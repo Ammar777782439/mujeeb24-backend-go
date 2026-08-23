@@ -1,171 +1,136 @@
-# قرار المدير: مقارنة هيكل Backend Go المقترح
+# Baseline النهائي لـ Mujeeb 24 Backend Go
 
-## الحكم الحاسم
+## قرار المدير
 
-الهيكل المرفق من الذكاء الاصطناعي **أفضل من الهيكل الأول الذي أنشأناه من ناحية التنظيم التجاري والتشغيلي**، وسنعتمد فكرته الأساسية. لكنه لا يُنسخ حرفيًا؛ لأن نسخ كل المجلدات والملفات المقترحة الآن سيصنع مشروعًا ضخمًا أغلبه فارغ.
+الرد الأخير هو **الأدق تنظيميًا** لمجيب 24. سنعتمد بنيته الأساسية، وليس Hybrid Architecture السابقة التي وسعت الطبقات أكثر من اللازم.
 
-سنعتمد **Hybrid Architecture** تجمع وضوح الهيكل المقترح مع انضباط الهيكل الأول:
+السبب أن المشروع Modular Monolith في مرحلته الحالية، ويحتاج وضوحًا لا عددًا كبيرًا من الحدود المتداخلة.
 
 ```text
-internal/
-├── domain/          # Business rules only
-├── application/     # Use cases by business capability
-├── ports/           # Contracts for external dependencies
-├── adapters/        # SocialAPI, Chatwoot, AI adapters
-├── transport/       # HTTP and webhook ingress
-├── infrastructure/  # Postgres, Redis, queue, secrets, telemetry
-├── jobs/             # Runtime workers and scheduled jobs
-└── platform/        # Technical cross-cutting helpers
+adapters/primary/http
+          ↓
+application/{ports,commands,queries,services,workers}
+          ↓
+domain
+          ↑
+adapters/secondary/{providers,workspaces,persistence,queue,ai}
 ```
 
-## لماذا الهيكل المرفق أقوى؟
+`bootstrap` يركب الاعتماديات، و`platform` يحتوي المكونات التقنية المشتركة. لا نحتاج الآن إلى طبقة مستقلة باسم `transport` وطبقة مستقلة باسم `infrastructure` وطبقة مستقلة باسم `jobs` إذا كانت ستكرر نفس المسؤوليات.
 
-الهيكل المقترح يفصل بوضوح بين `transport` و`adapters` و`infrastructure`، ويضع `jobs` خارج HTTP، ويضيف `reconciler` مستقلًا، وينظم `application` حسب قدرات العمل مثل inbound وoutbound وcatalog وleads وtransactions. هذه نقاط مهمة في منتج إنتاجي متعدد القنوات وليست CRUD عاديًا.
-
-كما أنه يصحح نقطة مهمة: **Chatwoot ليس Sales Domain**. لذلك لا ننشئ داخل Domain كيانات مثل Chatwoot Message أو Inbox أو Team، بل نحتفظ بمراجع تشغيلية فقط.
-
-## ما الذي نعدله في الهيكل المقترح؟
-
-| النقطة | القرار |
-|---|---|
-| اسم المشروع القديم `yemen-social-reply-engine` | لا نعيد استخدامه؛ المستودع الجديد هو `mujeeb24-backend-go` |
-| `internal/ports` | نعتمده بدل وضع Ports داخل `application/ports` لتكون الحدود ظاهرة |
-| `internal/transport` | نعتمده منفصلًا عن adapters؛ فيه HTTP وWebhook ingress فقط |
-| `internal/infrastructure` | نعتمده للتقنيات: PostgreSQL، Redis، Queue، Secrets، Auth، Observability |
-| `internal/adapters` | نعتمده لمترجمات SocialAPI وChatwoot وAI فقط |
-| `internal/jobs` | نعتمده للـworkers؛ أما منطق القرار فيبقى Application Service |
-| `cmd/reconciler` | نعتمده كبرنامج مستقل، ويمكن تشغيله مبدئيًا ضمن worker عند الحاجة |
-| `domain/communication/message` | لا نعتمده كـCommunication Truth؛ Chatwoot يملك ذلك |
-| `domain/customer` و`domain/identity` | نعتمدهما معًا؛ Customer هو كيان Mujeeb وIdentity هي هوية القناة الخارجية |
-| `application/commands/queries/services` | نستبدله بتنظيم حسب capability: inbound/outbound/catalog/leads/transactions/ai |
-| `configs` و`deployments` | نضيفهما لإعدادات التشغيل وDocker/deployment، دون أسرار |
-
-## الهيكل النهائي المعتمد
+## الهيكل المعتمد
 
 ```text
 mujeeb24-backend-go/
 ├── cmd/
 │   ├── api/main.go
 │   ├── worker/main.go
-│   ├── reconciler/main.go
 │   └── migrate/main.go
 │
 ├── internal/
+│   ├── bootstrap/
+│   │   ├── dependencies.go
+│   │   ├── api.go
+│   │   └── worker.go
+│   │
 │   ├── domain/
+│   │   ├── shared/
 │   │   ├── business/
-│   │   ├── tenant/
-│   │   ├── identity/
-│   │   ├── customer/
-│   │   ├── conversation/
 │   │   ├── channel/
+│   │   ├── identity/
+│   │   ├── communication/
 │   │   ├── catalog/
-│   │   ├── lead/
-│   │   ├── transaction/
+│   │   ├── sales/
 │   │   ├── ai/
-│   │   ├── automation/
-│   │   ├── notification/
-│   │   ├── subscription/
-│   │   └── shared/
+│   │   └── audit/
 │   │
 │   ├── application/
-│   │   ├── business/
-│   │   ├── channels/
-│   │   ├── inbound/
-│   │   ├── outbound/
-│   │   ├── conversations/
-│   │   ├── ai/
-│   │   ├── catalog/
-│   │   ├── leads/
-│   │   ├── transactions/
-│   │   ├── automation/
-│   │   ├── analytics/
-│   │   ├── notifications/
-│   │   └── subscriptions/
-│   │
-│   ├── ports/
-│   │   ├── social/
-│   │   ├── communication/
-│   │   ├── ai/
-│   │   ├── persistence/
-│   │   ├── events/
-│   │   ├── idempotency/
-│   │   ├── delivery/
-│   │   ├── secrets/
-│   │   ├── cache/
-│   │   ├── clock/
-│   │   ├── ids/
-│   │   └── observability/
+│   │   ├── ports/
+│   │   ├── commands/
+│   │   ├── queries/
+│   │   ├── services/
+│   │   └── workers/
 │   │
 │   ├── adapters/
-│   │   ├── socialapi/
-│   │   ├── chatwoot/
-│   │   └── ai/
-│   │
-│   ├── transport/
-│   │   ├── http/
-│   │   └── webhooks/
-│   │       ├── socialapi/
-│   │       └── chatwoot/
-│   │
-│   ├── infrastructure/
-│   │   ├── postgres/
-│   │   ├── redis/
-│   │   ├── queue/
-│   │   ├── storage/
-│   │   ├── secrets/
-│   │   ├── auth/
-│   │   ├── observability/
-│   │   └── config/
-│   │
-│   ├── jobs/
-│   │   ├── inbound/
-│   │   ├── outbound/
-│   │   ├── chatwoot/
-│   │   ├── ai/
-│   │   ├── automation/
-│   │   └── maintenance/
+│   │   ├── primary/
+│   │   │   └── http/
+│   │   │       ├── handlers/
+│   │   │       ├── dto/
+│   │   │       └── middleware/
+│   │   └── secondary/
+│   │       ├── providers/socialapi/
+│   │       ├── workspaces/chatwoot/
+│   │       ├── persistence/postgres/
+│   │       ├── queue/asynq/
+│   │       ├── ai/
+│   │       ├── storage/
+│   │       ├── secrets/
+│   │       └── observability/
 │   │
 │   └── platform/
-│       ├── httpclient/
-│       ├── retry/
-│       ├── backoff/
-│       ├── errors/
-│       ├── validation/
-│       ├── security/
-│       ├── telemetry/
+│       ├── config/
+│       ├── database/
+│       ├── httpserver/
 │       └── lifecycle/
 │
 ├── migrations/
+├── contracts/
 ├── api/openapi/
-├── configs/
-├── deployments/
-├── scripts/provider-simulator/
-├── tests/{contract,integration,fixtures}
+├── tests/
 ├── docs/
+├── scripts/
+├── Dockerfile
+├── docker-compose.local.yaml
+├── Makefile
+├── README.md
 ├── go.mod
-├── go.sum
-└── Makefile
+└── go.sum
 ```
 
-## ما لا نفعله
+## التعديلات الستة المعتمدة
 
-لا ننشئ Agent منفصلًا لكل قطاع. لا نضع منطقًا في HTTP handlers. لا نجعل `infrastructure` يعرف Sales decisions. لا نعرض SocialAPI أو Chatwoot APIs للواجهة الأمامية. ولا ننشئ 100 ملف فارغ فقط ليبدو المشروع كبيرًا.
+أولًا، تبقى Ports تحت `application/ports`؛ لأن Use Cases هي التي تحدد العقود التي تحتاجها. لا نحتفظ بمجلد `internal/ports` بالتوازي.
+
+ثانيًا، يبقى `adapters/primary` لكل ما يدخل إلى النظام، مثل Dashboard HTTP وWebhook HTTP. ويبقى `adapters/secondary` لكل ما يعتمد عليه النظام، مثل SocialAPI وChatwoot وPostgreSQL وAsynq وAI.
+
+ثالثًا، `domain/communication` لا يمثل Chatwoot كاملًا. يحتوي فقط على `ConversationReference` و`SalesContext` وربما `CommunicationMessage` كمرجع داخلي محدود. لا ننشئ Team أو Label أو Inbox كـSales Entities.
+
+رابعًا، `assignment` في Domain لا يمثل Team في Chatwoot؛ إن احتجناه فهو `AssignmentReference` أو `OwnershipState` فقط.
+
+خامسًا، `application/services` مسموح فقط لخدمات Orchestration واضحة. لا نضع Service عملاقًا يفعل كل شيء؛ فـ`InboundIngestionService` يستقبل ويحفظ، و`InboundProcessingService` يعالج، و`IdempotencyService` يملك سياسة التكرار، و`OutboxService` يملك إنشاء وإدارة أوامر الخروج.
+
+سادسًا، Workers ليست مكان Business Logic. Worker يستلم Job ويستدعي Application Service. نضع reconciliation داخل worker في البداية، ونفصل `cmd/reconciler` لاحقًا فقط إذا احتاج التشغيل ذلك فعليًا.
+
+## ملكية الأنظمة
+
+| المكوّن | الملكية |
+|---|---|
+| Mujeeb Domain | Business، Customer Context، Catalog، Intent، AI Decision، Lead، Transactions، Automation، Subscription |
+| Chatwoot Adapter | Contacts/Conversations/Messages/Assignments كمراجع وعمليات Workspace فقط |
+| SocialAPI Adapter | الاتصال بالقنوات، Webhooks، الإرسال الخارجي، حالات التسليم |
+| PostgreSQL Adapter | التخزين الدائم والمعاملات وEvent Ledger وOutbox |
+| Asynq Adapter | تشغيل Jobs وإعادة المحاولة المسرّعة، وليس مصدر الحقيقة الوحيد |
+| Dashboard API | الواجهة الوحيدة للتاجر عبر Mujeeb API |
 
 ## ترتيب التنفيذ
 
 ```text
-1. domain + ports
-2. SQL migrations الأساسية
-3. Event Ledger + Idempotency + Outbox
-4. SocialAPI adapter + Provider Simulator
-5. Chatwoot adapter
-6. transport/webhooks
-7. Vertical Slice inbound → mirror → outbound → status
-8. AI Context + Intent + Decision
-9. Catalog / Lead / Transaction
-10. Automation / Analytics / Subscription
+1. domain + application/ports
+2. bootstrap + config
+3. SQL migrations
+4. Event Ledger + Idempotency + Outbox
+5. SocialAPI Adapter + Provider Simulator
+6. Chatwoot Adapter
+7. Primary HTTP/Webhook handlers
+8. Vertical Slice inbound → mirror → outbound → status
+9. AI Context + Intent + Decision
+10. Catalog / Lead / Commercial Transactions
 ```
+
+## ما لا نعتمده
+
+لا نعود إلى `yemen-social-reply-engine` القديم كقاعدة كود. لا ننقل Facebook/Meta Prototype إلى النواة. لا ننشئ `internal/ports` بجانب `application/ports`. لا ننشئ `transport` بجانب `adapters/primary/http` لنفس HTTP. لا ننشئ `infrastructure` بجانب `adapters/secondary` لنفس PostgreSQL وRedis. ولا ننشئ عشرات الملفات البرمجية الفارغة؛ المجلدات التأسيسية تستخدم `.gitkeep` فقط إلى أن يأتي تنفيذ حقيقي.
 
 ## القرار النهائي
 
-**نعم، نعتمد هيكل الذكاء الاصطناعي كمرجع أقوى، مع التعديلات المذكورة.** المستودع الجديد الحالي كان Foundation صحيحًا لكنه يحتاج إعادة ترتيب المجلدات قبل بدء التنفيذ الحقيقي. لن نعود إلى المستودع القديم، ولن نخلط إرث Postiz مع Mujeeb 24.
+هذا هو **Baseline المعتمد**. بعده لا نغيّر الشجرة بسبب اقتراحات عامة؛ أي تعديل يجب أن يحل مشكلة حقيقية ظهرت من كود أو اختبار أو تشغيل. الخطوة التالية هي فحص Domain ملفًا ملفًا، ثم كتابة عقود Ports وMigrations وProvider Simulator قبل إضافة AI أو واجهات تجميلية.
