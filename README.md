@@ -26,7 +26,7 @@ Mujeeb Go    = Orchestration + AI + Sales Domain
 Dashboard    = Merchant Experience
 ```
 
-Domain لا يعرف كائنات `SocialAPIPost` أو `SocialAPIDM` أو `ChatwootConversation` أو `MetaWebhookPayload`. هذه التفاصيل محصورة داخل adapters.
+Domain لا يعرف أي كائنات خاصة بمزود خارجي أو Workspace داخلي. هذه التفاصيل محصورة داخل adapters.
 
 ## التشغيل الأولي
 
