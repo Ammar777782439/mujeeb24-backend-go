@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+*.local
+*.secret
+*.pem
+*.key
+*.crt
+coverage.out
+coverage.html
+bin/
+dist/
+tmp/
+.DS_Store
+.idea/
+.vscode/
