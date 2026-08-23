@@ -1,19 +1,34 @@
 # Mujeeb 24 Backend Go
 
-Backend مستقل ونظيف لمنصة **مجيب 24**: نظام تشغيل مبيعات ومحادثات للتجار، مبني بـGo، ويدعم تعدد التجار والقنوات والقطاعات.
+Backend مستقل ونظيف لمنصة **مجيب 24**: نظام تشغيل مبيعات ومحادثات متعدد التجار والقطاعات والقنوات، مبني بـGo.
 
-> لا تفوّت عميلك، ولو كنت مشغولًا.
+> **لا تفوّت عميلك، ولو كنت مشغولًا.**
+
+## ابدأ من هنا
+
+إذا فتحت المستودع لأول مرة، اقرأ الملفات بهذا الترتيب:
+
+```text
+1. docs/project-status-ar.md
+2. docs/developer-guide-ar.md
+3. docs/decision-log-ar.md
+4. contracts/domain_contract_index_ar.md
+5. docs/implementation-roadmap-ar.md
+6. contracts/
+```
+
+هذه الملفات تحتوي على ما تم اعتماده وما لم يبدأ، لذلك لا تحتاج إلى الرجوع إلى المحادثات القديمة لفهم نقطة التوقف.
 
 ## مسؤوليات النظام
 
 يمتلك هذا المستودع **Mujeeb Sales Domain** وطبقة التكامل:
 
-- Channel Orchestration بين Provider خارجي وChatwoot.
+- Channel Orchestration بين Provider خارجي وCommunication Workspace.
 - حفظ الأحداث الواردة ومنع التكرار وفقدان الرسائل.
 - Customer Identity وConversation References.
 - Outbound Delivery وDelivery Status وReconciliation.
 - AI Context وIntent وStructured Decisions.
-- Commercial Catalog وOffers وAttributes.
+- Universal Catalog وOffers وAttributes.
 - Leads وOrders وBookings وAppointments وQuotes.
 - Dashboard API وTenant Isolation وAudit.
 
@@ -21,36 +36,71 @@ Backend مستقل ونظيف لمنصة **مجيب 24**: نظام تشغيل م
 
 ```text
 SocialAPI.ai = Channel Transport
-Chatwoot     = Internal Conversation Workspace
+Chatwoot     = Internal Communication Workspace
 Mujeeb Go    = Orchestration + AI + Sales Domain
 Dashboard    = Merchant Experience
 ```
 
-Domain لا يعرف أي كائنات خاصة بمزود خارجي أو Workspace داخلي. هذه التفاصيل محصورة داخل adapters.
+التاجر يستخدم Dashboard مجيب 24 فقط. لا نطلب منه فتح Chatwoot أو SocialAPI.ai. Domain لا يعرف Provider DTOs أو Chatwoot Models أو HTTP أو PostgreSQL؛ التفاصيل تكون في Adapters وPlatform.
 
-## التشغيل الأولي
+## المعمارية
 
-المشروع في مرحلة **Foundation**. نستخدم Modular Monolith منظمًا، مع عمليتي `api` و`worker` من نفس المستودع. Redis/Asynq مسرّع للمهام، وليس مصدر الحقيقة الوحيد. PostgreSQL يعتمد على SQL migrations versioned؛ لا نستخدم `AutoMigrate` في الإنتاج.
+```text
+internal/
+├── bootstrap/
+├── domain/
+├── application/
+│   ├── ports/
+│   ├── commands/
+│   ├── queries/
+│   ├── services/
+│   └── workers/
+├── adapters/
+│   ├── primary/http/
+│   └── secondary/
+│       ├── providers/socialapi/
+│       ├── workspaces/chatwoot/
+│       ├── persistence/postgres/
+│       ├── queue/asynq/
+│       ├── ai/
+│       ├── storage/
+│       ├── secrets/
+│       └── observability/
+└── platform/
+```
 
-## الهيكل
-
-انظر إلى:
-
-- `docs/architecture.md`
-- `contracts/`
-- `api/openapi.yaml`
-- `migrations/`
+نستخدم **Modular Monolith** في البداية. `cmd/api` و`cmd/worker` و`cmd/migrate` نقاط تشغيل رفيعة، و`bootstrap` يركب الاعتماديات.
 
 ## المبادئ غير القابلة للكسر
 
 1. نحفظ Webhook بعد التحقق وقبل ACK.
 2. نستخدم `At-Least-Once + Idempotent Processing` بدل ادعاء Exactly-Once خارجيًا.
-3. نستخدم Outbox حتى لا تضيع المهمة بين database commit وqueue publish.
+3. نستخدم Event Ledger وOutbox حتى لا تضيع المهمة بين database commit وqueue publish.
 4. لا نعيد إرسال outbound عندما تكون النتيجة `unknown`؛ نستخدم reconciliation.
 5. لا نخلط IDs الخاصة بـMujeeb وProvider وChatwoot والقناة الخارجية.
 6. لا يملك AI صلاحية اختراع سعر أو مخزون أو تأكيد حجز دون تحقق وتفويض.
-7. التاجر يستخدم Dashboard مجيب 24 ولا يحتاج إلى فتح Chatwoot أو SocialAPI.ai.
+7. لا نستخدم Product كجذر عالمي؛ نستخدم CatalogItem وOffer وVariant وAttributes.
+8. لا نستخدم Order كمعاملة عامة؛ نستخدم CommercialTransaction بأنواع متعددة.
+9. لا نضع tokens أو webhook secrets داخل Domain أو Git.
+10. لا نضيف طبقات مكررة إذا كانت `application/ports` أو `adapters/primary` أو `adapters/secondary` تغطي المسؤولية.
 
 ## الحالة الحالية
 
-هذا المستودع لا ينسخ Prototype القديم. الخطوة التنفيذية الأولى هي إغلاق عقود القنوات، ثم بناء Provider Simulator وVertical Slice من رسالة واردة إلى رد خارجي وحالة تسليم، قبل إضافة AI التجاري الكامل.
+المشروع في مرحلة **Domain Contract وFoundation**. تم إغلاق shared وbusiness وchannel وidentity وcommunication وcatalog وsales وai وaudit كتصميمات موثقة، ولم يبدأ بعد تنفيذ Repositories أو SQL migrations أو Provider APIs أو AI runtime.
+
+الأمر التالي المعتمد هو إغلاق `application/ports`، ثم SQL migrations، ثم Reliability Foundation، ثم Provider Simulator، ثم أول Vertical Slice.
+
+## الاختبار الحالي
+
+```bash
+go test ./...
+go list ./...
+```
+
+نجاح الاختبارات الحالية يثبت قابلية Foundation للبناء فقط، ولا يثبت تكامل SocialAPI.ai أو Chatwoot أو القنوات الحقيقية.
+
+## المستودع
+
+هذا المستودع خاص وموجود على branch `main`:
+
+<https://github.com/Ammar777782439/mujeeb24-backend-go>
