@@ -23,7 +23,7 @@
 | Domain/ai وaudit | مغلق كتصميم | Structured Decision، Evidence، Policy، Audit |
 | application/ports | مغلق كتصميم | Go interfaces التنفيذية تحتاج ضبطًا نهائيًا أثناء Adapter work |
 | HTTP API Dashboard V1 Contract | مغلق كتصميم | Dashboard-only، JWT، Webhooks منفصلة، Auth/Tenant/Error/Pagination/Idempotency موثقة |
-| Auth transport | JWT معتمد تصميميًا | EdDSA access token قصير العمر؛ Auth provider/storage وMembership contract منفصلان |
+| Auth transport | JWT معتمد تصميميًا؛ middleware boundary منفذ | `RequireAccessToken` قابل للحقن ويضع Principal فقط؛ JWT issuer/key storage وMembership غير منفذين |
 | PostgreSQL Persistence Contract | مغلق كتصميم | Composite Tenant FKs وLeases وIdempotency موثقة |
 | PostgreSQL schema/migrations | مكتملة 000001–000027 | Migration Runner مضمّن ويطبقها من قاعدة فارغة؛ لا AutoMigrate |
 | PostgreSQL constraint tests | Foundation وFull Schema ناجحة | تشمل Tenant Isolation وIdempotency وLeases وSnapshots |
@@ -45,7 +45,7 @@
 
 أُغلق عقد Dashboard V1 تصميميًا بعد تحديد routes وroles وpermissions وRequest/Response envelopes وErrors وPagination وIdempotency وConcurrency وApplication Command/Query mapping، واعتماد JWT Access Authentication، مع فصل Webhooks وOperational endpoints وDeferred Scope. ثم تحوّل العقد إلى Go DTOs وHuma operation registration، وتولد منه OpenAPI 3.0.3 في `api/openapi/mujeeb24-dashboard-v1.generated.yaml`.
 
-يمنع `scripts/check-openapi-generated.sh` اختلاف الملف المولد عن Go source، ويُشغل مع `go test ./...` في CI أو محليًا. أُضيفت Typed Commands/Queries، ووُصلت كل عمليات Huma الـ76 بـruntime dispatcher مشترك، مع mapping typed فعلي لأربع Core callbacks. ما زالت façade الخاصة ببقية Commands/Queries وFunctional Application logic وAuth middleware/storage غير منفذة. حُذف `http/dto/.gitkeep` لأن DTOs الفعلية موجودة في `http/contract` كمصدر الحقيقة، وحُذف placeholder القديم من `handlers`.
+يمنع `scripts/check-openapi-generated.sh` اختلاف الملف المولد عن Go source، ويُشغل مع `go test ./...` في CI أو محليًا. أُضيفت Typed Commands/Queries، ووُصلت كل عمليات Huma الـ76 بـruntime dispatcher مشترك، مع mapping typed فعلي لأربع Core callbacks. أضيف Auth middleware boundary واختباراته، لكن JWT issuer/key storage وMembership وfaçade الخاصة ببقية Commands/Queries وFunctional Application logic غير منفذة. حُذف `http/dto/.gitkeep` لأن DTOs الفعلية موجودة في `http/contract` كمصدر الحقيقة، وحُذف placeholder القديم من `handlers`.
 
 ## الخطوة التالية الوحيدة
 

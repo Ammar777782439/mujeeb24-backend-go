@@ -50,8 +50,12 @@ HTTP DTO
 
 Application لا يعيد HTTP status. يستخدم typed application errors مثل `validation_error` و`not_found` و`forbidden` و`conflict` و`stale_resource` و`external_dependency_unavailable`. HTTP Adapter يترجمها إلى status codes وErrorEnvelope.
 
+## Auth middleware boundary
+
+أضيف `http/middleware.RequireAccessToken` كحد HTTP قابل للحقن. يستقبل `Authorization: Bearer`، يستدعي `AccessTokenVerifier`، ويضع `PrincipalID` فقط في context. لا يخزن Business ID أو Role أو Permission في JWT boundary، ولا ينفذ membership؛ `ScopeProvider` يبقى المسؤول عن Business Scope. المسار يكتب `ErrorEnvelope` مع `application/json` عند 401. لا يوجد JWT key storage أو token issuer داخل هذه المرحلة.
+
 ## ما لم يُنفذ بعد
 
-لم تُربط كل عمليات Huma الـ76 بتطبيقات Use Case فعلية. الأربع عمليات التالية لديها mapping typed فعلي: `listConversations` و`getConversation` و`createOutboundMessage` و`listCustomers`. أما بقية operations فلها DTO وoperation descriptor وruntime dispatcher، لكنها لا تملك بعد façade تنشئ Command/Query وتستدعي dependency الخاصة بها؛ لذلك ترجع `not_implemented` typed error. اختبارات httptest أثبتت prefix `/api/v1` وErrorEnvelope مع `application/json` لكل من Core route وnon-Core route. لا ندعي أن Business logic أو Repositories أو Auth storage جاهزة.
+لم تُربط كل عمليات Huma الـ76 بتطبيقات Use Case فعلية. الأربع عمليات التالية لديها mapping typed فعلي: `listConversations` و`getConversation` و`createOutboundMessage` و`listCustomers`. أما بقية operations فلها DTO وoperation descriptor وruntime dispatcher، لكنها لا تملك بعد façade تنشئ Command/Query وتستدعي dependency الخاصة بها؛ لذلك ترجع `not_implemented` typed error. اختبارات httptest أثبتت prefix `/api/v1` وErrorEnvelope مع `application/json` لكل من Core route وnon-Core route. واختبارات middleware تغطي missing/invalid/valid Bearer token. لا ندعي أن Business logic أو Repositories أو Auth storage/JWT issuer جاهزة.
 
 الخطوة التالية هي إكمال route wiring بنفس النمط عند الحاجة، ثم PostgreSQL Adapter وTransactionManager. لا نضع SQL داخل Handler ولا نعيد فتح OpenAPI أو Schema.
