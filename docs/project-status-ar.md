@@ -41,6 +41,10 @@
 
 أُغلق تنفيذ الـFull Schema بعد تطبيق migrations من 000001 إلى 000027 على PostgreSQL فارغة، ونجاح اختبارات Tenant Isolation وProvider Event Dedupe وScoped Outbound Idempotency وUnresolved Event وOutbox Lease وSnapshots، ونجاح تشغيل Runner مرتين (`applied=27` ثم `applied=0`). هذا لا يعني أن Event Ledger أو Outbox Go implementation أصبحا منفذين.
 
+## الحالة الحالية: PR-009 — PostgreSQL Adapter وTransactionManager
+
+أُغلق PR-008 عند حد HTTP → Application façade wiring بنتيجة 76/76. بدأ PR-009 الآن بتنفيذ PostgreSQL pool وTransactionManager في `internal/adapters/secondary/persistence/postgres`، مع عقد `application/ports.TransactionManager`. هذه الدفعة لا تنفذ Repositories أو EventStore أو Idempotency/Outbox implementations.
+
 ## معيار إغلاق HTTP API Contract وDTO-first Generation
 
 أُغلق عقد Dashboard V1 تصميميًا بعد تحديد routes وroles وpermissions وRequest/Response envelopes وErrors وPagination وIdempotency وConcurrency وApplication Command/Query mapping، واعتماد JWT Access Authentication، مع فصل Webhooks وOperational endpoints وDeferred Scope. ثم تحوّل العقد إلى Go DTOs وHuma operation registration، وتولد منه OpenAPI 3.0.3 في `api/openapi/mujeeb24-dashboard-v1.generated.yaml`.
@@ -50,10 +54,10 @@
 ## الخطوة التالية الوحيدة
 
 ```text
-Validate 76/76 typed façade coverage and runtime mapping
-→ Close PR-008
-→ Implement PostgreSQL Adapter/TransactionManager
-→ Implement Event Ledger/Idempotency/Outbox
+PR-008 CLOSED: HTTP → Application façade 76/76
+→ PR-009: PostgreSQL pool + TransactionManager
+→ Repository foundation
+→ Event Ledger/Idempotency/Outbox
 ```
 
 لا نبدأ SocialAPI أو Chatwoot أو AI runtime قبل اكتمال Reliability Foundation وSimulator. ولا نعتبر Provider integration ناجحًا قبل اختبار حقيقي آمن لاحقًا.

@@ -1,12 +1,12 @@
 # خارطة التنفيذ — Mujeeb 24 Backend Go
 
-## المرحلة الحالية: PR-008 — Typed Application Boundary وHTTP Handlers
+## المرحلة الحالية: PR-009 — PostgreSQL Adapter وTransactionManager
 
-الحالة: **DTO-first OpenAPI منفذ، وكل 76 route تمر runtime dispatcher ولها façade typed؛ dependencies التنفيذية الداخلية ما زالت مؤجلة حسب مراحلها**.
+الحالة: **PR-008 مغلق عند HTTP → Application façade 76/76؛ بدأ PR-009 بتنفيذ PostgreSQL pool وTransactionManager واختباراته، دون Repositories أو Reliability implementations بعد**.
 
 SQL migrations من 000001 إلى 000027 وFull Schema constraint tests مكتملة. عقد HTTP Dashboard V1 موجود في `contracts/http_api_dashboard_v1_contract_ar.md`. Go Request/Response DTOs داخل `internal/adapters/primary/http/dto` مع operation registration داخل `internal/adapters/primary/http/contract` هي مصدر الحقيقة المشترك، وHuma يولد OpenAPI 3.0.3 إلى `api/openapi/mujeeb24-dashboard-v1.generated.yaml`. يمنع `scripts/check-openapi-generated.sh` drift ويعمل في CI.
 
-الـHuma registration يولد العقد من DTOs الموجودة في `http/dto` عبر operation registration في `http/contract`. يحتوي `handlers` على dispatcher موحد وfaçade typed لكل الـ76 operation؛ كل façade تبني Command/Query أو system contract وتستدعي dependency typed، وقد تعيد `not_implemented` من Application boundary عند غياب التنفيذ الداخلي. لا يوجد PostgreSQL أو Provider call داخل هذه المرحلة.
+الـHuma registration يولد العقد من DTOs الموجودة في `http/dto` عبر operation registration في `http/contract`. يحتوي `handlers` على dispatcher موحد وfaçade typed لكل الـ76 operation؛ كل façade تبني Command/Query أو system contract وتستدعي dependency typed، وقد تعيد `not_implemented` من Application boundary عند غياب التنفيذ الداخلي. بدأ PR-009 الآن بإضافة PostgreSQL pool وTransactionManager فقط؛ لا يوجد Provider call أو Repository implementation في هذه الدفعة.
 
 ## المرحلة المنجزة تصميميًا: Application Ports
 
@@ -60,7 +60,7 @@ audit_events
 
 حالة التنفيذ: Foundation وFull Schema migrations تعملان من قاعدة فارغة، ونجحت اختبارات cross-tenant references والتكرار الأساسي وUnresolved Event وOutbox Lease وSnapshots. شغّلنا Runner مرتين ونتج `applied=27` ثم `applied=0`.
 
-## المرحلة الحالية: إكمال HTTP Application façades قبل PostgreSQL
+## المرحلة المنفذة: HTTP Application façades، والمرحلة الحالية PostgreSQL foundation
 
 نطبق:
 
@@ -69,7 +69,8 @@ Generated DTO Contract
 → runtime dispatcher لكل routes
 → typed Application façade لكل Command/Query
 → Auth/Tenant/Error/Metadata tests
-→ PostgreSQL Adapter
+→ PostgreSQL pool + TransactionManager
+→ Repository foundation
 → Event Ledger
 → Idempotency
 → Outbox
@@ -135,8 +136,8 @@ SocialAPI inbound
 PR-005: SQL migrations 000001–000012 + Foundation constraint tests — مكتمل
 PR-006: SQL migrations 000013–000027 + full-schema tests/review — مكتمل
 PR-007: HTTP API Contract → Go DTOs + generated OpenAPI v1 + drift check — مكتمل
-PR-008: Typed Commands/Queries + dispatcher وfaçades typed لكل routes — في التحقق النهائي قبل الإغلاق
-PR-009: PostgreSQL Adapter and TransactionManager
+PR-008: Typed Commands/Queries + dispatcher وfaçades typed لكل routes — مكتمل
+PR-009: PostgreSQL Adapter وTransactionManager — قيد التنفيذ؛ pool وtransaction boundary منفذان، وRepositories مؤجلة
 PR-010: Event ledger/idempotency/outbox implementation
 PR-011: Provider simulator
 PR-012: Chatwoot/SocialAPI adapters
