@@ -44,9 +44,9 @@ POSTGRES_TEST_DSN='postgres://...' go test -tags=integration -count=1 ./internal
 
 ## Repository Foundation الحالية
 
-بعد BusinessRepository، أضيفت ports وimplementations للقراءة الأساسية من `customers` و`conversations` و`channel_connections`. كل استعلام يستخدم `business_id` مع المعرف الخاص بالسجل، ولا يعتمد على معرف عالمي منفرد عند وجود tenant scope. الـrecords المعادة إلى Application لا تحتوي pgx أو SQL rows، وحقول JSON المرنة محفوظة كـraw JSON bytes حتى لا يفرض adapter نموذجًا مرنًا غير معتمد.
+بعد BusinessRepository، أضيفت ports وimplementations للقراءة الأساسية من `customers` و`conversations` و`channel_connections`، ثم `ConversationReferenceRepository` و`OutboundMessageRepository` للـCommunication surface الموجود فعليًا في schema. كل استعلام يستخدم `business_id` مع المعرف الخاص بالسجل، ولا يعتمد على معرف عالمي منفرد عند وجود tenant scope. الـrecords المعادة إلى Application لا تحتوي pgx أو SQL rows، وحقول JSON المرنة محفوظة كـraw JSON bytes حتى لا يفرض adapter نموذجًا مرنًا غير معتمد.
 
-تمت إضافة integration coverage حقيقية على PostgreSQL 16 تثبت قراءة السجلات الثلاثة، ورفض cross-tenant lookup كـtyped not-found، إضافة إلى BusinessRepository وcommit/rollback.
+تمت إضافة integration coverage حقيقية على PostgreSQL 16 تثبت قراءة السجلات الأساسية، ورفض cross-tenant lookup كـtyped not-found، وإنشاء وقراءة outbound pending، وprovider-scoped idempotency conflict، إضافة إلى BusinessRepository وcommit/rollback. لم يُنشأ `MessageRepository` عام لأن schema الحالية لا تحتوي جدول message timeline مستقلًا.
 
 ## ما لم يُنفذ
 

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/database"
 )
 
@@ -103,6 +104,9 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 	const customerB = "00000000-0000-0000-0000-000000000022"
 	const conversationA = "00000000-0000-0000-0000-000000000031"
 	const connectionA = "00000000-0000-0000-0000-000000000041"
+	const referenceA = "00000000-0000-0000-0000-000000000051"
+	const outboundA = "00000000-0000-0000-0000-000000000061"
+	const outboundB = "00000000-0000-0000-0000-000000000062"
 	for _, id := range []string{businessA, businessB} {
 		_, _ = pool.Exec(ctx, `DELETE FROM businesses WHERE id = $1::uuid`, id)
 	}
@@ -126,6 +130,11 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 		t.Fatalf("insert channel connection: %v", err)
 	}
 	defer pool.Exec(context.Background(), `DELETE FROM channel_connections WHERE id = $1::uuid`, connectionA)
+	_, err = pool.Exec(ctx, `INSERT INTO conversation_references (id, business_id, conversation_id, system, provider_ref, resource_type, resource_id, connection_id, conversation_kind, is_current, mapping_status, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, 'provider', 'socialapi', 'conversation', 'provider-conversation-a', $4::uuid, 'dm', true, 'active', now(), now())`, referenceA, businessA, conversationA, connectionA)
+	if err != nil {
+		t.Fatalf("insert conversation reference: %v", err)
+	}
+	defer pool.Exec(context.Background(), `DELETE FROM conversation_references WHERE id = $1::uuid`, referenceA)
 
 	customerRepo := NewCustomerRepository(adapter)
 	customer, err := customerRepo.GetByID(ctx, businessA, customerA)
@@ -150,5 +159,32 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 	}
 	if _, err := connectionRepo.GetByID(ctx, businessB, connectionA); !IsRepositoryKind(err, RepositoryNotFound) {
 		t.Fatalf("connection crossed tenant boundary: %v", err)
+	}
+	referenceRepo := NewConversationReferenceRepository(adapter)
+	reference, err := referenceRepo.GetCurrentByConversation(ctx, businessA, conversationA, "provider")
+	if err != nil || reference.ID != referenceA || reference.ConnectionID == nil || *reference.ConnectionID != connectionA {
+		t.Fatalf("reference read: %#v err=%v", reference, err)
+	}
+	if _, err := referenceRepo.GetCurrentByConversation(ctx, businessB, conversationA, "provider"); !IsRepositoryKind(err, RepositoryNotFound) {
+		t.Fatalf("reference crossed tenant boundary: %v", err)
+	}
+	outboundRepo := NewOutboundMessageRepository(adapter)
+	draft := ports.OutboundMessageDraft{ID: outboundA, BusinessID: businessA, ConversationID: conversationA, ConversationReferenceID: referenceA, ConnectionID: connectionA, ProviderRef: "socialapi", Channel: "facebook", Origin: "human", Transport: "provider", ContentReference: "content-ref-a", ProviderIdempotencyKey: "idem-a"}
+	outbound, err := outboundRepo.CreatePending(ctx, draft)
+	if err != nil || outbound.ID != outboundA || outbound.Status != "pending" || outbound.Direction != "outbound" {
+		t.Fatalf("outbound create: %#v err=%v", outbound, err)
+	}
+	defer pool.Exec(context.Background(), `DELETE FROM outbound_messages WHERE id = $1::uuid`, outboundA)
+	loaded, err := outboundRepo.GetByID(ctx, businessA, outboundA)
+	if err != nil || loaded.ID != outboundA {
+		t.Fatalf("outbound read: %#v err=%v", loaded, err)
+	}
+	if _, err := outboundRepo.GetByID(ctx, businessB, outboundA); !IsRepositoryKind(err, RepositoryNotFound) {
+		t.Fatalf("outbound crossed tenant boundary: %v", err)
+	}
+	duplicate := draft
+	duplicate.ID = outboundB
+	if _, err := outboundRepo.CreatePending(ctx, duplicate); !IsRepositoryKind(err, RepositoryConflict) {
+		t.Fatalf("expected idempotency conflict, got %v", err)
 	}
 }
