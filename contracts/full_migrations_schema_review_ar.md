@@ -309,8 +309,8 @@ outcome
 000014 attribute_schemas
 000015 attribute_definitions
 000016 catalog_items
-000017 offers
-000018 variants
+000017 variants
+000018 offers  # Variants تسبق Offers حتى يفرض FK أن العرض والـVariant من نفس CatalogItem
 000019 leads
 000020 lead_attributions
 000021 lead_scores
@@ -343,15 +343,13 @@ migration rerun/order
 
 ## القرار النهائي
 
-**أعتمد الحزمة كـFull Schema Design، لا كـSQL Production جاهز.** نثبت التصحيحات أعلاه، ثم نكتب migrations فعليًا من `000001` حتى `000027` على مراحل، ونشغل Contract Tests بعد Foundation وقبل أي Provider أو AI implementation.
+**أعتمد الحزمة كـFull Schema Design، وقد تحولت الآن إلى SQL قابل للتطبيق والاختبار.** Foundation من `000001` إلى `000012` وبقية Schema من `000013` إلى `000027` مطبقة على PostgreSQL فارغة، مع اختبارات Foundation وFull Schema ناجحة.
 
 الخطوة العملية التالية:
 
 ```text
-Finalize typed IDs + composite FK strategy
-→ Write 000001–000012
-→ Run migration/constraint tests
-→ Write 000013–000027
-→ Run full schema review
-→ Implement PostgreSQL Adapter
+Finalize PostgreSQL Adapter contracts
+→ Implement EventStore/IdempotencyStore/OutboxStore
+→ Add TransactionManager semantics
+→ Build Provider Simulator
 ```

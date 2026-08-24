@@ -2,9 +2,9 @@
 
 ## المرحلة الحالية: SQL Migrations وPersistence Tests
 
-الحالة: **Foundation SQL من 000001 إلى 000012 منفذة، واختبارات قيودها ناجحة؛ العمل الحالي هو بقية الـSchema ثم Full Schema validation**.
+الحالة: **SQL migrations من 000001 إلى 000027 منفذة، وFoundation وFull Schema constraint tests ناجحة؛ العمل الحالي هو PostgreSQL Adapter وReliability Foundation**.
 
-العقود الموجودة في `contracts/` تحدد shared وbusiness وchannel وidentity وcommunication وcatalog وsales وai وaudit، كما توثق Persistence Boundary وComposite Tenant FKs وEvent Ledger وOutbox وIdempotency. لا ننتقل إلى PostgreSQL Adapter قبل اكتمال migrations واختبار القيود من قاعدة فارغة.
+العقود الموجودة في `contracts/` تحدد shared وbusiness وchannel وidentity وcommunication وcatalog وsales وai وaudit، كما توثق Persistence Boundary وComposite Tenant FKs وEvent Ledger وOutbox وIdempotency. Migration Runner مضمّن في Go ويطبق الإصدار من قاعدة فارغة دون إعادة تنفيذ المigrations السابقة.
 
 ## المرحلة المنجزة تصميميًا: Application Ports
 
@@ -56,9 +56,9 @@ audit_events
 
 كل جدول تجاري يحمل business scope حيث يلزم. كل unique constraint يترجم قاعدة Idempotency أو Mapping من Domain.
 
-حالة التنفيذ: Foundation migrations تعمل من قاعدة فارغة، ونجحت اختبارات cross-tenant references والتكرار الأساسي وUnresolved Event وOutbox Lease. معيار الإغلاق الكامل هو نجاح migrations 000013–000027 واختبارات Full Schema مع forward-only policy واضحة.
+حالة التنفيذ: Foundation وFull Schema migrations تعملان من قاعدة فارغة، ونجحت اختبارات cross-tenant references والتكرار الأساسي وUnresolved Event وOutbox Lease وSnapshots. شغّلنا Runner مرتين ونتج `applied=27` ثم `applied=0`. المرحلة التالية هي تنفيذ PostgreSQL Adapter لا إعادة تصميم Schema.
 
-## المرحلة التالية: Reliability Foundation
+## المرحلة التالية: PostgreSQL Adapter وReliability Foundation
 
 نطبق:
 
@@ -129,8 +129,8 @@ SocialAPI inbound
 
 ```text
 PR-005: SQL migrations 000001–000012 + Foundation constraint tests — مكتمل
-PR-006: SQL migrations 000013–000027 + full-schema tests/review — التالي
-PR-007: PostgreSQL Adapter and TransactionManager
+PR-006: SQL migrations 000013–000027 + full-schema tests/review — مكتمل
+PR-007: PostgreSQL Adapter and TransactionManager — التالي
 PR-008: Event ledger/idempotency/outbox implementation
 PR-009: Provider simulator
 PR-010: Chatwoot/SocialAPI adapters

@@ -4,7 +4,7 @@
 
 ## الخلاصة التنفيذية
 
-`mujeeb24-backend-go` هو Backend مستقل ونظيف لمجيب 24. أُنشئ بعيدًا عن Prototype القديم المرتبط بـPostiz/Facebook. المشروع أنهى تصميم **Domain Contracts وApplication Ports وPersistence Boundary وFull Migration Schema**. لم يبدأ بعد تنفيذ SQL migrations أو Repositories أو Provider integrations أو AI runtime.
+`mujeeb24-backend-go` هو Backend مستقل ونظيف لمجيب 24. أُنشئ بعيدًا عن Prototype القديم المرتبط بـPostiz/Facebook. المشروع أنهى تصميم **Domain Contracts وApplication Ports وPersistence Boundary وFull Migration Schema**، ونفّذ SQL migrations من 000001 إلى 000027 مع اختبارات PostgreSQL أساسية وFull Schema ناجحة. لم يبدأ بعد تنفيذ Repositories التجارية أو Provider integrations أو AI runtime.
 
 التاجر سيستخدم Dashboard مجيب 24 فقط. SocialAPI.ai سيكون Provider لنقل رسائل Facebook وInstagram وWhatsApp، وChatwoot سيكون Communication Workspace داخليًا عبر API Channel/Adapter. أما Go فهو مالك Sales Intelligence وBusiness Knowledge وCatalog وLeads وCommercial Transactions وAI Decisions.
 
@@ -23,9 +23,9 @@
 | Domain/ai وaudit | مغلق كتصميم | Structured Decision، Evidence، Policy، Audit |
 | application/ports | مغلق كتصميم | Go interfaces التنفيذية تحتاج ضبطًا نهائيًا أثناء Adapter work |
 | PostgreSQL Persistence Contract | مغلق كتصميم | Composite Tenant FKs وLeases وIdempotency موثقة |
-| PostgreSQL schema/migrations | Foundation 000001–000012 منفذة | Catalog/Sales/AI/Audit من 000013–000027 لم تُكتب بعد؛ لا AutoMigrate |
-| PostgreSQL constraint tests | Foundation ناجحة | اختبارات Full Schema لم تبدأ |
-| Event Ledger/Idempotency/Outbox | SQL foundation موجود، Go implementation لم يبدأ | Reliability Foundation بعد اكتمال Full Schema validation |
+| PostgreSQL schema/migrations | مكتملة 000001–000027 | Migration Runner مضمّن ويطبقها من قاعدة فارغة؛ لا AutoMigrate |
+| PostgreSQL constraint tests | Foundation وFull Schema ناجحة | تشمل Tenant Isolation وIdempotency وLeases وSnapshots |
+| Event Ledger/Idempotency/Outbox | تصميم + SQL tables | Go implementation لم يبدأ؛ الخطوة الحالية |
 | Provider Simulator | لم يبدأ | مطلوب قبل أي credentials حقيقية |
 | SocialAPI.ai integration | غير مثبت | لا توجد credentials إنتاجية أو test credentials |
 | Chatwoot Adapter | غير منفذ | Feasibility مثبتة، Adapter لم يُكتب |
@@ -37,15 +37,15 @@
 
 ## معيار إغلاق الـMigrations
 
-أُغلق تصميم الـFull Schema بعد تثبيت Foundation وCatalog وSales وAI وAudit، مع Composite Tenant FKs، External References، Event Ledger، Outbox، Idempotency، Snapshots، وسياسة `RESTRICT/ARCHIVED` بدل الحذف المتسلسل من Business. تم تنفيذ Foundation SQL من 000001 إلى 000012 ونجحت اختبارات PostgreSQL الأساسية. أما migrations 000013–000027 وFull Schema validation فما زالت متبقية.
+أُغلق تنفيذ الـFull Schema بعد تطبيق migrations من 000001 إلى 000027 على PostgreSQL فارغة، ونجاح اختبارات Tenant Isolation وProvider Event Dedupe وScoped Outbound Idempotency وUnresolved Event وOutbox Lease وSnapshots، ونجاح تشغيل Runner مرتين (`applied=27` ثم `applied=0`). هذا لا يعني أن Event Ledger أو Outbox Go implementation أصبحا منفذين.
 
 ## الخطوة التالية الوحيدة
 
 ```text
-Finalize typed IDs + composite FK strategy
-→ Write SQL migrations 000013–000027
-→ Run full-schema migration tests/review
-→ Implement PostgreSQL Adapter
+Finalize PostgreSQL Adapter contracts
+→ Implement EventStore/IdempotencyStore/OutboxStore
+→ Add TransactionManager semantics
+→ Build Provider Simulator
 ```
 
-لا نبدأ SocialAPI أو Chatwoot أو AI runtime قبل اكتمال migrations والاختبارات. ولا نعتبر Event Ledger أو Outbox منفذين لمجرد أن تصميم الجداول مغلق.
+لا نبدأ SocialAPI أو Chatwoot أو AI runtime قبل اكتمال Reliability Foundation وSimulator. ولا نعتبر Provider integration ناجحًا قبل اختبار حقيقي آمن لاحقًا.
