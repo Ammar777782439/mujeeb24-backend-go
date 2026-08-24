@@ -177,9 +177,9 @@ type TransactionListInput struct {
 type AIDecisionListInput struct {
 	BusinessPath
 	ListQuery
-	Lifecycle      string `query:"lifecycle"`
-	ConversationID UUID   `query:"conversation_id" format:"uuid"`
-	RequiresHuman  bool   `query:"requires_human"`
+	Lifecycle      string       `query:"lifecycle"`
+	ConversationID UUID         `query:"conversation_id" format:"uuid"`
+	RequiresHuman  OptionalBool `query:"requires_human"`
 }
 type AuditListInput struct {
 	BusinessPath

@@ -1,9 +1,33 @@
 package dto
 
-import "time"
+import (
+	"strconv"
+	"time"
+
+	"github.com/danielgtaylor/huma/v2"
+)
 
 type UUID string
 type Timestamp time.Time
+
+type OptionalBool struct {
+	Value   bool
+	Present bool
+}
+
+func (b *OptionalBool) UnmarshalText(value []byte) error {
+	parsed, err := strconv.ParseBool(string(value))
+	if err != nil {
+		return err
+	}
+	b.Value = parsed
+	b.Present = true
+	return nil
+}
+
+func (OptionalBool) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeBoolean}
+}
 
 type Page struct {
 	NextCursor *string `json:"next_cursor,omitempty"`

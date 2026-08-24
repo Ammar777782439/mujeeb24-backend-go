@@ -145,20 +145,38 @@ type TransactionView struct {
 	ResourceVersion ResourceVersion
 }
 type AIDecisionView struct {
-	ID              AIDecisionID
-	BusinessID      BusinessID
-	Lifecycle       string
-	RequiresHuman   bool
-	RequestedAction string
+	ID                 AIDecisionID
+	BusinessID         BusinessID
+	ConversationID     *ConversationID
+	IntentBase         string
+	DomainContext      string
+	Entities           []byte
+	EvidenceReferences []byte
+	RequestedAction    string
+	RequiresHuman      bool
+	MissingInformation []byte
+	ReasonCodes        []byte
+	PolicyVersion      string
+	Lifecycle          string
+	HumanReviewReason  string
+	ResourceVersion    ResourceVersion
+	CreatedAt          time.Time
 }
 type AuditEventView struct {
-	ID           AuditEventID
-	BusinessID   BusinessID
-	ActorType    string
-	Action       string
-	ResourceType string
-	ResourceID   string
-	OccurredAt   time.Time
+	ID                AuditEventID
+	BusinessID        BusinessID
+	ActorType         string
+	ActorReference    string
+	Action            string
+	ResourceType      string
+	ResourceID        string
+	Metadata          []byte
+	DecisionReference string
+	Result            string
+	ReasonCode        string
+	BeforeReference   string
+	AfterReference    string
+	OccurredAt        time.Time
 }
 type ListResult[T any] struct {
 	Items      []T

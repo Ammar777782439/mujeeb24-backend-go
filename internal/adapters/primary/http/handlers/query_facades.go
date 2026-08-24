@@ -383,7 +383,11 @@ func (s *Server) dispatchAdditionalQuery(ctx context.Context, operationID string
 		if err != nil {
 			return mapApplicationError(err), true
 		}
-		view, err := s.deps.ListAIDecisions.Handle(ctx, queries.ListAIDecisionsQuery{Meta: queryMeta(actor, "", ""), Limit: in.Limit, Cursor: in.Cursor, Lifecycle: in.Lifecycle, ConversationID: optionalConversationID(in.ConversationID), RequiresHuman: optionalBool(in.RequiresHuman)})
+		var requiresHuman *bool
+		if in.RequiresHuman.Present {
+			requiresHuman = &in.RequiresHuman.Value
+		}
+		view, err := s.deps.ListAIDecisions.Handle(ctx, queries.ListAIDecisionsQuery{Meta: queryMeta(actor, "", ""), Limit: in.Limit, Cursor: in.Cursor, Lifecycle: in.Lifecycle, ConversationID: optionalConversationID(in.ConversationID), RequiresHuman: requiresHuman})
 		if err != nil {
 			return mapApplicationError(err), true
 		}
@@ -618,7 +622,12 @@ func transactionProjection(v commands.TransactionView) contract.CommercialTransa
 	return contract.CommercialTransaction{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), CustomerID: contract.UUID(v.CustomerID), TransactionType: v.TransactionType, State: v.State, ResourceVersion: string(v.ResourceVersion)}
 }
 func aiDecisionProjection(v commands.AIDecisionView) contract.AIDecision {
-	return contract.AIDecision{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), RequestedAction: v.RequestedAction, RequiresHuman: v.RequiresHuman, Lifecycle: v.Lifecycle}
+	var conversationID *contract.UUID
+	if v.ConversationID != nil {
+		id := contract.UUID(*v.ConversationID)
+		conversationID = &id
+	}
+	return contract.AIDecision{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), ConversationID: conversationID, IntentBase: v.IntentBase, Entities: jsonObject(v.Entities), EvidenceReferences: jsonStrings(v.EvidenceReferences), RequestedAction: v.RequestedAction, RequiresHuman: v.RequiresHuman, MissingInformation: jsonStrings(v.MissingInformation), PolicyVersion: v.PolicyVersion, Lifecycle: v.Lifecycle, CreatedAt: v.CreatedAt}
 }
 func aiDecisionList(v commands.ListResult[commands.AIDecisionView]) *contract.List[contract.AIDecision] {
 	items := make([]contract.AIDecision, 0, len(v.Items))
@@ -628,7 +637,7 @@ func aiDecisionList(v commands.ListResult[commands.AIDecisionView]) *contract.Li
 	return listPage(items, v.NextCursor, v.HasMore)
 }
 func auditEventProjection(v commands.AuditEventView) contract.AuditEvent {
-	return contract.AuditEvent{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), ActorType: v.ActorType, Action: v.Action, ResourceType: v.ResourceType, ResourceID: optionalString(v.ResourceID), OccurredAt: v.OccurredAt}
+	return contract.AuditEvent{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), ActorType: v.ActorType, ActorReference: optionalString(v.ActorReference), Action: v.Action, ResourceType: v.ResourceType, ResourceID: optionalString(v.ResourceID), Metadata: jsonObject(v.Metadata), OccurredAt: v.OccurredAt}
 }
 func auditEventList(v commands.ListResult[commands.AuditEventView]) *contract.List[contract.AuditEvent] {
 	items := make([]contract.AuditEvent, 0, len(v.Items))
@@ -644,4 +653,13 @@ func optionalConversationID(v contract.UUID) *commands.ConversationID {
 	id := commands.ConversationID(v)
 	return &id
 }
-func optionalBool(v bool) *bool { return &v }
+func jsonStrings(value []byte) []string {
+	if len(value) == 0 {
+		return nil
+	}
+	var values []string
+	if err := json.Unmarshal(value, &values); err != nil {
+		return nil
+	}
+	return values
+}
