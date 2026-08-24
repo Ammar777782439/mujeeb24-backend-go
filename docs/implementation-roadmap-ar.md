@@ -1,12 +1,12 @@
 # خارطة التنفيذ — Mujeeb 24 Backend Go
 
-## المرحلة الحالية: Domain Contract
+## المرحلة الحالية: SQL Migrations وPersistence Tests
 
-الحالة: **مغلقة تصميميًا، غير منفذة ككود**.
+الحالة: **تصميم الـFull Schema مغلق، والتنفيذ SQL والاختبارات هما العمل الحالي**.
 
-العقود الموجودة في `contracts/` تحدد shared وbusiness وchannel وidentity وcommunication وcatalog وsales وai وaudit. لا نكتب Repositories أو HTTP DTOs قبل مراجعتها.
+العقود الموجودة في `contracts/` تحدد shared وbusiness وchannel وidentity وcommunication وcatalog وsales وai وaudit، كما توثق Persistence Boundary وComposite Tenant FKs وEvent Ledger وOutbox وIdempotency. لا ننتقل إلى PostgreSQL Adapter قبل كتابة SQL واختبار القيود من قاعدة فارغة.
 
-## المرحلة 1: Application Ports
+## المرحلة المنجزة تصميميًا: Application Ports
 
 نكتب interfaces التي تحتاجها Use Cases فقط:
 
@@ -31,7 +31,7 @@ Transaction
 
 معيار النجاح: يمكن اختبار Application باستخدام fakes دون تشغيل SocialAPI أو Chatwoot أو PostgreSQL.
 
-## المرحلة 2: SQL Schema
+## المرحلة الحالية: SQL Schema
 
 نبني SQL migrations versioned، لا AutoMigrate:
 
@@ -58,7 +58,7 @@ audit_events
 
 معيار النجاح: migrations تعمل من قاعدة فارغة، وrollback/forward policy واضحة، وconstraints تمنع cross-tenant references والتكرار الأساسي.
 
-## المرحلة 3: Reliability Foundation
+## المرحلة التالية: Reliability Foundation
 
 نطبق:
 
@@ -125,19 +125,17 @@ SocialAPI inbound
 
 بعد AI contract والتنفيذ الآمن، نضيف CatalogItem وOffer وVariant ثم Lead وCommercialTransaction بأنواع Order/Booking/Appointment/Service Request/Quote.
 
-## ترتيب العمل في أول Pull Requests
+## ترتيب العمل في Pull Requests التالية
 
 ```text
-PR-001: Domain shared Value Objects + invariant tests
-PR-002: Domain business + channel contracts as Go types
-PR-003: Identity + communication contracts as Go types
-PR-004: Application ports
-PR-005: SQL migrations and transaction boundaries
-PR-006: Event ledger/idempotency/outbox
-PR-007: Provider simulator
-PR-008: Chatwoot/SocialAPI adapters
-PR-009: First vertical slice
-PR-010: AI Context/Intent/Decision
+PR-005: SQL migrations 000001–000012 + Foundation constraint tests
+PR-006: SQL migrations 000013–000027 + full-schema tests/review
+PR-007: PostgreSQL Adapter and TransactionManager
+PR-008: Event ledger/idempotency/outbox implementation
+PR-009: Provider simulator
+PR-010: Chatwoot/SocialAPI adapters
+PR-011: First vertical slice
+PR-012: AI Context/Intent/Decision
 ```
 
-كل Pull Request يجب أن يذكر العقد الذي يطبقه والاختبارات التي تثبت invariants الخاصة به.
+تصميم Domain وPorts وPersistence مغلق، لكن كل PR يجب أن يذكر العقد الذي يطبقه والاختبارات التي تثبت invariants الخاصة به.

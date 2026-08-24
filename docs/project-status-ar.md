@@ -4,7 +4,7 @@
 
 ## الخلاصة التنفيذية
 
-`mujeeb24-backend-go` هو Backend مستقل ونظيف لمجيب 24. أُنشئ بعيدًا عن Prototype القديم المرتبط بـPostiz/Facebook. المشروع حاليًا في مرحلة **Domain Contract وFoundation**؛ لم يبدأ تنفيذ Repositories أو SQL migrations أو Provider integrations أو AI runtime.
+`mujeeb24-backend-go` هو Backend مستقل ونظيف لمجيب 24. أُنشئ بعيدًا عن Prototype القديم المرتبط بـPostiz/Facebook. المشروع أنهى تصميم **Domain Contracts وApplication Ports وPersistence Boundary وFull Migration Schema**. لم يبدأ بعد تنفيذ SQL migrations أو Repositories أو Provider integrations أو AI runtime.
 
 التاجر سيستخدم Dashboard مجيب 24 فقط. SocialAPI.ai سيكون Provider لنقل رسائل Facebook وInstagram وWhatsApp، وChatwoot سيكون Communication Workspace داخليًا عبر API Channel/Adapter. أما Go فهو مالك Sales Intelligence وBusiness Knowledge وCatalog وLeads وCommercial Transactions وAI Decisions.
 
@@ -21,9 +21,11 @@
 | Domain/identity وcommunication | مغلق كتصميم | Customer/ExternalIdentity/Conversation References |
 | Domain/catalog وsales | مغلق كتصميم | CatalogItem/Offer/Variant/Transactions متعددة الأنواع |
 | Domain/ai وaudit | مغلق كتصميم | Structured Decision، Evidence، Policy، Audit |
-| application/ports | لم يُغلق | الخطوة التالية بعد Domain Review |
-| PostgreSQL schema/migrations | لم يبدأ | لن نستخدم AutoMigrate |
-| Event Ledger/Idempotency/Outbox | لم يبدأ | Reliability Foundation إلزامي قبل AI |
+| application/ports | مغلق كتصميم | Go interfaces التنفيذية تحتاج ضبطًا نهائيًا أثناء Adapter work |
+| PostgreSQL Persistence Contract | مغلق كتصميم | Composite Tenant FKs وLeases وIdempotency موثقة |
+| PostgreSQL schema/migrations | SQL لم يبدأ | سيُكتب من 000001 حتى 000027؛ لا AutoMigrate |
+| PostgreSQL constraint tests | لم يبدأ | مطلوب قبل Reliability implementation |
+| Event Ledger/Idempotency/Outbox | لم يبدأ | Reliability Foundation بعد نجاح migrations/tests |
 | Provider Simulator | لم يبدأ | مطلوب قبل أي credentials حقيقية |
 | SocialAPI.ai integration | غير مثبت | لا توجد credentials إنتاجية أو test credentials |
 | Chatwoot Adapter | غير منفذ | Feasibility مثبتة، Adapter لم يُكتب |
@@ -33,19 +35,19 @@
 
 لا نستخدم المستودع القديم `yemen-social-reply-engine` كقاعدة تطوير. لا نعيد Facebook adapter القديم. لا نجعل Chatwoot أو SocialAPI مصدر Sales Truth. لا نضع Provider DTOs داخل Domain. لا نستخدم `float64` للأموال ولا `AutoMigrate` للإنتاج.
 
-## معايير الانتقال من المرحلة الحالية
+## معيار إغلاق تصميم الـMigrations
 
-لا ننتقل إلى Ports حتى تكون أسماء Aggregates وValue Objects وInvariants وحالات الانتقال واضحة. ولا ننتقل إلى SQL حتى تكون Ports واضحة. ولا ننتقل إلى Provider حقيقي حتى ينجح Provider Simulator في duplicate وretry وout-of-order وfailure وdelivery.
+أُغلق تصميم الـFull Schema بعد تثبيت Foundation وCatalog وSales وAI وAudit، مع Composite Tenant FKs، External References، Event Ledger، Outbox، Idempotency، Snapshots، وسياسة `RESTRICT/ARCHIVED` بدل الحذف المتسلسل من Business. هذا لا يعني أن SQL أو الاختبارات التنفيذية قد نجحت.
 
 ## الخطوة التالية الوحيدة
 
-ابدأ بقراءة:
-
 ```text
-contracts/domain_contract_index_ar.md
-contracts/domain_shared_business_contract_ar.md
-contracts/domain_channel_contract_review_ar.md
-contracts/domain_identity_communication_contract_review_ar.md
+Finalize typed IDs + composite FK strategy
+→ Write SQL migrations 000001–000012
+→ Run PostgreSQL constraint tests
+→ Write SQL migrations 000013–000027
+→ Run full-schema migration tests/review
+→ Implement PostgreSQL Adapter
 ```
 
-ثم أغلق `application/ports`، دون كتابة API أو AI قبل ذلك.
+لا نبدأ SocialAPI أو Chatwoot أو AI runtime قبل اكتمال migrations والاختبارات. ولا نعتبر Event Ledger أو Outbox منفذين لمجرد أن تصميم الجداول مغلق.
