@@ -243,11 +243,12 @@ SELECT assert_raises(
 
 UPDATE outbox_entries
 SET status = 'processing', lease_owner = 'worker-a',
+    lease_token = '81000000-0000-0000-0000-000000000001',
     lease_expires_at = now() + interval '5 minutes', updated_at = now()
 WHERE id = '80000000-0000-0000-0000-000000000001';
 
 SELECT assert_true(
-    (SELECT status = 'processing' AND lease_owner = 'worker-a' AND lease_expires_at IS NOT NULL
+    (SELECT status = 'processing' AND lease_owner = 'worker-a' AND lease_token IS NOT NULL AND lease_expires_at IS NOT NULL
      FROM outbox_entries WHERE id = '80000000-0000-0000-0000-000000000001'),
     'valid outbox lease must be persisted'
 );
