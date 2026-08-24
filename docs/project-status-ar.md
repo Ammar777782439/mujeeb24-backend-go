@@ -27,7 +27,7 @@
 | PostgreSQL Persistence Contract | مغلق كتصميم | Composite Tenant FKs وLeases وIdempotency موثقة |
 | PostgreSQL schema/migrations | مكتملة 000001–000027 | Migration Runner مضمّن ويطبقها من قاعدة فارغة؛ لا AutoMigrate |
 | PostgreSQL constraint tests | Foundation وFull Schema ناجحة | تشمل Tenant Isolation وIdempotency وLeases وSnapshots |
-| Event Ledger/Idempotency/Outbox | تصميم + SQL tables | Go implementation لم يبدأ؛ يأتي بعد HTTP boundary |
+| Event Ledger/Idempotency/Outbox | تصميم + SQL tables | Go implementation لم يبدأ؛ يأتي بعد PostgreSQL Adapter |
 | Provider Simulator | لم يبدأ | مطلوب قبل أي credentials حقيقية |
 | SocialAPI.ai integration | غير مثبت | لا توجد credentials إنتاجية أو test credentials |
 | Chatwoot Adapter | غير منفذ | Feasibility مثبتة، Adapter لم يُكتب |
@@ -45,15 +45,15 @@
 
 أُغلق عقد Dashboard V1 تصميميًا بعد تحديد routes وroles وpermissions وRequest/Response envelopes وErrors وPagination وIdempotency وConcurrency وApplication Command/Query mapping، واعتماد JWT Access Authentication، مع فصل Webhooks وOperational endpoints وDeferred Scope. ثم تحوّل العقد إلى Go DTOs وHuma operation registration، وتولد منه OpenAPI 3.0.3 في `api/openapi/mujeeb24-dashboard-v1.generated.yaml`.
 
-يمنع `scripts/check-openapi-generated.sh` اختلاف الملف المولد عن Go source، ويُشغل مع `go test ./...` في CI أو محليًا. هذا لا يعني أن Handlers أو Application Commands أو Auth storage أصبحت منفذة؛ التسجيل الحالي HTTP skeletons للتوثيق والتحقق فقط.
+يمنع `scripts/check-openapi-generated.sh` اختلاف الملف المولد عن Go source، ويُشغل مع `go test ./...` في CI أو محليًا. أُضيفت Typed Commands/Queries وCore HTTP mapping skeletons واختبارات Scope/Meta، لكن Functional Handlers وApplication logic وAuth storage لم تُنفذ بعد.
 
 ## الخطوة التالية الوحيدة
 
 ```text
-Write shared/endpoint DTO tests
-→ Write HTTP route/handler skeletons over generated contract
-→ Finalize Application Commands/Queries
-→ Implement PostgreSQL Adapter/Reliability
+Complete route wiring for remaining typed operations
+→ Add HTTP error/auth middleware tests
+→ Implement PostgreSQL Adapter/TransactionManager
+→ Implement Event Ledger/Idempotency/Outbox
 ```
 
 لا نبدأ SocialAPI أو Chatwoot أو AI runtime قبل اكتمال Reliability Foundation وSimulator. ولا نعتبر Provider integration ناجحًا قبل اختبار حقيقي آمن لاحقًا.

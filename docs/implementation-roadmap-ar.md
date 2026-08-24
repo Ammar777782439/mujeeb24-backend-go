@@ -1,12 +1,12 @@
 # خارطة التنفيذ — Mujeeb 24 Backend Go
 
-## المرحلة الحالية: DTO-first HTTP Boundary — Dashboard V1
+## المرحلة الحالية: PR-008 — Typed Application Boundary وHTTP Handlers
 
-الحالة: **HTTP Contract مغلق، وDTO-first OpenAPI generation منفذ**.
+الحالة: **DTO-first OpenAPI منفذ، وTyped Commands/Queries وCore HTTP mapping skeletons منفذة؛ wiring الكامل ما زال قيد التنفيذ**.
 
 SQL migrations من 000001 إلى 000027 وFull Schema constraint tests مكتملة. عقد HTTP Dashboard V1 موجود في `contracts/http_api_dashboard_v1_contract_ar.md`. Go Request/Response DTOs وoperation registration داخل `internal/adapters/primary/http/contract` هي مصدر الحقيقة، وHuma يولد OpenAPI 3.0.3 إلى `api/openapi/mujeeb24-dashboard-v1.generated.yaml`. يمنع `scripts/check-openapi-generated.sh` drift ويعمل في CI.
 
-الـHandlers الحالية skeletons للتسجيل والتوثيق فقط؛ لا تنفذ Application Commands أو Queries بعد.
+الـHuma registration يولد العقد، و`internal/adapters/primary/http/handlers` يحتوي Core mapping typed إلى Application handlers. ما زالت Functional Handlers وAuth middleware وwiring الكامل للـ76 operation غير منفذة، ولا يوجد PostgreSQL أو Provider call داخل هذه المرحلة.
 
 ## المرحلة المنجزة تصميميًا: Application Ports
 
@@ -135,7 +135,7 @@ SocialAPI inbound
 PR-005: SQL migrations 000001–000012 + Foundation constraint tests — مكتمل
 PR-006: SQL migrations 000013–000027 + full-schema tests/review — مكتمل
 PR-007: HTTP API Contract → Go DTOs + generated OpenAPI v1 + drift check — مكتمل
-PR-008: HTTP route/handler skeletons + Application Commands/Queries — التالي
+PR-008: Typed Commands/Queries + Core HTTP mapping skeletons — منفذ جزئيًا؛ الإكمال الحالي
 PR-009: PostgreSQL Adapter and TransactionManager
 PR-010: Event ledger/idempotency/outbox implementation
 PR-011: Provider simulator

@@ -15,10 +15,10 @@ type ChannelProvider interface {
 }
 
 type SendMessageCommand struct {
-	ConnectionID            string
-	ProviderConversationID  string
-	Text                    string
-	IdempotencyKey          string
+	ConnectionID           string
+	ProviderConversationID string
+	Text                   string
+	IdempotencyKey         string
 }
 
 type ProviderSendResult struct {
@@ -28,7 +28,7 @@ type ProviderSendResult struct {
 }
 
 type DeliveryReference struct {
-	ConnectionID       string
-	ProviderMessageID  string
-	OutboundMessageID  string
+	ConnectionID      string
+	ProviderMessageID string
+	OutboundMessageID string
 }

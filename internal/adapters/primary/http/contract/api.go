@@ -20,7 +20,7 @@ func BuildAPI() (huma.API, *http.ServeMux) {
 	config.OpenAPI.Components.SecuritySchemes = map[string]*huma.SecurityScheme{
 		"bearerAuth": {Type: "http", Scheme: "bearer", BearerFormat: "JWT", Description: "EdDSA/Ed25519 JWT access token"},
 	}
-	api := humago.New(mux, config)
+	api := humago.NewWithPrefix(mux, "/api/v1", config)
 	registerCoreOperations(api)
 	registerExtendedOperations(api)
 	registerSystemOperations(api)

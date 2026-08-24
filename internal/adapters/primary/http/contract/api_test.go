@@ -3,6 +3,7 @@ package contract
 import (
 	"bytes"
 	"context"
+	"net/http/httptest"
 	"regexp"
 	"testing"
 )
@@ -52,4 +53,14 @@ func TestGeneratedContractHandlerSkeletonIsExplicitlyNotImplemented(t *testing.T
 		t.Fatal("BuildAPI returned nil API")
 	}
 	_ = context.Background()
+}
+
+func TestBuildAPIRoutesUseV1Prefix(t *testing.T) {
+	_, mux := BuildAPI()
+	req := httptest.NewRequest("GET", "/api/v1/health/live", nil)
+	res := httptest.NewRecorder()
+	mux.ServeHTTP(res, req)
+	if res.Code != 501 {
+		t.Fatalf("expected registered skeleton under /api/v1 to return 501, got %d", res.Code)
+	}
 }

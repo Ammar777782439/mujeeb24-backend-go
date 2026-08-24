@@ -33,11 +33,8 @@ type ConversationInput struct{ ConversationPath }
 type ConversationMessageInput struct {
 	ConversationPath
 	ListQuery
-	IfMatch        string `header:"If-Match"`
-	IdempotencyKey string `header:"Idempotency-Key"`
-	XRequestID     string `header:"X-Request-ID"`
-	XCorrelationID string `header:"X-Correlation-ID"`
-	Body           SendMessageRequest
+	CommandHeaders
+	Body SendMessageRequest
 }
 type CustomerInput struct{ CustomerPath }
 type BusinessBodyInput struct {

@@ -5265,11 +5265,11 @@ paths:
           schema:
             type: string
         - in: header
-          name: If-Match
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: Idempotency-Key
+          name: If-Match
           schema:
             type: string
         - in: header
