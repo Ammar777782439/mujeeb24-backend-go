@@ -54,9 +54,10 @@ mujeeb24-backend-go/
 │   ├── adapters/
 │   │   ├── primary/
 │   │   │   └── http/
-│   │   │       ├── handlers/
-│   │   │       ├── dto/
-│   │   │       └── middleware/
+│   │   │       ├── contract/   # Huma operation registration + HTTP metadata
+│   │   │       ├── dto/        # HTTP request/response DTOs
+│   │   │       ├── handlers/   # DTO → Application Command/Query mapping
+│   │   │       └── middleware/ # Auth, request, scope and error boundaries
 │   │   └── secondary/
 │   │       ├── providers/socialapi/
 │   │       ├── workspaces/chatwoot/
@@ -129,7 +130,7 @@ mujeeb24-backend-go/
 
 ## ما لا نعتمده
 
-لا نعود إلى `yemen-social-reply-engine` القديم كقاعدة كود. لا ننقل Facebook/Meta Prototype إلى النواة. لا ننشئ `internal/ports` بجانب `application/ports`. لا ننشئ `transport` بجانب `adapters/primary/http` لنفس HTTP. لا ننشئ `infrastructure` بجانب `adapters/secondary` لنفس PostgreSQL وRedis. ولا ننشئ عشرات الملفات البرمجية الفارغة؛ المجلدات التأسيسية تستخدم `.gitkeep` فقط إلى أن يأتي تنفيذ حقيقي.
+لا نعود إلى `yemen-social-reply-engine` القديم كقاعدة كود. لا ننقل Facebook/Meta Prototype إلى النواة. لا ننشئ `internal/ports` بجانب `application/ports`. لا ننشئ `transport` بجانب `adapters/primary/http` لنفس HTTP. لا ننشئ `infrastructure` بجانب `adapters/secondary` لنفس PostgreSQL وRedis. ولا ننشئ عشرات الملفات البرمجية الفارغة. المجلدات التأسيسية يمكن أن تستخدم `.gitkeep` قبل التنفيذ، لكن بعد دخول الكود الفعلي يجب أن تعكس الشجرة المسؤوليات الحقيقية: `contract` للتسجيل والـmetadata، `dto` لأشكال HTTP، `handlers` للتحويل إلى Application، و`middleware` للحدود المشتركة.
 
 ## القرار النهائي
 

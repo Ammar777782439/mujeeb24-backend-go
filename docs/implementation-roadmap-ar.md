@@ -4,7 +4,7 @@
 
 الحالة: **DTO-first OpenAPI منفذ، وكل 76 route تمر runtime dispatcher موحد؛ أربع Core façades typed منفذة، وبقية Application façades قيد الإكمال**.
 
-SQL migrations من 000001 إلى 000027 وFull Schema constraint tests مكتملة. عقد HTTP Dashboard V1 موجود في `contracts/http_api_dashboard_v1_contract_ar.md`. Go Request/Response DTOs وoperation registration داخل `internal/adapters/primary/http/contract` هي مصدر الحقيقة، وHuma يولد OpenAPI 3.0.3 إلى `api/openapi/mujeeb24-dashboard-v1.generated.yaml`. يمنع `scripts/check-openapi-generated.sh` drift ويعمل في CI.
+SQL migrations من 000001 إلى 000027 وFull Schema constraint tests مكتملة. عقد HTTP Dashboard V1 موجود في `contracts/http_api_dashboard_v1_contract_ar.md`. Go Request/Response DTOs داخل `internal/adapters/primary/http/dto` مع operation registration داخل `internal/adapters/primary/http/contract` هي مصدر الحقيقة المشترك، وHuma يولد OpenAPI 3.0.3 إلى `api/openapi/mujeeb24-dashboard-v1.generated.yaml`. يمنع `scripts/check-openapi-generated.sh` drift ويعمل في CI.
 
 الـHuma registration يولد العقد من نفس DTO source، و`internal/adapters/primary/http/handlers` يحتوي runtime dispatcher. أربع عمليات Core تنشئ وتستدعي typed Application Query/Command handlers؛ بقية العمليات تمر dispatcher وتعيد typed `not_implemented` حتى تُضاف façades الخاصة بها. لا يوجد PostgreSQL أو Provider call داخل هذه المرحلة.
 

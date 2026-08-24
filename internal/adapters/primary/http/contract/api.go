@@ -107,29 +107,6 @@ func registerTyped[I any, O any](api huma.API, operation huma.Operation, input I
 	huma.Register(api, operation, handler)
 }
 
-// Named input types keep the public DTO contract explicit and avoid leaking
-// internal application or provider request types into HTTP.
-type BusinessUpdateInput struct {
-	BusinessPath
-	Body BusinessUpdateRequest
-}
-type ConversationMessageListInput struct {
-	ConversationPath
-	ListQuery
-}
-type CustomerListInput struct {
-	BusinessPath
-	ListQuery
-	Search string `query:"search"`
-	Status string `query:"status"`
-}
-type CreateCustomerInput struct {
-	BusinessPath
-	IdempotencyKey string `header:"Idempotency-Key"`
-	XRequestID     string `header:"X-Request-ID"`
-	Body           CreateCustomerRequest
-}
-
 func registerExtendedOperations(api huma.API, dispatcher DashboardOperationHandler) {
 	register(api, dispatcher, huma.Operation{OperationID: "getBusinessPolicy", Method: http.MethodGet, Path: "/businesses/{business_id}/policy", Tags: []string{"Business"}, Summary: "Get business policy", Security: dashboardSecurity}, BusinessPath{}, Single[BusinessPolicy]{})
 	register(api, dispatcher, huma.Operation{OperationID: "updateBusinessPolicy", Method: http.MethodPatch, Path: "/businesses/{business_id}/policy", Tags: []string{"Business"}, Summary: "Update business policy", Security: dashboardSecurity}, BusinessPolicyInput{}, Single[BusinessPolicy]{})

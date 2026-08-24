@@ -4,12 +4,12 @@
 
 في Mujeeb 24 V1 تكون **Go HTTP DTOs وتعريفات العمليات المسجلة** هي مصدر الحقيقة لعقد Dashboard API. لا يُكتب OpenAPI يدويًا كمصدر مستقل، ولا تُعدّل النسخة المولدة مباشرة.
 
-يستخدم المشروع Huma v2.32.0 مع Go 1.22.2. تسجل حزمة `internal/adapters/primary/http/contract` العمليات، وتحدد أنواع Input وOutput وحقول path/query/header/body، ثم يولد الأمر `cmd/openapi-gen` ملف OpenAPI 3.0.3 من نفس التسجيل البرمجي.
+يستخدم المشروع Huma v2.32.0 مع Go 1.22.2. تحتوي حزمة `internal/adapters/primary/http/dto` أنواع Input وOutput وحقول path/query/header/body، بينما تسجل حزمة `internal/adapters/primary/http/contract` العمليات وmetadata باستخدام DTOs تلك. يولد الأمر `cmd/openapi-gen` ملف OpenAPI 3.0.3 من هذا المصدر البرمجي المشترك.
 
 ## دورة التوليد
 
 ```text
-Go DTOs + operation registration
+http/dto DTOs + http/contract operation registration
         ↓
 contract.BuildAPI()
         ↓
@@ -44,7 +44,7 @@ go generate ./internal/adapters/primary/http/contract
 
 ## الحدود
 
-توليد OpenAPI لا ينفذ Application Commands ولا يتصل بـPostgreSQL أو SocialAPI أو Chatwoot. الـHandlers الحالية skeletons فقط، ومهمتها القادمة تحويل DTO إلى Application Command أو Query. لا تظهر في DTOs أي Provider secrets أو raw payloads أو LLM Chain-of-Thought.
+توليد OpenAPI لا ينفذ Application Commands ولا يتصل بـPostgreSQL أو SocialAPI أو Chatwoot. الـDTOs منفصلة عن contract registration، والـHandlers مسؤولة عن تحويل DTO إلى Application Command أو Query. لا تظهر في DTOs أي Provider secrets أو raw payloads أو LLM Chain-of-Thought.
 
 Webhooks مسجلة كحدود HTTP مستقلة بدون JWT Dashboard، وتحتاج لاحقًا signature verification وdurable Event Ledger داخل التنفيذ الفعلي.
 

@@ -45,7 +45,7 @@
 
 أُغلق عقد Dashboard V1 تصميميًا بعد تحديد routes وroles وpermissions وRequest/Response envelopes وErrors وPagination وIdempotency وConcurrency وApplication Command/Query mapping، واعتماد JWT Access Authentication، مع فصل Webhooks وOperational endpoints وDeferred Scope. ثم تحوّل العقد إلى Go DTOs وHuma operation registration، وتولد منه OpenAPI 3.0.3 في `api/openapi/mujeeb24-dashboard-v1.generated.yaml`.
 
-يمنع `scripts/check-openapi-generated.sh` اختلاف الملف المولد عن Go source، ويُشغل مع `go test ./...` في CI أو محليًا. أُضيفت Typed Commands/Queries، ووُصلت كل عمليات Huma الـ76 بـruntime dispatcher مشترك، مع mapping typed فعلي لأربع Core callbacks. أضيف Auth middleware boundary واختباراته، لكن JWT issuer/key storage وMembership وfaçade الخاصة ببقية Commands/Queries وFunctional Application logic غير منفذة. حُذف `http/dto/.gitkeep` لأن DTOs الفعلية موجودة في `http/contract` كمصدر الحقيقة، وحُذف placeholder القديم من `handlers`.
+يمنع `scripts/check-openapi-generated.sh` اختلاف الملف المولد عن Go source، ويُشغل مع `go test ./...` في CI أو محليًا. أُضيفت Typed Commands/Queries، ووُصلت كل عمليات Huma الـ76 بـruntime dispatcher مشترك، مع mapping typed فعلي لأربع Core callbacks. أضيف Auth middleware boundary واختباراته، لكن JWT issuer/key storage وMembership وfaçade الخاصة ببقية Commands/Queries وFunctional Application logic غير منفذة. نُقلت DTOs الفعلية إلى `http/dto`، وأصبح `http/contract` مسؤولًا عن operation registration وmetadata مع aliases توافقية فقط، وحُذف placeholder القديم من `handlers`.
 
 ## الخطوة التالية الوحيدة
 

@@ -2,9 +2,9 @@
 
 ## قرار بنية المجلدات
 
-في هذا المشروع، `internal/adapters/primary/http/contract` هو حزمة **HTTP DTOs + Huma operation registration** معًا. هذا مقصود لأن سياسة DTO-first تعتمد نفس Go types في parsing وفي توليد OpenAPI، ولا نريد نسخة ثانية من DTOs داخل `http/dto` تسبب drift. لذلك كان `http/dto/.gitkeep` placeholder غير مستخدم، وتم حذفه. أما `http/handlers` فهو الحزمة الفعلية للتحويل إلى Commands/Queries، وتم حذف placeholder منها بعد دخول `core.go`. `middleware` يبقى فارغًا مؤقتًا إلى أن يبدأ Auth/Scope middleware في إغلاق PR-008.
+في القرار المصحح، `internal/adapters/primary/http/dto` هو حزمة **HTTP request/response structs**، و`internal/adapters/primary/http/contract` هو حزمة **Huma operation registration وHTTP metadata**. يستخدم contract DTOs من dto عبر aliases توافقية فقط عند الحاجة، ولا توجد نسخة ثانية من structs. أما `http/handlers` فهو حزمة DTO → Commands/Queries، و`middleware` يملك الحدود المشتركة مثل Auth.
 
-وجود DTOs داخل `contract` لا يعني أن كل Functional Application handlers مكتملة؛ المصفوفة التالية تفصل بين وجود العقد وبين runtime wiring الفعلي.
+وجود DTOs داخل `dto` وتسجيلها داخل `contract` لا يعني أن كل Functional Application handlers مكتملة؛ المصفوفة التالية تفصل بين وجود العقد وبين runtime wiring الفعلي.
 
 ## Operations
 addPrivateNote
@@ -225,7 +225,7 @@ type VariantUpdateInput struct {
 | القياس | العدد/الحالة |
 |---|---:|
 | Huma operation descriptors | 76 |
-| DTO input/output types | موجودة داخل `contract` ومستخدمة في التسجيل |
+| DTO input/output types | موجودة داخل `dto`، ويستخدمها `contract` في التسجيل |
 | routes التي تمر runtime عبر dispatcher | 76 |
 | routes ذات façade typed تستدعي Application handler | 4: conversations/messages/customers core |
 | routes التي ما زالت تعيد `not_implemented` من Application boundary | بقية العمليات |

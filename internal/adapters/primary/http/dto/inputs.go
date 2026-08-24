@@ -1,4 +1,4 @@
-package contract
+package dto
 
 // Common query and path DTOs. Huma reads the tags to generate OpenAPI parameters.
 type EmptyInput struct{}
@@ -591,4 +591,27 @@ type UpdateCustomerRequest struct {
 	Profile          map[string]any      `json:"profile,omitempty"`
 	ContactPoints    []ContactPointInput `json:"contact_points,omitempty"`
 	LocalePreference string              `json:"locale_preference,omitempty" maxLength:"20"`
+}
+
+// Named inputs used by operation registration. They remain DTOs; contract only
+// registers these types and supplies operation metadata.
+type BusinessUpdateInput struct {
+	BusinessPath
+	Body BusinessUpdateRequest
+}
+type ConversationMessageListInput struct {
+	ConversationPath
+	ListQuery
+}
+type CustomerListInput struct {
+	BusinessPath
+	ListQuery
+	Search string `query:"search"`
+	Status string `query:"status"`
+}
+type CreateCustomerInput struct {
+	BusinessPath
+	IdempotencyKey string `header:"Idempotency-Key"`
+	XRequestID     string `header:"X-Request-ID"`
+	Body           CreateCustomerRequest
 }

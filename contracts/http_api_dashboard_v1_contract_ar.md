@@ -2,7 +2,7 @@
 
 ## حالة العقد
 
-**الحالة: مغلق تصميميًا ومحوّل إلى DTO-first source.** هذه الوثيقة هي المرجع التجاري بين Dashboard Frontend وMujeeb 24 Backend. مصدر التنفيذ هو Go Request/Response DTOs وoperation registration داخل `internal/adapters/primary/http/contract`، ومنها يتولد OpenAPI تلقائيًا. تعتمد V1 **JWT Access Tokens** كآلية Authentication. لا تكشف الوثيقة PostgreSQL أو SocialAPI أو Chatwoot.
+**الحالة: مغلق تصميميًا ومحوّل إلى DTO-first source.** هذه الوثيقة هي المرجع التجاري بين Dashboard Frontend وMujeeb 24 Backend. مصدر التنفيذ هو Go Request/Response DTOs داخل `internal/adapters/primary/http/dto` مع operation registration وHTTP metadata داخل `internal/adapters/primary/http/contract`، ومن اتحادهما يتولد OpenAPI تلقائيًا. تعتمد V1 **JWT Access Tokens** كآلية Authentication. لا تكشف الوثيقة PostgreSQL أو SocialAPI أو Chatwoot.
 
 > هذا العقد يحدد ما يستطيع Dashboard طلبه وما يراه. أما طريقة التنفيذ الداخلية فتظل مسؤولية Application وPorts وAdapters.
 
