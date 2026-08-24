@@ -211,3 +211,24 @@ func singleMessage(v commands.MessageView) *contract.Single[contract.Message] {
 	out.Body.Data = contract.Message{ID: contract.UUID(v.ID), ConversationID: contract.UUID(v.ConversationID), Direction: v.Direction, Origin: v.Origin, Status: v.Status, Text: v.Text, CreatedAt: v.CreatedAt}
 	return out
 }
+
+// Dispatch is the single runtime callback used by all registered Huma operations.
+// The operation ID selects a typed façade method; operations without an
+// Application dependency yet still fail through the Application error boundary,
+// never through a contract-local generic handler.
+func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (any, error) {
+	switch operationID {
+	case "listConversations":
+		return s.ListConversations(ctx, input.(*contract.ConversationListInput))
+	case "getConversation":
+		return s.GetConversation(ctx, input.(*contract.ConversationInput))
+	case "createOutboundMessage":
+		return s.CreateOutboundMessage(ctx, input.(*contract.ConversationMessageInput))
+	case "listCustomers":
+		return s.ListCustomers(ctx, input.(*contract.CustomerListInput))
+	default:
+		return nil, mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "application handler is not wired: "+operationID))
+	}
+}
+
+var _ contract.DashboardOperationHandler = (*Server)(nil)

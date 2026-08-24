@@ -116,3 +116,20 @@ func TestMapApplicationErrorKeepsHTTPOutsideApplication(t *testing.T) {
 		}
 	}
 }
+
+func TestRuntimeNonCoreRouteUsesApplicationBoundary(t *testing.T) {
+	_, mux := contract.BuildAPIWithHandlers(NewServer(Dependencies{}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/businesses/00000000-0000-0000-0000-000000000001/catalogs", nil)
+	res := httptest.NewRecorder()
+	mux.ServeHTTP(res, req)
+	if res.Code != http.StatusNotImplemented {
+		t.Fatalf("expected application boundary status 501, got %d body=%s", res.Code, res.Body.String())
+	}
+	var envelope contract.ErrorEnvelope
+	if err := json.NewDecoder(res.Body).Decode(&envelope); err != nil {
+		t.Fatalf("decode error envelope: %v", err)
+	}
+	if envelope.Error.Code != string(appErrors.CodeNotImplemented) {
+		t.Fatalf("expected not_implemented application code, got %#v", envelope.Error)
+	}
+}

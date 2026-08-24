@@ -2,7 +2,7 @@
 
 ## الحالة
 
-تم تنفيذ **Typed Application boundary وCore HTTP runtime mapping**. هذه المرحلة لا تنفذ PostgreSQL أو SocialAPI أو Chatwoot أو AI runtime. العمليات الأربع الأساسية للمحادثات/الرسائل والعملاء تمر runtime عبر `BuildAPIWithHandlers` إلى Server typed، وتعيد `not_implemented` typed error فقط لأن dependencies غير موصلة بعد.
+تم تنفيذ **Typed Application boundary وHTTP runtime dispatcher**. هذه المرحلة لا تنفذ PostgreSQL أو SocialAPI أو Chatwoot أو AI runtime. كل عمليات Huma الـ76 تمر عبر نفس `BuildAPIWithHandlers` و`handlers.Server.Dispatch`؛ أربع عمليات Core لديها mapping typed إلى Application handlers، والعمليات الأخرى تعبر نفس الحد وتعيد `not_implemented` من Application boundary إلى أن تُضاف façade الخاصة بها.
 
 ## قاعدة الاعتماد
 
@@ -52,6 +52,6 @@ Application لا يعيد HTTP status. يستخدم typed application errors م�
 
 ## ما لم يُنفذ بعد
 
-لم تُربط كل عمليات Huma الـ76 بتطبيقات Use Case فعلية؛ أربع عمليات Core فقط موصولة runtime typed: `listConversations` و`getConversation` و`createOutboundMessage` و`listCustomers`. بقية التسجيل يحافظ على route/DTO skeleton واحد المصدر. اختبار httptest أثبت prefix `/api/v1` وHTTP status 501 المؤقت وJSON `ErrorEnvelope` مع `application/json`. لا ندعي أن Business logic أو Repositories أو Auth storage جاهزة.
+لم تُربط كل عمليات Huma الـ76 بتطبيقات Use Case فعلية. الأربع عمليات التالية لديها mapping typed فعلي: `listConversations` و`getConversation` و`createOutboundMessage` و`listCustomers`. أما بقية operations فلها DTO وoperation descriptor وruntime dispatcher، لكنها لا تملك بعد façade تنشئ Command/Query وتستدعي dependency الخاصة بها؛ لذلك ترجع `not_implemented` typed error. اختبارات httptest أثبتت prefix `/api/v1` وErrorEnvelope مع `application/json` لكل من Core route وnon-Core route. لا ندعي أن Business logic أو Repositories أو Auth storage جاهزة.
 
 الخطوة التالية هي إكمال route wiring بنفس النمط عند الحاجة، ثم PostgreSQL Adapter وTransactionManager. لا نضع SQL داخل Handler ولا نعيد فتح OpenAPI أو Schema.
