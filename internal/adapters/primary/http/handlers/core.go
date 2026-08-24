@@ -9,7 +9,6 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/queries"
-	"github.com/danielgtaylor/huma/v2"
 )
 
 type ScopeProvider interface {
@@ -140,17 +139,26 @@ func (s *Server) ListCustomers(ctx context.Context, in *contract.CustomerListInp
 	return out, nil
 }
 
+type dashboardHTTPError struct {
+	contract.ErrorEnvelope
+	status int
+}
+
+func (e *dashboardHTTPError) Error() string                         { return e.ErrorEnvelope.Error.Message }
+func (e *dashboardHTTPError) GetStatus() int                        { return e.status }
+func (e *dashboardHTTPError) ContentType(contentType string) string { return contentType }
+
 func mapApplicationError(err error) error {
 	if err == nil {
 		return nil
 	}
 	var typed *appErrors.Error
 	if !errors.As(err, &typed) {
-		return huma.Error500InternalServerError("internal error")
+		return &dashboardHTTPError{ErrorEnvelope: contract.ErrorEnvelope{Error: contract.ErrorBody{Code: "internal_error", Message: "internal error"}}, status: 500}
 	}
 	status := 500
 	switch typed.Code {
-	case appErrors.CodeValidation:
+	case appErrors.CodeValidation, appErrors.CodeInvalidState:
 		status = 422
 	case appErrors.CodeNotFound:
 		status = 404
@@ -167,7 +175,11 @@ func mapApplicationError(err error) error {
 	if message == "" {
 		message = string(typed.Code)
 	}
-	return huma.NewError(status, message)
+	fields := map[string]string(nil)
+	if typed.Field != "" {
+		fields = map[string]string{"field": typed.Field}
+	}
+	return &dashboardHTTPError{ErrorEnvelope: contract.ErrorEnvelope{Error: contract.ErrorBody{Code: string(typed.Code), Message: message, Fields: fields, Retryable: typed.Retryable}}, status: status}
 }
 
 func optionalString(v string) *string {

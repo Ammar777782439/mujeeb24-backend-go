@@ -5,10 +5,12 @@ import (
 	"net/http"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/handlers"
 )
 
 func main() {
-	_, mux := contract.BuildAPI()
+	appHandlers := handlers.NewServer(handlers.Dependencies{})
+	_, mux := contract.BuildAPIWithHandlers(appHandlers)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			w.WriteHeader(http.StatusMethodNotAllowed)

@@ -10,10 +10,23 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 )
 
-// BuildAPI creates the DTO-first API contract. Handlers are intentionally
-// skeletons at this stage; the registered input/output types are the source of
-// truth for generated OpenAPI and later HTTP interfaces.
+// DashboardHandlers is the HTTP-facing application handler boundary. It lives
+// in contract so the concrete handlers package can implement it without an import cycle.
+type DashboardHandlers interface {
+	ListConversations(context.Context, *ConversationListInput) (*List[Conversation], error)
+	GetConversation(context.Context, *ConversationInput) (*Single[Conversation], error)
+	CreateOutboundMessage(context.Context, *ConversationMessageInput) (*Single[Message], error)
+	ListCustomers(context.Context, *CustomerListInput) (*List[Customer], error)
+}
+
+// BuildAPI creates the DTO-first API contract with skeleton callbacks.
 func BuildAPI() (huma.API, *http.ServeMux) {
+	return BuildAPIWithHandlers(nil)
+}
+
+// BuildAPIWithHandlers uses the same operation declarations as BuildAPI while
+// allowing runtime wiring of the typed HTTP handler boundary.
+func BuildAPIWithHandlers(handlers DashboardHandlers) (huma.API, *http.ServeMux) {
 	mux := http.NewServeMux()
 	config := huma.DefaultConfig("Mujeeb 24 Dashboard API", "1.0.0")
 	config.OpenAPI.Servers = []*huma.Server{{URL: "/api/v1", Description: "Mujeeb 24 API V1"}}
@@ -21,7 +34,7 @@ func BuildAPI() (huma.API, *http.ServeMux) {
 		"bearerAuth": {Type: "http", Scheme: "bearer", BearerFormat: "JWT", Description: "EdDSA/Ed25519 JWT access token"},
 	}
 	api := humago.NewWithPrefix(mux, "/api/v1", config)
-	registerCoreOperations(api)
+	registerCoreOperations(api, handlers)
 	registerExtendedOperations(api)
 	registerSystemOperations(api)
 	registerRemainingDashboardOperations(api)
@@ -31,17 +44,37 @@ func BuildAPI() (huma.API, *http.ServeMux) {
 
 var dashboardSecurity = []map[string][]string{{"bearerAuth": {}}}
 
-func registerCoreOperations(api huma.API) {
+func registerCoreOperations(api huma.API, handlers DashboardHandlers) {
 	register(api, huma.Operation{OperationID: "getCurrentPrincipal", Method: http.MethodGet, Path: "/me", Tags: []string{"Me"}, Summary: "Get the authenticated principal", Security: dashboardSecurity}, EmptyInput{}, Single[Principal]{})
 	register(api, huma.Operation{OperationID: "listAccessibleBusinesses", Method: http.MethodGet, Path: "/me/businesses", Tags: []string{"Me"}, Summary: "List businesses accessible to the principal", Security: dashboardSecurity}, BusinessListInput{}, List[BusinessMembership]{})
 	register(api, huma.Operation{OperationID: "getBusiness", Method: http.MethodGet, Path: "/businesses/{business_id}", Tags: []string{"Business"}, Summary: "Get a business projection", Security: dashboardSecurity}, BusinessPath{}, Single[Business]{})
 	register(api, huma.Operation{OperationID: "updateBusinessProfile", Method: http.MethodPatch, Path: "/businesses/{business_id}", Tags: []string{"Business"}, Summary: "Update editable business profile fields", Security: dashboardSecurity, DefaultStatus: http.StatusOK}, BusinessUpdateInput{}, Single[Business]{})
 	register(api, huma.Operation{OperationID: "getDashboardOverview", Method: http.MethodGet, Path: "/businesses/{business_id}/dashboard/overview", Tags: []string{"Dashboard"}, Summary: "Get the merchant dashboard overview", Security: dashboardSecurity}, BusinessPath{}, Single[DashboardOverview]{})
-	register(api, huma.Operation{OperationID: "listConversations", Method: http.MethodGet, Path: "/businesses/{business_id}/conversations", Tags: []string{"Conversations"}, Summary: "List merchant conversations", Security: dashboardSecurity}, ConversationListInput{}, List[Conversation]{})
-	register(api, huma.Operation{OperationID: "getConversation", Method: http.MethodGet, Path: "/businesses/{business_id}/conversations/{conversation_id}", Tags: []string{"Conversations"}, Summary: "Get a conversation projection", Security: dashboardSecurity}, ConversationInput{}, Single[Conversation]{})
+	listConversationsOp := huma.Operation{OperationID: "listConversations", Method: http.MethodGet, Path: "/businesses/{business_id}/conversations", Tags: []string{"Conversations"}, Summary: "List merchant conversations", Security: dashboardSecurity}
+	if handlers == nil {
+		register(api, listConversationsOp, ConversationListInput{}, List[Conversation]{})
+	} else {
+		registerTyped(api, listConversationsOp, ConversationListInput{}, List[Conversation]{}, handlers.ListConversations)
+	}
+	getConversationOp := huma.Operation{OperationID: "getConversation", Method: http.MethodGet, Path: "/businesses/{business_id}/conversations/{conversation_id}", Tags: []string{"Conversations"}, Summary: "Get a conversation projection", Security: dashboardSecurity}
+	if handlers == nil {
+		register(api, getConversationOp, ConversationInput{}, Single[Conversation]{})
+	} else {
+		registerTyped(api, getConversationOp, ConversationInput{}, Single[Conversation]{}, handlers.GetConversation)
+	}
 	register(api, huma.Operation{OperationID: "listConversationMessages", Method: http.MethodGet, Path: "/businesses/{business_id}/conversations/{conversation_id}/messages", Tags: []string{"Conversations"}, Summary: "List conversation messages", Security: dashboardSecurity}, ConversationMessageListInput{}, List[Message]{})
-	register(api, huma.Operation{OperationID: "createOutboundMessage", Method: http.MethodPost, Path: "/businesses/{business_id}/conversations/{conversation_id}/messages", Tags: []string{"Conversations"}, Summary: "Create an outbound message intent", Security: dashboardSecurity, DefaultStatus: http.StatusAccepted, Errors: []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict, http.StatusUnprocessableEntity, http.StatusServiceUnavailable}}, ConversationMessageInput{}, Single[Message]{})
-	register(api, huma.Operation{OperationID: "listCustomers", Method: http.MethodGet, Path: "/businesses/{business_id}/customers", Tags: []string{"Customers"}, Summary: "List customers", Security: dashboardSecurity}, CustomerListInput{}, List[Customer]{})
+	createOutboundOp := huma.Operation{OperationID: "createOutboundMessage", Method: http.MethodPost, Path: "/businesses/{business_id}/conversations/{conversation_id}/messages", Tags: []string{"Conversations"}, Summary: "Create an outbound message intent", Security: dashboardSecurity, DefaultStatus: http.StatusAccepted, Errors: []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict, http.StatusUnprocessableEntity, http.StatusServiceUnavailable}}
+	if handlers == nil {
+		register(api, createOutboundOp, ConversationMessageInput{}, Single[Message]{})
+	} else {
+		registerTyped(api, createOutboundOp, ConversationMessageInput{}, Single[Message]{}, handlers.CreateOutboundMessage)
+	}
+	listCustomersOp := huma.Operation{OperationID: "listCustomers", Method: http.MethodGet, Path: "/businesses/{business_id}/customers", Tags: []string{"Customers"}, Summary: "List customers", Security: dashboardSecurity}
+	if handlers == nil {
+		register(api, listCustomersOp, CustomerListInput{}, List[Customer]{})
+	} else {
+		registerTyped(api, listCustomersOp, CustomerListInput{}, List[Customer]{}, handlers.ListCustomers)
+	}
 	register(api, huma.Operation{OperationID: "getCustomer", Method: http.MethodGet, Path: "/businesses/{business_id}/customers/{customer_id}", Tags: []string{"Customers"}, Summary: "Get a customer projection", Security: dashboardSecurity}, CustomerInput{}, Single[Customer]{})
 	register(api, huma.Operation{OperationID: "createCustomer", Method: http.MethodPost, Path: "/businesses/{business_id}/customers", Tags: []string{"Customers"}, Summary: "Create a customer", Security: dashboardSecurity, DefaultStatus: http.StatusCreated}, CreateCustomerInput{}, Single[Customer]{})
 }
@@ -70,12 +103,16 @@ func replaceFrameworkErrorResponses(api huma.API) {
 }
 
 func register[I any, O any](api huma.API, operation huma.Operation, input I, output O) {
+	registerTyped(api, operation, input, output, func(context.Context, *I) (*O, error) {
+		return nil, huma.Error501NotImplemented("HTTP handler skeleton is not implemented")
+	})
+}
+
+func registerTyped[I any, O any](api huma.API, operation huma.Operation, input I, output O, handler func(context.Context, *I) (*O, error)) {
 	if operation.Errors == nil {
 		operation.Errors = []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict, http.StatusUnprocessableEntity}
 	}
-	huma.Register(api, operation, func(context.Context, *I) (*O, error) {
-		return nil, huma.Error501NotImplemented("HTTP handler skeleton is not implemented")
-	})
+	huma.Register(api, operation, handler)
 }
 
 // Named input types keep the public DTO contract explicit and avoid leaking

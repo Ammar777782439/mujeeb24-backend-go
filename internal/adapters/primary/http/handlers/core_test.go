@@ -2,6 +2,10 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
@@ -72,6 +76,26 @@ func asApplicationError(err error, target **appErrors.Error) bool {
 		return true
 	}
 	return false
+}
+
+func TestRuntimeRouteUsesTypedHandlerAndErrorEnvelope(t *testing.T) {
+	_, mux := contract.BuildAPIWithHandlers(NewServer(Dependencies{}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/businesses/00000000-0000-0000-0000-000000000001/conversations", nil)
+	res := httptest.NewRecorder()
+	mux.ServeHTTP(res, req)
+	if res.Code != http.StatusNotImplemented {
+		t.Fatalf("expected typed skeleton status 501, got %d body=%s", res.Code, res.Body.String())
+	}
+	if !strings.HasPrefix(res.Header().Get("Content-Type"), "application/json") {
+		t.Fatalf("expected application/json, got %q", res.Header().Get("Content-Type"))
+	}
+	var envelope contract.ErrorEnvelope
+	if err := json.NewDecoder(res.Body).Decode(&envelope); err != nil {
+		t.Fatalf("decode error envelope: %v; body=%s", err, res.Body.String())
+	}
+	if envelope.Error.Code != string(appErrors.CodeNotImplemented) || envelope.Error.Message == "" {
+		t.Fatalf("unexpected error envelope: %#v", envelope)
+	}
 }
 
 func TestMapApplicationErrorKeepsHTTPOutsideApplication(t *testing.T) {

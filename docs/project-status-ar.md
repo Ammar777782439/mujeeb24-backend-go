@@ -45,7 +45,7 @@
 
 أُغلق عقد Dashboard V1 تصميميًا بعد تحديد routes وroles وpermissions وRequest/Response envelopes وErrors وPagination وIdempotency وConcurrency وApplication Command/Query mapping، واعتماد JWT Access Authentication، مع فصل Webhooks وOperational endpoints وDeferred Scope. ثم تحوّل العقد إلى Go DTOs وHuma operation registration، وتولد منه OpenAPI 3.0.3 في `api/openapi/mujeeb24-dashboard-v1.generated.yaml`.
 
-يمنع `scripts/check-openapi-generated.sh` اختلاف الملف المولد عن Go source، ويُشغل مع `go test ./...` في CI أو محليًا. أُضيفت Typed Commands/Queries وCore HTTP mapping skeletons واختبارات Scope/Meta، لكن Functional Handlers وApplication logic وAuth storage لم تُنفذ بعد.
+يمنع `scripts/check-openapi-generated.sh` اختلاف الملف المولد عن Go source، ويُشغل مع `go test ./...` في CI أو محليًا. أُضيفت Typed Commands/Queries، ووُصلت أربع Core callbacks runtime عبر `BuildAPIWithHandlers`، واختُبر Scope/Meta وErrorEnvelope بـhttptest. ما زالت بقية operations وFunctional Handlers وApplication logic وAuth storage غير منفذة.
 
 ## الخطوة التالية الوحيدة
 

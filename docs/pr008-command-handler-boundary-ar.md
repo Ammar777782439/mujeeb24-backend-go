@@ -2,7 +2,7 @@
 
 ## الحالة
 
-تم تنفيذ **Typed Application boundary وHTTP mapping skeletons**. هذه المرحلة لا تنفذ PostgreSQL أو SocialAPI أو Chatwoot أو AI runtime. الـHandlers الحالية تستدعي Application interfaces عندما تُحقن dependencies، وتعيد `not_implemented` typed error عندما لا تكون Application wiring موجودة.
+تم تنفيذ **Typed Application boundary وCore HTTP runtime mapping**. هذه المرحلة لا تنفذ PostgreSQL أو SocialAPI أو Chatwoot أو AI runtime. العمليات الأربع الأساسية للمحادثات/الرسائل والعملاء تمر runtime عبر `BuildAPIWithHandlers` إلى Server typed، وتعيد `not_implemented` typed error فقط لأن dependencies غير موصلة بعد.
 
 ## قاعدة الاعتماد
 
@@ -52,6 +52,6 @@ Application لا يعيد HTTP status. يستخدم typed application errors م�
 
 ## ما لم يُنفذ بعد
 
-لم تُربط كل عمليات Huma الـ76 بتطبيقات Use Case فعلية؛ التسجيل الحالي وثيقة HTTP وroute skeleton، وCore mapping المطبق هو Conversations وCustomers مع أمثلة Scope/Meta. لا ندعي أن Business logic أو Repositories أو Auth storage جاهزة.
+لم تُربط كل عمليات Huma الـ76 بتطبيقات Use Case فعلية؛ أربع عمليات Core فقط موصولة runtime typed: `listConversations` و`getConversation` و`createOutboundMessage` و`listCustomers`. بقية التسجيل يحافظ على route/DTO skeleton واحد المصدر. اختبار httptest أثبت prefix `/api/v1` وHTTP status 501 المؤقت وJSON `ErrorEnvelope` مع `application/json`. لا ندعي أن Business logic أو Repositories أو Auth storage جاهزة.
 
 الخطوة التالية هي إكمال route wiring بنفس النمط عند الحاجة، ثم PostgreSQL Adapter وTransactionManager. لا نضع SQL داخل Handler ولا نعيد فتح OpenAPI أو Schema.
