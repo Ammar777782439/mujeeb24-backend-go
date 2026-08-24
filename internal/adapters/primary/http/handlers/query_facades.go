@@ -477,7 +477,7 @@ func capabilityList(v commands.ListResult[queries.ConnectionCapabilityView]) *co
 	items := make([]contract.Capability, 0, len(v.Items))
 	for _, item := range v.Items {
 		evidence := optionalString(item.EvidenceSource)
-		items = append(items, contract.Capability{Name: item.Name, Enabled: item.Enabled, EvidenceSource: evidence})
+		items = append(items, contract.Capability{Name: item.Name, Enabled: item.Enabled, CheckedAt: item.CheckedAt, EvidenceSource: evidence})
 	}
 	return listPage(items, v.NextCursor, v.HasMore)
 }

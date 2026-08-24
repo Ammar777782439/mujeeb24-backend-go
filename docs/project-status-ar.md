@@ -27,7 +27,7 @@
 | PostgreSQL Persistence Contract | مغلق كتصميم | Composite Tenant FKs وLeases وIdempotency موثقة |
 | PostgreSQL schema/migrations | مكتملة 000001–000028 | Migration Runner مضمّن ويطبقها من قاعدة فارغة؛ لا AutoMigrate؛ 000028 forward-only لـCommunicationMessage |
 | PostgreSQL constraint tests | Foundation وFull Schema ناجحة | تشمل Tenant Isolation وIdempotency وLeases وSnapshots |
-| Event Ledger/Idempotency/Outbox | تصميم + SQL tables | Go implementation لم يبدأ؛ يأتي بعد إكمال Repository surfaces بما فيها CommunicationMessage |
+| Event Ledger/Idempotency/Outbox | تصميم + SQL tables | Go implementation لم يبدأ؛ يأتي بعد إكمال Repository surfaces بما فيها CommunicationMessage وChannel Capabilities |
 | Provider Simulator | لم يبدأ | مطلوب قبل أي credentials حقيقية |
 | SocialAPI.ai integration | غير مثبت | لا توجد credentials إنتاجية أو test credentials |
 | Chatwoot Adapter | غير منفذ | Feasibility مثبتة، Adapter لم يُكتب |
@@ -43,7 +43,7 @@
 
 ## الحالة الحالية: PR-009 — PostgreSQL Adapter وTransactionManager
 
-أُغلق PR-008 عند حد HTTP → Application façade wiring بنتيجة 76/76. في PR-009 نُفذ PostgreSQL pool وTransactionManager وSQLExecutor وtyped repository errors، ثم Business/Customer/Conversation/ChannelConnection/ConversationReference/OutboundMessage foundation، وأضيفت `communication_messages` في 000028 مع `MessageRepository.Record/ListByConversation` و`MessageQueryService`. نجح integration test حقيقي على PostgreSQL 16 يثبت insert/read وtenant scope وtyped not-found وordering/keyset pagination وmalformed cursor وstatus projection وcommit/rollback وApplication mapping. ما زالت Catalog/Sales/AI/Audit repositories وEventStore وIdempotency/Outbox implementations وbootstrap wiring مؤجلة.
+أُغلق PR-008 عند حد HTTP → Application façade wiring بنتيجة 76/76. في PR-009 نُفذ PostgreSQL pool وTransactionManager وSQLExecutor وtyped repository errors، ثم Business/Customer/Conversation/ChannelConnection/ConversationReference/OutboundMessage foundation، وCommunicationMessage timeline، والآن `ChannelCapabilityRepository.ListByConnection` و`ConnectionCapabilitiesQueryService`. نجح integration test حقيقي على PostgreSQL 16 يثبت capabilities read/order وchecked_at/evidence mapping وtenant not-found وtransaction commit/rollback، إضافة إلى تغطية CommunicationMessage السابقة. ما زالت Catalog/Sales/AI/Audit repositories وEventStore وIdempotency/Outbox implementations وbootstrap wiring مؤجلة.
 
 ## معيار إغلاق HTTP API Contract وDTO-first Generation
 
@@ -57,6 +57,7 @@
 PR-008 CLOSED: HTTP → Application façade 76/76
 → PR-009: PostgreSQL pool + TransactionManager ✅
 → Repository foundation + CommunicationMessage timeline ✅
+→ Channel Capabilities ✅
 → Catalog/Sales/AI/Audit repositories ⏳
 → Event Ledger: atomic inbound dedupe ⏳
 → Outbox persistence/worker boundary ⏳

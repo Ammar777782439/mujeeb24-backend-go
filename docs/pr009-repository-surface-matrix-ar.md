@@ -10,7 +10,7 @@
 |---|---|---|---|
 | Foundation | قراءة tenant/business scope | `businesses` | منفذ |
 | Identity/Communication | عرض العملاء والمحادثات، قراءة/إنشاء outbound، وعرض message timeline | `customers`, `conversations`, `conversation_references`, `communication_messages`, `outbound_messages` | Business/Customer/Conversation/Connection/Reference/Outbound وCommunicationMessage foundation منفذة ومثبتة بـPostgreSQL 16 |
-| Channels | عرض connection وcapabilities | `channel_connections`, `channel_connection_capabilities` | قراءة أساسية منفذة للـconnection فقط؛ capabilities لاحقًا |
+| Channels | عرض connection وcapabilities | `channel_connections`, `channel_connection_capabilities` | `ChannelConnection.GetByID` و`ChannelCapability.ListByConnection` منفذان ومثبتان بـPostgreSQL 16؛ لا CRUD كتابة غير مطلوب |
 | Catalog | عرض/إنشاء/تعديل catalog وitems/offers/variants | `catalogs`, `attribute_schemas`, `attribute_definitions`, `catalog_items`, `offers`, `variants` | مؤجلة بعد إغلاق CommunicationMessage |
 | Sales | Leads وtransactions وreviews/order lines | `leads`, `lead_attributions`, `lead_scores`, `commercial_transactions`, `transaction_reviews`, `transaction_confirmations`, `order_lines` | مؤجلة بعد Catalog |
 | AI/Audit | قراءة decisions وتسجيل/عرض audit | `ai_decisions`, `audit_events` | مؤجلة بعد Sales |
@@ -29,6 +29,10 @@
 
 `CommunicationMessage` ليس بديلًا عن `ConversationReference` أو `OutboundMessage` أو `InboundEventLedger`. لا يوجد CRUD عام، ولا one-to-one unique غير مثبت بين message record وinbound/outbound links.
 
+## Channel Capabilities surface
+
+`GetConnectionCapabilities` هو use case القراءة الوحيد المطلوب حاليًا. `ChannelCapabilityRepository.ListByConnection` يعيد `Name`, `Enabled`, `CheckedAt`, و`EvidenceSource` بترتيب capability تصاعديًا، ويجعل connection existence والـtenant scope شرطًا سابقًا؛ الاتصال المفقود أو التابع لـBusiness آخر يعيد `RepositoryNotFound`. لا تُنشأ methods لتحديث capability من Dashboard، لأن capabilities ناتجة عن provider health/contract checks وتبقى الكتابة في مسار integration لاحق.
+
 ## Status projection
 
 لا يملك `communication_messages` عمود `status` في V1. الرسالة inbound غير المرتبطة بـOutboundMessage تعرض `received`، والرسالة outbound غير المرتبطة تعرض `recorded`، والرسالة المرتبطة بـ`outbound_message_id` تعرض حالة OutboundMessage الحالية: `pending | sending | accepted | sent | delivered | read | failed | unknown`. هذه projection لا تدّعي نجاح التسليم.
@@ -45,4 +49,4 @@
 
 ## معيار قبول كل مجموعة
 
-لا تنتقل المجموعة إلى التالية قبل نجاح unit tests وintegration test على PostgreSQL حقيقي، مع تطبيق migrations، وقراءة صحيحة، وnot-found، وcross-tenant rejection، وسلوك transaction عند الحاجة. CommunicationMessage حققت هذا المعيار في PostgreSQL 16، بما في ذلك ordering/pagination وconstraints وApplication mapping. بعد تثبيت surfaces المتبقية في Catalog/Sales/AI/Audit فقط نبدأ EventStore ثم inbound dedupe ثم Outbox. لا يبدأ Provider runtime قبل إكمال Reliability foundation.
+لا تنتقل المجموعة إلى التالية قبل نجاح unit tests وintegration test على PostgreSQL حقيقي، مع تطبيق migrations، وقراءة صحيحة، وnot-found، وcross-tenant rejection، وسلوك transaction عند الحاجة. CommunicationMessage وChannel Capabilities حققتا هذا المعيار في PostgreSQL 16. CommunicationMessage غطت ordering/pagination وconstraints وApplication mapping، وChannel Capabilities غطت read/order وchecked_at/evidence وtenant not-found وtransaction commit/rollback وApplication mapping. بعد تثبيت surfaces المتبقية في Catalog/Sales/AI/Audit فقط نبدأ EventStore ثم inbound dedupe ثم Outbox. لا يبدأ Provider runtime قبل إكمال Reliability foundation.

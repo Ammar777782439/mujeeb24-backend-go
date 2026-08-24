@@ -1,6 +1,10 @@
 package queries
 
-import "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
+import (
+	"time"
+
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
+)
 
 type QueryMeta = commands.QueryMeta
 
@@ -47,6 +51,7 @@ type GetConnectionCapabilitiesQuery struct {
 type ConnectionCapabilityView struct {
 	Name           string
 	Enabled        bool
+	CheckedAt      time.Time
 	EvidenceSource string
 }
 type ListChannelConnectionsHandler = commands.QueryHandler[ListChannelConnectionsQuery, commands.ListResult[commands.ChannelConnectionView]]

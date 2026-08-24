@@ -2,7 +2,7 @@
 
 ## المرحلة الحالية: PR-009 — PostgreSQL Adapter وTransactionManager
 
-الحالة: **PR-008 مغلق عند HTTP → Application façade 76/76؛ PR-009 يملك الآن PostgreSQL pool وTransactionManager وRepository foundation الأساسية وCommunicationMessage timeline persistence، لكنه ما زال مفتوحًا قبل Catalog/Sales/AI/Audit repositories وEventStore/Outbox وbootstrap wiring.**
+الحالة: **PR-008 مغلق عند HTTP → Application façade 76/76؛ PR-009 يملك الآن PostgreSQL pool وTransactionManager وRepository foundation الأساسية وCommunicationMessage وChannel Capabilities persistence، لكنه ما زال مفتوحًا قبل Catalog/Sales/AI/Audit repositories وEventStore/Outbox وbootstrap wiring.**
 
 SQL migrations من 000001 إلى 000028، مع 000028 كـforward migration لـCommunicationMessage. Full Schema constraint tests وmigration runner تحققت فعليًا على PostgreSQL 16 (`applied=28` ثم `applied=0`). عقد HTTP Dashboard V1 موجود في `contracts/http_api_dashboard_v1_contract_ar.md`. Go Request/Response DTOs داخل `internal/adapters/primary/http/dto` مع operation registration داخل `internal/adapters/primary/http/contract` هي مصدر الحقيقة المشترك، وHuma يولد OpenAPI 3.0.3 إلى `api/openapi/mujeeb24-dashboard-v1.generated.yaml`. يمنع `scripts/check-openapi-generated.sh` drift ويعمل في CI.
 
@@ -71,6 +71,7 @@ Generated DTO Contract
 → Auth/Tenant/Error/Metadata tests
 → PostgreSQL pool + TransactionManager ✅
 → Repository foundation + CommunicationMessage timeline ✅
+→ Channel Capabilities ✅
 → Catalog/Sales/AI/Audit repositories ⏳
 → Event Ledger + atomic inbound dedupe ⏳
 → Outbox ⏳
@@ -135,10 +136,10 @@ SocialAPI inbound
 ```text
 PR-005: SQL migrations 000001–000012 + Foundation constraint tests — مكتمل
 PR-006: SQL migrations 000013–000027 + full-schema tests/review — مكتمل
-PR-009 message correction: 000028 communication_messages + Record/ListByConversation + integration tests — منفذ محليًا، ينتظر commit/push ضمن PR-009
+PR-009 message correction: 000028 communication_messages + Record/ListByConversation + integration tests — مرفوع ضمن commit سابق
 PR-007: HTTP API Contract → Go DTOs + generated OpenAPI v1 + drift check — مكتمل
 PR-008: Typed Commands/Queries + dispatcher وfaçades typed لكل routes — مكتمل
-PR-009: PostgreSQL Adapter وTransactionManager وRepository foundation — قيد التنفيذ؛ CommunicationMessage timeline منفذة ومثبتة، وبقية repositories وReliability/bootstrap مؤجلة
+PR-009: PostgreSQL Adapter وTransactionManager وRepository foundation — قيد التنفيذ؛ CommunicationMessage وChannel Capabilities منفذتان ومثبتتان، والآن التالي Catalog repositories ثم Sales/AI/Audit وReliability/bootstrap
 PR-010: Event ledger/idempotency/outbox implementation
 PR-011: Provider simulator
 PR-012: Chatwoot/SocialAPI adapters

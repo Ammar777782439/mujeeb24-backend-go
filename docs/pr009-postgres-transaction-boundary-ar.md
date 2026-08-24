@@ -38,10 +38,11 @@ pgxpool.Pool / pgx transaction
 
 ## Repository foundation وCommunicationMessage
 
-الـfoundation المنفذة تشمل Business/Customer/Conversation/ChannelConnection reads، ConversationReference current read، وOutboundMessage `CreatePending/GetByID`. أضيفت الآن `MessageRepository` بسطح محدود:
+الـfoundation المنفذة تشمل Business/Customer/Conversation/ChannelConnection reads، ConversationReference current read، وOutboundMessage `CreatePending/GetByID`. أضيفت كذلك `ChannelCapabilityRepository.ListByConnection` لقراءة capabilities الخاصة بـConnection من نفس Business. وأضيفت `MessageRepository` بسطح محدود:
 
-- `Record(ctx, CommunicationMessageDraft)` لإدخال typed في `communication_messages` وإعادة record projection.
-- `ListByConversation(ctx, businessID, conversationID, limit, cursor)` لقراءة timeline.
+- `ChannelCapabilityRepository.ListByConnection(ctx, businessID, connectionID)` لقراءة `Name`, `Enabled`, `CheckedAt`, و`EvidenceSource` بترتيب deterministic، مع typed not-found للـconnection المفقود أو cross-tenant.
+- `MessageRepository.Record(ctx, CommunicationMessageDraft)` لإدخال typed في `communication_messages` وإعادة record projection.
+- `MessageRepository.ListByConversation(ctx, businessID, conversationID, limit, cursor)` لقراءة timeline.
 
 `communication_messages` أُضيفت في migration forward-only `000028`؛ لا تعدّل migrations `000001–000027`. كل العلاقات الحساسة تستخدم composite tenant FKs. الفهارس تدعم timeline keyset على `(occurred_at DESC, created_at DESC, id DESC)` ومراجع Provider/Chatwoot.
 
@@ -51,7 +52,7 @@ pgxpool.Pool / pgx transaction
 
 ## الاختبارات
 
-تم تشغيلها فعليًا بعد آخر تعديل:
+تم تشغيلها فعليًا بعد آخر تعديل في دفعة Channel Capabilities:
 
 | الأمر | النتيجة |
 |---|---|
@@ -60,11 +61,11 @@ pgxpool.Pool / pgx transaction
 | `scripts/test-postgres-schema.sh` | PASS على PostgreSQL 16؛ foundation/full constraints وrunner `applied=28` ثم `applied=0` |
 | `POSTGRES_TEST_DSN=... GOTOOLCHAIN=local go test -tags=integration -count=1 ./internal/adapters/secondary/persistence/postgres` | PASS على PostgreSQL 16 Docker |
 
-Integration test يطبق migrations، يستخدم `MessageRepository.Record` للـinsert/read، يثبت conversation scope وcross-tenant typed not-found وmissing conversation، ordering/keyset pagination، malformed cursor، content/reference constraints عبر schema، outbound status projection، Application `MessageQueryService` mapping، وcommit/rollback لرسائل CommunicationMessage داخل TransactionManager.
+Integration test يطبق migrations، ويثبت CommunicationMessage عبر `Record`/timeline، كما يثبت Channel Capabilities عبر read/order و`CheckedAt`/`EvidenceSource` وcross-tenant typed not-found وApplication mapping، وقراءة التعديل داخل TransactionManager ثم commit/rollback. ويظل مثبتًا أيضًا malformed cursor وcontent/reference constraints وoutbound status projection لجزء CommunicationMessage.
 
 ## ما لم يُنفذ
 
-لم تُنفذ Repositories الخاصة بـCatalog/Sales/AI/Audit، ولا EventStore أو atomic inbound dedupe أو OutboxStore، ولا bootstrap dependency wiring الفعلي في `cmd/api`؛ ما زال `handlers.Dependencies{}` الافتراضي غير موصول بـPostgreSQL runtime. لا يبدأ SocialAPI أو Chatwoot أو AI runtime قبل اكتمال Reliability foundation.
+لم تُنفذ Repositories الخاصة بـCatalog/Sales/AI/Audit، ولا EventStore أو atomic inbound dedupe أو OutboxStore، ولا bootstrap dependency wiring الفعلي في `cmd/api`؛ ما زال `handlers.Dependencies{}` الافتراضي غير موصول بـPostgreSQL runtime. Channel capabilities نفسها لا تملك Dashboard write path؛ تحديثها يبقى ضمن integration/provider health path لاحق. لا يبدأ SocialAPI أو Chatwoot أو AI runtime قبل اكتمال Reliability foundation.
 
 ## معيار الانتقال التالي
 

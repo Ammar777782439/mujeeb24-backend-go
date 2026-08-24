@@ -140,6 +140,11 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 		t.Fatalf("insert channel connection: %v", err)
 	}
 	defer pool.Exec(context.Background(), `DELETE FROM channel_connections WHERE id = $1::uuid`, connectionA)
+	_, err = pool.Exec(ctx, `INSERT INTO channel_connection_capabilities (connection_id, capability, enabled, checked_at, evidence_source) VALUES ($1::uuid, 'receive_messages', true, '2025-01-01T10:00:00Z', 'provider-contract'), ($1::uuid, 'send_messages', false, '2025-01-01T10:01:00Z', 'health-check'), ($1::uuid, 'media_inbound', true, '2025-01-01T10:02:00Z', NULL)`, connectionA)
+	if err != nil {
+		t.Fatalf("insert channel capabilities: %v", err)
+	}
+	defer pool.Exec(context.Background(), `DELETE FROM channel_connection_capabilities WHERE connection_id = $1::uuid`, connectionA)
 	_, err = pool.Exec(ctx, `INSERT INTO conversation_references (id, business_id, conversation_id, system, provider_ref, resource_type, resource_id, connection_id, conversation_kind, is_current, mapping_status, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, 'provider', 'socialapi', 'conversation', 'provider-conversation-a', $4::uuid, 'dm', true, 'active', now(), now())`, referenceA, businessA, conversationA, connectionA)
 	if err != nil {
 		t.Fatalf("insert conversation reference: %v", err)
@@ -169,6 +174,56 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 	}
 	if _, err := connectionRepo.GetByID(ctx, businessB, connectionA); !IsRepositoryKind(err, RepositoryNotFound) {
 		t.Fatalf("connection crossed tenant boundary: %v", err)
+	}
+	capabilityRepo := NewChannelCapabilityRepository(adapter)
+	capabilities, err := capabilityRepo.ListByConnection(ctx, businessA, connectionA)
+	if err != nil || len(capabilities) != 3 || capabilities[0].Name != "media_inbound" || capabilities[1].Name != "receive_messages" || capabilities[2].Name != "send_messages" || capabilities[1].EvidenceSource == nil || *capabilities[1].EvidenceSource != "provider-contract" || capabilities[2].Enabled || !capabilities[0].CheckedAt.Equal(time.Date(2025, 1, 1, 10, 2, 0, 0, time.UTC)) {
+		t.Fatalf("capability read/order: %#v err=%v", capabilities, err)
+	}
+	if _, err := capabilityRepo.ListByConnection(ctx, businessB, connectionA); !IsRepositoryKind(err, RepositoryNotFound) {
+		t.Fatalf("capability crossed tenant boundary: %v", err)
+	}
+	capabilityService := services.ConnectionCapabilitiesQueryService{Repository: capabilityRepo}
+	capabilityView, err := capabilityService.Handle(ctx, queries.GetConnectionCapabilitiesQuery{Meta: queries.QueryMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, ConnectionID: commands.ConnectionID(connectionA)})
+	if err != nil || len(capabilityView.Items) != 3 || capabilityView.Items[1].Name != "receive_messages" || !capabilityView.Items[1].Enabled || !capabilityView.Items[1].CheckedAt.Equal(time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC)) || capabilityView.Items[1].EvidenceSource != "provider-contract" {
+		t.Fatalf("application capability mapping: %#v err=%v", capabilityView, err)
+	}
+	if err := adapter.Within(ctx, func(txCtx context.Context) error {
+		executor, txErr := adapter.Executor(txCtx)
+		if txErr != nil {
+			return txErr
+		}
+		if _, txErr = executor.Exec(txCtx, `UPDATE channel_connection_capabilities SET enabled = true WHERE connection_id = $1::uuid AND capability = 'send_messages'`, connectionA); txErr != nil {
+			return txErr
+		}
+		inside, txErr := capabilityRepo.ListByConnection(txCtx, businessA, connectionA)
+		if txErr != nil || len(inside) != 3 || !inside[2].Enabled {
+			return errors.New("capability transaction update not visible")
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("capability commit transaction: %v", err)
+	}
+	capabilities, err = capabilityRepo.ListByConnection(ctx, businessA, connectionA)
+	if err != nil || !capabilities[2].Enabled {
+		t.Fatalf("capability commit not visible: %#v err=%v", capabilities, err)
+	}
+	rollbackErr := errors.New("force capability rollback")
+	if err := adapter.Within(ctx, func(txCtx context.Context) error {
+		executor, txErr := adapter.Executor(txCtx)
+		if txErr != nil {
+			return txErr
+		}
+		if _, txErr = executor.Exec(txCtx, `UPDATE channel_connection_capabilities SET enabled = false WHERE connection_id = $1::uuid AND capability = 'send_messages'`, connectionA); txErr != nil {
+			return txErr
+		}
+		return rollbackErr
+	}); !errors.Is(err, rollbackErr) {
+		t.Fatalf("expected capability rollback error, got %v", err)
+	}
+	capabilities, err = capabilityRepo.ListByConnection(ctx, businessA, connectionA)
+	if err != nil || !capabilities[2].Enabled {
+		t.Fatalf("capability rollback leaked: %#v err=%v", capabilities, err)
 	}
 	referenceRepo := NewConversationReferenceRepository(adapter)
 	reference, err := referenceRepo.GetCurrentByConversation(ctx, businessA, conversationA, "provider")
@@ -259,13 +314,13 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 	defer pool.Exec(context.Background(), `DELETE FROM communication_messages WHERE id = $1::uuid`, committedID)
 	rollbackID := "00000000-0000-0000-0000-000000000075"
 	rollbackText := "رسالة transaction rolled back"
-	rollbackErr := errors.New("force message rollback")
+	messageRollbackErr := errors.New("force message rollback")
 	if err := adapter.Within(ctx, func(txCtx context.Context) error {
 		if _, txErr := messageRepo.Record(txCtx, ports.CommunicationMessageDraft{ID: rollbackID, BusinessID: businessA, ConversationReferenceID: referenceA, Direction: "inbound", Origin: "customer", Transport: "provider", ContentType: "text", TextContent: &rollbackText, ContentReference: "content-rollback", OccurredAt: time.Date(2025, 1, 1, 10, 4, 0, 0, time.UTC), CreatedAt: time.Date(2025, 1, 1, 10, 4, 1, 0, time.UTC)}); txErr != nil {
 			return txErr
 		}
-		return rollbackErr
-	}); !errors.Is(err, rollbackErr) {
+		return messageRollbackErr
+	}); !errors.Is(err, messageRollbackErr) {
 		t.Fatalf("expected message rollback error, got %v", err)
 	}
 	var rollbackCount int

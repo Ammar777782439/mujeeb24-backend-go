@@ -89,13 +89,14 @@ send_messages
 receive_comments
 reply_comments
 private_reply
-media
+media_inbound
+media_outbound
 interactive_messages
 templates
 delivery_status
 ```
 
-نستخدم Enum/typed value وليس JSON عشوائيًا في قواعد القرار. يمكن تخزين metadata إضافية في Adapter، لكن Application يستعمل capability contract موحدًا.
+نستخدم Enum/typed value وليس JSON عشوائيًا في قواعد القرار. يعتمد V1 على أسماء دقيقة قابلة للقراءة والتدقيق، ومنها `media_inbound` و`media_outbound` بدل capability تجميعية باسم `media`، حتى لا يفقد القرار اتجاه النقل. يمكن تخزين metadata إضافية في Adapter، لكن Application يستعمل capability contract موحدًا.
 
 كل Capability تحمل:
 
