@@ -1,26 +1,51 @@
 package main
 
 import (
+	"context"
 	"log"
-	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/handlers"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/bootstrap"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
 )
 
 func main() {
-	appHandlers := handlers.NewServer(handlers.Dependencies{})
-	_, mux := contract.BuildAPIWithHandlers(appHandlers)
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok","service":"mujeeb24-api"}`))
-	})
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
 
-	server := &http.Server{Addr: ":3001", Handler: mux}
-	log.Println("Mujeeb 24 API listening on :3001")
-	log.Fatal(server.ListenAndServe())
+func run() error {
+	cfg, err := config.LoadFromEnv()
+	if err != nil {
+		return err
+	}
+	startupContext, cancelStartup := context.WithTimeout(context.Background(), cfg.DBConnectTimeout)
+	defer cancelStartup()
+	runtime, err := bootstrap.BuildAPI(startupContext, cfg)
+	if err != nil {
+		return err
+	}
+
+	serverErrors := make(chan error, 1)
+	go func() {
+		serverErrors <- runtime.Serve()
+	}()
+
+	signalContext, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+	select {
+	case err := <-serverErrors:
+		_ = runtime.Shutdown(context.Background())
+		return err
+	case <-signalContext.Done():
+		shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+		defer cancelShutdown()
+		if err := runtime.Shutdown(shutdownContext); err != nil {
+			return err
+		}
+		return <-serverErrors
+	}
 }
