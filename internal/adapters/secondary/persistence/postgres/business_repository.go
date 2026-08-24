@@ -14,6 +14,7 @@ type RepositoryErrorKind string
 const (
 	RepositoryNotFound RepositoryErrorKind = "not_found"
 	RepositoryConflict RepositoryErrorKind = "conflict"
+	RepositoryStale    RepositoryErrorKind = "stale"
 	RepositoryInvalid  RepositoryErrorKind = "invalid"
 )
 
@@ -30,6 +31,18 @@ func (e *RepositoryError) Error() string {
 	return fmt.Sprintf("repository %s: %s: %v", e.Operation, e.Kind, e.Err)
 }
 func (e *RepositoryError) Unwrap() error { return e.Err }
+func (e *RepositoryError) RepositoryKind() RepositoryErrorKind {
+	if e == nil {
+		return ""
+	}
+	return e.Kind
+}
+func (e *RepositoryError) ErrorKind() string {
+	if e == nil {
+		return ""
+	}
+	return string(e.Kind)
+}
 func IsRepositoryKind(err error, kind RepositoryErrorKind) bool {
 	var target *RepositoryError
 	return errors.As(err, &target) && target.Kind == kind

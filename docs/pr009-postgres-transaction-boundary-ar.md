@@ -2,7 +2,7 @@
 
 ## نطاق هذه الدفعة
 
-هذه الدفعة تثبت Persistence foundation في PostgreSQL وتضيف CommunicationMessage timeline persistence فوقها. الحزمة `internal/adapters/secondary/persistence/postgres` تملك pool lifecycle و`Within` transaction boundary وSQLExecutor وrepositories typed، بينما Application يعتمد على `application/ports` فقط.
+هذه الدفعة تثبت Persistence foundation في PostgreSQL وتضيف CommunicationMessage timeline وCatalog read/write persistence فوقها. الحزمة `internal/adapters/secondary/persistence/postgres` تملك pool lifecycle و`Within` transaction boundary وSQLExecutor وrepositories typed، بينما Application يعتمد على `application/ports` فقط.
 
 ```text
 Application
@@ -44,7 +44,9 @@ pgxpool.Pool / pgx transaction
 - `MessageRepository.Record(ctx, CommunicationMessageDraft)` لإدخال typed في `communication_messages` وإعادة record projection.
 - `MessageRepository.ListByConversation(ctx, businessID, conversationID, limit, cursor)` لقراءة timeline.
 
-`communication_messages` أُضيفت في migration forward-only `000028`؛ لا تعدّل migrations `000001–000027`. كل العلاقات الحساسة تستخدم composite tenant FKs. الفهارس تدعم timeline keyset على `(occurred_at DESC, created_at DESC, id DESC)` ومراجع Provider/Chatwoot.
+`communication_messages` أُضيفت في migration forward-only `000028`، وCatalog resource versions في `000029`؛ لا تعدّل migrations `000001–000029` بعد ذلك. كل العلاقات الحساسة تستخدم composite tenant FKs. الفهارس تدعم timeline keyset على `(occurred_at DESC, created_at DESC, id DESC)`، وCatalog lists على `(updated_at DESC, id DESC)`، ومراجع Provider/Chatwoot.
+
+`CatalogRepository` ينفذ كذلك create/update للـCatalog وItem وOffer وVariant، وcreate schema version مع definitions. كل writes تمر من Application عبر TransactionManager؛ resource version conditional update يزيد العداد atomically، وOffer `AmountMinor` يتحول إلى `NUMERIC(20,4)` major units بقسمة 100.
 
 `CommunicationMessage` لا يملك status مستقلًا في V1. repository يعرض `received` للـinbound غير المرتبط، `recorded` للـoutbound غير المرتبط، أو OutboundMessage lifecycle عند وجود `outbound_message_id`. هذا لا يخلط message timeline مع outbound delivery truth.
 
@@ -58,15 +60,15 @@ pgxpool.Pool / pgx transaction
 |---|---|
 | `GOTOOLCHAIN=local go test ./...` | PASS |
 | `GOTOOLCHAIN=local go vet ./...` | PASS |
-| `scripts/test-postgres-schema.sh` | PASS على PostgreSQL 16؛ foundation/full constraints وrunner `applied=28` ثم `applied=0` |
+| `scripts/test-postgres-schema.sh` | PASS على PostgreSQL 16؛ foundation/full constraints وrunner `applied=29` ثم `applied=0` |
 | `POSTGRES_TEST_DSN=... GOTOOLCHAIN=local go test -tags=integration -count=1 ./internal/adapters/secondary/persistence/postgres` | PASS على PostgreSQL 16 Docker |
 
-Integration test يطبق migrations، ويثبت CommunicationMessage عبر `Record`/timeline، كما يثبت Channel Capabilities عبر read/order و`CheckedAt`/`EvidenceSource` وcross-tenant typed not-found وApplication mapping، وقراءة التعديل داخل TransactionManager ثم commit/rollback. ويظل مثبتًا أيضًا malformed cursor وcontent/reference constraints وoutbound status projection لجزء CommunicationMessage.
+Integration test يطبق migrations، ويثبت CommunicationMessage عبر `Record`/timeline، وChannel Capabilities عبر read/order و`CheckedAt`/`EvidenceSource` وcross-tenant typed not-found وApplication mapping، وCatalog عبر read filters/keyset وJSON/decimal projection وcreate/update وresource version 1→2 وstale rejection وschema definitions وtransaction commit/rollback. ويظل مثبتًا أيضًا malformed cursor وcontent/reference constraints وoutbound status projection لجزء CommunicationMessage.
 
 ## ما لم يُنفذ
 
-لم تُنفذ Repositories الخاصة بـCatalog/Sales/AI/Audit، ولا EventStore أو atomic inbound dedupe أو OutboxStore، ولا bootstrap dependency wiring الفعلي في `cmd/api`؛ ما زال `handlers.Dependencies{}` الافتراضي غير موصول بـPostgreSQL runtime. Channel capabilities نفسها لا تملك Dashboard write path؛ تحديثها يبقى ضمن integration/provider health path لاحق. لا يبدأ SocialAPI أو Chatwoot أو AI runtime قبل اكتمال Reliability foundation.
+لم تُنفذ Repositories الخاصة بـSales/AI/Audit، ولا EventStore أو atomic inbound dedupe أو OutboxStore، ولا bootstrap dependency wiring الفعلي في `cmd/api`؛ ما زال `handlers.Dependencies{}` الافتراضي غير موصول بـPostgreSQL runtime. Channel capabilities نفسها لا تملك Dashboard write path؛ تحديثها يبقى ضمن integration/provider health path لاحق. لا يبدأ SocialAPI أو Chatwoot أو AI runtime قبل اكتمال Reliability foundation.
 
 ## معيار الانتقال التالي
 
-الخطوة التالية داخل PR-009 هي إكمال repository surfaces الضرورية الأخرى فوق نفس TransactionManager، مع إبقاء CommunicationMessage كحد persistence مثبت. بعد ذلك يبدأ EventStore الذي يملك inbound idempotency الذرية، ثم Outbox؛ لا نضيف `IdempotencyStore` عامًا موازيًا بلا use case.
+الخطوة التالية داخل PR-009 هي تنفيذ Sales repositories الضرورية فوق نفس TransactionManager، مع إبقاء CommunicationMessage وCatalog كـpersistence surfaces مثبتة. بعد ذلك يبدأ EventStore الذي يملك inbound idempotency الذرية، ثم Outbox؛ لا نضيف `IdempotencyStore` عامًا موازيًا بلا use case.

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
+	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/queries"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
@@ -135,12 +136,25 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 	const offerA = "00000000-0000-0000-0000-000000000091"
 	const offerB = "00000000-0000-0000-0000-000000000092"
 	const offerC = "00000000-0000-0000-0000-000000000096"
+	const catalogWrite = "00000000-0000-0000-0000-000000000097"
+	const schemaWrite = "00000000-0000-0000-0000-000000000098"
+	const definitionWrite = "00000000-0000-0000-0000-000000000099"
+	const itemWrite = "00000000-0000-0000-0000-000000000100"
+	const variantWrite = "00000000-0000-0000-0000-000000000101"
+	const offerWrite = "00000000-0000-0000-0000-000000000102"
+	const catalogRollback = "00000000-0000-0000-0000-000000000103"
 	_, _ = pool.Exec(ctx, `DELETE FROM offers WHERE id IN ($1::uuid, $2::uuid, $3::uuid)`, offerA, offerB, offerC)
+	_, _ = pool.Exec(ctx, `DELETE FROM offers WHERE id = $1::uuid`, offerWrite)
 	_, _ = pool.Exec(ctx, `DELETE FROM variants WHERE id IN ($1::uuid, $2::uuid, $3::uuid)`, variantA, variantB, variantC)
+	_, _ = pool.Exec(ctx, `DELETE FROM variants WHERE id = $1::uuid`, variantWrite)
 	_, _ = pool.Exec(ctx, `DELETE FROM catalog_items WHERE id IN ($1::uuid, $2::uuid, $3::uuid)`, itemA, itemB, itemC)
+	_, _ = pool.Exec(ctx, `DELETE FROM catalog_items WHERE id = $1::uuid`, itemWrite)
 	_, _ = pool.Exec(ctx, `DELETE FROM attribute_definitions WHERE id IN ($1::uuid, $2::uuid)`, definitionA, definitionB)
+	_, _ = pool.Exec(ctx, `DELETE FROM attribute_definitions WHERE id = $1::uuid`, definitionWrite)
 	_, _ = pool.Exec(ctx, `DELETE FROM attribute_schemas WHERE id IN ($1::uuid, $2::uuid)`, schemaA, schemaB)
+	_, _ = pool.Exec(ctx, `DELETE FROM attribute_schemas WHERE id = $1::uuid`, schemaWrite)
 	_, _ = pool.Exec(ctx, `DELETE FROM catalogs WHERE id IN ($1::uuid, $2::uuid, $3::uuid)`, catalogA, catalogB, catalogC)
+	_, _ = pool.Exec(ctx, `DELETE FROM catalogs WHERE id IN ($1::uuid, $2::uuid)`, catalogWrite, catalogRollback)
 	for _, id := range []string{businessA, businessB} {
 		_, _ = pool.Exec(ctx, `DELETE FROM businesses WHERE id = $1::uuid`, id)
 	}
@@ -149,6 +163,12 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 		t.Fatalf("insert businesses: %v", err)
 	}
 	defer pool.Exec(context.Background(), `DELETE FROM businesses WHERE id IN ($1::uuid, $2::uuid)`, businessA, businessB)
+	defer pool.Exec(context.Background(), `DELETE FROM catalogs WHERE id IN ($1::uuid, $2::uuid)`, catalogWrite, catalogRollback)
+	defer pool.Exec(context.Background(), `DELETE FROM attribute_schemas WHERE id = $1::uuid`, schemaWrite)
+	defer pool.Exec(context.Background(), `DELETE FROM attribute_definitions WHERE id = $1::uuid`, definitionWrite)
+	defer pool.Exec(context.Background(), `DELETE FROM catalog_items WHERE id = $1::uuid`, itemWrite)
+	defer pool.Exec(context.Background(), `DELETE FROM variants WHERE id = $1::uuid`, variantWrite)
+	defer pool.Exec(context.Background(), `DELETE FROM offers WHERE id = $1::uuid`, offerWrite)
 	_, err = pool.Exec(ctx, `INSERT INTO catalogs (id, business_id, name, description, status, created_at, updated_at) VALUES ($1::uuid, $2::uuid, 'Electronics', 'Devices and accessories', 'active', '2025-01-01T09:00:00Z', '2025-01-01T09:00:00Z'), ($3::uuid, $4::uuid, 'Travel', 'Travel offers', 'draft', '2025-01-01T09:01:00Z', '2025-01-01T09:01:00Z'), ($5::uuid, $6::uuid, 'Services', 'Service catalog', 'active', '2025-01-01T09:10:00Z', '2025-01-01T09:10:00Z')`, catalogA, businessA, catalogB, businessB, catalogC, businessA)
 	if err != nil {
 		t.Fatalf("insert catalogs: %v", err)
@@ -384,6 +404,63 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 	if err != nil || len(schemaView.Definitions) != 1 || schemaView.Definitions[0].Key != "color" {
 		t.Fatalf("schema application mapping: %#v err=%v", schemaView, err)
 	}
+	generatedIDs := []string{catalogWrite, definitionWrite, schemaWrite, itemWrite, offerWrite, variantWrite}
+	generatedIndex := 0
+	commandServices := services.NewCatalogCommandServices(catalogRepo, adapter)
+	commandServices.Now = func() time.Time { return time.Date(2025, time.January, 1, 10, 0, 0, 0, time.UTC) }
+	commandServices.NewID = func() string {
+		id := generatedIDs[generatedIndex]
+		generatedIndex++
+		return id
+	}
+	createCatalogService := services.CreateCatalogCommandService{CatalogCommandServices: commandServices}
+	createdCatalog, err := createCatalogService.Handle(ctx, commands.CreateCatalogCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, Name: "Created Catalog", Description: "Created through application"})
+	if err != nil || createdCatalog.Catalog.ID != commands.CatalogID(catalogWrite) || createdCatalog.ResourceVersion != "1" {
+		t.Fatalf("catalog command create: %#v err=%v", createdCatalog, err)
+	}
+	updateCatalogService := services.UpdateCatalogCommandService{CatalogCommandServices: commandServices}
+	newCatalogName := "Updated Catalog"
+	updatedCatalog, err := updateCatalogService.Handle(ctx, commands.UpdateCatalogCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}, ExpectedVersion: resourceVersion("1")}, CatalogID: commands.CatalogID(catalogWrite), Name: &newCatalogName})
+	if err != nil || updatedCatalog.Catalog.Name != newCatalogName || updatedCatalog.ResourceVersion != "2" {
+		t.Fatalf("catalog command update: %#v err=%v", updatedCatalog, err)
+	}
+	if _, err := updateCatalogService.Handle(ctx, commands.UpdateCatalogCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}, ExpectedVersion: resourceVersion("1")}, CatalogID: commands.CatalogID(catalogWrite), Name: &newCatalogName}); !isApplicationCode(err, "stale_resource") {
+		t.Fatalf("expected stale catalog update, got %v", err)
+	}
+	createSchemaService := services.CreateAttributeSchemaVersionCommandService{CatalogCommandServices: commandServices}
+	createdSchema, err := createSchemaService.Handle(ctx, commands.CreateAttributeSchemaVersionCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, Name: "Write schema", Definitions: []commands.AttributeDefinition{{Key: "brand", Label: "Brand", DataType: "text", Required: true, Searchable: true, DisplayOrder: 0}}})
+	if err != nil || createdSchema.Schema.ID != commands.AttributeSchemaID(schemaWrite) || createdSchema.Schema.Version != 1 || len(createdSchema.Schema.Definitions) != 1 {
+		t.Fatalf("schema command create: %#v err=%v", createdSchema, err)
+	}
+	createItemService := services.CreateCatalogItemCommandService{CatalogCommandServices: commandServices}
+	createdItem, err := createItemService.Handle(ctx, commands.CreateCatalogItemCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, CatalogID: commands.CatalogID(catalogWrite), AttributeSchemaID: attributeSchemaID(schemaWrite), ItemType: "physical_good", Name: "Created phone", PricingMode: "fixed", AvailabilityMode: "stock", FulfillmentMode: "delivery", Attributes: map[string]any{"brand": "Mujeeb"}})
+	if err != nil || createdItem.Item.ID != commands.CatalogItemID(itemWrite) || createdItem.Item.AttributeSchemaVersion == nil || *createdItem.Item.AttributeSchemaVersion != 1 {
+		t.Fatalf("item command create: %#v err=%v", createdItem, err)
+	}
+	createOfferService := services.CreateOfferCommandService{CatalogCommandServices: commandServices}
+	amountMinor := int64(125050)
+	createdOffer, err := createOfferService.Handle(ctx, commands.CreateOfferCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, CatalogItemID: commands.CatalogItemID(itemWrite), Name: "Created offer", PricingMode: "fixed", AmountMinor: &amountMinor, Currency: stringPointer("YER"), AvailabilityMode: "stock", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"})
+	if err != nil || createdOffer.Offer.ID != commands.OfferID(offerWrite) || createdOffer.Offer.Amount == nil || *createdOffer.Offer.Amount != "1250.5000" || createdOffer.ResourceVersion != "1" {
+		t.Fatalf("offer command create: %#v err=%v", createdOffer, err)
+	}
+	createVariantService := services.CreateVariantCommandService{CatalogCommandServices: commandServices}
+	createdVariant, err := createVariantService.Handle(ctx, commands.CreateVariantCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, CatalogItemID: commands.CatalogItemID(itemWrite), Name: "Created black", Attributes: map[string]any{"color": "black"}})
+	if err != nil || createdVariant.Variant.ID != commands.VariantID(variantWrite) || createdVariant.ResourceVersion != "1" {
+		t.Fatalf("variant command create: %#v err=%v", createdVariant, err)
+	}
+	writeRollbackErr := errors.New("force catalog write rollback")
+	if err := adapter.Within(ctx, func(txCtx context.Context) error {
+		_, err := catalogRepo.CreateCatalog(txCtx, ports.CatalogDraft{ID: catalogRollback, BusinessID: businessA, Name: "Rolled back catalog", Status: "draft", CreatedAt: commandServices.Now(), UpdatedAt: commandServices.Now()})
+		if err != nil {
+			return err
+		}
+		return writeRollbackErr
+	}); !errors.Is(err, writeRollbackErr) {
+		t.Fatalf("expected catalog write rollback error, got %v", err)
+	}
+	if _, err := catalogRepo.GetCatalog(ctx, businessA, catalogRollback); !IsRepositoryKind(err, RepositoryNotFound) {
+		t.Fatalf("catalog write rollback leaked: %v", err)
+	}
 	referenceRepo := NewConversationReferenceRepository(adapter)
 	reference, err := referenceRepo.GetCurrentByConversation(ctx, businessA, conversationA, "provider")
 	if err != nil || reference.ID != referenceA || reference.ConnectionID == nil || *reference.ConnectionID != connectionA {
@@ -519,4 +596,23 @@ func jsonObjectsEqual(got []byte, want string) bool {
 		return false
 	}
 	return reflect.DeepEqual(gotObject, wantObject)
+}
+
+func resourceVersion(value string) *commands.ResourceVersion {
+	version := commands.ResourceVersion(value)
+	return &version
+}
+
+func attributeSchemaID(value string) *commands.AttributeSchemaID {
+	id := commands.AttributeSchemaID(value)
+	return &id
+}
+
+func stringPointer(value string) *string {
+	return &value
+}
+
+func isApplicationCode(err error, code string) bool {
+	var typed *appErrors.Error
+	return errors.As(err, &typed) && string(typed.Code) == code
 }

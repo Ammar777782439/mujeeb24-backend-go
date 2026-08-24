@@ -43,7 +43,7 @@ func (r *CatalogRepository) ListCatalogs(ctx context.Context, businessID, status
 	if decoded != nil {
 		updatedAt, id = decoded.UpdatedAt, decoded.ID
 	}
-	rows, err := executor.Query(ctx, `SELECT id::text, business_id::text, name, description, status, created_at, updated_at FROM catalogs WHERE business_id = $1::uuid AND ($2 = '' OR status = $2) AND ($3::timestamptz IS NULL OR (updated_at, id) < ($3::timestamptz, $4::uuid)) ORDER BY updated_at DESC, id DESC LIMIT $5`, businessID, status, updatedAt, id, limit+1)
+	rows, err := executor.Query(ctx, `SELECT id::text, business_id::text, name, description, status, resource_version, created_at, updated_at FROM catalogs WHERE business_id = $1::uuid AND ($2 = '' OR status = $2) AND ($3::timestamptz IS NULL OR (updated_at, id) < ($3::timestamptz, $4::uuid)) ORDER BY updated_at DESC, id DESC LIMIT $5`, businessID, status, updatedAt, id, limit+1)
 	if err != nil {
 		return ports.CatalogPage{}, catalogRepositoryError("catalog.list", err)
 	}
@@ -51,7 +51,7 @@ func (r *CatalogRepository) ListCatalogs(ctx context.Context, businessID, status
 	items := make([]ports.CatalogRecord, 0, limit)
 	for rows.Next() {
 		var item ports.CatalogRecord
-		if err := rows.Scan(&item.ID, &item.BusinessID, &item.Name, &item.Description, &item.Status, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.BusinessID, &item.Name, &item.Description, &item.Status, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return ports.CatalogPage{}, catalogRepositoryError("catalog.list", err)
 		}
 		items = append(items, item)
@@ -77,7 +77,7 @@ func (r *CatalogRepository) GetCatalog(ctx context.Context, businessID, catalogI
 		return ports.CatalogRecord{}, invalidRepositoryInput("catalog.get", "business and catalog ids are required")
 	}
 	var item ports.CatalogRecord
-	if err := executor.QueryRow(ctx, `SELECT id::text, business_id::text, name, description, status, created_at, updated_at FROM catalogs WHERE business_id = $1::uuid AND id = $2::uuid`, businessID, catalogID).Scan(&item.ID, &item.BusinessID, &item.Name, &item.Description, &item.Status, &item.CreatedAt, &item.UpdatedAt); err != nil {
+	if err := executor.QueryRow(ctx, `SELECT id::text, business_id::text, name, description, status, resource_version, created_at, updated_at FROM catalogs WHERE business_id = $1::uuid AND id = $2::uuid`, businessID, catalogID).Scan(&item.ID, &item.BusinessID, &item.Name, &item.Description, &item.Status, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt); err != nil {
 		return item, classifyRepositoryGetError("catalog.get", err)
 	}
 	return item, nil
@@ -100,7 +100,7 @@ func (r *CatalogRepository) ListCatalogItems(ctx context.Context, businessID, ca
 	if decoded != nil {
 		updatedAt, id = decoded.UpdatedAt, decoded.ID
 	}
-	rows, err := executor.Query(ctx, `SELECT id::text, business_id::text, catalog_id::text, attribute_schema_id::text, attribute_schema_version, item_type, name, status, attributes, created_at, updated_at FROM catalog_items WHERE business_id = $1::uuid AND catalog_id = $2::uuid AND ($3 = '' OR status = $3) AND ($4 = '' OR name ILIKE '%' || $4 || '%') AND ($5::timestamptz IS NULL OR (updated_at, id) < ($5::timestamptz, $6::uuid)) ORDER BY updated_at DESC, id DESC LIMIT $7`, businessID, catalogID, status, search, updatedAt, id, limit+1)
+	rows, err := executor.Query(ctx, `SELECT id::text, business_id::text, catalog_id::text, attribute_schema_id::text, attribute_schema_version, item_type, name, status, attributes, resource_version, created_at, updated_at FROM catalog_items WHERE business_id = $1::uuid AND catalog_id = $2::uuid AND ($3 = '' OR status = $3) AND ($4 = '' OR name ILIKE '%' || $4 || '%') AND ($5::timestamptz IS NULL OR (updated_at, id) < ($5::timestamptz, $6::uuid)) ORDER BY updated_at DESC, id DESC LIMIT $7`, businessID, catalogID, status, search, updatedAt, id, limit+1)
 	if err != nil {
 		return ports.CatalogItemPage{}, catalogRepositoryError("catalog_item.list", err)
 	}
@@ -134,7 +134,7 @@ func (r *CatalogRepository) GetCatalogItem(ctx context.Context, businessID, cata
 		return ports.CatalogItemRecord{}, invalidRepositoryInput("catalog_item.get", "business, catalog, and item ids are required")
 	}
 	var item ports.CatalogItemRecord
-	if err := executor.QueryRow(ctx, `SELECT id::text, business_id::text, catalog_id::text, attribute_schema_id::text, attribute_schema_version, item_type, name, status, attributes, created_at, updated_at FROM catalog_items WHERE business_id = $1::uuid AND catalog_id = $2::uuid AND id = $3::uuid`, businessID, catalogID, itemID).Scan(&item.ID, &item.BusinessID, &item.CatalogID, &item.AttributeSchemaID, &item.AttributeSchemaVersion, &item.ItemType, &item.Name, &item.Status, &item.Attributes, &item.CreatedAt, &item.UpdatedAt); err != nil {
+	if err := executor.QueryRow(ctx, `SELECT id::text, business_id::text, catalog_id::text, attribute_schema_id::text, attribute_schema_version, item_type, name, status, attributes, resource_version, created_at, updated_at FROM catalog_items WHERE business_id = $1::uuid AND catalog_id = $2::uuid AND id = $3::uuid`, businessID, catalogID, itemID).Scan(&item.ID, &item.BusinessID, &item.CatalogID, &item.AttributeSchemaID, &item.AttributeSchemaVersion, &item.ItemType, &item.Name, &item.Status, &item.Attributes, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt); err != nil {
 		return item, classifyRepositoryGetError("catalog_item.get", err)
 	}
 	return item, nil
@@ -157,7 +157,7 @@ func (r *CatalogRepository) ListOffers(ctx context.Context, businessID, itemID, 
 	if decoded != nil {
 		updatedAt, id = decoded.UpdatedAt, decoded.ID
 	}
-	rows, err := executor.Query(ctx, `SELECT id::text, business_id::text, catalog_item_id::text, variant_id::text, name, pricing_mode, amount::text, currency, availability_status, status, created_at, updated_at FROM offers WHERE business_id = $1::uuid AND catalog_item_id = $2::uuid AND ($3 = '' OR status = $3) AND ($4::timestamptz IS NULL OR (updated_at, id) < ($4::timestamptz, $5::uuid)) ORDER BY updated_at DESC, id DESC LIMIT $6`, businessID, itemID, status, updatedAt, id, limit+1)
+	rows, err := executor.Query(ctx, `SELECT id::text, business_id::text, catalog_item_id::text, variant_id::text, name, pricing_mode, amount::text, currency, availability_status, status, resource_version, created_at, updated_at FROM offers WHERE business_id = $1::uuid AND catalog_item_id = $2::uuid AND ($3 = '' OR status = $3) AND ($4::timestamptz IS NULL OR (updated_at, id) < ($4::timestamptz, $5::uuid)) ORDER BY updated_at DESC, id DESC LIMIT $6`, businessID, itemID, status, updatedAt, id, limit+1)
 	if err != nil {
 		return ports.OfferPage{}, catalogRepositoryError("offer.list", err)
 	}
@@ -165,7 +165,7 @@ func (r *CatalogRepository) ListOffers(ctx context.Context, businessID, itemID, 
 	items := make([]ports.OfferRecord, 0, limit)
 	for rows.Next() {
 		var item ports.OfferRecord
-		if err := rows.Scan(&item.ID, &item.BusinessID, &item.CatalogItemID, &item.VariantID, &item.Name, &item.PricingMode, &item.Amount, &item.Currency, &item.AvailabilityStatus, &item.Status, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.BusinessID, &item.CatalogItemID, &item.VariantID, &item.Name, &item.PricingMode, &item.Amount, &item.Currency, &item.AvailabilityStatus, &item.Status, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return ports.OfferPage{}, catalogRepositoryError("offer.list", err)
 		}
 		items = append(items, item)
@@ -199,7 +199,7 @@ func (r *CatalogRepository) ListVariants(ctx context.Context, businessID, itemID
 	if decoded != nil {
 		updatedAt, id = decoded.UpdatedAt, decoded.ID
 	}
-	rows, err := executor.Query(ctx, `SELECT id::text, business_id::text, catalog_item_id::text, name, attributes, status, created_at, updated_at FROM variants WHERE business_id = $1::uuid AND catalog_item_id = $2::uuid AND ($3 = '' OR status = $3) AND ($4::timestamptz IS NULL OR (updated_at, id) < ($4::timestamptz, $5::uuid)) ORDER BY updated_at DESC, id DESC LIMIT $6`, businessID, itemID, status, updatedAt, id, limit+1)
+	rows, err := executor.Query(ctx, `SELECT id::text, business_id::text, catalog_item_id::text, name, attributes, status, resource_version, created_at, updated_at FROM variants WHERE business_id = $1::uuid AND catalog_item_id = $2::uuid AND ($3 = '' OR status = $3) AND ($4::timestamptz IS NULL OR (updated_at, id) < ($4::timestamptz, $5::uuid)) ORDER BY updated_at DESC, id DESC LIMIT $6`, businessID, itemID, status, updatedAt, id, limit+1)
 	if err != nil {
 		return ports.VariantPage{}, catalogRepositoryError("variant.list", err)
 	}
@@ -207,7 +207,7 @@ func (r *CatalogRepository) ListVariants(ctx context.Context, businessID, itemID
 	items := make([]ports.VariantRecord, 0, limit)
 	for rows.Next() {
 		var item ports.VariantRecord
-		if err := rows.Scan(&item.ID, &item.BusinessID, &item.CatalogItemID, &item.Name, &item.Attributes, &item.Status, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.BusinessID, &item.CatalogItemID, &item.Name, &item.Attributes, &item.Status, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return ports.VariantPage{}, catalogRepositoryError("variant.list", err)
 		}
 		items = append(items, item)
@@ -419,7 +419,7 @@ func decodeSchemaCursor(value string) (*schemaCursor, error) {
 
 func scanCatalogItem(row interface{ Scan(...any) error }) (ports.CatalogItemRecord, error) {
 	var item ports.CatalogItemRecord
-	err := row.Scan(&item.ID, &item.BusinessID, &item.CatalogID, &item.AttributeSchemaID, &item.AttributeSchemaVersion, &item.ItemType, &item.Name, &item.Status, &item.Attributes, &item.CreatedAt, &item.UpdatedAt)
+	err := row.Scan(&item.ID, &item.BusinessID, &item.CatalogID, &item.AttributeSchemaID, &item.AttributeSchemaVersion, &item.ItemType, &item.Name, &item.Status, &item.Attributes, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt)
 	return item, err
 }
 
@@ -431,3 +431,213 @@ func catalogRepositoryError(operation string, err error) error {
 }
 
 var _ ports.CatalogRepository = (*CatalogRepository)(nil)
+
+func (r *CatalogRepository) CreateCatalog(ctx context.Context, draft ports.CatalogDraft) (ports.CatalogRecord, error) {
+	executor, err := r.catalogExecutor(ctx, "catalog.create")
+	if err != nil {
+		return ports.CatalogRecord{}, err
+	}
+	if draft.ID == "" || draft.BusinessID == "" || draft.Name == "" || draft.Status == "" {
+		return ports.CatalogRecord{}, invalidRepositoryInput("catalog.create", "id, business, name, and status are required")
+	}
+	if draft.CreatedAt.IsZero() || draft.UpdatedAt.IsZero() {
+		return ports.CatalogRecord{}, invalidRepositoryInput("catalog.create", "created_at and updated_at are required")
+	}
+	return scanCatalogRecord(executor.QueryRow(ctx, `INSERT INTO catalogs (id, business_id, name, description, status, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7) RETURNING id::text, business_id::text, name, description, status, resource_version, created_at, updated_at`, draft.ID, draft.BusinessID, draft.Name, draft.Description, draft.Status, draft.CreatedAt, draft.UpdatedAt))
+}
+
+func (r *CatalogRepository) UpdateCatalog(ctx context.Context, patch ports.CatalogPatch) (ports.CatalogRecord, error) {
+	executor, err := r.catalogExecutor(ctx, "catalog.update")
+	if err != nil {
+		return ports.CatalogRecord{}, err
+	}
+	if patch.ID == "" || patch.BusinessID == "" || patch.ExpectedVersion <= 0 {
+		return ports.CatalogRecord{}, invalidRepositoryInput("catalog.update", "id, business, and positive expected version are required")
+	}
+	var record ports.CatalogRecord
+	err = executor.QueryRow(ctx, `UPDATE catalogs SET name = COALESCE($3, name), description = COALESCE($4, description), status = COALESCE($5, status), resource_version = resource_version + 1, updated_at = $6 WHERE business_id = $1::uuid AND id = $2::uuid AND resource_version = $7 RETURNING id::text, business_id::text, name, description, status, resource_version, created_at, updated_at`, patch.BusinessID, patch.ID, patch.Name, patch.Description, patch.Status, patch.UpdatedAt, patch.ExpectedVersion).Scan(&record.ID, &record.BusinessID, &record.Name, &record.Description, &record.Status, &record.ResourceVersion, &record.CreatedAt, &record.UpdatedAt)
+	if err == nil {
+		return record, nil
+	}
+	return record, classifyCatalogUpdateMiss(ctx, executor, "catalog.update", `SELECT EXISTS (SELECT 1 FROM catalogs WHERE business_id = $1::uuid AND id = $2::uuid)`, patch.BusinessID, patch.ID, err)
+}
+
+func (r *CatalogRepository) CreateCatalogItem(ctx context.Context, draft ports.CatalogItemDraft) (ports.CatalogItemRecord, error) {
+	executor, err := r.catalogExecutor(ctx, "catalog_item.create")
+	if err != nil {
+		return ports.CatalogItemRecord{}, err
+	}
+	if draft.ID == "" || draft.BusinessID == "" || draft.CatalogID == "" || draft.ItemType == "" || draft.Name == "" || draft.PricingMode == "" || draft.AvailabilityMode == "" || draft.FulfillmentMode == "" || draft.CreatedAt.IsZero() || draft.UpdatedAt.IsZero() {
+		return ports.CatalogItemRecord{}, invalidRepositoryInput("catalog_item.create", "required catalog item fields are missing")
+	}
+	attributes := draft.Attributes
+	if len(attributes) == 0 {
+		attributes = []byte(`{}`)
+	}
+	return scanCatalogItem(executor.QueryRow(ctx, `INSERT INTO catalog_items (id, business_id, catalog_id, attribute_schema_id, attribute_schema_version, item_type, name, status, pricing_mode, availability_mode, fulfillment_mode, requires_confirmation, attributes, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, 'draft', $8, $9, $10, $11, $12::jsonb, $13, $14) RETURNING id::text, business_id::text, catalog_id::text, attribute_schema_id::text, attribute_schema_version, item_type, name, status, attributes, resource_version, created_at, updated_at`, draft.ID, draft.BusinessID, draft.CatalogID, draft.AttributeSchemaID, draft.AttributeSchemaVersion, draft.ItemType, draft.Name, draft.PricingMode, draft.AvailabilityMode, draft.FulfillmentMode, draft.RequiresConfirmation, attributes, draft.CreatedAt, draft.UpdatedAt))
+}
+
+func (r *CatalogRepository) UpdateCatalogItem(ctx context.Context, patch ports.CatalogItemPatch) (ports.CatalogItemRecord, error) {
+	executor, err := r.catalogExecutor(ctx, "catalog_item.update")
+	if err != nil {
+		return ports.CatalogItemRecord{}, err
+	}
+	if patch.ID == "" || patch.BusinessID == "" || patch.ExpectedVersion <= 0 {
+		return ports.CatalogItemRecord{}, invalidRepositoryInput("catalog_item.update", "id, business, and positive expected version are required")
+	}
+	var item ports.CatalogItemRecord
+	attributes := patch.Attributes
+	if len(attributes) == 0 {
+		attributes = nil
+	}
+	err = executor.QueryRow(ctx, `UPDATE catalog_items SET name = COALESCE($3, name), status = COALESCE($4, status), attributes = COALESCE($5::jsonb, attributes), resource_version = resource_version + 1, updated_at = $6 WHERE business_id = $1::uuid AND id = $2::uuid AND resource_version = $7 RETURNING id::text, business_id::text, catalog_id::text, attribute_schema_id::text, attribute_schema_version, item_type, name, status, attributes, resource_version, created_at, updated_at`, patch.BusinessID, patch.ID, patch.Name, patch.Status, attributes, patch.UpdatedAt, patch.ExpectedVersion).Scan(&item.ID, &item.BusinessID, &item.CatalogID, &item.AttributeSchemaID, &item.AttributeSchemaVersion, &item.ItemType, &item.Name, &item.Status, &item.Attributes, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt)
+	if err == nil {
+		return item, nil
+	}
+	return item, classifyCatalogUpdateMiss(ctx, executor, "catalog_item.update", `SELECT EXISTS (SELECT 1 FROM catalog_items WHERE business_id = $1::uuid AND id = $2::uuid)`, patch.BusinessID, patch.ID, err)
+}
+
+func (r *CatalogRepository) CreateOffer(ctx context.Context, draft ports.OfferDraft) (ports.OfferRecord, error) {
+	executor, err := r.catalogExecutor(ctx, "offer.create")
+	if err != nil {
+		return ports.OfferRecord{}, err
+	}
+	if draft.ID == "" || draft.BusinessID == "" || draft.CatalogItemID == "" || draft.Name == "" || draft.PricingMode == "" || draft.AvailabilityMode == "" || draft.AvailabilityStatus == "" || draft.FulfillmentMode == "" || draft.Status == "" || draft.CreatedAt.IsZero() || draft.UpdatedAt.IsZero() {
+		return ports.OfferRecord{}, invalidRepositoryInput("offer.create", "required offer fields are missing")
+	}
+	return scanOfferRecord(executor.QueryRow(ctx, `INSERT INTO offers (id, business_id, catalog_item_id, variant_id, name, pricing_mode, amount, currency, availability_mode, availability_status, fulfillment_mode, price_verification_status, status, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, CASE WHEN $7::bigint IS NULL THEN NULL ELSE $7::numeric / 100 END, $8, $9, $10, $11, 'unverified', $12, $13, $14) RETURNING id::text, business_id::text, catalog_item_id::text, variant_id::text, name, pricing_mode, amount::text, currency, availability_status, status, resource_version, created_at, updated_at`, draft.ID, draft.BusinessID, draft.CatalogItemID, draft.VariantID, draft.Name, draft.PricingMode, draft.AmountMinor, draft.Currency, draft.AvailabilityMode, draft.AvailabilityStatus, draft.FulfillmentMode, draft.Status, draft.CreatedAt, draft.UpdatedAt))
+}
+
+func (r *CatalogRepository) UpdateOffer(ctx context.Context, patch ports.OfferPatch) (ports.OfferRecord, error) {
+	executor, err := r.catalogExecutor(ctx, "offer.update")
+	if err != nil {
+		return ports.OfferRecord{}, err
+	}
+	if patch.ID == "" || patch.BusinessID == "" || patch.ExpectedVersion <= 0 {
+		return ports.OfferRecord{}, invalidRepositoryInput("offer.update", "id, business, and positive expected version are required")
+	}
+	var offer ports.OfferRecord
+	err = executor.QueryRow(ctx, `UPDATE offers SET name = COALESCE($3, name), amount = CASE WHEN $4::bigint IS NULL THEN amount ELSE $4::numeric / 100 END, availability_status = COALESCE($5, availability_status), status = COALESCE($6, status), resource_version = resource_version + 1, updated_at = $7 WHERE business_id = $1::uuid AND id = $2::uuid AND resource_version = $8 RETURNING id::text, business_id::text, catalog_item_id::text, variant_id::text, name, pricing_mode, amount::text, currency, availability_status, status, resource_version, created_at, updated_at`, patch.BusinessID, patch.ID, patch.Name, patch.AmountMinor, patch.AvailabilityStatus, patch.Status, patch.UpdatedAt, patch.ExpectedVersion).Scan(&offer.ID, &offer.BusinessID, &offer.CatalogItemID, &offer.VariantID, &offer.Name, &offer.PricingMode, &offer.Amount, &offer.Currency, &offer.AvailabilityStatus, &offer.Status, &offer.ResourceVersion, &offer.CreatedAt, &offer.UpdatedAt)
+	if err == nil {
+		return offer, nil
+	}
+	return offer, classifyCatalogUpdateMiss(ctx, executor, "offer.update", `SELECT EXISTS (SELECT 1 FROM offers WHERE business_id = $1::uuid AND id = $2::uuid)`, patch.BusinessID, patch.ID, err)
+}
+
+func (r *CatalogRepository) CreateVariant(ctx context.Context, draft ports.VariantDraft) (ports.VariantRecord, error) {
+	executor, err := r.catalogExecutor(ctx, "variant.create")
+	if err != nil {
+		return ports.VariantRecord{}, err
+	}
+	if draft.ID == "" || draft.BusinessID == "" || draft.CatalogItemID == "" || draft.Name == "" || draft.CreatedAt.IsZero() || draft.UpdatedAt.IsZero() {
+		return ports.VariantRecord{}, invalidRepositoryInput("variant.create", "id, business, item, name, and timestamps are required")
+	}
+	attributes := draft.Attributes
+	if len(attributes) == 0 {
+		attributes = []byte(`{}`)
+	}
+	status := draft.Status
+	if status == "" {
+		status = "active"
+	}
+	return scanVariantRecord(executor.QueryRow(ctx, `INSERT INTO variants (id, business_id, catalog_item_id, name, attributes, status, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5::jsonb, $6, $7, $8) RETURNING id::text, business_id::text, catalog_item_id::text, name, attributes, status, resource_version, created_at, updated_at`, draft.ID, draft.BusinessID, draft.CatalogItemID, draft.Name, attributes, status, draft.CreatedAt, draft.UpdatedAt))
+}
+
+func (r *CatalogRepository) UpdateVariant(ctx context.Context, patch ports.VariantPatch) (ports.VariantRecord, error) {
+	executor, err := r.catalogExecutor(ctx, "variant.update")
+	if err != nil {
+		return ports.VariantRecord{}, err
+	}
+	if patch.ID == "" || patch.BusinessID == "" || patch.ExpectedVersion <= 0 {
+		return ports.VariantRecord{}, invalidRepositoryInput("variant.update", "id, business, and positive expected version are required")
+	}
+	var variant ports.VariantRecord
+	attributes := patch.Attributes
+	if len(attributes) == 0 {
+		attributes = nil
+	}
+	err = executor.QueryRow(ctx, `UPDATE variants SET name = COALESCE($3, name), attributes = COALESCE($4::jsonb, attributes), status = COALESCE($5, status), resource_version = resource_version + 1, updated_at = $6 WHERE business_id = $1::uuid AND id = $2::uuid AND resource_version = $7 RETURNING id::text, business_id::text, catalog_item_id::text, name, attributes, status, resource_version, created_at, updated_at`, patch.BusinessID, patch.ID, patch.Name, attributes, patch.Status, patch.UpdatedAt, patch.ExpectedVersion).Scan(&variant.ID, &variant.BusinessID, &variant.CatalogItemID, &variant.Name, &variant.Attributes, &variant.Status, &variant.ResourceVersion, &variant.CreatedAt, &variant.UpdatedAt)
+	if err == nil {
+		return variant, nil
+	}
+	return variant, classifyCatalogUpdateMiss(ctx, executor, "variant.update", `SELECT EXISTS (SELECT 1 FROM variants WHERE business_id = $1::uuid AND id = $2::uuid)`, patch.BusinessID, patch.ID, err)
+}
+
+func (r *CatalogRepository) CreateAttributeSchemaVersion(ctx context.Context, draft ports.AttributeSchemaDraft) (ports.AttributeSchemaRecord, error) {
+	executor, err := r.catalogExecutor(ctx, "attribute_schema.create")
+	if err != nil {
+		return ports.AttributeSchemaRecord{}, err
+	}
+	if draft.ID == "" || draft.BusinessID == "" || draft.Name == "" || draft.Version <= 0 || draft.CreatedAt.IsZero() || draft.UpdatedAt.IsZero() {
+		return ports.AttributeSchemaRecord{}, invalidRepositoryInput("attribute_schema.create", "id, business, name, positive version, and timestamps are required")
+	}
+	if _, err := executor.Exec(ctx, `INSERT INTO attribute_schemas (id, business_id, name, version, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6)`, draft.ID, draft.BusinessID, draft.Name, draft.Version, draft.CreatedAt, draft.UpdatedAt); err != nil {
+		return ports.AttributeSchemaRecord{}, classifyRepositoryWriteError("attribute_schema.create", err)
+	}
+	for _, definition := range draft.Definitions {
+		rules := definition.ValidationRules
+		if len(rules) == 0 {
+			rules = []byte(`{}`)
+		}
+		if definition.ID == "" || definition.Key == "" || definition.Label == "" || definition.DataType == "" || definition.DisplayOrder < 0 {
+			return ports.AttributeSchemaRecord{}, invalidRepositoryInput("attribute_schema.create", "attribute definition fields are invalid")
+		}
+		if _, err := executor.Exec(ctx, `INSERT INTO attribute_definitions (id, schema_id, attribute_key, label, data_type, is_required, is_searchable, validation_rules, display_order, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11)`, definition.ID, draft.ID, definition.Key, definition.Label, definition.DataType, definition.Required, definition.Searchable, rules, definition.DisplayOrder, definition.CreatedAt, definition.UpdatedAt); err != nil {
+			return ports.AttributeSchemaRecord{}, classifyRepositoryWriteError("attribute_schema.create", err)
+		}
+	}
+	return r.GetAttributeSchema(ctx, draft.BusinessID, draft.ID)
+}
+
+func scanCatalogRecord(row pgx.Row) (ports.CatalogRecord, error) {
+	var record ports.CatalogRecord
+	if err := row.Scan(&record.ID, &record.BusinessID, &record.Name, &record.Description, &record.Status, &record.ResourceVersion, &record.CreatedAt, &record.UpdatedAt); err != nil {
+		return record, classifyRepositoryWriteError("catalog", err)
+	}
+	return record, nil
+}
+
+func scanOfferRecord(row pgx.Row) (ports.OfferRecord, error) {
+	var record ports.OfferRecord
+	if err := row.Scan(&record.ID, &record.BusinessID, &record.CatalogItemID, &record.VariantID, &record.Name, &record.PricingMode, &record.Amount, &record.Currency, &record.AvailabilityStatus, &record.Status, &record.ResourceVersion, &record.CreatedAt, &record.UpdatedAt); err != nil {
+		return record, classifyRepositoryWriteError("offer", err)
+	}
+	return record, nil
+}
+
+func scanVariantRecord(row pgx.Row) (ports.VariantRecord, error) {
+	var record ports.VariantRecord
+	if err := row.Scan(&record.ID, &record.BusinessID, &record.CatalogItemID, &record.Name, &record.Attributes, &record.Status, &record.ResourceVersion, &record.CreatedAt, &record.UpdatedAt); err != nil {
+		return record, classifyRepositoryWriteError("variant", err)
+	}
+	return record, nil
+}
+
+func classifyCatalogUpdateMiss(ctx context.Context, executor SQLExecutor, operation, existsQuery, businessID, id string, original error) error {
+	if !errors.Is(original, pgx.ErrNoRows) {
+		return classifyRepositoryWriteError(operation, original)
+	}
+	var exists bool
+	if err := executor.QueryRow(ctx, existsQuery, businessID, id).Scan(&exists); err != nil {
+		return classifyRepositoryWriteError(operation, err)
+	}
+	if !exists {
+		return &RepositoryError{Operation: operation, Kind: RepositoryNotFound, Err: pgx.ErrNoRows}
+	}
+	return &RepositoryError{Operation: operation, Kind: RepositoryStale, Err: original}
+}
+
+func (r *CatalogRepository) NextAttributeSchemaVersion(ctx context.Context, businessID, name string) (int, error) {
+	executor, err := r.catalogExecutor(ctx, "attribute_schema.next_version")
+	if err != nil {
+		return 0, err
+	}
+	if businessID == "" || name == "" {
+		return 0, invalidRepositoryInput("attribute_schema.next_version", "business id and name are required")
+	}
+	var version int
+	if err := executor.QueryRow(ctx, `SELECT COALESCE(MAX(version), 0) + 1 FROM attribute_schemas WHERE business_id = $1::uuid AND name = $2`, businessID, name).Scan(&version); err != nil {
+		return 0, classifyRepositoryWriteError("attribute_schema.next_version", err)
+	}
+	return version, nil
+}

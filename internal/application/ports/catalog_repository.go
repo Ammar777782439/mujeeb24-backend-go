@@ -6,13 +6,14 @@ import (
 )
 
 type CatalogRecord struct {
-	ID          string
-	BusinessID  string
-	Name        string
-	Description *string
-	Status      string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID              string
+	BusinessID      string
+	Name            string
+	Description     *string
+	Status          string
+	ResourceVersion int64
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type CatalogItemRecord struct {
@@ -25,6 +26,7 @@ type CatalogItemRecord struct {
 	Name                   string
 	Status                 string
 	Attributes             []byte
+	ResourceVersion        int64
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
 }
@@ -40,19 +42,21 @@ type OfferRecord struct {
 	Currency           *string
 	AvailabilityStatus string
 	Status             string
+	ResourceVersion    int64
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 }
 
 type VariantRecord struct {
-	ID            string
-	BusinessID    string
-	CatalogItemID string
-	Name          string
-	Attributes    []byte
-	Status        string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID              string
+	BusinessID      string
+	CatalogItemID   string
+	Name            string
+	Attributes      []byte
+	Status          string
+	ResourceVersion int64
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type AttributeDefinitionRecord struct {
@@ -103,13 +107,142 @@ type AttributeSchemaPage struct {
 	HasMore    bool
 }
 
+type CatalogDraft struct {
+	ID          string
+	BusinessID  string
+	Name        string
+	Description *string
+	Status      string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type CatalogPatch struct {
+	ID              string
+	BusinessID      string
+	Name            *string
+	Description     *string
+	Status          *string
+	ExpectedVersion int64
+	UpdatedAt       time.Time
+}
+
+type AttributeSchemaDraft struct {
+	ID          string
+	BusinessID  string
+	Name        string
+	Version     int
+	Definitions []AttributeDefinitionDraft
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type AttributeDefinitionDraft struct {
+	ID              string
+	Key             string
+	Label           string
+	DataType        string
+	Required        bool
+	Searchable      bool
+	ValidationRules []byte
+	DisplayOrder    int
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+type CatalogItemDraft struct {
+	ID                     string
+	BusinessID             string
+	CatalogID              string
+	AttributeSchemaID      *string
+	AttributeSchemaVersion *int
+	ItemType               string
+	Name                   string
+	PricingMode            string
+	AvailabilityMode       string
+	FulfillmentMode        string
+	RequiresConfirmation   bool
+	Attributes             []byte
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+}
+
+type CatalogItemPatch struct {
+	ID              string
+	BusinessID      string
+	Name            *string
+	Status          *string
+	Attributes      []byte
+	ExpectedVersion int64
+	UpdatedAt       time.Time
+}
+
+type OfferDraft struct {
+	ID                 string
+	BusinessID         string
+	CatalogItemID      string
+	VariantID          *string
+	Name               string
+	PricingMode        string
+	AmountMinor        *int64
+	Currency           *string
+	AvailabilityMode   string
+	AvailabilityStatus string
+	FulfillmentMode    string
+	Status             string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+type OfferPatch struct {
+	ID                 string
+	BusinessID         string
+	Name               *string
+	AmountMinor        *int64
+	AvailabilityStatus *string
+	Status             *string
+	ExpectedVersion    int64
+	UpdatedAt          time.Time
+}
+
+type VariantDraft struct {
+	ID            string
+	BusinessID    string
+	CatalogItemID string
+	Name          string
+	Attributes    []byte
+	Status        string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type VariantPatch struct {
+	ID              string
+	BusinessID      string
+	Name            *string
+	Attributes      []byte
+	Status          *string
+	ExpectedVersion int64
+	UpdatedAt       time.Time
+}
+
 type CatalogRepository interface {
 	ListCatalogs(ctx context.Context, businessID, status string, limit int, cursor string) (CatalogPage, error)
 	GetCatalog(ctx context.Context, businessID, catalogID string) (CatalogRecord, error)
+	CreateCatalog(ctx context.Context, draft CatalogDraft) (CatalogRecord, error)
+	UpdateCatalog(ctx context.Context, patch CatalogPatch) (CatalogRecord, error)
 	ListCatalogItems(ctx context.Context, businessID, catalogID, search, status string, limit int, cursor string) (CatalogItemPage, error)
 	GetCatalogItem(ctx context.Context, businessID, catalogID, itemID string) (CatalogItemRecord, error)
+	CreateCatalogItem(ctx context.Context, draft CatalogItemDraft) (CatalogItemRecord, error)
+	UpdateCatalogItem(ctx context.Context, patch CatalogItemPatch) (CatalogItemRecord, error)
 	ListOffers(ctx context.Context, businessID, itemID, status string, limit int, cursor string) (OfferPage, error)
+	CreateOffer(ctx context.Context, draft OfferDraft) (OfferRecord, error)
+	UpdateOffer(ctx context.Context, patch OfferPatch) (OfferRecord, error)
 	ListVariants(ctx context.Context, businessID, itemID, status string, limit int, cursor string) (VariantPage, error)
+	CreateVariant(ctx context.Context, draft VariantDraft) (VariantRecord, error)
+	UpdateVariant(ctx context.Context, patch VariantPatch) (VariantRecord, error)
 	ListAttributeSchemas(ctx context.Context, businessID, name string, version *int, limit int, cursor string) (AttributeSchemaPage, error)
 	GetAttributeSchema(ctx context.Context, businessID, schemaID string) (AttributeSchemaRecord, error)
+	NextAttributeSchemaVersion(ctx context.Context, businessID, name string) (int, error)
+	CreateAttributeSchemaVersion(ctx context.Context, draft AttributeSchemaDraft) (AttributeSchemaRecord, error)
 }

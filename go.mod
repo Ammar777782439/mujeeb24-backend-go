@@ -6,6 +6,7 @@ toolchain go1.22.2
 
 require (
 	github.com/danielgtaylor/huma/v2 v2.32.0
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.5.5
 )
 

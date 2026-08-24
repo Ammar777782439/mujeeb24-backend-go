@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
@@ -134,7 +135,7 @@ func (s GetAttributeSchemaQueryService) Handle(ctx context.Context, query querie
 }
 
 func catalogView(record ports.CatalogRecord) commands.CatalogView {
-	return commands.CatalogView{ID: commands.CatalogID(record.ID), BusinessID: commands.BusinessID(record.BusinessID), Name: record.Name, Description: record.Description, Status: record.Status, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
+	return commands.CatalogView{ID: commands.CatalogID(record.ID), BusinessID: commands.BusinessID(record.BusinessID), Name: record.Name, Description: record.Description, Status: record.Status, ResourceVersion: commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10)), CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
 }
 
 func catalogItemView(record ports.CatalogItemRecord) commands.CatalogItemView {
@@ -143,7 +144,7 @@ func catalogItemView(record ports.CatalogItemRecord) commands.CatalogItemView {
 		value := commands.AttributeSchemaID(*record.AttributeSchemaID)
 		schemaID = &value
 	}
-	return commands.CatalogItemView{ID: commands.CatalogItemID(record.ID), BusinessID: commands.BusinessID(record.BusinessID), CatalogID: commands.CatalogID(record.CatalogID), AttributeSchemaID: schemaID, AttributeSchemaVersion: record.AttributeSchemaVersion, ItemType: record.ItemType, Name: record.Name, Status: record.Status, Attributes: append([]byte(nil), record.Attributes...), CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
+	return commands.CatalogItemView{ID: commands.CatalogItemID(record.ID), BusinessID: commands.BusinessID(record.BusinessID), CatalogID: commands.CatalogID(record.CatalogID), AttributeSchemaID: schemaID, AttributeSchemaVersion: record.AttributeSchemaVersion, ItemType: record.ItemType, Name: record.Name, Status: record.Status, Attributes: append([]byte(nil), record.Attributes...), ResourceVersion: commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10)), CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
 }
 
 func offerView(record ports.OfferRecord) commands.OfferView {
@@ -151,11 +152,11 @@ func offerView(record ports.OfferRecord) commands.OfferView {
 	if record.VariantID != nil {
 		variantID = commands.VariantID(*record.VariantID)
 	}
-	return commands.OfferView{ID: commands.OfferID(record.ID), BusinessID: commands.BusinessID(record.BusinessID), CatalogItemID: commands.CatalogItemID(record.CatalogItemID), VariantID: variantID, Name: record.Name, PricingMode: record.PricingMode, Amount: record.Amount, Currency: record.Currency, AvailabilityStatus: record.AvailabilityStatus, Status: record.Status, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
+	return commands.OfferView{ID: commands.OfferID(record.ID), BusinessID: commands.BusinessID(record.BusinessID), CatalogItemID: commands.CatalogItemID(record.CatalogItemID), VariantID: variantID, Name: record.Name, PricingMode: record.PricingMode, Amount: record.Amount, Currency: record.Currency, AvailabilityStatus: record.AvailabilityStatus, Status: record.Status, ResourceVersion: commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10)), CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
 }
 
 func variantView(record ports.VariantRecord) commands.VariantView {
-	return commands.VariantView{ID: commands.VariantID(record.ID), BusinessID: commands.BusinessID(record.BusinessID), CatalogItemID: commands.CatalogItemID(record.CatalogItemID), Name: record.Name, Attributes: append([]byte(nil), record.Attributes...), Status: record.Status, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
+	return commands.VariantView{ID: commands.VariantID(record.ID), BusinessID: commands.BusinessID(record.BusinessID), CatalogItemID: commands.CatalogItemID(record.CatalogItemID), Name: record.Name, Attributes: append([]byte(nil), record.Attributes...), Status: record.Status, ResourceVersion: commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10)), CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
 }
 
 func attributeSchemaView(record ports.AttributeSchemaRecord) commands.AttributeSchemaView {

@@ -2,11 +2,9 @@
 
 ## الحكم التنفيذي
 
-Commit المرفوع: `84ea2c6fd342762b82d5e5505fa57609e0415bd8`.
+Commit المرفوع موثق في تقرير الإغلاق وسجل Git؛ لا نكرر hash داخل محتوى commit حتى لا يصبح self-referential بعد amend.
 
-هذه الدفعة تنفذ **Catalog read persistence** المطلوبة حاليًا من Application queries، ولا تدّعي إغلاق Catalog Persistence بالكامل. تم تنفيذ القراءة على الجداول الموجودة `000013–000018` دون تعديل migrations قديمة أو إضافة جدول generic.
-
-تظل عمليات الكتابة التالية مؤجلة عمدًا: `Create/UpdateCatalog`، `CreateAttributeSchemaVersion`، `Create/UpdateCatalogItem`، `Create/UpdateOffer`، و`Create/UpdateVariant`. سبب التأجيل موثق وليس نقصًا مخفيًا: عقود الأوامر موجودة، لكن لا توجد Application command services تنفيذية، كما أن schema لا تملك `resource_version` المطلوب لـ`If-Match`، وOffer command يستخدم `AmountMinor` بينما HTTP DTO/schema يستخدمان تمثيلًا عشريًا مختلفًا. لا يجوز بناء write repository يتجاوز هذه التناقضات.
+هذه الدفعة تنفذ **Catalog read/write persistence** المطلوبة حاليًا من Application queries والـcommands، عبر الجداول الموجودة `000013–000018` وإضافة resource-version forward migration في `000029`. لم تُعدّل migrations قديمة، ولم يُنشأ جدول generic.
 
 ## Contract evidence
 
@@ -61,8 +59,16 @@ Integration test PostgreSQL 16 يغطي:
 - visibility داخل TransactionManager ثم commit وrollback؛
 - Application query mapping.
 
-## ما لم يُنفذ
+## Catalog write contract and implementation
 
-لا توجد في هذه الدفعة write repositories ولا Application command services، ولا resource-version migration، ولا validation كاملة لـattributes مقابل schema definitions، ولا domain lifecycle validation لـactive Offer. هذه مسؤوليات Application/Domain، ولا يصح أن ينفذها SQL read adapter بالنيابة عنها.
+تم تنفيذ write path بعد تثبيت القرار، في migration forward-only `000029_catalog_resource_versions.up.sql`. أضيف `resource_version BIGINT NOT NULL DEFAULT 1` إلى `catalogs`, `catalog_items`, `offers`, و`variants` مع check موجب. لم تُعدّل `000001–000028`، ولا تُشتق version من `updated_at`.
 
-لذلك لا ننتقل إلى Sales بعد هذا commit على أنه Catalog مكتمل بالكامل. الخطوة الصحيحة التالية داخل Catalog هي قرار مستقل لتصحيح write contract وresource-version/decimal-money boundary ثم تنفيذ command services وtransactional write repositories واختبارها.
+يظل `ResourceVersion` في Application/HTTP opaque string، بينما يخزن PostgreSQL عدادًا موجبًا. كل Catalog PATCH ينفذ conditional update على `(business_id, id, resource_version)` ثم يزيد العداد ذريًا. عدم وجود المورد يعيد `not_found`، ووجوده مع version قديمة يعيد `stale_resource`، وكلاهما typed. لا يوجد delete تدميري.
+
+بالنسبة للمال، يحافظ Application command الحالي على `AmountMinor *int64` كما يثبت helper HTTP أنه يقبل رقمًا بدقتين عشريتين ويضربه في 100. repository write يحفظ القيمة في `offers.amount NUMERIC(20,4)` بقسمة minor units على 100، ويعيد decimal text exact في record. هذا يبقي المال integer/decimal-safe داخل Application ولا يجعل `float64` جزءًا من Domain أو persistence contract. تغيير HTTP DTO نفسه إلى decimal string قرار مستقل ولم يُخفَ هنا.
+
+أضيفت command services typed لكل عمليات Catalog الحالية: إنشاء/تحديث Catalog، إنشاء schema version مع definitions، إنشاء/تحديث CatalogItem، إنشاء/تحديث Offer، وإنشاء/تحديث Variant. schema version allocation محمي داخل transaction بقفل transaction-level على business/name، وschema مع definitions تُنشأ كوحدة ذرية. attributes تمر كـraw JSON bytes بعد JSON encoding في Application، ولا يستخدم record contract `map[string]any`.
+
+## ما لم يُنفذ بعد
+
+تم إغلاق Catalog Persistence من ناحية الـread/write surfaces الحالية، لكن **bootstrap dependency wiring** لم يُنفذ بعد؛ `cmd/api` ما زال يحتاج تركيب repository وTransactionManager وtyped command/query services داخل `handlers.Dependencies`. كما أن validation الدلالية الكاملة لـattributes مقابل definitions وprovider price verification تبقى مسؤولية Domain/Application لاحقة، وليست مسؤولية SQL adapter.
