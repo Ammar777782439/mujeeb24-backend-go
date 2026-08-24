@@ -880,6 +880,27 @@ components:
         - new_leads
         - transactions_needing_review
       type: object
+    ErrorBody:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        details:
+          additionalProperties: {}
+          type: object
+        fields:
+          additionalProperties:
+            type: string
+          type: object
+        message:
+          type: string
+        retryable:
+          type: boolean
+      required:
+        - code
+        - message
+        - retryable
+      type: object
     ErrorDetail:
       additionalProperties: false
       properties:
@@ -892,45 +913,16 @@ components:
         value:
           description: The value at the given location
       type: object
-    ErrorModel:
+    ErrorEnvelope:
       additionalProperties: false
       properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          example: /api/v1/schemas/ErrorModel.json
-          format: uri
-          readOnly: true
+        error:
+          $ref: "#/components/schemas/ErrorBody"
+        request_id:
           type: string
-        detail:
-          description: A human-readable explanation specific to this occurrence of the problem.
-          example: Property foo is required but is missing.
-          type: string
-        errors:
-          description: Optional list of individual error details
-          items:
-            $ref: "#/components/schemas/ErrorDetail"
-          nullable: true
-          type: array
-        instance:
-          description: A URI reference that identifies the specific occurrence of the problem.
-          example: https://example.com/error-log/abc123
-          format: uri
-          type: string
-        status:
-          description: HTTP status code
-          example: 400
-          format: int64
-          type: integer
-        title:
-          description: A short, human-readable summary of the problem type. This value should not change between occurrences of the error.
-          example: Bad Request
-          type: string
-        type:
-          default: about:blank
-          description: A URI reference to human-readable documentation for the error.
-          example: https://example.com/errors/example
-          format: uri
-          type: string
+      required:
+        - error
+        - request_id
       type: object
     Health:
       additionalProperties: false
@@ -2288,33 +2280,33 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "429":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Too Many Requests
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security: []
       summary: Authenticate and issue JWT access token
@@ -2328,15 +2320,15 @@ paths:
           description: No Content
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -2355,21 +2347,21 @@ paths:
           description: OK
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "429":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Too Many Requests
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - refreshCookie: []
@@ -2395,45 +2387,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -2464,45 +2456,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -2558,45 +2550,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -2628,45 +2620,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -2720,45 +2712,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -2809,45 +2801,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -2894,45 +2886,45 @@ paths:
           description: Created
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -2964,45 +2956,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -3067,45 +3059,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -3137,45 +3129,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -3226,45 +3218,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -3317,45 +3309,45 @@ paths:
           description: Created
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -3406,45 +3398,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -3497,45 +3489,45 @@ paths:
           description: Created
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -3575,45 +3567,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -3660,45 +3652,45 @@ paths:
           description: Created
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -3730,45 +3722,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -3821,45 +3813,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -3915,45 +3907,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -4006,45 +3998,45 @@ paths:
           description: Created
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -4082,45 +4074,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -4173,45 +4165,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -4261,45 +4253,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -4346,45 +4338,45 @@ paths:
           description: Accepted
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -4416,45 +4408,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -4486,45 +4478,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -4578,45 +4570,45 @@ paths:
           description: Accepted
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -4670,45 +4662,45 @@ paths:
           description: Accepted
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -4769,45 +4761,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -4839,45 +4831,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -4930,45 +4922,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -5022,45 +5014,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -5114,45 +5106,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -5198,45 +5190,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -5303,51 +5295,51 @@ paths:
           description: Accepted
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
         "503":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Service Unavailable
       security:
         - bearerAuth: []
@@ -5401,45 +5393,45 @@ paths:
           description: Accepted
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -5489,45 +5481,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -5566,45 +5558,45 @@ paths:
           description: Created
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -5636,45 +5628,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -5727,45 +5719,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -5811,45 +5803,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -5903,45 +5895,45 @@ paths:
           description: Accepted
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -5987,45 +5979,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -6051,45 +6043,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -6145,45 +6137,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -6230,45 +6222,45 @@ paths:
           description: Created
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -6300,45 +6292,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -6391,45 +6383,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -6475,45 +6467,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -6567,45 +6559,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -6659,45 +6651,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -6743,45 +6735,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -6835,45 +6827,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -6899,45 +6891,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -6984,45 +6976,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -7078,45 +7070,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -7163,45 +7155,45 @@ paths:
           description: Created
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -7233,45 +7225,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -7324,45 +7316,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -7416,45 +7408,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -7508,45 +7500,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -7578,45 +7570,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -7670,45 +7662,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -7762,45 +7754,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -7854,45 +7846,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -7946,45 +7938,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -8003,45 +7995,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security: []
       summary: Process liveness
@@ -8059,15 +8051,15 @@ paths:
           description: OK
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
         "503":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Service Unavailable
       security: []
       summary: Dependency readiness
@@ -8085,45 +8077,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -8163,45 +8155,45 @@ paths:
           description: OK
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "404":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Not Found
         "409":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Conflict
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security:
         - bearerAuth: []
@@ -8220,15 +8212,15 @@ paths:
           description: OK
         "403":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Forbidden
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security: []
       summary: Internal metrics
@@ -8272,33 +8264,33 @@ paths:
           description: Accepted
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "413":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Request Entity Too Large
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security: []
       summary: Ingest Chatwoot webhook
@@ -8342,33 +8334,33 @@ paths:
           description: Accepted
         "400":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Bad Request
         "401":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
         "413":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Request Entity Too Large
         "422":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Unprocessable Entity
         "500":
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
       security: []
       summary: Ingest SocialAPI webhook

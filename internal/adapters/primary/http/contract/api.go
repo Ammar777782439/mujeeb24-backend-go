@@ -3,6 +3,8 @@ package contract
 import (
 	"context"
 	"net/http"
+	"reflect"
+	"strconv"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
@@ -23,6 +25,7 @@ func BuildAPI() (huma.API, *http.ServeMux) {
 	registerExtendedOperations(api)
 	registerSystemOperations(api)
 	registerRemainingDashboardOperations(api)
+	replaceFrameworkErrorResponses(api)
 	return api, mux
 }
 
@@ -41,6 +44,29 @@ func registerCoreOperations(api huma.API) {
 	register(api, huma.Operation{OperationID: "listCustomers", Method: http.MethodGet, Path: "/businesses/{business_id}/customers", Tags: []string{"Customers"}, Summary: "List customers", Security: dashboardSecurity}, CustomerListInput{}, List[Customer]{})
 	register(api, huma.Operation{OperationID: "getCustomer", Method: http.MethodGet, Path: "/businesses/{business_id}/customers/{customer_id}", Tags: []string{"Customers"}, Summary: "Get a customer projection", Security: dashboardSecurity}, CustomerInput{}, Single[Customer]{})
 	register(api, huma.Operation{OperationID: "createCustomer", Method: http.MethodPost, Path: "/businesses/{business_id}/customers", Tags: []string{"Customers"}, Summary: "Create a customer", Security: dashboardSecurity, DefaultStatus: http.StatusCreated}, CreateCustomerInput{}, Single[Customer]{})
+}
+
+func replaceFrameworkErrorResponses(api huma.API) {
+	registry := api.OpenAPI().Components.Schemas
+	errorSchema := registry.Schema(reflect.TypeOf(ErrorEnvelope{}), true, "ErrorEnvelope")
+	for _, item := range api.OpenAPI().Paths {
+		operations := []*huma.Operation{item.Get, item.Put, item.Post, item.Delete, item.Options, item.Head, item.Patch, item.Trace}
+		for _, operation := range operations {
+			if operation == nil {
+				continue
+			}
+			for status, response := range operation.Responses {
+				code, err := strconv.Atoi(status)
+				if (err != nil && status != "default") || (err == nil && code < http.StatusBadRequest) {
+					continue
+				}
+				response.Content = map[string]*huma.MediaType{
+					"application/json": {Schema: errorSchema},
+				}
+			}
+		}
+	}
+	delete(registry.Map(), "ErrorModel")
 }
 
 func register[I any, O any](api huma.API, operation huma.Operation, input I, output O) {

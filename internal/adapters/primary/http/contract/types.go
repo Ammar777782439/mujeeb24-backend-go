@@ -34,11 +34,12 @@ type ErrorBody struct {
 	Details   map[string]any    `json:"details,omitempty"`
 	Retryable bool              `json:"retryable"`
 }
+type ErrorEnvelope struct {
+	Error     ErrorBody `json:"error"`
+	RequestID string    `json:"request_id"`
+}
 type ErrorResponse struct {
-	Body struct {
-		Error     ErrorBody `json:"error"`
-		RequestID string    `json:"request_id"`
-	}
+	Body ErrorEnvelope
 }
 
 type Principal struct {

@@ -19,6 +19,12 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
 	if !bytes.Contains(document, []byte("bearerAuth:")) || !bytes.Contains(document, []byte("refreshCookie:")) {
 		t.Fatal("JWT security schemes are missing from generated document")
 	}
+	if !bytes.Contains(document, []byte("ErrorEnvelope:")) || bytes.Contains(document, []byte("ErrorModel:")) {
+		t.Fatal("generated document is not using Mujeeb 24 ErrorEnvelope")
+	}
+	if bytes.Contains(document, []byte("application/problem+json")) {
+		t.Fatal("framework problem+json leaked into the Dashboard contract")
+	}
 	if !bytes.Contains(document, []byte("/webhooks/socialapi/{route_key}:")) {
 		t.Fatal("SocialAPI webhook path is missing from generated document")
 	}
