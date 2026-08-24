@@ -63,43 +63,70 @@ type CustomerView struct {
 	Status          string
 	ResourceVersion ResourceVersion
 }
+type AttributeDefinitionView struct {
+	ID           ID
+	Key          string
+	Label        string
+	DataType     string
+	Required     bool
+	Searchable   bool
+	DisplayOrder int
+}
 type AttributeSchemaView struct {
-	ID         AttributeSchemaID
-	BusinessID BusinessID
-	Name       string
-	Version    int
+	ID          AttributeSchemaID
+	BusinessID  BusinessID
+	Name        string
+	Version     int
+	Definitions []AttributeDefinitionView
 }
 type CatalogView struct {
 	ID              CatalogID
 	BusinessID      BusinessID
 	Name            string
+	Description     *string
 	Status          string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 	ResourceVersion ResourceVersion
 }
 type CatalogItemView struct {
-	ID              CatalogItemID
-	BusinessID      BusinessID
-	CatalogID       CatalogID
-	Name            string
-	ItemType        string
-	Status          string
-	ResourceVersion ResourceVersion
+	ID                     CatalogItemID
+	BusinessID             BusinessID
+	CatalogID              CatalogID
+	AttributeSchemaID      *AttributeSchemaID
+	AttributeSchemaVersion *int
+	Name                   string
+	ItemType               string
+	Status                 string
+	Attributes             []byte
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+	ResourceVersion        ResourceVersion
 }
 type OfferView struct {
-	ID              OfferID
-	BusinessID      BusinessID
-	CatalogItemID   CatalogItemID
-	VariantID       VariantID
-	Name            string
-	Status          string
-	ResourceVersion ResourceVersion
+	ID                 OfferID
+	BusinessID         BusinessID
+	CatalogItemID      CatalogItemID
+	VariantID          VariantID
+	Name               string
+	PricingMode        string
+	Amount             *string
+	Currency           *string
+	AvailabilityStatus string
+	Status             string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	ResourceVersion    ResourceVersion
 }
 type VariantView struct {
 	ID              VariantID
 	BusinessID      BusinessID
 	CatalogItemID   CatalogItemID
 	Name            string
+	Attributes      []byte
 	Status          string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 	ResourceVersion ResourceVersion
 }
 type LeadView struct {

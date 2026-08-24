@@ -4,8 +4,10 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -117,6 +119,28 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 	const communicationE = "00000000-0000-0000-0000-000000000077"
 	const communicationF = "00000000-0000-0000-0000-000000000078"
 	const communicationG = "00000000-0000-0000-0000-000000000079"
+	const catalogA = "00000000-0000-0000-0000-000000000081"
+	const catalogB = "00000000-0000-0000-0000-000000000082"
+	const catalogC = "00000000-0000-0000-0000-000000000093"
+	const schemaA = "00000000-0000-0000-0000-000000000083"
+	const schemaB = "00000000-0000-0000-0000-000000000084"
+	const definitionA = "00000000-0000-0000-0000-000000000085"
+	const definitionB = "00000000-0000-0000-0000-000000000086"
+	const itemA = "00000000-0000-0000-0000-000000000087"
+	const itemB = "00000000-0000-0000-0000-000000000088"
+	const itemC = "00000000-0000-0000-0000-000000000094"
+	const variantA = "00000000-0000-0000-0000-000000000089"
+	const variantB = "00000000-0000-0000-0000-000000000090"
+	const variantC = "00000000-0000-0000-0000-000000000095"
+	const offerA = "00000000-0000-0000-0000-000000000091"
+	const offerB = "00000000-0000-0000-0000-000000000092"
+	const offerC = "00000000-0000-0000-0000-000000000096"
+	_, _ = pool.Exec(ctx, `DELETE FROM offers WHERE id IN ($1::uuid, $2::uuid, $3::uuid)`, offerA, offerB, offerC)
+	_, _ = pool.Exec(ctx, `DELETE FROM variants WHERE id IN ($1::uuid, $2::uuid, $3::uuid)`, variantA, variantB, variantC)
+	_, _ = pool.Exec(ctx, `DELETE FROM catalog_items WHERE id IN ($1::uuid, $2::uuid, $3::uuid)`, itemA, itemB, itemC)
+	_, _ = pool.Exec(ctx, `DELETE FROM attribute_definitions WHERE id IN ($1::uuid, $2::uuid)`, definitionA, definitionB)
+	_, _ = pool.Exec(ctx, `DELETE FROM attribute_schemas WHERE id IN ($1::uuid, $2::uuid)`, schemaA, schemaB)
+	_, _ = pool.Exec(ctx, `DELETE FROM catalogs WHERE id IN ($1::uuid, $2::uuid, $3::uuid)`, catalogA, catalogB, catalogC)
 	for _, id := range []string{businessA, businessB} {
 		_, _ = pool.Exec(ctx, `DELETE FROM businesses WHERE id = $1::uuid`, id)
 	}
@@ -125,6 +149,36 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 		t.Fatalf("insert businesses: %v", err)
 	}
 	defer pool.Exec(context.Background(), `DELETE FROM businesses WHERE id IN ($1::uuid, $2::uuid)`, businessA, businessB)
+	_, err = pool.Exec(ctx, `INSERT INTO catalogs (id, business_id, name, description, status, created_at, updated_at) VALUES ($1::uuid, $2::uuid, 'Electronics', 'Devices and accessories', 'active', '2025-01-01T09:00:00Z', '2025-01-01T09:00:00Z'), ($3::uuid, $4::uuid, 'Travel', 'Travel offers', 'draft', '2025-01-01T09:01:00Z', '2025-01-01T09:01:00Z'), ($5::uuid, $6::uuid, 'Services', 'Service catalog', 'active', '2025-01-01T09:10:00Z', '2025-01-01T09:10:00Z')`, catalogA, businessA, catalogB, businessB, catalogC, businessA)
+	if err != nil {
+		t.Fatalf("insert catalogs: %v", err)
+	}
+	defer pool.Exec(context.Background(), `DELETE FROM catalogs WHERE id IN ($1::uuid, $2::uuid, $3::uuid)`, catalogA, catalogB, catalogC)
+	_, err = pool.Exec(ctx, `INSERT INTO attribute_schemas (id, business_id, name, version, created_at, updated_at) VALUES ($1::uuid, $2::uuid, 'Product attributes', 1, '2025-01-01T09:02:00Z', '2025-01-01T09:02:00Z'), ($3::uuid, $4::uuid, 'Travel attributes', 1, '2025-01-01T09:03:00Z', '2025-01-01T09:03:00Z')`, schemaA, businessA, schemaB, businessB)
+	if err != nil {
+		t.Fatalf("insert attribute schemas: %v", err)
+	}
+	defer pool.Exec(context.Background(), `DELETE FROM attribute_schemas WHERE id IN ($1::uuid, $2::uuid)`, schemaA, schemaB)
+	_, err = pool.Exec(ctx, `INSERT INTO attribute_definitions (id, schema_id, attribute_key, label, data_type, is_required, is_searchable, validation_rules, display_order, created_at, updated_at) VALUES ($1::uuid, $2::uuid, 'color', 'Color', 'text', true, true, '{}'::jsonb, 0, '2025-01-01T09:02:01Z', '2025-01-01T09:02:01Z'), ($3::uuid, $4::uuid, 'capacity', 'Capacity', 'number', false, true, '{"min":1}'::jsonb, 1, '2025-01-01T09:02:02Z', '2025-01-01T09:02:02Z')`, definitionA, schemaA, definitionB, schemaB)
+	if err != nil {
+		t.Fatalf("insert attribute definitions: %v", err)
+	}
+	defer pool.Exec(context.Background(), `DELETE FROM attribute_definitions WHERE id IN ($1::uuid, $2::uuid)`, definitionA, definitionB)
+	_, err = pool.Exec(ctx, `INSERT INTO catalog_items (id, business_id, catalog_id, attribute_schema_id, attribute_schema_version, item_type, name, status, pricing_mode, availability_mode, fulfillment_mode, requires_confirmation, attributes, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 1, 'physical_good', 'Phone', 'active', 'fixed', 'stock', 'delivery', false, '{"brand":"Mujeeb"}'::jsonb, '2025-01-01T09:04:00Z', '2025-01-01T09:04:00Z'), ($5::uuid, $6::uuid, $7::uuid, $8::uuid, 1, 'service', 'Travel booking', 'draft', 'quote_required', 'supplier_check', 'travel', true, '{"route":"Sanaa-Cairo"}'::jsonb, '2025-01-01T09:05:00Z', '2025-01-01T09:05:00Z'), ($9::uuid, $10::uuid, $11::uuid, $12::uuid, 1, 'service', 'Repair service', 'active', 'quote_required', 'supplier_check', 'manual', false, '{"category":"repair"}'::jsonb, '2025-01-01T09:11:00Z', '2025-01-01T09:11:00Z')`, itemA, businessA, catalogA, schemaA, itemB, businessB, catalogB, schemaB, itemC, businessA, catalogC, schemaA)
+	if err != nil {
+		t.Fatalf("insert catalog items: %v", err)
+	}
+	defer pool.Exec(context.Background(), `DELETE FROM catalog_items WHERE id IN ($1::uuid, $2::uuid, $3::uuid)`, itemA, itemB, itemC)
+	_, err = pool.Exec(ctx, `INSERT INTO variants (id, business_id, catalog_item_id, name, attributes, status, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, 'Black', '{"color":"black"}'::jsonb, 'active', '2025-01-01T09:06:00Z', '2025-01-01T09:06:00Z'), ($4::uuid, $5::uuid, $6::uuid, 'Economy', '{"class":"economy"}'::jsonb, 'inactive', '2025-01-01T09:07:00Z', '2025-01-01T09:07:00Z'), ($7::uuid, $8::uuid, $9::uuid, 'Standard', '{"tier":"standard"}'::jsonb, 'active', '2025-01-01T09:12:00Z', '2025-01-01T09:12:00Z')`, variantA, businessA, itemA, variantB, businessB, itemB, variantC, businessA, itemC)
+	if err != nil {
+		t.Fatalf("insert variants: %v", err)
+	}
+	defer pool.Exec(context.Background(), `DELETE FROM variants WHERE id IN ($1::uuid, $2::uuid, $3::uuid)`, variantA, variantB, variantC)
+	_, err = pool.Exec(ctx, `INSERT INTO offers (id, business_id, catalog_item_id, variant_id, name, pricing_mode, amount, currency, availability_mode, availability_status, fulfillment_mode, price_verification_status, status, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'Phone offer', 'fixed', 1250.0000, 'YER', 'stock', 'available', 'delivery', 'verified', 'active', '2025-01-01T09:08:00Z', '2025-01-01T09:08:00Z'), ($5::uuid, $6::uuid, $7::uuid, NULL, 'Travel quote', 'quote_required', NULL, NULL, 'supplier_check', 'requires_check', 'travel', 'unverified', 'draft', '2025-01-01T09:09:00Z', '2025-01-01T09:09:00Z'), ($8::uuid, $9::uuid, $10::uuid, $11::uuid, 'Repair offer', 'quote_required', NULL, NULL, 'supplier_check', 'unknown', 'manual', 'unverified', 'draft', '2025-01-01T09:13:00Z', '2025-01-01T09:13:00Z')`, offerA, businessA, itemA, variantA, offerB, businessB, itemB, offerC, businessA, itemC, variantC)
+	if err != nil {
+		t.Fatalf("insert offers: %v", err)
+	}
+	defer pool.Exec(context.Background(), `DELETE FROM offers WHERE id IN ($1::uuid, $2::uuid, $3::uuid)`, offerA, offerB, offerC)
 	_, err = pool.Exec(ctx, `INSERT INTO customers (id, business_id, profile, contact_points, locale_preference, status, created_at, updated_at) VALUES ($1::uuid, $2::uuid, '{"name":"A"}', '[]', 'ar-YE', 'active', now(), now()), ($3::uuid, $4::uuid, '{"name":"B"}', '[]', 'ar-YE', 'active', now(), now())`, customerA, businessA, customerB, businessB)
 	if err != nil {
 		t.Fatalf("insert customers: %v", err)
@@ -224,6 +278,111 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 	capabilities, err = capabilityRepo.ListByConnection(ctx, businessA, connectionA)
 	if err != nil || !capabilities[2].Enabled {
 		t.Fatalf("capability rollback leaked: %#v err=%v", capabilities, err)
+	}
+	catalogRepo := NewCatalogRepository(adapter)
+	catalogPage, err := catalogRepo.ListCatalogs(ctx, businessA, "active", 1, "")
+	if err != nil || len(catalogPage.Items) != 1 || catalogPage.Items[0].ID != catalogC || !catalogPage.HasMore || catalogPage.NextCursor == "" {
+		t.Fatalf("catalog list first page: %#v err=%v", catalogPage, err)
+	}
+	catalogPage, err = catalogRepo.ListCatalogs(ctx, businessA, "active", 1, catalogPage.NextCursor)
+	if err != nil || len(catalogPage.Items) != 1 || catalogPage.Items[0].ID != catalogA || catalogPage.HasMore {
+		t.Fatalf("catalog list cursor page: %#v err=%v", catalogPage, err)
+	}
+	if _, err := catalogRepo.ListCatalogs(ctx, businessA, "", 25, "not-a-cursor"); !IsRepositoryKind(err, RepositoryInvalid) {
+		t.Fatalf("expected catalog malformed cursor invalid error, got %v", err)
+	}
+	catalog, err := catalogRepo.GetCatalog(ctx, businessA, catalogA)
+	if err != nil || catalog.Description == nil || *catalog.Description != "Devices and accessories" || catalog.Status != "active" {
+		t.Fatalf("catalog read: %#v err=%v", catalog, err)
+	}
+	if err := adapter.Within(ctx, func(txCtx context.Context) error {
+		executor, txErr := adapter.Executor(txCtx)
+		if txErr != nil {
+			return txErr
+		}
+		if _, txErr = executor.Exec(txCtx, `UPDATE catalogs SET status = 'archived' WHERE id = $1::uuid`, catalogA); txErr != nil {
+			return txErr
+		}
+		inside, txErr := catalogRepo.GetCatalog(txCtx, businessA, catalogA)
+		if txErr != nil || inside.Status != "archived" {
+			return errors.New("catalog transaction update not visible")
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("catalog transaction commit: %v", err)
+	}
+	catalog, err = catalogRepo.GetCatalog(ctx, businessA, catalogA)
+	if err != nil || catalog.Status != "archived" {
+		t.Fatalf("catalog transaction commit not visible: %#v err=%v", catalog, err)
+	}
+	catalogRollbackErr := errors.New("force catalog rollback")
+	if err := adapter.Within(ctx, func(txCtx context.Context) error {
+		executor, txErr := adapter.Executor(txCtx)
+		if txErr != nil {
+			return txErr
+		}
+		if _, txErr = executor.Exec(txCtx, `UPDATE catalogs SET status = 'active' WHERE id = $1::uuid`, catalogA); txErr != nil {
+			return txErr
+		}
+		return catalogRollbackErr
+	}); !errors.Is(err, catalogRollbackErr) {
+		t.Fatalf("expected catalog rollback error, got %v", err)
+	}
+	catalog, err = catalogRepo.GetCatalog(ctx, businessA, catalogA)
+	if err != nil || catalog.Status != "archived" {
+		t.Fatalf("catalog transaction rollback leaked: %#v err=%v", catalog, err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE catalogs SET status = 'active' WHERE id = $1::uuid`, catalogA); err != nil {
+		t.Fatalf("restore catalog fixture status: %v", err)
+	}
+	if _, err := catalogRepo.GetCatalog(ctx, businessB, catalogA); !IsRepositoryKind(err, RepositoryNotFound) {
+		t.Fatalf("catalog crossed tenant boundary: %v", err)
+	}
+	itemPage, err := catalogRepo.ListCatalogItems(ctx, businessA, catalogA, "phone", "active", 25, "")
+	if err != nil || len(itemPage.Items) != 1 || itemPage.Items[0].ID != itemA || !jsonObjectsEqual(itemPage.Items[0].Attributes, `{"brand":"Mujeeb"}`) {
+		t.Fatalf("catalog item list: %#v err=%v", itemPage, err)
+	}
+	item, err := catalogRepo.GetCatalogItem(ctx, businessA, catalogA, itemA)
+	if err != nil || item.AttributeSchemaID == nil || *item.AttributeSchemaID != schemaA || item.AttributeSchemaVersion == nil || *item.AttributeSchemaVersion != 1 {
+		t.Fatalf("catalog item read: %#v err=%v", item, err)
+	}
+	if _, err := catalogRepo.ListCatalogItems(ctx, businessB, catalogA, "", "", 25, ""); !IsRepositoryKind(err, RepositoryNotFound) {
+		t.Fatalf("catalog item crossed tenant boundary: %v", err)
+	}
+	offerPage, err := catalogRepo.ListOffers(ctx, businessA, itemA, "active", 25, "")
+	if err != nil || len(offerPage.Items) != 1 || offerPage.Items[0].ID != offerA || offerPage.Items[0].Amount == nil || *offerPage.Items[0].Amount != "1250.0000" || offerPage.Items[0].Currency == nil || *offerPage.Items[0].Currency != "YER" || offerPage.Items[0].AvailabilityStatus != "available" {
+		t.Fatalf("offer list: %#v err=%v", offerPage, err)
+	}
+	if _, err := catalogRepo.ListOffers(ctx, businessB, itemA, "", 25, ""); !IsRepositoryKind(err, RepositoryNotFound) {
+		t.Fatalf("offer crossed tenant boundary: %v", err)
+	}
+	variantPage, err := catalogRepo.ListVariants(ctx, businessA, itemA, "active", 25, "")
+	if err != nil || len(variantPage.Items) != 1 || variantPage.Items[0].ID != variantA || !jsonObjectsEqual(variantPage.Items[0].Attributes, `{"color":"black"}`) {
+		t.Fatalf("variant list: %#v err=%v", variantPage, err)
+	}
+	if _, err := catalogRepo.ListVariants(ctx, businessB, itemA, "", 25, ""); !IsRepositoryKind(err, RepositoryNotFound) {
+		t.Fatalf("variant crossed tenant boundary: %v", err)
+	}
+	schemaPage, err := catalogRepo.ListAttributeSchemas(ctx, businessA, "Product attributes", nil, 25, "")
+	if err != nil || len(schemaPage.Items) != 1 || schemaPage.Items[0].ID != schemaA || schemaPage.Items[0].Version != 1 {
+		t.Fatalf("attribute schema list: %#v err=%v", schemaPage, err)
+	}
+	schema, err := catalogRepo.GetAttributeSchema(ctx, businessA, schemaA)
+	if err != nil || len(schema.Definitions) != 1 || schema.Definitions[0].Key != "color" || schema.Definitions[0].DataType != "text" || !schema.Definitions[0].Required {
+		t.Fatalf("attribute schema read: %#v err=%v", schema, err)
+	}
+	if _, err := catalogRepo.GetAttributeSchema(ctx, businessB, schemaA); !IsRepositoryKind(err, RepositoryNotFound) {
+		t.Fatalf("attribute schema crossed tenant boundary: %v", err)
+	}
+	catalogQueryService := services.ListCatalogsQueryService{Repository: catalogRepo}
+	catalogViewPage, err := catalogQueryService.Handle(ctx, queries.ListCatalogsQuery{Meta: queries.QueryMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, Limit: 1, Status: "active"})
+	if err != nil || len(catalogViewPage.Items) != 1 || catalogViewPage.Items[0].Name != "Services" || !catalogViewPage.HasMore || catalogViewPage.NextCursor == "" {
+		t.Fatalf("catalog application mapping: %#v err=%v", catalogViewPage, err)
+	}
+	schemaQueryService := services.GetAttributeSchemaQueryService{Repository: catalogRepo}
+	schemaView, err := schemaQueryService.Handle(ctx, queries.GetAttributeSchemaQuery{Meta: queries.QueryMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, SchemaID: commands.AttributeSchemaID(schemaA)})
+	if err != nil || len(schemaView.Definitions) != 1 || schemaView.Definitions[0].Key != "color" {
+		t.Fatalf("schema application mapping: %#v err=%v", schemaView, err)
 	}
 	referenceRepo := NewConversationReferenceRepository(adapter)
 	reference, err := referenceRepo.GetCurrentByConversation(ctx, businessA, conversationA, "provider")
@@ -352,3 +511,12 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 }
 
 func strptr(value string) *string { return &value }
+
+func jsonObjectsEqual(got []byte, want string) bool {
+	var gotObject any
+	var wantObject any
+	if json.Unmarshal(got, &gotObject) != nil || json.Unmarshal([]byte(want), &wantObject) != nil {
+		return false
+	}
+	return reflect.DeepEqual(gotObject, wantObject)
+}

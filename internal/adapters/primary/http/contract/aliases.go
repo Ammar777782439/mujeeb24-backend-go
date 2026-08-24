@@ -46,6 +46,7 @@ type ConversationPath = dto.ConversationPath
 type CustomerPath = dto.CustomerPath
 type ListQuery = dto.ListQuery
 type BusinessListInput = dto.BusinessListInput
+type CatalogListInput = dto.CatalogListInput
 type ConversationListInput = dto.ConversationListInput
 type ConversationInput = dto.ConversationInput
 type ConversationMessageInput = dto.ConversationMessageInput

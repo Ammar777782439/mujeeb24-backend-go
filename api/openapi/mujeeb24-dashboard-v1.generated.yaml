@@ -3600,6 +3600,11 @@ paths:
           name: cursor
           schema:
             type: string
+        - explode: false
+          in: query
+          name: status
+          schema:
+            type: string
       responses:
         "200":
           content:

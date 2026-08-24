@@ -11,7 +11,7 @@
 | Foundation | قراءة tenant/business scope | `businesses` | منفذ |
 | Identity/Communication | عرض العملاء والمحادثات، قراءة/إنشاء outbound، وعرض message timeline | `customers`, `conversations`, `conversation_references`, `communication_messages`, `outbound_messages` | Business/Customer/Conversation/Connection/Reference/Outbound وCommunicationMessage foundation منفذة ومثبتة بـPostgreSQL 16 |
 | Channels | عرض connection وcapabilities | `channel_connections`, `channel_connection_capabilities` | `ChannelConnection.GetByID` و`ChannelCapability.ListByConnection` منفذان ومثبتان بـPostgreSQL 16؛ لا CRUD كتابة غير مطلوب |
-| Catalog | عرض/إنشاء/تعديل catalog وitems/offers/variants | `catalogs`, `attribute_schemas`, `attribute_definitions`, `catalog_items`, `offers`, `variants` | مؤجلة بعد إغلاق CommunicationMessage |
+| Catalog | قراءة catalogs/items/offers/variants/schemas، ثم الكتابة عبر commands | `catalogs`, `attribute_schemas`, `attribute_definitions`, `catalog_items`, `offers`, `variants` | **Read surface منفذ ومثبت بـPostgreSQL 16**؛ write commands/repositories مؤجلة حتى حسم resource-version وdecimal-money boundary وApplication command services |
 | Sales | Leads وtransactions وreviews/order lines | `leads`, `lead_attributions`, `lead_scores`, `commercial_transactions`, `transaction_reviews`, `transaction_confirmations`, `order_lines` | مؤجلة بعد Catalog |
 | AI/Audit | قراءة decisions وتسجيل/عرض audit | `ai_decisions`, `audit_events` | مؤجلة بعد Sales |
 | Reliability | atomic inbound dedupe وoutbox | `inbound_event_ledger`, `outbox_entries` | Go implementation مؤجلة؛ EventStore يملك inbound idempotency |
@@ -28,6 +28,12 @@
 | `ListByConversation` | قراءة Dashboard timeline | tenant-scoped، يتحقق من وجود المحادثة، keyset pagination، cursor opaque |
 
 `CommunicationMessage` ليس بديلًا عن `ConversationReference` أو `OutboundMessage` أو `InboundEventLedger`. لا يوجد CRUD عام، ولا one-to-one unique غير مثبت بين message record وinbound/outbound links.
+
+## Catalog read surface
+
+تم تنفيذ `CatalogRepository` وservices typed لقراءات Catalog الحالية فقط: `List/GetCatalog`, `List/GetCatalogItem`, `ListOffers`, `ListVariants`, و`List/GetAttributeSchema`. القوائم تستخدم tenant-scoped parent checks وopaque keyset cursors؛ `AttributeSchema` يعيد definitions مرتبة. attributes تعاد كـraw JSON bytes داخل Application port ولا تتحول إلى `map[string]any` record.
+
+هذه ليست إشارة إلى إغلاق Catalog بالكامل. أوامر الكتابة موجودة في Application contract، لكن لا توجد command services تنفيذية، و`resource_version` غير موجود في migrations الحالية رغم أن HTTP contract يفرض `If-Match`. كما أن Offer command يستخدم `AmountMinor` بينما schema/DTO الحاليان يعرضان decimal amount. لذلك تبقى الكتابة قرارًا وتنفيذًا مستقلًا قبل Sales.
 
 ## Channel Capabilities surface
 
@@ -49,4 +55,4 @@
 
 ## معيار قبول كل مجموعة
 
-لا تنتقل المجموعة إلى التالية قبل نجاح unit tests وintegration test على PostgreSQL حقيقي، مع تطبيق migrations، وقراءة صحيحة، وnot-found، وcross-tenant rejection، وسلوك transaction عند الحاجة. CommunicationMessage وChannel Capabilities حققتا هذا المعيار في PostgreSQL 16. CommunicationMessage غطت ordering/pagination وconstraints وApplication mapping، وChannel Capabilities غطت read/order وchecked_at/evidence وtenant not-found وtransaction commit/rollback وApplication mapping. بعد تثبيت surfaces المتبقية في Catalog/Sales/AI/Audit فقط نبدأ EventStore ثم inbound dedupe ثم Outbox. لا يبدأ Provider runtime قبل إكمال Reliability foundation.
+لا تنتقل المجموعة إلى التالية قبل نجاح unit tests وintegration test على PostgreSQL حقيقي، مع تطبيق migrations، وقراءة صحيحة، وnot-found، وcross-tenant rejection، وسلوك transaction عند الحاجة. CommunicationMessage وChannel Capabilities وCatalog read surface حققت معيار القراءة هذا في PostgreSQL 16. Catalog لم يحقق بعد معيار Catalog write persistence، لذلك لا يُعتبر المجموعة مغلقة. CommunicationMessage غطت ordering/pagination وconstraints وApplication mapping، وChannel Capabilities غطت read/order وchecked_at/evidence وtenant not-found وtransaction commit/rollback وApplication mapping. بعد تثبيت surfaces المتبقية في Catalog/Sales/AI/Audit فقط نبدأ EventStore ثم inbound dedupe ثم Outbox. لا يبدأ Provider runtime قبل إكمال Reliability foundation.

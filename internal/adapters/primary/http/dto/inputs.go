@@ -21,6 +21,11 @@ type BusinessListInput struct {
 	BusinessPath
 	ListQuery
 }
+type CatalogListInput struct {
+	BusinessPath
+	ListQuery
+	Status string `query:"status"`
+}
 type ConversationListInput struct {
 	BusinessPath
 	ListQuery

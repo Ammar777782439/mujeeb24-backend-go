@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"strconv"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
@@ -146,7 +148,7 @@ func (s *Server) dispatchAdditionalQuery(ctx context.Context, operationID string
 		}
 		return transactionList(view), true
 	case "listCatalogs":
-		in := input.(*contract.BusinessListInput)
+		in := input.(*contract.CatalogListInput)
 		if s.deps.ListCatalogs == nil {
 			return mapApplicationError(appErrors.NotImplemented()), true
 		}
@@ -154,7 +156,7 @@ func (s *Server) dispatchAdditionalQuery(ctx context.Context, operationID string
 		if err != nil {
 			return mapApplicationError(err), true
 		}
-		view, err := s.deps.ListCatalogs.Handle(ctx, queries.ListCatalogsQuery{Meta: queryMeta(actor, "", ""), Limit: in.Limit, Cursor: in.Cursor})
+		view, err := s.deps.ListCatalogs.Handle(ctx, queries.ListCatalogsQuery{Meta: queryMeta(actor, "", ""), Limit: in.Limit, Cursor: in.Cursor, Status: in.Status})
 		if err != nil {
 			return mapApplicationError(err), true
 		}
@@ -242,8 +244,12 @@ func (s *Server) dispatchAdditionalQuery(ctx context.Context, operationID string
 		if err != nil {
 			return mapApplicationError(err), true
 		}
-		version := in.Version
-		view, err := s.deps.ListAttributeSchemas.Handle(ctx, queries.ListAttributeSchemasQuery{Meta: queryMeta(actor, "", ""), Limit: in.Limit, Cursor: in.Cursor, Name: in.Name, Version: &version})
+		var version *int
+		if in.Version > 0 {
+			value := in.Version
+			version = &value
+		}
+		view, err := s.deps.ListAttributeSchemas.Handle(ctx, queries.ListAttributeSchemasQuery{Meta: queryMeta(actor, "", ""), Limit: in.Limit, Cursor: in.Cursor, Name: in.Name, Version: version})
 		if err != nil {
 			return mapApplicationError(err), true
 		}
@@ -489,7 +495,7 @@ func customerList(v commands.ListResult[commands.CustomerView]) *contract.List[c
 	return listPage(items, v.NextCursor, v.HasMore)
 }
 func catalogProjection(v commands.CatalogView) contract.Catalog {
-	return contract.Catalog{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), Name: v.Name, Status: v.Status, ResourceVersion: string(v.ResourceVersion)}
+	return contract.Catalog{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), Name: v.Name, Description: v.Description, Status: v.Status, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt, ResourceVersion: string(v.ResourceVersion)}
 }
 func catalogList(v commands.ListResult[commands.CatalogView]) *contract.List[contract.Catalog] {
 	items := make([]contract.Catalog, 0, len(v.Items))
@@ -499,7 +505,7 @@ func catalogList(v commands.ListResult[commands.CatalogView]) *contract.List[con
 	return listPage(items, v.NextCursor, v.HasMore)
 }
 func catalogItemProjection(v commands.CatalogItemView) contract.CatalogItem {
-	return contract.CatalogItem{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), CatalogID: contract.UUID(v.CatalogID), ItemType: v.ItemType, Name: v.Name, Status: v.Status, ResourceVersion: string(v.ResourceVersion)}
+	return contract.CatalogItem{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), CatalogID: contract.UUID(v.CatalogID), ItemType: v.ItemType, Name: v.Name, Status: v.Status, Attributes: jsonObject(v.Attributes), ResourceVersion: string(v.ResourceVersion)}
 }
 func catalogItemList(v commands.ListResult[commands.CatalogItemView]) *contract.List[contract.CatalogItem] {
 	items := make([]contract.CatalogItem, 0, len(v.Items))
@@ -509,7 +515,7 @@ func catalogItemList(v commands.ListResult[commands.CatalogItemView]) *contract.
 	return listPage(items, v.NextCursor, v.HasMore)
 }
 func offerProjection(v commands.OfferView) contract.Offer {
-	return contract.Offer{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), CatalogItemID: contract.UUID(v.CatalogItemID), VariantID: optionalUUID(v.VariantID), Name: v.Name, Status: v.Status, ResourceVersion: string(v.ResourceVersion)}
+	return contract.Offer{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), CatalogItemID: contract.UUID(v.CatalogItemID), VariantID: optionalUUID(v.VariantID), Name: v.Name, PricingMode: v.PricingMode, Amount: decimalFloat(v.Amount), Currency: v.Currency, AvailabilityStatus: v.AvailabilityStatus, Status: v.Status, ResourceVersion: string(v.ResourceVersion)}
 }
 func offerList(v commands.ListResult[commands.OfferView]) *contract.List[contract.Offer] {
 	items := make([]contract.Offer, 0, len(v.Items))
@@ -519,7 +525,7 @@ func offerList(v commands.ListResult[commands.OfferView]) *contract.List[contrac
 	return listPage(items, v.NextCursor, v.HasMore)
 }
 func variantProjection(v commands.VariantView) contract.Variant {
-	return contract.Variant{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), CatalogItemID: contract.UUID(v.CatalogItemID), Name: v.Name, Status: v.Status, ResourceVersion: string(v.ResourceVersion)}
+	return contract.Variant{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), CatalogItemID: contract.UUID(v.CatalogItemID), Name: v.Name, Attributes: jsonObject(v.Attributes), Status: v.Status, ResourceVersion: string(v.ResourceVersion)}
 }
 func variantList(v commands.ListResult[commands.VariantView]) *contract.List[contract.Variant] {
 	items := make([]contract.Variant, 0, len(v.Items))
@@ -529,7 +535,33 @@ func variantList(v commands.ListResult[commands.VariantView]) *contract.List[con
 	return listPage(items, v.NextCursor, v.HasMore)
 }
 func attributeSchemaProjection(v commands.AttributeSchemaView) contract.AttributeSchema {
-	return contract.AttributeSchema{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), Name: v.Name, Version: v.Version}
+	definitions := make([]contract.AttributeDefinition, 0, len(v.Definitions))
+	for _, item := range v.Definitions {
+		definitions = append(definitions, contract.AttributeDefinition{ID: contract.UUID(item.ID), Key: item.Key, Label: item.Label, DataType: item.DataType, Required: item.Required, Searchable: item.Searchable, DisplayOrder: item.DisplayOrder})
+	}
+	return contract.AttributeSchema{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), Name: v.Name, Version: v.Version, Definitions: definitions}
+}
+
+func jsonObject(value []byte) map[string]any {
+	if len(value) == 0 {
+		return nil
+	}
+	var object map[string]any
+	if err := json.Unmarshal(value, &object); err != nil {
+		return nil
+	}
+	return object
+}
+
+func decimalFloat(value *string) *float64 {
+	if value == nil {
+		return nil
+	}
+	parsed, err := strconv.ParseFloat(*value, 64)
+	if err != nil {
+		return nil
+	}
+	return &parsed
 }
 func attributeSchemaList(v commands.ListResult[commands.AttributeSchemaView]) *contract.List[contract.AttributeSchema] {
 	items := make([]contract.AttributeSchema, 0, len(v.Items))
