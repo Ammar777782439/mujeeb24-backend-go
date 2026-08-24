@@ -27,7 +27,7 @@
 | PostgreSQL Persistence Contract | مغلق كتصميم | Composite Tenant FKs وLeases وIdempotency موثقة |
 | PostgreSQL schema/migrations | مكتملة 000001–000027 | Migration Runner مضمّن ويطبقها من قاعدة فارغة؛ لا AutoMigrate |
 | PostgreSQL constraint tests | Foundation وFull Schema ناجحة | تشمل Tenant Isolation وIdempotency وLeases وSnapshots |
-| Event Ledger/Idempotency/Outbox | تصميم + SQL tables | Go implementation لم يبدأ؛ يأتي بعد PostgreSQL Adapter |
+| Event Ledger/Idempotency/Outbox | تصميم + SQL tables | Go implementation لم يبدأ؛ يأتي بعد إكمال Repository foundation |
 | Provider Simulator | لم يبدأ | مطلوب قبل أي credentials حقيقية |
 | SocialAPI.ai integration | غير مثبت | لا توجد credentials إنتاجية أو test credentials |
 | Chatwoot Adapter | غير منفذ | Feasibility مثبتة، Adapter لم يُكتب |
@@ -43,7 +43,7 @@
 
 ## الحالة الحالية: PR-009 — PostgreSQL Adapter وTransactionManager
 
-أُغلق PR-008 عند حد HTTP → Application façade wiring بنتيجة 76/76. بدأ PR-009 الآن بتنفيذ PostgreSQL pool وTransactionManager في `internal/adapters/secondary/persistence/postgres`، مع عقد `application/ports.TransactionManager`. هذه الدفعة لا تنفذ Repositories أو EventStore أو Idempotency/Outbox implementations.
+أُغلق PR-008 عند حد HTTP → Application façade wiring بنتيجة 76/76. في PR-009 نُفذ PostgreSQL pool وTransactionManager، ثم أضيف Repository foundation و`BusinessRepository` الأول فوق جدول `businesses` مع `SQLExecutor` transaction-aware وtyped repository errors. نجح integration test حقيقي على PostgreSQL 16 يثبت migration وread وnot-found وcommit وrollback. ما زالت بقية Repositories وEventStore وIdempotency/Outbox implementations مؤجلة.
 
 ## معيار إغلاق HTTP API Contract وDTO-first Generation
 

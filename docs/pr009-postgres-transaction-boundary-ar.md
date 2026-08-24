@@ -32,11 +32,15 @@ pgxpool.Pool / pgx transaction
 6. يرفض nested transactions عبر `ErrNestedTransaction` بدل إنشاء transaction مستقلة مخفية.
 7. لا ينفذ network calls أو provider calls؛ callback يملك وحدة العمل Application/Persistence.
 
-Repositories اللاحقة ستستخدم transaction context عبر adapter contract مناسب، ولن تصل إلى pgx من Application مباشرة.
+Repositories اللاحقة ستستخدم transaction context عبر adapter contract مناسب، ولن تصل إلى pgx من Application مباشرة. مثال التشغيل المحلي للاختبار الحقيقي هو:
+
+```bash
+POSTGRES_TEST_DSN='postgres://...' go test -tags=integration -count=1 ./internal/adapters/secondary/persistence/postgres
+```
 
 ## الاختبارات
 
-تغطي اختبارات الوحدة نجاح commit، callback failure وrollback، nested transaction rejection، cancellation قبل begin، cancellation داخل callback، وnil-pool/invalid URL lifecycle behavior. لا تدعي هذه الاختبارات نجاح اتصال PostgreSQL حقيقي؛ integration test بقاعدة PostgreSQL منفصلة يأتي مع Repository foundation.
+تغطي اختبارات الوحدة نجاح commit، callback failure وrollback، nested transaction rejection، cancellation قبل begin، cancellation داخل callback، وnil-pool/invalid URL lifecycle behavior. أضيف `business_repository_integration_test.go` باختبار PostgreSQL حقيقي gated بـ`-tags=integration` و`POSTGRES_TEST_DSN`. الاختبار يطبق migrations، يقرأ Business، يثبت not-found typed error، ويتحقق من commit وrollback. تم تشغيله فعليًا على PostgreSQL 16 مؤقت ونجح.
 
 ## ما لم يُنفذ
 

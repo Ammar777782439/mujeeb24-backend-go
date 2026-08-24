@@ -8,12 +8,14 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var (
-	ErrPoolClosed        = errors.New("postgres pool is closed")
-	ErrNestedTransaction = errors.New("nested transactions are not supported")
+	ErrPoolClosed                 = errors.New("postgres pool is closed")
+	ErrNestedTransaction          = errors.New("nested transactions are not supported")
+	ErrTransactionExecutorMissing = errors.New("transaction executor is unavailable")
 )
 
 type PoolConfig struct {
@@ -27,6 +29,12 @@ type PoolConfig struct {
 
 func DefaultPoolConfig() PoolConfig {
 	return PoolConfig{MaxConns: 10, MinConns: 1, MaxConnLifetime: time.Hour, MaxConnIdleTime: 30 * time.Minute, HealthCheckPeriod: time.Minute, ConnectTimeout: 5 * time.Second}
+}
+
+type SQLExecutor interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
 type tx interface {
@@ -97,6 +105,20 @@ func NewFromPool(pool *pgxpool.Pool) *Adapter {
 		return &Adapter{}
 	}
 	return &Adapter{pool: pool, beginner: poolBeginner{pool: pool}, closer: pool, pinger: pool}
+}
+
+func (a *Adapter) Executor(ctx context.Context) (SQLExecutor, error) {
+	if a == nil || a.pool == nil {
+		return nil, ErrPoolClosed
+	}
+	if value, ok := transactionFromContext(ctx); ok {
+		executor, ok := value.(SQLExecutor)
+		if !ok {
+			return nil, ErrTransactionExecutorMissing
+		}
+		return executor, nil
+	}
+	return a.pool, nil
 }
 
 func (a *Adapter) Pool() *pgxpool.Pool {
