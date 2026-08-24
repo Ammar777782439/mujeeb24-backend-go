@@ -2,9 +2,9 @@
 
 ## المرحلة الحالية: SQL Migrations وPersistence Tests
 
-الحالة: **تصميم الـFull Schema مغلق، والتنفيذ SQL والاختبارات هما العمل الحالي**.
+الحالة: **Foundation SQL من 000001 إلى 000012 منفذة، واختبارات قيودها ناجحة؛ العمل الحالي هو بقية الـSchema ثم Full Schema validation**.
 
-العقود الموجودة في `contracts/` تحدد shared وbusiness وchannel وidentity وcommunication وcatalog وsales وai وaudit، كما توثق Persistence Boundary وComposite Tenant FKs وEvent Ledger وOutbox وIdempotency. لا ننتقل إلى PostgreSQL Adapter قبل كتابة SQL واختبار القيود من قاعدة فارغة.
+العقود الموجودة في `contracts/` تحدد shared وbusiness وchannel وidentity وcommunication وcatalog وsales وai وaudit، كما توثق Persistence Boundary وComposite Tenant FKs وEvent Ledger وOutbox وIdempotency. لا ننتقل إلى PostgreSQL Adapter قبل اكتمال migrations واختبار القيود من قاعدة فارغة.
 
 ## المرحلة المنجزة تصميميًا: Application Ports
 
@@ -56,7 +56,7 @@ audit_events
 
 كل جدول تجاري يحمل business scope حيث يلزم. كل unique constraint يترجم قاعدة Idempotency أو Mapping من Domain.
 
-معيار النجاح: migrations تعمل من قاعدة فارغة، وrollback/forward policy واضحة، وconstraints تمنع cross-tenant references والتكرار الأساسي.
+حالة التنفيذ: Foundation migrations تعمل من قاعدة فارغة، ونجحت اختبارات cross-tenant references والتكرار الأساسي وUnresolved Event وOutbox Lease. معيار الإغلاق الكامل هو نجاح migrations 000013–000027 واختبارات Full Schema مع forward-only policy واضحة.
 
 ## المرحلة التالية: Reliability Foundation
 
@@ -128,8 +128,8 @@ SocialAPI inbound
 ## ترتيب العمل في Pull Requests التالية
 
 ```text
-PR-005: SQL migrations 000001–000012 + Foundation constraint tests
-PR-006: SQL migrations 000013–000027 + full-schema tests/review
+PR-005: SQL migrations 000001–000012 + Foundation constraint tests — مكتمل
+PR-006: SQL migrations 000013–000027 + full-schema tests/review — التالي
 PR-007: PostgreSQL Adapter and TransactionManager
 PR-008: Event ledger/idempotency/outbox implementation
 PR-009: Provider simulator

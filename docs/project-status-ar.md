@@ -23,9 +23,9 @@
 | Domain/ai وaudit | مغلق كتصميم | Structured Decision، Evidence، Policy، Audit |
 | application/ports | مغلق كتصميم | Go interfaces التنفيذية تحتاج ضبطًا نهائيًا أثناء Adapter work |
 | PostgreSQL Persistence Contract | مغلق كتصميم | Composite Tenant FKs وLeases وIdempotency موثقة |
-| PostgreSQL schema/migrations | SQL لم يبدأ | سيُكتب من 000001 حتى 000027؛ لا AutoMigrate |
-| PostgreSQL constraint tests | لم يبدأ | مطلوب قبل Reliability implementation |
-| Event Ledger/Idempotency/Outbox | لم يبدأ | Reliability Foundation بعد نجاح migrations/tests |
+| PostgreSQL schema/migrations | Foundation 000001–000012 منفذة | Catalog/Sales/AI/Audit من 000013–000027 لم تُكتب بعد؛ لا AutoMigrate |
+| PostgreSQL constraint tests | Foundation ناجحة | اختبارات Full Schema لم تبدأ |
+| Event Ledger/Idempotency/Outbox | SQL foundation موجود، Go implementation لم يبدأ | Reliability Foundation بعد اكتمال Full Schema validation |
 | Provider Simulator | لم يبدأ | مطلوب قبل أي credentials حقيقية |
 | SocialAPI.ai integration | غير مثبت | لا توجد credentials إنتاجية أو test credentials |
 | Chatwoot Adapter | غير منفذ | Feasibility مثبتة، Adapter لم يُكتب |
@@ -35,16 +35,14 @@
 
 لا نستخدم المستودع القديم `yemen-social-reply-engine` كقاعدة تطوير. لا نعيد Facebook adapter القديم. لا نجعل Chatwoot أو SocialAPI مصدر Sales Truth. لا نضع Provider DTOs داخل Domain. لا نستخدم `float64` للأموال ولا `AutoMigrate` للإنتاج.
 
-## معيار إغلاق تصميم الـMigrations
+## معيار إغلاق الـMigrations
 
-أُغلق تصميم الـFull Schema بعد تثبيت Foundation وCatalog وSales وAI وAudit، مع Composite Tenant FKs، External References، Event Ledger، Outbox، Idempotency، Snapshots، وسياسة `RESTRICT/ARCHIVED` بدل الحذف المتسلسل من Business. هذا لا يعني أن SQL أو الاختبارات التنفيذية قد نجحت.
+أُغلق تصميم الـFull Schema بعد تثبيت Foundation وCatalog وSales وAI وAudit، مع Composite Tenant FKs، External References، Event Ledger، Outbox، Idempotency، Snapshots، وسياسة `RESTRICT/ARCHIVED` بدل الحذف المتسلسل من Business. تم تنفيذ Foundation SQL من 000001 إلى 000012 ونجحت اختبارات PostgreSQL الأساسية. أما migrations 000013–000027 وFull Schema validation فما زالت متبقية.
 
 ## الخطوة التالية الوحيدة
 
 ```text
 Finalize typed IDs + composite FK strategy
-→ Write SQL migrations 000001–000012
-→ Run PostgreSQL constraint tests
 → Write SQL migrations 000013–000027
 → Run full-schema migration tests/review
 → Implement PostgreSQL Adapter
