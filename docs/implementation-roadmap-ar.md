@@ -1,10 +1,10 @@
 # خارطة التنفيذ — Mujeeb 24 Backend Go
 
-## المرحلة الحالية: SQL Migrations وPersistence Tests
+## المرحلة الحالية: HTTP API Contract — Dashboard V1
 
-الحالة: **SQL migrations من 000001 إلى 000027 منفذة، وFoundation وFull Schema constraint tests ناجحة؛ العمل الحالي هو PostgreSQL Adapter وReliability Foundation**.
+الحالة: **مغلقة تصميميًا، والتنفيذ لم يبدأ**.
 
-العقود الموجودة في `contracts/` تحدد shared وbusiness وchannel وidentity وcommunication وcatalog وsales وai وaudit، كما توثق Persistence Boundary وComposite Tenant FKs وEvent Ledger وOutbox وIdempotency. Migration Runner مضمّن في Go ويطبق الإصدار من قاعدة فارغة دون إعادة تنفيذ المigrations السابقة.
+SQL migrations من 000001 إلى 000027 وFull Schema constraint tests مكتملة. عقد HTTP Dashboard V1 موجود في `contracts/http_api_dashboard_v1_contract_ar.md` ويحدد Business Scope وAuth boundary وRoles وErrors وPagination وIdempotency وConcurrency وEndpoint mapping، مع فصل Webhooks وOperational endpoints عن واجهة التاجر.
 
 ## المرحلة المنجزة تصميميًا: Application Ports
 
@@ -31,7 +31,7 @@ Transaction
 
 معيار النجاح: يمكن اختبار Application باستخدام fakes دون تشغيل SocialAPI أو Chatwoot أو PostgreSQL.
 
-## المرحلة الحالية: SQL Schema
+## المرحلة المنجزة: SQL Schema
 
 نبني SQL migrations versioned، لا AutoMigrate:
 
@@ -56,9 +56,9 @@ audit_events
 
 كل جدول تجاري يحمل business scope حيث يلزم. كل unique constraint يترجم قاعدة Idempotency أو Mapping من Domain.
 
-حالة التنفيذ: Foundation وFull Schema migrations تعملان من قاعدة فارغة، ونجحت اختبارات cross-tenant references والتكرار الأساسي وUnresolved Event وOutbox Lease وSnapshots. شغّلنا Runner مرتين ونتج `applied=27` ثم `applied=0`. المرحلة التالية هي تنفيذ PostgreSQL Adapter لا إعادة تصميم Schema.
+حالة التنفيذ: Foundation وFull Schema migrations تعملان من قاعدة فارغة، ونجحت اختبارات cross-tenant references والتكرار الأساسي وUnresolved Event وOutbox Lease وSnapshots. شغّلنا Runner مرتين ونتج `applied=27` ثم `applied=0`.
 
-## المرحلة التالية: PostgreSQL Adapter وReliability Foundation
+## المرحلة التالية: OpenAPI وHTTP Boundary Implementation
 
 نطبق:
 
@@ -130,12 +130,14 @@ SocialAPI inbound
 ```text
 PR-005: SQL migrations 000001–000012 + Foundation constraint tests — مكتمل
 PR-006: SQL migrations 000013–000027 + full-schema tests/review — مكتمل
-PR-007: PostgreSQL Adapter and TransactionManager — التالي
-PR-008: Event ledger/idempotency/outbox implementation
-PR-009: Provider simulator
-PR-010: Chatwoot/SocialAPI adapters
-PR-011: First vertical slice
-PR-012: AI Context/Intent/Decision
+PR-007: HTTP API Contract → OpenAPI v1 + shared DTOs — التالي
+PR-008: HTTP route/handler skeletons + Application Commands/Queries
+PR-009: PostgreSQL Adapter and TransactionManager
+PR-010: Event ledger/idempotency/outbox implementation
+PR-011: Provider simulator
+PR-012: Chatwoot/SocialAPI adapters
+PR-013: First vertical slice
+PR-014: AI Context/Intent/Decision
 ```
 
 تصميم Domain وPorts وPersistence مغلق، لكن كل PR يجب أن يذكر العقد الذي يطبقه والاختبارات التي تثبت invariants الخاصة به.

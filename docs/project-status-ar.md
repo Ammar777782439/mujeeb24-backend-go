@@ -22,6 +22,7 @@
 | Domain/catalog وsales | مغلق كتصميم | CatalogItem/Offer/Variant/Transactions متعددة الأنواع |
 | Domain/ai وaudit | مغلق كتصميم | Structured Decision، Evidence، Policy، Audit |
 | application/ports | مغلق كتصميم | Go interfaces التنفيذية تحتاج ضبطًا نهائيًا أثناء Adapter work |
+| HTTP API Dashboard V1 Contract | مغلق كتصميم | Dashboard-only، Webhooks منفصلة، Auth/Tenant/Error/Pagination/Idempotency موثقة |
 | PostgreSQL Persistence Contract | مغلق كتصميم | Composite Tenant FKs وLeases وIdempotency موثقة |
 | PostgreSQL schema/migrations | مكتملة 000001–000027 | Migration Runner مضمّن ويطبقها من قاعدة فارغة؛ لا AutoMigrate |
 | PostgreSQL constraint tests | Foundation وFull Schema ناجحة | تشمل Tenant Isolation وIdempotency وLeases وSnapshots |
@@ -39,13 +40,18 @@
 
 أُغلق تنفيذ الـFull Schema بعد تطبيق migrations من 000001 إلى 000027 على PostgreSQL فارغة، ونجاح اختبارات Tenant Isolation وProvider Event Dedupe وScoped Outbound Idempotency وUnresolved Event وOutbox Lease وSnapshots، ونجاح تشغيل Runner مرتين (`applied=27` ثم `applied=0`). هذا لا يعني أن Event Ledger أو Outbox Go implementation أصبحا منفذين.
 
+## معيار إغلاق HTTP API Contract
+
+أُغلق عقد Dashboard V1 تصميميًا بعد تحديد routes وroles وpermissions وRequest/Response envelopes وErrors وPagination وIdempotency وConcurrency وApplication Command/Query mapping، مع فصل Webhooks وOperational endpoints وDeferred Scope. لم تُكتب OpenAPI أو DTOs أو Handlers بعد.
+
 ## الخطوة التالية الوحيدة
 
 ```text
-Finalize PostgreSQL Adapter contracts
-→ Implement EventStore/IdempotencyStore/OutboxStore
-→ Add TransactionManager semantics
-→ Build Provider Simulator
+Translate HTTP API Contract to OpenAPI v1
+→ Define shared and endpoint DTOs
+→ Write HTTP route/handler skeletons
+→ Finalize Application Commands/Queries
+→ Implement PostgreSQL Adapter/Reliability
 ```
 
 لا نبدأ SocialAPI أو Chatwoot أو AI runtime قبل اكتمال Reliability Foundation وSimulator. ولا نعتبر Provider integration ناجحًا قبل اختبار حقيقي آمن لاحقًا.
