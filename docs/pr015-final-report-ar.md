@@ -90,11 +90,11 @@ SocialAPI هو transport خارجي، بينما Chatwoot communication workspac
 
 ## J. Commit SHA وGit state
 
-الـfeature commit هو `eae2e5c`، ثم دُمج تحديث remote غير متزامن في merge commit النهائي:
+الـfeature commit هو `eae2e5c`، ثم دُمج تحديث remote غير متزامن في `d9c83e3`. وبعد إضافة هذا التقرير أصبح commit التسليم النهائي:
 
-`d9c83e393a7e9573d04b26d8ea142a927f620c43`
+`b8100d8acdad9aa74f6b390468e47b55264d0e6d`
 
-تم الدفع إلى `origin/main` بنجاح. بعد `git fetch origin main` كانت النتيجة:
+تم دفع commits إلى `origin/main` بنجاح. بعد `git fetch origin main` كانت النتيجة:
 
 | الحالة | النتيجة |
 |---|---:|
