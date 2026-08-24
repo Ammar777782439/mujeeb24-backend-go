@@ -25,14 +25,14 @@ trap cleanup EXIT
 
 cd "$ROOT_DIR"
 "${DOCKER[@]}" rm -f "$CONTAINER" >/dev/null 2>&1 || true
-"${DOCKER[@]}" run --rm -d --name "$CONTAINER" -p "${PORT}:5432" \
+"${DOCKER[@]}" run --network host --rm -d --name "$CONTAINER" \
     -e POSTGRES_PASSWORD=testpassword \
     -e POSTGRES_DB=postgres \
-    "$IMAGE" >/dev/null
+    "$IMAGE" -c "port=${PORT}" >/dev/null
 
 ready=0
 for _ in $(seq 1 180); do
-    if "${DOCKER[@]}" exec "$CONTAINER" psql -U postgres -d postgres -Atqc 'SELECT 1' >/dev/null 2>&1; then
+    if "${DOCKER[@]}" exec "$CONTAINER" psql -p "$PORT" -U postgres -d postgres -Atqc 'SELECT 1' >/dev/null 2>&1; then
         ready=1
         break
     fi
@@ -44,20 +44,20 @@ if [[ "$ready" -ne 1 ]]; then
     exit 1
 fi
 sleep 2
-"${DOCKER[@]}" exec "$CONTAINER" psql -U postgres -d postgres -Atqc 'SELECT 1' >/dev/null
+"${DOCKER[@]}" exec "$CONTAINER" psql -p "$PORT" -U postgres -d postgres -Atqc 'SELECT 1' >/dev/null
 
 for db in "$FOUNDATION_DB" "$FULL_SCHEMA_DB" "$RUNNER_DB"; do
-    "${DOCKER[@]}" exec "$CONTAINER" createdb -U postgres "$db"
+    "${DOCKER[@]}" exec "$CONTAINER" createdb -p "$PORT" -U postgres "$db"
 done
 
 cat migrations/0000*.up.sql | "${DOCKER[@]}" exec -i "$CONTAINER" \
-    psql -v ON_ERROR_STOP=1 -U postgres -d "$FOUNDATION_DB" >/dev/null
-"${DOCKER[@]}" exec -i "$CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d "$FOUNDATION_DB" \
+    psql -p "$PORT" -v ON_ERROR_STOP=1 -U postgres -d "$FOUNDATION_DB" >/dev/null
+"${DOCKER[@]}" exec -i "$CONTAINER" psql -p "$PORT" -v ON_ERROR_STOP=1 -U postgres -d "$FOUNDATION_DB" \
     < tests/integration/foundation_constraints.sql >/dev/null
 
 cat migrations/0000*.up.sql | "${DOCKER[@]}" exec -i "$CONTAINER" \
-    psql -v ON_ERROR_STOP=1 -U postgres -d "$FULL_SCHEMA_DB" >/dev/null
-"${DOCKER[@]}" exec -i "$CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d "$FULL_SCHEMA_DB" \
+    psql -p "$PORT" -v ON_ERROR_STOP=1 -U postgres -d "$FULL_SCHEMA_DB" >/dev/null
+"${DOCKER[@]}" exec -i "$CONTAINER" psql -p "$PORT" -v ON_ERROR_STOP=1 -U postgres -d "$FULL_SCHEMA_DB" \
     < tests/integration/full_schema_constraints.sql >/dev/null
 
 GOTOOLCHAIN=local go build -o /tmp/mujeeb24-migrate-schema-test ./cmd/migrate
@@ -68,7 +68,7 @@ DATABASE_URL="postgres://postgres:testpassword@127.0.0.1:${PORT}/${RUNNER_DB}?ss
 
 grep -q 'applied=27' /tmp/mujeeb24-migrate-schema-test-1.log
 grep -q 'applied=0' /tmp/mujeeb24-migrate-schema-test-2.log
-[[ "$("${DOCKER[@]}" exec "$CONTAINER" psql -U postgres -d "$RUNNER_DB" -Atqc 'SELECT count(*) FROM schema_migrations')" == "27" ]]
+[[ "$("${DOCKER[@]}" exec "$CONTAINER" psql -p "$PORT" -U postgres -d "$RUNNER_DB" -Atqc 'SELECT count(*) FROM schema_migrations')" == "27" ]]
 
 echo 'postgres_schema_validation=passed'
 echo 'foundation_constraints=passed'
