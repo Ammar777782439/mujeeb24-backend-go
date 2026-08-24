@@ -2,11 +2,11 @@
 
 ## المرحلة الحالية: PR-008 — Typed Application Boundary وHTTP Handlers
 
-الحالة: **DTO-first OpenAPI منفذ، وكل 76 route تمر runtime dispatcher موحد؛ أربع Core façades typed منفذة، وبقية Application façades قيد الإكمال**.
+الحالة: **DTO-first OpenAPI منفذ، وكل 76 route تمر runtime dispatcher ولها façade typed؛ dependencies التنفيذية الداخلية ما زالت مؤجلة حسب مراحلها**.
 
 SQL migrations من 000001 إلى 000027 وFull Schema constraint tests مكتملة. عقد HTTP Dashboard V1 موجود في `contracts/http_api_dashboard_v1_contract_ar.md`. Go Request/Response DTOs داخل `internal/adapters/primary/http/dto` مع operation registration داخل `internal/adapters/primary/http/contract` هي مصدر الحقيقة المشترك، وHuma يولد OpenAPI 3.0.3 إلى `api/openapi/mujeeb24-dashboard-v1.generated.yaml`. يمنع `scripts/check-openapi-generated.sh` drift ويعمل في CI.
 
-الـHuma registration يولد العقد من نفس DTO source، و`internal/adapters/primary/http/handlers` يحتوي runtime dispatcher. أربع عمليات Core تنشئ وتستدعي typed Application Query/Command handlers؛ بقية العمليات تمر dispatcher وتعيد typed `not_implemented` حتى تُضاف façades الخاصة بها. لا يوجد PostgreSQL أو Provider call داخل هذه المرحلة.
+الـHuma registration يولد العقد من DTOs الموجودة في `http/dto` عبر operation registration في `http/contract`. يحتوي `handlers` على dispatcher موحد وfaçade typed لكل الـ76 operation؛ كل façade تبني Command/Query أو system contract وتستدعي dependency typed، وقد تعيد `not_implemented` من Application boundary عند غياب التنفيذ الداخلي. لا يوجد PostgreSQL أو Provider call داخل هذه المرحلة.
 
 ## المرحلة المنجزة تصميميًا: Application Ports
 
@@ -135,7 +135,7 @@ SocialAPI inbound
 PR-005: SQL migrations 000001–000012 + Foundation constraint tests — مكتمل
 PR-006: SQL migrations 000013–000027 + full-schema tests/review — مكتمل
 PR-007: HTTP API Contract → Go DTOs + generated OpenAPI v1 + drift check — مكتمل
-PR-008: Typed Commands/Queries + dispatcher لكل routes + Core façades — قيد الإكمال
+PR-008: Typed Commands/Queries + dispatcher وfaçades typed لكل routes — في التحقق النهائي قبل الإغلاق
 PR-009: PostgreSQL Adapter and TransactionManager
 PR-010: Event ledger/idempotency/outbox implementation
 PR-011: Provider simulator

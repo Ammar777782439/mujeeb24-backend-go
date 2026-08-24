@@ -264,6 +264,170 @@ func (s *Server) dispatchAdditionalQuery(ctx context.Context, operationID string
 		out := &contract.Single[contract.AttributeSchema]{}
 		out.Body.Data = attributeSchemaProjection(view)
 		return out, true
+	case "listLeads":
+		in := input.(*contract.LeadListInput)
+		if s.deps.ListLeads == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.ListLeads.Handle(ctx, queries.ListLeadsQuery{Meta: queryMeta(actor, "", ""), Limit: in.Limit, Cursor: in.Cursor, Status: in.Status, CustomerID: optionalCustomerID(in.CustomerID), ScoreBand: in.ScoreBand})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		return leadList(view), true
+	case "getLead":
+		in := input.(*contract.LeadPath)
+		if s.deps.GetLead == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.GetLead.Handle(ctx, queries.GetLeadQuery{Meta: queryMeta(actor, "", ""), LeadID: commands.LeadID(in.LeadID)})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		out := &contract.Single[contract.Lead]{}
+		out.Body.Data = leadProjection(view)
+		return out, true
+	case "listLeadAttributions":
+		in := input.(*contract.LeadAttributionsInput)
+		if s.deps.ListLeadAttributions == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.ListLeadAttributions.Handle(ctx, queries.ListLeadAttributionsQuery{Meta: queryMeta(actor, "", ""), LeadID: commands.LeadID(in.LeadID), Limit: in.Limit, Cursor: in.Cursor})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		return leadAttributionList(view), true
+	case "listLeadScores":
+		in := input.(*contract.LeadScoresInput)
+		if s.deps.ListLeadScores == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.ListLeadScores.Handle(ctx, queries.ListLeadScoresQuery{Meta: queryMeta(actor, "", ""), LeadID: commands.LeadID(in.LeadID), Limit: in.Limit, Cursor: in.Cursor})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		return leadScoreList(view), true
+	case "listTransactions":
+		in := input.(*contract.TransactionListInput)
+		if s.deps.ListTransactions == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.ListTransactions.Handle(ctx, queries.ListTransactionsQuery{Meta: queryMeta(actor, "", ""), Limit: in.Limit, Cursor: in.Cursor, State: in.State, TransactionType: in.TransactionType, CustomerID: optionalCustomerID(in.CustomerID)})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		return transactionList(view), true
+	case "getTransaction":
+		in := input.(*contract.TransactionPath)
+		if s.deps.GetTransaction == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.GetTransaction.Handle(ctx, queries.GetTransactionQuery{Meta: queryMeta(actor, "", ""), TransactionID: commands.TransactionID(in.TransactionID)})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		out := &contract.Single[contract.CommercialTransaction]{}
+		out.Body.Data = transactionProjection(view)
+		return out, true
+	case "getTransactionReview":
+		in := input.(*contract.TransactionPath)
+		if s.deps.GetTransactionReview == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.GetTransactionReview.Handle(ctx, queries.GetTransactionReviewQuery{Meta: queryMeta(actor, "", ""), TransactionID: commands.TransactionID(in.TransactionID)})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		out := &contract.Single[contract.TransactionReview]{}
+		out.Body.Data = contract.TransactionReview{Required: view.Required, Status: view.Status, ReasonCodes: view.ReasonCodes, ReviewerReference: optionalString(view.ReviewerReference)}
+		return out, true
+	case "listAIDecisions":
+		in := input.(*contract.AIDecisionListInput)
+		if s.deps.ListAIDecisions == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.ListAIDecisions.Handle(ctx, queries.ListAIDecisionsQuery{Meta: queryMeta(actor, "", ""), Limit: in.Limit, Cursor: in.Cursor, Lifecycle: in.Lifecycle, ConversationID: optionalConversationID(in.ConversationID), RequiresHuman: optionalBool(in.RequiresHuman)})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		return aiDecisionList(view), true
+	case "getAIDecision":
+		in := input.(*contract.DecisionPath)
+		if s.deps.GetAIDecision == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.GetAIDecision.Handle(ctx, queries.GetAIDecisionQuery{Meta: queryMeta(actor, "", ""), DecisionID: commands.AIDecisionID(in.DecisionID)})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		out := &contract.Single[contract.AIDecision]{}
+		out.Body.Data = aiDecisionProjection(view)
+		return out, true
+	case "listAuditEvents":
+		in := input.(*contract.AuditListInput)
+		if s.deps.ListAuditEvents == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.ListAuditEvents.Handle(ctx, queries.ListAuditEventsQuery{Meta: queryMeta(actor, "", ""), Limit: in.Limit, Cursor: in.Cursor, ActorType: in.ActorType, Action: in.Action, ResourceType: in.ResourceType, From: in.From, Until: in.Until})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		return auditEventList(view), true
+	case "getAuditEvent":
+		in := input.(*contract.AuditPath)
+		if s.deps.GetAuditEvent == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.GetAuditEvent.Handle(ctx, queries.GetAuditEventQuery{Meta: queryMeta(actor, "", ""), AuditEventID: commands.AuditEventID(in.AuditEventID)})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		out := &contract.Single[contract.AuditEvent]{}
+		out.Body.Data = auditEventProjection(view)
+		return out, true
 	default:
 		return nil, false
 	}
@@ -381,3 +545,71 @@ func optionalUUID(v commands.VariantID) *contract.UUID {
 	id := contract.UUID(v)
 	return &id
 }
+
+func leadProjection(v commands.LeadView) contract.Lead {
+	return contract.Lead{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), CustomerID: contract.UUID(v.CustomerID), Status: v.Status, ResourceVersion: string(v.ResourceVersion)}
+}
+func leadList(v commands.ListResult[commands.LeadView]) *contract.List[contract.Lead] {
+	items := make([]contract.Lead, 0, len(v.Items))
+	for _, item := range v.Items {
+		items = append(items, leadProjection(item))
+	}
+	return listPage(items, v.NextCursor, v.HasMore)
+}
+func leadAttributionProjection(v queries.LeadAttributionView) contract.LeadAttribution {
+	var conversationID *contract.UUID
+	if v.SourceConversationID != nil {
+		id := contract.UUID(*v.SourceConversationID)
+		conversationID = &id
+	}
+	sourceChannel := optionalString(v.SourceChannel)
+	return contract.LeadAttribution{ID: contract.UUID(v.ID), LeadID: contract.UUID(v.LeadID), SourceConversationID: conversationID, SourceChannel: sourceChannel}
+}
+func leadAttributionList(v commands.ListResult[queries.LeadAttributionView]) *contract.List[contract.LeadAttribution] {
+	items := make([]contract.LeadAttribution, 0, len(v.Items))
+	for _, item := range v.Items {
+		items = append(items, leadAttributionProjection(item))
+	}
+	return listPage(items, v.NextCursor, v.HasMore)
+}
+func leadScoreProjection(v queries.LeadScoreView) contract.LeadScore {
+	return contract.LeadScore{ID: contract.UUID(v.ID), LeadID: contract.UUID(v.LeadID), Value: v.Value, Band: v.Band}
+}
+func leadScoreList(v commands.ListResult[queries.LeadScoreView]) *contract.List[contract.LeadScore] {
+	items := make([]contract.LeadScore, 0, len(v.Items))
+	for _, item := range v.Items {
+		items = append(items, leadScoreProjection(item))
+	}
+	return listPage(items, v.NextCursor, v.HasMore)
+}
+func transactionProjection(v commands.TransactionView) contract.CommercialTransaction {
+	return contract.CommercialTransaction{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), CustomerID: contract.UUID(v.CustomerID), TransactionType: v.TransactionType, State: v.State, ResourceVersion: string(v.ResourceVersion)}
+}
+func aiDecisionProjection(v commands.AIDecisionView) contract.AIDecision {
+	return contract.AIDecision{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), RequestedAction: v.RequestedAction, RequiresHuman: v.RequiresHuman, Lifecycle: v.Lifecycle}
+}
+func aiDecisionList(v commands.ListResult[commands.AIDecisionView]) *contract.List[contract.AIDecision] {
+	items := make([]contract.AIDecision, 0, len(v.Items))
+	for _, item := range v.Items {
+		items = append(items, aiDecisionProjection(item))
+	}
+	return listPage(items, v.NextCursor, v.HasMore)
+}
+func auditEventProjection(v commands.AuditEventView) contract.AuditEvent {
+	return contract.AuditEvent{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), ActorType: v.ActorType, Action: v.Action, ResourceType: v.ResourceType, ResourceID: optionalString(v.ResourceID), OccurredAt: v.OccurredAt}
+}
+func auditEventList(v commands.ListResult[commands.AuditEventView]) *contract.List[contract.AuditEvent] {
+	items := make([]contract.AuditEvent, 0, len(v.Items))
+	for _, item := range v.Items {
+		items = append(items, auditEventProjection(item))
+	}
+	return listPage(items, v.NextCursor, v.HasMore)
+}
+func optionalConversationID(v contract.UUID) *commands.ConversationID {
+	if v == "" {
+		return nil
+	}
+	id := commands.ConversationID(v)
+	return &id
+}
+func optionalBool(v bool) *bool { return &v }

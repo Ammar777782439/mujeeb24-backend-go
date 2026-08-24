@@ -2315,6 +2315,11 @@ paths:
   /auth/logout:
     post:
       operationId: revokeRefreshSession
+      parameters:
+        - in: header
+          name: Cookie
+          schema:
+            type: string
       responses:
         "204":
           description: No Content
@@ -2324,6 +2329,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
         "500":
           content:
             application/json:
@@ -2338,6 +2349,11 @@ paths:
   /auth/refresh:
     post:
       operationId: rotateRefreshSession
+      parameters:
+        - in: header
+          name: Cookie
+          schema:
+            type: string
       responses:
         "200":
           content:
@@ -2351,6 +2367,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
           description: Unauthorized
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
         "429":
           content:
             application/json:
@@ -2440,6 +2462,22 @@ paths:
           required: true
           schema:
             format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
             type: string
       requestBody:
         content:
@@ -4130,6 +4168,12 @@ paths:
             type: string
         - in: path
           name: catalog_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: item_id
           required: true
           schema:
             format: uuid

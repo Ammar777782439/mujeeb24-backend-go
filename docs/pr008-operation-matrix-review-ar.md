@@ -227,8 +227,9 @@ type VariantUpdateInput struct {
 | Huma operation descriptors | 76 |
 | DTO input/output types | موجودة داخل `dto`، ويستخدمها `contract` في التسجيل |
 | routes التي تمر runtime عبر dispatcher | 76 |
-| routes ذات façade typed تستدعي Application handler | 4: conversations/messages/customers core |
-| routes التي ما زالت تعيد `not_implemented` من Application boundary | بقية العمليات |
+| routes ذات façade typed صريحة تبني Command/Query أو system contract | 76 |
+| routes التي يمكن أن تعيد `not_implemented` | فقط عند غياب Application dependency الداخلية؛ يصدر بعد عبور façade لا من contract registration |
+| routes ذات dependency تنفيذية موصولة حاليًا | Core handlers الحالية، والبقية تحتاج wiring Application implementation لاحقًا |
 | PostgreSQL/Provider/Auth storage داخل HTTP layer | 0 |
 
-لا يُستخدم هذا الجدول لإعلان إغلاق PR-008؛ بل هو baseline تدقيق يجب أن يصل إلى 76/76 قبل الإغلاق الرسمي.
+هذه المصفوفة تثبت اكتمال HTTP → Application façade wiring عند 76/76. ولا تعني اكتمال Business implementations أو Auth storage أو PostgreSQL؛ تلك تبقى خلف dependencies وتُنفذ في مراحلها المحددة.

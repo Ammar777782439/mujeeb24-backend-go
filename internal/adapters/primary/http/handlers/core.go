@@ -16,21 +16,60 @@ type ScopeProvider interface {
 }
 
 type Dependencies struct {
-	Scope                     ScopeProvider
-	GetCurrentPrincipal       queries.GetCurrentPrincipalHandler
-	ListAccessibleBusinesses  queries.ListAccessibleBusinessesHandler
-	GetBusiness               queries.GetBusinessHandler
-	GetBusinessPolicy         queries.GetBusinessPolicyHandler
-	GetDashboardOverview      queries.GetDashboardOverviewHandler
-	ListConversations         queries.ListConversationsHandler
-	GetConversation           queries.GetConversationHandler
-	ListConversationMessages  queries.ListConversationMessagesHandler
-	CreateOutboundMessage     commands.CreateOutboundMessageHandler
-	ListCustomers             queries.ListCustomersHandler
-	GetCustomer               queries.GetCustomerHandler
-	CreateCustomer            commands.CreateCustomerHandler
-	UpdateCustomer            commands.UpdateCustomerHandler
-	MergeCustomer             commands.MergeCustomerHandler
+	Scope                        ScopeProvider
+	GetCurrentPrincipal          queries.GetCurrentPrincipalHandler
+	ListAccessibleBusinesses     queries.ListAccessibleBusinessesHandler
+	GetBusiness                  queries.GetBusinessHandler
+	GetBusinessPolicy            queries.GetBusinessPolicyHandler
+	GetDashboardOverview         queries.GetDashboardOverviewHandler
+	ListConversations            queries.ListConversationsHandler
+	GetConversation              queries.GetConversationHandler
+	ListConversationMessages     queries.ListConversationMessagesHandler
+	CreateOutboundMessage        commands.CreateOutboundMessageHandler
+	ListCustomers                queries.ListCustomersHandler
+	GetCustomer                  queries.GetCustomerHandler
+	CreateCustomer               commands.CreateCustomerHandler
+	UpdateCustomer               commands.UpdateCustomerHandler
+	MergeCustomer                commands.MergeCustomerHandler
+	UpdateBusinessProfile        commands.UpdateBusinessProfileHandler
+	UpdateBusinessPolicy         commands.UpdateBusinessPolicyHandler
+	BeginChannelConnection       commands.BeginChannelConnectionHandler
+	ReconnectChannel             commands.ReconnectChannelHandler
+	DisconnectChannel            commands.DisconnectChannelHandler
+	UpdateConversation           commands.UpdateConversationHandler
+	AssignConversation           commands.AssignConversationHandler
+	UpdateConversationLabels     commands.UpdateConversationLabelsHandler
+	AddPrivateNote               commands.AddPrivateNoteHandler
+	CreateCatalog                commands.CreateCatalogHandler
+	UpdateCatalog                commands.UpdateCatalogHandler
+	CreateAttributeSchemaVersion commands.CreateAttributeSchemaVersionHandler
+	CreateCatalogItem            commands.CreateCatalogItemHandler
+	UpdateCatalogItem            commands.UpdateCatalogItemHandler
+	CreateOffer                  commands.CreateOfferHandler
+	UpdateOffer                  commands.UpdateOfferHandler
+	CreateVariant                commands.CreateVariantHandler
+	UpdateVariant                commands.UpdateVariantHandler
+	CreateLead                   commands.CreateLeadHandler
+	UpdateLead                   commands.UpdateLeadHandler
+	QualifyLead                  commands.QualifyLeadHandler
+	MarkLeadLost                 commands.MarkLeadLostHandler
+	CreateTransactionDraft       commands.CreateTransactionDraftHandler
+	UpdateTransactionDraft       commands.UpdateTransactionDraftHandler
+	ConfirmTransaction           commands.ConfirmTransactionHandler
+	CancelTransaction            commands.CancelTransactionHandler
+	SubmitTransactionReview      commands.SubmitTransactionReviewHandler
+	ApproveTransactionReview     commands.ApproveTransactionReviewHandler
+	RejectTransactionReview      commands.RejectTransactionReviewHandler
+	AuthenticatePrincipal        commands.AuthenticatePrincipalHandler
+	RotateRefreshSession         commands.RotateRefreshSessionHandler
+	RevokeRefreshSession         commands.RevokeRefreshSessionHandler
+	RequestHumanReview           commands.RequestHumanReviewHandler
+	GetLiveness                  commands.QueryHandler[commands.GetLivenessQuery, commands.HealthView]
+	GetReadiness                 commands.QueryHandler[commands.GetReadinessQuery, commands.HealthView]
+	GetMetrics                   commands.QueryHandler[commands.GetMetricsQuery, commands.MetricsView]
+	IngestSocialAPIWebhook       commands.IngestSocialAPIWebhookHandler
+	IngestChatwootWebhook        commands.IngestChatwootWebhookHandler
+
 	ListChannelConnections    queries.ListChannelConnectionsHandler
 	GetChannelConnection      queries.GetChannelConnectionHandler
 	GetConnectionCapabilities queries.GetConnectionCapabilitiesHandler
@@ -188,6 +227,9 @@ func mapApplicationError(err error) error {
 		status = 404
 	case appErrors.CodeForbidden:
 		status = 403
+	case appErrors.CodeUnauthenticated:
+		status = 401
+
 	case appErrors.CodeConflict, appErrors.CodeIdempotencyConflict, appErrors.CodeStaleResource:
 		status = 409
 	case appErrors.CodeExternalDependency:
@@ -244,6 +286,9 @@ func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (a
 	if result, handled := s.dispatchQuery(ctx, operationID, input); handled {
 		return result, nil
 	}
+	if result, handled := s.dispatchCommand(ctx, operationID, input); handled {
+		return result, nil
+	}
 	switch operationID {
 	case "listConversations":
 		return s.ListConversations(ctx, input.(*contract.ConversationListInput))
@@ -261,6 +306,9 @@ func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (a
 var _ contract.DashboardOperationHandler = (*Server)(nil)
 
 func (s *Server) dispatchQuery(ctx context.Context, operationID string, input any) (any, bool) {
+	if result, handled := s.dispatchSystemQuery(ctx, operationID, input); handled {
+		return result, true
+	}
 	switch operationID {
 	case "getBusiness":
 		in := input.(*contract.BusinessPath)

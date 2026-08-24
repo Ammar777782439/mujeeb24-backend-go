@@ -45,13 +45,13 @@
 
 أُغلق عقد Dashboard V1 تصميميًا بعد تحديد routes وroles وpermissions وRequest/Response envelopes وErrors وPagination وIdempotency وConcurrency وApplication Command/Query mapping، واعتماد JWT Access Authentication، مع فصل Webhooks وOperational endpoints وDeferred Scope. ثم تحوّل العقد إلى Go DTOs وHuma operation registration، وتولد منه OpenAPI 3.0.3 في `api/openapi/mujeeb24-dashboard-v1.generated.yaml`.
 
-يمنع `scripts/check-openapi-generated.sh` اختلاف الملف المولد عن Go source، ويُشغل مع `go test ./...` في CI أو محليًا. أُضيفت Typed Commands/Queries، ووُصلت كل عمليات Huma الـ76 بـruntime dispatcher مشترك، مع mapping typed فعلي لأربع Core callbacks. أضيف Auth middleware boundary واختباراته، لكن JWT issuer/key storage وMembership وfaçade الخاصة ببقية Commands/Queries وFunctional Application logic غير منفذة. نُقلت DTOs الفعلية إلى `http/dto`، وأصبح `http/contract` مسؤولًا عن operation registration وmetadata مع aliases توافقية فقط، وحُذف placeholder القديم من `handlers`.
+يمنع `scripts/check-openapi-generated.sh` اختلاف الملف المولد عن Go source، ويُشغل مع `go test ./...` في CI أو محليًا. أُضيفت Typed Commands/Queries، ووُصلت كل عمليات Huma الـ76 بـruntime dispatcher مشترك، ولكل عملية façade typed صريحة تبني Command/Query أو system contract. أربع Core callbacks لديها dependencies تنفيذية موصولة؛ بقية operations تعبر façade typed وقد تعيد `not_implemented` من Application boundary عند غياب implementation dependency. أضيف Auth middleware boundary واختباراته، لكن JWT issuer/key storage وMembership وFunctional Application logic غير منفذة. نُقلت DTOs الفعلية إلى `http/dto`، وأصبح `http/contract` مسؤولًا عن operation registration وmetadata مع aliases توافقية فقط، وحُذف placeholder القديم من `handlers`.
 
 ## الخطوة التالية الوحيدة
 
 ```text
-Complete route wiring for remaining typed operations
-→ Add HTTP error/auth middleware tests
+Validate 76/76 typed façade coverage and runtime mapping
+→ Close PR-008
 → Implement PostgreSQL Adapter/TransactionManager
 → Implement Event Ledger/Idempotency/Outbox
 ```

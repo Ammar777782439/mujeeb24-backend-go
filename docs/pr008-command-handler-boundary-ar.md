@@ -2,7 +2,7 @@
 
 ## الحالة
 
-تم تنفيذ **Typed Application boundary وHTTP runtime dispatcher**. هذه المرحلة لا تنفذ PostgreSQL أو SocialAPI أو Chatwoot أو AI runtime. كل عمليات Huma الـ76 تمر عبر نفس `BuildAPIWithHandlers` و`handlers.Server.Dispatch`؛ أربع عمليات Core لديها mapping typed إلى Application handlers، والعمليات الأخرى تعبر نفس الحد وتعيد `not_implemented` من Application boundary إلى أن تُضاف façade الخاصة بها.
+تم تنفيذ **Typed Application boundary وHTTP runtime dispatcher**. هذه المرحلة لا تنفذ PostgreSQL أو SocialAPI أو Chatwoot أو AI runtime. كل عمليات Huma الـ76 تمر عبر نفس `BuildAPIWithHandlers` و`handlers.Server.Dispatch`، ولكل عملية façade typed صريحة تبني Command/Query أو system contract. dependencies التنفيذية التي لم تُبنَ بعد تعيد `not_implemented` من داخل Application boundary، لا من contract registration.
 
 ## قاعدة الاعتماد
 
@@ -56,6 +56,6 @@ Application لا يعيد HTTP status. يستخدم typed application errors م�
 
 ## ما لم يُنفذ بعد
 
-لم تُربط كل عمليات Huma الـ76 بتطبيقات Use Case فعلية. الأربع عمليات التالية لديها mapping typed فعلي: `listConversations` و`getConversation` و`createOutboundMessage` و`listCustomers`. أما بقية operations فلها DTO وoperation descriptor وruntime dispatcher، لكنها لا تملك بعد façade تنشئ Command/Query وتستدعي dependency الخاصة بها؛ لذلك ترجع `not_implemented` typed error. اختبارات httptest أثبتت prefix `/api/v1` وErrorEnvelope مع `application/json` لكل من Core route وnon-Core route. واختبارات middleware تغطي missing/invalid/valid Bearer token. لا ندعي أن Business logic أو Repositories أو Auth storage/JWT issuer جاهزة.
+كل عمليات Huma الـ76 لديها الآن DTO وoperation descriptor وruntime dispatcher وfaçade typed تبني Command/Query أو system command/query. أربع عمليات Core لديها dependencies تنفيذية موصولة حاليًا، بينما بقية العمليات تنتظر Application implementations أو Auth/Event Ledger/Provider dependencies؛ لذلك قد تعيد `not_implemented` بعد عبور façade. اختبارات httptest أثبتت prefix `/api/v1` وErrorEnvelope مع `application/json`، واختبارات middleware تغطي missing/invalid/valid Bearer token. لا ندعي أن Business logic أو Repositories أو Auth storage/JWT issuer جاهزة.
 
-الخطوة التالية هي إكمال route wiring بنفس النمط عند الحاجة، ثم PostgreSQL Adapter وTransactionManager. لا نضع SQL داخل Handler ولا نعيد فتح OpenAPI أو Schema.
+الخطوة التالية بعد هذا الإغلاق هي PR-009: PostgreSQL Adapter وTransactionManager. لا نضع SQL داخل Handler ولا نعيد فتح OpenAPI أو Schema.

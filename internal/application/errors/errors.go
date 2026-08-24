@@ -8,6 +8,7 @@ const (
 	CodeValidation          Code = "validation_error"
 	CodeNotFound            Code = "not_found"
 	CodeForbidden           Code = "forbidden"
+	CodeUnauthenticated     Code = "unauthenticated"
 	CodeConflict            Code = "conflict"
 	CodeIdempotencyConflict Code = "idempotency_conflict"
 	CodeStaleResource       Code = "stale_resource"

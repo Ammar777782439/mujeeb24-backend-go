@@ -400,7 +400,7 @@ type CatalogItemCreateInput struct {
 	Body CreateCatalogItemRequest
 }
 type CatalogItemUpdateInput struct {
-	CatalogPath
+	CatalogItemPath
 	CommandHeaders
 	Body UpdateCatalogItemRequest
 }
@@ -491,8 +491,12 @@ type LoginInput struct {
 		Password string `json:"password"`
 	}
 }
-type RefreshInput struct{}
-type LogoutInput struct{}
+type RefreshInput struct {
+	Cookie string `header:"Cookie"`
+}
+type LogoutInput struct {
+	Cookie string `header:"Cookie"`
+}
 type NoContentOutput struct{}
 type AuthResponse struct {
 	AccessToken string    `json:"access_token"`
@@ -597,6 +601,7 @@ type UpdateCustomerRequest struct {
 // registers these types and supplies operation metadata.
 type BusinessUpdateInput struct {
 	BusinessPath
+	CommandHeaders
 	Body BusinessUpdateRequest
 }
 type ConversationMessageListInput struct {
