@@ -4,7 +4,7 @@
 
 الحالة: **PR-008 مغلق عند HTTP → Application façade 76/76؛ PR-009 يملك الآن PostgreSQL pool وTransactionManager وRepository foundation الأساسية وCommunicationMessage وChannel Capabilities وCatalog read/write persistence، لكنه ما زال مفتوحًا قبل Sales/AI/Audit repositories وEventStore/Outbox وbootstrap wiring.**
 
-SQL migrations من 000001 إلى 000029، مع 000028 كـforward migration لـCommunicationMessage و000029 كـforward migration لـCatalog resource versions. Full Schema constraint tests وmigration runner تحققت فعليًا على PostgreSQL 16 (`applied=29` ثم `applied=0`). عقد HTTP Dashboard V1 موجود في `contracts/http_api_dashboard_v1_contract_ar.md`. Go Request/Response DTOs داخل `internal/adapters/primary/http/dto` مع operation registration داخل `internal/adapters/primary/http/contract` هي مصدر الحقيقة المشترك، وHuma يولد OpenAPI 3.0.3 إلى `api/openapi/mujeeb24-dashboard-v1.generated.yaml`. يمنع `scripts/check-openapi-generated.sh` drift ويعمل في CI.
+SQL migrations من 000001 إلى 000030، مع 000028 كـforward migration لـCommunicationMessage، و000029 لـCatalog resource versions، و000030 لتسوية Sales contract وsnapshots/concurrency. Full Schema constraint tests وmigration runner تحققت فعليًا على PostgreSQL 16 (`applied=30` ثم `applied=0`). عقد HTTP Dashboard V1 موجود في `contracts/http_api_dashboard_v1_contract_ar.md`. Go Request/Response DTOs داخل `internal/adapters/primary/http/dto` مع operation registration داخل `internal/adapters/primary/http/contract` هي مصدر الحقيقة المشترك، وHuma يولد OpenAPI 3.0.3 إلى `api/openapi/mujeeb24-dashboard-v1.generated.yaml`. يمنع `scripts/check-openapi-generated.sh` drift ويعمل في CI.
 
 الـHuma registration يولد العقد من DTOs الموجودة في `http/dto` عبر operation registration في `http/contract`. يحتوي `handlers` على dispatcher موحد وfaçade typed لكل الـ76 operation؛ كل façade تبني Command/Query أو system contract وتستدعي dependency typed، وقد تعيد `not_implemented` من Application boundary عند غياب التنفيذ الداخلي. في PR-009 أصبحت repositories الأساسية و`MessageRepository.Record/ListByConversation` منفذة ومثبتة؛ لا يوجد Provider call في هذه الدفعة.
 
@@ -73,7 +73,8 @@ Generated DTO Contract
 → Repository foundation + CommunicationMessage timeline ✅
 → Channel Capabilities ✅
 → Catalog read/write persistence ✅
-→ Sales/AI/Audit repositories ⏳
+→ Sales Persistence ✅
+→ AI/Audit repositories ⏳
 → Event Ledger + atomic inbound dedupe ⏳
 → Outbox ⏳
 → Asynq Worker
@@ -138,10 +139,11 @@ SocialAPI inbound
 PR-005: SQL migrations 000001–000012 + Foundation constraint tests — مكتمل
 PR-006: SQL migrations 000013–000027 + full-schema tests/review — مكتمل
 PR-009 message correction: 000028 communication_messages + Record/ListByConversation + integration tests — مرفوع ضمن commit سابق
-PR-009 Catalog persistence: 000029 resource versions + read/write repositories/services + integration tests — مرفوع ضمن commit الدفعة الحالية
+PR-009 Catalog persistence: 000029 resource versions + read/write repositories/services + integration tests — مرفوع ضمن commit سابق
+PR-010 Sales persistence: 000030 contract reconciliation + Lead/Transaction repositories/services + PostgreSQL 16 integration tests — قيد التثبيت في الدفعة الحالية
 PR-007: HTTP API Contract → Go DTOs + generated OpenAPI v1 + drift check — مكتمل
 PR-008: Typed Commands/Queries + dispatcher وfaçades typed لكل routes — مكتمل
-PR-009: PostgreSQL Adapter وTransactionManager وRepository foundation — قيد التنفيذ؛ CommunicationMessage وChannel Capabilities وCatalog read/write persistence منفذة ومثبتة، والخطوة التالية Sales repositories ثم AI/Audit وReliability/bootstrap
+PR-009: PostgreSQL Adapter وTransactionManager وRepository foundation — CommunicationMessage وChannel Capabilities وCatalog read/write persistence مثبتة؛ Sales persistence تُثبت الآن كـPR-010، ثم AI/Audit وReliability/bootstrap
 PR-010: Event ledger/idempotency/outbox implementation
 PR-011: Provider simulator
 PR-012: Chatwoot/SocialAPI adapters
