@@ -382,6 +382,8 @@ Response Projection يعرض أرقامًا آمنة مثل `open_conversations`
 | `GET` | `/businesses/{business_id}/conversations/{id}` | all members | none | `GetConversation` | `200` |
 | `GET` | `/businesses/{business_id}/conversations/{id}/messages` | all members | cursor, limit | `ListConversationMessages` | `200` |
 
+Message timeline projection تعرض `id`, `conversation_id`, `direction`, `origin`, `status`, `text`, مراجع Provider/Chatwoot الاختيارية، `occurred_at`، و`created_at`. `status` للرسالة المرتبطة بـOutboundMessage يعكس lifecycle الإرسال (`pending`, `sending`, `accepted`, `sent`, `delivered`, `read`, `failed`, `unknown`)، بينما `received` تعني inbound timeline record و`recorded` تعني outbound/mirror record غير المرتبط بعد بـOutboundMessage؛ ولا تعني أي منهما تسليمًا للعميل.
+
 Conversation Projection:
 
 ```json

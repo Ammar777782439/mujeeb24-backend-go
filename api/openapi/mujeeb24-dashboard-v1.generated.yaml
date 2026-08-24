@@ -1508,6 +1508,9 @@ components:
           type: string
         id:
           type: string
+        occurred_at:
+          format: date-time
+          type: string
         origin:
           type: string
         provider_message_reference:
@@ -1523,6 +1526,7 @@ components:
         - origin
         - status
         - text
+        - occurred_at
         - created_at
       type: object
     Offer:

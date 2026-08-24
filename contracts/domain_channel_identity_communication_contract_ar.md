@@ -352,18 +352,21 @@ CommunicationMessageReference
 ├── id
 ├── business_id
 ├── conversation_reference_id
-├── inbound_event_id
+├── inbound_event_id (optional)
+├── outbound_message_id (optional)
 ├── direction
 ├── origin
 ├── transport
-├── provider_message_id
-├── chatwoot_message_id
+├── provider_message_id (optional)
+├── chatwoot_message_id (optional)
+├── content_type
+├── text_content (optional; text-only V1)
 ├── content_reference
 ├── occurred_at
 └── created_at
 ```
 
-هذا المرجع لا يقرر UI أو Team أو Label. النص/المرفقات يمكن أن تكون في Communication Store أو Message record تحتاجه AI، لكن Domain لا يتبنى DTO Chatwoot.
+هذا المرجع لا يقرر UI أو Team أو Label. `outbound_message_id` يربطه اختياريًا بسجل نية الإرسال، و`inbound_event_id` يربطه اختياريًا بحدث الاستقبال؛ لا يعني ذلك دمج lifecycle أو نسخ Provider/Chatwoot. `content_reference` يربط محتوى أو مرفقات خارج السجل، و`text_content` يغطي text-only V1. لا يستخدم السجل `map[string]any` كبديل عن Contract، ولا يتبنى DTO Chatwoot.
 
 القيم:
 
@@ -374,6 +377,8 @@ transport: provider | chatwoot | mujeeb
 ```
 
 هذه الثلاثة تمنع Loop: إذا جاء Chatwoot Webhook لرسالة outbound أنشأها Go، نربطها بالمرجع الموجود ولا نرسلها إلى Provider مرة ثانية.
+
+`CommunicationMessageReference` لا يملك عمود `status` مستقلًا في V1 حتى لا يكرر OutboundMessage delivery lifecycle. عند إسقاط timeline للقراءة، تكون الرسالة الواردة غير المرتبطة بـOutboundMessage ذات status عرضي `received`، وتكون الرسالة غير المرتبطة بـOutboundMessage ذات status عرضي `recorded`؛ أما الرسالة المرتبطة بـ`outbound_message_id` فتستخدم حالة OutboundMessage الحالية (`pending | sending | accepted | sent | delivered | read | failed | unknown`). `received` و`recorded` ليسا حالات OutboundMessage ولا يدّعيان وصول الرسالة إلى العميل.
 
 ### 4.5 Communication Domain Events
 
@@ -413,4 +418,4 @@ Business
 9. حالات `unknown/rebuild_required` للحالات الغامضة.
 10. Domain Events بلا أسرار أو raw provider payload.
 
-بعد إغلاق هذا العقد ننتقل إلى `domain/catalog` و`domain/sales`، مع بقاء هذه الطبقات مستقلة عن Provider وChatwoot.
+بعد تثبيت هذا العقد وتنفيذ migration وMessageRepository وListConversationMessages integration tests، ننتقل إلى `domain/catalog` و`domain/sales`، مع بقاء هذه الطبقات مستقلة عن Provider وChatwoot. Migration `000028` هي تصحيح forward-only ولا تعدّل `000001–000027`؛ وقد ثبتت على PostgreSQL 16 مع tenant FKs وkeyset pagination وRecord/List mapping.

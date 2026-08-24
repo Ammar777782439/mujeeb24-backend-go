@@ -9,24 +9,35 @@
 | المجموعة | Use Cases المرتبطة | الجداول الأساسية | الحالة |
 |---|---|---|---|
 | Foundation | قراءة tenant/business scope | `businesses` | منفذ |
-| Identity/Communication | عرض العملاء والمحادثات، وقراءة/إنشاء outbound message حيث يسمح schema | `customers`, `conversations`, `conversation_references`, `outbound_messages` | Business/Customer/Conversation/Connection/Reference/Outbound read-create foundation منفذ؛ لا يوجد جدول عام للرسائل الواردة/الداخلية |
+| Identity/Communication | عرض العملاء والمحادثات، قراءة/إنشاء outbound، وعرض message timeline | `customers`, `conversations`, `conversation_references`, `communication_messages`, `outbound_messages` | Business/Customer/Conversation/Connection/Reference/Outbound وCommunicationMessage foundation منفذة ومثبتة بـPostgreSQL 16 |
 | Channels | عرض connection وcapabilities | `channel_connections`, `channel_connection_capabilities` | قراءة أساسية منفذة للـconnection فقط؛ capabilities لاحقًا |
-| Catalog | عرض/إنشاء/تعديل catalog وitems/offers/variants | `catalogs`, `attribute_schemas`, `attribute_definitions`, `catalog_items`, `offers`, `variants` | مؤجلة بعد Communication |
+| Catalog | عرض/إنشاء/تعديل catalog وitems/offers/variants | `catalogs`, `attribute_schemas`, `attribute_definitions`, `catalog_items`, `offers`, `variants` | مؤجلة بعد إغلاق CommunicationMessage |
 | Sales | Leads وtransactions وreviews/order lines | `leads`, `lead_attributions`, `lead_scores`, `commercial_transactions`, `transaction_reviews`, `transaction_confirmations`, `order_lines` | مؤجلة بعد Catalog |
 | AI/Audit | قراءة decisions وتسجيل/عرض audit | `ai_decisions`, `audit_events` | مؤجلة بعد Sales |
-| Reliability | atomic inbound dedupe وoutbox | `inbound_event_ledger`, `outbox_entries` | لا تُنفذ قبل اكتمال repository foundation؛ EventStore يملك inbound idempotency |
+| Reliability | atomic inbound dedupe وoutbox | `inbound_event_ledger`, `outbox_entries` | Go implementation مؤجلة؛ EventStore يملك inbound idempotency |
 
 ## Communication surface المنفذ
 
 تم تنفيذ ports وrepositories للـConversationReference وOutboundMessage فوق SQLExecutor. `CreatePending` يفرض الحقول اللازمة من schema ويترك unique constraint `(provider_ref, connection_id, provider_idempotency_key)` مصدر conflict semantics؛ لا ينفذ network call ولا يرسل Provider.
 
-## Methods المسموح بها في الدفعة التالية
+تمت إضافة `MessageRepository` بسطح محدود ومطلوب فعليًا:
 
-Communication الحالية تشمل `GetCustomer` و`GetConversation` وقراءة current reference و`CreatePending/GetByID` للـoutbound. أما `ListConversationMessages` فلا يُنفذ كقراءة كاملة قبل حسم جدول الرسائل، لأن schema الحالية لا تحتوي `messages` أو `communication_messages`; `conversation_references` ليست بديلًا عن message timeline. لا نضيف update/list methods غير المطلوبة من Application contracts الحالية.
+| Method | الغرض | السلوك |
+|---|---|---|
+| `Record` | إدخال CommunicationMessage typed | transaction-aware، يعيد record projection وstatus projection |
+| `ListByConversation` | قراءة Dashboard timeline | tenant-scoped، يتحقق من وجود المحادثة، keyset pagination، cursor opaque |
 
-كل method يستقبل `context.Context` وbusiness scope حيث يلزم، ويستخدم `SQLExecutor` من PostgreSQL adapter. لا يرجع pgx rows أو HTTP DTOs إلى Application؛ يعيد record types مستقلة، والـJSON المرن يبقى raw bytes عند الحاجة.
+`CommunicationMessage` ليس بديلًا عن `ConversationReference` أو `OutboundMessage` أو `InboundEventLedger`. لا يوجد CRUD عام، ولا one-to-one unique غير مثبت بين message record وinbound/outbound links.
 
-## قواعد إلزامية
+## Status projection
+
+لا يملك `communication_messages` عمود `status` في V1. الرسالة inbound غير المرتبطة بـOutboundMessage تعرض `received`، والرسالة outbound غير المرتبطة تعرض `recorded`، والرسالة المرتبطة بـ`outbound_message_id` تعرض حالة OutboundMessage الحالية: `pending | sending | accepted | sent | delivered | read | failed | unknown`. هذه projection لا تدّعي نجاح التسليم.
+
+## Tenant وnot-found policy
+
+كل method تستقبل `context.Context` وbusiness scope حيث يلزم. `ListByConversation` يتحقق أولًا من `(business_id, conversation_id)`؛ لذلك تعود المحادثة المفقودة أو cross-tenant كـtyped `RepositoryNotFound` ولا تُعاد أي سجلات من tenant آخر. malformed cursor وinvalid limits تعود `RepositoryInvalid`.
+
+## قواعد التنفيذ
 
 يجب أن يستخدم أي query يقرأ سجلًا tenant-scoped شرط `business_id` مع record ID أو cursor المناسب. يجب ألا يعتمد repository على ID وحده عندما يسمح schema بحدود composite. ويجب أن تعمل methods داخل TransactionManager عندما يستدعيها Use Case داخل transaction، دون بدء nested transaction مخفية.
 
@@ -34,4 +45,4 @@ Communication الحالية تشمل `GetCustomer` و`GetConversation` وقرا
 
 ## معيار قبول كل مجموعة
 
-لا تنتقل المجموعة إلى التالية قبل نجاح unit tests وintegration test على PostgreSQL حقيقي، مع تطبيق migrations، وقراءة صحيحة، وnot-found، وcross-tenant rejection، وسلوك transaction عند الحاجة. بعد تثبيت surfaces الموجودة فعليًا في Communication/Catalog/Sales/AI/Audit فقط نبدأ EventStore ثم inbound dedupe ثم Outbox. وأي حاجة إلى inbound/internal message timeline تتطلب قرار schema موثقًا قبل adapter، ولا تُحل باختراع repository فوق جدول غير موجود.
+لا تنتقل المجموعة إلى التالية قبل نجاح unit tests وintegration test على PostgreSQL حقيقي، مع تطبيق migrations، وقراءة صحيحة، وnot-found، وcross-tenant rejection، وسلوك transaction عند الحاجة. CommunicationMessage حققت هذا المعيار في PostgreSQL 16، بما في ذلك ordering/pagination وconstraints وApplication mapping. بعد تثبيت surfaces المتبقية في Catalog/Sales/AI/Audit فقط نبدأ EventStore ثم inbound dedupe ثم Outbox. لا يبدأ Provider runtime قبل إكمال Reliability foundation.

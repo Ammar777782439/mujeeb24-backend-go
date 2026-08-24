@@ -2,11 +2,13 @@
 
 ## نطاق هذه الدفعة
 
-هذه الدفعة تبدأ تنفيذ Persistence الحقيقي دون القفز إلى Repositories أو Event Ledger أو Idempotency/Outbox implementations. الحزمة `internal/adapters/secondary/persistence/postgres` تملك pool lifecycle و`Within` transaction boundary، بينما Application يعتمد على `application/ports.TransactionManager` فقط.
+هذه الدفعة تثبت Persistence foundation في PostgreSQL وتضيف CommunicationMessage timeline persistence فوقها. الحزمة `internal/adapters/secondary/persistence/postgres` تملك pool lifecycle و`Within` transaction boundary وSQLExecutor وrepositories typed، بينما Application يعتمد على `application/ports` فقط.
 
 ```text
 Application
-    ↓ application/ports.TransactionManager
+    ↓ application/ports
+PostgreSQL repositories
+    ↓ SQLExecutor
 PostgreSQL Adapter
     ↓
 pgxpool.Pool / pgx transaction
@@ -32,26 +34,38 @@ pgxpool.Pool / pgx transaction
 6. يرفض nested transactions عبر `ErrNestedTransaction` بدل إنشاء transaction مستقلة مخفية.
 7. لا ينفذ network calls أو provider calls؛ callback يملك وحدة العمل Application/Persistence.
 
-Repositories اللاحقة ستستخدم transaction context عبر adapter contract مناسب، ولن تصل إلى pgx من Application مباشرة. مثال التشغيل المحلي للاختبار الحقيقي هو:
+`SQLExecutor` يختار transaction من context عندما تكون موجودة، وإلا يستخدم pool. لذلك `MessageRepository.Record` يمكنه العمل داخل `Within` في commit أو rollback دون معرفة Application بتفاصيل pgx.
 
-```bash
-POSTGRES_TEST_DSN='postgres://...' go test -tags=integration -count=1 ./internal/adapters/secondary/persistence/postgres
-```
+## Repository foundation وCommunicationMessage
+
+الـfoundation المنفذة تشمل Business/Customer/Conversation/ChannelConnection reads، ConversationReference current read، وOutboundMessage `CreatePending/GetByID`. أضيفت الآن `MessageRepository` بسطح محدود:
+
+- `Record(ctx, CommunicationMessageDraft)` لإدخال typed في `communication_messages` وإعادة record projection.
+- `ListByConversation(ctx, businessID, conversationID, limit, cursor)` لقراءة timeline.
+
+`communication_messages` أُضيفت في migration forward-only `000028`؛ لا تعدّل migrations `000001–000027`. كل العلاقات الحساسة تستخدم composite tenant FKs. الفهارس تدعم timeline keyset على `(occurred_at DESC, created_at DESC, id DESC)` ومراجع Provider/Chatwoot.
+
+`CommunicationMessage` لا يملك status مستقلًا في V1. repository يعرض `received` للـinbound غير المرتبط، `recorded` للـoutbound غير المرتبط، أو OutboundMessage lifecycle عند وجود `outbound_message_id`. هذا لا يخلط message timeline مع outbound delivery truth.
+
+`ListByConversation` يفحص `(business_id, conversation_id)` قبل القراءة. المحادثة غير الموجودة أو التابعة لـBusiness آخر تعود `RepositoryNotFound` typed، ولا تُعاد صفحة فارغة مضللة أو بيانات cross-tenant. malformed cursor وinvalid input يعودان `RepositoryInvalid`.
 
 ## الاختبارات
 
-تغطي اختبارات الوحدة نجاح commit، callback failure وrollback، nested transaction rejection، cancellation قبل begin، cancellation داخل callback، وnil-pool/invalid URL lifecycle behavior. أضيف `business_repository_integration_test.go` باختبار PostgreSQL حقيقي gated بـ`-tags=integration` و`POSTGRES_TEST_DSN`. الاختبار يطبق migrations، يقرأ Business، يثبت not-found typed error، ويتحقق من commit وrollback. تم تشغيله فعليًا على PostgreSQL 16 مؤقت ونجح.
+تم تشغيلها فعليًا بعد آخر تعديل:
 
-## Repository Foundation الحالية
+| الأمر | النتيجة |
+|---|---|
+| `GOTOOLCHAIN=local go test ./...` | PASS |
+| `GOTOOLCHAIN=local go vet ./...` | PASS |
+| `scripts/test-postgres-schema.sh` | PASS على PostgreSQL 16؛ foundation/full constraints وrunner `applied=28` ثم `applied=0` |
+| `POSTGRES_TEST_DSN=... GOTOOLCHAIN=local go test -tags=integration -count=1 ./internal/adapters/secondary/persistence/postgres` | PASS على PostgreSQL 16 Docker |
 
-بعد BusinessRepository، أضيفت ports وimplementations للقراءة الأساسية من `customers` و`conversations` و`channel_connections`، ثم `ConversationReferenceRepository` و`OutboundMessageRepository` للـCommunication surface الموجود فعليًا في schema. كل استعلام يستخدم `business_id` مع المعرف الخاص بالسجل، ولا يعتمد على معرف عالمي منفرد عند وجود tenant scope. الـrecords المعادة إلى Application لا تحتوي pgx أو SQL rows، وحقول JSON المرنة محفوظة كـraw JSON bytes حتى لا يفرض adapter نموذجًا مرنًا غير معتمد.
-
-تمت إضافة integration coverage حقيقية على PostgreSQL 16 تثبت قراءة السجلات الأساسية، ورفض cross-tenant lookup كـtyped not-found، وإنشاء وقراءة outbound pending، وprovider-scoped idempotency conflict، إضافة إلى BusinessRepository وcommit/rollback. لم يُنشأ `MessageRepository` عام لأن schema الحالية لا تحتوي جدول message timeline مستقلًا.
+Integration test يطبق migrations، يستخدم `MessageRepository.Record` للـinsert/read، يثبت conversation scope وcross-tenant typed not-found وmissing conversation، ordering/keyset pagination، malformed cursor، content/reference constraints عبر schema، outbound status projection، Application `MessageQueryService` mapping، وcommit/rollback لرسائل CommunicationMessage داخل TransactionManager.
 
 ## ما لم يُنفذ
 
-لم تُنفذ Repositories الخاصة ببقية الكيانات أو TransactionManager bootstrap wiring في `cmd/api`، ولم تُنفذ EventStore أو IdempotencyStore أو OutboxStore. لا نضيف Schema أو migrations جديدة في هذه الدفعة، ولا نبدأ SocialAPI أو Chatwoot أو AI.
+لم تُنفذ Repositories الخاصة بـCatalog/Sales/AI/Audit، ولا EventStore أو atomic inbound dedupe أو OutboxStore، ولا bootstrap dependency wiring الفعلي في `cmd/api`؛ ما زال `handlers.Dependencies{}` الافتراضي غير موصول بـPostgreSQL runtime. لا يبدأ SocialAPI أو Chatwoot أو AI runtime قبل اكتمال Reliability foundation.
 
 ## معيار الانتقال التالي
 
-بعد مراجعة هذه boundary واختبارها، تكون الدفعة التالية هي إكمال repositories الضرورية الأخرى فوق نفس TransactionManager. بعد تثبيت ذلك فقط نبدأ EventStore وinbound dedupe، ثم Outbox؛ مع الحفاظ على قاعدة أن inbound EventStore يملك idempotency الذرية ولا نضيف IdempotencyStore عامًا موازيًا بلا use case.
+الخطوة التالية داخل PR-009 هي إكمال repository surfaces الضرورية الأخرى فوق نفس TransactionManager، مع إبقاء CommunicationMessage كحد persistence مثبت. بعد ذلك يبدأ EventStore الذي يملك inbound idempotency الذرية، ثم Outbox؛ لا نضيف `IdempotencyStore` عامًا موازيًا بلا use case.

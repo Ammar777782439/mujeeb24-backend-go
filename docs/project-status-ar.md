@@ -1,10 +1,10 @@
 # حالة مشروع Mujeeb 24 Backend Go
 
-> هذه الوثيقة هي نقطة الرجوع الأولى عند فتح المستودع. آخر تحديث: 2026-08-24.
+> هذه الوثيقة هي نقطة الرجوع الأولى عند فتح المستودع. آخر تحديث: 2026-08-25.
 
 ## الخلاصة التنفيذية
 
-`mujeeb24-backend-go` هو Backend مستقل ونظيف لمجيب 24. أُنشئ بعيدًا عن Prototype القديم المرتبط بـPostiz/Facebook. المشروع أنهى تصميم **Domain Contracts وApplication Ports وPersistence Boundary وFull Migration Schema**، ونفّذ SQL migrations من 000001 إلى 000027 مع اختبارات PostgreSQL أساسية وFull Schema ناجحة. كما نفّذ DTO-first HTTP Contract: Go DTOs وoperation registration هي مصدر الحقيقة، وOpenAPI v1 يُولد تلقائيًا منها. لم يبدأ بعد تنفيذ Repositories التجارية أو Provider integrations أو AI runtime.
+`mujeeb24-backend-go` هو Backend مستقل ونظيف لمجيب 24. أُنشئ بعيدًا عن Prototype القديم المرتبط بـPostiz/Facebook. المشروع أنهى تصميم **Domain Contracts وApplication Ports وPersistence Boundary**، وثبّت SQL migrations من 000001 إلى 000028 مع اختبارات PostgreSQL وFull Schema ناجحة. كما نفّذ DTO-first HTTP Contract: Go DTOs وoperation registration هي مصدر الحقيقة، وOpenAPI v1 يُولد تلقائيًا منها. أُنجز الآن CommunicationMessage timeline persistence، بينما بقية Repositories التجارية وProvider integrations وAI runtime لم تبدأ.
 
 التاجر سيستخدم Dashboard مجيب 24 فقط. SocialAPI.ai سيكون Provider لنقل رسائل Facebook وInstagram وWhatsApp، وChatwoot سيكون Communication Workspace داخليًا عبر API Channel/Adapter. أما Go فهو مالك Sales Intelligence وBusiness Knowledge وCatalog وLeads وCommercial Transactions وAI Decisions.
 
@@ -25,9 +25,9 @@
 | HTTP API Dashboard V1 Contract | مغلق كتصميم | Dashboard-only، JWT، Webhooks منفصلة، Auth/Tenant/Error/Pagination/Idempotency موثقة |
 | Auth transport | JWT معتمد تصميميًا؛ middleware boundary منفذ | `RequireAccessToken` قابل للحقن ويضع Principal فقط؛ JWT issuer/key storage وMembership غير منفذين |
 | PostgreSQL Persistence Contract | مغلق كتصميم | Composite Tenant FKs وLeases وIdempotency موثقة |
-| PostgreSQL schema/migrations | مكتملة 000001–000027 | Migration Runner مضمّن ويطبقها من قاعدة فارغة؛ لا AutoMigrate |
+| PostgreSQL schema/migrations | مكتملة 000001–000028 | Migration Runner مضمّن ويطبقها من قاعدة فارغة؛ لا AutoMigrate؛ 000028 forward-only لـCommunicationMessage |
 | PostgreSQL constraint tests | Foundation وFull Schema ناجحة | تشمل Tenant Isolation وIdempotency وLeases وSnapshots |
-| Event Ledger/Idempotency/Outbox | تصميم + SQL tables | Go implementation لم يبدأ؛ يأتي بعد إكمال Repository foundation |
+| Event Ledger/Idempotency/Outbox | تصميم + SQL tables | Go implementation لم يبدأ؛ يأتي بعد إكمال Repository surfaces بما فيها CommunicationMessage |
 | Provider Simulator | لم يبدأ | مطلوب قبل أي credentials حقيقية |
 | SocialAPI.ai integration | غير مثبت | لا توجد credentials إنتاجية أو test credentials |
 | Chatwoot Adapter | غير منفذ | Feasibility مثبتة، Adapter لم يُكتب |
@@ -39,11 +39,11 @@
 
 ## معيار إغلاق الـMigrations
 
-أُغلق تنفيذ الـFull Schema بعد تطبيق migrations من 000001 إلى 000027 على PostgreSQL فارغة، ونجاح اختبارات Tenant Isolation وProvider Event Dedupe وScoped Outbound Idempotency وUnresolved Event وOutbox Lease وSnapshots، ونجاح تشغيل Runner مرتين (`applied=27` ثم `applied=0`). هذا لا يعني أن Event Ledger أو Outbox Go implementation أصبحا منفذين.
+أُغلق تنفيذ الـFull Schema بعد تطبيق migrations من 000001 إلى 000028 على PostgreSQL فارغة، ونجاح اختبارات Tenant Isolation وProvider Event Dedupe وScoped Outbound Idempotency وUnresolved Event وOutbox Lease وSnapshots، ونجاح CommunicationMessage constraints وmessage timeline integration، ونجاح تشغيل Runner مرتين (`applied=28` ثم `applied=0`). هذا لا يعني أن Event Ledger أو Outbox Go implementation أصبحا منفذين.
 
 ## الحالة الحالية: PR-009 — PostgreSQL Adapter وTransactionManager
 
-أُغلق PR-008 عند حد HTTP → Application façade wiring بنتيجة 76/76. في PR-009 نُفذ PostgreSQL pool وTransactionManager، ثم أضيف Repository foundation و`BusinessRepository` الأول فوق جدول `businesses` مع `SQLExecutor` transaction-aware وtyped repository errors. نجح integration test حقيقي على PostgreSQL 16 يثبت migration وread وnot-found وcommit وrollback. ما زالت بقية Repositories وEventStore وIdempotency/Outbox implementations مؤجلة.
+أُغلق PR-008 عند حد HTTP → Application façade wiring بنتيجة 76/76. في PR-009 نُفذ PostgreSQL pool وTransactionManager وSQLExecutor وtyped repository errors، ثم Business/Customer/Conversation/ChannelConnection/ConversationReference/OutboundMessage foundation، وأضيفت `communication_messages` في 000028 مع `MessageRepository.Record/ListByConversation` و`MessageQueryService`. نجح integration test حقيقي على PostgreSQL 16 يثبت insert/read وtenant scope وtyped not-found وordering/keyset pagination وmalformed cursor وstatus projection وcommit/rollback وApplication mapping. ما زالت Catalog/Sales/AI/Audit repositories وEventStore وIdempotency/Outbox implementations وbootstrap wiring مؤجلة.
 
 ## معيار إغلاق HTTP API Contract وDTO-first Generation
 
@@ -51,13 +51,16 @@
 
 يمنع `scripts/check-openapi-generated.sh` اختلاف الملف المولد عن Go source، ويُشغل مع `go test ./...` في CI أو محليًا. أُضيفت Typed Commands/Queries، ووُصلت كل عمليات Huma الـ76 بـruntime dispatcher مشترك، ولكل عملية façade typed صريحة تبني Command/Query أو system contract. أربع Core callbacks لديها dependencies تنفيذية موصولة؛ بقية operations تعبر façade typed وقد تعيد `not_implemented` من Application boundary عند غياب implementation dependency. أضيف Auth middleware boundary واختباراته، لكن JWT issuer/key storage وMembership وFunctional Application logic غير منفذة. نُقلت DTOs الفعلية إلى `http/dto`، وأصبح `http/contract` مسؤولًا عن operation registration وmetadata مع aliases توافقية فقط، وحُذف placeholder القديم من `handlers`.
 
-## الخطوة التالية الوحيدة
+## الخطوة التالية داخل PR-009
 
 ```text
 PR-008 CLOSED: HTTP → Application façade 76/76
-→ PR-009: PostgreSQL pool + TransactionManager
-→ Repository foundation
-→ Event Ledger/Idempotency/Outbox
+→ PR-009: PostgreSQL pool + TransactionManager ✅
+→ Repository foundation + CommunicationMessage timeline ✅
+→ Catalog/Sales/AI/Audit repositories ⏳
+→ Event Ledger: atomic inbound dedupe ⏳
+→ Outbox persistence/worker boundary ⏳
+→ bootstrap dependency wiring ⏳
 ```
 
 لا نبدأ SocialAPI أو Chatwoot أو AI runtime قبل اكتمال Reliability Foundation وSimulator. ولا نعتبر Provider integration ناجحًا قبل اختبار حقيقي آمن لاحقًا.

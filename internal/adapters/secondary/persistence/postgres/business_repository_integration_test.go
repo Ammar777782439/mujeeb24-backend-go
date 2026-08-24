@@ -9,7 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/queries"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/database"
 )
 
@@ -107,6 +110,13 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 	const referenceA = "00000000-0000-0000-0000-000000000051"
 	const outboundA = "00000000-0000-0000-0000-000000000061"
 	const outboundB = "00000000-0000-0000-0000-000000000062"
+	const communicationA = "00000000-0000-0000-0000-000000000071"
+	const communicationB = "00000000-0000-0000-0000-000000000072"
+	const communicationC = "00000000-0000-0000-0000-000000000073"
+	const communicationD = "00000000-0000-0000-0000-000000000076"
+	const communicationE = "00000000-0000-0000-0000-000000000077"
+	const communicationF = "00000000-0000-0000-0000-000000000078"
+	const communicationG = "00000000-0000-0000-0000-000000000079"
 	for _, id := range []string{businessA, businessB} {
 		_, _ = pool.Exec(ctx, `DELETE FROM businesses WHERE id = $1::uuid`, id)
 	}
@@ -187,4 +197,103 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 	if _, err := outboundRepo.CreatePending(ctx, duplicate); !IsRepositoryKind(err, RepositoryConflict) {
 		t.Fatalf("expected idempotency conflict, got %v", err)
 	}
+	messageRepo := NewMessageRepository(adapter)
+	textA, textB, textC := "رسالة أولى", "رد ثانٍ", "رسالة ثالثة"
+	for _, draft := range []ports.CommunicationMessageDraft{
+		{ID: communicationA, BusinessID: businessA, ConversationReferenceID: referenceA, Direction: "inbound", Origin: "customer", Transport: "provider", ProviderMessageID: strptr("provider-message-a"), ContentType: "text", TextContent: &textA, ContentReference: "content-a", OccurredAt: time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC), CreatedAt: time.Date(2025, 1, 1, 10, 0, 1, 0, time.UTC)},
+		{ID: communicationB, BusinessID: businessA, ConversationReferenceID: referenceA, OutboundMessageID: strptr(outboundA), Direction: "outbound", Origin: "human", Transport: "provider", ProviderMessageID: strptr("provider-message-b"), ContentType: "text", TextContent: &textB, ContentReference: "content-b", OccurredAt: time.Date(2025, 1, 1, 10, 1, 0, 0, time.UTC), CreatedAt: time.Date(2025, 1, 1, 10, 1, 1, 0, time.UTC)},
+		{ID: communicationC, BusinessID: businessA, ConversationReferenceID: referenceA, Direction: "inbound", Origin: "customer", Transport: "provider", ProviderMessageID: strptr("provider-message-c"), ContentType: "text", TextContent: &textC, ContentReference: "content-c", OccurredAt: time.Date(2025, 1, 1, 10, 2, 0, 0, time.UTC), CreatedAt: time.Date(2025, 1, 1, 10, 2, 1, 0, time.UTC)},
+	} {
+		recorded, recordErr := messageRepo.Record(ctx, draft)
+		if recordErr != nil || recorded.BusinessID != businessA || recorded.ConversationID != conversationA {
+			t.Fatalf("record communication message: %#v err=%v", recorded, recordErr)
+		}
+	}
+	committedID := "00000000-0000-0000-0000-000000000074"
+	defer pool.Exec(context.Background(), `DELETE FROM communication_messages WHERE id IN ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6::uuid, $7::uuid)`, communicationA, communicationB, communicationC, communicationD, committedID, communicationE, communicationG)
+	invalidTextDraft := ports.CommunicationMessageDraft{ID: communicationE, BusinessID: businessA, ConversationReferenceID: referenceA, Direction: "inbound", Origin: "customer", Transport: "provider", ContentType: "text", ContentReference: "content-invalid", OccurredAt: time.Date(2025, 1, 1, 9, 0, 0, 0, time.UTC), CreatedAt: time.Date(2025, 1, 1, 9, 0, 1, 0, time.UTC)}
+	if _, err := messageRepo.Record(ctx, invalidTextDraft); !IsRepositoryKind(err, RepositoryInvalid) {
+		t.Fatalf("expected text content constraint invalid error, got %v", err)
+	}
+	crossBusinessDraft := invalidTextDraft
+	crossBusinessDraft.ID = communicationF
+	crossBusinessDraft.BusinessID = businessB
+	crossBusinessDraft.ContentReference = "content-cross-business"
+	crossBusinessDraft.TextContent = &textA
+	if _, err := messageRepo.Record(ctx, crossBusinessDraft); !IsRepositoryKind(err, RepositoryInvalid) {
+		t.Fatalf("expected cross-business FK invalid error, got %v", err)
+	}
+	chatwootDraft := invalidTextDraft
+	chatwootDraft.ID = communicationD
+	chatwootDraft.ContentType = "image"
+	chatwootDraft.TextContent = nil
+	chatwootDraft.ChatwootMessageID = strptr("chatwoot-message-1")
+	chatwootDraft.ContentReference = "content-chatwoot"
+	chatwootDraft.OccurredAt = time.Date(2025, 1, 1, 8, 0, 0, 0, time.UTC)
+	chatwootDraft.CreatedAt = time.Date(2025, 1, 1, 8, 0, 1, 0, time.UTC)
+	if _, err := messageRepo.Record(ctx, chatwootDraft); err != nil {
+		t.Fatalf("chatwoot reference record: %v", err)
+	}
+	duplicateChatwoot := chatwootDraft
+	duplicateChatwoot.ID = communicationE
+	if _, err := messageRepo.Record(ctx, duplicateChatwoot); !IsRepositoryKind(err, RepositoryConflict) {
+		t.Fatalf("expected chatwoot uniqueness conflict, got %v", err)
+	}
+	duplicateProvider := ports.CommunicationMessageDraft{ID: communicationG, BusinessID: businessA, ConversationReferenceID: referenceA, Direction: "inbound", Origin: "customer", Transport: "provider", ProviderMessageID: strptr("provider-message-a"), ContentType: "text", TextContent: &textA, ContentReference: "content-provider-duplicate", OccurredAt: time.Date(2025, 1, 1, 7, 0, 0, 0, time.UTC), CreatedAt: time.Date(2025, 1, 1, 7, 0, 1, 0, time.UTC)}
+	if _, err := messageRepo.Record(ctx, duplicateProvider); !IsRepositoryKind(err, RepositoryConflict) {
+		t.Fatalf("expected provider uniqueness conflict, got %v", err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM communication_messages WHERE id = $1::uuid`, communicationD); err != nil {
+		t.Fatalf("cleanup constraint fixture: %v", err)
+	}
+	if _, err := messageRepo.ListByConversation(ctx, businessA, conversationA, 2, "not-a-cursor"); !IsRepositoryKind(err, RepositoryInvalid) {
+		t.Fatalf("expected malformed cursor invalid error, got %v", err)
+	}
+	commitText := "رسالة transaction committed"
+	if err := adapter.Within(ctx, func(txCtx context.Context) error {
+		_, txErr := messageRepo.Record(txCtx, ports.CommunicationMessageDraft{ID: committedID, BusinessID: businessA, ConversationReferenceID: referenceA, Direction: "inbound", Origin: "customer", Transport: "provider", ContentType: "text", TextContent: &commitText, ContentReference: "content-committed", OccurredAt: time.Date(2025, 1, 1, 10, 3, 0, 0, time.UTC), CreatedAt: time.Date(2025, 1, 1, 10, 3, 1, 0, time.UTC)})
+		return txErr
+	}); err != nil {
+		t.Fatalf("message commit transaction: %v", err)
+	}
+	defer pool.Exec(context.Background(), `DELETE FROM communication_messages WHERE id = $1::uuid`, committedID)
+	rollbackID := "00000000-0000-0000-0000-000000000075"
+	rollbackText := "رسالة transaction rolled back"
+	rollbackErr := errors.New("force message rollback")
+	if err := adapter.Within(ctx, func(txCtx context.Context) error {
+		if _, txErr := messageRepo.Record(txCtx, ports.CommunicationMessageDraft{ID: rollbackID, BusinessID: businessA, ConversationReferenceID: referenceA, Direction: "inbound", Origin: "customer", Transport: "provider", ContentType: "text", TextContent: &rollbackText, ContentReference: "content-rollback", OccurredAt: time.Date(2025, 1, 1, 10, 4, 0, 0, time.UTC), CreatedAt: time.Date(2025, 1, 1, 10, 4, 1, 0, time.UTC)}); txErr != nil {
+			return txErr
+		}
+		return rollbackErr
+	}); !errors.Is(err, rollbackErr) {
+		t.Fatalf("expected message rollback error, got %v", err)
+	}
+	var rollbackCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM communication_messages WHERE id = $1::uuid`, rollbackID).Scan(&rollbackCount); err != nil || rollbackCount != 0 {
+		t.Fatalf("message rollback leaked row: count=%d err=%v", rollbackCount, err)
+	}
+	page, err := messageRepo.ListByConversation(ctx, businessA, conversationA, 2, "")
+	if err != nil || len(page.Items) != 2 || !page.HasMore || page.NextCursor == "" {
+		t.Fatalf("first message page: %#v err=%v", page, err)
+	}
+	if page.Items[0].ID != committedID || page.Items[1].ID != communicationC || page.Items[0].Status != "received" || page.Items[1].Status != "received" {
+		t.Fatalf("unexpected message ordering/status: %#v", page.Items)
+	}
+	second, err := messageRepo.ListByConversation(ctx, businessA, conversationA, 2, page.NextCursor)
+	if err != nil || len(second.Items) != 2 || second.HasMore || second.Items[0].ID != communicationB || second.Items[1].ID != communicationA || second.Items[0].Status != "pending" {
+		t.Fatalf("second message page: %#v err=%v", second, err)
+	}
+	if _, err := messageRepo.ListByConversation(ctx, businessB, conversationA, 2, ""); !IsRepositoryKind(err, RepositoryNotFound) {
+		t.Fatalf("cross-business list must be typed not-found, got %v", err)
+	}
+	if _, err := messageRepo.ListByConversation(ctx, businessA, "00000000-0000-0000-0000-000000000099", 2, ""); !IsRepositoryKind(err, RepositoryNotFound) {
+		t.Fatalf("missing conversation list must be typed not-found, got %v", err)
+	}
+	service := services.MessageQueryService{Repository: messageRepo}
+	viewPage, err := service.Handle(ctx, queries.ListConversationMessagesQuery{Meta: queries.QueryMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, ConversationID: commands.ConversationID(conversationA), Limit: 2})
+	if err != nil || len(viewPage.Items) != 2 || viewPage.Items[0].Text != commitText || viewPage.Items[1].Text != textC || viewPage.Items[1].ProviderMessageReference == nil || !viewPage.Items[0].OccurredAt.Equal(time.Date(2025, 1, 1, 10, 3, 0, 0, time.UTC)) {
+		t.Fatalf("application message view: %#v err=%v", viewPage, err)
+	}
 }
+
+func strptr(value string) *string { return &value }

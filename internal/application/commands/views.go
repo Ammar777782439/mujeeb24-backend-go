@@ -44,14 +44,17 @@ type ConversationView struct {
 	ResourceVersion ResourceVersion
 }
 type MessageView struct {
-	ID              MessageID
-	ConversationID  ConversationID
-	Direction       string
-	Origin          string
-	Status          string
-	Text            string
-	CreatedAt       time.Time
-	ResourceVersion ResourceVersion
+	ID                       MessageID
+	ConversationID           ConversationID
+	Direction                string
+	Origin                   string
+	Status                   string
+	Text                     string
+	ProviderMessageReference *string
+	ChatwootMessageReference *string
+	OccurredAt               time.Time
+	CreatedAt                time.Time
+	ResourceVersion          ResourceVersion
 }
 type CustomerView struct {
 	ID              CustomerID
