@@ -2,7 +2,7 @@
 
 ## حالة العقد
 
-**الحالة: مغلق تصميميًا.** هذه الوثيقة هي المرجع الرسمي بين Dashboard Frontend وMujeeb 24 Backend قبل كتابة OpenAPI وRequest/Response DTOs وHandlers. لا تحتوي على تنفيذ HTTP، ولا تختار مزود Authentication، ولا تكشف PostgreSQL أو SocialAPI أو Chatwoot.
+**الحالة: مغلق تصميميًا.** هذه الوثيقة هي المرجع الرسمي بين Dashboard Frontend وMujeeb 24 Backend قبل كتابة OpenAPI وRequest/Response DTOs وHandlers. تعتمد V1 **JWT Access Tokens** كآلية Authentication. لا تكشف الوثيقة PostgreSQL أو SocialAPI أو Chatwoot.
 
 > هذا العقد يحدد ما يستطيع Dashboard طلبه وما يراه. أما طريقة التنفيذ الداخلية فتظل مسؤولية Application وPorts وAdapters.
 
@@ -60,7 +60,7 @@ Authenticated Principal
 
 ### 3.1 HTTP boundary
 
-كل Dashboard endpoint، ما عدا Health وWebhook، يحتاج Principal موثوقًا. وسيلة النقل النهائية قد تكون JWT أو Session بحسب Auth Contract الذي لم يُحسم كمزود بعد، لكن HTTP boundary ثابت:
+كل Dashboard endpoint، ما عدا Health وWebhook، يحتاج Principal موثوقًا. تعتمد V1 **JWT Access Token** في:
 
 ```http
 Authorization: Bearer <access-token>
@@ -70,7 +70,74 @@ X-Correlation-ID: <optional-correlation-id>
 
 الخادم ينشئ `request_id` إذا لم يرسله العميل، ويعيده في Response Header وResponse Body. `X-Correlation-ID` يربط Command وAudit وOutbox وProvider attempts، ولا يقبل قيمة تتجاوز حدود الحجم أو تحتوي بيانات سرية.
 
-### 3.2 الأدوار
+### 3.2 JWT Contract
+
+نستخدم JWT موقّعًا بخوارزمية **EdDSA/Ed25519**، مع `kid` لتدوير المفاتيح. يحفظ المفتاح الخاص في Secret Store/KMS ولا يدخل المستودع أو Environment المطبوع في logs. يحتفظ الخادم بالمفاتيح العامة الحالية والسابقة خلال فترة التدوير حتى لا تنكسر Access Tokens القصيرة.
+
+| العنصر | القرار V1 |
+|---|---|
+| نوع الرمز | JWT Access Token بصيغة Bearer |
+| الخوارزمية | EdDSA/Ed25519 فقط؛ أي Algorithm آخر مرفوض |
+| Access TTL | 15 دقيقة |
+| Refresh | Refresh Token opaque، مخزن Hash فقط، مع Rotation عند كل استخدام |
+| Refresh session | حد أقصى 30 يومًا وسياسة إبطال عند Logout أو reuse detection |
+| Audience | `mujeeb24-dashboard` |
+| Issuer | `mujeeb24-api` |
+| التخزين في المتصفح | لا نضع Access Token في `localStorage`؛ يحتفظ به Frontend في الذاكرة، ويُرسل Bearer |
+| Refresh Cookie | `HttpOnly` و`Secure` و`SameSite` وفق deployment، مع CSRF protection عند الحاجة |
+
+Claims المسموح بها في Access Token:
+
+```json
+{
+  "iss": "mujeeb24-api",
+  "sub": "principal-uuid",
+  "aud": "mujeeb24-dashboard",
+  "exp": 0,
+  "iat": 0,
+  "nbf": 0,
+  "jti": "access-token-id",
+  "sid": "auth-session-id",
+  "typ": "access",
+  "auth_version": 1
+}
+```
+
+لا نضع `business_id` أو Role أو Permissions داخل JWT كمصدر حقيقة. يستطيع المستخدم تبديل Business من Dashboard، وتغيير Membership يجب أن يصبح فعّالًا دون انتظار انتهاء Token؛ لذلك يحدد Route `business_id` ويعيد الخادم فحص Membership/Permission من Auth/Application boundary.
+
+Middleware يتحقق بالترتيب التالي:
+
+```text
+اقرأ Bearer Token
+→ اقرأ kid
+→ اختر Public Key من Key Set
+→ اقبل EdDSA فقط
+→ تحقق من signature
+→ تحقق من iss/aud/typ/sub/jti/nbf/exp
+→ أنشئ Authenticated Principal
+→ تحقق من Business Membership وPermission
+→ مرر Request إلى Handler
+```
+
+رمز JWT لا يقرر أنه يملك Business. إذا انتهت صلاحيته نعيد `401 token_expired`، وإذا كان التوقيع أوIssuer أوAudience غير صحيح نعيد `401 invalid_token`. لا نعيد سببًا يكشف تفاصيل المفاتيح.
+
+### 3.3 Auth Endpoints
+
+هذه endpoints تثبت JWT transport contract، أما User وMembership وPassword Policy وAuth Storage فتحتاج Auth Contract مستقلًا قبل تنفيذها:
+
+| Method | Path | Auth | Application operation | Success |
+|---|---|---|---|---:|
+| `POST` | `/api/v1/auth/login` | public | `AuthenticatePrincipal` | `200` |
+| `POST` | `/api/v1/auth/refresh` | refresh cookie فقط | `RotateRefreshSession` | `200` |
+| `POST` | `/api/v1/auth/logout` | access + refresh | `RevokeRefreshSession` | `204` |
+| `GET` | `/api/v1/me` | JWT | `GetCurrentPrincipal` | `200` |
+| `GET` | `/api/v1/me/businesses` | JWT | `ListAccessibleBusinesses` | `200` |
+
+`login` يعيد Access Token ووقت انتهاءه وPrincipal projection، ويضع Refresh Token في Cookie آمن بدل إعادته في JSON. `refresh` يدور Refresh Token ويصدر Access Token جديدًا. عند اكتشاف reuse لرمز Refresh قديم، نلغي Session كاملة ونرجع `401 refresh_reuse_detected`.
+
+هذه السياسة لا تضيف جداول Auth إلى Migration Schema المغلقة الآن؛ Auth persistence سيكون Contract/Migration منفصلًا قبل تنفيذ Login الحقيقي.
+
+### 3.4 الأدوار
 
 | الدور | الصلاحيات العامة |
 |---|---|
@@ -81,7 +148,7 @@ X-Correlation-ID: <optional-correlation-id>
 
 الصلاحية الدقيقة تُفحص في Application، ولا يكفي Role وحده عندما تكون العملية حساسة. مثال ذلك تأكيد Transaction أو تغيير Policy أو Customer Merge.
 
-### 3.3 نتائج الهوية والنطاق
+### 3.5 نتائج الهوية والنطاق
 
 | الحالة | HTTP |
 |---|---:|

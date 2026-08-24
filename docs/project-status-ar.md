@@ -22,7 +22,8 @@
 | Domain/catalog وsales | مغلق كتصميم | CatalogItem/Offer/Variant/Transactions متعددة الأنواع |
 | Domain/ai وaudit | مغلق كتصميم | Structured Decision، Evidence، Policy، Audit |
 | application/ports | مغلق كتصميم | Go interfaces التنفيذية تحتاج ضبطًا نهائيًا أثناء Adapter work |
-| HTTP API Dashboard V1 Contract | مغلق كتصميم | Dashboard-only، Webhooks منفصلة، Auth/Tenant/Error/Pagination/Idempotency موثقة |
+| HTTP API Dashboard V1 Contract | مغلق كتصميم | Dashboard-only، JWT، Webhooks منفصلة، Auth/Tenant/Error/Pagination/Idempotency موثقة |
+| Auth transport | JWT معتمد تصميميًا | EdDSA access token قصير العمر؛ Auth provider/storage وMembership contract منفصلان |
 | PostgreSQL Persistence Contract | مغلق كتصميم | Composite Tenant FKs وLeases وIdempotency موثقة |
 | PostgreSQL schema/migrations | مكتملة 000001–000027 | Migration Runner مضمّن ويطبقها من قاعدة فارغة؛ لا AutoMigrate |
 | PostgreSQL constraint tests | Foundation وFull Schema ناجحة | تشمل Tenant Isolation وIdempotency وLeases وSnapshots |
@@ -42,7 +43,7 @@
 
 ## معيار إغلاق HTTP API Contract
 
-أُغلق عقد Dashboard V1 تصميميًا بعد تحديد routes وroles وpermissions وRequest/Response envelopes وErrors وPagination وIdempotency وConcurrency وApplication Command/Query mapping، مع فصل Webhooks وOperational endpoints وDeferred Scope. لم تُكتب OpenAPI أو DTOs أو Handlers بعد.
+أُغلق عقد Dashboard V1 تصميميًا بعد تحديد routes وroles وpermissions وRequest/Response envelopes وErrors وPagination وIdempotency وConcurrency وApplication Command/Query mapping، واعتماد JWT Access Authentication، مع فصل Webhooks وOperational endpoints وDeferred Scope. لم تُكتب OpenAPI أو DTOs أو Handlers بعد.
 
 ## الخطوة التالية الوحيدة
 

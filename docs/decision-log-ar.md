@@ -29,6 +29,7 @@
 | ADR-021 | Bootstrap مستقل | منع تضخم `cmd/main.go` بتركيب كل dependencies | معتمد |
 | ADR-022 | Domain Review قبل Implementation | الكود يجب أن يترجم تصميمًا مغلقًا لا يخترعه | معتمد |
 | ADR-023 | Dashboard HTTP API Contract مستقل عن Providers | التاجر يرى Mujeeb فقط؛ Webhooks وSocialAPI وChatwoot حدود داخلية منفصلة | معتمد تصميميًا |
+| ADR-024 | JWT Access Authentication لـDashboard V1 | Token قصير العمر، Business Scope من Membership لا من Claims، وفصل Auth عن Providers | معتمد تصميميًا |
 
 ## قرارات لم تُحسم بعد
 
@@ -39,7 +40,7 @@
 - Native Custom Channel stability مع Chatwoot
 - Exact AI model/provider وpricing
 - Subscription billing provider
-- مزود Authentication وآلية Session/JWT النهائية؛ أما Principal وBusiness Scope وRole/Permission فهي ثابتة في HTTP API Contract
+- Auth provider وUser/Membership storage وPassword/SSO policy؛ أما JWT transport وPrincipal وBusiness Scope وRole/Permission فهي ثابتة في HTTP API Contract
 - Retention policy للرسائل والوسائط
 - التحقق الحقيقي لقنوات Facebook/Instagram/WhatsApp
 ```
