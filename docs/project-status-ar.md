@@ -4,7 +4,7 @@
 
 ## الخلاصة التنفيذية
 
-`mujeeb24-backend-go` هو Backend مستقل ونظيف لمجيب 24. أُنشئ بعيدًا عن Prototype القديم المرتبط بـPostiz/Facebook. المشروع أنهى تصميم **Domain Contracts وApplication Ports وPersistence Boundary وFull Migration Schema**، ونفّذ SQL migrations من 000001 إلى 000027 مع اختبارات PostgreSQL أساسية وFull Schema ناجحة. لم يبدأ بعد تنفيذ Repositories التجارية أو Provider integrations أو AI runtime.
+`mujeeb24-backend-go` هو Backend مستقل ونظيف لمجيب 24. أُنشئ بعيدًا عن Prototype القديم المرتبط بـPostiz/Facebook. المشروع أنهى تصميم **Domain Contracts وApplication Ports وPersistence Boundary وFull Migration Schema**، ونفّذ SQL migrations من 000001 إلى 000027 مع اختبارات PostgreSQL أساسية وFull Schema ناجحة. كما نفّذ DTO-first HTTP Contract: Go DTOs وoperation registration هي مصدر الحقيقة، وOpenAPI v1 يُولد تلقائيًا منها. لم يبدأ بعد تنفيذ Repositories التجارية أو Provider integrations أو AI runtime.
 
 التاجر سيستخدم Dashboard مجيب 24 فقط. SocialAPI.ai سيكون Provider لنقل رسائل Facebook وInstagram وWhatsApp، وChatwoot سيكون Communication Workspace داخليًا عبر API Channel/Adapter. أما Go فهو مالك Sales Intelligence وBusiness Knowledge وCatalog وLeads وCommercial Transactions وAI Decisions.
 
@@ -27,7 +27,7 @@
 | PostgreSQL Persistence Contract | مغلق كتصميم | Composite Tenant FKs وLeases وIdempotency موثقة |
 | PostgreSQL schema/migrations | مكتملة 000001–000027 | Migration Runner مضمّن ويطبقها من قاعدة فارغة؛ لا AutoMigrate |
 | PostgreSQL constraint tests | Foundation وFull Schema ناجحة | تشمل Tenant Isolation وIdempotency وLeases وSnapshots |
-| Event Ledger/Idempotency/Outbox | تصميم + SQL tables | Go implementation لم يبدأ؛ الخطوة الحالية |
+| Event Ledger/Idempotency/Outbox | تصميم + SQL tables | Go implementation لم يبدأ؛ يأتي بعد HTTP boundary |
 | Provider Simulator | لم يبدأ | مطلوب قبل أي credentials حقيقية |
 | SocialAPI.ai integration | غير مثبت | لا توجد credentials إنتاجية أو test credentials |
 | Chatwoot Adapter | غير منفذ | Feasibility مثبتة، Adapter لم يُكتب |
@@ -41,16 +41,17 @@
 
 أُغلق تنفيذ الـFull Schema بعد تطبيق migrations من 000001 إلى 000027 على PostgreSQL فارغة، ونجاح اختبارات Tenant Isolation وProvider Event Dedupe وScoped Outbound Idempotency وUnresolved Event وOutbox Lease وSnapshots، ونجاح تشغيل Runner مرتين (`applied=27` ثم `applied=0`). هذا لا يعني أن Event Ledger أو Outbox Go implementation أصبحا منفذين.
 
-## معيار إغلاق HTTP API Contract
+## معيار إغلاق HTTP API Contract وDTO-first Generation
 
-أُغلق عقد Dashboard V1 تصميميًا بعد تحديد routes وroles وpermissions وRequest/Response envelopes وErrors وPagination وIdempotency وConcurrency وApplication Command/Query mapping، واعتماد JWT Access Authentication، مع فصل Webhooks وOperational endpoints وDeferred Scope. لم تُكتب OpenAPI أو DTOs أو Handlers بعد.
+أُغلق عقد Dashboard V1 تصميميًا بعد تحديد routes وroles وpermissions وRequest/Response envelopes وErrors وPagination وIdempotency وConcurrency وApplication Command/Query mapping، واعتماد JWT Access Authentication، مع فصل Webhooks وOperational endpoints وDeferred Scope. ثم تحوّل العقد إلى Go DTOs وHuma operation registration، وتولد منه OpenAPI 3.0.3 في `api/openapi/mujeeb24-dashboard-v1.generated.yaml`.
+
+يمنع `scripts/check-openapi-generated.sh` اختلاف الملف المولد عن Go source، ويُشغل مع `go test ./...` في CI أو محليًا. هذا لا يعني أن Handlers أو Application Commands أو Auth storage أصبحت منفذة؛ التسجيل الحالي HTTP skeletons للتوثيق والتحقق فقط.
 
 ## الخطوة التالية الوحيدة
 
 ```text
-Translate HTTP API Contract to OpenAPI v1
-→ Define shared and endpoint DTOs
-→ Write HTTP route/handler skeletons
+Write shared/endpoint DTO tests
+→ Write HTTP route/handler skeletons over generated contract
 → Finalize Application Commands/Queries
 → Implement PostgreSQL Adapter/Reliability
 ```

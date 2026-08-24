@@ -2,7 +2,7 @@
 
 ## حالة العقد
 
-**الحالة: مغلق تصميميًا.** هذه الوثيقة هي المرجع الرسمي بين Dashboard Frontend وMujeeb 24 Backend قبل كتابة OpenAPI وRequest/Response DTOs وHandlers. تعتمد V1 **JWT Access Tokens** كآلية Authentication. لا تكشف الوثيقة PostgreSQL أو SocialAPI أو Chatwoot.
+**الحالة: مغلق تصميميًا ومحوّل إلى DTO-first source.** هذه الوثيقة هي المرجع التجاري بين Dashboard Frontend وMujeeb 24 Backend. مصدر التنفيذ هو Go Request/Response DTOs وoperation registration داخل `internal/adapters/primary/http/contract`، ومنها يتولد OpenAPI تلقائيًا. تعتمد V1 **JWT Access Tokens** كآلية Authentication. لا تكشف الوثيقة PostgreSQL أو SocialAPI أو Chatwoot.
 
 > هذا العقد يحدد ما يستطيع Dashboard طلبه وما يراه. أما طريقة التنفيذ الداخلية فتظل مسؤولية Application وPorts وAdapters.
 
@@ -701,15 +701,15 @@ Audit requirement
 
 ```text
 HTTP API Contract
-→ OpenAPI v1
-→ shared Error/Pagination/ID DTOs
-→ endpoint DTOs
+→ Go shared/endpoint DTOs وoperation registration
+→ generated OpenAPI v1
+→ shared Error/Pagination/ID validation
 → route/handler skeletons
 → Application Commands/Queries
 → PostgreSQL Adapter + Reliability implementation
 ```
 
-لا نكتب Handlers قبل ترجمة هذا العقد إلى OpenAPI ومراجعة أسماء الحقول مرة واحدة. ولا نعيد فتح Domain أو Persistence بسبب اختلاف تسمية في DTO؛ نضيف Mapping واضحًا.
+لا نكتب Handlers التنفيذية قبل مراجعة Go DTO source وgenerated OpenAPI مرة واحدة. لا نعيد فتح Domain أو Persistence بسبب اختلاف تسمية في DTO؛ نضيف Mapping واضحًا. ملف `api/openapi/mujeeb24-dashboard-v1.generated.yaml` artifact مولد ولا يُحرر يدويًا.
 
 ## References
 

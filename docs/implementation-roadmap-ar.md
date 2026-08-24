@@ -1,10 +1,12 @@
 # خارطة التنفيذ — Mujeeb 24 Backend Go
 
-## المرحلة الحالية: HTTP API Contract — Dashboard V1
+## المرحلة الحالية: DTO-first HTTP Boundary — Dashboard V1
 
-الحالة: **مغلقة تصميميًا، والتنفيذ لم يبدأ**.
+الحالة: **HTTP Contract مغلق، وDTO-first OpenAPI generation منفذ**.
 
-SQL migrations من 000001 إلى 000027 وFull Schema constraint tests مكتملة. عقد HTTP Dashboard V1 موجود في `contracts/http_api_dashboard_v1_contract_ar.md` ويحدد Business Scope وAuth boundary وRoles وErrors وPagination وIdempotency وConcurrency وEndpoint mapping، مع فصل Webhooks وOperational endpoints عن واجهة التاجر.
+SQL migrations من 000001 إلى 000027 وFull Schema constraint tests مكتملة. عقد HTTP Dashboard V1 موجود في `contracts/http_api_dashboard_v1_contract_ar.md`. Go Request/Response DTOs وoperation registration داخل `internal/adapters/primary/http/contract` هي مصدر الحقيقة، وHuma يولد OpenAPI 3.0.3 إلى `api/openapi/mujeeb24-dashboard-v1.generated.yaml`. يمنع `scripts/check-openapi-generated.sh` drift ويعمل في CI.
+
+الـHandlers الحالية skeletons للتسجيل والتوثيق فقط؛ لا تنفذ Application Commands أو Queries بعد.
 
 ## المرحلة المنجزة تصميميًا: Application Ports
 
@@ -58,23 +60,25 @@ audit_events
 
 حالة التنفيذ: Foundation وFull Schema migrations تعملان من قاعدة فارغة، ونجحت اختبارات cross-tenant references والتكرار الأساسي وUnresolved Event وOutbox Lease وSnapshots. شغّلنا Runner مرتين ونتج `applied=27` ثم `applied=0`.
 
-## المرحلة التالية: OpenAPI وHTTP Boundary Implementation
+## المرحلة التالية: HTTP route/handler skeletons ثم Application Boundary
 
 نطبق:
 
 ```text
-Event Ledger
+Generated DTO Contract
+→ route/handler skeletons
+→ Application Commands/Queries
+→ validation/error mapping
+→ PostgreSQL Adapter
+→ Event Ledger
 → Idempotency
 → Outbox
 → Asynq Worker
-→ Retry/Backoff
-→ Dead Letter
-→ Reconciliation
 ```
 
 Inbound event يحفظ أولًا. Outbound intent يحفظ قبل enqueue. UNKNOWN لا يعاد إرساله تلقائيًا.
 
-معيار النجاح: اختبار crash بين كل خطوتين لا ينشئ Customer أو Conversation أو Message ثانية ولا يفقد event.
+معيار النجاح: كل Handler يمرر DTO إلى Command/Query typed ولا يحتوي SQL أو Provider call، واختبارات HTTP تثبت Auth/Tenant/Error/Idempotency/Concurrency boundaries.
 
 ## المرحلة 4: Provider Simulator
 
@@ -130,8 +134,8 @@ SocialAPI inbound
 ```text
 PR-005: SQL migrations 000001–000012 + Foundation constraint tests — مكتمل
 PR-006: SQL migrations 000013–000027 + full-schema tests/review — مكتمل
-PR-007: HTTP API Contract → OpenAPI v1 + shared DTOs — التالي
-PR-008: HTTP route/handler skeletons + Application Commands/Queries
+PR-007: HTTP API Contract → Go DTOs + generated OpenAPI v1 + drift check — مكتمل
+PR-008: HTTP route/handler skeletons + Application Commands/Queries — التالي
 PR-009: PostgreSQL Adapter and TransactionManager
 PR-010: Event ledger/idempotency/outbox implementation
 PR-011: Provider simulator
