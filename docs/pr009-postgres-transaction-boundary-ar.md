@@ -42,10 +42,16 @@ POSTGRES_TEST_DSN='postgres://...' go test -tags=integration -count=1 ./internal
 
 تغطي اختبارات الوحدة نجاح commit، callback failure وrollback، nested transaction rejection، cancellation قبل begin، cancellation داخل callback، وnil-pool/invalid URL lifecycle behavior. أضيف `business_repository_integration_test.go` باختبار PostgreSQL حقيقي gated بـ`-tags=integration` و`POSTGRES_TEST_DSN`. الاختبار يطبق migrations، يقرأ Business، يثبت not-found typed error، ويتحقق من commit وrollback. تم تشغيله فعليًا على PostgreSQL 16 مؤقت ونجح.
 
+## Repository Foundation الحالية
+
+بعد BusinessRepository، أضيفت ports وimplementations للقراءة الأساسية من `customers` و`conversations` و`channel_connections`. كل استعلام يستخدم `business_id` مع المعرف الخاص بالسجل، ولا يعتمد على معرف عالمي منفرد عند وجود tenant scope. الـrecords المعادة إلى Application لا تحتوي pgx أو SQL rows، وحقول JSON المرنة محفوظة كـraw JSON bytes حتى لا يفرض adapter نموذجًا مرنًا غير معتمد.
+
+تمت إضافة integration coverage حقيقية على PostgreSQL 16 تثبت قراءة السجلات الثلاثة، ورفض cross-tenant lookup كـtyped not-found، إضافة إلى BusinessRepository وcommit/rollback.
+
 ## ما لم يُنفذ
 
-لم تُنفذ Repositories أو TransactionManager bootstrap wiring في `cmd/api`، ولم تُنفذ EventStore أو IdempotencyStore أو OutboxStore. لا نضيف Schema أو migrations جديدة في هذه الدفعة، ولا نبدأ SocialAPI أو Chatwoot أو AI.
+لم تُنفذ Repositories الخاصة ببقية الكيانات أو TransactionManager bootstrap wiring في `cmd/api`، ولم تُنفذ EventStore أو IdempotencyStore أو OutboxStore. لا نضيف Schema أو migrations جديدة في هذه الدفعة، ولا نبدأ SocialAPI أو Chatwoot أو AI.
 
 ## معيار الانتقال التالي
 
-بعد مراجعة هذه boundary واختبارها، تكون الدفعة التالية هي Repository foundation فوق نفس TransactionManager، ثم EventStore وinbound dedupe، ثم Outbox؛ مع الحفاظ على قاعدة أن inbound EventStore يملك idempotency الذرية ولا نضيف IdempotencyStore عامًا موازيًا بلا use case.
+بعد مراجعة هذه boundary واختبارها، تكون الدفعة التالية هي إكمال repositories الضرورية الأخرى فوق نفس TransactionManager. بعد تثبيت ذلك فقط نبدأ EventStore وinbound dedupe، ثم Outbox؛ مع الحفاظ على قاعدة أن inbound EventStore يملك idempotency الذرية ولا نضيف IdempotencyStore عامًا موازيًا بلا use case.
