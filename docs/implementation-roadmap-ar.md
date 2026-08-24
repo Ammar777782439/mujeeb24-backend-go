@@ -2,11 +2,11 @@
 
 ## المرحلة الحالية: PR-008 — Typed Application Boundary وHTTP Handlers
 
-الحالة: **DTO-first OpenAPI منفذ، وTyped Commands/Queries وCore HTTP mapping skeletons منفذة؛ wiring الكامل ما زال قيد التنفيذ**.
+الحالة: **DTO-first OpenAPI منفذ، وكل 76 route تمر runtime dispatcher موحد؛ أربع Core façades typed منفذة، وبقية Application façades قيد الإكمال**.
 
 SQL migrations من 000001 إلى 000027 وFull Schema constraint tests مكتملة. عقد HTTP Dashboard V1 موجود في `contracts/http_api_dashboard_v1_contract_ar.md`. Go Request/Response DTOs وoperation registration داخل `internal/adapters/primary/http/contract` هي مصدر الحقيقة، وHuma يولد OpenAPI 3.0.3 إلى `api/openapi/mujeeb24-dashboard-v1.generated.yaml`. يمنع `scripts/check-openapi-generated.sh` drift ويعمل في CI.
 
-الـHuma registration يولد العقد، و`internal/adapters/primary/http/handlers` يحتوي Core mapping typed إلى Application handlers. ما زالت Functional Handlers وAuth middleware وwiring الكامل للـ76 operation غير منفذة، ولا يوجد PostgreSQL أو Provider call داخل هذه المرحلة.
+الـHuma registration يولد العقد من نفس DTO source، و`internal/adapters/primary/http/handlers` يحتوي runtime dispatcher. أربع عمليات Core تنشئ وتستدعي typed Application Query/Command handlers؛ بقية العمليات تمر dispatcher وتعيد typed `not_implemented` حتى تُضاف façades الخاصة بها. لا يوجد PostgreSQL أو Provider call داخل هذه المرحلة.
 
 ## المرحلة المنجزة تصميميًا: Application Ports
 
@@ -60,15 +60,15 @@ audit_events
 
 حالة التنفيذ: Foundation وFull Schema migrations تعملان من قاعدة فارغة، ونجحت اختبارات cross-tenant references والتكرار الأساسي وUnresolved Event وOutbox Lease وSnapshots. شغّلنا Runner مرتين ونتج `applied=27` ثم `applied=0`.
 
-## المرحلة التالية: HTTP route/handler skeletons ثم Application Boundary
+## المرحلة الحالية: إكمال HTTP Application façades قبل PostgreSQL
 
 نطبق:
 
 ```text
 Generated DTO Contract
-→ route/handler skeletons
-→ Application Commands/Queries
-→ validation/error mapping
+→ runtime dispatcher لكل routes
+→ typed Application façade لكل Command/Query
+→ Auth/Tenant/Error/Metadata tests
 → PostgreSQL Adapter
 → Event Ledger
 → Idempotency
@@ -135,7 +135,7 @@ SocialAPI inbound
 PR-005: SQL migrations 000001–000012 + Foundation constraint tests — مكتمل
 PR-006: SQL migrations 000013–000027 + full-schema tests/review — مكتمل
 PR-007: HTTP API Contract → Go DTOs + generated OpenAPI v1 + drift check — مكتمل
-PR-008: Typed Commands/Queries + Core HTTP mapping skeletons — منفذ جزئيًا؛ الإكمال الحالي
+PR-008: Typed Commands/Queries + dispatcher لكل routes + Core façades — قيد الإكمال
 PR-009: PostgreSQL Adapter and TransactionManager
 PR-010: Event ledger/idempotency/outbox implementation
 PR-011: Provider simulator

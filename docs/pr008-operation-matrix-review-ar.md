@@ -219,3 +219,16 @@ type TransactionReviewSubmitInput struct {
 type TransactionUpdateInput struct {
 type VariantCreateInput struct {
 type VariantUpdateInput struct {
+
+## خلاصة التدقيق الحالي
+
+| القياس | العدد/الحالة |
+|---|---:|
+| Huma operation descriptors | 76 |
+| DTO input/output types | موجودة داخل `contract` ومستخدمة في التسجيل |
+| routes التي تمر runtime عبر dispatcher | 76 |
+| routes ذات façade typed تستدعي Application handler | 4: conversations/messages/customers core |
+| routes التي ما زالت تعيد `not_implemented` من Application boundary | بقية العمليات |
+| PostgreSQL/Provider/Auth storage داخل HTTP layer | 0 |
+
+لا يُستخدم هذا الجدول لإعلان إغلاق PR-008؛ بل هو baseline تدقيق يجب أن يصل إلى 76/76 قبل الإغلاق الرسمي.

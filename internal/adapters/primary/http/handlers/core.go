@@ -16,21 +16,45 @@ type ScopeProvider interface {
 }
 
 type Dependencies struct {
-	Scope                    ScopeProvider
-	GetCurrentPrincipal      queries.GetCurrentPrincipalHandler
-	ListAccessibleBusinesses queries.ListAccessibleBusinessesHandler
-	GetBusiness              queries.GetBusinessHandler
-	GetBusinessPolicy        queries.GetBusinessPolicyHandler
-	GetDashboardOverview     queries.GetDashboardOverviewHandler
-	ListConversations        queries.ListConversationsHandler
-	GetConversation          queries.GetConversationHandler
-	ListConversationMessages queries.ListConversationMessagesHandler
-	CreateOutboundMessage    commands.CreateOutboundMessageHandler
-	ListCustomers            queries.ListCustomersHandler
-	GetCustomer              queries.GetCustomerHandler
-	CreateCustomer           commands.CreateCustomerHandler
-	UpdateCustomer           commands.UpdateCustomerHandler
-	MergeCustomer            commands.MergeCustomerHandler
+	Scope                     ScopeProvider
+	GetCurrentPrincipal       queries.GetCurrentPrincipalHandler
+	ListAccessibleBusinesses  queries.ListAccessibleBusinessesHandler
+	GetBusiness               queries.GetBusinessHandler
+	GetBusinessPolicy         queries.GetBusinessPolicyHandler
+	GetDashboardOverview      queries.GetDashboardOverviewHandler
+	ListConversations         queries.ListConversationsHandler
+	GetConversation           queries.GetConversationHandler
+	ListConversationMessages  queries.ListConversationMessagesHandler
+	CreateOutboundMessage     commands.CreateOutboundMessageHandler
+	ListCustomers             queries.ListCustomersHandler
+	GetCustomer               queries.GetCustomerHandler
+	CreateCustomer            commands.CreateCustomerHandler
+	UpdateCustomer            commands.UpdateCustomerHandler
+	MergeCustomer             commands.MergeCustomerHandler
+	ListChannelConnections    queries.ListChannelConnectionsHandler
+	GetChannelConnection      queries.GetChannelConnectionHandler
+	GetConnectionCapabilities queries.GetConnectionCapabilitiesHandler
+	ListCustomerConversations queries.ListCustomerConversationsHandler
+	ListCustomerTransactions  queries.ListCustomerTransactionsHandler
+	ListCatalogs              queries.ListCatalogsHandler
+	GetCatalog                queries.GetCatalogHandler
+	ListCatalogItems          queries.ListCatalogItemsHandler
+	GetCatalogItem            queries.GetCatalogItemHandler
+	ListOffers                queries.ListOffersHandler
+	ListVariants              queries.ListVariantsHandler
+	ListAttributeSchemas      queries.ListAttributeSchemasHandler
+	GetAttributeSchema        queries.GetAttributeSchemaHandler
+	ListLeads                 queries.ListLeadsHandler
+	GetLead                   queries.GetLeadHandler
+	ListLeadAttributions      queries.ListLeadAttributionsHandler
+	ListLeadScores            queries.ListLeadScoresHandler
+	ListTransactions          queries.ListTransactionsHandler
+	GetTransaction            queries.GetTransactionHandler
+	GetTransactionReview      queries.GetTransactionReviewHandler
+	ListAIDecisions           queries.ListAIDecisionsHandler
+	GetAIDecision             queries.GetAIDecisionHandler
+	ListAuditEvents           queries.ListAuditEventsHandler
+	GetAuditEvent             queries.GetAuditEventHandler
 }
 
 type Server struct{ deps Dependencies }
@@ -217,6 +241,9 @@ func singleMessage(v commands.MessageView) *contract.Single[contract.Message] {
 // Application dependency yet still fail through the Application error boundary,
 // never through a contract-local generic handler.
 func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (any, error) {
+	if result, handled := s.dispatchQuery(ctx, operationID, input); handled {
+		return result, nil
+	}
 	switch operationID {
 	case "listConversations":
 		return s.ListConversations(ctx, input.(*contract.ConversationListInput))
@@ -232,3 +259,42 @@ func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (a
 }
 
 var _ contract.DashboardOperationHandler = (*Server)(nil)
+
+func (s *Server) dispatchQuery(ctx context.Context, operationID string, input any) (any, bool) {
+	switch operationID {
+	case "getBusiness":
+		in := input.(*contract.BusinessPath)
+		if s.deps.GetBusiness == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.GetBusiness.Handle(ctx, queries.GetBusinessQuery{Meta: queryMeta(actor, "", "")})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		out := &contract.Single[contract.Business]{}
+		out.Body.Data = businessProjection(view)
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
+func businessProjection(v commands.BusinessView) contract.Business {
+	return contract.Business{
+		ID:              contract.UUID(v.ID),
+		Name:            v.Name,
+		Slug:            v.Slug,
+		Status:          v.Status,
+		VerticalType:    v.VerticalType,
+		Timezone:        v.Timezone,
+		DefaultCurrency: v.DefaultCurrency,
+		Locale:          v.Locale,
+		CreatedAt:       v.CreatedAt,
+		UpdatedAt:       v.UpdatedAt,
+		ResourceVersion: string(v.ResourceVersion),
+	}
+}
