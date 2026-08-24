@@ -12,14 +12,20 @@ type MetricsView struct {
 }
 
 type IngestWebhookCommand struct {
-	RouteKey   string
-	Signature  string
-	Timestamp  string
-	RequestID  string
-	RawPayload []byte
+	RouteKey        string
+	Signature       string
+	Timestamp       string
+	DeliveryID      string
+	ProviderEvent   string
+	RequestID       string
+	ProviderHeaders map[string]string
+	RawPayload      []byte
 }
 type WebhookAcceptedResult struct {
 	Accepted  bool
+	Duplicate bool
+	Resolved  bool
+	Ignored   bool
 	RequestID string
 }
 type IngestSocialAPIWebhookHandler = CommandHandler[IngestWebhookCommand, WebhookAcceptedResult]

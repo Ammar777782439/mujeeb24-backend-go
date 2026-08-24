@@ -44,4 +44,5 @@ type ChannelConnectionRecord struct {
 
 type ChannelConnectionRepository interface {
 	GetByID(ctx context.Context, businessID, connectionID string) (ChannelConnectionRecord, error)
+	GetByProviderReferences(ctx context.Context, providerReference, providerAccountReference, providerConnectionReference string) (ChannelConnectionRecord, error)
 }

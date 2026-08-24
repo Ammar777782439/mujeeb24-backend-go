@@ -1,5 +1,7 @@
 package dto
 
+import "encoding/json"
+
 // Common query and path DTOs. Huma reads the tags to generate OpenAPI parameters.
 type EmptyInput struct{}
 type BusinessPath struct {
@@ -520,19 +522,29 @@ type WebhookPath struct {
 	RouteKey string `path:"route_key"`
 }
 type WebhookHeaders struct {
-	Signature  string `header:"X-Provider-Signature"`
-	Timestamp  string `header:"X-Provider-Timestamp"`
-	XRequestID string `header:"X-Request-ID"`
+	Signature            string `header:"X-Provider-Signature"`
+	Timestamp            string `header:"X-Provider-Timestamp"`
+	XRequestID           string `header:"X-Request-ID"`
+	SocialAPISignature   string `header:"X-SocialAPI-Signature"`
+	SocialAPISignatureV2 string `header:"X-SocialAPI-Signature-V2"`
+	SocialAPITimestamp   string `header:"X-SocialAPI-Timestamp"`
+	SocialAPIDelivery    string `header:"X-SocialAPI-Delivery"`
+	SocialAPIEvent       string `header:"X-SocialAPI-Event"`
+	ChatwootSignature    string `header:"X-Chatwoot-Signature"`
+	ChatwootTimestamp    string `header:"X-Chatwoot-Timestamp"`
+	ChatwootDelivery     string `header:"X-Chatwoot-Delivery"`
 }
 type SocialWebhookInput struct {
 	WebhookPath
 	WebhookHeaders
-	RawBody []byte `contentType:"application/json" required:"true"`
+	Body    json.RawMessage
+	RawBody []byte
 }
 type ChatwootWebhookInput struct {
 	WebhookPath
 	WebhookHeaders
-	RawBody []byte `contentType:"application/json" required:"true"`
+	Body    json.RawMessage
+	RawBody []byte
 }
 type WebhookAccepted struct {
 	Accepted  bool   `json:"accepted"`

@@ -10,16 +10,21 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/handlers"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
 )
 
 type APIRuntime struct {
-	HTTP         *http.Server
-	Database     *postgres.Adapter
-	Dependencies handlers.Dependencies
-	EventStore   ports.EventStore
-	Outbox       ports.OutboxStore
-	closeOnce    sync.Once
+	HTTP            *http.Server
+	Database        *postgres.Adapter
+	Dependencies    handlers.Dependencies
+	EventStore      ports.EventStore
+	Outbox          ports.OutboxStore
+	SocialAPI       ports.ChannelProvider
+	Chatwoot        ports.CommunicationWorkspace
+	SocialWebhook   ports.WebhookReceiver
+	ChatwootWebhook ports.WebhookReceiver
+	closeOnce       sync.Once
 }
 
 func BuildAPI(ctx context.Context, cfg config.ProcessConfig) (*APIRuntime, error) {
@@ -27,7 +32,7 @@ func BuildAPI(ctx context.Context, cfg config.ProcessConfig) (*APIRuntime, error
 	if err != nil {
 		return nil, err
 	}
-	runtime, err := NewAPI(database, cfg.HTTPAddr)
+	runtime, err := NewAPIWithExternal(database, cfg.HTTPAddr, BuildExternalAdapters(cfg))
 	if err != nil {
 		database.Close()
 		return nil, err
@@ -36,6 +41,10 @@ func BuildAPI(ctx context.Context, cfg config.ProcessConfig) (*APIRuntime, error
 }
 
 func NewAPI(database *postgres.Adapter, address string) (*APIRuntime, error) {
+	return NewAPIWithExternal(database, address, ExternalAdapters{})
+}
+
+func NewAPIWithExternal(database *postgres.Adapter, address string, external ExternalAdapters) (*APIRuntime, error) {
 	if database == nil {
 		return nil, errors.New("postgres adapter is required")
 	}
@@ -43,6 +52,9 @@ func NewAPI(database *postgres.Adapter, address string) (*APIRuntime, error) {
 		return nil, errors.New("http address is required")
 	}
 	dependencies := BuildDependencies(database)
+	if external.ChatwootWebhook != nil {
+		dependencies.IngestChatwootWebhook = services.ChatwootWebhookService{Receiver: external.ChatwootWebhook}
+	}
 	eventStore := postgres.NewInboundEventStore(database)
 	outboxStore := postgres.NewPostgresOutboxStore(database)
 	_, mux := contract.BuildAPIWithHandlers(handlers.NewServer(dependencies))
@@ -54,7 +66,7 @@ func NewAPI(database *postgres.Adapter, address string) (*APIRuntime, error) {
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{"status":"ok","service":"mujeeb24-api"}`))
 	})
-	return &APIRuntime{HTTP: &http.Server{Addr: address, Handler: mux}, Database: database, Dependencies: dependencies, EventStore: eventStore, Outbox: outboxStore}, nil
+	return &APIRuntime{HTTP: &http.Server{Addr: address, Handler: mux}, Database: database, Dependencies: dependencies, EventStore: eventStore, Outbox: outboxStore, SocialAPI: external.SocialAPI, Chatwoot: external.Chatwoot, SocialWebhook: external.SocialWebhook, ChatwootWebhook: external.ChatwootWebhook}, nil
 }
 
 func (r *APIRuntime) Serve() error {

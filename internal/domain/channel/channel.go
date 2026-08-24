@@ -6,6 +6,7 @@ type Provider string
 
 const (
 	ProviderSocialAPI Provider = "socialapi"
+	ProviderChatwoot  Provider = "chatwoot"
 )
 
 type Channel string
@@ -29,13 +30,13 @@ const (
 type ConnectionStatus string
 
 const (
-	ConnectionPending          ConnectionStatus = "pending"
-	ConnectionConnecting       ConnectionStatus = "connecting"
-	ConnectionActive           ConnectionStatus = "active"
-	ConnectionDegraded         ConnectionStatus = "degraded"
-	ConnectionDisconnected     ConnectionStatus = "disconnected"
+	ConnectionPending           ConnectionStatus = "pending"
+	ConnectionConnecting        ConnectionStatus = "connecting"
+	ConnectionActive            ConnectionStatus = "active"
+	ConnectionDegraded          ConnectionStatus = "degraded"
+	ConnectionDisconnected      ConnectionStatus = "disconnected"
 	ConnectionReconnectRequired ConnectionStatus = "reconnect_required"
-	ConnectionFailed           ConnectionStatus = "failed"
+	ConnectionFailed            ConnectionStatus = "failed"
 )
 
 type MessageDirection string
@@ -48,11 +49,11 @@ const (
 type MessageOrigin string
 
 const (
-	OriginCustomer    MessageOrigin = "customer"
-	OriginAI          MessageOrigin = "ai"
-	OriginHuman       MessageOrigin = "human"
-	OriginAutomation  MessageOrigin = "automation"
-	OriginSystem      MessageOrigin = "system"
+	OriginCustomer   MessageOrigin = "customer"
+	OriginAI         MessageOrigin = "ai"
+	OriginHuman      MessageOrigin = "human"
+	OriginAutomation MessageOrigin = "automation"
+	OriginSystem     MessageOrigin = "system"
 )
 
 type DeliveryStatus string
@@ -70,34 +71,37 @@ const (
 )
 
 type InboundEvent struct {
-	ID                       string
-	BusinessID               string
-	ConnectionID             string
-	Provider                 Provider
-	ProviderConnectionID     string
-	ProviderEventID          string
-	EventType                string
-	InteractionKind          InteractionKind
-	ProviderMessageID        string
-	ProviderConversationID   string
-	ExternalUserID           string
-	Text                     string
-	ExternalCreatedAt        *time.Time
-	ReceivedAt               time.Time
-	RawPayloadReference      string
+	ID                     string
+	BusinessID             string
+	ConnectionID           string
+	Provider               Provider
+	Channel                Channel
+	ProviderConnectionID   string
+	ProviderEventID        string
+	DeliveryID             string
+	DedupeStrategy         string
+	EventType              string
+	InteractionKind        InteractionKind
+	ProviderMessageID      string
+	ProviderConversationID string
+	ExternalUserID         string
+	Text                   string
+	ExternalCreatedAt      *time.Time
+	ReceivedAt             time.Time
+	RawPayloadReference    string
 }
 
 type OutboundMessage struct {
-	ID                       string
-	BusinessID               string
-	ConversationReferenceID  string
-	Channel                  Channel
-	Origin                   MessageOrigin
-	Content                  string
-	ProviderIdempotencyKey   string
-	Status                   DeliveryStatus
-	ProviderMessageID        string
-	ChatwootMessageID        string
-	AttemptCount             int
-	NextRetryAt              *time.Time
+	ID                      string
+	BusinessID              string
+	ConversationReferenceID string
+	Channel                 Channel
+	Origin                  MessageOrigin
+	Content                 string
+	ProviderIdempotencyKey  string
+	Status                  DeliveryStatus
+	ProviderMessageID       string
+	ChatwootMessageID       string
+	AttemptCount            int
+	NextRetryAt             *time.Time
 }

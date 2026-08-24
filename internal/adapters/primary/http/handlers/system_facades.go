@@ -145,16 +145,27 @@ func (s *Server) dispatchSystemCommand(ctx context.Context, operationID string, 
 		out.Body.Data = aiDecisionProjection(result.Decision)
 		return out, true
 	case "ingestSocialAPIWebhook", "ingestChatwootWebhook":
-		var routeKey, signature, timestamp, requestID string
+		var routeKey, signature, timestamp, deliveryID, providerEvent, requestID string
 		var raw []byte
+		providerHeaders := make(map[string]string)
 		if operationID == "ingestSocialAPIWebhook" {
 			in := input.(*contract.SocialWebhookInput)
-			routeKey, signature, timestamp, requestID, raw = in.RouteKey, in.Signature, in.Timestamp, in.XRequestID, in.RawBody
+			routeKey, signature, timestamp, requestID, raw = in.RouteKey, in.Signature, in.Timestamp, in.XRequestID, []byte(in.RawBody)
+			providerHeaders["X-SocialAPI-Signature"] = in.SocialAPISignature
+			providerHeaders["X-SocialAPI-Signature-V2"] = in.SocialAPISignatureV2
+			providerHeaders["X-SocialAPI-Timestamp"] = in.SocialAPITimestamp
+			providerHeaders["X-SocialAPI-Delivery"] = in.SocialAPIDelivery
+			providerHeaders["X-SocialAPI-Event"] = in.SocialAPIEvent
+			deliveryID, providerEvent = in.SocialAPIDelivery, in.SocialAPIEvent
 		} else {
 			in := input.(*contract.ChatwootWebhookInput)
-			routeKey, signature, timestamp, requestID, raw = in.RouteKey, in.Signature, in.Timestamp, in.XRequestID, in.RawBody
+			routeKey, signature, timestamp, requestID, raw = in.RouteKey, in.Signature, in.Timestamp, in.XRequestID, []byte(in.RawBody)
+			providerHeaders["X-Chatwoot-Signature"] = in.ChatwootSignature
+			providerHeaders["X-Chatwoot-Timestamp"] = in.ChatwootTimestamp
+			providerHeaders["X-Chatwoot-Delivery"] = in.ChatwootDelivery
+			deliveryID = in.ChatwootDelivery
 		}
-		command := commands.IngestWebhookCommand{RouteKey: routeKey, Signature: signature, Timestamp: timestamp, RequestID: requestID, RawPayload: raw}
+		command := commands.IngestWebhookCommand{RouteKey: routeKey, Signature: signature, Timestamp: timestamp, DeliveryID: deliveryID, ProviderEvent: providerEvent, RequestID: requestID, ProviderHeaders: providerHeaders, RawPayload: raw}
 		var result commands.WebhookAcceptedResult
 		var err error
 		if operationID == "ingestSocialAPIWebhook" {

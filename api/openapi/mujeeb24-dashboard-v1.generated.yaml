@@ -8300,9 +8300,43 @@ paths:
           name: X-Request-ID
           schema:
             type: string
+        - in: header
+          name: X-SocialAPI-Signature
+          schema:
+            type: string
+        - in: header
+          name: X-SocialAPI-Signature-V2
+          schema:
+            type: string
+        - in: header
+          name: X-SocialAPI-Timestamp
+          schema:
+            type: string
+        - in: header
+          name: X-SocialAPI-Delivery
+          schema:
+            type: string
+        - in: header
+          name: X-SocialAPI-Event
+          schema:
+            type: string
+        - in: header
+          name: X-Chatwoot-Signature
+          schema:
+            type: string
+        - in: header
+          name: X-Chatwoot-Timestamp
+          schema:
+            type: string
+        - in: header
+          name: X-Chatwoot-Delivery
+          schema:
+            type: string
       requestBody:
         content:
           application/json:
+            schema: {}
+          application/octet-stream:
             schema:
               contentMediaType: application/octet-stream
               format: binary
@@ -8370,9 +8404,43 @@ paths:
           name: X-Request-ID
           schema:
             type: string
+        - in: header
+          name: X-SocialAPI-Signature
+          schema:
+            type: string
+        - in: header
+          name: X-SocialAPI-Signature-V2
+          schema:
+            type: string
+        - in: header
+          name: X-SocialAPI-Timestamp
+          schema:
+            type: string
+        - in: header
+          name: X-SocialAPI-Delivery
+          schema:
+            type: string
+        - in: header
+          name: X-SocialAPI-Event
+          schema:
+            type: string
+        - in: header
+          name: X-Chatwoot-Signature
+          schema:
+            type: string
+        - in: header
+          name: X-Chatwoot-Timestamp
+          schema:
+            type: string
+        - in: header
+          name: X-Chatwoot-Delivery
+          schema:
+            type: string
       requestBody:
         content:
           application/json:
+            schema: {}
+          application/octet-stream:
             schema:
               contentMediaType: application/octet-stream
               format: binary

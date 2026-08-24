@@ -13,6 +13,8 @@ type WorkerRuntime struct {
 	Database   *postgres.Adapter
 	EventStore ports.EventStore
 	Outbox     ports.OutboxStore
+	SocialAPI  ports.ChannelProvider
+	Chatwoot   ports.CommunicationWorkspace
 }
 
 func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime, error) {
@@ -20,7 +22,8 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 	if err != nil {
 		return nil, err
 	}
-	return &WorkerRuntime{Database: database, EventStore: postgres.NewInboundEventStore(database), Outbox: postgres.NewPostgresOutboxStore(database)}, nil
+	external := BuildExternalAdapters(cfg)
+	return &WorkerRuntime{Database: database, EventStore: postgres.NewInboundEventStore(database), Outbox: postgres.NewPostgresOutboxStore(database), SocialAPI: external.SocialAPI, Chatwoot: external.Chatwoot}, nil
 }
 
 func (r *WorkerRuntime) Run(ctx context.Context) error {

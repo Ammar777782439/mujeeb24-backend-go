@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -17,6 +18,15 @@ import (
 type fakeScope struct {
 	actor commands.ActorContext
 	err   error
+}
+
+type fakeWebhookHandler struct {
+	command commands.IngestWebhookCommand
+}
+
+func (f *fakeWebhookHandler) Handle(_ context.Context, command commands.IngestWebhookCommand) (commands.WebhookAcceptedResult, error) {
+	f.command = command
+	return commands.WebhookAcceptedResult{Accepted: true, RequestID: command.RequestID}, nil
 }
 
 func (f fakeScope) Resolve(context.Context, commands.BusinessID) (commands.ActorContext, error) {
@@ -76,6 +86,27 @@ func asApplicationError(err error, target **appErrors.Error) bool {
 		return true
 	}
 	return false
+}
+
+func TestWebhookRuntimeForwardsProviderHeadersToApplication(t *testing.T) {
+	body := []byte(`{"event":"webhook.test"}`)
+	capture := &fakeWebhookHandler{}
+	server := NewServer(Dependencies{IngestSocialAPIWebhook: capture})
+	_, mux := contract.BuildAPIWithHandlers(server)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/socialapi/callback", bytes.NewReader(body))
+	req.Header.Set("X-SocialAPI-Signature-V2", "sha256=signature")
+	req.Header.Set("X-SocialAPI-Timestamp", "1787659200")
+	req.Header.Set("X-SocialAPI-Delivery", "delivery-1")
+	req.Header.Set("X-SocialAPI-Event", "webhook.test")
+	req.Header.Set("X-Request-ID", "request-1")
+	res := httptest.NewRecorder()
+	mux.ServeHTTP(res, req)
+	if res.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%s", res.Code, res.Body.String())
+	}
+	if capture.command.RouteKey != "callback" || capture.command.RequestID != "request-1" || capture.command.DeliveryID != "delivery-1" || capture.command.ProviderEvent != "webhook.test" || capture.command.ProviderHeaders["X-SocialAPI-Signature-V2"] != "sha256=signature" || capture.command.ProviderHeaders["X-SocialAPI-Timestamp"] != "1787659200" || string(capture.command.RawPayload) != string(body) {
+		t.Fatalf("provider metadata was not forwarded exactly: %#v", capture.command)
+	}
 }
 
 func TestRuntimeRouteUsesTypedHandlerAndErrorEnvelope(t *testing.T) {

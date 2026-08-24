@@ -10,30 +10,46 @@ import (
 )
 
 type ProcessConfig struct {
-	Environment         string
-	DatabaseURL         string
-	HTTPAddr            string
-	ShutdownTimeout     time.Duration
-	DBMaxConns          int32
-	DBMinConns          int32
-	DBMaxConnLifetime   time.Duration
-	DBMaxConnIdleTime   time.Duration
-	DBHealthCheckPeriod time.Duration
-	DBConnectTimeout    time.Duration
+	Environment            string
+	DatabaseURL            string
+	HTTPAddr               string
+	ShutdownTimeout        time.Duration
+	DBMaxConns             int32
+	DBMinConns             int32
+	DBMaxConnLifetime      time.Duration
+	DBMaxConnIdleTime      time.Duration
+	DBHealthCheckPeriod    time.Duration
+	DBConnectTimeout       time.Duration
+	SocialAPIBaseURL       string
+	SocialAPIAPIKey        string
+	SocialAPIWebhookSecret string
+	SocialAPIHTTPTimeout   time.Duration
+	ChatwootBaseURL        string
+	ChatwootAPIToken       string
+	ChatwootWebhookSecret  string
+	ChatwootHTTPTimeout    time.Duration
 }
 
 func LoadFromEnv() (ProcessConfig, error) {
 	cfg := ProcessConfig{
-		Environment:         envOr("APP_ENV", "development"),
-		DatabaseURL:         strings.TrimSpace(os.Getenv("DATABASE_URL")),
-		HTTPAddr:            envOr("HTTP_ADDR", ":3001"),
-		ShutdownTimeout:     10 * time.Second,
-		DBMaxConns:          10,
-		DBMinConns:          1,
-		DBMaxConnLifetime:   time.Hour,
-		DBMaxConnIdleTime:   30 * time.Minute,
-		DBHealthCheckPeriod: time.Minute,
-		DBConnectTimeout:    5 * time.Second,
+		Environment:            envOr("APP_ENV", "development"),
+		DatabaseURL:            strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		HTTPAddr:               envOr("HTTP_ADDR", ":3001"),
+		ShutdownTimeout:        10 * time.Second,
+		DBMaxConns:             10,
+		DBMinConns:             1,
+		DBMaxConnLifetime:      time.Hour,
+		DBMaxConnIdleTime:      30 * time.Minute,
+		DBHealthCheckPeriod:    time.Minute,
+		DBConnectTimeout:       5 * time.Second,
+		SocialAPIBaseURL:       envOr("SOCIALAPI_BASE_URL", "https://api.social-api.ai"),
+		SocialAPIAPIKey:        strings.TrimSpace(os.Getenv("SOCIALAPI_API_KEY")),
+		SocialAPIWebhookSecret: strings.TrimSpace(os.Getenv("SOCIALAPI_WEBHOOK_SECRET")),
+		SocialAPIHTTPTimeout:   10 * time.Second,
+		ChatwootBaseURL:        envOr("CHATWOOT_BASE_URL", "http://localhost:3000"),
+		ChatwootAPIToken:       strings.TrimSpace(os.Getenv("CHATWOOT_API_TOKEN")),
+		ChatwootWebhookSecret:  strings.TrimSpace(os.Getenv("CHATWOOT_WEBHOOK_SECRET")),
+		ChatwootHTTPTimeout:    10 * time.Second,
 	}
 	if cfg.DatabaseURL == "" {
 		return ProcessConfig{}, errors.New("DATABASE_URL is required")
@@ -58,6 +74,12 @@ func LoadFromEnv() (ProcessConfig, error) {
 		return ProcessConfig{}, err
 	}
 	if cfg.DBConnectTimeout, err = durationEnv("DB_CONNECT_TIMEOUT", cfg.DBConnectTimeout); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.SocialAPIHTTPTimeout, err = durationEnv("SOCIALAPI_HTTP_TIMEOUT", cfg.SocialAPIHTTPTimeout); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.ChatwootHTTPTimeout, err = durationEnv("CHATWOOT_HTTP_TIMEOUT", cfg.ChatwootHTTPTimeout); err != nil {
 		return ProcessConfig{}, err
 	}
 	if cfg.ShutdownTimeout <= 0 || cfg.DBMaxConns <= 0 || cfg.DBMinConns < 0 || cfg.DBMinConns > cfg.DBMaxConns {

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/jackc/pgx/v5"
@@ -82,6 +83,46 @@ func (r *ChannelConnectionRepository) GetByID(ctx context.Context, businessID, c
 		return record, classifyRepositoryGetError("channel_connection.get_by_id", err)
 	}
 	return record, nil
+}
+
+func (r *ChannelConnectionRepository) GetByProviderReferences(ctx context.Context, providerReference, providerAccountReference, providerConnectionReference string) (ports.ChannelConnectionRecord, error) {
+	if r == nil || r.adapter == nil {
+		return ports.ChannelConnectionRecord{}, ErrPoolClosed
+	}
+	providerReference = strings.TrimSpace(providerReference)
+	providerAccountReference = strings.TrimSpace(providerAccountReference)
+	providerConnectionReference = strings.TrimSpace(providerConnectionReference)
+	if providerReference == "" || (providerAccountReference == "" && providerConnectionReference == "") {
+		return ports.ChannelConnectionRecord{}, invalidRepositoryInput("channel_connection.get_by_provider_references", "provider and account or connection reference are required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.ChannelConnectionRecord{}, err
+	}
+	const query = `SELECT id::text, business_id::text, provider_ref, channel, provider_account_ref, provider_connection_ref, status, secret_reference FROM channel_connections WHERE provider_ref = $1 AND (($2 <> '' AND provider_account_ref = $2) OR ($3 <> '' AND provider_connection_ref = $3)) ORDER BY id LIMIT 2`
+	rows, err := executor.Query(ctx, query, providerReference, providerAccountReference, providerConnectionReference)
+	if err != nil {
+		return ports.ChannelConnectionRecord{}, &RepositoryError{Operation: "channel_connection.get_by_provider_references", Kind: RepositoryInvalid, Err: err}
+	}
+	defer rows.Close()
+	var records []ports.ChannelConnectionRecord
+	for rows.Next() {
+		var record ports.ChannelConnectionRecord
+		if err := rows.Scan(&record.ID, &record.BusinessID, &record.ProviderReference, &record.Channel, &record.ProviderAccountReference, &record.ProviderConnectionRef, &record.Status, &record.SecretReference); err != nil {
+			return ports.ChannelConnectionRecord{}, &RepositoryError{Operation: "channel_connection.get_by_provider_references", Kind: RepositoryInvalid, Err: err}
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return ports.ChannelConnectionRecord{}, &RepositoryError{Operation: "channel_connection.get_by_provider_references", Kind: RepositoryInvalid, Err: err}
+	}
+	if len(records) == 0 {
+		return ports.ChannelConnectionRecord{}, &RepositoryError{Operation: "channel_connection.get_by_provider_references", Kind: RepositoryNotFound, Err: pgx.ErrNoRows}
+	}
+	if len(records) > 1 {
+		return ports.ChannelConnectionRecord{}, &RepositoryError{Operation: "channel_connection.get_by_provider_references", Kind: RepositoryConflict, Err: errors.New("provider references match multiple channel connections")}
+	}
+	return records[0], nil
 }
 
 var _ ports.ChannelConnectionRepository = (*ChannelConnectionRepository)(nil)

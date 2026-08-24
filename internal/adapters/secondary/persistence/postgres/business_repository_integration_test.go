@@ -209,7 +209,7 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 		t.Fatalf("insert conversation: %v", err)
 	}
 	defer pool.Exec(context.Background(), `DELETE FROM conversations WHERE id = $1::uuid`, conversationA)
-	_, err = pool.Exec(ctx, `INSERT INTO channel_connections (id, business_id, provider_ref, channel, provider_connection_ref, status, secret_reference, created_at, updated_at) VALUES ($1::uuid, $2::uuid, 'socialapi', 'facebook', 'connection-a', 'active', 'secret-ref-a', now(), now())`, connectionA, businessA)
+	_, err = pool.Exec(ctx, `INSERT INTO channel_connections (id, business_id, provider_ref, channel, provider_account_ref, provider_connection_ref, status, secret_reference, created_at, updated_at) VALUES ($1::uuid, $2::uuid, 'socialapi', 'facebook', 'account-a', 'connection-a', 'active', 'secret-ref-a', now(), now())`, connectionA, businessA)
 	if err != nil {
 		t.Fatalf("insert channel connection: %v", err)
 	}
@@ -248,6 +248,13 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 	}
 	if _, err := connectionRepo.GetByID(ctx, businessB, connectionA); !IsRepositoryKind(err, RepositoryNotFound) {
 		t.Fatalf("connection crossed tenant boundary: %v", err)
+	}
+	resolvedConnection, err := connectionRepo.GetByProviderReferences(ctx, "socialapi", "account-a", "")
+	if err != nil || resolvedConnection.BusinessID != businessA || resolvedConnection.ID != connectionA {
+		t.Fatalf("provider reference lookup: %#v err=%v", resolvedConnection, err)
+	}
+	if _, err := connectionRepo.GetByProviderReferences(ctx, "socialapi", "account-from-other-tenant", ""); !IsRepositoryKind(err, RepositoryNotFound) {
+		t.Fatalf("provider reference lookup should not cross tenant data: %v", err)
 	}
 	capabilityRepo := NewChannelCapabilityRepository(adapter)
 	capabilities, err := capabilityRepo.ListByConnection(ctx, businessA, connectionA)
