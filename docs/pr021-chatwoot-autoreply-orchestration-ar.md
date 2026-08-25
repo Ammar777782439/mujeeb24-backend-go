@@ -119,3 +119,15 @@ AI reply → Chatwoot → webhook → AI reply → ...
 ## الحدود
 
 Chatwoot inbound materialization السابق لم يُعد بناؤه؛ تمت إضافة direction metadata وربط orchestration بعد نجاح materialization. لا يوجد إرسال Chatwoot إضافي من هذا المسار، ولا provider network call أثناء الاختبارات. اختبار PostgreSQL المحدد لمسار Chatwoot callback يعتمد على `POSTGRES_TEST_DSN` إن أريد تشغيله منفصلًا؛ أما schema validation فيشغّل migration runner في PostgreSQL مؤقت مع applied-35 ثم applied-0.
+
+## إعادة الاختبار على PostgreSQL الحقيقي
+
+بعد تشغيل integration suite بالطريقة الصحيحة عبر `-tags=integration` على PostgreSQL 16 مؤقتة ومعزولة، ظهر في المحاولة الأولى فشلان حقيقيان ولم يُصنفا PASS: خدمة AutoReply كانت تمرر `socialapi` إلى lookup يتطلب `system=provider`، وEventStore integration fixture كان يستخدم lease expiry تاريخيًا في الماضي. تم تصحيح caller ليستخدم `system=provider` مع التحقق المنفصل من `provider_ref`، وتم تصحيح fixture ليستخدم lease expiry مستقبليًا من وقت الاختبار.
+
+بعد الإصلاحات نجحت:
+
+```text
+go test -tags=integration -count=1 ./internal/adapters/secondary/persistence/postgres  PASS
+```
+
+وتضمنت النتيجة `TestChatwootInboundStoreAgainstPostgres` و`TestConversationReferenceProviderChatwootBindingAgainstPostgres` و`TestAutoReplyVerticalSliceAgainstPostgres` و`TestInboundEventStoreAgainstPostgres`. أُزيلت قاعدة الاختبار المؤقتة بعد انتهاء التشغيل، ولم يُستخدم أي provider أو credential خارجي.

@@ -121,6 +121,7 @@ func TestInboundEventStoreAgainstPostgres(t *testing.T) {
 	if created, _, err := store.RecordIfAbsent(ctx, claimDraft); err != nil || !created {
 		t.Fatalf("concurrent claim record: created=%v err=%v", created, err)
 	}
+	leaseExpiry := time.Now().UTC().Add(2 * time.Hour)
 	claimWorkers := 32
 	claimStart := make(chan struct{})
 	claimResults := make(chan ports.InboundEventClaimResult, claimWorkers)
@@ -131,7 +132,7 @@ func TestInboundEventStoreAgainstPostgres(t *testing.T) {
 		go func() {
 			defer claimWait.Done()
 			<-claimStart
-			claimResult, claimErr := store.Claim(ctx, claimDraft.ID, ports.InboundEventLease{Owner: "claim-worker", Token: uuid.NewString(), ExpiresAt: base.Add(2 * time.Hour)})
+			claimResult, claimErr := store.Claim(ctx, claimDraft.ID, ports.InboundEventLease{Owner: "claim-worker", Token: uuid.NewString(), ExpiresAt: leaseExpiry})
 			if claimErr != nil {
 				claimErrors <- claimErr
 				return
@@ -175,11 +176,11 @@ func TestInboundEventStoreAgainstPostgres(t *testing.T) {
 
 	owner := "worker-a"
 	token := uuid.NewString()
-	claim, err := store.Claim(ctx, draft.ID, ports.InboundEventLease{Owner: owner, Token: token, ExpiresAt: base.Add(time.Hour)})
+	claim, err := store.Claim(ctx, draft.ID, ports.InboundEventLease{Owner: owner, Token: token, ExpiresAt: leaseExpiry})
 	if err != nil || !claim.Claimed || claim.Record.ProcessingState != "processing" || claim.Record.AttemptCount != 1 || claim.Record.ProcessingLeaseToken == nil {
 		t.Fatalf("first claim: %#v err=%v", claim, err)
 	}
-	secondClaim, err := store.Claim(ctx, draft.ID, ports.InboundEventLease{Owner: "worker-b", Token: uuid.NewString(), ExpiresAt: base.Add(time.Hour)})
+	secondClaim, err := store.Claim(ctx, draft.ID, ports.InboundEventLease{Owner: "worker-b", Token: uuid.NewString(), ExpiresAt: leaseExpiry})
 	if err != nil || secondClaim.Claimed || secondClaim.Record.ID != draft.ID {
 		t.Fatalf("duplicate active claim: %#v err=%v", secondClaim, err)
 	}
@@ -187,7 +188,7 @@ func TestInboundEventStoreAgainstPostgres(t *testing.T) {
 	if err != nil || processed.ProcessingState != "processed" || processed.ProcessedAt == nil || processed.ProcessingOwner != nil || processed.ProcessingLeaseToken != nil {
 		t.Fatalf("mark processed: %#v err=%v", processed, err)
 	}
-	processedClaim, err := store.Claim(ctx, draft.ID, ports.InboundEventLease{Owner: owner, Token: uuid.NewString(), ExpiresAt: base.Add(2 * time.Hour)})
+	processedClaim, err := store.Claim(ctx, draft.ID, ports.InboundEventLease{Owner: owner, Token: uuid.NewString(), ExpiresAt: leaseExpiry})
 	if err != nil || processedClaim.Claimed || processedClaim.Record.ProcessingState != "processed" {
 		t.Fatalf("processed claim: %#v err=%v", processedClaim, err)
 	}
@@ -202,22 +203,22 @@ func TestInboundEventStoreAgainstPostgres(t *testing.T) {
 		t.Fatalf("retry record: created=%v err=%v", created, err)
 	}
 	retryToken := uuid.NewString()
-	if result, err := store.Claim(ctx, retryDraft.ID, ports.InboundEventLease{Owner: owner, Token: retryToken, ExpiresAt: base.Add(time.Hour)}); err != nil || !result.Claimed {
+	if result, err := store.Claim(ctx, retryDraft.ID, ports.InboundEventLease{Owner: owner, Token: retryToken, ExpiresAt: leaseExpiry}); err != nil || !result.Claimed {
 		t.Fatalf("retry claim: %#v err=%v", result, err)
 	}
-	nextAttempt := base.Add(time.Hour)
+	nextAttempt := leaseExpiry
 	retryFailed, err := store.MarkRetryableFailure(ctx, retryDraft.ID, ports.InboundEventFailure{Owner: owner, Token: retryToken, ErrorCode: "normalization_failed", NextAttempt: &nextAttempt, UpdatedAt: base.Add(3 * time.Minute)})
 	if err != nil || retryFailed.ProcessingState != "retryable_failed" || retryFailed.LastErrorCode == nil || retryFailed.NextAttemptAt == nil {
 		t.Fatalf("retryable failure: %#v err=%v", retryFailed, err)
 	}
-	beforeRetry, err := store.Claim(ctx, retryDraft.ID, ports.InboundEventLease{Owner: owner, Token: uuid.NewString(), ExpiresAt: base.Add(2 * time.Hour)})
+	beforeRetry, err := store.Claim(ctx, retryDraft.ID, ports.InboundEventLease{Owner: owner, Token: uuid.NewString(), ExpiresAt: leaseExpiry})
 	if err != nil || beforeRetry.Claimed {
 		t.Fatalf("early retry claim: %#v err=%v", beforeRetry, err)
 	}
 	if _, err := adapter.Pool().Exec(ctx, `UPDATE inbound_event_ledger SET next_attempt_at = $2 WHERE id = $1::uuid`, retryDraft.ID, time.Now().UTC().Add(-time.Minute)); err != nil {
 		t.Fatalf("make retry due: %v", err)
 	}
-	retryClaim, err := store.Claim(ctx, retryDraft.ID, ports.InboundEventLease{Owner: owner, Token: uuid.NewString(), ExpiresAt: base.Add(2 * time.Hour)})
+	retryClaim, err := store.Claim(ctx, retryDraft.ID, ports.InboundEventLease{Owner: owner, Token: uuid.NewString(), ExpiresAt: leaseExpiry})
 	if err != nil || !retryClaim.Claimed || retryClaim.Record.AttemptCount != 2 {
 		t.Fatalf("due retry claim: %#v err=%v", retryClaim, err)
 	}

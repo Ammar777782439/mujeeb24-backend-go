@@ -123,11 +123,14 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			return fmt.Errorf("%w: answer action requires response text", appErrors.New(appErrors.CodeValidation, "auto reply"))
 		}
 
-		reference, referenceErr := s.ReferenceRepository.GetCurrentByConversation(txCtx, string(command.Meta.Actor.BusinessID), conversationID, command.ProviderRef)
-		if referenceErr != nil {
-			return mapAIRepositoryError(referenceErr)
-		}
-		if reference.ConnectionID == nil || strings.TrimSpace(*reference.ConnectionID) == "" || strings.TrimSpace(reference.ResourceID) == "" {
+reference, referenceErr := s.ReferenceRepository.GetCurrentByConversation(txCtx, string(command.Meta.Actor.BusinessID), conversationID, "provider")
+			if referenceErr != nil {
+				return mapAIRepositoryError(referenceErr)
+			}
+			if reference.ProviderRef != command.ProviderRef {
+				return appErrors.New(appErrors.CodeInvalidState, "conversation provider reference does not match requested provider")
+			}
+			if reference.ConnectionID == nil || strings.TrimSpace(*reference.ConnectionID) == "" || strings.TrimSpace(reference.ResourceID) == "" {
 			return appErrors.New(appErrors.CodeInvalidState, "conversation provider reference is incomplete")
 		}
 
