@@ -127,3 +127,31 @@ func mustJSONString(value string) string {
 	}
 	return string(encoded)
 }
+
+func TestBuildUserPromptIncludesEvidenceButExcludesSensitiveCustomerDocuments(t *testing.T) {
+	contextValue := &ports.AIContext{
+		SchemaVersion: 1,
+		Freshness:     "fresh",
+		Business:      ports.AIContextBusiness{Reference: "business-1", Name: "متجر", Locale: "ar-YE"},
+		Customer: ports.AIContextCustomer{
+			Reference:     "customer-1",
+			Profile:       []byte(`{"secret":"profile-secret"}`),
+			ContactPoints: []byte(`{"phone":"contact-secret"}`),
+		},
+		CatalogEvidence: []ports.AICatalogEvidence{{Reference: "item-1", Name: "iPhone 15", Status: "active", Attributes: []byte(`{"color":"black"}`), EvidenceState: "fresh"}},
+		OfferEvidence:   []ports.AIOfferEvidence{{Reference: "offer-1", Name: "iPhone offer", AvailabilityState: "available", Amount: "250000", Currency: "YER", EvidenceState: "fresh"}},
+		RecentMessages:  []ports.AIRecentMessageEvidence{{Reference: "message-1", Direction: "inbound", Text: "هل هو متوفر؟", EvidenceState: "fresh"}},
+		PolicyEvidence:  ports.AIPolicyEvidence{Version: "auto-reply-v1", State: "application_policy_only"},
+	}
+	prompt := buildUserPrompt(ports.AIDecisionInput{BusinessID: "business-1", ConversationID: "conversation-1", Text: "هل الآيفون متوفر؟", Context: contextValue})
+	for _, expected := range []string{"iPhone 15", "available", "250000", "YER", "هل هو متوفر؟"} {
+		if !strings.Contains(prompt, expected) {
+			t.Fatalf("prompt omitted grounded evidence %q: %s", expected, prompt)
+		}
+	}
+	for _, secret := range []string{"profile-secret", "contact-secret"} {
+		if strings.Contains(prompt, secret) {
+			t.Fatalf("prompt leaked sensitive customer document %q", secret)
+		}
+	}
+}

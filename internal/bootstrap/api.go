@@ -64,20 +64,28 @@ func NewAPIWithExternal(database *postgres.Adapter, address string, external Ext
 				return nil, errors.New("Chatwoot AutoReply requires a configured LLM runtime")
 			}
 			referenceRepository := postgres.NewConversationReferenceRepository(database)
+			autoReply := services.NewAutoReplyService(
+				external.AIRuntime,
+				postgres.NewAIDecisionRepository(database),
+				referenceRepository,
+				postgres.NewOutboundMessageRepository(database),
+				outboxStore,
+				database,
+			)
+			autoReply.ContextBuilder = services.NewAutoReplyContextBuilder(
+				postgres.NewBusinessRepository(database),
+				postgres.NewConversationRepository(database),
+				postgres.NewCustomerRepository(database),
+				postgres.NewCatalogRepository(database),
+				postgres.NewMessageRepository(database),
+			)
 			chatwootService.AutoReply = &services.ChatwootAutoReplyBridge{
+
 				Resolver: services.ChatwootProviderReferenceResolver{
 					References:  referenceRepository,
 					Connections: postgres.NewChannelConnectionRepository(database),
 				},
-				AutoReply: services.NewAutoReplyService(
-					external.AIRuntime,
-
-					postgres.NewAIDecisionRepository(database),
-					referenceRepository,
-					postgres.NewOutboundMessageRepository(database),
-					outboxStore,
-					database,
-				),
+				AutoReply: autoReply,
 			}
 		}
 		dependencies.IngestChatwootWebhook = chatwootService

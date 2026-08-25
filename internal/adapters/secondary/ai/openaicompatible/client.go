@@ -209,10 +209,58 @@ func (c *Client) completionsURL() string {
 }
 
 func buildUserPrompt(input ports.AIDecisionInput) string {
-	return fmt.Sprintf("Business ID: %s\nConversation ID: %s\nChannel: %s\nPolicy version: %s\nSource message reference: %s\nCustomer message:\n%s", input.BusinessID, input.ConversationID, input.Channel, input.PolicyVersion, input.SourceMessageReference, strings.TrimSpace(input.Text))
+	prompt := fmt.Sprintf("Business ID: %s\nConversation ID: %s\nChannel: %s\nPolicy version: %s\nSource message reference: %s\nCustomer message:\n%s", input.BusinessID, input.ConversationID, input.Channel, input.PolicyVersion, input.SourceMessageReference, strings.TrimSpace(input.Text))
+	if input.Context == nil {
+		return prompt
+	}
+	encoded, err := json.Marshal(promptContextFrom(input.Context))
+	if err != nil {
+		return prompt + "\nVerified Mujeeb context: unavailable"
+	}
+	return prompt + "\nVerified Mujeeb context (evidence only; do not infer missing facts):\n" + string(encoded)
 }
 
-const defaultSystemPrompt = `أنت طبقة تحليل واقتراح فقط داخل Mujeeb 24. أخرج JSON المطابق للمخطط فقط، ولا تكتب أي شرح خارج JSON. لا تنفذ أدوات ولا تتصل بقاعدة بيانات أو Chatwoot أو SocialAPI. لا تخترع أسعارًا أو توفرًا أو سياسات. إذا لم توجد أدلة كافية فاختر requested_action=ask_clarification أو requested_action=no_action. لرسالة تحية أو طلب معلومات بسيط يمكن استخدام requested_action=answer مع response_text غير factual. استخدم requires_human=true عند الحاجة. لا تحفظ أو تُخرج chain-of-thought أو أسرارًا أو بيانات لا يحتاجها القرار. القيم المسموحة حرفيًا لـrequested_action هي answer أو ask_clarification أو no_action فقط. القيم المسموحة حرفيًا لـpolicy_decision هي allowed أو requires_approval أو denied فقط. confidence_band يجب أن تكون low أو medium أو high.`
+type promptContext struct {
+	SchemaVersion   int                             `json:"schema_version"`
+	Freshness       string                          `json:"freshness"`
+	Business        ports.AIContextBusiness         `json:"business"`
+	Conversation    ports.AIContextConversation     `json:"conversation"`
+	Customer        promptCustomerContext           `json:"customer"`
+	CatalogEvidence []ports.AICatalogEvidence       `json:"catalog_evidence"`
+	OfferEvidence   []ports.AIOfferEvidence         `json:"offer_evidence"`
+	VariantEvidence []ports.AIVariantEvidence       `json:"variant_evidence"`
+	RecentMessages  []ports.AIRecentMessageEvidence `json:"recent_messages"`
+	PolicyEvidence  ports.AIPolicyEvidence          `json:"policy_evidence"`
+	KnowledgeState  string                          `json:"knowledge_state"`
+	GeneratedAt     time.Time                       `json:"generated_at"`
+	ExpiresAt       time.Time                       `json:"expires_at"`
+}
+
+type promptCustomerContext struct {
+	Reference        string `json:"reference"`
+	LocalePreference string `json:"locale_preference"`
+	Status           string `json:"status"`
+}
+
+func promptContextFrom(value *ports.AIContext) promptContext {
+	return promptContext{
+		SchemaVersion:   value.SchemaVersion,
+		Freshness:       value.Freshness,
+		Business:        value.Business,
+		Conversation:    value.Conversation,
+		Customer:        promptCustomerContext{Reference: value.Customer.Reference, LocalePreference: value.Customer.LocalePreference, Status: value.Customer.Status},
+		CatalogEvidence: value.CatalogEvidence,
+		OfferEvidence:   value.OfferEvidence,
+		VariantEvidence: value.VariantEvidence,
+		RecentMessages:  value.RecentMessages,
+		PolicyEvidence:  value.PolicyEvidence,
+		KnowledgeState:  value.KnowledgeState,
+		GeneratedAt:     value.GeneratedAt,
+		ExpiresAt:       value.ExpiresAt,
+	}
+}
+
+const defaultSystemPrompt = `أنت طبقة تحليل واقتراح فقط داخل Mujeeb 24. أخرج JSON المطابق للمخطط فقط، ولا تكتب أي شرح خارج JSON. لا تنفذ أدوات ولا تتصل بقاعدة بيانات أو Chatwoot أو SocialAPI. استخدم Verified Mujeeb context كمصدر الأدلة الوحيد. لا تخترع سعرًا أو توفرًا أو موعدًا أو سياسة. إذا كانت المعلومة غير موجودة أو stale أو missing فلا تقل إنها متاحة، واختر requested_action=ask_clarification أو requested_action=no_action. أي إجابة factual عن catalog أو offer أو availability يجب أن تستشهد بمراجع موجودة في evidence_references. لرسالة تحية أو طلب معلومات بسيط يمكن استخدام requested_action=answer مع response_text غير factual. استخدم requires_human=true عند الحاجة. لا تحفظ أو تُخرج chain-of-thought أو أسرارًا أو بيانات لا يحتاجها القرار. القيم المسموحة حرفيًا لـrequested_action هي answer أو ask_clarification أو no_action فقط. القيم المسموحة حرفيًا لـpolicy_decision هي allowed أو requires_approval أو denied فقط. confidence_band يجب أن تكون low أو medium أو high.`
 
 type chatCompletionRequest struct {
 	Model               string         `json:"model"`

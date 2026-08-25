@@ -23,6 +23,7 @@ const (
 
 type AutoReplyService struct {
 	Runtime             ports.AIRuntime
+	ContextBuilder      ports.AIContextBuilder
 	DecisionRepository  ports.AIDecisionRepository
 	ReferenceRepository ports.ConversationReferenceRepository
 	OutboundRepository  ports.OutboundMessageRepository
@@ -61,14 +62,29 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	if strings.TrimSpace(policyVersion) == "" {
 		policyVersion = "auto-reply-v1"
 	}
-	proposal, err := s.Runtime.Decide(ctx, ports.AIDecisionInput{
+	aiInput := ports.AIDecisionInput{
 		BusinessID:             string(command.Meta.Actor.BusinessID),
 		ConversationID:         string(command.ConversationID),
 		SourceMessageReference: command.SourceMessageReference,
 		Text:                   command.Text,
 		Channel:                command.Channel,
 		PolicyVersion:          policyVersion,
-	})
+	}
+	if s.ContextBuilder != nil {
+		builtContext, contextErr := s.ContextBuilder.Build(ctx, ports.ContextBuildInput{
+			BusinessID:             aiInput.BusinessID,
+			ConversationID:         aiInput.ConversationID,
+			SourceMessageReference: aiInput.SourceMessageReference,
+			Text:                   aiInput.Text,
+			Channel:                aiInput.Channel,
+			PolicyVersion:          aiInput.PolicyVersion,
+		})
+		if contextErr != nil {
+			return commands.AutoReplyResult{}, contextErr
+		}
+		aiInput.Context = &builtContext
+	}
+	proposal, err := s.Runtime.Decide(ctx, aiInput)
 	if err != nil {
 		return commands.AutoReplyResult{}, err
 	}
@@ -123,14 +139,14 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			return fmt.Errorf("%w: answer action requires response text", appErrors.New(appErrors.CodeValidation, "auto reply"))
 		}
 
-reference, referenceErr := s.ReferenceRepository.GetCurrentByConversation(txCtx, string(command.Meta.Actor.BusinessID), conversationID, "provider")
-			if referenceErr != nil {
-				return mapAIRepositoryError(referenceErr)
-			}
-			if reference.ProviderRef != command.ProviderRef {
-				return appErrors.New(appErrors.CodeInvalidState, "conversation provider reference does not match requested provider")
-			}
-			if reference.ConnectionID == nil || strings.TrimSpace(*reference.ConnectionID) == "" || strings.TrimSpace(reference.ResourceID) == "" {
+		reference, referenceErr := s.ReferenceRepository.GetCurrentByConversation(txCtx, string(command.Meta.Actor.BusinessID), conversationID, "provider")
+		if referenceErr != nil {
+			return mapAIRepositoryError(referenceErr)
+		}
+		if reference.ProviderRef != command.ProviderRef {
+			return appErrors.New(appErrors.CodeInvalidState, "conversation provider reference does not match requested provider")
+		}
+		if reference.ConnectionID == nil || strings.TrimSpace(*reference.ConnectionID) == "" || strings.TrimSpace(reference.ResourceID) == "" {
 			return appErrors.New(appErrors.CodeInvalidState, "conversation provider reference is incomplete")
 		}
 

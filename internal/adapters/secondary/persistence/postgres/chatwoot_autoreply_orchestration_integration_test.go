@@ -14,6 +14,7 @@ import (
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/workspaces/chatwoot"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/database"
 	"github.com/google/uuid"
@@ -84,19 +85,28 @@ func TestChatwootInboundAutoReplyOrchestrationAgainstPostgres(t *testing.T) {
 
 	receiver := chatwoot.NewClient(chatwoot.Config{WebhookSecret: "test-chatwoot-secret"})
 	referenceRepository := NewConversationReferenceRepository(adapter)
+	capturingRuntime := &contextCapturingRuntime{}
+	autoReply := services.NewAutoReplyService(
+		capturingRuntime,
+		NewAIDecisionRepository(adapter),
+		referenceRepository,
+		NewOutboundMessageRepository(adapter),
+		NewPostgresOutboxStore(adapter),
+		adapter,
+	)
+	autoReply.ContextBuilder = services.NewAutoReplyContextBuilder(
+		NewBusinessRepository(adapter),
+		NewConversationRepository(adapter),
+		NewCustomerRepository(adapter),
+		NewCatalogRepository(adapter),
+		NewMessageRepository(adapter),
+	)
 	bridge := services.ChatwootAutoReplyBridge{
 		Resolver: services.ChatwootProviderReferenceResolver{
 			References:  referenceRepository,
 			Connections: NewChannelConnectionRepository(adapter),
 		},
-		AutoReply: services.NewAutoReplyService(
-			services.SafeAutoReplyRuntime{},
-			NewAIDecisionRepository(adapter),
-			referenceRepository,
-			NewOutboundMessageRepository(adapter),
-			NewPostgresOutboxStore(adapter),
-			adapter,
-		),
+		AutoReply: autoReply,
 	}
 	service := services.ChatwootWebhookService{Receiver: receiver, Inbound: NewChatwootInboundStore(adapter), AutoReply: &bridge}
 
@@ -107,6 +117,9 @@ func TestChatwootInboundAutoReplyOrchestrationAgainstPostgres(t *testing.T) {
 		t.Fatalf("incoming callback result=%#v err=%v", incomingResult, err)
 	}
 	assertAutoReplyCounts(t, ctx, adapter, businessID, 1, 1, 1, 1, "inbound")
+	if capturingRuntime.Context == nil || capturingRuntime.Context.Business.Reference != businessID || capturingRuntime.Context.Conversation.Reference != conversationID || capturingRuntime.Context.Customer.Reference != customerID || capturingRuntime.Context.SchemaVersion != services.AIContextSchemaVersion {
+		t.Fatalf("context builder did not produce tenant-scoped context: %#v", capturingRuntime.Context)
+	}
 
 	duplicateResult, err := service.Handle(ctx, incomingCommand)
 	if err != nil || !duplicateResult.Accepted || !duplicateResult.Duplicate {
@@ -157,3 +170,14 @@ func assertAutoReplyCounts(t *testing.T, ctx context.Context, adapter *Adapter, 
 func formatUnix(value int64) string {
 	return strconv.FormatInt(value, 10)
 }
+
+type contextCapturingRuntime struct {
+	Context *ports.AIContext
+}
+
+func (r *contextCapturingRuntime) Decide(ctx context.Context, input ports.AIDecisionInput) (ports.AIDecisionProposal, error) {
+	r.Context = input.Context
+	return (services.SafeAutoReplyRuntime{}).Decide(ctx, input)
+}
+
+var _ ports.AIRuntime = (*contextCapturingRuntime)(nil)
