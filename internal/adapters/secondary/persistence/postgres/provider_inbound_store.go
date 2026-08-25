@@ -12,10 +12,20 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-type ProviderInboundStore struct{ adapter *Adapter }
+type ProviderInboundStore struct {
+	adapter       *Adapter
+	mirror        *ChatwootMirrorStore
+	mirrorEnabled bool
+}
 
 func NewProviderInboundStore(adapter *Adapter) *ProviderInboundStore {
-	return &ProviderInboundStore{adapter: adapter}
+	return &ProviderInboundStore{adapter: adapter, mirror: NewChatwootMirrorStore(adapter)}
+}
+
+func NewProviderInboundStoreWithMirror(adapter *Adapter, enabled bool) *ProviderInboundStore {
+	store := NewProviderInboundStore(adapter)
+	store.mirrorEnabled = enabled
+	return store
 }
 
 func (s *ProviderInboundStore) Materialize(ctx context.Context, draft ports.ProviderInboundDraft) (ports.ProviderInboundResult, error) {
@@ -82,6 +92,11 @@ func (s *ProviderInboundStore) Materialize(ctx context.Context, draft ports.Prov
 		result.ConversationID = conversationID
 		result.ConversationReferenceID = referenceID
 		result.CommunicationMessageID = messageID
+		if s.mirrorEnabled && s.mirror != nil {
+			if _, err := s.mirror.Enqueue(txCtx, ports.ChatwootMirrorDraft{ID: uuid.NewString(), BusinessID: businessID, CommunicationMessageID: messageID, CreatedAt: draft.ReceivedAt, UpdatedAt: draft.ReceivedAt}); err != nil {
+				return err
+			}
+		}
 		return markProviderInboundProcessed(txCtx, executor, draft.InboundEventID, "socialapi_materialized", &result)
 	})
 	if err != nil {

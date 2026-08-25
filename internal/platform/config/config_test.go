@@ -54,6 +54,22 @@ func TestLoadFromEnvDisablesLLMByDefault(t *testing.T) {
 	}
 }
 
+func TestLoadFromEnvDisablesChatwootMirrorByDefaultAndReadsOverride(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("LoadFromEnv: %v", err)
+	}
+	if cfg.ChatwootMirrorEnabled {
+		t.Fatalf("Chatwoot mirror must be disabled by default: %#v", cfg)
+	}
+	t.Setenv("CHATWOOT_MIRROR_ENABLED", "true")
+	cfg, err = LoadFromEnv()
+	if err != nil || !cfg.ChatwootMirrorEnabled {
+		t.Fatalf("Chatwoot mirror override: cfg=%#v err=%v", cfg, err)
+	}
+}
+
 func TestLoadFromEnvRequiresCompleteLLMConfigurationWhenEnabled(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
 	t.Setenv("LLM_ENABLED", "true")

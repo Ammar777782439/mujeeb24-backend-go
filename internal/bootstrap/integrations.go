@@ -18,6 +18,7 @@ type ExternalAdapters struct {
 	AIRuntime                      ports.AIRuntime
 	LLMConfigError                 error
 	ChatwootAutoReplyEnabled       bool
+	ChatwootMirrorEnabled          bool
 	ChannelProvisioningSocial      ports.SocialChannelProvisioner
 	ChannelProvisioningWorkspace   ports.WorkspaceProvisioner
 	ChannelProvisioningError       error
@@ -68,6 +69,7 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 		}
 	}
 	adapters.ChatwootAutoReplyEnabled = cfg.ChatwootAutoReplyEnabled
+	adapters.ChatwootMirrorEnabled = cfg.ChatwootMirrorEnabled
 	adapters.ChannelProvisioningEnabled = cfg.ChatwootProvisioningEnabled
 	adapters.ChannelProvisioningRedirectURI = cfg.ChannelProvisioningRedirectURI
 	adapters.ChannelProvisioningWebhookURL = cfg.ChannelProvisioningWebhookURL

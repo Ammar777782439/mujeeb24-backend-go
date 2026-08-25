@@ -33,6 +33,7 @@ type ProcessConfig struct {
 	ChannelProvisioningRedirectURI string
 	ChannelProvisioningWebhookURL  string
 	ChatwootAutoReplyEnabled       bool
+	ChatwootMirrorEnabled          bool
 	LLMEnabled                     bool
 	LLMBaseURL                     string
 	LLMAPIKey                      string
@@ -68,6 +69,7 @@ func LoadFromEnv() (ProcessConfig, error) {
 		ChannelProvisioningRedirectURI: strings.TrimSpace(os.Getenv("CHANNEL_PROVISIONING_REDIRECT_URI")),
 		ChannelProvisioningWebhookURL:  strings.TrimSpace(os.Getenv("CHANNEL_PROVISIONING_WEBHOOK_URL")),
 		ChatwootAutoReplyEnabled:       false,
+		ChatwootMirrorEnabled:          false,
 		LLMEnabled:                     false,
 		LLMBaseURL:                     strings.TrimRight(strings.TrimSpace(os.Getenv("LLM_BASE_URL")), "/"),
 		LLMAPIKey:                      strings.TrimSpace(os.Getenv("LLM_API_KEY")),
@@ -112,6 +114,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 		return ProcessConfig{}, err
 	}
 	if cfg.ChatwootAutoReplyEnabled, err = boolEnv("CHATWOOT_AUTOREPLY_ENABLED", cfg.ChatwootAutoReplyEnabled); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.ChatwootMirrorEnabled, err = boolEnv("CHATWOOT_MIRROR_ENABLED", cfg.ChatwootMirrorEnabled); err != nil {
 		return ProcessConfig{}, err
 	}
 	if cfg.LLMEnabled, err = boolEnv("LLM_ENABLED", cfg.LLMEnabled); err != nil {

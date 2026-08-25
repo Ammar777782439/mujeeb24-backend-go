@@ -86,7 +86,7 @@ func NewAPIWithExternal(database *postgres.Adapter, address string, external Ext
 			RawPayloads: postgres.NewRawPayloadStore(database),
 			Connections: postgres.NewChannelConnectionRepository(database),
 			Events:      eventStore,
-			Inbound:     postgres.NewProviderInboundStore(database),
+			Inbound:     postgres.NewProviderInboundStoreWithMirror(database, external.ChatwootMirrorEnabled && external.Chatwoot != nil),
 		}
 	}
 	if external.ChatwootWebhook != nil {

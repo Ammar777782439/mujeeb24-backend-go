@@ -47,6 +47,8 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 	}
 	defer func() {
 		cleanupCtx := context.Background()
+		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM chatwoot_mirror_jobs WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
+		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM chatwoot_workspace_bindings WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
 		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM communication_messages WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
 		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM conversation_references WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
 		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM external_identities WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
@@ -85,7 +87,7 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 		t.Fatalf("record event: created=%v record=%#v err=%v", created, eventRecord, err)
 	}
 
-	materializer := NewProviderInboundStore(adapter)
+	materializer := NewProviderInboundStoreWithMirror(adapter, true)
 	draft := ports.ProviderInboundDraft{InboundEventID: eventRecord.ID, BusinessID: businessID, ConnectionID: connectionID, ProviderRef: "socialapi", ProviderEventID: "provider-event-1", Channel: "whatsapp", ProviderAccountRef: "account-provider-a", ProviderConversationID: "provider-conversation-1", ExternalUserID: "provider-user-1", ProviderMessageID: "provider-message-1", EventType: "interaction_received", InteractionKind: "dm", Text: "مرحبا", ExternalCreatedAt: providerInboundTimePtr(base), ReceivedAt: base, RawPayloadReference: raw.Reference, PayloadHash: raw.SHA256}
 	first, err := materializer.Materialize(ctx, draft)
 	if err != nil {
@@ -100,6 +102,34 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 	}
 	if !second.Duplicate || second.CustomerID != first.CustomerID || second.ConversationID != first.ConversationID || second.ConversationReferenceID != first.ConversationReferenceID || second.CommunicationMessageID != first.CommunicationMessageID || second.InboundEventID != eventID {
 		t.Fatalf("duplicate was not idempotent: first=%#v second=%#v", first, second)
+	}
+	if _, err := NewChatwootWorkspaceBindingRepository(adapter).EnsureBinding(ctx, businessID, "business/"+businessID+"/socialapi/whatsapp", "901", "902", "whatsapp"); err != nil {
+		t.Fatalf("ensure workspace binding: %v", err)
+	}
+	mirrorStore := NewChatwootMirrorStore(adapter)
+	jobs, err := mirrorStore.ListClaimable(ctx, 10)
+	if err != nil || len(jobs) != 1 || jobs[0].CommunicationMessageID != first.CommunicationMessageID {
+		t.Fatalf("unexpected mirror jobs=%#v err=%v", jobs, err)
+	}
+	lease := ports.MirrorLease{Owner: "mirror-test", Token: uuid.NewString(), ExpiresAt: base.Add(time.Minute)}
+	claim, err := mirrorStore.Claim(ctx, jobs[0].ID, lease)
+	if err != nil || !claim.Claimed || claim.Record.AttemptCount != 1 {
+		t.Fatalf("claim mirror: result=%#v err=%v", claim, err)
+	}
+	delivery, err := mirrorStore.Resolve(ctx, businessID, jobs[0].ID)
+	if err != nil || delivery.CustomerIdentifier != "provider-user-1" || delivery.ProviderConversationID != "provider-conversation-1" || delivery.Text != "مرحبا" || delivery.AccountID != 901 || delivery.InboxID != 902 {
+		t.Fatalf("resolve mirror: delivery=%#v err=%v", delivery, err)
+	}
+	completed, err := mirrorStore.MarkCompleted(ctx, ports.ChatwootMirrorCompletion{JobID: jobs[0].ID, Owner: lease.Owner, Token: lease.Token, AccountID: 901, InboxID: 902, ChatwootContactID: "1001", ChatwootConversationID: "1002", ChatwootMessageID: "1003", CompletedAt: base.Add(2 * time.Minute), UpdatedAt: base.Add(2 * time.Minute)})
+	if err != nil || completed.Status != "completed" || completed.ChatwootMessageID == nil || *completed.ChatwootMessageID != "1003" {
+		t.Fatalf("complete mirror: result=%#v err=%v", completed, err)
+	}
+	var mirroredMessageID, mirroredAccountID, mirroredInboxID, mirroredConversationID string
+	if err := adapter.Pool().QueryRow(ctx, `SELECT m.chatwoot_message_id, r.chatwoot_account_id, r.chatwoot_inbox_id, r.chatwoot_conversation_id FROM communication_messages m JOIN conversation_references r ON r.business_id = m.business_id AND r.id = m.conversation_reference_id WHERE m.business_id = $1::uuid AND m.id = $2::uuid`, businessID, first.CommunicationMessageID).Scan(&mirroredMessageID, &mirroredAccountID, &mirroredInboxID, &mirroredConversationID); err != nil {
+		t.Fatalf("read mirror projections: %v", err)
+	}
+	if mirroredMessageID != "1003" || mirroredAccountID != "901" || mirroredInboxID != "902" || mirroredConversationID != "1002" {
+		t.Fatalf("unexpected mirror projections message=%s account=%s inbox=%s conversation=%s", mirroredMessageID, mirroredAccountID, mirroredInboxID, mirroredConversationID)
 	}
 
 	var customerCount, identityCount, conversationCount, referenceCount, messageCount, processedCount int
