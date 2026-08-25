@@ -2,69 +2,57 @@
 
 ## الحكم التنفيذي
 
-يوجد **76 operation** في OpenAPI المتولد، وجميعها مسجلة في Huma وتملك dispatch typed. أصبح أول مانع حقيقي قد أُغلق: **Authentication + JWT Ed25519 + PostgreSQL Business Scope** موصولة في الـruntime عند `AUTH_ENABLED=true`. لا يعني ذلك أن جميع عمليات الأعمال الـ76 أصبحت ناجحة؛ فبعضها لا يزال يرجع `501 not_implemented` لأن application dependency المقابلة غير موصولة في bootstrap.
+يوجد **76 operation** في OpenAPI المتولد، وكلها مسجلة في Huma وتمتلك dispatch typed وhandler runtime. أُزيلت جميع حالات `501 not_implemented` الناتجة عن **Application Dependency غير موصولة**. لا تُفهم هذه النتيجة على أنها تشغيل حي لكل خدمة خارجية؛ المسارات التي لا تملك إعدادات SocialAPI أو Chatwoot حقيقية تعيد الآن خطأً واضحًا ومقصودًا بدلاً من نجاح مزيف أو 501.
 
-> لا تستخدم هذه الدفعة principal ثابتًا أو header تطوير أو token مضمّنًا. كل نجاح تجاري يعتمد على principal محفوظ في PostgreSQL وعضوية business نشطة.
+> لا يوجد principal ثابت أو token مضمّن أو header تطوير. نجاح كل عملية business-scoped ما زال يعتمد على JWT Ed25519 وعضوية business نشطة في PostgreSQL.
 
-| السطح | حالة Postman | الدليل/الشرط |
+| نوع العملية | النتيجة في Postman | الشرط أو السلوك |
 |---|---|---|
-| `/api/v1/health/live` و`/api/v1/health/ready` | **قابل للاختبار محليًا** | public؛ readiness تفحص PostgreSQL وحالة feature configuration فقط. |
-| `/api/v1/auth/login` | **قابل للاختبار محليًا** | principal موجود، bcrypt password صحيح، `AUTH_ENABLED=true`، مفاتيح Ed25519 من environment. |
-| `/api/v1/auth/refresh` و`/auth/logout` | **قابل للاختبار محليًا** | refresh token opaque في `mujeeb_refresh` HttpOnly cookie، single-use rotation وrevoke حقيقيان في PostgreSQL. |
-| `/api/v1/me` و`/me/businesses` | **قابل للاختبار محليًا** | Bearer JWT صالح وmembership نشطة. |
-| Catalog / Sales / AI / Audit الموصولة أدناه | **قابلة لاختبار نجاح حقيقي** | JWT + business membership + سجلات مناسبة إن كانت العملية تحتاج record قائمًا. |
-| Business / Conversations / Customers / Channel connection management غير المذكورة أدناه | **ليست جاهزة لنجاح Postman بعد** | operation/DTO موجودان، لكن dependency التطبيقية في runtime غير موصولة؛ النتيجة الصادقة `501`. |
-| Webhooks | **اختبار contract محلي فقط** | يلزم verifier/secret مهيأ؛ لا SocialAPI أو Chatwoot live في هذه الدفعة. |
-| Metrics | **غير موصول** | `GetMetrics` لا يزال `501`. |
+| Health وMetrics | **نجاح محلي** | `/health/live` و`/health/ready` و`/metrics` تعمل دون تسجيل دخول؛ metrics تعرض pgxpool gauges المحلية فقط. |
+| Auth وIdentity | **نجاح محلي** | login، refresh cookie rotation، logout، `/me`، و`/me/businesses` تعمل مع principal مُنشأ محليًا. |
+| Business وDashboard | **نجاح محلي** | get/update profile، policy، overview مع PostgreSQL و`If-Match` حيث يلزم. |
+| Customers وConversations | **نجاح محلي** | read/list/create/update/merge، conversation list/get/update/assign/labels، private notes، message timeline، وcustomer conversations كلها موصولة بـPostgreSQL scope. |
+| Outbound Message Intent | **نجاح محلي حتى Outbox** | ينشئ `OutboundMessage` وOutbox transactionally بعد provider reference/connection active؛ **لا يرسل إلى provider من طلب HTTP**. |
+| Catalog/Sales/AI/Audit | **نجاح محلي** | repositories والخدمات الموصلّة سابقًا تعمل مع business scope والسجلات اللازمة. |
+| Channel Connections | **نجاح محلي للحالة والقراءة** | list/get/reconnect/disconnect تعمل في PostgreSQL، وتكتب reason/actor state event مع optimistic concurrency. |
+| Begin Channel Provisioning | **422 عند التعطيل، لا 501** | يتطلب `CHATWOOT_PROVISIONING_ENABLED=true` وإعداد SocialAPI/Chatwoot صحيحين؛ لا يبدأ provider OAuth محليًا بلا تلك الإعدادات. |
+| SocialAPI/Chatwoot Webhooks | **503 عند عدم إعداد receiver، لا 501** | تصبح accepted/processed فقط عند ضبط verifier وreceiver المناسبين؛ لا توجد محاكاة نجاح. |
 
-## طبقة المصادقة ونطاق الأعمال المنفذة
+## طبقة المصادقة والنطاق
 
 ```text
 Postman login
   ↓
-principal + bcrypt password hash (PostgreSQL)
+principal + bcrypt hash في PostgreSQL
   ↓
-Ed25519 access JWT
+Ed25519 JWT access token
   ↓
-Huma bearer middleware (protected operations only)
+Bearer middleware للمسارات المحمية
   ↓
-principal context
-  ↓
-active business_membership (PostgreSQL)
+active business_membership في PostgreSQL
   ↓
 ScopeProvider
   ↓
-application handler / repository
+service / repository scoped
 ```
 
-المسارات العامة مقصودة وصريحة: login، refresh، liveness، readiness، metrics، وwebhooks. أما logout و`/me` وكل business operation فهي محمية بـBearer JWT. لا تمر membership من header؛ تُحل من PostgreSQL في كل طلب business scoped.
+المسارات العامة مقصودة: login، refresh، health، metrics، وwebhooks. أما logout و`/me` وكل business operation فهي محمية بـBearer JWT. لا يقبل النظام business scope من headers.
 
-## العمليات ذات surface موصول في bootstrap
+## الضمانات الجديدة لإزالة 501
 
-| المجموعة | العمليات القابلة للتشغيل محليًا |
+| السطح | الضمان الذي أُضيف |
 |---|---|
-| Auth/identity | `authenticatePrincipal`, `rotateRefreshSession`, `revokeRefreshSession`, `getCurrentPrincipal`, `listAccessibleBusinesses` |
-| Operational | `getLiveness`, `getReadiness` |
-| Messages/Capabilities | `listConversationMessages`, `getConnectionCapabilities` |
-| Catalog | `createCatalog`, `updateCatalog`, `createAttributeSchemaVersion`, `createCatalogItem`, `updateCatalogItem`, `createOffer`, `updateOffer`, `createVariant`, `updateVariant`, `listCatalogs`, `getCatalog`, `listCatalogItems`, `getCatalogItem`, `listOffers`, `listVariants`, `listAttributeSchemas`, `getAttributeSchema` |
-| Sales | `createLead`, `updateLead`, `qualifyLead`, `markLeadLost`, `createTransactionDraft`, `updateTransactionDraft`, `confirmTransaction`, `cancelTransaction`, `submitTransactionReview`, `approveTransactionReview`, `rejectTransactionReview`, `listLeads`, `getLead`, `listLeadAttributions`, `listLeadScores`, `listTransactions`, `listCustomerTransactions`, `getTransaction`, `getTransactionReview` |
-| AI/Audit | `requestHumanReview`, `listAIDecisions`, `getAIDecision`, `listAuditEvents`, `getAuditEvent` |
-| Conditional adapters | `beginChannelConnection` فقط عند تفعيل provisioning بإعدادات صحيحة؛ webhook operations فقط عند ضبط receiver/verifier. |
+| Business profile/policy | migration `000042`، resource versions، update ذري، stale conflict، tests PostgreSQL وHTTP. |
+| Customer/Conversation | migration `000043`، keyset opaque، tenant isolation، optimistic updates، merge، assignments. |
+| Labels/private note | migration `000044`، labels normalized ومرتبة، private visibility صريحة في communication timeline، ولا Outbox للـprivate note. |
+| Channel state | migration `000045`، state events تحفظ action/reason/actor، reconnect/disconnect لا تنفذ provider network call. |
+| Manual outbound | current+active provider reference وconnection active إلزاميان؛ OutboundMessage وOutbox يكتبان في transaction واحدة و`Idempotency-Key` إلزامي. |
+| Metrics | gauges PostgreSQL pool فقط؛ لا تدّعي metrics لخدمات خارجية غير مشغلة. |
 
-تم إصلاح فجوة dispatch كانت تجعل `listCatalogs` يرجع 501 رغم أن dependency محقونة؛ أصبح الآن يصل إلى service/repository مع تطبيق business scope الحقيقي.
+## إعداد محلي آمن
 
-## ما ما زال يرجع 501 بصدق
-
-السطوح غير الموصولة بعد هي: `getBusiness`، profile/policy، dashboard overview، conversation/customer management، outbound message creation، channel connection read/reconnect/disconnect، وmetrics. وجودها في OpenAPI ليس دليلاً على نجاحها في runtime، ولذلك ستوضع في Collection داخل folder منفصل باسم **Known 501 — غير مكتملة**، لا ضمن smoke PASS.
-
-## إعداد محلي آمن للاختبار
-
-1. شغّل migrations أولًا، ثم أنشئ business صالحًا.
-2. ولّد زوج Ed25519 محليًا وضعه فقط في environment: `JWT_ED25519_PRIVATE_KEY` و`JWT_ED25519_PUBLIC_KEY` بترميز Base64؛ لا تضع أي مفتاح داخل `.env.example` أو Git.
-3. عيّن `AUTH_ENABLED=true` و`JWT_ISSUER` و`JWT_ACCESS_TTL` و`REFRESH_SESSION_TTL`.
-4. شغّل `cmd/bootstrap-principal` بقيم environment وقت التشغيل فقط: `BOOTSTRAP_EMAIL` و`BOOTSTRAP_PASSWORD` و`BOOTSTRAP_DISPLAY_NAME` و`BOOTSTRAP_BUSINESS_ID` و`BOOTSTRAP_ROLE` و`BOOTSTRAP_PERMISSIONS_JSON`.
-5. استخدم login من Collection. يحتفظ Postman بـ`Set-Cookie` تلقائيًا في Cookie Jar؛ لا تحفظ refresh token في Environment أو Collection.
+شغّل migrations أولًا. أنشئ business ثم principal/membership عبر `cmd/bootstrap-principal` من environment وقت التشغيل، وأدخل مفاتيح Ed25519 وpassword فقط في environment المحلي. اضبط `AUTH_ENABLED=true` و`JWT_ISSUER` و`JWT_ACCESS_TTL` و`REFRESH_SESSION_TTL`. تحتفظ Postman بـrefresh token في Cookie Jar من `Set-Cookie`؛ لا يوضع refresh token أو password أو key داخل Environment أو Collection.
 
 ## Truthmode للاختبار الحالي
 
-اختبارات PostgreSQL 16 أثبتت migration 000041، email case-insensitive، membership isolation/revocation، opaque cursor، refresh single-use/revoke، transaction rollback، ومسار HTTP login → JWT → `/me` → scoped Catalog → cross-tenant 403 → refresh rotation → logout. لم يُشغّل أي SocialAPI أو Chatwoot أو Facebook/Instagram/WhatsApp أو LLM live في هذه الدفعة.
+أثبتت اختبارات PostgreSQL 16 migrations `000001..000045`، isolation، optimistic concurrency، private visibility، channel state events، auth/scope، وmetrics/feature-gated response عبر HTTP. كما نجحت `go test ./...` و`go vet ./...` وOpenAPI drift. لم يتم تشغيل أي SocialAPI أو Chatwoot أو Facebook/Instagram/WhatsApp أو LLM live في هذه الدفعة.

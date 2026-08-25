@@ -78,6 +78,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	}
 	dependencies := BuildDependencies(database)
 	dependencies.GetReadiness = readinessQueryService{Ping: database.Ping, FeatureChecks: external.ReadinessChecks()}
+	dependencies.BeginChannelConnection = services.ChannelProvisioningDisabledService{}
+	dependencies.IngestSocialAPIWebhook = services.WebhookReceiverDisabledService{Receiver: "SocialAPI"}
+	dependencies.IngestChatwootWebhook = services.WebhookReceiverDisabledService{Receiver: "Chatwoot"}
 	if authentication != nil {
 		dependencies.Scope = handlers.PostgresScopeProvider{Memberships: authentication.Repository}
 		dependencies.AuthenticatePrincipal = authentication.Service

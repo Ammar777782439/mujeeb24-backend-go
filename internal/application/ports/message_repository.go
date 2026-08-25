@@ -20,6 +20,7 @@ type CommunicationMessageRecord struct {
 	ContentType             string
 	TextContent             *string
 	ContentReference        string
+	Visibility              string
 	OccurredAt              time.Time
 	CreatedAt               time.Time
 	Status                  string
@@ -39,6 +40,7 @@ type CommunicationMessageDraft struct {
 	ContentType             string
 	TextContent             *string
 	ContentReference        string
+	Visibility              string
 	OccurredAt              time.Time
 	CreatedAt               time.Time
 }

@@ -155,6 +155,7 @@ type Message struct {
 	ChatwootMessageReference *string   `json:"chatwoot_message_reference,omitempty"`
 	OccurredAt               time.Time `json:"occurred_at"`
 	CreatedAt                time.Time `json:"created_at"`
+	Private                  bool      `json:"private"`
 }
 type ContactPoint struct {
 	Kind               string `json:"kind"`

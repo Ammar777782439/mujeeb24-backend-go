@@ -27,9 +27,9 @@ func (r *CustomerRepository) GetByID(ctx context.Context, businessID, customerID
 	if err != nil {
 		return ports.CustomerRecord{}, err
 	}
-	const query = `SELECT id::text, business_id::text, profile, contact_points, locale_preference, status, merged_into_customer_id::text FROM customers WHERE business_id = $1::uuid AND id = $2::uuid`
+	const query = `SELECT id::text, business_id::text, profile, contact_points, locale_preference, status, merged_into_customer_id::text, resource_version, updated_at FROM customers WHERE business_id = $1::uuid AND id = $2::uuid`
 	var record ports.CustomerRecord
-	if err := executor.QueryRow(ctx, query, businessID, customerID).Scan(&record.ID, &record.BusinessID, &record.Profile, &record.ContactPoints, &record.LocalePreference, &record.Status, &record.MergedIntoCustomer); err != nil {
+	if err := executor.QueryRow(ctx, query, businessID, customerID).Scan(&record.ID, &record.BusinessID, &record.Profile, &record.ContactPoints, &record.LocalePreference, &record.Status, &record.MergedIntoCustomer, &record.ResourceVersion, &record.UpdatedAt); err != nil {
 		return record, classifyRepositoryGetError("customer.get_by_id", err)
 	}
 	return record, nil
@@ -53,9 +53,9 @@ func (r *ConversationRepository) GetByID(ctx context.Context, businessID, conver
 	if err != nil {
 		return ports.ConversationRecord{}, err
 	}
-	const query = `SELECT id::text, business_id::text, customer_id::text, state, ownership, ai_mode_override, priority, assignment_reference FROM conversations WHERE business_id = $1::uuid AND id = $2::uuid`
+	const query = `SELECT id::text, business_id::text, customer_id::text, state, ownership, ai_mode_override, priority, assignment_reference, resource_version, last_activity_at FROM conversations WHERE business_id = $1::uuid AND id = $2::uuid`
 	var record ports.ConversationRecord
-	if err := executor.QueryRow(ctx, query, businessID, conversationID).Scan(&record.ID, &record.BusinessID, &record.CustomerID, &record.State, &record.Ownership, &record.AIModeOverride, &record.Priority, &record.AssignmentReference); err != nil {
+	if err := executor.QueryRow(ctx, query, businessID, conversationID).Scan(&record.ID, &record.BusinessID, &record.CustomerID, &record.State, &record.Ownership, &record.AIModeOverride, &record.Priority, &record.AssignmentReference, &record.ResourceVersion, &record.LastActivityAt); err != nil {
 		return record, classifyRepositoryGetError("conversation.get_by_id", err)
 	}
 	return record, nil
@@ -79,9 +79,9 @@ func (r *ChannelConnectionRepository) GetByID(ctx context.Context, businessID, c
 	if err != nil {
 		return ports.ChannelConnectionRecord{}, err
 	}
-	const query = `SELECT id::text, business_id::text, provider_ref, channel, provider_account_ref, provider_connection_ref, status, secret_reference FROM channel_connections WHERE business_id = $1::uuid AND id = $2::uuid`
+	const query = `SELECT id::text, business_id::text, provider_ref, channel, provider_account_ref, provider_connection_ref, status, secret_reference, resource_version, updated_at FROM channel_connections WHERE business_id = $1::uuid AND id = $2::uuid`
 	var record ports.ChannelConnectionRecord
-	if err := executor.QueryRow(ctx, query, businessID, connectionID).Scan(&record.ID, &record.BusinessID, &record.ProviderReference, &record.Channel, &record.ProviderAccountReference, &record.ProviderConnectionRef, &record.Status, &record.SecretReference); err != nil {
+	if err := executor.QueryRow(ctx, query, businessID, connectionID).Scan(&record.ID, &record.BusinessID, &record.ProviderReference, &record.Channel, &record.ProviderAccountReference, &record.ProviderConnectionRef, &record.Status, &record.SecretReference, &record.ResourceVersion, &record.UpdatedAt); err != nil {
 		return record, classifyRepositoryGetError("channel_connection.get_by_id", err)
 	}
 	return record, nil
@@ -101,7 +101,7 @@ func (r *ChannelConnectionRepository) GetByProviderReferences(ctx context.Contex
 	if err != nil {
 		return ports.ChannelConnectionRecord{}, err
 	}
-	const query = `SELECT id::text, business_id::text, provider_ref, channel, provider_account_ref, provider_connection_ref, status, secret_reference FROM channel_connections WHERE provider_ref = $1 AND (($2 <> '' AND provider_account_ref = $2) OR ($3 <> '' AND provider_connection_ref = $3)) ORDER BY id LIMIT 2`
+	const query = `SELECT id::text, business_id::text, provider_ref, channel, provider_account_ref, provider_connection_ref, status, secret_reference, resource_version, updated_at FROM channel_connections WHERE provider_ref = $1 AND (($2 <> '' AND provider_account_ref = $2) OR ($3 <> '' AND provider_connection_ref = $3)) ORDER BY id LIMIT 2`
 	rows, err := executor.Query(ctx, query, providerReference, providerAccountReference, providerConnectionReference)
 	if err != nil {
 		return ports.ChannelConnectionRecord{}, &RepositoryError{Operation: "channel_connection.get_by_provider_references", Kind: RepositoryInvalid, Err: err}
@@ -110,7 +110,7 @@ func (r *ChannelConnectionRepository) GetByProviderReferences(ctx context.Contex
 	var records []ports.ChannelConnectionRecord
 	for rows.Next() {
 		var record ports.ChannelConnectionRecord
-		if err := rows.Scan(&record.ID, &record.BusinessID, &record.ProviderReference, &record.Channel, &record.ProviderAccountReference, &record.ProviderConnectionRef, &record.Status, &record.SecretReference); err != nil {
+		if err := rows.Scan(&record.ID, &record.BusinessID, &record.ProviderReference, &record.Channel, &record.ProviderAccountReference, &record.ProviderConnectionRef, &record.Status, &record.SecretReference, &record.ResourceVersion, &record.UpdatedAt); err != nil {
 			return ports.ChannelConnectionRecord{}, &RepositoryError{Operation: "channel_connection.get_by_provider_references", Kind: RepositoryInvalid, Err: err}
 		}
 		records = append(records, record)
@@ -140,9 +140,9 @@ func (r *ChannelConnectionRepository) CreatePending(ctx context.Context, busines
 	}
 	id := uuid.NewString()
 	now := time.Now().UTC()
-	const query = `INSERT INTO channel_connections (id, business_id, provider_ref, channel, provider_connection_ref, status, secret_reference, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3, $4, $5, 'pending', $6, $7, $7) RETURNING id::text, business_id::text, provider_ref, channel, provider_account_ref, provider_connection_ref, status, secret_reference`
+	const query = `INSERT INTO channel_connections (id, business_id, provider_ref, channel, provider_connection_ref, status, secret_reference, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3, $4, $5, 'pending', $6, $7, $7) RETURNING id::text, business_id::text, provider_ref, channel, provider_account_ref, provider_connection_ref, status, secret_reference, resource_version, updated_at`
 	var record ports.ChannelConnectionRecord
-	if err := executor.QueryRow(ctx, query, id, businessID, providerRef, channel, providerConnectionRef, secretReference, now).Scan(&record.ID, &record.BusinessID, &record.ProviderReference, &record.Channel, &record.ProviderAccountReference, &record.ProviderConnectionRef, &record.Status, &record.SecretReference); err != nil {
+	if err := executor.QueryRow(ctx, query, id, businessID, providerRef, channel, providerConnectionRef, secretReference, now).Scan(&record.ID, &record.BusinessID, &record.ProviderReference, &record.Channel, &record.ProviderAccountReference, &record.ProviderConnectionRef, &record.Status, &record.SecretReference, &record.ResourceVersion, &record.UpdatedAt); err != nil {
 		return ports.ChannelConnectionRecord{}, &RepositoryError{Operation: "channel_connection.create_pending", Kind: RepositoryInvalid, Err: err}
 	}
 	return record, nil
@@ -159,9 +159,9 @@ func (r *ChannelConnectionRepository) Activate(ctx context.Context, businessID, 
 	if err != nil {
 		return ports.ChannelConnectionRecord{}, err
 	}
-	const query = `UPDATE channel_connections SET provider_account_ref = $3, provider_connection_ref = $4, status = 'active', updated_at = $5 WHERE business_id = $1::uuid AND id = $2::uuid AND status IN ('pending', 'reconnect_required') RETURNING id::text, business_id::text, provider_ref, channel, provider_account_ref, provider_connection_ref, status, secret_reference`
+	const query = `UPDATE channel_connections SET provider_account_ref = $3, provider_connection_ref = $4, status = 'active', resource_version = resource_version + 1, updated_at = $5 WHERE business_id = $1::uuid AND id = $2::uuid AND status IN ('pending', 'reconnect_required') RETURNING id::text, business_id::text, provider_ref, channel, provider_account_ref, provider_connection_ref, status, secret_reference, resource_version, updated_at`
 	var record ports.ChannelConnectionRecord
-	if err := executor.QueryRow(ctx, query, businessID, id, providerAccountRef, providerConnectionRef, time.Now().UTC()).Scan(&record.ID, &record.BusinessID, &record.ProviderReference, &record.Channel, &record.ProviderAccountReference, &record.ProviderConnectionRef, &record.Status, &record.SecretReference); err != nil {
+	if err := executor.QueryRow(ctx, query, businessID, id, providerAccountRef, providerConnectionRef, time.Now().UTC()).Scan(&record.ID, &record.BusinessID, &record.ProviderReference, &record.Channel, &record.ProviderAccountReference, &record.ProviderConnectionRef, &record.Status, &record.SecretReference, &record.ResourceVersion, &record.UpdatedAt); err != nil {
 		return ports.ChannelConnectionRecord{}, classifyRepositoryGetError("channel_connection.activate", err)
 	}
 	return record, nil

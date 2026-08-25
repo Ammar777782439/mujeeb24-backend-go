@@ -49,6 +49,7 @@ type ConversationView struct {
 	State           string
 	Ownership       string
 	AIMode          string
+	Labels          []string
 	ResourceVersion ResourceVersion
 }
 type MessageView struct {
@@ -63,6 +64,7 @@ type MessageView struct {
 	OccurredAt               time.Time
 	CreatedAt                time.Time
 	ResourceVersion          ResourceVersion
+	Private                  bool
 }
 type CustomerView struct {
 	ID              CustomerID

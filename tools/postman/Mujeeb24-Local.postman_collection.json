@@ -18,6 +18,11 @@
           "name": "Readiness (PostgreSQL)",
           "request": {"method": "GET", "header": [], "url": "{{base_url}}/api/v1/health/ready"},
           "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 readiness', function () { pm.response.to.have.status(200); });"]}}]
+        },
+        {
+          "name": "Metrics (local PostgreSQL pool)",
+          "request": {"method": "GET", "header": [], "url": "{{base_url}}/api/v1/metrics"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 Prometheus metrics', function () { pm.response.to.have.status(200); pm.expect(pm.response.text()).to.include('mujeeb_postgres_pool_total_connections'); });"]}}]
         }
       ]
     },
@@ -102,22 +107,42 @@
       ]
     },
     {
-      "name": "05 — Known 501 (contract present, runtime work pending)",
+      "name": "05 — Business, conversations, and channels (runtime wired)",
       "item": [
         {
-          "name": "Get business profile — expect 501",
+          "name": "Get business profile",
           "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('typed 501 is expected until business query wiring lands', function () { pm.response.to.have.status(501); });"]}}]
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 business profile', function () { pm.response.to.have.status(200); pm.collectionVariables.set('business_resource_version', pm.response.json().data.resource_version); });"]}}]
         },
         {
-          "name": "List conversations — expect 501",
+          "name": "Dashboard overview",
+          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/dashboard/overview"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 overview', function () { pm.response.to.have.status(200); });"]}}]
+        },
+        {
+          "name": "List conversations",
           "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/conversations?limit=50"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('typed 501 is expected until conversation runtime wiring lands', function () { pm.response.to.have.status(501); });"]}}]
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 conversations', function () { pm.response.to.have.status(200); });"]}}]
         },
         {
-          "name": "Metrics — expect 501",
-          "request": {"method": "GET", "header": [], "url": "{{base_url}}/api/v1/metrics"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('typed 501 is expected until metrics handler is wired', function () { pm.response.to.have.status(501); });"]}}]
+          "name": "List customers",
+          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/customers?limit=50"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 customers', function () { pm.response.to.have.status(200); });"]}}]
+        },
+        {
+          "name": "List channel connections",
+          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/channel-connections?limit=50"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 channel connection list', function () { pm.response.to.have.status(200); });"]}}]
+        }
+      ]
+    },
+    {
+      "name": "06 — Feature-gated external runtime (not live)",
+      "item": [
+        {
+          "name": "Begin channel provisioning — disabled configuration returns 422, not 501",
+          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}, {"key": "Content-Type", "value": "application/json"}, {"key": "Idempotency-Key", "value": "postman-provisioning-disabled-001"}], "body": {"mode": "raw", "raw": "{\n  \"provider\": \"socialapi\",\n  \"channel\": \"whatsapp\",\n  \"display_name\": \"Postman local business\"\n}"}, "url": "{{base_url}}/api/v1/businesses/{{business_id}}/channel-connections"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('422 when provisioning is not configured, never 501', function () { pm.response.to.have.status(422); });"]}}]
         }
       ]
     }

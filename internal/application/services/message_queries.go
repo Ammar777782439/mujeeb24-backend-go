@@ -29,9 +29,17 @@ func (s MessageQueryService) ListConversationMessages(ctx context.Context, query
 		if record.TextContent != nil {
 			text = *record.TextContent
 		}
-		items = append(items, commands.MessageView{ID: commands.MessageID(record.ID), ConversationID: commands.ConversationID(record.ConversationID), Direction: record.Direction, Origin: record.Origin, Status: record.Status, Text: text, ProviderMessageReference: record.ProviderMessageID, ChatwootMessageReference: record.ChatwootMessageID, OccurredAt: record.OccurredAt, CreatedAt: record.CreatedAt})
+		items = append(items, commands.MessageView{ID: commands.MessageID(record.ID), ConversationID: commands.ConversationID(record.ConversationID), Direction: record.Direction, Origin: record.Origin, Status: record.Status, Text: text, ProviderMessageReference: record.ProviderMessageID, ChatwootMessageReference: record.ChatwootMessageID, OccurredAt: record.OccurredAt, CreatedAt: record.CreatedAt, Private: record.Visibility == "private"})
 	}
 	return commands.ListResult[commands.MessageView]{Items: items, NextCursor: page.NextCursor, HasMore: page.HasMore}, nil
 }
 
 var _ queries.ListConversationMessagesHandler = MessageQueryService{}
+
+func messageView(record ports.CommunicationMessageRecord) commands.MessageView {
+	text := ""
+	if record.TextContent != nil {
+		text = *record.TextContent
+	}
+	return commands.MessageView{ID: commands.MessageID(record.ID), ConversationID: commands.ConversationID(record.ConversationID), Direction: record.Direction, Origin: record.Origin, Status: record.Status, Text: text, ProviderMessageReference: record.ProviderMessageID, ChatwootMessageReference: record.ChatwootMessageID, OccurredAt: record.OccurredAt, CreatedAt: record.CreatedAt, Private: record.Visibility == "private"}
+}

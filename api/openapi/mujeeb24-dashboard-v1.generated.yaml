@@ -1605,6 +1605,8 @@ components:
           type: string
         origin:
           type: string
+        private:
+          type: boolean
         provider_message_reference:
           type: string
         status:
@@ -1620,6 +1622,7 @@ components:
         - text
         - occurred_at
         - created_at
+        - private
       type: object
     Offer:
       additionalProperties: false

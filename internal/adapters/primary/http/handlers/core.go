@@ -262,7 +262,7 @@ func optionalCustomerID(v contract.UUID) *commands.CustomerID {
 	return &id
 }
 func conversationProjection(v commands.ConversationView) contract.Conversation {
-	return contract.Conversation{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), Customer: contract.CustomerSummary{ID: contract.UUID(v.CustomerID)}, State: v.State, Ownership: v.Ownership, AIMode: v.AIMode, ResourceVersion: string(v.ResourceVersion)}
+	return contract.Conversation{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), Customer: contract.CustomerSummary{ID: contract.UUID(v.CustomerID)}, State: v.State, Ownership: v.Ownership, AIMode: v.AIMode, Labels: v.Labels, ResourceVersion: string(v.ResourceVersion)}
 }
 func customerProjection(v commands.CustomerView) contract.Customer {
 	return contract.Customer{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), DisplayName: optionalString(v.DisplayName), Status: v.Status, ResourceVersion: string(v.ResourceVersion)}
@@ -274,7 +274,7 @@ func singleConversation(v commands.ConversationView) *contract.Single[contract.C
 }
 func singleMessage(v commands.MessageView) *contract.Single[contract.Message] {
 	out := &contract.Single[contract.Message]{}
-	out.Body.Data = contract.Message{ID: contract.UUID(v.ID), ConversationID: contract.UUID(v.ConversationID), Direction: v.Direction, Origin: v.Origin, Status: v.Status, Text: v.Text, CreatedAt: v.CreatedAt}
+	out.Body.Data = contract.Message{ID: contract.UUID(v.ID), ConversationID: contract.UUID(v.ConversationID), Direction: v.Direction, Origin: v.Origin, Status: v.Status, Text: v.Text, CreatedAt: v.CreatedAt, Private: v.Private}
 	return out
 }
 
