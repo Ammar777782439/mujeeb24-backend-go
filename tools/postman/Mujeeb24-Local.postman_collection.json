@@ -1,0 +1,129 @@
+{
+  "info": {
+    "_postman_id": "4d1662f5-72e8-41e0-9b32-ef4cb6357b55",
+    "name": "Mujeeb 24 — Local PostgreSQL API",
+    "description": "Collection صادقة لمسارات Mujeeb 24 القابلة للاختبار محليًا. لا تحتوي أسرارًا أو refresh token. استورد معها Environment المحلي واقرأ README-ar.md قبل التنفيذ.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 — Public health",
+      "item": [
+        {
+          "name": "Liveness",
+          "request": {"method": "GET", "header": [], "url": "{{base_url}}/api/v1/health/live"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 liveness', function () { pm.response.to.have.status(200); });"]}}]
+        },
+        {
+          "name": "Readiness (PostgreSQL)",
+          "request": {"method": "GET", "header": [], "url": "{{base_url}}/api/v1/health/ready"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 readiness', function () { pm.response.to.have.status(200); });"]}}]
+        }
+      ]
+    },
+    {
+      "name": "02 — Authentication and identity",
+      "item": [
+        {
+          "name": "Login — capture access token",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"email\": \"{{login_email}}\",\n  \"password\": \"{{login_password}}\"\n}"},
+            "url": "{{base_url}}/api/v1/auth/login"
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 and token only in response body', function () { pm.response.to.have.status(200); const json = pm.response.json(); pm.expect(json.data.access_token).to.be.a('string').and.not.empty; pm.expect(JSON.stringify(json)).not.to.include('refresh_token'); pm.collectionVariables.set('access_token', json.data.access_token); });", "pm.test('HttpOnly refresh cookie is issued', function () { pm.expect(pm.response.headers.get('Set-Cookie')).to.include('HttpOnly'); });"]}}]
+        },
+        {
+          "name": "Get current principal",
+          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/me"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 current principal', function () { pm.response.to.have.status(200); });"]}}]
+        },
+        {
+          "name": "List accessible businesses — capture first business ID",
+          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/me/businesses?limit=50"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 memberships and business ID', function () { pm.response.to.have.status(200); const items = pm.response.json().data; pm.expect(items).to.be.an('array').and.not.empty; pm.collectionVariables.set('business_id', items[0].business.id); });"]}}]
+        },
+        {
+          "name": "Refresh session — Cookie Jar only",
+          "request": {"method": "POST", "header": [], "url": "{{base_url}}/api/v1/auth/refresh"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 rotated refresh session', function () { pm.response.to.have.status(200); const json = pm.response.json(); pm.collectionVariables.set('access_token', json.data.access_token); });"]}}]
+        },
+        {
+          "name": "Logout — revoke current refresh session",
+          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/auth/logout"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('204 logout', function () { pm.response.to.have.status(204); pm.collectionVariables.unset('access_token'); });"]}}]
+        }
+      ]
+    },
+    {
+      "name": "03 — Scoped Catalog (runtime wired)",
+      "item": [
+        {
+          "name": "List catalogs",
+          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/catalogs?limit=50"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 scoped catalog list', function () { pm.response.to.have.status(200); });"]}}]
+        },
+        {
+          "name": "List leads",
+          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/leads?limit=50"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 scoped lead list', function () { pm.response.to.have.status(200); });"]}}]
+        },
+        {
+          "name": "List transactions",
+          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/transactions?limit=50"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 scoped transaction list', function () { pm.response.to.have.status(200); });"]}}]
+        },
+        {
+          "name": "List AI decisions",
+          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/ai-decisions?limit=50"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 scoped AI decision list', function () { pm.response.to.have.status(200); });"]}}]
+        },
+        {
+          "name": "List audit events",
+          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/audit-events?limit=50"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 scoped audit list', function () { pm.response.to.have.status(200); });"]}}]
+        }
+      ]
+    },
+    {
+      "name": "04 — Expected authorization failures",
+      "item": [
+        {
+          "name": "No bearer → 401",
+          "request": {"method": "GET", "header": [], "url": "{{base_url}}/api/v1/me"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('401 without bearer', function () { pm.response.to.have.status(401); });"]}}]
+        },
+        {
+          "name": "Other business → 403",
+          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{other_business_id}}/catalogs?limit=50"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('403 for business without active membership', function () { pm.response.to.have.status(403); });"]}}]
+        }
+      ]
+    },
+    {
+      "name": "05 — Known 501 (contract present, runtime work pending)",
+      "item": [
+        {
+          "name": "Get business profile — expect 501",
+          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('typed 501 is expected until business query wiring lands', function () { pm.response.to.have.status(501); });"]}}]
+        },
+        {
+          "name": "List conversations — expect 501",
+          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/conversations?limit=50"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('typed 501 is expected until conversation runtime wiring lands', function () { pm.response.to.have.status(501); });"]}}]
+        },
+        {
+          "name": "Metrics — expect 501",
+          "request": {"method": "GET", "header": [], "url": "{{base_url}}/api/v1/metrics"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('typed 501 is expected until metrics handler is wired', function () { pm.response.to.have.status(501); });"]}}]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {"key": "access_token", "value": "", "type": "string"},
+    {"key": "business_id", "value": "", "type": "string"}
+  ]
+}

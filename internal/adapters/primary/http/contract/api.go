@@ -25,13 +25,21 @@ func BuildAPI() (huma.API, *http.ServeMux) {
 // BuildAPIWithHandlers uses the same operation declarations as BuildAPI while
 // allowing runtime wiring of the typed HTTP handler boundary.
 func BuildAPIWithHandlers(handlers DashboardOperationHandler) (huma.API, *http.ServeMux) {
+	return BuildAPIWithHandlersAndMiddleware(handlers, nil)
+}
+
+func BuildAPIWithHandlersAndMiddleware(handlers DashboardOperationHandler, middlewares huma.Middlewares) (huma.API, *http.ServeMux) {
 	mux := http.NewServeMux()
 	config := huma.DefaultConfig("Mujeeb 24 Dashboard API", "1.0.0")
 	config.OpenAPI.Servers = []*huma.Server{{URL: "/api/v1", Description: "Mujeeb 24 API V1"}}
 	config.OpenAPI.Components.SecuritySchemes = map[string]*huma.SecurityScheme{
-		"bearerAuth": {Type: "http", Scheme: "bearer", BearerFormat: "JWT", Description: "EdDSA/Ed25519 JWT access token"},
+		"bearerAuth":    {Type: "http", Scheme: "bearer", BearerFormat: "JWT", Description: "EdDSA/Ed25519 JWT access token"},
+		"refreshCookie": {Type: "apiKey", In: "cookie", Name: "mujeeb_refresh", Description: "HttpOnly opaque refresh session cookie"},
 	}
 	api := humago.NewWithPrefix(mux, "/api/v1", config)
+	if len(middlewares) > 0 {
+		api.UseMiddleware(middlewares...)
+	}
 	registerCoreOperations(api, handlers)
 	registerExtendedOperations(api, handlers)
 	registerSystemOperations(api, handlers)
@@ -160,8 +168,8 @@ func registerExtendedOperations(api huma.API, dispatcher DashboardOperationHandl
 func init() { _ = registerExtendedOperations }
 
 func registerSystemOperations(api huma.API, dispatcher DashboardOperationHandler) {
-	register(api, dispatcher, huma.Operation{OperationID: "authenticatePrincipal", Method: http.MethodPost, Path: "/auth/login", Tags: []string{"Auth"}, Summary: "Authenticate and issue JWT access token", Security: []map[string][]string{}, DefaultStatus: http.StatusOK, Errors: []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusTooManyRequests}}, LoginInput{}, Single[AuthResponse]{})
-	register(api, dispatcher, huma.Operation{OperationID: "rotateRefreshSession", Method: http.MethodPost, Path: "/auth/refresh", Tags: []string{"Auth"}, Summary: "Rotate refresh session", Security: []map[string][]string{{"refreshCookie": {}}}, DefaultStatus: http.StatusOK, Errors: []int{http.StatusUnauthorized, http.StatusTooManyRequests}}, RefreshInput{}, Single[AuthResponse]{})
+	register(api, dispatcher, huma.Operation{OperationID: "authenticatePrincipal", Method: http.MethodPost, Path: "/auth/login", Tags: []string{"Auth"}, Summary: "Authenticate and issue JWT access token", Security: []map[string][]string{}, DefaultStatus: http.StatusOK, Errors: []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusTooManyRequests}}, LoginInput{}, AuthOutput{})
+	register(api, dispatcher, huma.Operation{OperationID: "rotateRefreshSession", Method: http.MethodPost, Path: "/auth/refresh", Tags: []string{"Auth"}, Summary: "Rotate refresh session", Security: []map[string][]string{{"refreshCookie": {}}}, DefaultStatus: http.StatusOK, Errors: []int{http.StatusUnauthorized, http.StatusTooManyRequests}}, RefreshInput{}, AuthOutput{})
 	register(api, dispatcher, huma.Operation{OperationID: "revokeRefreshSession", Method: http.MethodPost, Path: "/auth/logout", Tags: []string{"Auth"}, Summary: "Revoke refresh session", Security: dashboardSecurity, DefaultStatus: http.StatusNoContent, Errors: []int{http.StatusUnauthorized}}, LogoutInput{}, NoContentOutput{})
 	register(api, dispatcher, huma.Operation{OperationID: "getLiveness", Method: http.MethodGet, Path: "/health/live", Tags: []string{"Operational"}, Summary: "Process liveness", Security: []map[string][]string{}, Errors: nil}, EmptyInput{}, Single[Health]{})
 	register(api, dispatcher, huma.Operation{OperationID: "getReadiness", Method: http.MethodGet, Path: "/health/ready", Tags: []string{"Operational"}, Summary: "Dependency readiness", Security: []map[string][]string{}, Errors: []int{http.StatusServiceUnavailable}}, EmptyInput{}, Single[Health]{})

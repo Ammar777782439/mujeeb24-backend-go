@@ -2,12 +2,15 @@ package handlers
 
 import (
 	"context"
+	"net/http"
+	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/middleware"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/queries"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 )
 
 func (s *Server) dispatchSystemQuery(ctx context.Context, operationID string, input any) (any, bool) {
@@ -100,7 +103,8 @@ func (s *Server) dispatchSystemCommand(ctx context.Context, operationID string, 
 		if err != nil {
 			return mapApplicationError(err), true
 		}
-		out := &contract.Single[contract.AuthResponse]{}
+		out := &contract.AuthOutput{}
+		out.SetCookie = refreshCookie(result.RefreshToken, result.RefreshExpiresAt)
 		out.Body.Data = authResponseProjection(result)
 		return out, true
 	case "rotateRefreshSession":
@@ -108,11 +112,16 @@ func (s *Server) dispatchSystemCommand(ctx context.Context, operationID string, 
 		if s.deps.RotateRefreshSession == nil {
 			return mapApplicationError(appErrors.NotImplemented()), true
 		}
-		result, err := s.deps.RotateRefreshSession.Handle(ctx, commands.RotateRefreshSessionCommand{RequestID: "", CorrelationID: "", RefreshToken: in.Cookie})
+		refreshToken, err := refreshTokenFromCookie(in.Cookie)
 		if err != nil {
 			return mapApplicationError(err), true
 		}
-		out := &contract.Single[contract.AuthResponse]{}
+		result, err := s.deps.RotateRefreshSession.Handle(ctx, commands.RotateRefreshSessionCommand{RequestID: "", CorrelationID: "", RefreshToken: refreshToken})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		out := &contract.AuthOutput{}
+		out.SetCookie = refreshCookie(result.RefreshToken, result.RefreshExpiresAt)
 		out.Body.Data = authResponseProjection(result)
 		return out, true
 	case "revokeRefreshSession":
@@ -123,7 +132,16 @@ func (s *Server) dispatchSystemCommand(ctx context.Context, operationID string, 
 		if err != nil {
 			return mapApplicationError(err), true
 		}
-		_, err = s.deps.RevokeRefreshSession.Handle(ctx, commands.RevokeRefreshSessionCommand{Meta: commands.CommandMeta{Actor: actor}, SessionReference: ""})
+		in := input.(*contract.LogoutInput)
+		refreshToken, err := refreshTokenFromCookie(in.Cookie)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		sessionID, err := services.RefreshSessionID(refreshToken)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		_, err = s.deps.RevokeRefreshSession.Handle(ctx, commands.RevokeRefreshSessionCommand{Meta: commands.CommandMeta{Actor: actor}, SessionReference: sessionID})
 		if err != nil {
 			return mapApplicationError(err), true
 		}
@@ -190,4 +208,21 @@ func (s *Server) dispatchSystemCommand(ctx context.Context, operationID string, 
 
 func authResponseProjection(v commands.AuthResult) contract.AuthResponse {
 	return contract.AuthResponse{AccessToken: v.AccessToken, TokenType: "Bearer", ExpiresAt: v.ExpiresAt, Principal: contract.Principal{PrincipalID: contract.UUID(v.Principal.ID), DisplayName: v.Principal.DisplayName, Email: optionalString(v.Principal.Email)}}
+}
+
+func refreshTokenFromCookie(raw string) (string, error) {
+	request := &http.Request{Header: http.Header{"Cookie": []string{raw}}}
+	cookie, err := request.Cookie("mujeeb_refresh")
+	if err != nil || cookie.Value == "" {
+		return "", appErrors.New(appErrors.CodeUnauthenticated, "refresh cookie is required")
+	}
+	return cookie.Value, nil
+}
+
+func refreshCookie(value string, expiresAt time.Time) *http.Cookie {
+	maxAge := int(time.Until(expiresAt).Seconds())
+	if maxAge < 1 {
+		maxAge = 1
+	}
+	return &http.Cookie{Name: "mujeeb_refresh", Value: value, Path: "/api/v1/auth", HttpOnly: true, SameSite: http.SameSiteStrictMode, Expires: expiresAt.UTC(), MaxAge: maxAge}
 }

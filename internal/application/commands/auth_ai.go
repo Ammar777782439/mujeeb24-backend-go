@@ -1,5 +1,7 @@
 package commands
 
+import "time"
+
 type AuthenticatePrincipalCommand struct {
 	RequestID     string
 	CorrelationID string
@@ -17,9 +19,11 @@ type RevokeRefreshSessionCommand struct {
 	SessionReference string
 }
 type AuthResult struct {
-	AccessToken string
-	ExpiresAt   string
-	Principal   PrincipalAuthView
+	AccessToken      string
+	RefreshToken     string
+	ExpiresAt        string
+	RefreshExpiresAt time.Time
+	Principal        PrincipalAuthView
 }
 type PrincipalAuthView struct {
 	ID          PrincipalID

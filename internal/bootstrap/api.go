@@ -11,10 +11,13 @@ import (
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/handlers"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/middleware"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/auth/ed25519jwt"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
+	"github.com/danielgtaylor/huma/v2"
 )
 
 type APIRuntime struct {
@@ -31,12 +34,23 @@ type APIRuntime struct {
 	closeOnce           sync.Once
 }
 
+type authenticationRuntime struct {
+	Verifier   middleware.AccessTokenVerifier
+	Repository *postgres.AuthenticationRepository
+	Service    services.AuthenticationService
+}
+
 func BuildAPI(ctx context.Context, cfg config.ProcessConfig) (*APIRuntime, error) {
 	database, err := postgres.Open(ctx, cfg.DatabaseURL, postgres.PoolConfig{MaxConns: cfg.DBMaxConns, MinConns: cfg.DBMinConns, MaxConnLifetime: cfg.DBMaxConnLifetime, MaxConnIdleTime: cfg.DBMaxConnIdleTime, HealthCheckPeriod: cfg.DBHealthCheckPeriod, ConnectTimeout: cfg.DBConnectTimeout})
 	if err != nil {
 		return nil, err
 	}
-	runtime, err := NewAPIWithExternal(database, cfg.HTTPAddr, BuildExternalAdapters(cfg))
+	authentication, err := buildAuthenticationRuntime(cfg, database)
+	if err != nil {
+		database.Close()
+		return nil, err
+	}
+	runtime, err := newAPIWithExternalAndAuthentication(database, cfg.HTTPAddr, BuildExternalAdapters(cfg), authentication)
 	if err != nil {
 		database.Close()
 		return nil, err
@@ -49,6 +63,10 @@ func NewAPI(database *postgres.Adapter, address string) (*APIRuntime, error) {
 }
 
 func NewAPIWithExternal(database *postgres.Adapter, address string, external ExternalAdapters) (*APIRuntime, error) {
+	return newAPIWithExternalAndAuthentication(database, address, external, nil)
+}
+
+func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address string, external ExternalAdapters, authentication *authenticationRuntime) (*APIRuntime, error) {
 	if database == nil {
 		return nil, errors.New("postgres adapter is required")
 	}
@@ -60,6 +78,15 @@ func NewAPIWithExternal(database *postgres.Adapter, address string, external Ext
 	}
 	dependencies := BuildDependencies(database)
 	dependencies.GetReadiness = readinessQueryService{Ping: database.Ping, FeatureChecks: external.ReadinessChecks()}
+	if authentication != nil {
+		dependencies.Scope = handlers.PostgresScopeProvider{Memberships: authentication.Repository}
+		dependencies.AuthenticatePrincipal = authentication.Service
+		dependencies.RotateRefreshSession = services.RefreshSessionRotationService{Authentication: authentication.Service}
+		dependencies.RevokeRefreshSession = services.RefreshSessionRevocationService{Authentication: authentication.Service}
+		principalQueries := services.PrincipalQueryService{Principals: authentication.Repository}
+		dependencies.GetCurrentPrincipal = principalQueries
+		dependencies.ListAccessibleBusinesses = services.MembershipQueryService{PrincipalQueryService: principalQueries}
+	}
 	var provisioningService *services.ChannelProvisioningService
 	if external.ChannelProvisioningEnabled {
 		if external.ChannelProvisioningError != nil {
@@ -130,7 +157,11 @@ func NewAPIWithExternal(database *postgres.Adapter, address string, external Ext
 		}
 		dependencies.IngestChatwootWebhook = chatwootService
 	}
-	_, mux := contract.BuildAPIWithHandlers(handlers.NewServer(dependencies))
+	var apiMiddleware []func(ctx huma.Context, next func(huma.Context))
+	if authentication != nil {
+		apiMiddleware = append(apiMiddleware, middleware.RequireAccessTokenHuma(authentication.Verifier))
+	}
+	_, mux := contract.BuildAPIWithHandlersAndMiddleware(handlers.NewServer(dependencies), apiMiddleware)
 	if provisioningService != nil {
 		mux.HandleFunc("/oauth/socialapi/callback", func(writer http.ResponseWriter, request *http.Request) {
 			if request.Method != http.MethodGet {
@@ -166,6 +197,19 @@ func NewAPIWithExternal(database *postgres.Adapter, address string, external Ext
 	})
 	server := &http.Server{Addr: address, Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	return &APIRuntime{HTTP: server, Database: database, Dependencies: dependencies, EventStore: eventStore, Outbox: outboxStore, SocialAPI: external.SocialAPI, Chatwoot: external.Chatwoot, SocialWebhook: external.SocialWebhook, ChatwootWebhook: external.ChatwootWebhook, ChannelProvisioning: provisioningService}, nil
+}
+
+func buildAuthenticationRuntime(cfg config.ProcessConfig, database *postgres.Adapter) (*authenticationRuntime, error) {
+	if !cfg.AuthEnabled {
+		return nil, nil
+	}
+	issuer, err := ed25519jwt.New(ed25519jwt.Config{PrivateKeyBase64: cfg.JWTEd25519PrivateKey, PublicKeyBase64: cfg.JWTEd25519PublicKey, Issuer: cfg.JWTIssuer, AccessTTL: cfg.JWTAccessTTL})
+	if err != nil {
+		return nil, err
+	}
+	repository := postgres.NewAuthenticationRepository(database)
+	service := services.AuthenticationService{Principals: repository, Sessions: repository, Tokens: issuer, RefreshTTL: cfg.RefreshSessionTTL}
+	return &authenticationRuntime{Verifier: issuer, Repository: repository, Service: service}, nil
 }
 
 func (r *APIRuntime) Serve() error {

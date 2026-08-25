@@ -316,6 +316,9 @@ func (s *Server) dispatchQuery(ctx context.Context, operationID string, input an
 	if result, handled := s.dispatchSystemQuery(ctx, operationID, input); handled {
 		return result, true
 	}
+	if result, handled := s.dispatchAdditionalQuery(ctx, operationID, input); handled {
+		return result, true
+	}
 	switch operationID {
 	case "getBusiness":
 		in := input.(*contract.BusinessPath)

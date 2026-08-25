@@ -24,6 +24,12 @@ type ProcessConfig struct {
 	DBMaxConnIdleTime              time.Duration
 	DBHealthCheckPeriod            time.Duration
 	DBConnectTimeout               time.Duration
+	AuthEnabled                    bool
+	JWTIssuer                      string
+	JWTEd25519PrivateKey           string
+	JWTEd25519PublicKey            string
+	JWTAccessTTL                   time.Duration
+	RefreshSessionTTL              time.Duration
 	SocialAPIBaseURL               string
 	SocialAPIAPIKey                string
 	SocialAPIWebhookSecret         string
@@ -63,6 +69,12 @@ func LoadFromEnv() (ProcessConfig, error) {
 		DBMaxConnIdleTime:              30 * time.Minute,
 		DBHealthCheckPeriod:            time.Minute,
 		DBConnectTimeout:               5 * time.Second,
+		AuthEnabled:                    false,
+		JWTIssuer:                      envOr("JWT_ISSUER", "mujeeb24"),
+		JWTEd25519PrivateKey:           strings.TrimSpace(os.Getenv("JWT_ED25519_PRIVATE_KEY")),
+		JWTEd25519PublicKey:            strings.TrimSpace(os.Getenv("JWT_ED25519_PUBLIC_KEY")),
+		JWTAccessTTL:                   15 * time.Minute,
+		RefreshSessionTTL:              30 * 24 * time.Hour,
 		SocialAPIBaseURL:               envOr("SOCIALAPI_BASE_URL", "https://api.social-api.ai"),
 		SocialAPIAPIKey:                strings.TrimSpace(os.Getenv("SOCIALAPI_API_KEY")),
 		SocialAPIWebhookSecret:         strings.TrimSpace(os.Getenv("SOCIALAPI_WEBHOOK_SECRET")),
@@ -117,6 +129,15 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.DBConnectTimeout, err = durationEnv("DB_CONNECT_TIMEOUT", cfg.DBConnectTimeout); err != nil {
 		return ProcessConfig{}, err
 	}
+	if cfg.AuthEnabled, err = boolEnv("AUTH_ENABLED", cfg.AuthEnabled); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.JWTAccessTTL, err = durationEnv("JWT_ACCESS_TTL", cfg.JWTAccessTTL); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.RefreshSessionTTL, err = durationEnv("REFRESH_SESSION_TTL", cfg.RefreshSessionTTL); err != nil {
+		return ProcessConfig{}, err
+	}
 	if cfg.SocialAPIHTTPTimeout, err = durationEnv("SOCIALAPI_HTTP_TIMEOUT", cfg.SocialAPIHTTPTimeout); err != nil {
 		return ProcessConfig{}, err
 	}
@@ -151,6 +172,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 		if cfg.LLMMaxOutputTokens <= 0 || cfg.LLMMaxInputCharacters <= 0 {
 			return ProcessConfig{}, errors.New("LLM token and input limits must be positive")
 		}
+	}
+	if cfg.AuthEnabled && (cfg.JWTEd25519PrivateKey == "" || cfg.JWTEd25519PublicKey == "" || strings.TrimSpace(cfg.JWTIssuer) == "" || cfg.JWTAccessTTL <= 0 || cfg.RefreshSessionTTL <= 0) {
+		return ProcessConfig{}, errors.New("AUTH_ENABLED requires JWT_ED25519_PRIVATE_KEY, JWT_ED25519_PUBLIC_KEY, JWT_ISSUER, and positive token lifetimes")
 	}
 	if cfg.ShutdownTimeout <= 0 || cfg.WorkerPollInterval <= 0 || cfg.WorkerBatchSize <= 0 || strings.TrimSpace(cfg.WorkerOwner) == "" || cfg.DBMaxConns <= 0 || cfg.DBMinConns < 0 || cfg.DBMinConns > cfg.DBMaxConns {
 		return ProcessConfig{}, errors.New("invalid process or database pool configuration")

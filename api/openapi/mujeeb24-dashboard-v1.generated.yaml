@@ -185,6 +185,23 @@ components:
         - metadata
         - occurred_at
       type: object
+    AuthOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/AuthOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/AuthResponse"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
     AuthResponse:
       additionalProperties: false
       properties:
@@ -640,6 +657,53 @@ components:
         - priority
         - last_activity_at
         - resource_version
+      type: object
+    Cookie:
+      additionalProperties: false
+      properties:
+        Domain:
+          type: string
+        Expires:
+          format: date-time
+          type: string
+        HttpOnly:
+          type: boolean
+        MaxAge:
+          format: int64
+          type: integer
+        Name:
+          type: string
+        Path:
+          type: string
+        Raw:
+          type: string
+        RawExpires:
+          type: string
+        SameSite:
+          format: int64
+          type: integer
+        Secure:
+          type: boolean
+        Unparsed:
+          items:
+            type: string
+          nullable: true
+          type: array
+        Value:
+          type: string
+      required:
+        - Name
+        - Value
+        - Path
+        - Domain
+        - Expires
+        - RawExpires
+        - MaxAge
+        - Secure
+        - HttpOnly
+        - SameSite
+        - Raw
+        - Unparsed
       type: object
     CreateAttributeSchemaRequest:
       additionalProperties: false
@@ -1742,23 +1806,6 @@ components:
         - data
         - request_id
       type: object
-    SingleAuthResponseBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          example: /api/v1/schemas/SingleAuthResponseBody.json
-          format: uri
-          readOnly: true
-          type: string
-        data:
-          $ref: "#/components/schemas/AuthResponse"
-        request_id:
-          type: string
-      required:
-        - data
-        - request_id
-      type: object
     SingleBusinessBody:
       additionalProperties: false
       properties:
@@ -2306,6 +2353,11 @@ components:
       description: EdDSA/Ed25519 JWT access token
       scheme: bearer
       type: http
+    refreshCookie:
+      description: HttpOnly opaque refresh session cookie
+      in: cookie
+      name: mujeeb_refresh
+      type: apiKey
 info:
   title: Mujeeb 24 Dashboard API
   version: 1.0.0
@@ -2325,8 +2377,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SingleAuthResponseBody"
+                $ref: "#/components/schemas/AuthOutputBody"
           description: OK
+          headers:
+            Set-Cookie:
+              schema:
+                $ref: "#/components/schemas/Cookie"
         "400":
           content:
             application/json:
@@ -2408,8 +2464,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SingleAuthResponseBody"
+                $ref: "#/components/schemas/AuthOutputBody"
           description: OK
+          headers:
+            Set-Cookie:
+              schema:
+                $ref: "#/components/schemas/Cookie"
         "401":
           content:
             application/json:

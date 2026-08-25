@@ -1,6 +1,10 @@
 package contract
 
-import "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/dto"
+import (
+	"net/http"
+
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/dto"
+)
 
 type UUID = dto.UUID
 type Timestamp = dto.Timestamp
@@ -161,6 +165,14 @@ type Single[T any] struct {
 	Body struct {
 		Data      T      `json:"data"`
 		RequestID string `json:"request_id"`
+	}
+}
+
+type AuthOutput struct {
+	SetCookie *http.Cookie `header:"Set-Cookie"`
+	Body      struct {
+		Data      AuthResponse `json:"data"`
+		RequestID string       `json:"request_id"`
 	}
 }
 
