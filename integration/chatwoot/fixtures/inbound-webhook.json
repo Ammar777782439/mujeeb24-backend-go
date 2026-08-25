@@ -2,6 +2,7 @@
   "event": "conversation_created",
   "id": 9001,
   "account_id": 1,
+  "inbox_id": 1,
   "conversation_id": 1,
   "sender_id": 1,
   "content": "Mujeeb Chatwoot webhook integration test",

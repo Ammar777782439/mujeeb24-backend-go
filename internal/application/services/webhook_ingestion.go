@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"time"
@@ -96,14 +98,14 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 
 type ChatwootWebhookService struct {
 	Receiver ports.WebhookReceiver
+	Inbound  ports.ChatwootInboundStore
 }
 
 // Chatwoot is an internal communication workspace, not Mujeeb's provider
-// transport or source of customer truth. Valid callbacks are acknowledged and
-// ignored to prevent mirror/echo loops until an explicit workspace callback
-// use-case and mapping contract is approved.
+// transport or source of customer truth. A verified callback is materialized
+// into Mujeeb-owned records; no Chatwoot network call occurs in that transaction.
 func (s ChatwootWebhookService) Handle(ctx context.Context, command commands.IngestWebhookCommand) (commands.WebhookAcceptedResult, error) {
-	if s.Receiver == nil {
+	if s.Receiver == nil || s.Inbound == nil {
 		return commands.WebhookAcceptedResult{}, appErrors.NotImplemented()
 	}
 	if err := validateWebhookCommand(command); err != nil {
@@ -112,10 +114,48 @@ func (s ChatwootWebhookService) Handle(ctx context.Context, command commands.Ing
 	if err := s.Receiver.VerifyWebhook(ctx, command.ProviderHeaders, command.RawPayload); err != nil {
 		return commands.WebhookAcceptedResult{}, webhookAuthenticationError(err)
 	}
-	if _, err := s.Receiver.NormalizeWebhook(ctx, command.ProviderHeaders, command.RawPayload); err != nil {
+	events, err := s.Receiver.NormalizeWebhook(ctx, command.ProviderHeaders, command.RawPayload)
+	if err != nil {
 		return commands.WebhookAcceptedResult{}, webhookAuthenticationError(err)
 	}
-	return commands.WebhookAcceptedResult{Accepted: true, Ignored: true, RequestID: command.RequestID}, nil
+	result := commands.WebhookAcceptedResult{Accepted: true, Resolved: true, RequestID: command.RequestID}
+	payloadHash := sha256.Sum256(command.RawPayload)
+	for _, event := range events {
+		accountID, inboxID, ok := splitChatwootConnectionReference(event.ProviderConnectionID)
+		if !ok {
+			return commands.WebhookAcceptedResult{}, appErrors.New(appErrors.CodeValidation, "Chatwoot callback requires account and inbox references")
+		}
+		materialized, err := s.Inbound.Materialize(ctx, ports.ChatwootInboundDraft{
+			EventID:             event.ProviderEventID,
+			EventType:           event.EventType,
+			RouteKey:            command.RouteKey,
+			AccountID:           accountID,
+			InboxID:             inboxID,
+			ConversationID:      event.ProviderConversationID,
+			ExternalUserID:      event.ExternalUserID,
+			ProviderMessageID:   event.ProviderMessageID,
+			Content:             event.Text,
+			OccurredAt:          event.ReceivedAt,
+			ReceivedAt:          event.ReceivedAt,
+			RawPayloadReference: event.RawPayloadReference,
+			PayloadHash:         hex.EncodeToString(payloadHash[:]),
+		})
+		if err != nil {
+			return commands.WebhookAcceptedResult{}, externalDependencyError("Chatwoot callback could not be materialized", err)
+		}
+		if materialized.Duplicate {
+			result.Duplicate = true
+		}
+	}
+	return result, nil
+}
+
+func splitChatwootConnectionReference(value string) (string, string, bool) {
+	parts := strings.SplitN(strings.TrimSpace(value), ":", 2)
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+		return "", "", false
+	}
+	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), true
 }
 
 func validateWebhookCommand(command commands.IngestWebhookCommand) error {
@@ -168,3 +208,4 @@ func nonEmptyOr(value, fallback string) string {
 
 var _ commands.IngestSocialAPIWebhookHandler = SocialAPIWebhookService{}
 var _ commands.IngestChatwootWebhookHandler = ChatwootWebhookService{}
+var _ = splitChatwootConnectionReference

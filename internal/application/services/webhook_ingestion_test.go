@@ -55,6 +55,17 @@ type webhookEventStore struct {
 	created bool
 }
 
+type chatwootInboundStore struct {
+	draft  ports.ChatwootInboundDraft
+	result ports.ChatwootInboundResult
+	err    error
+}
+
+func (s *chatwootInboundStore) Materialize(_ context.Context, draft ports.ChatwootInboundDraft) (ports.ChatwootInboundResult, error) {
+	s.draft = draft
+	return s.result, s.err
+}
+
 func (s *webhookEventStore) RecordIfAbsent(_ context.Context, draft ports.InboundEventDraft) (bool, ports.InboundEventRecord, error) {
 	s.draft = draft
 	return s.created, ports.InboundEventRecord{ID: draft.ID}, nil
@@ -134,21 +145,25 @@ func TestSocialAPIWebhookServicePersistsValidUnknownConnectionAsUnresolved(t *te
 	}
 }
 
-func TestChatwootWebhookServiceAcknowledgesValidCallbackWithoutPersistence(t *testing.T) {
-	body := []byte(`{"event":"message_created","id":901,"content":"hello","account":{"id":12},"conversation":{"id":78},"sender":{"id":56}}`)
+func TestChatwootWebhookServiceMaterializesVerifiedCallback(t *testing.T) {
+	body := []byte(`{"event":"message_created","id":901,"content":"hello","account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56}}`)
+	store := &chatwootInboundStore{result: ports.ChatwootInboundResult{CustomerID: "customer-1", ConversationID: "conversation-1", CommunicationMessageID: "message-1"}}
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	mac := hmac.New(sha256.New, []byte("secret"))
 	_, _ = mac.Write([]byte(timestamp + "." + string(body)))
-	command := commands.IngestWebhookCommand{RouteKey: "chatwoot", ProviderHeaders: map[string]string{"X-Chatwoot-Signature": "sha256=" + hex.EncodeToString(mac.Sum(nil)), "X-Chatwoot-Timestamp": timestamp}, RawPayload: body}
-	result, err := (ChatwootWebhookService{Receiver: chatwoot.NewClient(chatwoot.Config{WebhookSecret: "secret"})}).Handle(context.Background(), command)
-	if err != nil || !result.Accepted || !result.Ignored {
+	command := commands.IngestWebhookCommand{RouteKey: "chatwoot-test", ProviderHeaders: map[string]string{"X-Chatwoot-Signature": "sha256=" + hex.EncodeToString(mac.Sum(nil)), "X-Chatwoot-Timestamp": timestamp}, RawPayload: body}
+	result, err := (ChatwootWebhookService{Receiver: chatwoot.NewClient(chatwoot.Config{WebhookSecret: "secret"}), Inbound: store}).Handle(context.Background(), command)
+	if err != nil || !result.Accepted || result.Ignored || !result.Resolved || result.Duplicate {
 		t.Fatalf("unexpected result=%#v err=%v", result, err)
+	}
+	if store.draft.RouteKey != "chatwoot-test" || store.draft.AccountID != "12" || store.draft.InboxID != "34" || store.draft.ConversationID != "78" || store.draft.ExternalUserID != "56" || store.draft.ProviderMessageID != "901" || store.draft.EventType != "interaction_received" || store.draft.Content != "hello" || store.draft.PayloadHash == "" {
+		t.Fatalf("unexpected materialization draft=%#v", store.draft)
 	}
 }
 
 func TestChatwootWebhookServiceRejectsInvalidSignature(t *testing.T) {
 	command := commands.IngestWebhookCommand{RouteKey: "chatwoot", ProviderHeaders: map[string]string{"X-Chatwoot-Signature": "sha256=00", "X-Chatwoot-Timestamp": strconv.FormatInt(time.Now().Unix(), 10)}, RawPayload: []byte(`{"event":"message_created","id":901}`)}
-	_, err := (ChatwootWebhookService{Receiver: chatwoot.NewClient(chatwoot.Config{WebhookSecret: "secret"})}).Handle(context.Background(), command)
+	_, err := (ChatwootWebhookService{Receiver: chatwoot.NewClient(chatwoot.Config{WebhookSecret: "secret"}), Inbound: &chatwootInboundStore{}}).Handle(context.Background(), command)
 	var appErr *appErrors.Error
 	if !errors.As(err, &appErr) || appErr.Code != appErrors.CodeUnauthenticated {
 		t.Fatalf("unexpected error: %v", err)
@@ -157,5 +172,6 @@ func TestChatwootWebhookServiceRejectsInvalidSignature(t *testing.T) {
 
 var _ ports.ChannelConnectionRepository = webhookConnectionRepository{}
 var _ ports.EventStore = (*webhookEventStore)(nil)
+var _ ports.ChatwootInboundStore = (*chatwootInboundStore)(nil)
 var _ = channel.ProviderSocialAPI
 var _ = uuid.Nil

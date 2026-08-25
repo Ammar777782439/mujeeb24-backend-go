@@ -107,32 +107,38 @@ func (c *Client) NormalizeWebhook(ctx context.Context, headers map[string]string
 	}
 	receivedAt := time.Now().UTC()
 	if payload.CreatedAt > 0 {
-		receivedAt = time.Unix(payload.CreatedAt, 0).UTC()
+		receivedAt = time.Unix(int64(payload.CreatedAt), 0).UTC()
 	}
 	messageID := string(payload.ID)
-	return []channel.InboundEvent{{ID: messageID, Provider: channel.ProviderChatwoot, ProviderConnectionID: string(payload.AccountID), ProviderEventID: messageID, EventType: payload.Event, InteractionKind: channel.InteractionDM, ProviderMessageID: messageID, ProviderConversationID: string(payload.ConversationID), ExternalUserID: string(payload.SenderID), Text: payload.Content, ReceivedAt: receivedAt, RawPayloadReference: "chatwoot://webhook/" + messageID, ExternalCreatedAt: &receivedAt}}, nil
+	return []channel.InboundEvent{{ID: messageID, Provider: channel.ProviderChatwoot, ProviderConnectionID: chatwootConnectionReference(payload.AccountID, payload.InboxID), ProviderEventID: messageID, EventType: normalizeChatwootEventType(payload.Event), InteractionKind: channel.InteractionDM, ProviderMessageID: chatwootProviderMessageID(payload.Event, payload.Content, messageID), ProviderConversationID: string(payload.ConversationID), ExternalUserID: string(payload.SenderID), Text: payload.Content, ReceivedAt: receivedAt, RawPayloadReference: "chatwoot://webhook/" + messageID, ExternalCreatedAt: &receivedAt}}, nil
 }
 
 type chatwootWebhookPayload struct {
-	Event          string         `json:"event"`
-	ID             flexibleString `json:"id"`
-	Content        string         `json:"content"`
-	CreatedAt      int64          `json:"created_at"`
-	AccountID      flexibleString `json:"account_id"`
-	ConversationID flexibleString `json:"conversation_id"`
-	SenderID       flexibleString `json:"sender_id"`
+	Event          string           `json:"event"`
+	ID             flexibleString   `json:"id"`
+	Content        string           `json:"content"`
+	CreatedAt      flexibleUnixTime `json:"created_at"`
+	AccountID      flexibleString   `json:"account_id"`
+	ConversationID flexibleString   `json:"conversation_id"`
+	SenderID       flexibleString   `json:"sender_id"`
+	InboxID        flexibleString   `json:"inbox_id"`
 	Conversation   struct {
 		ID flexibleString `json:"id"`
 	} `json:"conversation"`
 	Sender struct {
 		ID flexibleString `json:"id"`
 	} `json:"sender"`
+	Inbox struct {
+		ID flexibleString `json:"id"`
+	} `json:"inbox"`
 	Account struct {
 		ID flexibleString `json:"id"`
 	} `json:"account"`
 }
 
 type flexibleString string
+
+type flexibleUnixTime int64
 
 func (s *flexibleString) UnmarshalJSON(data []byte) error {
 	if string(data) == "null" {
@@ -152,12 +158,77 @@ func (s *flexibleString) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (t *flexibleUnixTime) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*t = 0
+		return nil
+	}
+	var number json.Number
+	if err := json.Unmarshal(data, &number); err == nil {
+		value, parseErr := strconv.ParseInt(number.String(), 10, 64)
+		if parseErr == nil {
+			*t = flexibleUnixTime(value)
+			return nil
+		}
+	}
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		*t = 0
+		return nil
+	}
+	if seconds, err := strconv.ParseInt(value, 10, 64); err == nil {
+		*t = flexibleUnixTime(seconds)
+		return nil
+	}
+	formats := []string{time.RFC3339Nano, time.RFC3339, "2006-01-02 15:04:05 MST", "2006-01-02 15:04:05 -0700 MST"}
+	for _, format := range formats {
+		parsed, err := time.Parse(format, value)
+		if err == nil {
+			*t = flexibleUnixTime(parsed.Unix())
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid Chatwoot created_at: %q", value)
+}
+
+func chatwootConnectionReference(accountID, inboxID flexibleString) string {
+	if string(inboxID) == "" {
+		return string(accountID)
+	}
+	return string(accountID) + ":" + string(inboxID)
+}
+
+func chatwootProviderMessageID(eventType, content, messageID string) string {
+	if eventType == "message_created" && strings.TrimSpace(content) != "" {
+		return messageID
+	}
+	return ""
+}
+
+func normalizeChatwootEventType(eventType string) string {
+	switch eventType {
+	case "message_created":
+		return "interaction_received"
+	case "conversation_created", "conversation_updated", "conversation_status_changed":
+		return "conversation_updated"
+	default:
+		return "conversation_updated"
+	}
+}
+
 func (p *chatwootWebhookPayload) normalizeReferences() {
 	if string(p.ConversationID) == "" {
 		p.ConversationID = p.Conversation.ID
 	}
 	if string(p.SenderID) == "" {
 		p.SenderID = p.Sender.ID
+	}
+	if string(p.InboxID) == "" {
+		p.InboxID = p.Inbox.ID
 	}
 	if string(p.AccountID) == "" {
 		p.AccountID = p.Account.ID

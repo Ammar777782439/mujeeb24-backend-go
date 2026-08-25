@@ -16,7 +16,7 @@ import (
 
 func TestClientNormalizesSignedChatwootWebhook(t *testing.T) {
 	secret := "chatwoot-secret"
-	body := []byte(`{"event":"message_created","id":901,"content":"hello","created_at":1787659200,"account":{"id":12},"conversation":{"id":78},"sender":{"id":56}}`)
+	body := []byte(`{"event":"message_created","id":901,"content":"hello","created_at":1787659200,"account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56}}`)
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	mac := hmac.New(sha256.New, []byte(secret))
 	_, _ = mac.Write([]byte(timestamp + "." + string(body)))
@@ -35,11 +35,32 @@ func TestClientNormalizesSignedChatwootWebhook(t *testing.T) {
 		t.Fatalf("events=%#v", events)
 	}
 	event := events[0]
-	if event.Provider != channel.ProviderChatwoot || event.ProviderEventID != "901" || event.ProviderConnectionID != "12" || event.ProviderConversationID != "78" || event.ExternalUserID != "56" || event.Text != "hello" {
+	if event.Provider != channel.ProviderChatwoot || event.ProviderEventID != "901" || event.ProviderConnectionID != "12:34" || event.ProviderConversationID != "78" || event.ExternalUserID != "56" || event.EventType != "interaction_received" || event.ProviderMessageID != "901" || event.Text != "hello" {
 		t.Fatalf("unexpected event: %#v", event)
 	}
 	if err := client.VerifyWebhook(ctx, headers, body); err != nil {
 		t.Fatalf("VerifyWebhook: %v", err)
+	}
+}
+
+func TestClientNormalizesSignedChatwootWebhookWithStringCreatedAt(t *testing.T) {
+	secret := "chatwoot-secret"
+	body := []byte(`{"event":"message_created","id":902,"content":"hello","created_at":"2026-08-25T01:00:00.000Z","account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56}}`)
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(timestamp + "." + string(body)))
+	headers := map[string]string{
+		"X-Chatwoot-Signature": "sha256=" + hex.EncodeToString(mac.Sum(nil)),
+		"X-Chatwoot-Timestamp": timestamp,
+	}
+	client := NewClient(Config{WebhookSecret: secret})
+	ctx := httptest.NewRequest(http.MethodPost, "/", nil).Context()
+	events, err := client.NormalizeWebhook(ctx, headers, body)
+	if err != nil {
+		t.Fatalf("NormalizeWebhook: %v", err)
+	}
+	if len(events) != 1 || events[0].ProviderEventID != "902" || events[0].ReceivedAt.Unix() != 1787619600 {
+		t.Fatalf("unexpected events: %#v", events)
 	}
 }
 
