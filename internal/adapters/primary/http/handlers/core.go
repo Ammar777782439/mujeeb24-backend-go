@@ -284,10 +284,10 @@ func singleMessage(v commands.MessageView) *contract.Single[contract.Message] {
 // never through a contract-local generic handler.
 func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (any, error) {
 	if result, handled := s.dispatchQuery(ctx, operationID, input); handled {
-		return result, nil
+		return dispatchResult(result)
 	}
 	if result, handled := s.dispatchCommand(ctx, operationID, input); handled {
-		return result, nil
+		return dispatchResult(result)
 	}
 	switch operationID {
 	case "listConversations":
@@ -301,6 +301,13 @@ func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (a
 	default:
 		return nil, mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "application handler is not wired: "+operationID))
 	}
+}
+
+func dispatchResult(value any) (any, error) {
+	if err, ok := value.(error); ok {
+		return nil, err
+	}
+	return value, nil
 }
 
 var _ contract.DashboardOperationHandler = (*Server)(nil)

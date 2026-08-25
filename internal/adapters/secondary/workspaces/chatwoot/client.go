@@ -194,8 +194,8 @@ func (c *Client) CreateContact(ctx context.Context, draft ports.WorkspaceContact
 	if err != nil {
 		return ports.WorkspaceContact{}, err
 	}
-	if response.ID == 0 && len(response.Payload) > 0 {
-		response.ID = response.Payload[0].ID
+	if response.ID == 0 {
+		response.ID = response.contactID()
 	}
 	if response.ID == 0 {
 		return ports.WorkspaceContact{}, fmt.Errorf("%w: contact id missing", ErrInvalidResponse)
@@ -204,10 +204,26 @@ func (c *Client) CreateContact(ctx context.Context, draft ports.WorkspaceContact
 }
 
 type contactResponse struct {
-	ID      int64 `json:"id"`
-	Payload []struct {
+	ID      int64           `json:"id"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+func (r contactResponse) contactID() int64 {
+	var object struct {
+		Contact struct {
+			ID int64 `json:"id"`
+		} `json:"contact"`
+	}
+	if len(r.Payload) > 0 && json.Unmarshal(r.Payload, &object) == nil && object.Contact.ID > 0 {
+		return object.Contact.ID
+	}
+	var list []struct {
 		ID int64 `json:"id"`
-	} `json:"payload"`
+	}
+	if len(r.Payload) > 0 && json.Unmarshal(r.Payload, &list) == nil && len(list) > 0 {
+		return list[0].ID
+	}
+	return 0
 }
 
 func (c *Client) CreateConversation(ctx context.Context, draft ports.WorkspaceConversationDraft) (ports.WorkspaceConversation, error) {
@@ -281,16 +297,31 @@ func (c *Client) CreateMessage(ctx context.Context, draft ports.WorkspaceMessage
 	if response.CreatedAt > 0 {
 		createdAt = time.Unix(response.CreatedAt, 0).UTC()
 	}
-	return ports.WorkspaceMessage{ID: response.ID, AccountID: draft.AccountID, ConversationID: draft.ConversationID, Text: response.Content, MessageType: response.MessageType, Status: response.Status, CreatedAt: createdAt, Private: response.Private}, nil
+	return ports.WorkspaceMessage{ID: response.ID, AccountID: draft.AccountID, ConversationID: draft.ConversationID, Text: response.Content, MessageType: normalizeMessageType(response.MessageType), Status: response.Status, CreatedAt: createdAt, Private: response.Private}, nil
 }
 
 type messageResponse struct {
-	ID          int64  `json:"id"`
-	Content     string `json:"content"`
-	MessageType string `json:"message_type"`
-	CreatedAt   int64  `json:"created_at"`
-	Private     bool   `json:"private"`
-	Status      string `json:"status"`
+	ID          int64          `json:"id"`
+	Content     string         `json:"content"`
+	MessageType flexibleString `json:"message_type"`
+	CreatedAt   int64          `json:"created_at"`
+	Private     bool           `json:"private"`
+	Status      string         `json:"status"`
+}
+
+func normalizeMessageType(value flexibleString) string {
+	switch string(value) {
+	case "0":
+		return "incoming"
+	case "1":
+		return "outgoing"
+	case "2":
+		return "activity"
+	case "3":
+		return "template"
+	default:
+		return string(value)
+	}
 }
 
 func decodeObject(raw []byte) (map[string]any, error) {

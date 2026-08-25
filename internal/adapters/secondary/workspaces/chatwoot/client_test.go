@@ -54,6 +54,40 @@ func TestClientCreatesContactConversationAndMessage(t *testing.T) {
 	}
 }
 
+func TestClientDecodesRealContactPayloadShape(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/api/v1/accounts/12/contacts" {
+			http.NotFound(writer, request)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"payload":{"contact":{"id":57},"contact_inbox":{"id":91}}}`))
+	}))
+	defer server.Close()
+	client := NewClient(Config{BaseURL: server.URL, APIToken: "chatwoot-token", HTTPClient: server.Client()})
+	contact, err := client.CreateContact(httptest.NewRequest(http.MethodPost, "/", nil).Context(), ports.WorkspaceContactDraft{AccountID: 12, InboxID: 34, Name: "Ali", Identifier: "real-payload-shape"})
+	if err != nil || contact.ID != 57 {
+		t.Fatalf("CreateContact real payload = %#v, err=%v", contact, err)
+	}
+}
+
+func TestClientDecodesRealMessageResponseShape(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/api/v1/accounts/12/conversations/78/messages" {
+			http.NotFound(writer, request)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"id":90,"content":"reply","message_type":0,"created_at":1787659200,"private":false,"status":"sent","sender":null,"content_attributes":{},"content_type":"text","conversation_id":78,"inbox_id":34,"source_id":null}`))
+	}))
+	defer server.Close()
+	client := NewClient(Config{BaseURL: server.URL, APIToken: "chatwoot-token", HTTPClient: server.Client()})
+	message, err := client.CreateMessage(httptest.NewRequest(http.MethodPost, "/", nil).Context(), ports.WorkspaceMessageDraft{AccountID: 12, ConversationID: 78, Text: "reply", MessageType: "incoming"})
+	if err != nil || message.ID != 90 || message.MessageType != "incoming" || message.Status != "sent" {
+		t.Fatalf("CreateMessage real payload = %#v, err=%v", message, err)
+	}
+}
+
 func TestClientRejectsInvalidAttributesAndClassifiesRateLimit(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")

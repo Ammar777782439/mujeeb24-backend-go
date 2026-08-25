@@ -24,7 +24,7 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 	if s.Receiver == nil || s.RawPayloads == nil || s.Connections == nil || s.Events == nil {
 		return commands.WebhookAcceptedResult{}, appErrors.NotImplemented()
 	}
-	if err := validateWebhookCommand(command, "socialapi"); err != nil {
+	if err := validateWebhookCommand(command); err != nil {
 		return commands.WebhookAcceptedResult{}, err
 	}
 	if err := s.Receiver.VerifyWebhook(ctx, command.ProviderHeaders, command.RawPayload); err != nil {
@@ -106,7 +106,7 @@ func (s ChatwootWebhookService) Handle(ctx context.Context, command commands.Ing
 	if s.Receiver == nil {
 		return commands.WebhookAcceptedResult{}, appErrors.NotImplemented()
 	}
-	if err := validateWebhookCommand(command, "chatwoot"); err != nil {
+	if err := validateWebhookCommand(command); err != nil {
 		return commands.WebhookAcceptedResult{}, err
 	}
 	if err := s.Receiver.VerifyWebhook(ctx, command.ProviderHeaders, command.RawPayload); err != nil {
@@ -118,9 +118,9 @@ func (s ChatwootWebhookService) Handle(ctx context.Context, command commands.Ing
 	return commands.WebhookAcceptedResult{Accepted: true, Ignored: true, RequestID: command.RequestID}, nil
 }
 
-func validateWebhookCommand(command commands.IngestWebhookCommand, expectedRoute string) error {
-	if command.RouteKey != "" && !strings.EqualFold(command.RouteKey, expectedRoute) {
-		return appErrors.New(appErrors.CodeValidation, "webhook route does not match provider")
+func validateWebhookCommand(command commands.IngestWebhookCommand) error {
+	if strings.TrimSpace(command.RouteKey) == "" {
+		return appErrors.New(appErrors.CodeValidation, "webhook route key is required")
 	}
 	if len(command.RawPayload) == 0 {
 		return appErrors.New(appErrors.CodeValidation, "webhook raw payload is required")

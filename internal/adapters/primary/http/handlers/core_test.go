@@ -24,6 +24,14 @@ type fakeWebhookHandler struct {
 	command commands.IngestWebhookCommand
 }
 
+type errorWebhookHandler struct {
+	err error
+}
+
+func (f errorWebhookHandler) Handle(context.Context, commands.IngestWebhookCommand) (commands.WebhookAcceptedResult, error) {
+	return commands.WebhookAcceptedResult{}, f.err
+}
+
 func (f *fakeWebhookHandler) Handle(_ context.Context, command commands.IngestWebhookCommand) (commands.WebhookAcceptedResult, error) {
 	f.command = command
 	return commands.WebhookAcceptedResult{Accepted: true, RequestID: command.RequestID}, nil
@@ -106,6 +114,37 @@ func TestWebhookRuntimeForwardsProviderHeadersToApplication(t *testing.T) {
 	}
 	if capture.command.RouteKey != "callback" || capture.command.RequestID != "request-1" || capture.command.DeliveryID != "delivery-1" || capture.command.ProviderEvent != "webhook.test" || capture.command.ProviderHeaders["X-SocialAPI-Signature-V2"] != "sha256=signature" || capture.command.ProviderHeaders["X-SocialAPI-Timestamp"] != "1787659200" || string(capture.command.RawPayload) != string(body) {
 		t.Fatalf("provider metadata was not forwarded exactly: %#v", capture.command)
+	}
+}
+
+func TestWebhookRuntimeMapsApplicationErrorStatus(t *testing.T) {
+	server := NewServer(Dependencies{IngestChatwootWebhook: errorWebhookHandler{err: &appErrors.Error{Code: appErrors.CodeUnauthenticated, Message: "signature verification failed"}}})
+	_, mux := contract.BuildAPIWithHandlers(server)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/chatwoot/chatwoot-test", bytes.NewReader([]byte(`{"event":"conversation_created","id":9001}`)))
+	res := httptest.NewRecorder()
+	mux.ServeHTTP(res, req)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 from application error, got %d body=%s", res.Code, res.Body.String())
+	}
+}
+
+func TestChatwootWebhookRuntimeForwardsProviderHeadersToApplication(t *testing.T) {
+	body := []byte(`{"event":"conversation_created","id":9001}`)
+	capture := &fakeWebhookHandler{}
+	server := NewServer(Dependencies{IngestChatwootWebhook: capture})
+	_, mux := contract.BuildAPIWithHandlers(server)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/chatwoot/chatwoot-test", bytes.NewReader(body))
+	req.Header.Set("X-Chatwoot-Signature", "sha256=signature")
+	req.Header.Set("X-Chatwoot-Timestamp", "1787659200")
+	req.Header.Set("X-Chatwoot-Delivery", "delivery-1")
+	req.Header.Set("X-Request-ID", "request-1")
+	res := httptest.NewRecorder()
+	mux.ServeHTTP(res, req)
+	if res.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%s", res.Code, res.Body.String())
+	}
+	if capture.command.RouteKey != "chatwoot-test" || capture.command.RequestID != "request-1" || capture.command.DeliveryID != "delivery-1" || capture.command.ProviderHeaders["X-Chatwoot-Signature"] != "sha256=signature" || capture.command.ProviderHeaders["X-Chatwoot-Timestamp"] != "1787659200" || string(capture.command.RawPayload) != string(body) {
+		t.Fatalf("Chatwoot metadata was not forwarded exactly: %#v", capture.command)
 	}
 }
 
