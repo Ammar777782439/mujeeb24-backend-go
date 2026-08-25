@@ -16,6 +16,7 @@ type OutboxProcessor struct {
 	Outbox   ports.OutboxStore
 	Resolver ports.OutboundDeliveryResolver
 	Provider ports.ChannelProvider
+	Messages ports.ProviderAcceptanceRecorder
 	Owner    string
 	LeaseFor time.Duration
 	Now      func() time.Time
@@ -58,6 +59,14 @@ func (p OutboxProcessor) Process(ctx context.Context, entryID string) error {
 		return p.deadLetter(ctx, record, "provider_send_outcome_unknown")
 	}
 	resultCode := "provider_accepted"
+	if p.Messages != nil {
+		if result.ProviderMessageID == "" {
+			return p.deadLetter(ctx, record, "provider_acceptance_missing_message_id")
+		}
+		if _, err := p.Messages.MarkProviderAccepted(ctx, record.BusinessID, record.OutboundMessageID, result.ProviderMessageID); err != nil {
+			return p.deadLetter(ctx, record, "provider_acceptance_persistence_failed")
+		}
+	}
 	if result.ProviderMessageID != "" {
 		resultCode += ":" + result.ProviderMessageID
 	}

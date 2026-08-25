@@ -76,3 +76,7 @@ type OutboundMessageRepository interface {
 	CreatePending(ctx context.Context, draft OutboundMessageDraft) (OutboundMessageRecord, error)
 	GetByID(ctx context.Context, businessID, messageID string) (OutboundMessageRecord, error)
 }
+
+type ProviderAcceptanceRecorder interface {
+	MarkProviderAccepted(ctx context.Context, businessID, messageID, providerMessageID string) (OutboundMessageRecord, error)
+}

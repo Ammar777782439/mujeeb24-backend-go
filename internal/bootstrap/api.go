@@ -82,11 +82,12 @@ func NewAPIWithExternal(database *postgres.Adapter, address string, external Ext
 	outboxStore := postgres.NewPostgresOutboxStore(database)
 	if external.SocialWebhook != nil {
 		dependencies.IngestSocialAPIWebhook = services.SocialAPIWebhookService{
-			Receiver:    external.SocialWebhook,
-			RawPayloads: postgres.NewRawPayloadStore(database),
-			Connections: postgres.NewChannelConnectionRepository(database),
-			Events:      eventStore,
-			Inbound:     postgres.NewProviderInboundStoreWithMirror(database, external.ChatwootMirrorEnabled && external.Chatwoot != nil),
+			Receiver:         external.SocialWebhook,
+			RawPayloads:      postgres.NewRawPayloadStore(database),
+			Connections:      postgres.NewChannelConnectionRepository(database),
+			Events:           eventStore,
+			Inbound:          postgres.NewProviderInboundStoreWithMirror(database, external.ChatwootMirrorEnabled && external.Chatwoot != nil),
+			DeliveryStatuses: postgres.NewDeliveryStatusStore(database),
 		}
 	}
 	if external.ChatwootWebhook != nil {

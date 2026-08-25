@@ -43,6 +43,7 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 				ConnectionRepository: postgres.NewChannelConnectionRepository(database),
 			},
 			Provider: external.SocialAPI,
+			Messages: postgres.NewOutboundMessageRepository(database),
 			Owner:    runtime.WorkerOwner,
 		}
 	}

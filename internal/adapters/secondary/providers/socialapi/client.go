@@ -441,7 +441,7 @@ func (c *Client) NormalizeWebhook(ctx context.Context, headers map[string]string
 	providerConversationID := envelope.Data.ConversationID
 	normalizedEventType := normalizeSocialEventType(envelope.Event)
 	direction, origin := socialMessageMetadata(normalizedEventType)
-	event := channel.InboundEvent{ID: uuid.NewString(), Provider: channel.ProviderSocialAPI, Channel: providerChannel, ProviderConnectionID: envelope.Data.AccountID, ProviderEventID: providerEventID, DeliveryID: deliveryID, DedupeStrategy: dedupeStrategy, EventType: normalizedEventType, InteractionKind: interaction, ProviderMessageID: providerMessageID, ProviderConversationID: providerConversationID, ExternalUserID: envelope.Data.Author.ID, Text: envelope.Data.Content.Text, Direction: direction, Origin: origin, ReceivedAt: receivedAt}
+	event := channel.InboundEvent{ID: uuid.NewString(), Provider: channel.ProviderSocialAPI, Channel: providerChannel, ProviderConnectionID: envelope.Data.AccountID, ProviderEventID: providerEventID, DeliveryID: deliveryID, DedupeStrategy: dedupeStrategy, EventType: normalizedEventType, InteractionKind: interaction, ProviderMessageID: providerMessageID, ProviderConversationID: providerConversationID, ExternalUserID: envelope.Data.Author.ID, Text: envelope.Data.Content.Text, Direction: direction, Origin: origin, DeliveryStatus: strings.ToLower(strings.TrimSpace(envelope.Data.Status)), ReceivedAt: receivedAt}
 	if envelope.Data.ReceivedAt != "" || envelope.Data.CreatedAt != "" {
 		timestamp := receivedAt
 		event.ExternalCreatedAt = &timestamp

@@ -91,6 +91,7 @@ type InboundEvent struct {
 	Origin                 MessageOrigin
 	Private                bool
 	SenderType             string
+	DeliveryStatus         string
 	ExternalCreatedAt      *time.Time
 	ReceivedAt             time.Time
 	RawPayloadReference    string

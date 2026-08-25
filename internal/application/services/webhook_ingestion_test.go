@@ -72,6 +72,17 @@ func (s *providerInboundStore) Materialize(_ context.Context, draft ports.Provid
 	return s.result, s.err
 }
 
+type deliveryStatusStore struct {
+	draft  ports.DeliveryStatusDraft
+	result ports.DeliveryStatusResult
+	err    error
+}
+
+func (s *deliveryStatusStore) Apply(_ context.Context, draft ports.DeliveryStatusDraft) (ports.DeliveryStatusResult, error) {
+	s.draft = draft
+	return s.result, s.err
+}
+
 func (s *chatwootInboundStore) Materialize(_ context.Context, draft ports.ChatwootInboundDraft) (ports.ChatwootInboundResult, error) {
 	s.draft = draft
 	return s.result, s.err
@@ -143,6 +154,27 @@ func TestSocialAPIWebhookServiceRecordsResolvedEventAndRawPayloadHash(t *testing
 	}
 }
 
+func TestSocialAPIWebhookServiceAppliesDeliveryStatusWithoutMaterializingMessage(t *testing.T) {
+	body := []byte(`{"event":"dm.status.delivered","data":{"id":"status-event-1","type":"dm_status","platform":"whatsapp","account_id":"account-1","conversation_id":"conversation-1","mids":["provider-message-1"],"status":"delivered"}}`)
+	statuses := &deliveryStatusStore{result: ports.DeliveryStatusResult{Applied: true, OutboundMessageID: "outbound-1", Status: "delivered"}}
+	inbound := &providerInboundStore{}
+	service := SocialAPIWebhookService{
+		Receiver:         socialapi.NewClient(socialapi.Config{WebhookSecret: "secret"}),
+		RawPayloads:      &webhookRawPayloadStore{},
+		Connections:      webhookConnectionRepository{record: ports.ChannelConnectionRecord{ID: "connection-1", BusinessID: "business-1", ProviderReference: "socialapi", ProviderAccountReference: stringPointer("account-1")}},
+		Events:           &webhookEventStore{created: true},
+		Inbound:          inbound,
+		DeliveryStatuses: statuses,
+	}
+	result, err := service.Handle(context.Background(), signedSocialCommand(t, body))
+	if err != nil || !result.Accepted || !result.Resolved || statuses.draft.InboundEventID == "" || statuses.draft.ProviderMessageID != "provider-message-1" || statuses.draft.Status != "delivered" {
+		t.Fatalf("unexpected delivery status result=%#v draft=%#v err=%v", result, statuses.draft, err)
+	}
+	if inbound.draft.InboundEventID != "" {
+		t.Fatalf("delivery status must not enter provider inbound materialization: %#v", inbound.draft)
+	}
+}
+
 func TestSocialAPIWebhookServicePersistsValidUnknownConnectionAsUnresolved(t *testing.T) {
 	body := []byte(`{"event":"dm.received","data":{"id":"event-2","type":"dm","platform":"facebook","account_id":"unknown-account","conversation_id":"conversation-2","content":{"text":"hello"}}}`)
 	events := &webhookEventStore{created: true}
@@ -190,6 +222,7 @@ var _ ports.ChannelConnectionRepository = webhookConnectionRepository{}
 var _ ports.EventStore = (*webhookEventStore)(nil)
 var _ ports.ChatwootInboundStore = (*chatwootInboundStore)(nil)
 var _ ports.ProviderInboundStore = (*providerInboundStore)(nil)
+var _ ports.DeliveryStatusStore = (*deliveryStatusStore)(nil)
 var _ = channel.ProviderSocialAPI
 var _ = uuid.Nil
 

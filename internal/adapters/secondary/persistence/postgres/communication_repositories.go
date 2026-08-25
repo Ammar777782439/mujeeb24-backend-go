@@ -130,6 +130,28 @@ func (r *OutboundMessageRepository) GetByID(ctx context.Context, businessID, mes
 	return scanOutboundMessage(executor.QueryRow(ctx, query, businessID, messageID))
 }
 
+func (r *OutboundMessageRepository) MarkProviderAccepted(ctx context.Context, businessID, messageID, providerMessageID string) (ports.OutboundMessageRecord, error) {
+	if r == nil || r.adapter == nil {
+		return ports.OutboundMessageRecord{}, ErrPoolClosed
+	}
+	if businessID == "" || messageID == "" || providerMessageID == "" {
+		return ports.OutboundMessageRecord{}, invalidRepositoryInput("outbound_message.mark_accepted", "business, message, and provider message are required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.OutboundMessageRecord{}, err
+	}
+	const query = `
+		UPDATE outbound_messages
+		SET provider_message_id = COALESCE(provider_message_id, $3),
+			status = CASE WHEN status IN ('delivered', 'read') THEN status ELSE 'accepted' END,
+			updated_at = now()
+		WHERE business_id = $1::uuid AND id = $2::uuid
+		  AND (provider_message_id IS NULL OR provider_message_id = $3)
+		RETURNING id::text, business_id::text, conversation_id::text, conversation_reference_id::text, connection_id::text, provider_ref, channel, origin, direction, transport, content_reference, provider_idempotency_key, status, provider_message_id, chatwoot_message_id, failure_code, attempt_count, correlation_id::text, causation_id::text`
+	return scanOutboundMessage(executor.QueryRow(ctx, query, businessID, messageID, providerMessageID))
+}
+
 func scanOutboundMessage(row pgx.Row) (ports.OutboundMessageRecord, error) {
 	var record ports.OutboundMessageRecord
 	err := row.Scan(&record.ID, &record.BusinessID, &record.ConversationID, &record.ConversationReferenceID, &record.ConnectionID, &record.ProviderRef, &record.Channel, &record.Origin, &record.Direction, &record.Transport, &record.ContentReference, &record.ProviderIdempotencyKey, &record.Status, &record.ProviderMessageID, &record.ChatwootMessageID, &record.FailureCode, &record.AttemptCount, &record.CorrelationID, &record.CausationID)
@@ -151,3 +173,4 @@ func classifyRepositoryWriteError(operation string, err error) error {
 }
 
 var _ ports.OutboundMessageRepository = (*OutboundMessageRepository)(nil)
+var _ ports.ProviderAcceptanceRecorder = (*OutboundMessageRepository)(nil)

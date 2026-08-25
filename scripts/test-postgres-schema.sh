@@ -66,12 +66,12 @@ DATABASE_URL="postgres://postgres:testpassword@127.0.0.1:${PORT}/${RUNNER_DB}?ss
 DATABASE_URL="postgres://postgres:testpassword@127.0.0.1:${PORT}/${RUNNER_DB}?sslmode=disable" \
     /tmp/mujeeb24-migrate-schema-test >/tmp/mujeeb24-migrate-schema-test-2.log 2>&1
 
-grep -q 'applied=39' /tmp/mujeeb24-migrate-schema-test-1.log
+grep -q 'applied=40' /tmp/mujeeb24-migrate-schema-test-1.log
 grep -q 'applied=0' /tmp/mujeeb24-migrate-schema-test-2.log
-[[ "$("${DOCKER[@]}" exec "$CONTAINER" psql -p "$PORT" -U postgres -d "$RUNNER_DB" -Atqc 'SELECT count(*) FROM schema_migrations')" == "39" ]]
+[[ "$("${DOCKER[@]}" exec "$CONTAINER" psql -p "$PORT" -U postgres -d "$RUNNER_DB" -Atqc 'SELECT count(*) FROM schema_migrations')" == "40" ]]
 
 echo 'postgres_schema_validation=passed'
 echo 'foundation_constraints=passed'
 echo 'full_schema_constraints=passed'
-echo 'migration_runner_first=applied-39'
+echo 'migration_runner_first=applied-40'
 echo 'migration_runner_second=applied-0'

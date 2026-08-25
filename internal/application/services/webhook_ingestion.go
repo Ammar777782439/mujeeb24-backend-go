@@ -15,12 +15,13 @@ import (
 )
 
 type SocialAPIWebhookService struct {
-	Receiver    ports.WebhookReceiver
-	RawPayloads ports.RawPayloadStore
-	Connections ports.ChannelConnectionRepository
-	Events      ports.EventStore
-	Inbound     ports.ProviderInboundStore
-	Now         func() time.Time
+	Receiver         ports.WebhookReceiver
+	RawPayloads      ports.RawPayloadStore
+	Connections      ports.ChannelConnectionRepository
+	Events           ports.EventStore
+	Inbound          ports.ProviderInboundStore
+	DeliveryStatuses ports.DeliveryStatusStore
+	Now              func() time.Time
 }
 
 func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.IngestWebhookCommand) (commands.WebhookAcceptedResult, error) {
@@ -92,6 +93,19 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 		}
 		if !created {
 			result.Duplicate = true
+		}
+		if resolveErr == nil && event.EventType == "delivery_status_changed" {
+			if s.DeliveryStatuses == nil {
+				return commands.WebhookAcceptedResult{}, appErrors.NotImplemented()
+			}
+			statusResult, statusErr := s.DeliveryStatuses.Apply(ctx, ports.DeliveryStatusDraft{InboundEventID: record.ID, BusinessID: connection.BusinessID, ConnectionID: connection.ID, ProviderRef: string(event.Provider), ProviderAccountRef: event.ProviderConnectionID, ProviderMessageID: event.ProviderMessageID, Status: event.DeliveryStatus, OccurredAt: event.ReceivedAt})
+			if statusErr != nil {
+				return commands.WebhookAcceptedResult{}, externalDependencyError("SocialAPI delivery status could not be applied", statusErr)
+			}
+			if statusResult.Duplicate {
+				result.Duplicate = true
+			}
+			continue
 		}
 		if resolveErr == nil {
 			if s.Inbound == nil {

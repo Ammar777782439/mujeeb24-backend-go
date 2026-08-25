@@ -93,7 +93,7 @@ func TestClientNormalizesStatusEventWithoutTreatingItAsInboundText(t *testing.T)
 	_, _ = mac.Write([]byte(timestamp + "." + string(body)))
 	headers := map[string]string{"X-SocialAPI-Signature-V2": "sha256=" + hex.EncodeToString(mac.Sum(nil)), "X-SocialAPI-Timestamp": timestamp}
 	events, err := NewClient(Config{WebhookSecret: secret}).NormalizeWebhook(httptest.NewRequest(http.MethodPost, "/", nil).Context(), headers, body)
-	if err != nil || len(events) != 1 || events[0].EventType != "delivery_status_changed" || events[0].InteractionKind != channel.InteractionOther || events[0].ProviderMessageID != "message-1" || events[0].Text != "" {
+	if err != nil || len(events) != 1 || events[0].EventType != "delivery_status_changed" || events[0].InteractionKind != channel.InteractionOther || events[0].ProviderMessageID != "message-1" || events[0].DeliveryStatus != "delivered" || events[0].Text != "" {
 		t.Fatalf("unexpected status event=%#v err=%v", events, err)
 	}
 }
