@@ -29,8 +29,13 @@ func run() error {
 		return err
 	}
 	defer runtime.Shutdown()
+	log.Printf("worker starting poll_interval=%s batch_size=%d mirror_enabled=%t provider_enabled=%t", runtime.PollInterval, runtime.BatchSize, runtime.MirrorProcessor != nil, runtime.Processor != nil)
 
 	signalContext, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
-	return runtime.Run(signalContext)
+	err = runtime.Run(signalContext)
+	if err == nil {
+		log.Print("worker stopped")
+	}
+	return err
 }

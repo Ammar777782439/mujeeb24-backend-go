@@ -94,6 +94,17 @@ func TestWorkerRunOnceDoesNotSendWhenProviderIsNotConfigured(t *testing.T) {
 	}
 }
 
+func TestWorkerRuntimeDefaultsCycleTimeoutToBoundGracefulWork(t *testing.T) {
+	runtime := &WorkerRuntime{}
+	if runtime.cycleTimeout() != 10*time.Second {
+		t.Fatalf("unexpected default cycle timeout: %s", runtime.cycleTimeout())
+	}
+	runtime.CycleTimeout = 3 * time.Second
+	if runtime.cycleTimeout() != 3*time.Second {
+		t.Fatalf("unexpected configured cycle timeout: %s", runtime.cycleTimeout())
+	}
+}
+
 func TestWorkerRunOnceExecutesThroughSocialAPIAdapterContract(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodPost || request.URL.Path != "/v1/inbox/conversations/provider-conversation-1/messages" {

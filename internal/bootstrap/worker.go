@@ -21,6 +21,7 @@ type WorkerRuntime struct {
 	Processor       *services.OutboxProcessor
 	MirrorProcessor *services.ChatwootMirrorProcessor
 	PollInterval    time.Duration
+	CycleTimeout    time.Duration
 	BatchSize       int
 	WorkerOwner     string
 }
@@ -33,7 +34,7 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 	external := BuildExternalAdapters(cfg)
 	outbox := postgres.NewPostgresOutboxStore(database)
 	mirrorStore := postgres.NewChatwootMirrorStore(database)
-	runtime := &WorkerRuntime{Database: database, EventStore: postgres.NewInboundEventStore(database), Outbox: outbox, MirrorStore: mirrorStore, SocialAPI: external.SocialAPI, Chatwoot: external.Chatwoot, PollInterval: 2 * time.Second, BatchSize: 20, WorkerOwner: "mujeeb-worker"}
+	runtime := &WorkerRuntime{Database: database, EventStore: postgres.NewInboundEventStore(database), Outbox: outbox, MirrorStore: mirrorStore, SocialAPI: external.SocialAPI, Chatwoot: external.Chatwoot, PollInterval: cfg.WorkerPollInterval, CycleTimeout: cfg.ShutdownTimeout, BatchSize: cfg.WorkerBatchSize, WorkerOwner: cfg.WorkerOwner}
 	if external.SocialAPI != nil {
 		runtime.Processor = &services.OutboxProcessor{
 			Outbox: outbox,
@@ -68,11 +69,21 @@ func (r *WorkerRuntime) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			if _, err := r.RunOnce(ctx); err != nil {
+			cycleContext, cancel := context.WithTimeout(context.Background(), r.cycleTimeout())
+			_, err := r.RunOnce(cycleContext)
+			cancel()
+			if err != nil {
 				return err
 			}
 		}
 	}
+}
+
+func (r *WorkerRuntime) cycleTimeout() time.Duration {
+	if r != nil && r.CycleTimeout > 0 {
+		return r.CycleTimeout
+	}
+	return 10 * time.Second
 }
 
 func (r *WorkerRuntime) RunOnce(ctx context.Context) (int, error) {

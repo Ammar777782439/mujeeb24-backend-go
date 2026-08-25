@@ -27,6 +27,36 @@ type ExternalAdapters struct {
 	ChannelProvisioningWebhookURL  string
 }
 
+func (a ExternalAdapters) ReadinessChecks() map[string]string {
+	checks := map[string]string{
+		"socialapi_webhook":    "disabled",
+		"chatwoot_webhook":     "disabled",
+		"chatwoot_mirror":      "disabled",
+		"chatwoot_autoreply":   "disabled",
+		"channel_provisioning": "disabled",
+		"llm_runtime":          "disabled",
+	}
+	if a.SocialWebhook != nil {
+		checks["socialapi_webhook"] = "configured"
+	}
+	if a.ChatwootWebhook != nil {
+		checks["chatwoot_webhook"] = "configured"
+	}
+	if a.ChatwootMirrorEnabled {
+		checks["chatwoot_mirror"] = "configured"
+	}
+	if a.ChatwootAutoReplyEnabled {
+		checks["chatwoot_autoreply"] = "configured"
+	}
+	if a.ChannelProvisioningEnabled {
+		checks["channel_provisioning"] = "configured"
+	}
+	if a.AIRuntime != nil {
+		checks["llm_runtime"] = "configured"
+	}
+	return checks
+}
+
 func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 	adapters := ExternalAdapters{}
 	if cfg.SocialAPIAPIKey != "" || cfg.SocialAPIWebhookSecret != "" {

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/handlers"
@@ -58,6 +59,7 @@ func NewAPIWithExternal(database *postgres.Adapter, address string, external Ext
 		return nil, errors.New("http address is required")
 	}
 	dependencies := BuildDependencies(database)
+	dependencies.GetReadiness = readinessQueryService{Ping: database.Ping, FeatureChecks: external.ReadinessChecks()}
 	var provisioningService *services.ChannelProvisioningService
 	if external.ChannelProvisioningEnabled {
 		if external.ChannelProvisioningError != nil {
@@ -162,7 +164,8 @@ func NewAPIWithExternal(database *postgres.Adapter, address string, external Ext
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{"status":"ok","service":"mujeeb24-api"}`))
 	})
-	return &APIRuntime{HTTP: &http.Server{Addr: address, Handler: mux}, Database: database, Dependencies: dependencies, EventStore: eventStore, Outbox: outboxStore, SocialAPI: external.SocialAPI, Chatwoot: external.Chatwoot, SocialWebhook: external.SocialWebhook, ChatwootWebhook: external.ChatwootWebhook, ChannelProvisioning: provisioningService}, nil
+	server := &http.Server{Addr: address, Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
+	return &APIRuntime{HTTP: server, Database: database, Dependencies: dependencies, EventStore: eventStore, Outbox: outboxStore, SocialAPI: external.SocialAPI, Chatwoot: external.Chatwoot, SocialWebhook: external.SocialWebhook, ChatwootWebhook: external.ChatwootWebhook, ChannelProvisioning: provisioningService}, nil
 }
 
 func (r *APIRuntime) Serve() error {

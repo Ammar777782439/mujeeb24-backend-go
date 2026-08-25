@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -14,6 +15,9 @@ type ProcessConfig struct {
 	DatabaseURL                    string
 	HTTPAddr                       string
 	ShutdownTimeout                time.Duration
+	WorkerPollInterval             time.Duration
+	WorkerBatchSize                int
+	WorkerOwner                    string
 	DBMaxConns                     int32
 	DBMinConns                     int32
 	DBMaxConnLifetime              time.Duration
@@ -50,6 +54,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 		DatabaseURL:                    strings.TrimSpace(os.Getenv("DATABASE_URL")),
 		HTTPAddr:                       envOr("HTTP_ADDR", ":3001"),
 		ShutdownTimeout:                10 * time.Second,
+		WorkerPollInterval:             2 * time.Second,
+		WorkerBatchSize:                20,
+		WorkerOwner:                    envOr("WORKER_OWNER", "mujeeb-worker"),
 		DBMaxConns:                     10,
 		DBMinConns:                     1,
 		DBMaxConnLifetime:              time.Hour,
@@ -84,6 +91,12 @@ func LoadFromEnv() (ProcessConfig, error) {
 	}
 	var err error
 	if cfg.ShutdownTimeout, err = durationEnv("SHUTDOWN_TIMEOUT", cfg.ShutdownTimeout); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.WorkerPollInterval, err = durationEnv("WORKER_POLL_INTERVAL", cfg.WorkerPollInterval); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.WorkerBatchSize, err = intEnv("WORKER_BATCH_SIZE", cfg.WorkerBatchSize); err != nil {
 		return ProcessConfig{}, err
 	}
 	if cfg.DBMaxConns, err = int32Env("DB_MAX_CONNS", cfg.DBMaxConns); err != nil {
@@ -139,13 +152,29 @@ func LoadFromEnv() (ProcessConfig, error) {
 			return ProcessConfig{}, errors.New("LLM token and input limits must be positive")
 		}
 	}
-	if cfg.ShutdownTimeout <= 0 || cfg.DBMaxConns <= 0 || cfg.DBMinConns < 0 || cfg.DBMinConns > cfg.DBMaxConns {
+	if cfg.ShutdownTimeout <= 0 || cfg.WorkerPollInterval <= 0 || cfg.WorkerBatchSize <= 0 || strings.TrimSpace(cfg.WorkerOwner) == "" || cfg.DBMaxConns <= 0 || cfg.DBMinConns < 0 || cfg.DBMinConns > cfg.DBMaxConns {
 		return ProcessConfig{}, errors.New("invalid process or database pool configuration")
 	}
 	if strings.TrimSpace(cfg.HTTPAddr) == "" {
 		return ProcessConfig{}, errors.New("HTTP_ADDR cannot be empty")
 	}
+	if cfg.ChatwootMirrorEnabled && (cfg.SocialAPIWebhookSecret == "" || cfg.ChatwootAPIToken == "") {
+		return ProcessConfig{}, errors.New("CHATWOOT_MIRROR_ENABLED requires SOCIALAPI_WEBHOOK_SECRET and CHATWOOT_API_TOKEN")
+	}
+	if cfg.ChatwootAutoReplyEnabled && (cfg.ChatwootWebhookSecret == "" || cfg.SocialAPIAPIKey == "" || !cfg.LLMEnabled) {
+		return ProcessConfig{}, errors.New("CHATWOOT_AUTOREPLY_ENABLED requires CHATWOOT_WEBHOOK_SECRET, SOCIALAPI_API_KEY, and LLM_ENABLED")
+	}
+	if strings.EqualFold(cfg.Environment, "production") && cfg.ChatwootProvisioningEnabled {
+		if !isHTTPSURL(cfg.ChannelProvisioningRedirectURI) || !isHTTPSURL(cfg.ChannelProvisioningWebhookURL) {
+			return ProcessConfig{}, errors.New("production channel provisioning requires HTTPS redirect and webhook URLs")
+		}
+	}
 	return cfg, nil
+}
+
+func isHTTPSURL(value string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	return err == nil && parsed.Scheme == "https" && parsed.Host != ""
 }
 
 func envOr(key, fallback string) string {

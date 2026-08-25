@@ -37,6 +37,9 @@ func TestAPIBootstrapWiresRuntimeAndShutdown(t *testing.T) {
 	if deps.Scope != nil {
 		t.Fatal("bootstrap must not invent an authentication/scope provider")
 	}
+	if runtime.HTTP.ReadHeaderTimeout <= 0 || runtime.HTTP.WriteTimeout <= 0 || runtime.HTTP.IdleTimeout <= 0 {
+		t.Fatalf("API server timeouts must be configured: %#v", runtime.HTTP)
+	}
 
 	liveRequest := httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil)
 	liveResponse := httptest.NewRecorder()
