@@ -18,6 +18,34 @@ func NewAIDecisionRepository(adapter *Adapter) *AIDecisionRepository {
 
 const aiDecisionSelect = `SELECT id::text, business_id::text, conversation_id::text, source_message_reference, intent_base, domain_context, entities, evidence_references, requested_action, confidence_value::text, confidence_band, requires_human, missing_information, reason_codes, policy_reference, policy_version, knowledge_version, model_reference, schema_version, lifecycle, policy_decision, outcome, execution_reference, correlation_id::text, causation_id::text, expires_at, human_review_reason, human_review_requested_at, human_review_requested_by, decided_at, resource_version, created_at, updated_at FROM ai_decisions`
 
+func (r *AIDecisionRepository) CreateProposed(ctx context.Context, draft ports.AIDecisionDraft) (ports.AIDecisionRecord, error) {
+	executor, err := r.executor(ctx)
+	if err != nil {
+		return ports.AIDecisionRecord{}, err
+	}
+	if draft.ID == "" || draft.BusinessID == "" || draft.IntentBase == "" || draft.RequestedAction == "" || draft.ConfidenceBand == "" || draft.PolicyVersion == "" || draft.SchemaVersion <= 0 || draft.Lifecycle != "proposed" || draft.CreatedAt.IsZero() || draft.UpdatedAt.IsZero() {
+		return ports.AIDecisionRecord{}, invalidRepositoryInput("ai_decision.create_proposed", "id, business, intent, action, confidence band, policy version, schema version, proposed lifecycle, and timestamps are required")
+	}
+	entities := draft.Entities
+	if len(entities) == 0 {
+		entities = []byte(`{}`)
+	}
+	evidence := draft.EvidenceReferences
+	if len(evidence) == 0 {
+		evidence = []byte(`[]`)
+	}
+	missing := draft.MissingInformation
+	if len(missing) == 0 {
+		missing = []byte(`[]`)
+	}
+	reasons := draft.ReasonCodes
+	if len(reasons) == 0 {
+		reasons = []byte(`[]`)
+	}
+	const query = `INSERT INTO ai_decisions (id, business_id, conversation_id, source_message_reference, intent_base, domain_context, entities, evidence_references, requested_action, confidence_value, confidence_band, requires_human, missing_information, reason_codes, policy_reference, policy_version, knowledge_version, model_reference, schema_version, lifecycle, policy_decision, outcome, execution_reference, correlation_id, causation_id, expires_at, decided_at, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10::numeric, $11, $12, $13::jsonb, $14::jsonb, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24::uuid, $25::uuid, $26, $27, $28, $29) RETURNING id::text, business_id::text, conversation_id::text, source_message_reference, intent_base, domain_context, entities, evidence_references, requested_action, confidence_value::text, confidence_band, requires_human, missing_information, reason_codes, policy_reference, policy_version, knowledge_version, model_reference, schema_version, lifecycle, policy_decision, outcome, execution_reference, correlation_id::text, causation_id::text, expires_at, human_review_reason, human_review_requested_at, human_review_requested_by, decided_at, resource_version, created_at, updated_at`
+	return scanAIDecision(executor.QueryRow(ctx, query, draft.ID, draft.BusinessID, draft.ConversationID, draft.SourceMessageReference, draft.IntentBase, draft.DomainContext, entities, evidence, draft.RequestedAction, draft.ConfidenceValue, draft.ConfidenceBand, draft.RequiresHuman, missing, reasons, draft.PolicyReference, draft.PolicyVersion, draft.KnowledgeVersion, draft.ModelReference, draft.SchemaVersion, draft.Lifecycle, draft.PolicyDecision, draft.Outcome, draft.ExecutionReference, draft.CorrelationID, draft.CausationID, draft.ExpiresAt, draft.DecidedAt, draft.CreatedAt, draft.UpdatedAt), "ai_decision.create_proposed")
+}
+
 func (r *AIDecisionRepository) List(ctx context.Context, filter ports.AIDecisionFilter) (ports.AIDecisionPage, error) {
 	executor, err := r.executor(ctx)
 	if err != nil {

@@ -6,9 +6,42 @@ import (
 )
 
 type AIDecisionRepository interface {
+	CreateProposed(ctx context.Context, draft AIDecisionDraft) (AIDecisionRecord, error)
 	List(ctx context.Context, filter AIDecisionFilter) (AIDecisionPage, error)
 	Get(ctx context.Context, businessID, decisionID string) (AIDecisionRecord, error)
 	RequestHumanReview(ctx context.Context, patch HumanReviewPatch) (AIDecisionRecord, error)
+}
+
+type AIDecisionDraft struct {
+	ID                     string
+	BusinessID             string
+	ConversationID         *string
+	SourceMessageReference *string
+	IntentBase             string
+	DomainContext          *string
+	Entities               []byte
+	EvidenceReferences     []byte
+	RequestedAction        string
+	ConfidenceValue        *string
+	ConfidenceBand         string
+	RequiresHuman          bool
+	MissingInformation     []byte
+	ReasonCodes            []byte
+	PolicyReference        *string
+	PolicyVersion          string
+	KnowledgeVersion       *string
+	ModelReference         *string
+	SchemaVersion          int
+	Lifecycle              string
+	PolicyDecision         *string
+	Outcome                *string
+	ExecutionReference     *string
+	CorrelationID          *string
+	CausationID            *string
+	ExpiresAt              *time.Time
+	DecidedAt              *time.Time
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 }
 
 type AIDecisionFilter struct {

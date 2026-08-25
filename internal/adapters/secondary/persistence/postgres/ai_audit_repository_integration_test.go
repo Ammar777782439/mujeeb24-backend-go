@@ -233,3 +233,102 @@ func (passthroughTransactions) Within(ctx context.Context, fn func(context.Conte
 func stringPointerForAIAudit(value string) *string { return &value }
 
 var _ ports.TransactionManager = passthroughTransactions{}
+
+func TestAutoReplyVerticalSliceAgainstPostgres(t *testing.T) {
+	dsn := os.Getenv("POSTGRES_TEST_DSN")
+	if dsn == "" {
+		t.Skip("POSTGRES_TEST_DSN is not set")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	if _, err := database.RunMigrations(ctx, dsn, time.Now().UTC()); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+	adapter, err := Open(ctx, dsn, DefaultPoolConfig())
+	if err != nil {
+		t.Fatalf("open adapter: %v", err)
+	}
+	defer adapter.Close()
+
+	businessID := uuid.NewString()
+	customerID := uuid.NewString()
+	conversationID := uuid.NewString()
+	connectionID := uuid.NewString()
+	referenceID := uuid.NewString()
+	base := time.Date(2026, 8, 25, 13, 0, 0, 0, time.UTC)
+	cleanup := func() {
+		cleanupCtx := context.Background()
+		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM outbox_entries WHERE business_id = $1::uuid`, businessID)
+		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM outbound_messages WHERE business_id = $1::uuid`, businessID)
+		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM ai_decisions WHERE business_id = $1::uuid`, businessID)
+		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM conversation_references WHERE business_id = $1::uuid`, businessID)
+		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM channel_connections WHERE business_id = $1::uuid`, businessID)
+		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM conversations WHERE business_id = $1::uuid`, businessID)
+		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM customers WHERE business_id = $1::uuid`, businessID)
+		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM businesses WHERE id = $1::uuid`, businessID)
+	}
+	defer cleanup()
+
+	if _, err := adapter.Pool().Exec(ctx, `INSERT INTO businesses (id, name, slug, status, vertical_type, timezone, default_currency, locale, created_at, updated_at) VALUES ($1::uuid, 'Auto Reply Business', $1, 'active', 'retail', 'Asia/Aden', 'YER', 'ar-YE', $2, $2)`, businessID, base); err != nil {
+		t.Fatalf("insert business: %v", err)
+	}
+	if _, err := adapter.Pool().Exec(ctx, `INSERT INTO customers (id, business_id, profile, contact_points, status, created_at, updated_at) VALUES ($1::uuid, $2::uuid, '{}'::jsonb, '[]'::jsonb, 'active', $3, $3)`, customerID, businessID, base); err != nil {
+		t.Fatalf("insert customer: %v", err)
+	}
+	if _, err := adapter.Pool().Exec(ctx, `INSERT INTO conversations (id, business_id, customer_id, state, ownership, priority, last_activity_at, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, 'open', 'none', 'normal', $4, $4, $4)`, conversationID, businessID, customerID, base); err != nil {
+		t.Fatalf("insert conversation: %v", err)
+	}
+	if _, err := adapter.Pool().Exec(ctx, `INSERT INTO channel_connections (id, business_id, provider_ref, channel, provider_account_ref, provider_connection_ref, status, secret_reference, created_at, updated_at) VALUES ($1::uuid, $2::uuid, 'socialapi', 'facebook', 'account-1', 'connection-1', 'active', 'local-secret-ref', $3, $3)`, connectionID, businessID, base); err != nil {
+		t.Fatalf("insert channel connection: %v", err)
+	}
+	if _, err := adapter.Pool().Exec(ctx, `INSERT INTO conversation_references (id, business_id, conversation_id, system, provider_ref, resource_type, resource_id, connection_id, conversation_kind, is_current, mapping_status, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, 'provider', 'socialapi', 'conversation', 'provider-conversation-1', $4::uuid, 'dm', true, 'active', $5, $5)`, referenceID, businessID, conversationID, connectionID, base); err != nil {
+		t.Fatalf("insert conversation reference: %v", err)
+	}
+
+	decisionRepo := NewAIDecisionRepository(adapter)
+	referenceRepo := NewConversationReferenceRepository(adapter)
+	outboundRepo := NewOutboundMessageRepository(adapter)
+	outboxRepo := NewPostgresOutboxStore(adapter)
+	service := services.NewAutoReplyService(services.SafeAutoReplyRuntime{}, decisionRepo, referenceRepo, outboundRepo, outboxRepo, adapter)
+	result, err := service.Handle(ctx, commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessID)}}, ConversationID: commands.ConversationID(conversationID), SourceMessageReference: "inbound-success", Text: "مرحبا", Channel: "facebook", ProviderRef: "socialapi"})
+	if err != nil {
+		t.Fatalf("auto reply success: %v", err)
+	}
+	if !result.Enqueued || result.Action != "answer" || result.Decision.ID == "" || result.OutboundMessageID == "" || result.OutboxEntryID == "" {
+		t.Fatalf("unexpected auto reply result: %#v", result)
+	}
+	var decisionCount, outboundCount, outboxCount int
+	if err := adapter.Pool().QueryRow(ctx, `SELECT count(*) FROM ai_decisions WHERE business_id = $1::uuid AND source_message_reference = 'inbound-success' AND requested_action = 'answer' AND lifecycle = 'proposed'`, businessID).Scan(&decisionCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := adapter.Pool().QueryRow(ctx, `SELECT count(*) FROM outbound_messages WHERE business_id = $1::uuid AND id = $2::uuid AND status = 'pending' AND origin = 'ai' AND transport = 'provider'`, businessID, string(result.OutboundMessageID)).Scan(&outboundCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := adapter.Pool().QueryRow(ctx, `SELECT count(*) FROM outbox_entries WHERE business_id = $1::uuid AND id = $2::uuid AND command_type = $3 AND status = 'pending'`, businessID, string(result.OutboxEntryID), services.OutboundSendCommandType).Scan(&outboxCount); err != nil {
+		t.Fatal(err)
+	}
+	if decisionCount != 1 || outboundCount != 1 || outboxCount != 1 {
+		t.Fatalf("auto reply persistence counts decision=%d outbound=%d outbox=%d", decisionCount, outboundCount, outboxCount)
+	}
+
+	failingService := services.NewAutoReplyService(services.SafeAutoReplyRuntime{}, decisionRepo, referenceRepo, outboundRepo, failingEnqueueOutbox{OutboxStore: outboxRepo}, adapter)
+	if _, err := failingService.Handle(ctx, commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessID)}}, ConversationID: commands.ConversationID(conversationID), SourceMessageReference: "inbound-rollback", Text: "رسالة ثانية", Channel: "facebook", ProviderRef: "socialapi"}); err == nil {
+		t.Fatal("expected forced outbox failure")
+	}
+	var rollbackDecisions, rollbackOutbound int
+	if err := adapter.Pool().QueryRow(ctx, `SELECT count(*) FROM ai_decisions WHERE business_id = $1::uuid AND source_message_reference = 'inbound-rollback'`, businessID).Scan(&rollbackDecisions); err != nil {
+		t.Fatal(err)
+	}
+	if err := adapter.Pool().QueryRow(ctx, `SELECT count(*) FROM outbound_messages WHERE business_id = $1::uuid AND provider_idempotency_key = 'auto-reply:inbound-rollback'`, businessID).Scan(&rollbackOutbound); err != nil {
+		t.Fatal(err)
+	}
+	if rollbackDecisions != 0 || rollbackOutbound != 0 {
+		t.Fatalf("transaction leaked after outbox failure decisions=%d outbound=%d", rollbackDecisions, rollbackOutbound)
+	}
+}
+
+type failingEnqueueOutbox struct{ ports.OutboxStore }
+
+func (failingEnqueueOutbox) Enqueue(context.Context, ports.OutboxEntryDraft) (ports.OutboxEntryRecord, error) {
+	return ports.OutboxEntryRecord{}, errors.New("forced outbox enqueue failure")
+}
