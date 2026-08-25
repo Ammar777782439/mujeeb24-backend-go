@@ -138,12 +138,12 @@ func TestClientListsAccountsAndBeginsConnection(t *testing.T) {
 }
 
 func TestClientSendsMessageAndMapsDeliveryStatus(t *testing.T) {
-	var sawAuth, sawIdempotency bool
+	var sawAuth, sawProviderIdempotencyHeader bool
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/v1/inbox/conversations/conv_1/messages" && request.Method == http.MethodPost {
 			body, _ := io.ReadAll(request.Body)
 			sawAuth = request.Header.Get("Authorization") == "Bearer sapi_key_test"
-			sawIdempotency = request.Header.Get("Idempotency-Key") == "outbound_1"
+			sawProviderIdempotencyHeader = request.Header.Get("Idempotency-Key") != ""
 			if !strings.Contains(string(body), `"account_id":"acc_1"`) || !strings.Contains(string(body), `"text":"hello"`) {
 				t.Errorf("unexpected send body: %s", body)
 			}
@@ -165,8 +165,8 @@ func TestClientSendsMessageAndMapsDeliveryStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SendMessage: %v", err)
 	}
-	if result.ProviderRequestID != "request_1" || result.ProviderMessageID != "m_1" || result.Status != channel.DeliveryAccepted || !sawAuth || !sawIdempotency {
-		t.Fatalf("unexpected send result=%#v auth=%v idem=%v", result, sawAuth, sawIdempotency)
+	if result.ProviderRequestID != "request_1" || result.ProviderMessageID != "m_1" || result.Status != channel.DeliveryAccepted || !sawAuth || sawProviderIdempotencyHeader {
+		t.Fatalf("unexpected send result=%#v auth=%v provider_idem_header=%v", result, sawAuth, sawProviderIdempotencyHeader)
 	}
 	status, err := client.GetDeliveryStatus(httptest.NewRequest(http.MethodGet, "/", nil).Context(), ports.DeliveryReference{ProviderConversationID: "conv_1", ProviderMessageID: "m_1"})
 	if err != nil || status != channel.DeliveryDelivered {
@@ -186,6 +186,39 @@ func TestClientClassifiesRetryableAPIError(t *testing.T) {
 	providerErr, ok := err.(*Error)
 	if !ok || !providerErr.Retryable || providerErr.StatusCode != http.StatusTooManyRequests || providerErr.RequestID != "request_429" {
 		t.Fatalf("unexpected provider error: %#v", err)
+	}
+}
+
+func TestClientMapsOfficialHTTPErrorSemantics(t *testing.T) {
+	cases := []struct {
+		name      string
+		status    int
+		code      string
+		retryable bool
+	}{
+		{name: "auth", status: http.StatusUnauthorized, code: "auth.invalid_key", retryable: false},
+		{name: "permission", status: http.StatusForbidden, code: "account.reconnection_required", retryable: false},
+		{name: "not_found", status: http.StatusNotFound, code: "conversation.not_found", retryable: false},
+		{name: "rate_limit", status: http.StatusTooManyRequests, code: "platform.facebook.rate_limit", retryable: true},
+		{name: "unsupported", status: http.StatusNotImplemented, code: "resource.not_supported", retryable: false},
+		{name: "upstream", status: http.StatusBadGateway, code: "platform.facebook.api_error", retryable: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				writer.Header().Set("Content-Type", "application/json")
+				writer.Header().Set("X-Request-ID", "header-request")
+				writer.WriteHeader(tc.status)
+				_, _ = writer.Write([]byte(`{"error":{"code":"` + tc.code + `","message":"official message"},"request_id":"body-request"}`))
+			}))
+			defer server.Close()
+			client := NewClient(Config{BaseURL: server.URL, APIKey: "sapi_key_test", HTTPClient: server.Client()})
+			_, err := client.ListConnectedAccounts(httptest.NewRequest(http.MethodGet, "/", nil).Context(), "")
+			providerErr, ok := err.(*Error)
+			if !ok || providerErr.StatusCode != tc.status || providerErr.Code != tc.code || providerErr.Message != "official message" || providerErr.RequestID != "body-request" || providerErr.Retryable != tc.retryable {
+				t.Fatalf("unexpected provider error: %#v", err)
+			}
+		})
 	}
 }
 

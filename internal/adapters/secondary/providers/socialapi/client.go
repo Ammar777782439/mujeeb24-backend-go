@@ -499,7 +499,7 @@ func (c *Client) SendMessage(ctx context.Context, command ports.SendMessageComma
 		MessageIDs []string `json:"message_ids"`
 		Success    bool     `json:"success"`
 	}
-	requestID, err := c.doJSONWithHeaders(ctx, http.MethodPost, "/v1/inbox/conversations/"+url.PathEscape(command.ProviderConversationID)+"/messages", request, &response, http.Header{"Idempotency-Key": []string{command.IdempotencyKey}})
+	requestID, err := c.doJSON(ctx, http.MethodPost, "/v1/inbox/conversations/"+url.PathEscape(command.ProviderConversationID)+"/messages", request, &response)
 	if err != nil {
 		return ports.ProviderSendResult{}, err
 	}
@@ -622,7 +622,7 @@ func parseAPIError(res *http.Response) error {
 	if decoded.RequestID == "" {
 		decoded.RequestID = res.Header.Get("X-Request-ID")
 	}
-	return &Error{StatusCode: res.StatusCode, Code: decoded.Error.Code, Message: decoded.Error.Message, RequestID: decoded.RequestID, Retryable: res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500}
+	return &Error{StatusCode: res.StatusCode, Code: decoded.Error.Code, Message: decoded.Error.Message, RequestID: decoded.RequestID, Retryable: retryableStatus(res.StatusCode)}
 }
 
 type Error struct {
@@ -641,6 +641,15 @@ func (e *Error) Error() string {
 		return fmt.Sprintf("socialapi http %d: %s", e.StatusCode, e.Code)
 	}
 	return fmt.Sprintf("socialapi http %d", e.StatusCode)
+}
+
+func retryableStatus(statusCode int) bool {
+	switch statusCode {
+	case http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway:
+		return true
+	default:
+		return false
+	}
 }
 
 var ErrTransport = errors.New("socialapi transport error")
