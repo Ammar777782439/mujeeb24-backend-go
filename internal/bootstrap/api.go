@@ -48,6 +48,9 @@ func NewAPIWithExternal(database *postgres.Adapter, address string, external Ext
 	if database == nil {
 		return nil, errors.New("postgres adapter is required")
 	}
+	if external.LLMConfigError != nil {
+		return nil, external.LLMConfigError
+	}
 	if address == "" {
 		return nil, errors.New("http address is required")
 	}
@@ -57,6 +60,9 @@ func NewAPIWithExternal(database *postgres.Adapter, address string, external Ext
 	if external.ChatwootWebhook != nil {
 		chatwootService := services.ChatwootWebhookService{Receiver: external.ChatwootWebhook, Inbound: postgres.NewChatwootInboundStore(database)}
 		if external.ChatwootAutoReplyEnabled {
+			if external.AIRuntime == nil {
+				return nil, errors.New("Chatwoot AutoReply requires a configured LLM runtime")
+			}
 			referenceRepository := postgres.NewConversationReferenceRepository(database)
 			chatwootService.AutoReply = &services.ChatwootAutoReplyBridge{
 				Resolver: services.ChatwootProviderReferenceResolver{
@@ -64,7 +70,8 @@ func NewAPIWithExternal(database *postgres.Adapter, address string, external Ext
 					Connections: postgres.NewChannelConnectionRepository(database),
 				},
 				AutoReply: services.NewAutoReplyService(
-					services.SafeAutoReplyRuntime{},
+					external.AIRuntime,
+
 					postgres.NewAIDecisionRepository(database),
 					referenceRepository,
 					postgres.NewOutboundMessageRepository(database),

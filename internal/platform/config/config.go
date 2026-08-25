@@ -29,6 +29,14 @@ type ProcessConfig struct {
 	ChatwootWebhookSecret    string
 	ChatwootHTTPTimeout      time.Duration
 	ChatwootAutoReplyEnabled bool
+	LLMEnabled               bool
+	LLMBaseURL               string
+	LLMAPIKey                string
+	LLMModel                 string
+	LLMHTTPTimeout           time.Duration
+	LLMMaxOutputTokens       int
+	LLMMaxInputCharacters    int
+	LLMOutputTokensField     string
 }
 
 func LoadFromEnv() (ProcessConfig, error) {
@@ -52,6 +60,14 @@ func LoadFromEnv() (ProcessConfig, error) {
 		ChatwootWebhookSecret:    strings.TrimSpace(os.Getenv("CHATWOOT_WEBHOOK_SECRET")),
 		ChatwootHTTPTimeout:      10 * time.Second,
 		ChatwootAutoReplyEnabled: false,
+		LLMEnabled:               false,
+		LLMBaseURL:               strings.TrimRight(strings.TrimSpace(os.Getenv("LLM_BASE_URL")), "/"),
+		LLMAPIKey:                strings.TrimSpace(os.Getenv("LLM_API_KEY")),
+		LLMModel:                 strings.TrimSpace(os.Getenv("LLM_MODEL")),
+		LLMHTTPTimeout:           30 * time.Second,
+		LLMMaxOutputTokens:       700,
+		LLMMaxInputCharacters:    12000,
+		LLMOutputTokensField:     envOr("LLM_OUTPUT_TOKENS_FIELD", "max_completion_tokens"),
 	}
 	if cfg.DatabaseURL == "" {
 		return ProcessConfig{}, errors.New("DATABASE_URL is required")
@@ -86,6 +102,26 @@ func LoadFromEnv() (ProcessConfig, error) {
 	}
 	if cfg.ChatwootAutoReplyEnabled, err = boolEnv("CHATWOOT_AUTOREPLY_ENABLED", cfg.ChatwootAutoReplyEnabled); err != nil {
 		return ProcessConfig{}, err
+	}
+	if cfg.LLMEnabled, err = boolEnv("LLM_ENABLED", cfg.LLMEnabled); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.LLMHTTPTimeout, err = durationEnv("LLM_HTTP_TIMEOUT", cfg.LLMHTTPTimeout); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.LLMMaxOutputTokens, err = intEnv("LLM_MAX_OUTPUT_TOKENS", cfg.LLMMaxOutputTokens); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.LLMMaxInputCharacters, err = intEnv("LLM_MAX_INPUT_CHARACTERS", cfg.LLMMaxInputCharacters); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.LLMEnabled {
+		if cfg.LLMBaseURL == "" || cfg.LLMAPIKey == "" || cfg.LLMModel == "" {
+			return ProcessConfig{}, errors.New("LLM_ENABLED requires LLM_BASE_URL, LLM_API_KEY, and LLM_MODEL")
+		}
+		if cfg.LLMMaxOutputTokens <= 0 || cfg.LLMMaxInputCharacters <= 0 {
+			return ProcessConfig{}, errors.New("LLM token and input limits must be positive")
+		}
 	}
 	if cfg.ShutdownTimeout <= 0 || cfg.DBMaxConns <= 0 || cfg.DBMinConns < 0 || cfg.DBMinConns > cfg.DBMaxConns {
 		return ProcessConfig{}, errors.New("invalid process or database pool configuration")
@@ -126,6 +162,18 @@ func boolEnv(key string, fallback bool) (bool, error) {
 	parsed, err := strconv.ParseBool(value)
 	if err != nil {
 		return false, fmt.Errorf("%s must be a boolean: %w", key, err)
+	}
+	return parsed, nil
+}
+
+func intEnv(key string, fallback int) (int, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be an integer: %w", key, err)
 	}
 	return parsed, nil
 }

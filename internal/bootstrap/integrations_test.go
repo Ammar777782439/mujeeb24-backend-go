@@ -41,3 +41,26 @@ func TestBuildExternalAdaptersKeepsChatwootAutoReplyDisabledByDefault(t *testing
 		t.Fatal("Chatwoot AutoReply flag was not propagated")
 	}
 }
+
+func TestBuildExternalAdaptersConstructsLLMWithoutCallingNetwork(t *testing.T) {
+	adapters := BuildExternalAdapters(config.ProcessConfig{
+		LLMEnabled:            true,
+		LLMBaseURL:            "https://example.invalid/v1",
+		LLMAPIKey:             "test-only-key",
+		LLMModel:              "test-model",
+		LLMHTTPTimeout:        2 * time.Second,
+		LLMMaxOutputTokens:    300,
+		LLMMaxInputCharacters: 4000,
+		LLMOutputTokensField:  "max_completion_tokens",
+	})
+	if adapters.LLMConfigError != nil || adapters.AIRuntime == nil {
+		t.Fatalf("expected configured LLM runtime without network: %#v", adapters)
+	}
+}
+
+func TestBuildExternalAdaptersReportsInvalidLLMConfiguration(t *testing.T) {
+	adapters := BuildExternalAdapters(config.ProcessConfig{LLMEnabled: true, LLMModel: "test-model"})
+	if adapters.LLMConfigError == nil || adapters.AIRuntime != nil {
+		t.Fatalf("expected invalid LLM configuration: %#v", adapters)
+	}
+}
