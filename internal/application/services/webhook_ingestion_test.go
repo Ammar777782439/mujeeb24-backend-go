@@ -61,6 +61,17 @@ type chatwootInboundStore struct {
 	err    error
 }
 
+type providerInboundStore struct {
+	draft  ports.ProviderInboundDraft
+	result ports.ProviderInboundResult
+	err    error
+}
+
+func (s *providerInboundStore) Materialize(_ context.Context, draft ports.ProviderInboundDraft) (ports.ProviderInboundResult, error) {
+	s.draft = draft
+	return s.result, s.err
+}
+
 func (s *chatwootInboundStore) Materialize(_ context.Context, draft ports.ChatwootInboundDraft) (ports.ChatwootInboundResult, error) {
 	s.draft = draft
 	return s.result, s.err
@@ -106,11 +117,13 @@ func TestSocialAPIWebhookServiceRecordsResolvedEventAndRawPayloadHash(t *testing
 	body := []byte(`{"event":"dm.received","data":{"id":"event-1","type":"dm","platform":"instagram","account_id":"account-1","conversation_id":"conversation-1","author":{"id":"customer-1"},"content":{"text":"hello"}}}`)
 	raw := &webhookRawPayloadStore{}
 	events := &webhookEventStore{created: true}
+	inbound := &providerInboundStore{result: ports.ProviderInboundResult{BusinessID: "business-1", CustomerID: "customer-1", ConversationID: "conversation-1", ConversationReferenceID: "reference-1", CommunicationMessageID: "message-1"}}
 	service := SocialAPIWebhookService{
 		Receiver:    socialapi.NewClient(socialapi.Config{WebhookSecret: "secret"}),
 		RawPayloads: raw,
 		Connections: webhookConnectionRepository{record: ports.ChannelConnectionRecord{ID: "connection-1", BusinessID: "business-1", ProviderReference: "socialapi", ProviderAccountReference: stringPointer("account-1"), ProviderConnectionRef: "connection-ref-1"}},
 		Events:      events,
+		Inbound:     inbound,
 	}
 	result, err := service.Handle(context.Background(), signedSocialCommand(t, body))
 	if err != nil {
@@ -124,6 +137,9 @@ func TestSocialAPIWebhookServiceRecordsResolvedEventAndRawPayloadHash(t *testing
 	}
 	if events.draft.ProviderEventID != "event-1" || events.draft.DedupeStrategy != "provider_event_id" || !events.draft.SignatureVerified || events.draft.RawPayloadReference != "socialapi/delivery-1" || events.draft.PayloadHash != raw.sha256 || string(raw.payload) != string(body) {
 		t.Fatalf("unexpected event draft: %#v raw=%#v", events.draft, raw)
+	}
+	if inbound.draft.InboundEventID == "" || inbound.draft.BusinessID != "business-1" || inbound.draft.ConnectionID != "connection-1" || inbound.draft.ProviderAccountRef != "account-1" || inbound.draft.ProviderConversationID != "conversation-1" || inbound.draft.ProviderMessageID != "event-1" || inbound.draft.EventType != "interaction_received" {
+		t.Fatalf("unexpected provider materialization draft: %#v", inbound.draft)
 	}
 }
 
@@ -173,6 +189,7 @@ func TestChatwootWebhookServiceRejectsInvalidSignature(t *testing.T) {
 var _ ports.ChannelConnectionRepository = webhookConnectionRepository{}
 var _ ports.EventStore = (*webhookEventStore)(nil)
 var _ ports.ChatwootInboundStore = (*chatwootInboundStore)(nil)
+var _ ports.ProviderInboundStore = (*providerInboundStore)(nil)
 var _ = channel.ProviderSocialAPI
 var _ = uuid.Nil
 

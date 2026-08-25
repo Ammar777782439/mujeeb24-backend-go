@@ -80,6 +80,15 @@ func NewAPIWithExternal(database *postgres.Adapter, address string, external Ext
 	}
 	eventStore := postgres.NewInboundEventStore(database)
 	outboxStore := postgres.NewPostgresOutboxStore(database)
+	if external.SocialWebhook != nil {
+		dependencies.IngestSocialAPIWebhook = services.SocialAPIWebhookService{
+			Receiver:    external.SocialWebhook,
+			RawPayloads: postgres.NewRawPayloadStore(database),
+			Connections: postgres.NewChannelConnectionRepository(database),
+			Events:      eventStore,
+			Inbound:     postgres.NewProviderInboundStore(database),
+		}
+	}
 	if external.ChatwootWebhook != nil {
 		chatwootService := services.ChatwootWebhookService{Receiver: external.ChatwootWebhook, Inbound: postgres.NewChatwootInboundStore(database)}
 		if external.ChatwootAutoReplyEnabled {

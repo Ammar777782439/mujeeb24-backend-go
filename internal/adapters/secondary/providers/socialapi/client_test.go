@@ -40,7 +40,7 @@ func TestClientNormalizesAndVerifiesWebhookV2(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NormalizeWebhook: %v", err)
 	}
-	if len(events) != 1 || events[0].ProviderEventID != "sapi_dm_1" || events[0].InteractionKind != channel.InteractionDM || events[0].Text != "مرحبا" || events[0].ProviderConversationID != "conv_1" {
+	if len(events) != 1 || events[0].ProviderEventID != "sapi_dm_1" || events[0].EventType != "interaction_received" || events[0].Direction != channel.DirectionInbound || events[0].Origin != channel.OriginCustomer || events[0].InteractionKind != channel.InteractionDM || events[0].Text != "مرحبا" || events[0].ProviderConversationID != "conv_1" {
 		t.Fatalf("unexpected normalized event: %#v", events)
 	}
 	if err := client.VerifyWebhook(ctx, headers, body); err != nil {
@@ -93,7 +93,7 @@ func TestClientNormalizesStatusEventWithoutTreatingItAsInboundText(t *testing.T)
 	_, _ = mac.Write([]byte(timestamp + "." + string(body)))
 	headers := map[string]string{"X-SocialAPI-Signature-V2": "sha256=" + hex.EncodeToString(mac.Sum(nil)), "X-SocialAPI-Timestamp": timestamp}
 	events, err := NewClient(Config{WebhookSecret: secret}).NormalizeWebhook(httptest.NewRequest(http.MethodPost, "/", nil).Context(), headers, body)
-	if err != nil || len(events) != 1 || events[0].InteractionKind != channel.InteractionOther || events[0].ProviderMessageID != "message-1" || events[0].Text != "" {
+	if err != nil || len(events) != 1 || events[0].EventType != "delivery_status_changed" || events[0].InteractionKind != channel.InteractionOther || events[0].ProviderMessageID != "message-1" || events[0].Text != "" {
 		t.Fatalf("unexpected status event=%#v err=%v", events, err)
 	}
 }

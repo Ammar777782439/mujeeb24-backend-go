@@ -60,18 +60,18 @@ cat migrations/0000*.up.sql | "${DOCKER[@]}" exec -i "$CONTAINER" \
 "${DOCKER[@]}" exec -i "$CONTAINER" psql -p "$PORT" -v ON_ERROR_STOP=1 -U postgres -d "$FULL_SCHEMA_DB" \
     < tests/integration/full_schema_constraints.sql >/dev/null
 
-GOTOOLCHAIN=local go build -o /tmp/mujeeb24-migrate-schema-test ./cmd/migrate
+GOTOOLCHAIN=local /usr/local/go/bin/go build -o /tmp/mujeeb24-migrate-schema-test ./cmd/migrate
 DATABASE_URL="postgres://postgres:testpassword@127.0.0.1:${PORT}/${RUNNER_DB}?sslmode=disable" \
     /tmp/mujeeb24-migrate-schema-test >/tmp/mujeeb24-migrate-schema-test-1.log 2>&1
 DATABASE_URL="postgres://postgres:testpassword@127.0.0.1:${PORT}/${RUNNER_DB}?sslmode=disable" \
     /tmp/mujeeb24-migrate-schema-test >/tmp/mujeeb24-migrate-schema-test-2.log 2>&1
 
-grep -q 'applied=37' /tmp/mujeeb24-migrate-schema-test-1.log
+grep -q 'applied=38' /tmp/mujeeb24-migrate-schema-test-1.log
 grep -q 'applied=0' /tmp/mujeeb24-migrate-schema-test-2.log
-[[ "$(${DOCKER[@]} exec "$CONTAINER" psql -p "$PORT" -U postgres -d "$RUNNER_DB" -Atqc 'SELECT count(*) FROM schema_migrations')" == "37" ]]
+[[ "$(${DOCKER[@]} exec "$CONTAINER" psql -p "$PORT" -U postgres -d "$RUNNER_DB" -Atqc 'SELECT count(*) FROM schema_migrations')" == "38" ]]
 
 echo 'postgres_schema_validation=passed'
 echo 'foundation_constraints=passed'
 echo 'full_schema_constraints=passed'
-echo 'migration_runner_first=applied-37'
+echo 'migration_runner_first=applied-38'
 echo 'migration_runner_second=applied-0'

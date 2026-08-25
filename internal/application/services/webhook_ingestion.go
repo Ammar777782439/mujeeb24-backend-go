@@ -19,6 +19,7 @@ type SocialAPIWebhookService struct {
 	RawPayloads ports.RawPayloadStore
 	Connections ports.ChannelConnectionRepository
 	Events      ports.EventStore
+	Inbound     ports.ProviderInboundStore
 	Now         func() time.Time
 }
 
@@ -64,7 +65,7 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 		} else {
 			return commands.WebhookAcceptedResult{}, externalDependencyError("channel connection lookup failed", resolveErr)
 		}
-		created, _, recordErr := s.Events.RecordIfAbsent(ctx, ports.InboundEventDraft{
+		created, record, recordErr := s.Events.RecordIfAbsent(ctx, ports.InboundEventDraft{
 			ID:                     event.ID,
 			ProviderRef:            string(event.Provider),
 			ProviderConnectionRef:  event.ProviderConnectionID,
@@ -92,6 +93,37 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 		if !created {
 			result.Duplicate = true
 		}
+		if resolveErr == nil {
+			if s.Inbound == nil {
+				return commands.WebhookAcceptedResult{}, appErrors.NotImplemented()
+			}
+			materialized, materializeErr := s.Inbound.Materialize(ctx, ports.ProviderInboundDraft{
+				InboundEventID:         record.ID,
+				BusinessID:             connection.BusinessID,
+				ConnectionID:           connection.ID,
+				ProviderRef:            string(event.Provider),
+				ProviderEventID:        event.ProviderEventID,
+				Channel:                string(event.Channel),
+				ProviderAccountRef:     event.ProviderConnectionID,
+				ProviderConversationID: event.ProviderConversationID,
+				ExternalUserID:         event.ExternalUserID,
+				ProviderMessageID:      event.ProviderMessageID,
+				EventType:              event.EventType,
+				InteractionKind:        string(event.InteractionKind),
+				Text:                   event.Text,
+				ExternalCreatedAt:      event.ExternalCreatedAt,
+				ReceivedAt:             event.ReceivedAt,
+				RawPayloadReference:    stored.Reference,
+				PayloadHash:            stored.SHA256,
+			})
+			if materializeErr != nil {
+				return commands.WebhookAcceptedResult{}, externalDependencyError("SocialAPI inbound event could not be materialized", materializeErr)
+			}
+			if materialized.Duplicate {
+				result.Duplicate = true
+			}
+		}
+
 	}
 	return result, nil
 }

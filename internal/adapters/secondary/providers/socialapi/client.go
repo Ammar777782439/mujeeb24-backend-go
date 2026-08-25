@@ -439,7 +439,9 @@ func (c *Client) NormalizeWebhook(ctx context.Context, headers map[string]string
 		return nil, err
 	}
 	providerConversationID := envelope.Data.ConversationID
-	event := channel.InboundEvent{ID: uuid.NewString(), Provider: channel.ProviderSocialAPI, Channel: providerChannel, ProviderConnectionID: envelope.Data.AccountID, ProviderEventID: providerEventID, DeliveryID: deliveryID, DedupeStrategy: dedupeStrategy, EventType: envelope.Event, InteractionKind: interaction, ProviderMessageID: providerMessageID, ProviderConversationID: providerConversationID, ExternalUserID: envelope.Data.Author.ID, Text: envelope.Data.Content.Text, ReceivedAt: receivedAt}
+	normalizedEventType := normalizeSocialEventType(envelope.Event)
+	direction, origin := socialMessageMetadata(normalizedEventType)
+	event := channel.InboundEvent{ID: uuid.NewString(), Provider: channel.ProviderSocialAPI, Channel: providerChannel, ProviderConnectionID: envelope.Data.AccountID, ProviderEventID: providerEventID, DeliveryID: deliveryID, DedupeStrategy: dedupeStrategy, EventType: normalizedEventType, InteractionKind: interaction, ProviderMessageID: providerMessageID, ProviderConversationID: providerConversationID, ExternalUserID: envelope.Data.Author.ID, Text: envelope.Data.Content.Text, Direction: direction, Origin: origin, ReceivedAt: receivedAt}
 	if envelope.Data.ReceivedAt != "" || envelope.Data.CreatedAt != "" {
 		timestamp := receivedAt
 		event.ExternalCreatedAt = &timestamp
@@ -454,6 +456,30 @@ func (c *Client) NormalizeWebhook(ctx context.Context, headers map[string]string
 		return nil, fmt.Errorf("%w: unsupported webhook payload for %s", ErrInvalidRequest, envelope.Event)
 	}
 	return []channel.InboundEvent{event}, nil
+}
+
+func normalizeSocialEventType(event string) string {
+	switch event {
+	case "dm.received", "dm.referral", "dm.postback", "comment.received", "mention.received", "review.received":
+		return "interaction_received"
+	case "interaction.updated", "message.updated", "conversation.message.updated":
+		return "interaction_updated"
+	case "dm.status.delivered", "dm.status.sent", "dm.status.failed", "delivery.status_changed", "message.delivery_status_changed":
+		return "delivery_status_changed"
+	case "conversation.updated":
+		return "conversation_updated"
+	case "account.connected", "account.disconnected", "page.removed":
+		return "account_status_changed"
+	default:
+		return "account_status_changed"
+	}
+}
+
+func socialMessageMetadata(eventType string) (channel.MessageDirection, channel.MessageOrigin) {
+	if eventType == "interaction_received" {
+		return channel.DirectionInbound, channel.OriginCustomer
+	}
+	return "", ""
 }
 
 func interactionKind(event string) channel.InteractionKind {
