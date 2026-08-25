@@ -131,3 +131,37 @@ go test -tags=integration -count=1 ./internal/adapters/secondary/persistence/pos
 ```
 
 وتضمنت النتيجة `TestChatwootInboundStoreAgainstPostgres` و`TestConversationReferenceProviderChatwootBindingAgainstPostgres` و`TestAutoReplyVerticalSliceAgainstPostgres` و`TestInboundEventStoreAgainstPostgres`. أُزيلت قاعدة الاختبار المؤقتة بعد انتهاء التشغيل، ولم يُستخدم أي provider أو credential خارجي.
+
+## الاختبار المركب النهائي
+
+أُضيف الاختبار `TestChatwootInboundAutoReplyOrchestrationAgainstPostgres` تحت build tag `integration`. الاختبار لا يستخدم Chatwoot أو SocialAPI خارجيًا؛ لكنه يستخدم Chatwoot normalizer الحقيقي وHMAC حقيقيًا بقيمة اختبارية، و`ChatwootInboundStore` وConversationReference repositories وAIDecision/Outbound/Outbox repositories الحقيقية على PostgreSQL.
+
+الاختبار المركب يثبت داخل عملية واحدة:
+
+```text
+Chatwoot incoming payload
+  → HMAC verification
+  → message_type=incoming
+  → Mujeeb materialization
+  → exact Chatwoot/provider reference lookup
+  → SafeAutoReplyRuntime
+  → AIDecision
+  → OutboundMessage
+  → Outbox
+```
+
+ثم يعيد نفس callback لإثبات عدم إنشاء Outbox ثانية، ثم يرسل callback outgoing من AgentBot لإثبات materialization outbound مع عدم تشغيل AutoReply أو زيادة Outbox.
+
+في التشغيل الأول لـintegration suite ظهر فشلان حقيقيان، ولم يتم إخفاؤهما: mismatch بين `provider_ref` و`system` في AutoReply caller، وlease expiry تاريخي في EventStore fixture. تم إصلاحهما، ثم نجحت suite كاملة:
+
+```text
+go test -tags=integration -count=1 ./internal/adapters/secondary/persistence/postgres  PASS
+```
+
+كما نجح الاختبار المركب منفردًا:
+
+```text
+go test -tags=integration -run TestChatwootInboundAutoReplyOrchestrationAgainstPostgres -count=1 ./internal/adapters/secondary/persistence/postgres  PASS
+```
+
+تم حذف PostgreSQL المؤقتة بعد انتهاء الاختبارات، ولم تُستخدم أي credentials حقيقية أو network خارجي.
