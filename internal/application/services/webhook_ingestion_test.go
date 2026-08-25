@@ -217,6 +217,8 @@ func TestChatwootWebhookServiceDoesNotAutoReplyToOutgoingOrPrivateMessages(t *te
 	}{
 		{name: "outgoing", body: []byte(`{"event":"message_created","id":1002,"content":"agent reply","message_type":"outgoing","account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56,"type":"user"}}`)},
 		{name: "private", body: []byte(`{"event":"message_created","id":1003,"content":"private note","message_type":"incoming","private":true,"account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56,"type":"user"}}`)},
+		{name: "activity", body: []byte(`{"event":"message_created","id":1005,"content":"activity","message_type":"activity","account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56,"type":"user"}}`)},
+		{name: "template", body: []byte(`{"event":"message_created","id":1006,"content":"template","message_type":"template","account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56,"type":"user"}}`)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
