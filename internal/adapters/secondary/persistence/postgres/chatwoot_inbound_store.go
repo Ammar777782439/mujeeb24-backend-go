@@ -53,6 +53,7 @@ func (s *ChatwootInboundStore) Materialize(ctx context.Context, draft ports.Chat
 		if err != nil {
 			return err
 		}
+		result.BusinessID = businessID
 		result.InboundEventID = inboundEventID
 		if !created {
 			result.Duplicate = true
@@ -76,6 +77,7 @@ func (s *ChatwootInboundStore) Materialize(ctx context.Context, draft ports.Chat
 		if _, err := executor.Exec(txCtx, `UPDATE inbound_event_ledger SET processing_state = 'processed', processing_result_code = 'chatwoot_materialized', processed_at = $2, updated_at = $2 WHERE id = $1::uuid AND processing_state = 'received'`, inboundEventID, processedAt); err != nil {
 			return classifyRepositoryWriteError("chatwoot_inbound.mark_processed", err)
 		}
+		result.BusinessID = businessID
 		result.CustomerID = customerID
 		result.ConversationID = conversationID
 		result.ConversationReferenceID = referenceID
@@ -176,6 +178,18 @@ func recordChatwootCommunicationMessage(ctx context.Context, executor SQLExecuto
 		return "", nil
 	}
 	messageID := uuid.NewString()
+	direction := draft.Direction
+	if direction != "inbound" && direction != "outbound" {
+		direction = "inbound"
+	}
+	origin := draft.Origin
+	if origin == "" {
+		if direction == "outbound" {
+			origin = "human"
+		} else {
+			origin = "customer"
+		}
+	}
 	contentType := "unknown"
 	var textContent any
 	if strings.TrimSpace(draft.Content) != "" {
@@ -183,7 +197,7 @@ func recordChatwootCommunicationMessage(ctx context.Context, executor SQLExecuto
 		textContent = draft.Content
 	}
 	contentReference := draft.RawPayloadReference
-	if _, err := executor.Exec(ctx, `INSERT INTO communication_messages (id, business_id, conversation_reference_id, inbound_event_id, direction, origin, transport, provider_message_id, chatwoot_message_id, content_type, text_content, content_reference, occurred_at, created_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'inbound', 'customer', 'chatwoot', $5, $5, $6, $7, $8, $9, $10)`, messageID, businessID, referenceID, inboundEventID, draft.ProviderMessageID, contentType, textContent, contentReference, draft.OccurredAt, draft.ReceivedAt); err != nil {
+	if _, err := executor.Exec(ctx, `INSERT INTO communication_messages (id, business_id, conversation_reference_id, inbound_event_id, direction, origin, transport, provider_message_id, chatwoot_message_id, content_type, text_content, content_reference, occurred_at, created_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, 'chatwoot', $7, $7, $8, $9, $10, $11, $12)`, messageID, businessID, referenceID, inboundEventID, direction, origin, draft.ProviderMessageID, contentType, textContent, contentReference, draft.OccurredAt, draft.ReceivedAt); err != nil {
 		return "", classifyRepositoryWriteError("chatwoot_communication_message.create", err)
 	}
 	_ = conversationID

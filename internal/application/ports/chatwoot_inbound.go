@@ -21,6 +21,11 @@ type ChatwootInboundDraft struct {
 	ConversationID      string
 	ExternalUserID      string
 	ProviderMessageID   string
+	MessageType         string
+	Direction           string
+	Origin              string
+	Private             bool
+	SenderType          string
 	Content             string
 	OccurredAt          time.Time
 	ReceivedAt          time.Time
@@ -29,6 +34,7 @@ type ChatwootInboundDraft struct {
 }
 
 type ChatwootInboundResult struct {
+	BusinessID              string
 	Duplicate               bool
 	CustomerID              string
 	ConversationID          string

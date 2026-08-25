@@ -175,3 +175,80 @@ var _ ports.EventStore = (*webhookEventStore)(nil)
 var _ ports.ChatwootInboundStore = (*chatwootInboundStore)(nil)
 var _ = channel.ProviderSocialAPI
 var _ = uuid.Nil
+
+func signedChatwootCommand(t *testing.T, body []byte) commands.IngestWebhookCommand {
+	t.Helper()
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	mac := hmac.New(sha256.New, []byte("secret"))
+	_, _ = mac.Write([]byte(timestamp + "." + string(body)))
+	return commands.IngestWebhookCommand{RouteKey: "chatwoot-test", DeliveryID: "chatwoot-delivery", RequestID: "chatwoot-request", ProviderHeaders: map[string]string{"X-Chatwoot-Signature": "sha256=" + hex.EncodeToString(mac.Sum(nil)), "X-Chatwoot-Timestamp": timestamp}, RawPayload: body}
+}
+
+func testChatwootAutoReplyBridge() (ChatwootAutoReplyBridge, *fakeOutboxStore) {
+	reference, connection := providerReferenceBindingFixtures()
+	reference.ChatwootAccountID = stringPtr("12")
+	reference.ChatwootInboxID = stringPtr("34")
+	reference.ChatwootConversationID = stringPtr("78")
+	connection.ProviderAccountReference = stringPtr("12")
+	references := fakeReferenceRepository{record: reference}
+	outbox := &fakeOutboxStore{}
+	autoReply := NewAutoReplyService(SafeAutoReplyRuntime{}, &fakeDecisionRepository{}, references, &fakeOutboundRepository{}, outbox, fakeTransactionManager{})
+	return ChatwootAutoReplyBridge{Resolver: ChatwootProviderReferenceResolver{References: references, Connections: resolverConnectionRepository{record: connection}}, AutoReply: autoReply}, outbox
+}
+
+func TestChatwootWebhookServiceOrchestratesIncomingAutoReplyToOutbox(t *testing.T) {
+	body := []byte(`{"event":"message_created","id":1001,"content":"hello","message_type":"incoming","account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56,"type":"contact"}}`)
+	store := &chatwootInboundStore{result: ports.ChatwootInboundResult{BusinessID: "business-1", ConversationID: "conversation-1", CustomerID: "customer-1", CommunicationMessageID: "message-1"}}
+	bridge, outbox := testChatwootAutoReplyBridge()
+	service := ChatwootWebhookService{Receiver: chatwoot.NewClient(chatwoot.Config{WebhookSecret: "secret"}), Inbound: store, AutoReply: &bridge}
+	result, err := service.Handle(context.Background(), signedChatwootCommand(t, body))
+	if err != nil || !result.Accepted || !result.Resolved || result.Duplicate || outbox.calls != 1 {
+		t.Fatalf("unexpected incoming orchestration result=%#v err=%v outbox_calls=%d", result, err, outbox.calls)
+	}
+	if store.draft.Direction != "inbound" || store.draft.Origin != "customer" || store.draft.MessageType != "incoming" {
+		t.Fatalf("unexpected inbound draft=%#v", store.draft)
+	}
+}
+
+func TestChatwootWebhookServiceDoesNotAutoReplyToOutgoingOrPrivateMessages(t *testing.T) {
+	cases := []struct {
+		name string
+		body []byte
+	}{
+		{name: "outgoing", body: []byte(`{"event":"message_created","id":1002,"content":"agent reply","message_type":"outgoing","account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56,"type":"user"}}`)},
+		{name: "private", body: []byte(`{"event":"message_created","id":1003,"content":"private note","message_type":"incoming","private":true,"account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56,"type":"user"}}`)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &chatwootInboundStore{result: ports.ChatwootInboundResult{BusinessID: "business-1", ConversationID: "conversation-1"}}
+			bridge, outbox := testChatwootAutoReplyBridge()
+			service := ChatwootWebhookService{Receiver: chatwoot.NewClient(chatwoot.Config{WebhookSecret: "secret"}), Inbound: store, AutoReply: &bridge}
+			result, err := service.Handle(context.Background(), signedChatwootCommand(t, tc.body))
+			if err != nil || !result.Accepted || outbox.calls != 0 {
+				t.Fatalf("unexpected echo suppression result=%#v err=%v outbox_calls=%d", result, err, outbox.calls)
+			}
+			if store.draft.Direction != "outbound" {
+				t.Fatalf("expected outbound direction, draft=%#v", store.draft)
+			}
+		})
+	}
+}
+
+func TestChatwootWebhookServiceDoesNotAutoReplyToDuplicateOrUnresolvedReference(t *testing.T) {
+	body := []byte(`{"event":"message_created","id":1004,"content":"hello again","message_type":"incoming","account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56,"type":"contact"}}`)
+	duplicateStore := &chatwootInboundStore{result: ports.ChatwootInboundResult{BusinessID: "business-1", ConversationID: "conversation-1", Duplicate: true}}
+	bridge, outbox := testChatwootAutoReplyBridge()
+	service := ChatwootWebhookService{Receiver: chatwoot.NewClient(chatwoot.Config{WebhookSecret: "secret"}), Inbound: duplicateStore, AutoReply: &bridge}
+	result, err := service.Handle(context.Background(), signedChatwootCommand(t, body))
+	if err != nil || !result.Accepted || !result.Duplicate || outbox.calls != 0 {
+		t.Fatalf("unexpected duplicate result=%#v err=%v outbox_calls=%d", result, err, outbox.calls)
+	}
+
+	unresolvedStore := &chatwootInboundStore{result: ports.ChatwootInboundResult{BusinessID: "business-1", ConversationID: "conversation-1"}}
+	unresolvedBridge := ChatwootAutoReplyBridge{Resolver: ChatwootProviderReferenceResolver{References: resolverErrorReferenceRepository{err: repositoryKindError("not_found")}, Connections: resolverConnectionRepository{}}, AutoReply: bridge.AutoReply}
+	service = ChatwootWebhookService{Receiver: chatwoot.NewClient(chatwoot.Config{WebhookSecret: "secret"}), Inbound: unresolvedStore, AutoReply: &unresolvedBridge}
+	result, err = service.Handle(context.Background(), signedChatwootCommand(t, body))
+	if err != nil || !result.Accepted || result.Resolved || outbox.calls != 0 {
+		t.Fatalf("unexpected unresolved result=%#v err=%v outbox_calls=%d", result, err, outbox.calls)
+	}
+}

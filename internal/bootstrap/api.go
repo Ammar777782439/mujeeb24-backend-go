@@ -52,11 +52,29 @@ func NewAPIWithExternal(database *postgres.Adapter, address string, external Ext
 		return nil, errors.New("http address is required")
 	}
 	dependencies := BuildDependencies(database)
-	if external.ChatwootWebhook != nil {
-		dependencies.IngestChatwootWebhook = services.ChatwootWebhookService{Receiver: external.ChatwootWebhook, Inbound: postgres.NewChatwootInboundStore(database)}
-	}
 	eventStore := postgres.NewInboundEventStore(database)
 	outboxStore := postgres.NewPostgresOutboxStore(database)
+	if external.ChatwootWebhook != nil {
+		chatwootService := services.ChatwootWebhookService{Receiver: external.ChatwootWebhook, Inbound: postgres.NewChatwootInboundStore(database)}
+		if external.ChatwootAutoReplyEnabled {
+			referenceRepository := postgres.NewConversationReferenceRepository(database)
+			chatwootService.AutoReply = &services.ChatwootAutoReplyBridge{
+				Resolver: services.ChatwootProviderReferenceResolver{
+					References:  referenceRepository,
+					Connections: postgres.NewChannelConnectionRepository(database),
+				},
+				AutoReply: services.NewAutoReplyService(
+					services.SafeAutoReplyRuntime{},
+					postgres.NewAIDecisionRepository(database),
+					referenceRepository,
+					postgres.NewOutboundMessageRepository(database),
+					outboxStore,
+					database,
+				),
+			}
+		}
+		dependencies.IngestChatwootWebhook = chatwootService
+	}
 	_, mux := contract.BuildAPIWithHandlers(handlers.NewServer(dependencies))
 	mux.HandleFunc("/health", func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {

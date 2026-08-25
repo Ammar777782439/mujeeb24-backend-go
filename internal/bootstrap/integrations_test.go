@@ -29,3 +29,15 @@ func TestBuildExternalAdaptersConstructsConfiguredClientsWithoutCallingNetwork(t
 		t.Fatalf("expected configured adapters: %#v", adapters)
 	}
 }
+
+func TestBuildExternalAdaptersKeepsChatwootAutoReplyDisabledByDefault(t *testing.T) {
+	adapters := BuildExternalAdapters(config.ProcessConfig{ChatwootWebhookSecret: "placeholder"})
+	if adapters.ChatwootAutoReplyEnabled {
+		t.Fatal("Chatwoot AutoReply must be disabled by default")
+	}
+
+	adapters = BuildExternalAdapters(config.ProcessConfig{ChatwootWebhookSecret: "placeholder", ChatwootAutoReplyEnabled: true})
+	if !adapters.ChatwootAutoReplyEnabled {
+		t.Fatal("Chatwoot AutoReply flag was not propagated")
+	}
+}

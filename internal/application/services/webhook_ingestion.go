@@ -97,8 +97,9 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 }
 
 type ChatwootWebhookService struct {
-	Receiver ports.WebhookReceiver
-	Inbound  ports.ChatwootInboundStore
+	Receiver  ports.WebhookReceiver
+	Inbound   ports.ChatwootInboundStore
+	AutoReply *ChatwootAutoReplyBridge
 }
 
 // Chatwoot is an internal communication workspace, not Mujeeb's provider
@@ -134,6 +135,11 @@ func (s ChatwootWebhookService) Handle(ctx context.Context, command commands.Ing
 			ConversationID:      event.ProviderConversationID,
 			ExternalUserID:      event.ExternalUserID,
 			ProviderMessageID:   event.ProviderMessageID,
+			MessageType:         event.MessageType,
+			Direction:           string(event.Direction),
+			Origin:              string(event.Origin),
+			Private:             event.Private,
+			SenderType:          event.SenderType,
 			Content:             event.Text,
 			OccurredAt:          event.ReceivedAt,
 			ReceivedAt:          event.ReceivedAt,
@@ -145,7 +151,19 @@ func (s ChatwootWebhookService) Handle(ctx context.Context, command commands.Ing
 		}
 		if materialized.Duplicate {
 			result.Duplicate = true
+			continue
 		}
+		if s.AutoReply == nil || event.Direction != channel.DirectionInbound || event.Private || event.EventType != "interaction_received" || strings.TrimSpace(event.ProviderMessageID) == "" || strings.TrimSpace(event.Text) == "" {
+			continue
+		}
+		autoReplyResult, autoReplyErr := s.AutoReply.Handle(ctx, commands.ChatwootAutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(materialized.BusinessID)}}, AccountID: accountID, InboxID: inboxID, ChatwootConversationID: event.ProviderConversationID, MujeebConversationID: commands.ConversationID(materialized.ConversationID), SourceMessageReference: event.ProviderMessageID, Text: event.Text})
+		if autoReplyErr != nil {
+			return commands.WebhookAcceptedResult{}, externalDependencyError("Chatwoot AutoReply could not be executed", autoReplyErr)
+		}
+		if autoReplyResult.Blocked {
+			result.Resolved = false
+		}
+
 	}
 	return result, nil
 }

@@ -86,6 +86,11 @@ type InboundEvent struct {
 	ProviderConversationID string
 	ExternalUserID         string
 	Text                   string
+	MessageType            string
+	Direction              MessageDirection
+	Origin                 MessageOrigin
+	Private                bool
+	SenderType             string
 	ExternalCreatedAt      *time.Time
 	ReceivedAt             time.Time
 	RawPayloadReference    string

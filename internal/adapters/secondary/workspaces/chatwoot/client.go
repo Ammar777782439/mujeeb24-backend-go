@@ -110,13 +110,16 @@ func (c *Client) NormalizeWebhook(ctx context.Context, headers map[string]string
 		receivedAt = time.Unix(int64(payload.CreatedAt), 0).UTC()
 	}
 	messageID := string(payload.ID)
-	return []channel.InboundEvent{{ID: messageID, Provider: channel.ProviderChatwoot, ProviderConnectionID: chatwootConnectionReference(payload.AccountID, payload.InboxID), ProviderEventID: messageID, EventType: normalizeChatwootEventType(payload.Event), InteractionKind: channel.InteractionDM, ProviderMessageID: chatwootProviderMessageID(payload.Event, payload.Content, messageID), ProviderConversationID: string(payload.ConversationID), ExternalUserID: string(payload.SenderID), Text: payload.Content, ReceivedAt: receivedAt, RawPayloadReference: "chatwoot://webhook/" + messageID, ExternalCreatedAt: &receivedAt}}, nil
+	direction, origin := chatwootMessageDirection(string(payload.MessageType), string(payload.Sender.Type), payload.Private)
+	return []channel.InboundEvent{{ID: messageID, Provider: channel.ProviderChatwoot, ProviderConnectionID: chatwootConnectionReference(payload.AccountID, payload.InboxID), ProviderEventID: messageID, EventType: normalizeChatwootEventType(payload.Event), InteractionKind: channel.InteractionDM, ProviderMessageID: chatwootProviderMessageID(payload.Event, payload.Content, messageID), ProviderConversationID: string(payload.ConversationID), ExternalUserID: string(payload.SenderID), Text: payload.Content, MessageType: string(payload.MessageType), Direction: direction, Origin: origin, Private: payload.Private, SenderType: string(payload.Sender.Type), ReceivedAt: receivedAt, RawPayloadReference: "chatwoot://webhook/" + messageID, ExternalCreatedAt: &receivedAt}}, nil
 }
 
 type chatwootWebhookPayload struct {
 	Event          string           `json:"event"`
 	ID             flexibleString   `json:"id"`
 	Content        string           `json:"content"`
+	MessageType    flexibleString   `json:"message_type"`
+	Private        bool             `json:"private"`
 	CreatedAt      flexibleUnixTime `json:"created_at"`
 	AccountID      flexibleString   `json:"account_id"`
 	ConversationID flexibleString   `json:"conversation_id"`
@@ -126,7 +129,8 @@ type chatwootWebhookPayload struct {
 		ID flexibleString `json:"id"`
 	} `json:"conversation"`
 	Sender struct {
-		ID flexibleString `json:"id"`
+		ID   flexibleString `json:"id"`
+		Type flexibleString `json:"type"`
 	} `json:"sender"`
 	Inbox struct {
 		ID flexibleString `json:"id"`
@@ -200,6 +204,27 @@ func chatwootConnectionReference(accountID, inboxID flexibleString) string {
 		return string(accountID)
 	}
 	return string(accountID) + ":" + string(inboxID)
+}
+
+func chatwootMessageDirection(messageType, senderType string, private bool) (channel.MessageDirection, channel.MessageOrigin) {
+	messageType = strings.ToLower(strings.TrimSpace(messageType))
+	senderType = strings.ToLower(strings.TrimSpace(senderType))
+	if private {
+		return channel.DirectionOutbound, channel.OriginSystem
+	}
+	switch messageType {
+	case "incoming", "0":
+		return channel.DirectionInbound, channel.OriginCustomer
+	case "outgoing", "1":
+		if senderType == "agentbot" || senderType == "captain::assistant" {
+			return channel.DirectionOutbound, channel.OriginAutomation
+		}
+		return channel.DirectionOutbound, channel.OriginHuman
+	case "activity", "2", "template", "3":
+		return channel.DirectionOutbound, channel.OriginSystem
+	default:
+		return "", ""
+	}
 }
 
 func chatwootProviderMessageID(eventType, content, messageID string) string {

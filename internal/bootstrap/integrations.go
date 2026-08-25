@@ -8,10 +8,11 @@ import (
 )
 
 type ExternalAdapters struct {
-	SocialAPI       ports.ChannelProvider
-	Chatwoot        ports.CommunicationWorkspace
-	SocialWebhook   ports.WebhookReceiver
-	ChatwootWebhook ports.WebhookReceiver
+	SocialAPI                ports.ChannelProvider
+	Chatwoot                 ports.CommunicationWorkspace
+	SocialWebhook            ports.WebhookReceiver
+	ChatwootWebhook          ports.WebhookReceiver
+	ChatwootAutoReplyEnabled bool
 }
 
 func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
@@ -26,5 +27,6 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 		adapters.Chatwoot = client
 		adapters.ChatwootWebhook = client
 	}
+	adapters.ChatwootAutoReplyEnabled = cfg.ChatwootAutoReplyEnabled
 	return adapters
 }
