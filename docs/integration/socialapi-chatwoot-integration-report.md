@@ -1,6 +1,6 @@
 # تقرير اختبار التكامل الحقيقي: Mujeeb 24 وSocialAPI.ai وChatwoot Self-Hosted
 
-**الحالة:** تقرير truth-mode قبل التنظيف والدفع النهائي
+**الحالة:** تقرير truth-mode محدث بعد تنفيذ Chatwoot inbound materialization واختبار callback حقيقي
 **التاريخ:** 25 أغسطس 2026
 **المستودع:** `mujeeb24-backend-go`
 **النطاق:** بيئة محلية معزولة وبيانات اختبار اصطناعية فقط
@@ -9,7 +9,7 @@
 
 أُجري اختبار حقيقي، وليس Provider Simulator، بين أجزاء Mujeeb 24 ونسخة Chatwoot Self-Hosted تعمل محليًا مع PostgreSQL وRedis منفصلين. ثبتت صحة تشغيل Chatwoot، ومصادقته، وApplication API الفعلي، كما ثبتت سلسلة Go adapter الحقيقية من إنشاء Contact إلى Conversation ثم Message. وثبتت كذلك طبقة Mujeeb الخاصة بالـwebhook من خلال توقيع HMAC على البايتات الخام بدقة.
 
-لكن الاختبار **ليس E2E مكتملًا**. لا يوجد حاليًا orchestrator إنتاجي ينشئ mapping دائمًا بين كيانات Mujeeb وChatwoot، ولا يوجد `OutboundDeliveryResolver` أو worker production ينفذ Outbox إلى provider. كما أن SocialAPI لم يُختبر محليًا في هذه الدفعة لغياب credential محلي صالح، ولا يوجد public HTTPS endpoint لاستقبال callback خارجي. لذلك صُنفت هذه الأجزاء **BLOCKED** أو **NOT TESTED** بدل تحويلها إلى PASS افتراضي.
+لكن الاختبار **ليس E2E خارجيًا كاملًا**. أصبح لدى Mujeeb الآن orchestrator إنتاجي لمسار Chatwoot inbound ينشئ mapping وrecords داخل PostgreSQL، لكن لا يوجد بعد `OutboundDeliveryResolver` أو worker production ينفذ Outbox إلى provider، ولا يوجد SocialAPI outbound أو SocialAPI public webhook ضمن هذه الدفعة. لذلك بقيت هذه الأجزاء **BLOCKED** أو **NOT TESTED** بدل تحويلها إلى PASS افتراضي.
 
 ## B. حدود السلامة والنطاق
 
@@ -30,6 +30,7 @@
 | Mujeeb API live | PASS | `/api/v1/health/live` أعاد HTTP 200 |
 | Mujeeb API ready | PASS | `/api/v1/health/ready` أعاد HTTP 200 |
 | Worker process lifecycle | PASS جزئيًا | العملية موجودة، لكن التنفيذ الحالي ينتظر cancellation ولا ينفذ polling أو delivery |
+| Chatwoot inbound materialization | PASS | callback Chatwoot حقيقي أنشأ Event Ledger وCustomer وConversation وReference وCommunicationMessage في PostgreSQL |
 
 ## D. تثبيت Chatwoot Self-Hosted
 
@@ -68,10 +69,11 @@
 | invalid signature إلى Mujeeb route | PASS | HTTP 401 |
 | opaque non-empty route key | PASS | regression test يثبت قبول callback key غير مساوي لاسم provider |
 | application unauthenticated error mapping | PASS | regression test يثبت HTTP 401 بدل HTTP 500 |
-| Chatwoot-origin callback فعلي إلى Mujeeb | BLOCKED | لا يوجد public HTTPS endpoint، والاختبار المنفذ يدوي signed delivery إلى route المحلي |
-| Chatwoot callback persistence | NOT TESTED/BLOCKED | Chatwoot service الحالي verification-only و`Ignored=true` عمدًا لمنع echo loops |
+| Chatwoot-origin callback فعلي إلى Mujeeb | PASS | Chatwoot Sidekiq أرسل callback فعليًا عبر HTTPS proxy؛ بعد إصلاح `created_at` النصي وbinding عاد المسار إلى materialization ناجح |
+| Chatwoot callback persistence/materialization | PASS | PostgreSQL أثبت `inbound_event_ledger=1`, `customers=1`, `conversation_references=1`, `communication_messages=1`, و`processing_state=processed` |
+| Chatwoot callback duplicate | PASS جزئيًا | duplicate atomicity مثبتة باختبار PostgreSQL؛ لم نطلب retry خارجيًا من Chatwoot بعد نجاح callback |
 
-الـ202 هنا يثبت boundary verification/acknowledgement فقط. لا يثبت أنه تم إنشاء Customer أو Conversation أو Message في Mujeeb.
+الـ202 في harness اليدوي يثبت boundary فقط؛ أما callback الحقيقي الأخير فدليله مستقل: Chatwoot-origin message ثم counts وprocessed state داخل PostgreSQL Mujeeb.
 
 ## H. EventStore وinbound dedupe
 
@@ -93,9 +95,9 @@
 
 ## J. Mujeeb↔Chatwoot mapping
 
-هذا الجزء **ليس PASS**. توجد ports وadapter لإنشاء عناصر workspace، لكن لا توجد application orchestration service مكتملة تربط Mujeeb-owned Customer وConversation وCommunicationMessage بمراجع Chatwoot، ولا توجد معاملة application تحفظ mapping في `conversation_references` أو message references بعد نجاح workspace call. لذلك لا يجوز اعتبار customer resolution أو duplicate prevention أو mirror synchronization منجزًا.
+أصبح مسار **Chatwoot inbound mapping** منفذًا ومثبتًا: `ChatwootWebhookService` يتحقق من HMAC وينادي `ChatwootInboundStore`، والـstore يحل binding حسب route/account/inbox ثم ينشئ أو يعيد استخدام Customer وConversation وConversationReference وCommunicationMessage ويسجل Event Ledger ويضعه `processed` داخل معاملة واحدة. كما ثبت duplicate atomicity باختبار PostgreSQL. هذا لا يعني أن Chatwoot mirror outbound أو مزامنة كل تحديثات workspace مكتملة؛ تلك ما زالت خارج النطاق.
 
-القرار المعماري ثابت: Mujeeb يملك business/customer/conversation/message truth، وChatwoot workspace داخلي/مرآة، وSocialAPI provider transport. إبقاء Chatwoot callback في verification-only حاليًا يمنع loop ويمنع ادعاء mapping غير موجود.
+القرار المعماري ثابت: Mujeeb يملك business/customer/conversation/message truth، وChatwoot workspace داخلي/مرآة، وSocialAPI provider transport. مسار inbound الآن ي materialize السجلات داخل Mujeeb، بينما outbound mirror غير موصول بعد؛ لذلك لا توجد network calls من داخل transaction ولا echo loop.
 
 ## K. Outbound
 
@@ -103,15 +105,15 @@
 |---|---|---|
 | Mujeeb business transaction إلى Outbox | PARTIAL/PASS على مستوى storage | Outbox integration test نجح |
 | Worker claim ثم resolve delivery | BLOCKED | لا يوجد polling/execution production |
-| Chatwoot mirror send من Mujeeb | BLOCKED | mapping/orchestrator غير موجود |
+| Chatwoot mirror send من Mujeeb | BLOCKED | inbound mapping موجود، لكن outbound mirror use-case وworker delivery غير موصولين |
 | SocialAPI send | BLOCKED | credential محلي غير متاح ولا يوجد test-safe target مثبت |
 | Facebook outbound | BLOCKED عمدًا | لم يُرسل أي شيء إلى Facebook أو عميل حقيقي |
 
 ## L. End-to-End scenario
 
-السيناريو الكامل المطلوب هو: inbound provider event، EventStore dedupe، tenant/identity resolution، Mujeeb communication record، Chatwoot mirror، AI/business action، Outbox claim، provider delivery، ثم delivery status. لم يكتمل هذا السيناريو فعليًا.
+السيناريو الكامل المطلوب هو: inbound provider event، EventStore dedupe، tenant/identity resolution، Mujeeb communication record، Chatwoot mirror، AI/business action، Outbox claim، provider delivery، ثم delivery status. لم يكتمل هذا السيناريو فعليًا لأن outbound worker/provider delivery غير موصولين.
 
-المثبت فعليًا هو مساران منفصلان: أولًا Chatwoot API chain حقيقية عبر Go adapter، وثانيًا Mujeeb webhook boundary مع HMAC valid/invalid، وثالثًا EventStore/Outbox storage tests على PostgreSQL. لذلك تصنيف E2E هو **BLOCKED** وليس PASS.
+المثبت فعليًا الآن هو مسار inbound حقيقي كامل من Chatwoot إلى Mujeeb: Chatwoot API أنشأ Message، Chatwoot Sidekiq أرسل callback موقّعًا، Mujeeb تحقق من HMAC، حل binding، وأنشأ records المملوكة له في PostgreSQL مع `processed`. لذلك تصنيف Chatwoot inbound vertical slice هو **PASS**، بينما تصنيف E2E عبر outbound providers يظل **BLOCKED**.
 
 ## M. مصفوفة الحقيقة النهائية
 
@@ -128,24 +130,26 @@
 | Chatwoot Message/timeline | PASS | HTTP 200 وقراءة timeline، وGo decoder يدعم numeric message type |
 | Mujeeb webhook valid signature | PASS | exact raw-byte HMAC ثم HTTP 202 |
 | Mujeeb webhook invalid signature | PASS | HTTP 401 |
-| Actual Chatwoot-origin callback | BLOCKED | لا public HTTPS delivery مثبتة |
+| Actual Chatwoot-origin callback | PASS | Chatwoot Sidekiq أرسل callback حقيقيًا عبر HTTPS؛ status materialization مثبت في PostgreSQL |
+| Chatwoot inbound HMAC and raw-body handling | PASS | `channel_api.secret` و`timestamp.raw_body` تطابقا؛ decoder يدعم `created_at` النصي والرقمي |
 | EventStore first/duplicate/scoping | PASS | PostgreSQL integration test نجح |
 | Outbox persistence/claim/lease | PASS | PostgreSQL integration test نجح |
 | Worker/provider execution | BLOCKED | Worker lifecycle-only؛ لا resolver إنتاجي |
-| Mujeeb customer/conversation/message mapping | BLOCKED | application orchestrator وreference persistence غير موجودين |
-| Chatwoot mirror | BLOCKED | callback intentionally ignored، ولا mirror use-case مكتمل |
-| Full E2E | BLOCKED | عدة حدود لازالت غير موصولة |
+| Mujeeb customer/conversation/message mapping | PASS | binding + atomic store أنشأ customer/conversation/reference/message وprocessed ledger |
+| Chatwoot inbound duplicate prevention | PASS | unique ledger وatomic integration test نجحا |
+| Chatwoot mirror outbound | BLOCKED | لا outbound mirror use-case أو worker delivery |
+| Full E2E | BLOCKED | outbound/provider delivery وSocialAPI ما زالت غير موصولة |
 | Failure case | NOT TESTED | لا توجد حالة provider failure/outcome-unknown حقيقية أُرسلت خارجيًا |
 
 ## N. الملفات، الاختبارات، والتنظيف
 
-التغييرات البرمجية المرشحة تشمل إصلاح Chatwoot response decoding، اختبارات contract الجديدة، إصلاح route-key validation، تحويل أخطاء facade إلى أخطاء Huma صحيحة، واختبار regression لـ401. كما تشمل integration fixture الآمن و`verify-webhook.sh` الذي يوقع exact raw bytes ولا يحتوي سرًا. إعداد Compose و`.env.example` و`.gitignore` وREADME الآمن موجودة ضمن integration config.
+التغييرات البرمجية تشمل إصلاح Chatwoot response decoding، دعم `created_at` النصي والرقمي، اختبارات contract، إصلاح route-key validation، تحويل أخطاء facade إلى أخطاء Huma صحيحة، وربط Chatwoot inbound بـ`ChatwootInboundStore` وmigration `000034`. كما تشمل binding وtenant constraints واختبار PostgreSQL حقيقيًا، وintegration fixture الآمن و`verify-webhook.sh` الذي يوقع exact raw bytes ولا يحتوي سرًا. إعداد Compose و`.env.example` و`.gitignore` وREADME الآمن موجودة ضمن integration config.
 
-أُجريت اختبارات `go test ./...` و`go vet ./...`، وتوليد OpenAPI، وفحص drift، وفحص whitespace. كما أُجريت اختبارات integration PostgreSQL بالـbuild tag الصحيح، ونجحت اختبارات AI/Audit وBusiness وCore repositories وEventStore وOutbox وSales وBootstrap. ونجح schema validation: `applied-33` ثم `applied-0`.
+نجحت اختبارات الوحدة وChatwoot adapter/services/handlers، وجميع اختبارات PostgreSQL ذات وسم `integration` على قاعدة نظيفة (`go test -tags integration -p 1 ...`)، واختبار ChatwootInboundStore الصريح. كما أُعيد تشغيل callback من Chatwoot Self-Hosted فعليًا بعد إنشاء binding محلي. ونجحت إعادة التحقق النهائية: `go test ./...`، `go vet ./...`، توليد OpenAPI وفحص drift، وschema validation؛ runner من قاعدة فارغة أثبت `applied-34` ثم `applied-0`.
 
-قبل الدفع النهائي يجب إيقاف Mujeeb API وWorker وreceiver المحلي، حذف token المحلي وملف البيئة المحلي والسجلات والملفات المؤقتة، إيقاف Compose مع حذف volumes الخاصة ببيئة Chatwoot، حذف حاوية/volume PostgreSQL الخاصة باختبار Mujeeb فقط، ثم التحقق من أن `.env` غير موجود وغير متتبع. لا يجوز حذف أي حاوية أو volume غير تابع لبيئة التكامل هذه.
+قبل الدفع النهائي يجب إيقاف Mujeeb API وWorker وreceiver التشخيصي، حذف token المحلي وملف البيئة المحلي والسجلات والملفات المؤقتة، إيقاف Compose مع حذف volumes الخاصة ببيئة Chatwoot، حذف حاوية/volume PostgreSQL الخاصة باختبار Mujeeb فقط، ثم التحقق من أن `.env` غير موجود وغير متتبع. لا يجوز حذف أي حاوية أو volume غير تابع لبيئة التكامل هذه.
 
-**Commit SHA:** `ec8bf732ef75b027f7d1d663d61dc4a1a232f6a7` هو commit التنفيذ البرمجي و`b049a8357a809012cfee9f6f887c45121567db5b` هو commit التوثيق المنشور الحالي. كلاهما منشور على `origin/main` بعد تحقق المطابقة. لا يحتوي هذا التقرير على credentials أو passwords أو usernames أو tokens أو raw payloads.
+**Commit SHA:** `c28a3d8` هو commit تنفيذ Chatwoot inbound materialization وmigration `000034` والاختبارات المرتبطة به. هذا التقرير والتوثيقات المساندة ستُدفع في commit توثيق لاحق، ثم يُتحقق من مطابقة `HEAD` مع `origin/main`. لا يحتوي التقرير على credentials أو passwords أو usernames أو tokens أو raw payloads.
 
 ## المراجع
 
