@@ -2,7 +2,7 @@
 
 ## الحالة التنفيذية
 
-تم تنفيذ ورفع حدود التكامل الآمن لـSocialAPI.ai وChatwoot في مستودع `mujeeb24-backend-go`. هذا الإصدار **ليس External E2E مكتملًا**؛ فهو يثبت عقود adapters وapplication boundaries والاختبارات المحاكية وBootstrap الاختياري، لكنه لا يدّعي اتصالًا حيًا أو إنشاء حساب أو تسجيل webhook أو إرسال رسالة.
+تم تنفيذ ورفع حدود التكامل الآمن لـSocialAPI.ai وChatwoot في مستودع `mujeeb24-backend-go`. أُجري بعد ذلك اختبار حي read-only عبر GitHub Actions وأثبت استجابة SocialAPI بنجاح. هذا الإصدار **ليس External E2E مكتملًا**؛ إذ لم ينفذ إنشاء حساب أو تسجيل webhook أو إرسال رسالة.
 
 > **النتيجة الأساسية:** أصبح الكود جاهزًا للانتقال إلى gap-fix خاص بـRawPayloadStore وlive configuration الآمن، وليس إلى إرسال خارجي غير متحقق.
 
@@ -72,7 +72,7 @@ SocialAPI هو transport خارجي، بينما Chatwoot communication workspac
 | PostgreSQL integration packages with `-p 1` | SKIPPED — `POSTGRES_TEST_DSN` غير موجود |
 | `git diff --check` | PASS |
 
-اختبارات adapter استخدمت `httptest` وعناوين محلية/placeholder، ولم تستخدم مفتاح SocialAPI الحقيقي أو Chatwoot token حقيقي.
+اختبارات adapter استخدمت `httptest` وعناوين محلية/placeholder، بينما استخدم run حي واحد secret GitHub داخل runner فقط. نتيجة run الحي رقم `32792979839` كانت HTTP `200`، و`account_count=1`، والمنصة الظاهرة في الملخص `facebook`. لم تُعرض الاستجابة الخام أو المفتاح في logs.
 
 ## I. الملفات التي تغيرت
 
@@ -108,7 +108,7 @@ SocialAPI هو transport خارجي، بينما Chatwoot communication workspac
 
 يبقى أولًا تنفيذ adapter durable لـ`RawPayloadStore` مع سياسة retention/redaction ومفتاح تخزين opaque، ثم حقن `SocialAPIWebhookService` في Bootstrap بعد اكتمال ذلك. يبقى أيضًا بناء resolver production لـOutboundDelivery يقرأ outbound message، conversation reference، channel connection، ومحتوى الرسالة من Mujeeb state داخل حدود transaction-safe، ثم توصيل worker loop الحقيقي دون network داخل transaction.
 
-للاختبار الحي نحتاج إدخالًا سريًا خارج المحادثة: SocialAPI API key محدود بالـbrand التجريبي، SocialAPI webhook secret، وChatwoot base URL/token/account/inbox/webhook secret عند الحاجة. أول فعل حي يجب أن يكون read-only `GET /v1/accounts`. لم يُنفذ هذا الفعل في هذه الدفعة، ولم يُنفذ connect أو webhook registration أو send.
+تم تنفيذ أول فعل حي read-only `GET /v1/accounts` بنجاح عبر run رقم `32792979839`. لا يزال أي اختبار لاحق يحتاج secret محدودًا بالـbrand التجريبي، وSocialAPI webhook secret، وChatwoot base URL/token/account/inbox/webhook secret عند الحاجة. لم يُنفذ connect أو webhook registration أو send. يجب إلغاء المفتاح الذي كُشف سابقًا وإنشاء مفتاح محدود جديد قبل أي اختبار إضافي.
 
 ## References
 
