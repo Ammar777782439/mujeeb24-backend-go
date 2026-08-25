@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ const (
 	AIContextPartial        = "partial"
 	AIContextMissing        = "missing"
 	AIContextStale          = "stale"
+	AIContextGrounded       = "grounded"
 )
 
 // AutoReplyContextBuilder builds a bounded, tenant-scoped context from Mujeeb
@@ -28,6 +30,8 @@ type AutoReplyContextBuilder struct {
 	Customers     ports.CustomerRepository
 	Catalogs      ports.CatalogRepository
 	Messages      ports.MessageRepository
+	Knowledge     ports.KnowledgeDocumentRepository
+	Policies      ports.BusinessPolicyRepository
 	Now           func() time.Time
 	TTL           time.Duration
 	MaxCatalogs   int
@@ -35,6 +39,8 @@ type AutoReplyContextBuilder struct {
 	MaxOffers     int
 	MaxVariants   int
 	MaxMessages   int
+	MaxKnowledge  int
+	MaxPolicies   int
 }
 
 func NewAutoReplyContextBuilder(businesses ports.BusinessRepository, conversations ports.ConversationRepository, customers ports.CustomerRepository, catalogs ports.CatalogRepository, messages ports.MessageRepository) AutoReplyContextBuilder {
@@ -51,6 +57,8 @@ func NewAutoReplyContextBuilder(businesses ports.BusinessRepository, conversatio
 		MaxOffers:     5,
 		MaxVariants:   5,
 		MaxMessages:   8,
+		MaxKnowledge:  10,
+		MaxPolicies:   10,
 	}
 }
 
@@ -169,6 +177,51 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.ContextB
 		}
 	}
 
+	if b.Knowledge != nil {
+		knowledgeRecords, listErr := b.Knowledge.ListPublished(ctx, input.BusinessID, "", now, b.maxKnowledge()*3)
+		if listErr != nil {
+			return ports.AIContext{}, listErr
+		}
+		for _, record := range rankKnowledgeRecords(knowledgeRecords, input.Text) {
+			if record.BusinessID != input.BusinessID {
+				return ports.AIContext{}, errors.New("AI context knowledge scope mismatch")
+			}
+			context.KnowledgeEvidence = append(context.KnowledgeEvidence, ports.AIKnowledgeEvidence{
+				Reference: record.ID, KnowledgeKey: record.KnowledgeKey, Title: record.Title, Content: record.Content,
+				ContentType: record.ContentType, SourceReference: record.SourceReference, Authority: record.Authority,
+				EvidenceState: evidenceStateForValidity(now, record.ValidFrom, record.ValidUntil), Version: record.Version, ValidFrom: record.ValidFrom, ValidUntil: record.ValidUntil,
+				RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+			})
+			if len(context.KnowledgeEvidence) >= b.maxKnowledge() {
+				break
+			}
+		}
+	}
+	if b.Policies != nil {
+		policyRecords, listErr := b.Policies.ListPublished(ctx, input.BusinessID, "", now, b.maxPolicies()*3)
+		if listErr != nil {
+			return ports.AIContext{}, listErr
+		}
+		for _, record := range rankPolicyRecords(policyRecords, input.Text) {
+			if record.BusinessID != input.BusinessID {
+				return ports.AIContext{}, errors.New("AI context policy scope mismatch")
+			}
+			context.BusinessPolicyEvidence = append(context.BusinessPolicyEvidence, ports.AIBusinessPolicyEvidence{
+				Reference: record.ID, PolicyKey: record.PolicyKey, Category: record.Category, Title: record.Title,
+				Summary: record.Summary, Rules: safeJSONObject(record.Rules), Authority: record.Authority,
+				EvidenceState: evidenceStateForValidity(now, record.ValidFrom, record.ValidUntil), Version: record.Version, ValidFrom: record.ValidFrom, ValidUntil: record.ValidUntil,
+				RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+			})
+			if len(context.BusinessPolicyEvidence) >= b.maxPolicies() {
+				break
+			}
+		}
+		if len(context.BusinessPolicyEvidence) > 0 {
+			first := context.BusinessPolicyEvidence[0]
+			context.PolicyEvidence = ports.AIPolicyEvidence{Reference: first.Reference, Version: "policy-v" + formatInt(first.Version), State: "published", RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion}
+		}
+	}
+
 	for _, item := range context.CatalogEvidence {
 		offers, listErr := b.Catalogs.ListOffers(ctx, input.BusinessID, item.Reference, "active", b.maxOffers(), "")
 		if listErr != nil {
@@ -221,11 +274,28 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.ContextB
 	if len(context.CatalogEvidence) > 0 || len(context.OfferEvidence) > 0 || len(context.VariantEvidence) > 0 {
 		context.KnowledgeState = AIContextPartial
 	}
+	if len(context.KnowledgeEvidence) > 0 || len(context.BusinessPolicyEvidence) > 0 {
+		context.KnowledgeState = AIContextGrounded
+	}
 	if len(context.CatalogEvidence) == 0 {
 		context.Freshness = AIContextPartial
 	}
 	for _, offer := range context.OfferEvidence {
 		if offer.EvidenceState == AIContextStale {
+			context.Freshness = AIContextStale
+			context.KnowledgeState = AIContextPartial
+			break
+		}
+	}
+	for _, evidence := range context.KnowledgeEvidence {
+		if evidence.EvidenceState == AIContextStale {
+			context.Freshness = AIContextStale
+			context.KnowledgeState = AIContextPartial
+			break
+		}
+	}
+	for _, evidence := range context.BusinessPolicyEvidence {
+		if evidence.EvidenceState == AIContextStale {
 			context.Freshness = AIContextStale
 			context.KnowledgeState = AIContextPartial
 			break
@@ -327,6 +397,84 @@ func safeJSONDocument(value []byte) []byte {
 	return append([]byte(nil), value...)
 }
 
+func evidenceStateForValidity(now, validFrom time.Time, validUntil *time.Time) string {
+	if now.Before(validFrom) {
+		return AIContextMissing
+	}
+	if validUntil != nil && !now.Before(*validUntil) {
+		return AIContextStale
+	}
+	return AIContextFresh
+}
+
+func formatInt(value int) string {
+	return strconv.Itoa(value)
+}
+
+func rankKnowledgeRecords(records []ports.KnowledgeDocumentRecord, text string) []ports.KnowledgeDocumentRecord {
+	tokens := tokenize(text)
+	type scored struct {
+		record ports.KnowledgeDocumentRecord
+		score  int
+	}
+	items := make([]scored, 0, len(records))
+	for _, record := range records {
+		searchable := strings.ToLower(record.KnowledgeKey + " " + record.Title + " " + record.Content)
+		score := 0
+		for _, token := range tokens {
+			if strings.Contains(searchable, token) {
+				score++
+			}
+		}
+		if score > 0 {
+			items = append(items, scored{record: record, score: score})
+		}
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].score != items[j].score {
+			return items[i].score > items[j].score
+		}
+		return items[i].record.ID < items[j].record.ID
+	})
+	result := make([]ports.KnowledgeDocumentRecord, 0, len(items))
+	for _, item := range items {
+		result = append(result, item.record)
+	}
+	return result
+}
+
+func rankPolicyRecords(records []ports.BusinessPolicyRecord, text string) []ports.BusinessPolicyRecord {
+	tokens := tokenize(text)
+	type scored struct {
+		record ports.BusinessPolicyRecord
+		score  int
+	}
+	items := make([]scored, 0, len(records))
+	for _, record := range records {
+		searchable := strings.ToLower(record.PolicyKey + " " + record.Category + " " + record.Title + " " + record.Summary + " " + string(record.Rules))
+		score := 0
+		for _, token := range tokens {
+			if strings.Contains(searchable, token) {
+				score++
+			}
+		}
+		if score > 0 {
+			items = append(items, scored{record: record, score: score})
+		}
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].score != items[j].score {
+			return items[i].score > items[j].score
+		}
+		return items[i].record.ID < items[j].record.ID
+	})
+	result := make([]ports.BusinessPolicyRecord, 0, len(items))
+	for _, item := range items {
+		result = append(result, item.record)
+	}
+	return result
+}
+
 func (b AutoReplyContextBuilder) now() time.Time {
 	if b.Now == nil {
 		return time.Now().UTC()
@@ -360,6 +508,20 @@ func (b AutoReplyContextBuilder) maxVariants() int {
 		return 5
 	}
 	return b.MaxVariants
+}
+
+func (b AutoReplyContextBuilder) maxKnowledge() int {
+	if b.MaxKnowledge <= 0 {
+		return 10
+	}
+	return b.MaxKnowledge
+}
+
+func (b AutoReplyContextBuilder) maxPolicies() int {
+	if b.MaxPolicies <= 0 {
+		return 10
+	}
+	return b.MaxPolicies
 }
 
 func (b AutoReplyContextBuilder) maxMessages() int {

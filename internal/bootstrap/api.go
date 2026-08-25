@@ -72,13 +72,18 @@ func NewAPIWithExternal(database *postgres.Adapter, address string, external Ext
 				outboxStore,
 				database,
 			)
-			autoReply.ContextBuilder = services.NewAutoReplyContextBuilder(
+			autoReplyContextBuilder := services.NewAutoReplyContextBuilder(
 				postgres.NewBusinessRepository(database),
 				postgres.NewConversationRepository(database),
 				postgres.NewCustomerRepository(database),
 				postgres.NewCatalogRepository(database),
 				postgres.NewMessageRepository(database),
 			)
+			autoReplyContextBuilder.Knowledge = postgres.NewKnowledgeDocumentRepository(database)
+			autoReplyContextBuilder.Policies = postgres.NewBusinessPolicyRepository(database)
+			autoReply.ContextBuilder = autoReplyContextBuilder
+			autoReply.PolicyEvaluator = services.GroundedPolicyEngine{}
+
 			chatwootService.AutoReply = &services.ChatwootAutoReplyBridge{
 
 				Resolver: services.ChatwootProviderReferenceResolver{

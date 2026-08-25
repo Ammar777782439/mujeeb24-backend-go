@@ -24,6 +24,7 @@ const (
 type AutoReplyService struct {
 	Runtime             ports.AIRuntime
 	ContextBuilder      ports.AIContextBuilder
+	PolicyEvaluator     ports.AIPolicyEvaluator
 	DecisionRepository  ports.AIDecisionRepository
 	ReferenceRepository ports.ConversationReferenceRepository
 	OutboundRepository  ports.OutboundMessageRepository
@@ -87,6 +88,9 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	proposal, err := s.Runtime.Decide(ctx, aiInput)
 	if err != nil {
 		return commands.AutoReplyResult{}, err
+	}
+	if s.PolicyEvaluator != nil {
+		proposal = s.PolicyEvaluator.Evaluate(proposal, aiInput.Context)
 	}
 	if err := validateProposal(proposal); err != nil {
 		return commands.AutoReplyResult{}, err

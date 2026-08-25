@@ -221,19 +221,22 @@ func buildUserPrompt(input ports.AIDecisionInput) string {
 }
 
 type promptContext struct {
-	SchemaVersion   int                             `json:"schema_version"`
-	Freshness       string                          `json:"freshness"`
-	Business        ports.AIContextBusiness         `json:"business"`
-	Conversation    ports.AIContextConversation     `json:"conversation"`
-	Customer        promptCustomerContext           `json:"customer"`
-	CatalogEvidence []ports.AICatalogEvidence       `json:"catalog_evidence"`
-	OfferEvidence   []ports.AIOfferEvidence         `json:"offer_evidence"`
-	VariantEvidence []ports.AIVariantEvidence       `json:"variant_evidence"`
-	RecentMessages  []ports.AIRecentMessageEvidence `json:"recent_messages"`
-	PolicyEvidence  ports.AIPolicyEvidence          `json:"policy_evidence"`
-	KnowledgeState  string                          `json:"knowledge_state"`
-	GeneratedAt     time.Time                       `json:"generated_at"`
-	ExpiresAt       time.Time                       `json:"expires_at"`
+	SchemaVersion          int                              `json:"schema_version"`
+	Freshness              string                           `json:"freshness"`
+	Business               ports.AIContextBusiness          `json:"business"`
+	Conversation           ports.AIContextConversation      `json:"conversation"`
+	Customer               promptCustomerContext            `json:"customer"`
+	CatalogEvidence        []ports.AICatalogEvidence        `json:"catalog_evidence"`
+	OfferEvidence          []ports.AIOfferEvidence          `json:"offer_evidence"`
+	VariantEvidence        []ports.AIVariantEvidence        `json:"variant_evidence"`
+	KnowledgeEvidence      []ports.AIKnowledgeEvidence      `json:"knowledge_evidence"`
+	BusinessPolicyEvidence []ports.AIBusinessPolicyEvidence `json:"business_policy_evidence"`
+	RecentMessages         []ports.AIRecentMessageEvidence  `json:"recent_messages"`
+
+	PolicyEvidence ports.AIPolicyEvidence `json:"policy_evidence"`
+	KnowledgeState string                 `json:"knowledge_state"`
+	GeneratedAt    time.Time              `json:"generated_at"`
+	ExpiresAt      time.Time              `json:"expires_at"`
 }
 
 type promptCustomerContext struct {
@@ -244,19 +247,21 @@ type promptCustomerContext struct {
 
 func promptContextFrom(value *ports.AIContext) promptContext {
 	return promptContext{
-		SchemaVersion:   value.SchemaVersion,
-		Freshness:       value.Freshness,
-		Business:        value.Business,
-		Conversation:    value.Conversation,
-		Customer:        promptCustomerContext{Reference: value.Customer.Reference, LocalePreference: value.Customer.LocalePreference, Status: value.Customer.Status},
-		CatalogEvidence: value.CatalogEvidence,
-		OfferEvidence:   value.OfferEvidence,
-		VariantEvidence: value.VariantEvidence,
-		RecentMessages:  value.RecentMessages,
-		PolicyEvidence:  value.PolicyEvidence,
-		KnowledgeState:  value.KnowledgeState,
-		GeneratedAt:     value.GeneratedAt,
-		ExpiresAt:       value.ExpiresAt,
+		SchemaVersion:          value.SchemaVersion,
+		Freshness:              value.Freshness,
+		Business:               value.Business,
+		Conversation:           value.Conversation,
+		Customer:               promptCustomerContext{Reference: value.Customer.Reference, LocalePreference: value.Customer.LocalePreference, Status: value.Customer.Status},
+		CatalogEvidence:        value.CatalogEvidence,
+		OfferEvidence:          value.OfferEvidence,
+		VariantEvidence:        value.VariantEvidence,
+		KnowledgeEvidence:      value.KnowledgeEvidence,
+		BusinessPolicyEvidence: value.BusinessPolicyEvidence,
+		RecentMessages:         value.RecentMessages,
+		PolicyEvidence:         value.PolicyEvidence,
+		KnowledgeState:         value.KnowledgeState,
+		GeneratedAt:            value.GeneratedAt,
+		ExpiresAt:              value.ExpiresAt,
 	}
 }
 

@@ -179,3 +179,42 @@ func TestAutoReplyContextBuilderMarksUnknownAvailabilityStale(t *testing.T) {
 		t.Fatalf("unknown availability was not marked stale: %#v", contextValue)
 	}
 }
+
+type contextKnowledgeRepository struct {
+	records []ports.KnowledgeDocumentRecord
+}
+
+func (r contextKnowledgeRepository) ListPublished(context.Context, string, string, time.Time, int) ([]ports.KnowledgeDocumentRecord, error) {
+	return r.records, nil
+}
+
+type contextPolicyRepository struct{ records []ports.BusinessPolicyRecord }
+
+func (r contextPolicyRepository) ListPublished(context.Context, string, string, time.Time, int) ([]ports.BusinessPolicyRecord, error) {
+	return r.records, nil
+}
+
+func TestAutoReplyContextBuilderAddsKnowledgeAndMerchantPolicyEvidence(t *testing.T) {
+	builder := NewAutoReplyContextBuilder(
+		contextBusinessRepository{record: ports.BusinessRecord{ID: "business-1"}},
+		contextConversationRepository{record: ports.ConversationRecord{ID: "conversation-1", BusinessID: "business-1", CustomerID: "customer-1"}},
+		contextCustomerRepository{record: ports.CustomerRecord{ID: "customer-1", BusinessID: "business-1"}},
+		contextCatalogRepository{},
+		contextMessageRepository{},
+	)
+	builder.Knowledge = contextKnowledgeRepository{records: []ports.KnowledgeDocumentRecord{{ID: "knowledge-1", BusinessID: "business-1", KnowledgeKey: "opening-hours", Title: "دوام المتجر", Content: "نفتح يوم الجمعة من التاسعة", ContentType: "hours", SourceReference: "merchant-doc-1", Authority: "merchant", Status: "published", Version: 2}}}
+	builder.Policies = contextPolicyRepository{records: []ports.BusinessPolicyRecord{{ID: "policy-1", BusinessID: "business-1", PolicyKey: "opening-hours", Category: "hours", Title: "سياسة الدوام", Summary: "الدوام المنشور هو المصدر المعتمد", Rules: []byte(`{"friday":"09:00-17:00"}`), Authority: "merchant", Status: "published", Version: 3}}}
+	contextValue, err := builder.Build(context.Background(), ports.ContextBuildInput{BusinessID: "business-1", ConversationID: "conversation-1", Text: "ما هو دوام الجمعة؟"})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if len(contextValue.KnowledgeEvidence) != 1 || contextValue.KnowledgeEvidence[0].Reference != "knowledge-1" || contextValue.KnowledgeEvidence[0].Authority != "merchant" {
+		t.Fatalf("knowledge evidence mismatch: %#v", contextValue.KnowledgeEvidence)
+	}
+	if len(contextValue.BusinessPolicyEvidence) != 1 || contextValue.BusinessPolicyEvidence[0].Reference != "policy-1" || contextValue.BusinessPolicyEvidence[0].Category != "hours" || contextValue.PolicyEvidence.State != "published" {
+		t.Fatalf("policy evidence mismatch: %#v", contextValue.BusinessPolicyEvidence)
+	}
+	if contextValue.KnowledgeState != AIContextGrounded {
+		t.Fatalf("knowledge state was not grounded: %#v", contextValue)
+	}
+}

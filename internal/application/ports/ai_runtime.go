@@ -32,20 +32,26 @@ type AIContextBuilder interface {
 	Build(context.Context, ContextBuildInput) (AIContext, error)
 }
 
+type AIPolicyEvaluator interface {
+	Evaluate(AIDecisionProposal, *AIContext) AIDecisionProposal
+}
+
 type AIContext struct {
-	SchemaVersion   int
-	Freshness       string
-	Business        AIContextBusiness
-	Conversation    AIContextConversation
-	Customer        AIContextCustomer
-	CatalogEvidence []AICatalogEvidence
-	OfferEvidence   []AIOfferEvidence
-	VariantEvidence []AIVariantEvidence
-	RecentMessages  []AIRecentMessageEvidence
-	PolicyEvidence  AIPolicyEvidence
-	KnowledgeState  string
-	GeneratedAt     time.Time
-	ExpiresAt       time.Time
+	SchemaVersion          int
+	Freshness              string
+	Business               AIContextBusiness
+	Conversation           AIContextConversation
+	Customer               AIContextCustomer
+	CatalogEvidence        []AICatalogEvidence
+	OfferEvidence          []AIOfferEvidence
+	VariantEvidence        []AIVariantEvidence
+	KnowledgeEvidence      []AIKnowledgeEvidence
+	BusinessPolicyEvidence []AIBusinessPolicyEvidence
+	RecentMessages         []AIRecentMessageEvidence
+	PolicyEvidence         AIPolicyEvidence
+	KnowledgeState         string
+	GeneratedAt            time.Time
+	ExpiresAt              time.Time
 }
 
 type AIContextBusiness struct {
@@ -99,6 +105,38 @@ type AIOfferEvidence struct {
 	EvidenceState        string
 	RetrievedAt          time.Time
 	SchemaVersion        int
+}
+
+type AIKnowledgeEvidence struct {
+	Reference       string
+	KnowledgeKey    string
+	Title           string
+	Content         string
+	ContentType     string
+	SourceReference string
+	Authority       string
+	EvidenceState   string
+	Version         int
+	ValidFrom       time.Time
+	ValidUntil      *time.Time
+	RetrievedAt     time.Time
+	SchemaVersion   int
+}
+
+type AIBusinessPolicyEvidence struct {
+	Reference     string
+	PolicyKey     string
+	Category      string
+	Title         string
+	Summary       string
+	Rules         []byte
+	Authority     string
+	EvidenceState string
+	Version       int
+	ValidFrom     time.Time
+	ValidUntil    *time.Time
+	RetrievedAt   time.Time
+	SchemaVersion int
 }
 
 type AIVariantEvidence struct {
