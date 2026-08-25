@@ -3,7 +3,9 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
@@ -15,16 +17,17 @@ import (
 )
 
 type APIRuntime struct {
-	HTTP            *http.Server
-	Database        *postgres.Adapter
-	Dependencies    handlers.Dependencies
-	EventStore      ports.EventStore
-	Outbox          ports.OutboxStore
-	SocialAPI       ports.ChannelProvider
-	Chatwoot        ports.CommunicationWorkspace
-	SocialWebhook   ports.WebhookReceiver
-	ChatwootWebhook ports.WebhookReceiver
-	closeOnce       sync.Once
+	HTTP                *http.Server
+	Database            *postgres.Adapter
+	Dependencies        handlers.Dependencies
+	EventStore          ports.EventStore
+	Outbox              ports.OutboxStore
+	SocialAPI           ports.ChannelProvider
+	Chatwoot            ports.CommunicationWorkspace
+	SocialWebhook       ports.WebhookReceiver
+	ChatwootWebhook     ports.WebhookReceiver
+	ChannelProvisioning *services.ChannelProvisioningService
+	closeOnce           sync.Once
 }
 
 func BuildAPI(ctx context.Context, cfg config.ProcessConfig) (*APIRuntime, error) {
@@ -55,6 +58,26 @@ func NewAPIWithExternal(database *postgres.Adapter, address string, external Ext
 		return nil, errors.New("http address is required")
 	}
 	dependencies := BuildDependencies(database)
+	var provisioningService *services.ChannelProvisioningService
+	if external.ChannelProvisioningEnabled {
+		if external.ChannelProvisioningError != nil {
+			return nil, external.ChannelProvisioningError
+		}
+		if external.ChannelProvisioningSocial == nil || external.ChannelProvisioningWorkspace == nil {
+			return nil, errors.New("channel provisioning adapters are not configured")
+		}
+		service := services.ChannelProvisioningService{
+			Sessions:    postgres.NewChannelProvisioningStore(database),
+			Social:      external.ChannelProvisioningSocial,
+			Workspace:   external.ChannelProvisioningWorkspace,
+			Bindings:    postgres.NewChatwootWorkspaceBindingRepository(database),
+			Connections: postgres.NewChannelConnectionRepository(database),
+			RedirectURI: external.ChannelProvisioningRedirectURI,
+			WebhookURL:  external.ChannelProvisioningWebhookURL,
+		}
+		provisioningService = &service
+		dependencies.BeginChannelConnection = &services.BeginChannelConnectionHandler{Provisioning: service}
+	}
 	eventStore := postgres.NewInboundEventStore(database)
 	outboxStore := postgres.NewPostgresOutboxStore(database)
 	if external.ChatwootWebhook != nil {
@@ -96,6 +119,31 @@ func NewAPIWithExternal(database *postgres.Adapter, address string, external Ext
 		dependencies.IngestChatwootWebhook = chatwootService
 	}
 	_, mux := contract.BuildAPIWithHandlers(handlers.NewServer(dependencies))
+	if provisioningService != nil {
+		mux.HandleFunc("/oauth/socialapi/callback", func(writer http.ResponseWriter, request *http.Request) {
+			if request.Method != http.MethodGet {
+				writer.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			query := request.URL.Query()
+			callback := ports.SocialAuthorizationCallback{State: query.Get("state"), Status: query.Get("status"), Platform: query.Get("platform"), AccountID: query.Get("account_id"), ConnectionID: query.Get("connection_id"), PlatformAccountID: query.Get("platform_account_id"), PageIDs: append([]string(nil), query["page_id"]...)}
+			if len(callback.PageIDs) == 0 && query.Get("page_ids") != "" {
+				for _, pageID := range strings.Split(query.Get("page_ids"), ",") {
+					if value := strings.TrimSpace(pageID); value != "" {
+						callback.PageIDs = append(callback.PageIDs, value)
+					}
+				}
+			}
+			session, err := provisioningService.CompleteOAuthCallback(request.Context(), callback)
+			writer.Header().Set("Content-Type", "application/json")
+			if err != nil {
+				writer.WriteHeader(http.StatusBadRequest)
+				_, _ = writer.Write([]byte(`{"status":"failed"}`))
+				return
+			}
+			_, _ = fmt.Fprintf(writer, `{"status":%q,"provisioning_id":%q,"provider":%q,"channel":%q}`, session.Status, session.ID, session.ProviderRef, session.Channel)
+		})
+	}
 	mux.HandleFunc("/health", func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
 			writer.WriteHeader(http.StatusMethodNotAllowed)
@@ -104,7 +152,7 @@ func NewAPIWithExternal(database *postgres.Adapter, address string, external Ext
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{"status":"ok","service":"mujeeb24-api"}`))
 	})
-	return &APIRuntime{HTTP: &http.Server{Addr: address, Handler: mux}, Database: database, Dependencies: dependencies, EventStore: eventStore, Outbox: outboxStore, SocialAPI: external.SocialAPI, Chatwoot: external.Chatwoot, SocialWebhook: external.SocialWebhook, ChatwootWebhook: external.ChatwootWebhook}, nil
+	return &APIRuntime{HTTP: &http.Server{Addr: address, Handler: mux}, Database: database, Dependencies: dependencies, EventStore: eventStore, Outbox: outboxStore, SocialAPI: external.SocialAPI, Chatwoot: external.Chatwoot, SocialWebhook: external.SocialWebhook, ChatwootWebhook: external.ChatwootWebhook, ChannelProvisioning: provisioningService}, nil
 }
 
 func (r *APIRuntime) Serve() error {

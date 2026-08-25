@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -125,7 +127,48 @@ func (r *ChannelConnectionRepository) GetByProviderReferences(ctx context.Contex
 	return records[0], nil
 }
 
+func (r *ChannelConnectionRepository) CreatePending(ctx context.Context, businessID, providerRef, channel, providerConnectionRef, secretReference string) (ports.ChannelConnectionRecord, error) {
+	if r == nil || r.adapter == nil {
+		return ports.ChannelConnectionRecord{}, ErrPoolClosed
+	}
+	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(providerRef) == "" || strings.TrimSpace(channel) == "" || strings.TrimSpace(providerConnectionRef) == "" || strings.TrimSpace(secretReference) == "" {
+		return ports.ChannelConnectionRecord{}, invalidRepositoryInput("channel_connection.create_pending", "business, provider, channel, connection reference, and secret reference are required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.ChannelConnectionRecord{}, err
+	}
+	id := uuid.NewString()
+	now := time.Now().UTC()
+	const query = `INSERT INTO channel_connections (id, business_id, provider_ref, channel, provider_connection_ref, status, secret_reference, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3, $4, $5, 'pending', $6, $7, $7) RETURNING id::text, business_id::text, provider_ref, channel, provider_account_ref, provider_connection_ref, status, secret_reference`
+	var record ports.ChannelConnectionRecord
+	if err := executor.QueryRow(ctx, query, id, businessID, providerRef, channel, providerConnectionRef, secretReference, now).Scan(&record.ID, &record.BusinessID, &record.ProviderReference, &record.Channel, &record.ProviderAccountReference, &record.ProviderConnectionRef, &record.Status, &record.SecretReference); err != nil {
+		return ports.ChannelConnectionRecord{}, &RepositoryError{Operation: "channel_connection.create_pending", Kind: RepositoryInvalid, Err: err}
+	}
+	return record, nil
+}
+
+func (r *ChannelConnectionRepository) Activate(ctx context.Context, businessID, id, providerAccountRef, providerConnectionRef string) (ports.ChannelConnectionRecord, error) {
+	if r == nil || r.adapter == nil {
+		return ports.ChannelConnectionRecord{}, ErrPoolClosed
+	}
+	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(id) == "" || strings.TrimSpace(providerAccountRef) == "" || strings.TrimSpace(providerConnectionRef) == "" {
+		return ports.ChannelConnectionRecord{}, invalidRepositoryInput("channel_connection.activate", "business, connection, account, and provider connection references are required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.ChannelConnectionRecord{}, err
+	}
+	const query = `UPDATE channel_connections SET provider_account_ref = $3, provider_connection_ref = $4, status = 'active', updated_at = $5 WHERE business_id = $1::uuid AND id = $2::uuid AND status IN ('pending', 'reconnect_required') RETURNING id::text, business_id::text, provider_ref, channel, provider_account_ref, provider_connection_ref, status, secret_reference`
+	var record ports.ChannelConnectionRecord
+	if err := executor.QueryRow(ctx, query, businessID, id, providerAccountRef, providerConnectionRef, time.Now().UTC()).Scan(&record.ID, &record.BusinessID, &record.ProviderReference, &record.Channel, &record.ProviderAccountReference, &record.ProviderConnectionRef, &record.Status, &record.SecretReference); err != nil {
+		return ports.ChannelConnectionRecord{}, classifyRepositoryGetError("channel_connection.activate", err)
+	}
+	return record, nil
+}
+
 var _ ports.ChannelConnectionRepository = (*ChannelConnectionRepository)(nil)
+var _ ports.ChannelConnectionWriter = (*ChannelConnectionRepository)(nil)
 
 func invalidRepositoryInput(operation, message string) error {
 	return &RepositoryError{Operation: operation, Kind: RepositoryInvalid, Err: errors.New(message)}

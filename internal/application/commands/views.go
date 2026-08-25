@@ -34,6 +34,14 @@ type ChannelConnectionView struct {
 	ExternalAccountReference string
 	ResourceVersion          ResourceVersion
 }
+type ChannelProvisioningView struct {
+	ID               ID
+	BusinessID       BusinessID
+	Provider         string
+	Channel          string
+	Status           string
+	AuthorizationURL string
+}
 type ConversationView struct {
 	ID              ConversationID
 	BusinessID      BusinessID

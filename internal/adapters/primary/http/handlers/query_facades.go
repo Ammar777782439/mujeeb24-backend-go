@@ -473,6 +473,9 @@ func transactionList(v commands.ListResult[commands.TransactionView]) *contract.
 	}
 	return listPage(items, v.NextCursor, v.HasMore)
 }
+func channelProvisioningProjection(v commands.ChannelProvisioningView) contract.ChannelProvisioning {
+	return contract.ChannelProvisioning{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), Provider: v.Provider, Channel: v.Channel, Status: v.Status, AuthorizationURL: v.AuthorizationURL}
+}
 func channelConnectionProjection(v commands.ChannelConnectionView) contract.ChannelConnection {
 	return contract.ChannelConnection{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), Provider: v.Provider, Channel: v.Channel, Status: v.Status, ExternalAccountReference: optionalString(v.ExternalAccountReference), ResourceVersion: string(v.ResourceVersion)}
 }

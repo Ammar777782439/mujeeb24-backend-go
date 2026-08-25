@@ -61,8 +61,8 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 		if err != nil {
 			return mapApplicationError(err), true
 		}
-		out := &contract.Single[contract.ChannelConnection]{}
-		out.Body.Data = channelConnectionProjection(result.Connection)
+		out := &contract.Single[contract.ChannelProvisioning]{}
+		out.Body.Data = channelProvisioningProjection(result.Provisioning)
 		return out, true
 	case "reconnectChannel", "disconnectChannel":
 		in := input.(*contract.ConnectionActionInput)

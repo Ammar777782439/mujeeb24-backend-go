@@ -10,64 +10,72 @@ import (
 )
 
 type ProcessConfig struct {
-	Environment              string
-	DatabaseURL              string
-	HTTPAddr                 string
-	ShutdownTimeout          time.Duration
-	DBMaxConns               int32
-	DBMinConns               int32
-	DBMaxConnLifetime        time.Duration
-	DBMaxConnIdleTime        time.Duration
-	DBHealthCheckPeriod      time.Duration
-	DBConnectTimeout         time.Duration
-	SocialAPIBaseURL         string
-	SocialAPIAPIKey          string
-	SocialAPIWebhookSecret   string
-	SocialAPIHTTPTimeout     time.Duration
-	ChatwootBaseURL          string
-	ChatwootAPIToken         string
-	ChatwootWebhookSecret    string
-	ChatwootHTTPTimeout      time.Duration
-	ChatwootAutoReplyEnabled bool
-	LLMEnabled               bool
-	LLMBaseURL               string
-	LLMAPIKey                string
-	LLMModel                 string
-	LLMHTTPTimeout           time.Duration
-	LLMMaxOutputTokens       int
-	LLMMaxInputCharacters    int
-	LLMOutputTokensField     string
+	Environment                    string
+	DatabaseURL                    string
+	HTTPAddr                       string
+	ShutdownTimeout                time.Duration
+	DBMaxConns                     int32
+	DBMinConns                     int32
+	DBMaxConnLifetime              time.Duration
+	DBMaxConnIdleTime              time.Duration
+	DBHealthCheckPeriod            time.Duration
+	DBConnectTimeout               time.Duration
+	SocialAPIBaseURL               string
+	SocialAPIAPIKey                string
+	SocialAPIWebhookSecret         string
+	SocialAPIHTTPTimeout           time.Duration
+	ChatwootBaseURL                string
+	ChatwootAPIToken               string
+	ChatwootPlatformAPIToken       string
+	ChatwootWebhookSecret          string
+	ChatwootHTTPTimeout            time.Duration
+	ChatwootProvisioningEnabled    bool
+	ChannelProvisioningRedirectURI string
+	ChannelProvisioningWebhookURL  string
+	ChatwootAutoReplyEnabled       bool
+	LLMEnabled                     bool
+	LLMBaseURL                     string
+	LLMAPIKey                      string
+	LLMModel                       string
+	LLMHTTPTimeout                 time.Duration
+	LLMMaxOutputTokens             int
+	LLMMaxInputCharacters          int
+	LLMOutputTokensField           string
 }
 
 func LoadFromEnv() (ProcessConfig, error) {
 	cfg := ProcessConfig{
-		Environment:              envOr("APP_ENV", "development"),
-		DatabaseURL:              strings.TrimSpace(os.Getenv("DATABASE_URL")),
-		HTTPAddr:                 envOr("HTTP_ADDR", ":3001"),
-		ShutdownTimeout:          10 * time.Second,
-		DBMaxConns:               10,
-		DBMinConns:               1,
-		DBMaxConnLifetime:        time.Hour,
-		DBMaxConnIdleTime:        30 * time.Minute,
-		DBHealthCheckPeriod:      time.Minute,
-		DBConnectTimeout:         5 * time.Second,
-		SocialAPIBaseURL:         envOr("SOCIALAPI_BASE_URL", "https://api.social-api.ai"),
-		SocialAPIAPIKey:          strings.TrimSpace(os.Getenv("SOCIALAPI_API_KEY")),
-		SocialAPIWebhookSecret:   strings.TrimSpace(os.Getenv("SOCIALAPI_WEBHOOK_SECRET")),
-		SocialAPIHTTPTimeout:     10 * time.Second,
-		ChatwootBaseURL:          envOr("CHATWOOT_BASE_URL", "http://localhost:3000"),
-		ChatwootAPIToken:         strings.TrimSpace(os.Getenv("CHATWOOT_API_TOKEN")),
-		ChatwootWebhookSecret:    strings.TrimSpace(os.Getenv("CHATWOOT_WEBHOOK_SECRET")),
-		ChatwootHTTPTimeout:      10 * time.Second,
-		ChatwootAutoReplyEnabled: false,
-		LLMEnabled:               false,
-		LLMBaseURL:               strings.TrimRight(strings.TrimSpace(os.Getenv("LLM_BASE_URL")), "/"),
-		LLMAPIKey:                strings.TrimSpace(os.Getenv("LLM_API_KEY")),
-		LLMModel:                 strings.TrimSpace(os.Getenv("LLM_MODEL")),
-		LLMHTTPTimeout:           30 * time.Second,
-		LLMMaxOutputTokens:       700,
-		LLMMaxInputCharacters:    12000,
-		LLMOutputTokensField:     envOr("LLM_OUTPUT_TOKENS_FIELD", "max_completion_tokens"),
+		Environment:                    envOr("APP_ENV", "development"),
+		DatabaseURL:                    strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		HTTPAddr:                       envOr("HTTP_ADDR", ":3001"),
+		ShutdownTimeout:                10 * time.Second,
+		DBMaxConns:                     10,
+		DBMinConns:                     1,
+		DBMaxConnLifetime:              time.Hour,
+		DBMaxConnIdleTime:              30 * time.Minute,
+		DBHealthCheckPeriod:            time.Minute,
+		DBConnectTimeout:               5 * time.Second,
+		SocialAPIBaseURL:               envOr("SOCIALAPI_BASE_URL", "https://api.social-api.ai"),
+		SocialAPIAPIKey:                strings.TrimSpace(os.Getenv("SOCIALAPI_API_KEY")),
+		SocialAPIWebhookSecret:         strings.TrimSpace(os.Getenv("SOCIALAPI_WEBHOOK_SECRET")),
+		SocialAPIHTTPTimeout:           10 * time.Second,
+		ChatwootBaseURL:                envOr("CHATWOOT_BASE_URL", "http://localhost:3000"),
+		ChatwootAPIToken:               strings.TrimSpace(os.Getenv("CHATWOOT_API_TOKEN")),
+		ChatwootPlatformAPIToken:       strings.TrimSpace(os.Getenv("CHATWOOT_PLATFORM_API_TOKEN")),
+		ChatwootWebhookSecret:          strings.TrimSpace(os.Getenv("CHATWOOT_WEBHOOK_SECRET")),
+		ChatwootHTTPTimeout:            10 * time.Second,
+		ChatwootProvisioningEnabled:    false,
+		ChannelProvisioningRedirectURI: strings.TrimSpace(os.Getenv("CHANNEL_PROVISIONING_REDIRECT_URI")),
+		ChannelProvisioningWebhookURL:  strings.TrimSpace(os.Getenv("CHANNEL_PROVISIONING_WEBHOOK_URL")),
+		ChatwootAutoReplyEnabled:       false,
+		LLMEnabled:                     false,
+		LLMBaseURL:                     strings.TrimRight(strings.TrimSpace(os.Getenv("LLM_BASE_URL")), "/"),
+		LLMAPIKey:                      strings.TrimSpace(os.Getenv("LLM_API_KEY")),
+		LLMModel:                       strings.TrimSpace(os.Getenv("LLM_MODEL")),
+		LLMHTTPTimeout:                 30 * time.Second,
+		LLMMaxOutputTokens:             700,
+		LLMMaxInputCharacters:          12000,
+		LLMOutputTokensField:           envOr("LLM_OUTPUT_TOKENS_FIELD", "max_completion_tokens"),
 	}
 	if cfg.DatabaseURL == "" {
 		return ProcessConfig{}, errors.New("DATABASE_URL is required")
@@ -98,6 +106,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 		return ProcessConfig{}, err
 	}
 	if cfg.ChatwootHTTPTimeout, err = durationEnv("CHATWOOT_HTTP_TIMEOUT", cfg.ChatwootHTTPTimeout); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.ChatwootProvisioningEnabled, err = boolEnv("CHATWOOT_PROVISIONING_ENABLED", cfg.ChatwootProvisioningEnabled); err != nil {
 		return ProcessConfig{}, err
 	}
 	if cfg.ChatwootAutoReplyEnabled, err = boolEnv("CHATWOOT_AUTOREPLY_ENABLED", cfg.ChatwootAutoReplyEnabled); err != nil {

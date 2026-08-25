@@ -11,13 +11,19 @@ import (
 )
 
 type ExternalAdapters struct {
-	SocialAPI                ports.ChannelProvider
-	Chatwoot                 ports.CommunicationWorkspace
-	SocialWebhook            ports.WebhookReceiver
-	ChatwootWebhook          ports.WebhookReceiver
-	AIRuntime                ports.AIRuntime
-	LLMConfigError           error
-	ChatwootAutoReplyEnabled bool
+	SocialAPI                      ports.ChannelProvider
+	Chatwoot                       ports.CommunicationWorkspace
+	SocialWebhook                  ports.WebhookReceiver
+	ChatwootWebhook                ports.WebhookReceiver
+	AIRuntime                      ports.AIRuntime
+	LLMConfigError                 error
+	ChatwootAutoReplyEnabled       bool
+	ChannelProvisioningSocial      ports.SocialChannelProvisioner
+	ChannelProvisioningWorkspace   ports.WorkspaceProvisioner
+	ChannelProvisioningError       error
+	ChannelProvisioningEnabled     bool
+	ChannelProvisioningRedirectURI string
+	ChannelProvisioningWebhookURL  string
 }
 
 func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
@@ -26,11 +32,24 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 		client := socialapi.NewClient(socialapi.Config{BaseURL: cfg.SocialAPIBaseURL, APIKey: cfg.SocialAPIAPIKey, WebhookSecret: cfg.SocialAPIWebhookSecret, HTTPTimeout: cfg.SocialAPIHTTPTimeout})
 		adapters.SocialAPI = client
 		adapters.SocialWebhook = client
+		adapters.ChannelProvisioningSocial = socialapi.NewProvisioningAdapter(client)
 	}
-	if cfg.ChatwootAPIToken != "" || cfg.ChatwootWebhookSecret != "" {
+	if cfg.ChatwootAPIToken != "" || cfg.ChatwootWebhookSecret != "" || cfg.ChatwootPlatformAPIToken != "" {
 		client := chatwoot.NewClient(chatwoot.Config{BaseURL: cfg.ChatwootBaseURL, APIToken: cfg.ChatwootAPIToken, WebhookSecret: cfg.ChatwootWebhookSecret, HTTPTimeout: cfg.ChatwootHTTPTimeout})
 		adapters.Chatwoot = client
 		adapters.ChatwootWebhook = client
+		if cfg.ChatwootPlatformAPIToken != "" {
+			adapters.ChannelProvisioningWorkspace = chatwoot.NewPlatformClient(chatwoot.PlatformConfig{BaseURL: cfg.ChatwootBaseURL, PlatformToken: cfg.ChatwootPlatformAPIToken, HTTPTimeout: cfg.ChatwootHTTPTimeout})
+		}
+	}
+	if cfg.ChatwootProvisioningEnabled {
+		if cfg.SocialAPIAPIKey == "" {
+			adapters.ChannelProvisioningError = errors.New("channel provisioning requires SOCIALAPI_API_KEY")
+		} else if adapters.ChannelProvisioningWorkspace == nil {
+			adapters.ChannelProvisioningError = errors.New("channel provisioning requires CHATWOOT_PLATFORM_API_TOKEN for self-hosted Chatwoot")
+		} else if cfg.ChannelProvisioningRedirectURI == "" || cfg.ChannelProvisioningWebhookURL == "" {
+			adapters.ChannelProvisioningError = errors.New("channel provisioning requires CHANNEL_PROVISIONING_REDIRECT_URI and CHANNEL_PROVISIONING_WEBHOOK_URL")
+		}
 	}
 	if cfg.LLMEnabled {
 		client, err := openaicompatible.NewClient(openaicompatible.Config{
@@ -49,5 +68,8 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 		}
 	}
 	adapters.ChatwootAutoReplyEnabled = cfg.ChatwootAutoReplyEnabled
+	adapters.ChannelProvisioningEnabled = cfg.ChatwootProvisioningEnabled
+	adapters.ChannelProvisioningRedirectURI = cfg.ChannelProvisioningRedirectURI
+	adapters.ChannelProvisioningWebhookURL = cfg.ChannelProvisioningWebhookURL
 	return adapters
 }

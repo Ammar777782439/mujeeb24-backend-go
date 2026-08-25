@@ -15,6 +15,7 @@ type BusinessMembership = dto.BusinessMembership
 type BusinessPolicy = dto.BusinessPolicy
 type DashboardOverview = dto.DashboardOverview
 type ChannelConnection = dto.ChannelConnection
+type ChannelProvisioning = dto.ChannelProvisioning
 type Capability = dto.Capability
 type CustomerSummary = dto.CustomerSummary
 type Conversation = dto.Conversation

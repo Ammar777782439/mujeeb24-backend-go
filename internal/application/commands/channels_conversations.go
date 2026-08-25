@@ -18,7 +18,8 @@ type DisconnectChannelCommand struct {
 }
 type BeginChannelConnectionResult struct {
 	MutationResult
-	Connection ChannelConnectionView
+	Connection   ChannelConnectionView
+	Provisioning ChannelProvisioningView
 }
 type ChannelConnectionResult struct {
 	MutationResult

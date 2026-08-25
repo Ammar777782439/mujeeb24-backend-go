@@ -464,6 +464,34 @@ components:
         - updated_at
         - resource_version
       type: object
+    ChannelProvisioning:
+      additionalProperties: false
+      properties:
+        authorization_url:
+          type: string
+        business_id:
+          type: string
+        channel:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        provider:
+          type: string
+        provisioning_id:
+          type: string
+        status:
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+      required:
+        - provisioning_id
+        - business_id
+        - provider
+        - channel
+        - status
+      type: object
     CommercialTransaction:
       additionalProperties: false
       properties:
@@ -1810,6 +1838,23 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/ChannelConnection"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleChannelProvisioningBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleChannelProvisioningBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/ChannelProvisioning"
         request_id:
           type: string
       required:
@@ -4387,7 +4432,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SingleChannelConnectionBody"
+                $ref: "#/components/schemas/SingleChannelProvisioningBody"
           description: Accepted
         "400":
           content:
@@ -4433,7 +4478,7 @@ paths:
           description: Internal Server Error
       security:
         - bearerAuth: []
-      summary: Begin channel connection
+      summary: Begin channel provisioning
       tags:
         - Connections
   /businesses/{business_id}/channel-connections/{connection_id}:
