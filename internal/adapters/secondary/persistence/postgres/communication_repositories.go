@@ -27,10 +27,48 @@ func (r *ConversationReferenceRepository) GetByID(ctx context.Context, businessI
 	if err != nil {
 		return ports.ConversationReferenceRecord{}, err
 	}
-	const query = `SELECT id::text, business_id::text, conversation_id::text, system, provider_ref, resource_type, resource_id, connection_id::text, conversation_kind, is_current, mapping_status FROM conversation_references WHERE business_id = $1::uuid AND id = $2::uuid`
+	const query = `SELECT id::text, business_id::text, conversation_id::text, system, provider_ref, resource_type, resource_id, connection_id::text, conversation_kind, is_current, mapping_status, chatwoot_account_id, chatwoot_inbox_id, chatwoot_conversation_id FROM conversation_references WHERE business_id = $1::uuid AND id = $2::uuid`
 	var record ports.ConversationReferenceRecord
-	if err := executor.QueryRow(ctx, query, businessID, referenceID).Scan(&record.ID, &record.BusinessID, &record.ConversationID, &record.System, &record.ProviderRef, &record.ResourceType, &record.ResourceID, &record.ConnectionID, &record.ConversationKind, &record.IsCurrent, &record.MappingStatus); err != nil {
+	if err := executor.QueryRow(ctx, query, businessID, referenceID).Scan(&record.ID, &record.BusinessID, &record.ConversationID, &record.System, &record.ProviderRef, &record.ResourceType, &record.ResourceID, &record.ConnectionID, &record.ConversationKind, &record.IsCurrent, &record.MappingStatus, &record.ChatwootAccountID, &record.ChatwootInboxID, &record.ChatwootConversationID); err != nil {
 		return record, classifyRepositoryGetError("conversation_reference.get_by_id", err)
+	}
+	return record, nil
+}
+
+func (r *ConversationReferenceRepository) BindProviderToChatwoot(ctx context.Context, draft ports.ProviderChatwootBindingDraft) (ports.ConversationReferenceRecord, error) {
+	if r == nil || r.adapter == nil {
+		return ports.ConversationReferenceRecord{}, ErrPoolClosed
+	}
+	if draft.BusinessID == "" || draft.ReferenceID == "" || draft.AccountID == "" || draft.InboxID == "" || draft.ChatwootConversationID == "" {
+		return ports.ConversationReferenceRecord{}, invalidRepositoryInput("conversation_reference.bind_chatwoot", "business, reference, Chatwoot account, inbox, and conversation ids are required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.ConversationReferenceRecord{}, err
+	}
+	const query = `UPDATE conversation_references SET chatwoot_account_id = $3, chatwoot_inbox_id = $4, chatwoot_conversation_id = $5, updated_at = now() WHERE business_id = $1::uuid AND id = $2::uuid AND system = 'provider' AND is_current AND mapping_status = 'active' RETURNING id::text, business_id::text, conversation_id::text, system, provider_ref, resource_type, resource_id, connection_id::text, conversation_kind, is_current, mapping_status, chatwoot_account_id, chatwoot_inbox_id, chatwoot_conversation_id`
+	var record ports.ConversationReferenceRecord
+	if err := executor.QueryRow(ctx, query, draft.BusinessID, draft.ReferenceID, draft.AccountID, draft.InboxID, draft.ChatwootConversationID).Scan(&record.ID, &record.BusinessID, &record.ConversationID, &record.System, &record.ProviderRef, &record.ResourceType, &record.ResourceID, &record.ConnectionID, &record.ConversationKind, &record.IsCurrent, &record.MappingStatus, &record.ChatwootAccountID, &record.ChatwootInboxID, &record.ChatwootConversationID); err != nil {
+		return record, classifyRepositoryGetError("conversation_reference.bind_chatwoot", err)
+	}
+	return record, nil
+}
+
+func (r *ConversationReferenceRepository) GetCurrentProviderByChatwoot(ctx context.Context, businessID, accountID, inboxID, conversationID string) (ports.ConversationReferenceRecord, error) {
+	if r == nil || r.adapter == nil {
+		return ports.ConversationReferenceRecord{}, ErrPoolClosed
+	}
+	if businessID == "" || accountID == "" || inboxID == "" || conversationID == "" {
+		return ports.ConversationReferenceRecord{}, invalidRepositoryInput("conversation_reference.get_provider_by_chatwoot", "business, Chatwoot account, inbox, and conversation ids are required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.ConversationReferenceRecord{}, err
+	}
+	const query = `SELECT id::text, business_id::text, conversation_id::text, system, provider_ref, resource_type, resource_id, connection_id::text, conversation_kind, is_current, mapping_status, chatwoot_account_id, chatwoot_inbox_id, chatwoot_conversation_id FROM conversation_references WHERE business_id = $1::uuid AND system = 'provider' AND is_current AND chatwoot_account_id = $2 AND chatwoot_inbox_id = $3 AND chatwoot_conversation_id = $4 ORDER BY updated_at DESC LIMIT 1`
+	var record ports.ConversationReferenceRecord
+	if err := executor.QueryRow(ctx, query, businessID, accountID, inboxID, conversationID).Scan(&record.ID, &record.BusinessID, &record.ConversationID, &record.System, &record.ProviderRef, &record.ResourceType, &record.ResourceID, &record.ConnectionID, &record.ConversationKind, &record.IsCurrent, &record.MappingStatus, &record.ChatwootAccountID, &record.ChatwootInboxID, &record.ChatwootConversationID); err != nil {
+		return record, classifyRepositoryGetError("conversation_reference.get_provider_by_chatwoot", err)
 	}
 	return record, nil
 }
@@ -46,9 +84,9 @@ func (r *ConversationReferenceRepository) GetCurrentByConversation(ctx context.C
 	if err != nil {
 		return ports.ConversationReferenceRecord{}, err
 	}
-	const query = `SELECT id::text, business_id::text, conversation_id::text, system, provider_ref, resource_type, resource_id, connection_id::text, conversation_kind, is_current, mapping_status FROM conversation_references WHERE business_id = $1::uuid AND conversation_id = $2::uuid AND system = $3 AND is_current ORDER BY updated_at DESC LIMIT 1`
+	const query = `SELECT id::text, business_id::text, conversation_id::text, system, provider_ref, resource_type, resource_id, connection_id::text, conversation_kind, is_current, mapping_status, chatwoot_account_id, chatwoot_inbox_id, chatwoot_conversation_id FROM conversation_references WHERE business_id = $1::uuid AND conversation_id = $2::uuid AND system = $3 AND is_current ORDER BY updated_at DESC LIMIT 1`
 	var record ports.ConversationReferenceRecord
-	if err := executor.QueryRow(ctx, query, businessID, conversationID, system).Scan(&record.ID, &record.BusinessID, &record.ConversationID, &record.System, &record.ProviderRef, &record.ResourceType, &record.ResourceID, &record.ConnectionID, &record.ConversationKind, &record.IsCurrent, &record.MappingStatus); err != nil {
+	if err := executor.QueryRow(ctx, query, businessID, conversationID, system).Scan(&record.ID, &record.BusinessID, &record.ConversationID, &record.System, &record.ProviderRef, &record.ResourceType, &record.ResourceID, &record.ConnectionID, &record.ConversationKind, &record.IsCurrent, &record.MappingStatus, &record.ChatwootAccountID, &record.ChatwootInboxID, &record.ChatwootConversationID); err != nil {
 		return record, classifyRepositoryGetError("conversation_reference.get_current", err)
 	}
 	return record, nil
