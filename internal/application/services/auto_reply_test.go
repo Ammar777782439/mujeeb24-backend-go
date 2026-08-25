@@ -50,6 +50,10 @@ type fakeReferenceRepository struct {
 	record ports.ConversationReferenceRecord
 }
 
+func (f fakeReferenceRepository) GetByID(context.Context, string, string) (ports.ConversationReferenceRecord, error) {
+	return f.record, nil
+}
+
 func (f fakeReferenceRepository) GetCurrentByConversation(context.Context, string, string, string) (ports.ConversationReferenceRecord, error) {
 	return f.record, nil
 }
@@ -69,6 +73,10 @@ func (f *fakeOutboundRepository) GetByID(context.Context, string, string) (ports
 type fakeOutboxStore struct {
 	record ports.OutboxEntryRecord
 	calls  int
+}
+
+func (f *fakeOutboxStore) ListClaimable(context.Context, int) ([]ports.OutboxEntryRecord, error) {
+	return nil, nil
 }
 
 func (f *fakeOutboxStore) Enqueue(_ context.Context, draft ports.OutboxEntryDraft) (ports.OutboxEntryRecord, error) {
