@@ -6,6 +6,7 @@ import (
 )
 
 type OutboxStore interface {
+	ListClaimable(ctx context.Context, limit int) ([]OutboxEntryRecord, error)
 	Enqueue(ctx context.Context, draft OutboxEntryDraft) (OutboxEntryRecord, error)
 	Get(ctx context.Context, businessID, entryID string) (OutboxEntryRecord, error)
 	List(ctx context.Context, filter OutboxFilter) (OutboxPage, error)

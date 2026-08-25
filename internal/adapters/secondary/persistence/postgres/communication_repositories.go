@@ -16,6 +16,25 @@ func NewConversationReferenceRepository(adapter *Adapter) *ConversationReference
 	return &ConversationReferenceRepository{adapter: adapter}
 }
 
+func (r *ConversationReferenceRepository) GetByID(ctx context.Context, businessID, referenceID string) (ports.ConversationReferenceRecord, error) {
+	if r == nil || r.adapter == nil {
+		return ports.ConversationReferenceRecord{}, ErrPoolClosed
+	}
+	if businessID == "" || referenceID == "" {
+		return ports.ConversationReferenceRecord{}, invalidRepositoryInput("conversation_reference.get_by_id", "business id and reference id are required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.ConversationReferenceRecord{}, err
+	}
+	const query = `SELECT id::text, business_id::text, conversation_id::text, system, provider_ref, resource_type, resource_id, connection_id::text, conversation_kind, is_current, mapping_status FROM conversation_references WHERE business_id = $1::uuid AND id = $2::uuid`
+	var record ports.ConversationReferenceRecord
+	if err := executor.QueryRow(ctx, query, businessID, referenceID).Scan(&record.ID, &record.BusinessID, &record.ConversationID, &record.System, &record.ProviderRef, &record.ResourceType, &record.ResourceID, &record.ConnectionID, &record.ConversationKind, &record.IsCurrent, &record.MappingStatus); err != nil {
+		return record, classifyRepositoryGetError("conversation_reference.get_by_id", err)
+	}
+	return record, nil
+}
+
 func (r *ConversationReferenceRepository) GetCurrentByConversation(ctx context.Context, businessID, conversationID, system string) (ports.ConversationReferenceRecord, error) {
 	if r == nil || r.adapter == nil {
 		return ports.ConversationReferenceRecord{}, ErrPoolClosed

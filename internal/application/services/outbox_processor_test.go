@@ -18,6 +18,9 @@ type processorOutbox struct {
 	deadLetter  *ports.OutboxFailure
 }
 
+func (o *processorOutbox) ListClaimable(context.Context, int) ([]ports.OutboxEntryRecord, error) {
+	return nil, errors.New("not used")
+}
 func (o *processorOutbox) Enqueue(context.Context, ports.OutboxEntryDraft) (ports.OutboxEntryRecord, error) {
 	return ports.OutboxEntryRecord{}, errors.New("not used")
 }
@@ -100,8 +103,8 @@ func TestOutboxProcessorPreservesUnknownNetworkOutcome(t *testing.T) {
 	if err := processor.Process(context.Background(), "entry-1"); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
-	if outbox.failure == nil || outbox.failure.ErrorCode != "provider_send_outcome_unknown" || outbox.failure.NextAttempt != nil || outbox.failure.Owner != "worker-1" || outbox.failure.Token == "" || outbox.completed != nil {
-		t.Fatalf("unexpected unknown-outcome handling: failure=%#v completed=%#v", outbox.failure, outbox.completed)
+	if outbox.deadLetter == nil || outbox.deadLetter.ErrorCode != "provider_send_outcome_unknown" || outbox.deadLetter.Owner != "worker-1" || outbox.deadLetter.Token == "" || outbox.completed != nil || outbox.failure != nil {
+		t.Fatalf("unexpected unknown-outcome handling: dead_letter=%#v failure=%#v completed=%#v", outbox.deadLetter, outbox.failure, outbox.completed)
 	}
 }
 

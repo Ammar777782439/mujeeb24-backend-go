@@ -53,10 +53,9 @@ func (p OutboxProcessor) Process(ctx context.Context, entryID string) error {
 	result, err := p.Provider.SendMessage(ctx, ports.SendMessageCommand{ConnectionID: delivery.ConnectionID, ProviderAccountID: delivery.ProviderAccountID, ProviderConversationID: delivery.ProviderConversationID, Text: delivery.Text, IdempotencyKey: delivery.IdempotencyKey})
 	if err != nil {
 		// A transport failure does not prove that the provider did not accept
-		// the request. Leave NextAttempt nil so reconciliation can decide whether
-		// a retry is safe instead of blindly duplicating a customer message.
-		_, markErr := p.Outbox.MarkRetryableFailure(ctx, record.ID, ports.OutboxFailure{Owner: owner(record, p.Owner), Token: token(record), ErrorCode: "provider_send_outcome_unknown", NextAttempt: nil, UpdatedAt: p.Now().UTC()})
-		return markErr
+		// the request. Quarantine it in dead-letter until reconciliation decides
+		// whether a retry is safe; never blindly duplicate a customer message.
+		return p.deadLetter(ctx, record, "provider_send_outcome_unknown")
 	}
 	resultCode := "provider_accepted"
 	if result.ProviderMessageID != "" {

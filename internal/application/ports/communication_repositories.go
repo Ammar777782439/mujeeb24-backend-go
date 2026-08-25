@@ -17,6 +17,7 @@ type ConversationReferenceRecord struct {
 }
 
 type ConversationReferenceRepository interface {
+	GetByID(ctx context.Context, businessID, referenceID string) (ConversationReferenceRecord, error)
 	GetCurrentByConversation(ctx context.Context, businessID, conversationID, system string) (ConversationReferenceRecord, error)
 }
 

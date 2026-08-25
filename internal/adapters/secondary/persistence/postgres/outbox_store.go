@@ -21,6 +21,36 @@ func NewPostgresOutboxStore(adapter *Adapter) *PostgresOutboxStore {
 const outboxColumns = `id::text, business_id::text, outbound_message_id::text, command_type, dedupe_key, status, attempt_count, available_at, lease_owner, lease_token::text, lease_expires_at, last_error_code, result_code, completed_at, created_at, updated_at`
 const outboxSelect = `SELECT ` + outboxColumns + ` FROM outbox_entries`
 
+func (s *PostgresOutboxStore) ListClaimable(ctx context.Context, limit int) ([]ports.OutboxEntryRecord, error) {
+	executor, err := s.executor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	rows, err := executor.Query(ctx, outboxSelect+` WHERE status IN ('pending', 'retryable_failed') AND available_at <= now() ORDER BY available_at ASC, created_at ASC, id ASC LIMIT $1`, limit)
+	if err != nil {
+		return nil, classifyRepositoryGetError("outbox.list_claimable", err)
+	}
+	defer rows.Close()
+	items := make([]ports.OutboxEntryRecord, 0, limit)
+	for rows.Next() {
+		var item ports.OutboxEntryRecord
+		if err := rows.Scan(outboxScanArgs(&item)...); err != nil {
+			return nil, classifyRepositoryGetError("outbox.list_claimable", err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, classifyRepositoryGetError("outbox.list_claimable", err)
+	}
+	return items, nil
+}
+
 func (s *PostgresOutboxStore) Enqueue(ctx context.Context, draft ports.OutboxEntryDraft) (ports.OutboxEntryRecord, error) {
 	executor, err := s.executor(ctx)
 	if err != nil {
