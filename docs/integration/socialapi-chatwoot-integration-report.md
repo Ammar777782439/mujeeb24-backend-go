@@ -149,7 +149,7 @@
 
 قبل الدفع النهائي يجب إيقاف Mujeeb API وWorker وreceiver التشخيصي، حذف token المحلي وملف البيئة المحلي والسجلات والملفات المؤقتة، إيقاف Compose مع حذف volumes الخاصة ببيئة Chatwoot، حذف حاوية/volume PostgreSQL الخاصة باختبار Mujeeb فقط، ثم التحقق من أن `.env` غير موجود وغير متتبع. لا يجوز حذف أي حاوية أو volume غير تابع لبيئة التكامل هذه.
 
-**Commit SHA:** `c28a3d8` هو commit تنفيذ Chatwoot inbound materialization وmigration `000034` والاختبارات المرتبطة به. هذا التقرير والتوثيقات المساندة ستُدفع في commit توثيق لاحق، ثم يُتحقق من مطابقة `HEAD` مع `origin/main`. لا يحتوي التقرير على credentials أو passwords أو usernames أو tokens أو raw payloads.
+**Commit SHA:** `c28a3d8` هو commit تنفيذ Chatwoot inbound materialization وmigration `000034` والاختبارات المرتبطة به، و`330fc47` هو commit التقرير والتوثيقات المساندة. بعد تصحيح SHA هذا سيُدفع commit توثيقي أخير، ثم يُتحقق من مطابقة `HEAD` مع `origin/main`. لا يحتوي التقرير على credentials أو passwords أو usernames أو tokens أو raw payloads.
 
 ## المراجع
 
