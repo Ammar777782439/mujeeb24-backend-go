@@ -145,7 +145,7 @@
 
 قبل الدفع النهائي يجب إيقاف Mujeeb API وWorker وreceiver المحلي، حذف token المحلي وملف البيئة المحلي والسجلات والملفات المؤقتة، إيقاف Compose مع حذف volumes الخاصة ببيئة Chatwoot، حذف حاوية/volume PostgreSQL الخاصة باختبار Mujeeb فقط، ثم التحقق من أن `.env` غير موجود وغير متتبع. لا يجوز حذف أي حاوية أو volume غير تابع لبيئة التكامل هذه.
 
-**Commit SHA:** يُملأ بعد commit وpush والتحقق من أن `HEAD == origin/main` وأن working tree نظيف. لا يحتوي هذا التقرير على credentials أو passwords أو usernames أو tokens أو raw payloads.
+**Commit SHA:** `ec8bf732ef75b027f7d1d663d61dc4a1a232f6a7` هو commit التغييرات المحلي الحالي قبل amend النهائي. بعد تحديث هذه الفقرة يجب أن يكون SHA النهائي مختلفًا؛ سيُثبت SHA النهائي في نتيجة التحقق بعد push. لا يحتوي هذا التقرير على credentials أو passwords أو usernames أو tokens أو raw payloads.
 
 ## المراجع
 
