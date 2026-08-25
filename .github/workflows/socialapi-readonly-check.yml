@@ -1,0 +1,37 @@
+name: SocialAPI read-only check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  accounts-read-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read connected accounts
+        env:
+          SOCIALAPI_API_KEY: ${{ secrets.SOCIALAPI_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SOCIALAPI_API_KEY"
+          response="$(mktemp)"
+          trap 'rm -f "$response"; unset SOCIALAPI_API_KEY' EXIT
+          status="$(curl --silent --show-error --location \
+            --header "Authorization: Bearer ${SOCIALAPI_API_KEY}" \
+            --header 'Accept: application/json' \
+            --output "$response" --write-out '%{http_code}' \
+            'https://api.social-api.ai/v1/accounts')"
+          echo "socialapi_http_status=$status"
+          if [[ "$status" != 2* ]]; then
+            error_code="$(jq -r '.error.code // .code // "unknown"' "$response" 2>/dev/null || true)"
+            echo "socialapi_error_code=${error_code:-unknown}"
+            exit 1
+          fi
+          account_count="$(jq -r 'if (.count|type) == "number" then .count elif (.data|type) == "array" then (.data|length) else 0 end' "$response")"
+          platforms="$(jq -r '[.data[]?.platform? // empty] | unique | join(",")' "$response")"
+          echo "socialapi_account_count=$account_count"
+          echo "socialapi_platforms=${platforms:-none}"
