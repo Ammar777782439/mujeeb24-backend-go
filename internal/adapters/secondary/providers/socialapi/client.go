@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/channel"
@@ -101,17 +102,191 @@ type ConnectRequest struct {
 }
 
 type ConnectResponse struct {
-	AuthURL string `json:"auth_url"`
-	State   string `json:"state"`
-	Message string `json:"message"`
+	AccountID   string `json:"account_id"`
+	AuthURL     string `json:"auth_url"`
+	DisplayName string `json:"display_name"`
+	Platform    string `json:"platform"`
+	State       string `json:"state"`
+	Username    string `json:"username"`
+	Message     string `json:"message"`
 }
 
 func (c *Client) BeginConnection(ctx context.Context, request ConnectRequest) (ConnectResponse, error) {
-	if request.Platform == "" || request.RedirectURI == "" {
-		return ConnectResponse{}, fmt.Errorf("%w: platform and redirect_uri are required", ErrInvalidRequest)
+	if strings.TrimSpace(request.Platform) == "" {
+		return ConnectResponse{}, fmt.Errorf("%w: platform is required", ErrInvalidRequest)
+	}
+	if request.RedirectURI != "" {
+		redirectURI, err := url.Parse(request.RedirectURI)
+		if err != nil || redirectURI.Scheme != "https" || redirectURI.Host == "" {
+			return ConnectResponse{}, fmt.Errorf("%w: redirect_uri must be a valid https URL", ErrInvalidRequest)
+		}
+	}
+	if utf8.RuneCountInString(request.State) > 512 {
+		return ConnectResponse{}, fmt.Errorf("%w: state exceeds 512 characters", ErrInvalidRequest)
 	}
 	var response ConnectResponse
 	_, err := c.doJSON(ctx, http.MethodPost, "/v1/accounts/connect", request, &response)
+	return response, err
+}
+
+type InboxPagination struct {
+	HasMore    bool   `json:"has_more"`
+	NextCursor string `json:"next_cursor"`
+}
+
+type InboxConversation struct {
+	ID                 string `json:"id"`
+	AccountID          string `json:"account_id"`
+	Platform           string `json:"platform"`
+	PlatformID         string `json:"platform_id"`
+	PageID             string `json:"page_id"`
+	ParticipantID      string `json:"participant_id"`
+	ParticipantName    string `json:"participant_name"`
+	ParticipantPicture string `json:"participant_picture"`
+	UserID             string `json:"user_id"`
+	LastMessage        string `json:"last_message"`
+	Status             string `json:"status"`
+	UnreadCount        int    `json:"unread_count"`
+	CreatedAt          string `json:"created_at"`
+	UpdatedAt          string `json:"updated_at"`
+	LastMessageAt      string `json:"last_message_at"`
+}
+
+type InboxConversationsResponse struct {
+	Data         []InboxConversation `json:"data"`
+	LastSyncedAt string              `json:"last_synced_at"`
+	Pagination   InboxPagination     `json:"pagination"`
+	SyncState    string              `json:"sync_state"`
+}
+
+type InboxConversationQuery struct {
+	AccountID string
+	BrandID   string
+	PageID    string
+	Platform  string
+	Status    string
+	Limit     int
+	Cursor    string
+}
+
+func (c *Client) ListInboxConversations(ctx context.Context, query InboxConversationQuery) (InboxConversationsResponse, error) {
+	if query.Limit < 0 || query.Limit > 100 {
+		return InboxConversationsResponse{}, fmt.Errorf("%w: conversation limit must be between 1 and 100", ErrInvalidRequest)
+	}
+	if query.Status != "" && query.Status != "active" && query.Status != "archived" {
+		return InboxConversationsResponse{}, fmt.Errorf("%w: conversation status must be active or archived", ErrInvalidRequest)
+	}
+	values := url.Values{}
+	if query.AccountID != "" {
+		values.Set("account_id", query.AccountID)
+	}
+	if query.BrandID != "" {
+		values.Set("brand_id", query.BrandID)
+	}
+	if query.PageID != "" {
+		values.Set("page_id", query.PageID)
+	}
+	if query.Platform != "" {
+		values.Set("platform", query.Platform)
+	}
+	if query.Status != "" {
+		values.Set("status", query.Status)
+	}
+	if query.Limit != 0 {
+		values.Set("limit", strconv.Itoa(query.Limit))
+	}
+	if query.Cursor != "" {
+		values.Set("cursor", query.Cursor)
+	}
+	path := "/v1/inbox/conversations"
+	if encoded := values.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var response InboxConversationsResponse
+	_, err := c.doJSON(ctx, http.MethodGet, path, nil, &response)
+	return response, err
+}
+
+func (c *Client) GetInboxConversation(ctx context.Context, conversationID string) (InboxConversation, error) {
+	if strings.TrimSpace(conversationID) == "" {
+		return InboxConversation{}, fmt.Errorf("%w: conversation id is required", ErrInvalidRequest)
+	}
+	var response struct {
+		Data InboxConversation `json:"data"`
+	}
+	_, err := c.doJSON(ctx, http.MethodGet, "/v1/inbox/conversations/"+url.PathEscape(conversationID), nil, &response)
+	return response.Data, err
+}
+
+type InboxMessagesQuery struct {
+	Limit  int
+	Cursor string
+}
+
+type InboxMessage struct {
+	ID              string `json:"id"`
+	ConversationID  string `json:"conversation_id"`
+	PlatformID      string `json:"platform_id"`
+	SenderID        string `json:"sender_id"`
+	SenderName      string `json:"sender_name"`
+	Text            string `json:"text"`
+	Direction       string `json:"direction"`
+	Status          string `json:"status"`
+	AttachmentType  string `json:"attachment_type"`
+	AttachmentURL   string `json:"attachment_url"`
+	CreatedAt       string `json:"created_at"`
+	StatusUpdatedAt string `json:"status_updated_at"`
+}
+
+type InboxMessagesResponse struct {
+	Data         []InboxMessage  `json:"data"`
+	LastSyncedAt string          `json:"last_synced_at"`
+	Pagination   InboxPagination `json:"pagination"`
+	SyncState    string          `json:"sync_state"`
+}
+
+func (c *Client) ListConversationMessages(ctx context.Context, conversationID string, query InboxMessagesQuery) (InboxMessagesResponse, error) {
+	if strings.TrimSpace(conversationID) == "" {
+		return InboxMessagesResponse{}, fmt.Errorf("%w: conversation id is required", ErrInvalidRequest)
+	}
+	if query.Limit < 0 || query.Limit > 200 {
+		return InboxMessagesResponse{}, fmt.Errorf("%w: message limit must be between 1 and 200", ErrInvalidRequest)
+	}
+	values := url.Values{}
+	if query.Limit != 0 {
+		values.Set("limit", strconv.Itoa(query.Limit))
+	}
+	if query.Cursor != "" {
+		values.Set("cursor", query.Cursor)
+	}
+	path := "/v1/inbox/conversations/" + url.PathEscape(conversationID) + "/messages"
+	if encoded := values.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var response InboxMessagesResponse
+	_, err := c.doJSON(ctx, http.MethodGet, path, nil, &response)
+	return response, err
+}
+
+type RegisterWebhookRequest struct {
+	URL    string   `json:"url"`
+	Events []string `json:"events"`
+}
+
+type RegisterWebhookResponse struct {
+	ID     string   `json:"id"`
+	URL    string   `json:"url"`
+	Events []string `json:"events"`
+	Secret string   `json:"secret"`
+}
+
+func (c *Client) RegisterWebhook(ctx context.Context, request RegisterWebhookRequest) (RegisterWebhookResponse, error) {
+	webhookURL, err := url.Parse(request.URL)
+	if strings.TrimSpace(request.URL) == "" || err != nil || webhookURL.Scheme != "https" || webhookURL.Host == "" || len(request.Events) == 0 {
+		return RegisterWebhookResponse{}, fmt.Errorf("%w: webhook url must be https and events are required", ErrInvalidRequest)
+	}
+	var response RegisterWebhookResponse
+	_, err = c.doJSON(ctx, http.MethodPost, "/v1/webhooks", request, &response)
 	return response, err
 }
 
@@ -344,19 +519,22 @@ func (c *Client) GetDeliveryStatus(ctx context.Context, reference ports.Delivery
 	}
 	var response struct {
 		Data []struct {
-			ID     string `json:"id"`
-			Status string `json:"status"`
+			ID         string `json:"id"`
+			PlatformID string `json:"platform_id"`
+			Status     string `json:"status"`
 		} `json:"data"`
 	}
+
 	_, err := c.doJSON(ctx, http.MethodGet, "/v1/inbox/conversations/"+url.PathEscape(reference.ProviderConversationID)+"/messages", nil, &response)
 	if err != nil {
 		return channel.DeliveryUnknown, err
 	}
 	for _, item := range response.Data {
-		if item.ID == reference.ProviderMessageID {
+		if item.ID == reference.ProviderMessageID || item.PlatformID == reference.ProviderMessageID {
 			return deliveryStatus(item.Status), nil
 		}
 	}
+
 	return channel.DeliveryUnknown, nil
 }
 
@@ -431,7 +609,8 @@ func (c *Client) doJSONWithHeaders(ctx context.Context, method, path string, req
 
 type apiErrorResponse struct {
 	Error struct {
-		Code string `json:"code"`
+		Code    string `json:"code"`
+		Message string `json:"message"`
 	} `json:"error"`
 	RequestID string `json:"request_id"`
 }
@@ -443,17 +622,21 @@ func parseAPIError(res *http.Response) error {
 	if decoded.RequestID == "" {
 		decoded.RequestID = res.Header.Get("X-Request-ID")
 	}
-	return &Error{StatusCode: res.StatusCode, Code: decoded.Error.Code, RequestID: decoded.RequestID, Retryable: res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500}
+	return &Error{StatusCode: res.StatusCode, Code: decoded.Error.Code, Message: decoded.Error.Message, RequestID: decoded.RequestID, Retryable: res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500}
 }
 
 type Error struct {
 	StatusCode int
 	Code       string
+	Message    string
 	RequestID  string
 	Retryable  bool
 }
 
 func (e *Error) Error() string {
+	if e.Code != "" && e.Message != "" {
+		return fmt.Sprintf("socialapi http %d: %s: %s", e.StatusCode, e.Code, e.Message)
+	}
 	if e.Code != "" {
 		return fmt.Sprintf("socialapi http %d: %s", e.StatusCode, e.Code)
 	}
