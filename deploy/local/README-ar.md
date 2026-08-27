@@ -12,7 +12,7 @@
 | `mujeeb-worker` | يعالج Outbox وChatwoot mirror | داخلي فقط |
 | `chatwoot-postgres` و`chatwoot-redis` | اعتمادات Chatwoot المعزولة | داخلية فقط |
 | `chatwoot-rails` و`chatwoot-sidekiq` | Chatwoot CE ومساراته الخلفية | `127.0.0.1:3002` |
-| `webhook-gateway` | proxy يقبل SocialAPI webhook فقط | داخلي فقط |
+| `webhook-gateway` | proxy محدود لمسارات SocialAPI وOAuth وChatwoot callbacks | داخلي فقط |
 
 ## التشغيل الأول على Windows Docker Desktop
 
@@ -52,6 +52,30 @@ https://...trycloudflare.com/api/v1/webhooks/socialapi/{route_key}
 ```
 
 الرابط عام ومجاني لكنه مؤقت ويتغير عندما تتوقف حاوية Quick Tunnel. لا يشغل Chatwoot أو Mujeeb outbound تلقائيًا، ولا يجب وضعه في SocialAPI قبل أن يكون `mujeeb-api` شغالًا وأن يكون لديك `route_key` صحيح لا قيمة مخمّنة.
+
+## ربط قناة تاجر عبر SocialAPI وChatwoot
+
+لا يلزم التاجر فتح Chatwoot أو إدخال Account/Inbox IDs. عند تفعيل provisioning، ينشئ Mujeeb جلسة OAuth، يستقبل callback من SocialAPI، ثم ينشئ ChannelConnection وChatwoot Account وAPI Inbox وbinding خاصًا بالقناة.
+
+قبل تفعيل ذلك، استخدم نفس عنوان HTTPS العام للمسارات الثلاثة التالية:
+
+```text
+/oauth/socialapi/callback
+/api/v1/webhooks/socialapi/{route_key}
+/api/v1/webhooks/chatwoot/{route_key}
+```
+
+في `deploy/local/.env` المحلي، اضبط المتغيرات التالية فقط بعد حصولك على القيم من الخدمات المعنية. لا ترفعها إلى Git:
+
+```text
+CHATWOOT_PROVISIONING_ENABLED=true
+SOCIALAPI_API_KEY=...
+CHATWOOT_PLATFORM_API_TOKEN=...
+CHANNEL_PROVISIONING_REDIRECT_URI=https://YOUR-HOST/oauth/socialapi/callback
+CHANNEL_PROVISIONING_WEBHOOK_URL=https://YOUR-HOST/api/v1/webhooks/chatwoot
+```
+
+قيمة `CHANNEL_PROVISIONING_WEBHOOK_URL` هي **base URL**؛ لا تضف `route_key` بنفسك. ينشئ Mujeeb مقطع route خاصًا بكل ChannelConnection، ويضعه في API Inbox الذي ينشئه داخل Chatwoot. يلزم Platform API token صادر من Platform App في Chatwoot self-hosted قبل أن يبدأ provisioning الحي.
 
 ## Named Tunnel برابط ثابت
 

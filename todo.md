@@ -50,3 +50,8 @@
 - [x] التحقق من إعداد Cloudflare Tunnel المحدود لمسار SocialAPI webhook ودفعه إلى GitHub.
 - [x] إضافة Compose موحّد لتشغيل Mujeeb API وWorker وPostgreSQL مع Chatwoot وRedis دون تثبيت خدمات يدويًا.
 - [ ] بناء والتحقق من ملف Compose اختباري موحد يعمل بأمر واحد على Windows Docker Desktop بعد تهيئة ملفه المحلي.
+- [ ] تشخيص 503 لمسار SocialAPI webhook عبر Pinggy ومطابقة `route_key` وتهيئة توقيع runtime قبل إعادة الإرسال.
+- [ ] مطابقة `provider account reference` في SocialAPI test payload مع ChannelConnection قبل اختبار materialization.
+- [ ] إكمال Merchant Channel Provisioning: إنشاء/ربط SocialAPI account وChannelConnection وChatwoot workspace/inbox ضمن business التاجر، ثم اختبار العقد محليًا قبل أي عملية خارجية.
+- [x] توليد Chatwoot callback route key خاص بكل قناة تاجر داخل provisioning، ومنع استخدام عنوان callback ثابت لا يطابق binding متعدد المستأجرين.
+- [ ] تثبيت ودفع تصحيح Merchant Channel Provisioning وcallback routing متعدد التجار إلى GitHub.

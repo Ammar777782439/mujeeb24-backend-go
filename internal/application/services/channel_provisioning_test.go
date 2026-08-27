@@ -95,17 +95,19 @@ func (s *provisioningSocial) ResolveAuthorization(_ context.Context, callback po
 }
 
 type provisioningWorkspace struct {
-	accounts int
-	inboxes  int
-	inboxErr error
+	accounts    int
+	inboxes     int
+	inboxErr    error
+	callbackURL string
 }
 
 func (w *provisioningWorkspace) EnsureAccount(context.Context, string, string) (ports.WorkspaceAccount, error) {
 	w.accounts++
 	return ports.WorkspaceAccount{ID: "cw-account-1"}, nil
 }
-func (w *provisioningWorkspace) EnsureInbox(context.Context, string, string, string, string) (ports.WorkspaceInbox, error) {
+func (w *provisioningWorkspace) EnsureInbox(_ context.Context, _ string, _ string, _ string, callbackURL string) (ports.WorkspaceInbox, error) {
 	w.inboxes++
+	w.callbackURL = callbackURL
 	if w.inboxErr != nil {
 		return ports.WorkspaceInbox{}, w.inboxErr
 	}
@@ -155,8 +157,24 @@ func TestChannelProvisioningStartIsIdempotentAndCompleteConnects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("complete: %v", err)
 	}
-	if completed.Status != ports.ProvisioningConnected || completed.ChatwootAccountID != "cw-account-1" || completed.ChatwootInboxID != "cw-inbox-1" || completed.ChannelConnectionID != "connection-1" || social.resolve != 1 || workspace.accounts != 1 || workspace.inboxes != 1 || binding.calls != 1 || connections.pending != 1 || connections.active != 1 {
+	if completed.Status != ports.ProvisioningConnected || completed.ChatwootAccountID != "cw-account-1" || completed.ChatwootInboxID != "cw-inbox-1" || completed.ChannelConnectionID != "connection-1" || social.resolve != 1 || workspace.accounts != 1 || workspace.inboxes != 1 || binding.calls != 1 || connections.pending != 1 || connections.active != 1 || workspace.callbackURL != "https://app.example/webhooks/chatwoot/cw_connection1" {
 		t.Fatalf("complete mismatch: session=%#v social=%#v workspace=%#v binding=%#v connections=%#v", completed, social, workspace, binding, connections)
+	}
+}
+
+func TestChatwootCallbackURLRequiresHTTPSBaseAndOneSegmentRoute(t *testing.T) {
+	callbackURL, err := chatwootCallbackURL("https://hooks.example/api/v1/webhooks/chatwoot/", "cw_connection1")
+	if err != nil || callbackURL != "https://hooks.example/api/v1/webhooks/chatwoot/cw_connection1" {
+		t.Fatalf("callback URL=%q err=%v", callbackURL, err)
+	}
+	if _, err := chatwootCallbackURL("http://hooks.example/webhooks/chatwoot", "cw_connection1"); err == nil {
+		t.Fatal("expected non-HTTPS callback base to fail")
+	}
+	if _, err := chatwootCallbackURL("https://hooks.example/webhooks/chatwoot?x=1", "cw_connection1"); err == nil {
+		t.Fatal("expected callback base with query to fail")
+	}
+	if _, err := chatwootCallbackURL("https://hooks.example/webhooks/chatwoot", "business/connection"); err == nil {
+		t.Fatal("expected multi-segment route key to fail")
 	}
 }
 

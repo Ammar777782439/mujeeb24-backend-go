@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
@@ -118,15 +119,19 @@ func (s ChannelProvisioningService) Complete(ctx context.Context, businessID, se
 	if err != nil {
 		return s.fail(ctx, session, "channel_connection_create_failed", err)
 	}
+	routeKey := chatwootRouteKey(connection.ID)
+	callbackURL, err := chatwootCallbackURL(s.WebhookURL, routeKey)
+	if err != nil {
+		return s.failWithConnection(ctx, session, connection.ID, "chatwoot_callback_url_invalid", err)
+	}
 	account, err := s.Workspace.EnsureAccount(ctx, session.DisplayName, provisioningDefaultLocale)
 	if err != nil {
 		return s.failWithConnection(ctx, session, connection.ID, "chatwoot_account_provision_failed", err)
 	}
-	inbox, err := s.Workspace.EnsureInbox(ctx, account.ID, session.DisplayName, session.Channel, s.WebhookURL)
+	inbox, err := s.Workspace.EnsureInbox(ctx, account.ID, session.DisplayName, session.Channel, callbackURL)
 	if err != nil {
 		return s.failWithWorkspace(ctx, session, connection.ID, account.ID, "chatwoot_inbox_provision_failed", err)
 	}
-	routeKey := "business/" + businessID + "/" + session.ProviderRef + "/" + session.Channel
 	if _, err := s.Bindings.EnsureBinding(ctx, businessID, routeKey, account.ID, inbox.ID, session.Channel); err != nil {
 		return s.failWithWorkspace(ctx, session, connection.ID, account.ID, "chatwoot_binding_failed", err)
 	}
@@ -162,4 +167,24 @@ func (s ChannelProvisioningService) failWithWorkspace(ctx context.Context, sessi
 
 func validProvisioningChannel(channel string) bool {
 	return channel == "facebook" || channel == "instagram" || channel == "whatsapp"
+}
+
+func chatwootRouteKey(connectionID string) string {
+	return "cw_" + strings.ReplaceAll(strings.TrimSpace(connectionID), "-", "")
+}
+
+func chatwootCallbackURL(baseURL, routeKey string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return "", errors.New("chatwoot webhook base url must be https")
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("chatwoot webhook base url must not contain query or fragment")
+	}
+	routeKey = strings.TrimSpace(routeKey)
+	if routeKey == "" || strings.Contains(routeKey, "/") {
+		return "", errors.New("chatwoot webhook route key must be one path segment")
+	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/") + "/" + routeKey
+	return parsed.String(), nil
 }
