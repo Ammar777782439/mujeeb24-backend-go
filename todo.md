@@ -31,3 +31,18 @@
 - [x] إضافة تعليمات Arabic لتشغيل/تهيئة/إيقاف Chatwoot وربطه مع Mujeeb محليًا دون provider live.
 - [ ] التحقق من compose config وبناء الخدمات محليًا دون تثبيت أي بيانات دخول داخل المستودع.
 - [x] التحقق من commits المعتمدة محليًا ودفعها إلى `origin/main` بعد مراجعة البعيد.
+
+## SocialAPI webhook exposure
+
+- [x] مراجعة متطلبات webhook داخل لوحة SocialAPI وتسجيل الحقول المطلوبة فقط.
+- [x] تجهيز عنوان HTTPS خارجي بديل لـNgrok لاختبار webhook دون أسرار داخل المستودع.
+- [x] تشغيل مستقبِل Mujeeb مؤقتًا وتمرير `webhook.test` فقط وفق بروتوكول التسجيل الرسمي، بلا تخزين أو معالجة لحدث الاختبار.
+- [x] إدخال endpoint secret الصادر مرة واحدة في runtime آمن فقط، ثم التحقق من HMAC وحدث اختبار دون رسالة أو قناة حية.
+- [x] التحقق من الاستقبال الخارجي بتوقيع صحيح وحدث `dm.received`، قبل أي رسالة أو قناة حية.
+- [x] إنشاء ChannelConnection وbinding مطابقين في PostgreSQL قبل اختبار materialization الكامل؛ لا يُحل الحدث الخارجي إلى Customer/Conversation بلا tenant/connection scope مثبت.
+- [x] تنفيذ اختبار واقعي محدود من `dm.received` موقّع إلى Customer/Conversation/CommunicationMessage وEvent Ledger بعد اكتمال بيانات الربط الداخلية، من دون Chatwoot أو auto-reply أو إرسال خارجي.
+- [x] جرد وتشغيل تكامل حي: PostgreSQL وMujeeb وChatwoot وSocialAPI مع تحديد كل credential وbinding مطلوب وعدم افتراض الجاهزية.
+- [x] اختبار التزامن الحي بين Mujeeb وChatwoot بعد تهيئة Chatwoot وربط القناة بنجاح.
+- [ ] طلب موافقة منفصلة قبل إرسال رسالة اختبار فعلية من حساب SocialAPI أو تشغيل auto-reply/LLM في قناة حية.
+- [x] تنفيذ Mujeeb → Chatwoot mirroring كـOutbox job قابل لإعادة المحاولة وidempotent، ثم اختباره قبل إدخال Chatwoot في مسار حي.
+- [ ] تثبيت ودفع تغيير فصل Chatwoot mirror عن secret SocialAPI في commit مستقل بعد تحقق Git والأسرار.

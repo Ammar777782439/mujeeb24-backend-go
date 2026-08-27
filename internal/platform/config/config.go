@@ -182,8 +182,8 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if strings.TrimSpace(cfg.HTTPAddr) == "" {
 		return ProcessConfig{}, errors.New("HTTP_ADDR cannot be empty")
 	}
-	if cfg.ChatwootMirrorEnabled && (cfg.SocialAPIWebhookSecret == "" || cfg.ChatwootAPIToken == "") {
-		return ProcessConfig{}, errors.New("CHATWOOT_MIRROR_ENABLED requires SOCIALAPI_WEBHOOK_SECRET and CHATWOOT_API_TOKEN")
+	if cfg.ChatwootMirrorEnabled && cfg.ChatwootAPIToken == "" {
+		return ProcessConfig{}, errors.New("CHATWOOT_MIRROR_ENABLED requires CHATWOOT_API_TOKEN")
 	}
 	if cfg.ChatwootAutoReplyEnabled && (cfg.ChatwootWebhookSecret == "" || cfg.SocialAPIAPIKey == "" || !cfg.LLMEnabled) {
 		return ProcessConfig{}, errors.New("CHATWOOT_AUTOREPLY_ENABLED requires CHATWOOT_WEBHOOK_SECRET, SOCIALAPI_API_KEY, and LLM_ENABLED")

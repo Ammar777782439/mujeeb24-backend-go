@@ -66,7 +66,6 @@ func TestLoadFromEnvDisablesChatwootMirrorByDefaultAndReadsOverride(t *testing.T
 		t.Fatalf("Chatwoot mirror must be disabled by default: %#v", cfg)
 	}
 	t.Setenv("CHATWOOT_MIRROR_ENABLED", "true")
-	t.Setenv("SOCIALAPI_WEBHOOK_SECRET", "test-webhook-secret")
 	t.Setenv("CHATWOOT_API_TOKEN", "test-chatwoot-token")
 	cfg, err = LoadFromEnv()
 	if err != nil || !cfg.ChatwootMirrorEnabled {
@@ -78,7 +77,7 @@ func TestLoadFromEnvRejectsIncompleteExternalFeatureEnablement(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
 	t.Setenv("CHATWOOT_MIRROR_ENABLED", "true")
 	if _, err := LoadFromEnv(); err == nil {
-		t.Fatal("LoadFromEnv accepted Chatwoot mirror without webhook and API tokens")
+		t.Fatal("LoadFromEnv accepted Chatwoot mirror without Chatwoot API token")
 	}
 	t.Setenv("CHATWOOT_MIRROR_ENABLED", "false")
 	t.Setenv("CHATWOOT_AUTOREPLY_ENABLED", "true")
