@@ -33,8 +33,9 @@ func TestConversationLabelsAndPrivateVisibilityAgainstPostgres(t *testing.T) {
 	conversationID := uuid.NewString()
 	referenceID := uuid.NewString()
 	messageID := uuid.NewString()
+	slug := "labels-runtime-" + businessID
 	_, _ = pool.Exec(ctx, `DELETE FROM businesses WHERE id=$1::uuid`, businessID)
-	if _, err := pool.Exec(ctx, `INSERT INTO businesses (id,name,slug,status,vertical_type,timezone,default_currency,locale,created_at,updated_at) VALUES ($1::uuid,'Labels Runtime','labels-runtime','active','retail','Asia/Aden','YER','ar-YE',now(),now())`, businessID); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO businesses (id,name,slug,status,vertical_type,timezone,default_currency,locale,created_at,updated_at) VALUES ($1::uuid,'Labels Runtime',$2,'active','retail','Asia/Aden','YER','ar-YE',now(),now())`, businessID, slug); err != nil {
 		t.Fatalf("business: %v", err)
 	}
 	defer pool.Exec(context.Background(), `DELETE FROM businesses WHERE id=$1::uuid`, businessID)

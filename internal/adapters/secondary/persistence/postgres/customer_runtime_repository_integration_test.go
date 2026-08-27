@@ -32,11 +32,13 @@ func TestCustomerRuntimeRepositoryAgainstPostgres(t *testing.T) {
 	firstID := uuid.NewString()
 	targetID := uuid.NewString()
 	otherID := uuid.NewString()
+	slugA := "customer-runtime-a-" + businessA
+	slugB := "customer-runtime-b-" + businessB
 	pool := adapter.Pool()
 	for _, id := range []string{businessA, businessB} {
 		_, _ = pool.Exec(ctx, `DELETE FROM businesses WHERE id = $1::uuid`, id)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO businesses (id,name,slug,status,vertical_type,timezone,default_currency,locale,created_at,updated_at) VALUES ($1::uuid,'Customer Runtime A','customer-runtime-a','active','retail','Asia/Aden','YER','ar-YE',now(),now()),($2::uuid,'Customer Runtime B','customer-runtime-b','active','retail','Asia/Aden','YER','ar-YE',now(),now())`, businessA, businessB); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO businesses (id,name,slug,status,vertical_type,timezone,default_currency,locale,created_at,updated_at) VALUES ($1::uuid,'Customer Runtime A',$3,'active','retail','Asia/Aden','YER','ar-YE',now(),now()),($2::uuid,'Customer Runtime B',$4,'active','retail','Asia/Aden','YER','ar-YE',now(),now())`, businessA, businessB, slugA, slugB); err != nil {
 		t.Fatalf("insert businesses: %v", err)
 	}
 	defer pool.Exec(context.Background(), `DELETE FROM businesses WHERE id IN ($1::uuid,$2::uuid)`, businessA, businessB)

@@ -33,10 +33,12 @@ func TestConversationRuntimeRepositoryAgainstPostgres(t *testing.T) {
 	customerA := uuid.NewString()
 	conversationA := uuid.NewString()
 	conversationB := uuid.NewString()
+	slugA := "conversation-a-" + businessA
+	slugB := "conversation-b-" + businessB
 	for _, id := range []string{businessA, businessB} {
 		_, _ = pool.Exec(ctx, `DELETE FROM businesses WHERE id=$1::uuid`, id)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO businesses (id,name,slug,status,vertical_type,timezone,default_currency,locale,created_at,updated_at) VALUES ($1::uuid,'Conversation A','conversation-a','active','retail','Asia/Aden','YER','ar-YE',now(),now()),($2::uuid,'Conversation B','conversation-b','active','retail','Asia/Aden','YER','ar-YE',now(),now())`, businessA, businessB); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO businesses (id,name,slug,status,vertical_type,timezone,default_currency,locale,created_at,updated_at) VALUES ($1::uuid,'Conversation A',$3,'active','retail','Asia/Aden','YER','ar-YE',now(),now()),($2::uuid,'Conversation B',$4,'active','retail','Asia/Aden','YER','ar-YE',now(),now())`, businessA, businessB, slugA, slugB); err != nil {
 		t.Fatalf("businesses: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO customers (id,business_id,profile,contact_points,status,created_at,updated_at) VALUES ($1::uuid,$2::uuid,'{}','[]','active',now(),now())`, customerA, businessA); err != nil {

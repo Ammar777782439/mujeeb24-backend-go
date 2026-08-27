@@ -30,10 +30,12 @@ func TestChannelConnectionRuntimeAgainstPostgres(t *testing.T) {
 	businessA := uuid.NewString()
 	businessB := uuid.NewString()
 	connectionID := uuid.NewString()
+	slugA := "channel-a-" + businessA
+	slugB := "channel-b-" + businessB
 	for _, id := range []string{businessA, businessB} {
 		_, _ = pool.Exec(ctx, `DELETE FROM businesses WHERE id=$1::uuid`, id)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO businesses (id,name,slug,status,vertical_type,timezone,default_currency,locale,created_at,updated_at) VALUES ($1::uuid,'Channel A','channel-a','active','retail','Asia/Aden','YER','ar-YE',now(),now()),($2::uuid,'Channel B','channel-b','active','retail','Asia/Aden','YER','ar-YE',now(),now())`, businessA, businessB); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO businesses (id,name,slug,status,vertical_type,timezone,default_currency,locale,created_at,updated_at) VALUES ($1::uuid,'Channel A',$3,'active','retail','Asia/Aden','YER','ar-YE',now(),now()),($2::uuid,'Channel B',$4,'active','retail','Asia/Aden','YER','ar-YE',now(),now())`, businessA, businessB, slugA, slugB); err != nil {
 		t.Fatalf("businesses: %v", err)
 	}
 	defer pool.Exec(context.Background(), `DELETE FROM businesses WHERE id IN ($1::uuid,$2::uuid)`, businessA, businessB)
