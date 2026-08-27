@@ -8,6 +8,7 @@ import (
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/database"
+	"github.com/google/uuid"
 )
 
 func TestChannelConnectionRuntimeAgainstPostgres(t *testing.T) {
@@ -26,9 +27,9 @@ func TestChannelConnectionRuntimeAgainstPostgres(t *testing.T) {
 	}
 	defer adapter.Close()
 	pool := adapter.Pool()
-	const businessA = "00000000-0000-0000-0000-000000000160"
-	const businessB = "00000000-0000-0000-0000-000000000161"
-	const connectionID = "00000000-0000-0000-0000-000000000162"
+	businessA := uuid.NewString()
+	businessB := uuid.NewString()
+	connectionID := uuid.NewString()
 	for _, id := range []string{businessA, businessB} {
 		_, _ = pool.Exec(ctx, `DELETE FROM businesses WHERE id=$1::uuid`, id)
 	}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/database"
+	"github.com/google/uuid"
 )
 
 func TestCustomerRuntimeRepositoryAgainstPostgres(t *testing.T) {
@@ -26,11 +27,11 @@ func TestCustomerRuntimeRepositoryAgainstPostgres(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 	defer adapter.Close()
-	const businessA = "00000000-0000-0000-0000-000000000130"
-	const businessB = "00000000-0000-0000-0000-000000000131"
-	const firstID = "00000000-0000-0000-0000-000000000132"
-	const targetID = "00000000-0000-0000-0000-000000000133"
-	const otherID = "00000000-0000-0000-0000-000000000134"
+	businessA := uuid.NewString()
+	businessB := uuid.NewString()
+	firstID := uuid.NewString()
+	targetID := uuid.NewString()
+	otherID := uuid.NewString()
 	pool := adapter.Pool()
 	for _, id := range []string{businessA, businessB} {
 		_, _ = pool.Exec(ctx, `DELETE FROM businesses WHERE id = $1::uuid`, id)

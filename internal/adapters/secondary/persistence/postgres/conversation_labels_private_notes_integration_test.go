@@ -8,6 +8,7 @@ import (
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/database"
+	"github.com/google/uuid"
 )
 
 func TestConversationLabelsAndPrivateVisibilityAgainstPostgres(t *testing.T) {
@@ -26,12 +27,12 @@ func TestConversationLabelsAndPrivateVisibilityAgainstPostgres(t *testing.T) {
 	}
 	defer adapter.Close()
 	pool := adapter.Pool()
-	const businessID = "00000000-0000-0000-0000-000000000150"
-	const customerID = "00000000-0000-0000-0000-000000000151"
-	const connectionID = "00000000-0000-0000-0000-000000000152"
-	const conversationID = "00000000-0000-0000-0000-000000000153"
-	const referenceID = "00000000-0000-0000-0000-000000000154"
-	const messageID = "00000000-0000-0000-0000-000000000155"
+	businessID := uuid.NewString()
+	customerID := uuid.NewString()
+	connectionID := uuid.NewString()
+	conversationID := uuid.NewString()
+	referenceID := uuid.NewString()
+	messageID := uuid.NewString()
 	_, _ = pool.Exec(ctx, `DELETE FROM businesses WHERE id=$1::uuid`, businessID)
 	if _, err := pool.Exec(ctx, `INSERT INTO businesses (id,name,slug,status,vertical_type,timezone,default_currency,locale,created_at,updated_at) VALUES ($1::uuid,'Labels Runtime','labels-runtime','active','retail','Asia/Aden','YER','ar-YE',now(),now())`, businessID); err != nil {
 		t.Fatalf("business: %v", err)
