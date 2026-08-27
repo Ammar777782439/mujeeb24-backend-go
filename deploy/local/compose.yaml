@@ -104,12 +104,13 @@ services:
       PGDATABASE: ${POSTGRES_DATABASE:?run scripts/init-test-env.ps1 first}
       PGUSER: ${POSTGRES_USERNAME:?run scripts/init-test-env.ps1 first}
     entrypoint: ["sh", "-ec"]
-    command: >-
-      until pg_isready; do sleep 1; done;
-      psql -v ON_ERROR_STOP=1
-      -c 'CREATE EXTENSION IF NOT EXISTS pg_stat_statements;'
-      -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm;'
-      -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+    command:
+      - >-
+        until pg_isready; do sleep 1; done;
+        psql -v ON_ERROR_STOP=1
+        -c 'CREATE EXTENSION IF NOT EXISTS pg_stat_statements;'
+        -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm;'
+        -c 'CREATE EXTENSION IF NOT EXISTS vector;'
     depends_on:
       chatwoot-postgres:
         condition: service_healthy
