@@ -439,7 +439,7 @@ func (c *Client) NormalizeWebhook(ctx context.Context, headers map[string]string
 	if providerMessageID == "" && len(envelope.Data.MIDs) > 0 {
 		providerMessageID = envelope.Data.MIDs[0]
 	}
-	if providerMessageID == "" && envelope.Data.Type == "dm" {
+	if providerMessageID == "" && (envelope.Data.Type == "dm" || envelope.Data.Type == "dm.received") {
 		providerMessageID = envelope.Data.ID
 	}
 	interaction := interactionKind(envelope.Event)

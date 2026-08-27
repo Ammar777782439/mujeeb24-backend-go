@@ -140,7 +140,7 @@ func (s *ChatwootMirrorStore) Resolve(ctx context.Context, businessID, jobID str
 		JOIN customers c ON c.business_id = v.business_id AND c.id = v.customer_id
 		JOIN external_identities e ON e.business_id = c.business_id AND e.customer_id = c.id AND e.connection_id = r.connection_id AND e.link_status = 'linked'
 		JOIN channel_connections cc ON cc.business_id = r.business_id AND cc.id = r.connection_id AND cc.status = 'active'
-		JOIN chatwoot_workspace_bindings b ON b.business_id = j.business_id AND b.route_key = ('business/' || j.business_id::text || '/' || cc.provider_ref || '/' || cc.channel) AND b.active
+		JOIN chatwoot_workspace_bindings b ON b.business_id = j.business_id AND b.route_key = ('cw_' || REPLACE(cc.id::text, '-', '')) AND b.active
 		WHERE j.business_id = $1::uuid AND j.id = $2::uuid AND j.status = 'processing'
 		  AND r.system = 'provider' AND r.mapping_status = 'active' AND r.is_current
 		ORDER BY e.updated_at DESC
