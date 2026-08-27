@@ -47,16 +47,34 @@ func (p ChatwootMirrorProcessor) Process(ctx context.Context, jobID string) erro
 	if err != nil {
 		return p.deadLetter(ctx, job, "chatwoot_contact_outcome_unknown")
 	}
-	conversation, err := p.Workspace.CreateConversation(ctx, ports.WorkspaceConversationDraft{AccountID: delivery.AccountID, InboxID: delivery.InboxID, ContactID: contact.ID, SourceID: "mujeeb:" + delivery.BusinessID + ":" + delivery.ProviderConversationID, Status: "open"})
-	if err != nil {
-		return p.deadLetter(ctx, job, "chatwoot_conversation_outcome_unknown")
+	conversationID, conversationErr := existingChatwootConversationID(delivery.ExistingConversationID)
+	if conversationErr != nil {
+		return p.deadLetter(ctx, job, "chatwoot_mirror_mapping_missing")
 	}
-	message, err := p.Workspace.CreateMessage(ctx, ports.WorkspaceMessageDraft{AccountID: delivery.AccountID, ConversationID: conversation.ID, Text: delivery.Text, MessageType: "incoming"})
+	if conversationID == 0 {
+		conversation, err := p.Workspace.CreateConversation(ctx, ports.WorkspaceConversationDraft{AccountID: delivery.AccountID, InboxID: delivery.InboxID, ContactID: contact.ID, SourceID: "mujeeb:" + delivery.BusinessID + ":" + delivery.ProviderConversationID, Status: "open"})
+		if err != nil {
+			return p.deadLetter(ctx, job, "chatwoot_conversation_outcome_unknown")
+		}
+		conversationID = conversation.ID
+	}
+	message, err := p.Workspace.CreateMessage(ctx, ports.WorkspaceMessageDraft{AccountID: delivery.AccountID, ConversationID: conversationID, Text: delivery.Text, MessageType: "incoming"})
 	if err != nil {
 		return p.deadLetter(ctx, job, "chatwoot_message_outcome_unknown")
 	}
-	_, err = p.Store.MarkCompleted(ctx, ports.ChatwootMirrorCompletion{JobID: job.ID, Owner: leaseOwner(job, p.Owner), Token: leaseToken(job), AccountID: delivery.AccountID, InboxID: delivery.InboxID, ChatwootContactID: strconv.FormatInt(contact.ID, 10), ChatwootConversationID: strconv.FormatInt(conversation.ID, 10), ChatwootMessageID: strconv.FormatInt(message.ID, 10), CompletedAt: p.Now().UTC(), UpdatedAt: p.Now().UTC()})
+	_, err = p.Store.MarkCompleted(ctx, ports.ChatwootMirrorCompletion{JobID: job.ID, Owner: leaseOwner(job, p.Owner), Token: leaseToken(job), AccountID: delivery.AccountID, InboxID: delivery.InboxID, ChatwootContactID: strconv.FormatInt(contact.ID, 10), ChatwootConversationID: strconv.FormatInt(conversationID, 10), ChatwootMessageID: strconv.FormatInt(message.ID, 10), CompletedAt: p.Now().UTC(), UpdatedAt: p.Now().UTC()})
 	return err
+}
+
+func existingChatwootConversationID(raw string) (int64, error) {
+	if raw == "" {
+		return 0, nil
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || value <= 0 {
+		return 0, errors.New("invalid Chatwoot conversation reference")
+	}
+	return value, nil
 }
 
 func (p ChatwootMirrorProcessor) deadLetter(ctx context.Context, job ports.ChatwootMirrorJob, code string) error {

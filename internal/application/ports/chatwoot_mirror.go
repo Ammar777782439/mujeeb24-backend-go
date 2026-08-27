@@ -63,6 +63,7 @@ type ChatwootMirrorDelivery struct {
 	CustomerName            string
 	CustomerIdentifier      string
 	ProviderConversationID  string
+	ExistingConversationID  string
 	Text                    string
 	AccountID               int64
 	InboxID                 int64

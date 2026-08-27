@@ -37,6 +37,37 @@ func TestChatwootMirrorProcessorQuarantinesUnknownWorkspaceOutcome(t *testing.T)
 	}
 }
 
+func TestChatwootMirrorProcessorReusesPersistedConversation(t *testing.T) {
+	delivery := testMirrorDelivery()
+	delivery.ExistingConversationID = "22"
+	store := &mirrorStoreFake{job: ports.ChatwootMirrorJob{ID: "job-reuse", BusinessID: "business-1", CommunicationMessageID: "message-2"}, delivery: delivery}
+	workspace := &workspaceFake{}
+	processor := ChatwootMirrorProcessor{Store: store, Workspace: workspace, Owner: "worker-1"}
+	if err := processor.Process(context.Background(), "job-reuse"); err != nil {
+		t.Fatalf("process: %v", err)
+	}
+	if store.completed.ChatwootConversationID != "22" {
+		t.Fatalf("completion must retain persisted conversation: %#v", store.completed)
+	}
+	if len(workspace.calls) != 2 || workspace.calls[0] != "contact" || workspace.calls[1] != "message" {
+		t.Fatalf("expected contact and message only, got %v", workspace.calls)
+	}
+}
+
+func TestChatwootMirrorProcessorQuarantinesInvalidPersistedConversation(t *testing.T) {
+	delivery := testMirrorDelivery()
+	delivery.ExistingConversationID = "not-a-chatwoot-id"
+	store := &mirrorStoreFake{job: ports.ChatwootMirrorJob{ID: "job-invalid-reference", BusinessID: "business-1", CommunicationMessageID: "message-3"}, delivery: delivery}
+	workspace := &workspaceFake{}
+	processor := ChatwootMirrorProcessor{Store: store, Workspace: workspace, Owner: "worker-1"}
+	if err := processor.Process(context.Background(), "job-invalid-reference"); err != nil {
+		t.Fatalf("process: %v", err)
+	}
+	if store.failure.FailureCode != "chatwoot_mirror_mapping_missing" || len(workspace.calls) != 1 || workspace.calls[0] != "contact" {
+		t.Fatalf("failure=%#v calls=%v", store.failure, workspace.calls)
+	}
+}
+
 func testMirrorDelivery() ports.ChatwootMirrorDelivery {
 	return ports.ChatwootMirrorDelivery{BusinessID: "business-1", JobID: "job-1", CommunicationMessageID: "message-1", CustomerName: "عميل", CustomerIdentifier: "external-user-1", ProviderConversationID: "provider-conversation-1", Text: "مرحبا", AccountID: 9, InboxID: 10}
 }

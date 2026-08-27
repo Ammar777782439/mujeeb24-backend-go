@@ -132,7 +132,7 @@ func (s *ChatwootMirrorStore) Resolve(ctx context.Context, businessID, jobID str
 	err := s.adapter.Pool().QueryRow(ctx, `
 		SELECT j.business_id::text, j.id::text, m.id::text, r.id::text, c.id::text,
 		       COALESCE(NULLIF(c.profile->>'name', ''), 'عميل'), e.external_user_id, r.resource_id,
-		       COALESCE(m.text_content, ''), b.account_id, b.inbox_id
+		       COALESCE(r.chatwoot_conversation_id, ''), COALESCE(m.text_content, ''), b.account_id, b.inbox_id
 		FROM chatwoot_mirror_jobs j
 		JOIN communication_messages m ON m.business_id = j.business_id AND m.id = j.communication_message_id
 		JOIN conversation_references r ON r.business_id = m.business_id AND r.id = m.conversation_reference_id
@@ -147,7 +147,7 @@ func (s *ChatwootMirrorStore) Resolve(ctx context.Context, businessID, jobID str
 		LIMIT 1`, businessID, jobID).Scan(
 		&delivery.BusinessID, &delivery.JobID, &delivery.CommunicationMessageID, &delivery.ConversationReferenceID,
 		&delivery.CustomerID, &delivery.CustomerName, &delivery.CustomerIdentifier, &delivery.ProviderConversationID,
-		&delivery.Text, &accountID, &inboxID,
+		&delivery.ExistingConversationID, &delivery.Text, &accountID, &inboxID,
 	)
 	if err != nil {
 		return ports.ChatwootMirrorDelivery{}, classifyRepositoryGetError("chatwoot_mirror.resolve", err)
