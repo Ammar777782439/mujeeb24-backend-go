@@ -1,6 +1,7 @@
 package chatwoot
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -289,12 +290,10 @@ func (c *Client) CreateContact(ctx context.Context, draft ports.WorkspaceContact
 	var response contactResponse
 	_, err = c.doJSON(ctx, http.MethodPost, "/api/v1/accounts/"+strconv.FormatInt(draft.AccountID, 10)+"/contacts", request, &response)
 	if err != nil {
-		// If 422 (identifier already taken), fall back to searching for the existing contact
-		var chatwootErr *Error
-		if errors.As(err, &chatwootErr) && chatwootErr.StatusCode == http.StatusUnprocessableEntity {
-			return c.findContactByIdentifier(ctx, draft.AccountID, draft.Identifier)
+		if !isDuplicateContactIdentifier(err) {
+			return ports.WorkspaceContact{}, err
 		}
-		return ports.WorkspaceContact{}, err
+		return c.findContactByIdentifier(ctx, draft.AccountID, draft.InboxID, draft.Identifier)
 	}
 	if response.ID == 0 {
 		response.ID = response.contactID()
@@ -305,25 +304,44 @@ func (c *Client) CreateContact(ctx context.Context, draft ports.WorkspaceContact
 	return ports.WorkspaceContact{ID: response.ID, AccountID: draft.AccountID, InboxID: draft.InboxID, Identifier: draft.Identifier}, nil
 }
 
-func (c *Client) findContactByIdentifier(ctx context.Context, accountID int64, identifier string) (ports.WorkspaceContact, error) {
-	var result struct {
-		Payload []struct {
-			ID         int64  `json:"id"`
-			Identifier string `json:"identifier"`
-		} `json:"payload"`
+func isDuplicateContactIdentifier(err error) bool {
+	var providerErr *Error
+	if !errors.As(err, &providerErr) || providerErr.StatusCode != http.StatusUnprocessableEntity {
+		return false
 	}
-	_, err := c.doJSON(ctx, http.MethodGet, "/api/v1/accounts/"+strconv.FormatInt(accountID, 10)+"/contacts/search?q="+url.QueryEscape(identifier)+"&include_contacts=true", nil, &result)
-	if err != nil {
-		return ports.WorkspaceContact{}, fmt.Errorf("%w: contact search failed", ErrInvalidResponse)
-	}
-	for _, contact := range result.Payload {
-		if contact.Identifier == identifier && contact.ID > 0 {
-			return ports.WorkspaceContact{ID: contact.ID, AccountID: accountID, Identifier: identifier}, nil
-		}
-	}
-	return ports.WorkspaceContact{}, fmt.Errorf("%w: contact not found by identifier", ErrInvalidResponse)
+	message := strings.ToLower(providerErr.Code)
+	return strings.Contains(message, "identifier") && strings.Contains(message, "taken")
 }
 
+func (c *Client) findContactByIdentifier(ctx context.Context, accountID, inboxID int64, identifier string) (ports.WorkspaceContact, error) {
+	var response struct {
+		Payload []struct {
+			ID             int64  `json:"id"`
+			Identifier     string `json:"identifier"`
+			ContactInboxes []struct {
+				Inbox struct {
+					ID int64 `json:"id"`
+				} `json:"inbox"`
+			} `json:"contact_inboxes"`
+		} `json:"payload"`
+	}
+	path := "/api/v1/accounts/" + strconv.FormatInt(accountID, 10) + "/contacts/search?q=" + url.QueryEscape(identifier)
+	if _, err := c.doJSON(ctx, http.MethodGet, path, nil, &response); err != nil {
+		return ports.WorkspaceContact{}, err
+	}
+	for _, candidate := range response.Payload {
+		if candidate.ID <= 0 || candidate.Identifier != identifier {
+			continue
+		}
+		for _, contactInbox := range candidate.ContactInboxes {
+			if contactInbox.Inbox.ID == inboxID {
+				return ports.WorkspaceContact{ID: candidate.ID, AccountID: accountID, InboxID: inboxID, Identifier: identifier}, nil
+			}
+		}
+		return ports.WorkspaceContact{}, fmt.Errorf("%w: existing contact identifier is not associated with the target inbox", ErrInvalidResponse)
+	}
+	return ports.WorkspaceContact{}, fmt.Errorf("%w: duplicate contact identifier was not found by search", ErrInvalidResponse)
+}
 
 type contactResponse struct {
 	ID      int64           `json:"id"`
@@ -461,25 +479,23 @@ func (c *Client) doJSON(ctx context.Context, method, path string, request any, r
 	if c == nil || c.httpClient == nil || c.apiToken == "" {
 		return "", ErrNotConfigured
 	}
-	var bodyReader strings.Reader
-	var req *http.Request
-	var err error
+	var body io.Reader
 	if request != nil {
-		encoded, encErr := json.Marshal(request)
-		if encErr != nil {
+		encoded, err := json.Marshal(request)
+		if err != nil {
 			return "", fmt.Errorf("%w: encode request", ErrInvalidRequest)
 		}
-		bodyReader = *strings.NewReader(string(encoded))
-		req, err = http.NewRequestWithContext(ctx, method, c.baseURL+path, &bodyReader)
-	} else {
-		req, err = http.NewRequestWithContext(ctx, method, c.baseURL+path, nil)
+		body = bytes.NewReader(encoded)
 	}
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 	if err != nil {
 		return "", fmt.Errorf("%w: create request", ErrInvalidRequest)
 	}
 	req.Header.Set("api_access_token", c.apiToken)
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Content-Type", "application/json")
+	if request != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	res, err := c.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrTransport, err)

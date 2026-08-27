@@ -71,6 +71,53 @@ func TestClientDecodesRealContactPayloadShape(t *testing.T) {
 	}
 }
 
+func TestClientReusesExistingContactOnlyForDuplicateIdentifierInSameInbox(t *testing.T) {
+	var createCalls, searchCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/accounts/12/contacts":
+			createCalls++
+			writer.Header().Set("Content-Type", "application/json")
+			writer.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = writer.Write([]byte(`{"message":"Identifier has already been taken"}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/accounts/12/contacts/search":
+			searchCalls++
+			if request.URL.Query().Get("q") != "social-user-1" {
+				t.Errorf("search query=%q", request.URL.Query().Get("q"))
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"payload":[{"id":56,"identifier":"social-user-1","contact_inboxes":[{"inbox":{"id":34}}]}]}`))
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+	client := NewClient(Config{BaseURL: server.URL, APIToken: "chatwoot-token", HTTPClient: server.Client()})
+	contact, err := client.CreateContact(httptest.NewRequest(http.MethodPost, "/", nil).Context(), ports.WorkspaceContactDraft{AccountID: 12, InboxID: 34, Name: "Ali", Identifier: "social-user-1"})
+	if err != nil || contact.ID != 56 || createCalls != 1 || searchCalls != 1 {
+		t.Fatalf("contact=%#v err=%v create=%d search=%d", contact, err, createCalls, searchCalls)
+	}
+}
+
+func TestClientDoesNotTreatUnrelated422AsDuplicateContact(t *testing.T) {
+	var searchCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodGet {
+			searchCalls++
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = writer.Write([]byte(`{"message":"Phone number is invalid"}`))
+	}))
+	defer server.Close()
+	client := NewClient(Config{BaseURL: server.URL, APIToken: "chatwoot-token", HTTPClient: server.Client()})
+	_, err := client.CreateContact(httptest.NewRequest(http.MethodPost, "/", nil).Context(), ports.WorkspaceContactDraft{AccountID: 12, InboxID: 34, Name: "Ali", Identifier: "social-user-1"})
+	providerErr, ok := err.(*Error)
+	if !ok || providerErr.StatusCode != http.StatusUnprocessableEntity || searchCalls != 0 {
+		t.Fatalf("err=%#v search=%d", err, searchCalls)
+	}
+}
+
 func TestClientDecodesRealMessageResponseShape(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/api/v1/accounts/12/conversations/78/messages" {

@@ -22,15 +22,17 @@ type PlatformConfig struct {
 	BaseURL       string
 	PlatformToken string
 	APIToken      string
+	APIUserID     int64
 	HTTPClient    *http.Client
 	HTTPTimeout   time.Duration
 }
 
 type PlatformClient struct {
-	baseURL  string
-	token    string
-	apiToken string
-	client   *http.Client
+	baseURL   string
+	token     string
+	apiToken  string
+	apiUserID int64
+	client    *http.Client
 }
 
 func NewPlatformClient(cfg PlatformConfig) *PlatformClient {
@@ -43,7 +45,7 @@ func NewPlatformClient(cfg PlatformConfig) *PlatformClient {
 		}
 		client = &http.Client{Timeout: timeout}
 	}
-	return &PlatformClient{baseURL: baseURL, token: strings.TrimSpace(cfg.PlatformToken), apiToken: strings.TrimSpace(cfg.APIToken), client: client}
+	return &PlatformClient{baseURL: baseURL, token: strings.TrimSpace(cfg.PlatformToken), apiToken: strings.TrimSpace(cfg.APIToken), apiUserID: cfg.APIUserID, client: client}
 }
 
 func (c *PlatformClient) EnsureAccount(ctx context.Context, name, locale string) (ports.WorkspaceAccount, error) {
@@ -67,12 +69,15 @@ func (c *PlatformClient) EnsureAccount(ctx context.Context, name, locale string)
 	if response.ID <= 0 {
 		return ports.WorkspaceAccount{}, fmt.Errorf("%w: account id missing", ErrInvalidResponse)
 	}
-
-	// Add User ID 1 (SuperAdmin) to this account so we can create inboxes using their token
-	_, _ = c.do(ctx, http.MethodPost, "/platform/api/v1/accounts/"+strconv.FormatInt(response.ID, 10)+"/account_users", map[string]any{
-		"user_id": 1,
+	if c.apiUserID <= 0 {
+		return ports.WorkspaceAccount{}, fmt.Errorf("%w: application API user id is required to provision an inbox", ErrPlatformNotConfigured)
+	}
+	if _, err := c.do(ctx, http.MethodPost, "/platform/api/v1/accounts/"+strconv.FormatInt(response.ID, 10)+"/account_users", map[string]any{
+		"user_id": c.apiUserID,
 		"role":    "administrator",
-	}, nil)
+	}, nil); err != nil {
+		return ports.WorkspaceAccount{}, fmt.Errorf("%w: attach application API user to account", err)
+	}
 
 	return ports.WorkspaceAccount{ID: strconv.FormatInt(response.ID, 10)}, nil
 }
@@ -152,7 +157,7 @@ func (c *PlatformClient) do(ctx context.Context, method, path string, body any, 
 }
 
 func (c *PlatformClient) doAsUser(ctx context.Context, method, path string, body any, response any) (string, error) {
-	if err := c.validate(); err != nil {
+	if err := c.validateUserAPI(); err != nil {
 		return "", err
 	}
 	encoded, err := json.Marshal(body)
@@ -182,6 +187,16 @@ func (c *PlatformClient) doAsUser(ctx context.Context, method, path string, body
 		}
 	}
 	return requestID, nil
+}
+
+func (c *PlatformClient) validateUserAPI() error {
+	if err := c.validate(); err != nil {
+		return err
+	}
+	if c.apiToken == "" || c.apiUserID <= 0 {
+		return ErrPlatformNotConfigured
+	}
+	return nil
 }
 
 var _ ports.WorkspaceProvisioner = (*PlatformClient)(nil)

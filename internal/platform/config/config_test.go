@@ -120,6 +120,10 @@ func TestLoadFromEnvRequiresHTTPSProvisioningURLsInProduction(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("CHATWOOT_PROVISIONING_ENABLED", "true")
+	t.Setenv("SOCIALAPI_API_KEY", "test-socialapi-key")
+	t.Setenv("CHATWOOT_API_TOKEN", "test-chatwoot-api-token")
+	t.Setenv("CHATWOOT_PLATFORM_API_TOKEN", "test-chatwoot-platform-token")
+	t.Setenv("CHATWOOT_PROVISIONING_USER_ID", "7")
 	t.Setenv("CHANNEL_PROVISIONING_REDIRECT_URI", "http://example.test/oauth/socialapi/callback")
 	t.Setenv("CHANNEL_PROVISIONING_WEBHOOK_URL", "https://example.test/webhooks/chatwoot")
 	if _, err := LoadFromEnv(); err == nil {
@@ -128,5 +132,15 @@ func TestLoadFromEnvRequiresHTTPSProvisioningURLsInProduction(t *testing.T) {
 	t.Setenv("CHANNEL_PROVISIONING_REDIRECT_URI", "https://example.test/oauth/socialapi/callback")
 	if _, err := LoadFromEnv(); err != nil {
 		t.Fatalf("LoadFromEnv rejected HTTPS provisioning URLs: %v", err)
+	}
+}
+
+func TestLoadFromEnvRejectsIncompleteChatwootProvisioningConfiguration(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
+	t.Setenv("CHATWOOT_PROVISIONING_ENABLED", "true")
+	t.Setenv("CHANNEL_PROVISIONING_REDIRECT_URI", "https://example.test/oauth/socialapi/callback")
+	t.Setenv("CHANNEL_PROVISIONING_WEBHOOK_URL", "https://example.test/api/v1/webhooks/chatwoot")
+	if _, err := LoadFromEnv(); err == nil {
+		t.Fatal("LoadFromEnv accepted incomplete Chatwoot provisioning configuration")
 	}
 }

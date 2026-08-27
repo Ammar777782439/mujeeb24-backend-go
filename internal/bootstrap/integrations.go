@@ -70,7 +70,7 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 		adapters.Chatwoot = client
 		adapters.ChatwootWebhook = client
 		if cfg.ChatwootPlatformAPIToken != "" {
-			adapters.ChannelProvisioningWorkspace = chatwoot.NewPlatformClient(chatwoot.PlatformConfig{BaseURL: cfg.ChatwootBaseURL, PlatformToken: cfg.ChatwootPlatformAPIToken, APIToken: cfg.ChatwootAPIToken, HTTPTimeout: cfg.ChatwootHTTPTimeout})
+			adapters.ChannelProvisioningWorkspace = chatwoot.NewPlatformClient(chatwoot.PlatformConfig{BaseURL: cfg.ChatwootBaseURL, PlatformToken: cfg.ChatwootPlatformAPIToken, APIToken: cfg.ChatwootAPIToken, APIUserID: int64(cfg.ChatwootProvisioningUserID), HTTPTimeout: cfg.ChatwootHTTPTimeout})
 		}
 	}
 	if cfg.ChatwootProvisioningEnabled {

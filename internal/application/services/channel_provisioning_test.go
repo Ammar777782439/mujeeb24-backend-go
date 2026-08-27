@@ -82,9 +82,9 @@ type provisioningSocial struct {
 	selection bool
 }
 
-func (s *provisioningSocial) BeginAuthorization(context.Context, ports.SocialAuthorizationRequest) (ports.SocialAuthorization, error) {
+func (s *provisioningSocial) BeginAuthorization(_ context.Context, request ports.SocialAuthorizationRequest) (ports.SocialAuthorization, error) {
 	s.begin++
-	return ports.SocialAuthorization{AuthorizationURL: "https://social.example/authorize", State: "oauth-state"}, nil
+	return ports.SocialAuthorization{AuthorizationURL: "https://social.example/authorize", State: request.State}, nil
 }
 func (s *provisioningSocial) ResolveAuthorization(_ context.Context, callback ports.SocialAuthorizationCallback) (ports.SocialAuthorization, error) {
 	s.resolve++
@@ -153,7 +153,10 @@ func TestChannelProvisioningStartIsIdempotentAndCompleteConnects(t *testing.T) {
 	if first.ID != second.ID || social.begin != 1 || first.Status != ports.ProvisioningPendingAuthorization || first.AuthorizationURL == "" {
 		t.Fatalf("idempotency/start mismatch: first=%#v second=%#v begins=%d", first, second, social.begin)
 	}
-	completed, err := service.Complete(context.Background(), "business-1", first.ID, ports.SocialAuthorizationCallback{State: "oauth-state", Status: "success", Platform: "facebook", AccountID: "account-1"})
+	if first.OAuthState != first.ID {
+		t.Fatalf("oauth state must be the generated provisioning session id: %#v", first)
+	}
+	completed, err := service.Complete(context.Background(), "business-1", first.ID, ports.SocialAuthorizationCallback{State: first.OAuthState, Status: "success", Platform: "facebook", AccountID: "account-1"})
 	if err != nil {
 		t.Fatalf("complete: %v", err)
 	}
@@ -188,7 +191,7 @@ func TestChannelProvisioningRecordsPartialFailureWithoutActivation(t *testing.T)
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
-	failed, err := service.Complete(context.Background(), "business-1", started.ID, ports.SocialAuthorizationCallback{State: "oauth-state", Status: "success", Platform: "whatsapp", AccountID: "account-1"})
+	failed, err := service.Complete(context.Background(), "business-1", started.ID, ports.SocialAuthorizationCallback{State: started.OAuthState, Status: "success", Platform: "whatsapp", AccountID: "account-1"})
 	if err == nil || failed.Status != ports.ProvisioningFailed || failed.FailureCode != "chatwoot_inbox_provision_failed" || connections.active != 0 {
 		t.Fatalf("partial failure mismatch: session=%#v err=%v connections=%#v", failed, err, connections)
 	}

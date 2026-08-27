@@ -1,0 +1,45 @@
+name: Quality gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Go, contract, secrets, and PostgreSQL integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: mujeeb24_test
+          POSTGRES_USER: mujeeb_test
+          POSTGRES_PASSWORD: local-ci-only-password
+        options: >-
+          --health-cmd "pg_isready -U mujeeb_test -d mujeeb24_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+    env:
+      GOTOOLCHAIN: local
+      RUN_INTEGRATION: "1"
+      POSTGRES_TEST_DSN: postgresql://mujeeb_test:local-ci-only-password@localhost:5432/mujeeb24_test?sslmode=disable
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+          cache: true
+      - name: Verify repository contract
+        run: bash scripts/verify-repository.sh

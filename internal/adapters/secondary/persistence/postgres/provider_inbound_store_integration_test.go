@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -103,7 +104,8 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 	if !second.Duplicate || second.CustomerID != first.CustomerID || second.ConversationID != first.ConversationID || second.ConversationReferenceID != first.ConversationReferenceID || second.CommunicationMessageID != first.CommunicationMessageID || second.InboundEventID != eventID {
 		t.Fatalf("duplicate was not idempotent: first=%#v second=%#v", first, second)
 	}
-	if _, err := NewChatwootWorkspaceBindingRepository(adapter).EnsureBinding(ctx, businessID, "business/"+businessID+"/socialapi/whatsapp", "901", "902", "whatsapp"); err != nil {
+	routeKey := "cw_" + strings.ReplaceAll(connectionID, "-", "")
+	if _, err := NewChatwootWorkspaceBindingRepository(adapter).EnsureBinding(ctx, businessID, routeKey, "901", "902", "whatsapp"); err != nil {
 		t.Fatalf("ensure workspace binding: %v", err)
 	}
 	mirrorStore := NewChatwootMirrorStore(adapter)

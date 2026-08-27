@@ -8287,12 +8287,6 @@ paths:
     get:
       operationId: listAccessibleBusinesses
       parameters:
-        - in: path
-          name: business_id
-          required: true
-          schema:
-            format: uuid
-            type: string
         - explode: false
           in: query
           name: limit

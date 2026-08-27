@@ -40,7 +40,7 @@ func TestClientNormalizesAndVerifiesWebhookV2(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NormalizeWebhook: %v", err)
 	}
-	if len(events) != 1 || events[0].ProviderEventID != "sapi_dm_1" || events[0].EventType != "interaction_received" || events[0].Direction != channel.DirectionInbound || events[0].Origin != channel.OriginCustomer || events[0].InteractionKind != channel.InteractionDM || events[0].Text != "مرحبا" || events[0].ProviderConversationID != "conv_1" {
+	if len(events) != 1 || events[0].ProviderEventID != "sapi_dm_1" || events[0].ProviderMessageID != "sapi_dm_1" || events[0].EventType != "interaction_received" || events[0].Direction != channel.DirectionInbound || events[0].Origin != channel.OriginCustomer || events[0].InteractionKind != channel.InteractionDM || events[0].Text != "مرحبا" || events[0].ProviderConversationID != "conv_1" {
 		t.Fatalf("unexpected normalized event: %#v", events)
 	}
 	if err := client.VerifyWebhook(ctx, headers, body); err != nil {

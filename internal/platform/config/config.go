@@ -37,6 +37,7 @@ type ProcessConfig struct {
 	ChatwootBaseURL                string
 	ChatwootAPIToken               string
 	ChatwootPlatformAPIToken       string
+	ChatwootProvisioningUserID     int
 	ChatwootWebhookSecret          string
 	ChatwootHTTPTimeout            time.Duration
 	ChatwootProvisioningEnabled    bool
@@ -82,6 +83,7 @@ func LoadFromEnv() (ProcessConfig, error) {
 		ChatwootBaseURL:                envOr("CHATWOOT_BASE_URL", "http://localhost:3000"),
 		ChatwootAPIToken:               strings.TrimSpace(os.Getenv("CHATWOOT_API_TOKEN")),
 		ChatwootPlatformAPIToken:       strings.TrimSpace(os.Getenv("CHATWOOT_PLATFORM_API_TOKEN")),
+		ChatwootProvisioningUserID:     0,
 		ChatwootWebhookSecret:          strings.TrimSpace(os.Getenv("CHATWOOT_WEBHOOK_SECRET")),
 		ChatwootHTTPTimeout:            10 * time.Second,
 		ChatwootProvisioningEnabled:    false,
@@ -147,6 +149,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.ChatwootProvisioningEnabled, err = boolEnv("CHATWOOT_PROVISIONING_ENABLED", cfg.ChatwootProvisioningEnabled); err != nil {
 		return ProcessConfig{}, err
 	}
+	if cfg.ChatwootProvisioningUserID, err = intEnv("CHATWOOT_PROVISIONING_USER_ID", cfg.ChatwootProvisioningUserID); err != nil {
+		return ProcessConfig{}, err
+	}
 	if cfg.ChatwootAutoReplyEnabled, err = boolEnv("CHATWOOT_AUTOREPLY_ENABLED", cfg.ChatwootAutoReplyEnabled); err != nil {
 		return ProcessConfig{}, err
 	}
@@ -188,9 +193,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.ChatwootAutoReplyEnabled && (cfg.ChatwootWebhookSecret == "" || cfg.SocialAPIAPIKey == "" || !cfg.LLMEnabled) {
 		return ProcessConfig{}, errors.New("CHATWOOT_AUTOREPLY_ENABLED requires CHATWOOT_WEBHOOK_SECRET, SOCIALAPI_API_KEY, and LLM_ENABLED")
 	}
-	if strings.EqualFold(cfg.Environment, "production") && cfg.ChatwootProvisioningEnabled {
-		if !isHTTPSURL(cfg.ChannelProvisioningRedirectURI) || !isHTTPSURL(cfg.ChannelProvisioningWebhookURL) {
-			return ProcessConfig{}, errors.New("production channel provisioning requires HTTPS redirect and webhook URLs")
+	if cfg.ChatwootProvisioningEnabled {
+		if cfg.SocialAPIAPIKey == "" || cfg.ChatwootAPIToken == "" || cfg.ChatwootPlatformAPIToken == "" || cfg.ChatwootProvisioningUserID <= 0 || !isHTTPSURL(cfg.ChannelProvisioningRedirectURI) || !isHTTPSURL(cfg.ChannelProvisioningWebhookURL) {
+			return ProcessConfig{}, errors.New("CHATWOOT_PROVISIONING_ENABLED requires SOCIALAPI_API_KEY, CHATWOOT_API_TOKEN, CHATWOOT_PLATFORM_API_TOKEN, positive CHATWOOT_PROVISIONING_USER_ID, and HTTPS redirect/webhook URLs")
 		}
 	}
 	return cfg, nil
