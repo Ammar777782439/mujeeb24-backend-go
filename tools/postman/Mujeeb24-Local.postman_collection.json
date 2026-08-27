@@ -137,12 +137,20 @@
       ]
     },
     {
-      "name": "06 — Feature-gated external runtime (not live)",
+      "name": "06 — Feature-gated external runtime",
       "item": [
         {
           "name": "Begin channel provisioning — disabled configuration returns 422, not 501",
           "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}, {"key": "Content-Type", "value": "application/json"}, {"key": "Idempotency-Key", "value": "postman-provisioning-disabled-001"}], "body": {"mode": "raw", "raw": "{\n  \"provider\": \"socialapi\",\n  \"channel\": \"whatsapp\",\n  \"display_name\": \"Postman local business\"\n}"}, "url": "{{base_url}}/api/v1/businesses/{{business_id}}/channel-connections"},
           "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('422 when provisioning is not configured, never 501', function () { pm.response.to.have.status(422); });"]}}]
+        },
+        {
+          "name": "Begin channel provisioning — enabled configuration starts SocialAPI OAuth",
+          "event": [
+            {"listen": "prerequest", "script": {"type": "text/javascript", "exec": ["pm.collectionVariables.set('provisioning_idempotency_key', 'postman-provisioning-' + Date.now());"]}},
+            {"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('202 accepted provisioning session', function () { pm.response.to.have.status(202); });", "pm.test('returns OAuth authorization URL without provider secrets', function () { const body = pm.response.json(); pm.expect(body.data.status).to.eql('pending_authorization'); pm.expect(body.data.authorization_url).to.be.a('string').and.not.empty; pm.collectionVariables.set('provisioning_id', body.data.provisioning_id); pm.collectionVariables.set('provisioning_authorization_url', body.data.authorization_url); });"]}}
+          ],
+          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}, {"key": "Content-Type", "value": "application/json"}, {"key": "Idempotency-Key", "value": "{{provisioning_idempotency_key}}"}], "body": {"mode": "raw", "raw": "{\n  \"provider\": \"socialapi\",\n  \"channel\": \"instagram\",\n  \"display_name\": \"Postman merchant channel\"\n}"}, "url": "{{base_url}}/api/v1/businesses/{{business_id}}/channel-connections"}
         }
       ]
     }

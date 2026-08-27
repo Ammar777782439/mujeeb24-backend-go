@@ -55,3 +55,5 @@
 - [ ] إكمال Merchant Channel Provisioning: إنشاء/ربط SocialAPI account وChannelConnection وChatwoot workspace/inbox ضمن business التاجر، ثم اختبار العقد محليًا قبل أي عملية خارجية.
 - [x] توليد Chatwoot callback route key خاص بكل قناة تاجر داخل provisioning، ومنع استخدام عنوان callback ثابت لا يطابق binding متعدد المستأجرين.
 - [ ] تثبيت ودفع تصحيح Merchant Channel Provisioning وcallback routing متعدد التجار إلى GitHub.
+- [x] إضافة وتوثيق طلب Postman لبدء Merchant Channel Provisioning عبر API قبل وجود Frontend.
+- [ ] تثبيت ودفع طلب Postman الخاص بـMerchant Channel Provisioning إلى GitHub.
