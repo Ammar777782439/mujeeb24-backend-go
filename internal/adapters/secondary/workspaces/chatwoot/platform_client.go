@@ -67,6 +67,13 @@ func (c *PlatformClient) EnsureAccount(ctx context.Context, name, locale string)
 	if response.ID <= 0 {
 		return ports.WorkspaceAccount{}, fmt.Errorf("%w: account id missing", ErrInvalidResponse)
 	}
+
+	// Add User ID 1 (SuperAdmin) to this account so we can create inboxes using their token
+	_, _ = c.do(ctx, http.MethodPost, "/platform/api/v1/accounts/"+strconv.FormatInt(response.ID, 10)+"/account_users", map[string]any{
+		"user_id": 1,
+		"role":    "administrator",
+	}, nil)
+
 	return ports.WorkspaceAccount{ID: strconv.FormatInt(response.ID, 10)}, nil
 }
 
