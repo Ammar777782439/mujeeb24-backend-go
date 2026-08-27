@@ -1,0 +1,10 @@
+# لا يكشف هذا الـgateway إلا مسار SocialAPI webhook إلى Mujeeb المحلي.
+# لا تضف /health أو Dashboard أو Chatwoot هنا بلا قرار أمني مستقل.
+:8080 {
+	@socialapi_webhooks path /api/v1/webhooks/socialapi/*
+	handle @socialapi_webhooks {
+		reverse_proxy host.docker.internal:3001
+	}
+
+	respond "not found" 404
+}

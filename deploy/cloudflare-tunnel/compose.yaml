@@ -1,0 +1,25 @@
+services:
+  webhook-gateway:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+
+  quick-tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: ["quick"]
+    depends_on:
+      - webhook-gateway
+    command: tunnel --no-autoupdate --url http://webhook-gateway:8080
+
+  named-tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: ["named"]
+    depends_on:
+      - webhook-gateway
+    environment:
+      CLOUDFLARE_TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-MISSING_TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-MISSING_TUNNEL_TOKEN}
+    restart: unless-stopped

@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 deploy/chatwoot/.env
+deploy/cloudflare-tunnel/tunnel.env
 *.local
 *.secret
 *.pem
