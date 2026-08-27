@@ -99,6 +99,10 @@ go list ./...
 
 نجاح الاختبارات الحالية يثبت قابلية Foundation للبناء فقط، ولا يثبت تكامل SocialAPI.ai أو Chatwoot أو القنوات الحقيقية.
 
+## تشغيل Docker موحّد للاختبار
+
+لتشغيل Mujeeb API وWorker مع PostgreSQL الخاصة بهما، إلى جانب Chatwoot CE وPostgreSQL وRedis الخاصة بها، من أمر Docker Compose واحد ودون تثبيت هذه الخدمات يدويًا، راجع [دليل التشغيل الموحّد](deploy/local/README-ar.md). يبقي هذا المسار الأسرار محلية في `deploy/local/.env` ولا يرفعها إلى Git.
+
 ## المستودع
 
 هذا المستودع خاص وموجود على branch `main`:

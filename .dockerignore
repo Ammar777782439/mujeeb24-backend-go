@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+!.env.example
+deploy/local/.env
+deploy/chatwoot/.env
+deploy/cloudflare-tunnel/tunnel.env
+bin
+dist
+tmp
+coverage.out
+coverage.html

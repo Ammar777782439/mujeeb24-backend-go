@@ -1,0 +1,194 @@
+name: mujeeb24-test
+
+x-chatwoot-base: &chatwoot-base
+  image: ${CHATWOOT_IMAGE:-chatwoot/chatwoot:latest-ce}
+  env_file:
+    - ${LOCAL_ENV_FILE:-.env}
+  environment:
+    NODE_ENV: production
+    RAILS_ENV: production
+    INSTALLATION_ENV: docker
+  volumes:
+    - chatwoot_storage:/app/storage
+  depends_on:
+    chatwoot-postgres:
+      condition: service_healthy
+    chatwoot-redis:
+      condition: service_healthy
+
+services:
+  mujeeb-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${MUJEEB_POSTGRES_DATABASE:?run scripts/init-test-env.ps1 first}
+      POSTGRES_USER: ${MUJEEB_POSTGRES_USERNAME:?run scripts/init-test-env.ps1 first}
+      POSTGRES_PASSWORD: ${MUJEEB_POSTGRES_PASSWORD:?run scripts/init-test-env.ps1 first}
+    volumes:
+      - mujeeb_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  mujeeb-migrate:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    env_file:
+      - ${LOCAL_ENV_FILE:-.env}
+    environment:
+      DATABASE_URL: postgres://${MUJEEB_POSTGRES_USERNAME}:${MUJEEB_POSTGRES_PASSWORD}@mujeeb-postgres:5432/${MUJEEB_POSTGRES_DATABASE}?sslmode=disable
+    command: ["/usr/local/bin/mujeeb-migrate"]
+    depends_on:
+      mujeeb-postgres:
+        condition: service_healthy
+    restart: "no"
+
+  mujeeb-api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    env_file:
+      - ${LOCAL_ENV_FILE:-.env}
+    environment:
+      HTTP_ADDR: :3001
+      DATABASE_URL: postgres://${MUJEEB_POSTGRES_USERNAME}:${MUJEEB_POSTGRES_PASSWORD}@mujeeb-postgres:5432/${MUJEEB_POSTGRES_DATABASE}?sslmode=disable
+      CHATWOOT_BASE_URL: http://chatwoot-rails:3000
+    ports:
+      - "127.0.0.1:${MUJEEB_HOST_PORT:-3001}:3001"
+    depends_on:
+      mujeeb-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  mujeeb-worker:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    env_file:
+      - ${LOCAL_ENV_FILE:-.env}
+    environment:
+      DATABASE_URL: postgres://${MUJEEB_POSTGRES_USERNAME}:${MUJEEB_POSTGRES_PASSWORD}@mujeeb-postgres:5432/${MUJEEB_POSTGRES_DATABASE}?sslmode=disable
+      CHATWOOT_BASE_URL: http://chatwoot-rails:3000
+      WORKER_OWNER: mujeeb24-compose-worker
+    command: ["/usr/local/bin/mujeeb-worker"]
+    depends_on:
+      mujeeb-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  chatwoot-postgres:
+    image: pgvector/pgvector:pg16
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DATABASE:?run scripts/init-test-env.ps1 first}
+      POSTGRES_USER: ${POSTGRES_USERNAME:?run scripts/init-test-env.ps1 first}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run scripts/init-test-env.ps1 first}
+    volumes:
+      - chatwoot_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  chatwoot-db-bootstrap:
+    image: pgvector/pgvector:pg16
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?run scripts/init-test-env.ps1 first}
+      PGHOST: chatwoot-postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DATABASE:?run scripts/init-test-env.ps1 first}
+      PGUSER: ${POSTGRES_USERNAME:?run scripts/init-test-env.ps1 first}
+    entrypoint: ["sh", "-ec"]
+    command: >-
+      until pg_isready; do sleep 1; done;
+      psql -v ON_ERROR_STOP=1
+      -c 'CREATE EXTENSION IF NOT EXISTS pg_stat_statements;'
+      -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm;'
+      -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+    depends_on:
+      chatwoot-postgres:
+        condition: service_healthy
+    restart: "no"
+
+  chatwoot-redis:
+    image: redis:7-alpine
+    env_file:
+      - ${LOCAL_ENV_FILE:-.env}
+    command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    volumes:
+      - chatwoot_redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  chatwoot-prepare:
+    <<: *chatwoot-base
+    entrypoint: docker/entrypoints/rails.sh
+    command: ["bundle", "exec", "rails", "db:chatwoot_prepare"]
+    depends_on:
+      chatwoot-postgres:
+        condition: service_healthy
+      chatwoot-redis:
+        condition: service_healthy
+      chatwoot-db-bootstrap:
+        condition: service_completed_successfully
+    restart: "no"
+
+  chatwoot-rails:
+    <<: *chatwoot-base
+    entrypoint: docker/entrypoints/rails.sh
+    command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
+    ports:
+      - "127.0.0.1:${CHATWOOT_HOST_PORT:-3002}:3000"
+    depends_on:
+      chatwoot-prepare:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  chatwoot-sidekiq:
+    <<: *chatwoot-base
+    command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml"]
+    depends_on:
+      chatwoot-prepare:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  webhook-gateway:
+    image: caddy:2.10-alpine
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      mujeeb-api:
+        condition: service_started
+    restart: unless-stopped
+
+  quick-tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: ["quick-tunnel"]
+    depends_on:
+      webhook-gateway:
+        condition: service_started
+    command: tunnel --no-autoupdate --url http://webhook-gateway:8080
+
+  named-tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: ["named-tunnel"]
+    depends_on:
+      webhook-gateway:
+        condition: service_started
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-MISSING_TUNNEL_TOKEN}
+    restart: unless-stopped
+
+volumes:
+  mujeeb_postgres:
+  chatwoot_storage:
+  chatwoot_postgres:
+  chatwoot_redis:

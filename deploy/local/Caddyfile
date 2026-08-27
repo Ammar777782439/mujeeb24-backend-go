@@ -1,0 +1,9 @@
+# هذا الـgateway يمنع كشف أي endpoint غير SocialAPI Webhook.
+:8080 {
+	@socialapi_webhooks path /api/v1/webhooks/socialapi/*
+	handle @socialapi_webhooks {
+		reverse_proxy mujeeb-api:3001
+	}
+
+	respond "not found" 404
+}

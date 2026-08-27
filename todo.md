@@ -48,3 +48,5 @@
 - [ ] تثبيت ودفع تغيير فصل Chatwoot mirror عن secret SocialAPI في commit مستقل بعد تحقق Git والأسرار.
 - [ ] إضافة bootstrap محلي آمن يولد إعداد Chatwoot على جهاز المستخدم دون رفع أي secret حقيقي إلى Git.
 - [x] التحقق من إعداد Cloudflare Tunnel المحدود لمسار SocialAPI webhook ودفعه إلى GitHub.
+- [x] إضافة Compose موحّد لتشغيل Mujeeb API وWorker وPostgreSQL مع Chatwoot وRedis دون تثبيت خدمات يدويًا.
+- [ ] بناء والتحقق من ملف Compose اختباري موحد يعمل بأمر واحد على Windows Docker Desktop بعد تهيئة ملفه المحلي.
