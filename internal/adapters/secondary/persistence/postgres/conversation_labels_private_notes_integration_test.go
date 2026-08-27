@@ -34,6 +34,7 @@ func TestConversationLabelsAndPrivateVisibilityAgainstPostgres(t *testing.T) {
 	referenceID := uuid.NewString()
 	messageID := uuid.NewString()
 	slug := "labels-runtime-" + businessID
+	providerConnectionRef := "conn-private-note-" + connectionID
 	_, _ = pool.Exec(ctx, `DELETE FROM businesses WHERE id=$1::uuid`, businessID)
 	if _, err := pool.Exec(ctx, `INSERT INTO businesses (id,name,slug,status,vertical_type,timezone,default_currency,locale,created_at,updated_at) VALUES ($1::uuid,'Labels Runtime',$2,'active','retail','Asia/Aden','YER','ar-YE',now(),now())`, businessID, slug); err != nil {
 		t.Fatalf("business: %v", err)
@@ -42,7 +43,7 @@ func TestConversationLabelsAndPrivateVisibilityAgainstPostgres(t *testing.T) {
 	if _, err := pool.Exec(ctx, `INSERT INTO customers (id,business_id,profile,contact_points,status,created_at,updated_at) VALUES ($1::uuid,$2::uuid,'{}','[]','active',now(),now())`, customerID, businessID); err != nil {
 		t.Fatalf("customer: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO channel_connections (id,business_id,provider_ref,channel,provider_connection_ref,status,secret_reference,created_at,updated_at) VALUES ($1::uuid,$2::uuid,'socialapi','whatsapp','conn-private-note','active','test-secret-ref',now(),now())`, connectionID, businessID); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO channel_connections (id,business_id,provider_ref,channel,provider_connection_ref,status,secret_reference,created_at,updated_at) VALUES ($1::uuid,$2::uuid,'socialapi','whatsapp',$3,'active','test-secret-ref',now(),now())`, connectionID, businessID, providerConnectionRef); err != nil {
 		t.Fatalf("connection: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO conversations (id,business_id,customer_id,state,ownership,priority,last_activity_at,created_at,updated_at) VALUES ($1::uuid,$2::uuid,$3::uuid,'open','none','normal',now(),now(),now())`, conversationID, businessID, customerID); err != nil {

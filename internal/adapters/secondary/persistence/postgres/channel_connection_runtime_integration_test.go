@@ -32,6 +32,7 @@ func TestChannelConnectionRuntimeAgainstPostgres(t *testing.T) {
 	connectionID := uuid.NewString()
 	slugA := "channel-a-" + businessA
 	slugB := "channel-b-" + businessB
+	providerConnectionRef := "runtime-channel-connection-" + connectionID
 	for _, id := range []string{businessA, businessB} {
 		_, _ = pool.Exec(ctx, `DELETE FROM businesses WHERE id=$1::uuid`, id)
 	}
@@ -39,7 +40,7 @@ func TestChannelConnectionRuntimeAgainstPostgres(t *testing.T) {
 		t.Fatalf("businesses: %v", err)
 	}
 	defer pool.Exec(context.Background(), `DELETE FROM businesses WHERE id IN ($1::uuid,$2::uuid)`, businessA, businessB)
-	if _, err := pool.Exec(ctx, `INSERT INTO channel_connections (id,business_id,provider_ref,channel,provider_connection_ref,status,secret_reference,created_at,updated_at) VALUES ($1::uuid,$2::uuid,'socialapi','whatsapp','runtime-channel-connection','active','secret-ref',now(),now())`, connectionID, businessA); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO channel_connections (id,business_id,provider_ref,channel,provider_connection_ref,status,secret_reference,created_at,updated_at) VALUES ($1::uuid,$2::uuid,'socialapi','whatsapp',$3,'active','secret-ref',now(),now())`, connectionID, businessA, providerConnectionRef); err != nil {
 		t.Fatalf("connection: %v", err)
 	}
 	repo := NewChannelConnectionRepository(adapter)
