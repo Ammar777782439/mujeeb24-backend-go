@@ -23,6 +23,9 @@ type BusinessListInput struct {
 	BusinessPath
 	ListQuery
 }
+type MeBusinessListInput struct {
+	ListQuery
+}
 type CatalogListInput struct {
 	BusinessPath
 	ListQuery

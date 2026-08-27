@@ -49,6 +49,26 @@ func (a *ProvisioningAdapter) ResolveAuthorization(ctx context.Context, callback
 	if callback.Status != "selection_required" || strings.TrimSpace(callback.ConnectionID) == "" {
 		return ports.SocialAuthorization{}, fmt.Errorf("%w: unsupported callback status", ErrAuthorizationCallback)
 	}
+	if len(callback.PageIDs) == 0 && callback.PlatformAccountID == "" {
+		raw, err := a.Client.GetPendingConnectionRaw(ctx, callback.ConnectionID)
+		if err == nil {
+			if pages, ok := raw["pages"].([]any); ok {
+				for _, page := range pages {
+					if pageMap, ok := page.(map[string]any); ok && pageMap["platform_page_id"] != nil {
+						callback.PageIDs = append(callback.PageIDs, fmt.Sprintf("%v", pageMap["platform_page_id"]))
+					}
+				}
+			}
+			if profiles, ok := raw["profiles"].([]any); ok {
+				for _, profile := range profiles {
+					if profileMap, ok := profile.(map[string]any); ok && profileMap["platform_account_id"] != nil {
+						callback.PlatformAccountID = fmt.Sprintf("%v", profileMap["platform_account_id"])
+						break
+					}
+				}
+			}
+		}
+	}
 	selection, err := a.Client.SelectPendingConnection(ctx, callback.ConnectionID, PendingSelectionRequest{PageIDs: callback.PageIDs, PlatformAccountID: callback.PlatformAccountID})
 	if err != nil {
 		return ports.SocialAuthorization{}, err

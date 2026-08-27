@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"log"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 )
@@ -17,6 +18,7 @@ func (h BeginChannelConnectionHandler) Handle(ctx context.Context, command comma
 	}
 	session, err := h.Provisioning.Start(ctx, string(command.Meta.Actor.BusinessID), command.Provider, command.Channel, command.DisplayName, command.Meta.IdempotencyKey)
 	if err != nil {
+		log.Printf("ERROR BeginChannelConnectionHandler Start returned err: %v", err)
 		return commands.BeginChannelConnectionResult{}, err
 	}
 	return commands.BeginChannelConnectionResult{

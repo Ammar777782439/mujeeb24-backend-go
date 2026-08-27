@@ -31,7 +31,7 @@ func (s *Server) dispatchSystemQuery(ctx context.Context, operationID string, in
 		out.Body.Data = contract.Principal{PrincipalID: contract.UUID(view.ID), DisplayName: view.DisplayName, Email: optionalString(view.Email)}
 		return out, true
 	case "listAccessibleBusinesses":
-		in := input.(*contract.BusinessListInput)
+		in := input.(*contract.MeBusinessListInput)
 		if s.deps.ListAccessibleBusinesses == nil {
 			return mapApplicationError(appErrors.NotImplemented()), true
 		}

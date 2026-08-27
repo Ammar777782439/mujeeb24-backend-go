@@ -311,6 +311,15 @@ func (c *Client) SelectPendingConnection(ctx context.Context, connectionID strin
 	return response, err
 }
 
+func (c *Client) GetPendingConnectionRaw(ctx context.Context, connectionID string) (map[string]any, error) {
+	if strings.TrimSpace(connectionID) == "" {
+		return nil, fmt.Errorf("%w: connection id is required", ErrInvalidRequest)
+	}
+	var response map[string]any
+	_, err := c.doJSON(ctx, http.MethodGet, "/v1/accounts/pending/"+url.PathEscape(connectionID), nil, &response)
+	return response, err
+}
+
 func (c *Client) VerifyWebhook(ctx context.Context, headers map[string]string, rawBody []byte) error {
 	if ctx == nil {
 		return ErrInvalidWebhook

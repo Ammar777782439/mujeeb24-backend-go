@@ -15,5 +15,7 @@
 		reverse_proxy mujeeb-api:3001
 	}
 
-	respond "not found" 404
+	handle {
+		respond "not found" 404
+	}
 }

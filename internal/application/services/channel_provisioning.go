@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/url"
 	"strings"
 
@@ -55,10 +56,11 @@ func (s ChannelProvisioningService) Start(ctx context.Context, businessID, provi
 	}
 	authorization, err := s.Social.BeginAuthorization(ctx, ports.SocialAuthorizationRequest{ProviderRef: provider, Channel: channel, RedirectURI: s.RedirectURI, State: sessionID})
 	if err != nil {
+		log.Printf("ERROR BeginAuthorization failed for channel %q: %v", channel, err)
 		_, _ = s.Sessions.MarkProvisioning(ctx, businessID, sessionID, ports.ChannelProvisioningPatch{Status: ports.ProvisioningFailed, FailureCode: stringPtr("social_authorization_failed")})
 		return ports.ChannelProvisioningSession{}, err
 	}
-	return s.Sessions.MarkProvisioning(ctx, businessID, sessionID, ports.ChannelProvisioningPatch{Status: ports.ProvisioningPendingAuthorization, OAuthState: stringPtr(authorization.State), AuthorizationURL: stringPtr(authorization.AuthorizationURL)})
+	return s.Sessions.MarkProvisioning(ctx, businessID, sessionID, ports.ChannelProvisioningPatch{Status: ports.ProvisioningPendingAuthorization, OAuthState: stringPtr(sessionID), AuthorizationURL: stringPtr(authorization.AuthorizationURL)})
 }
 
 func (s ChannelProvisioningService) CompleteOAuthCallback(ctx context.Context, callback ports.SocialAuthorizationCallback) (ports.ChannelProvisioningSession, error) {
@@ -69,6 +71,7 @@ func (s ChannelProvisioningService) CompleteOAuthCallback(ctx context.Context, c
 	if callback.State == "" {
 		return ports.ChannelProvisioningSession{}, errors.New("oauth callback state is required")
 	}
+	log.Printf("DEBUG CompleteOAuthCallback received state: %q", callback.State)
 	session, err := s.Sessions.GetByOAuthState(ctx, callback.State)
 	if err != nil {
 		return ports.ChannelProvisioningSession{}, err

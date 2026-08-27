@@ -184,7 +184,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			writer.Header().Set("Content-Type", "application/json")
 			if err != nil {
 				writer.WriteHeader(http.StatusBadRequest)
-				_, _ = writer.Write([]byte(`{"status":"failed"}`))
+				_, _ = fmt.Fprintf(writer, `{"status":"failed","error":%q}`, err.Error())
 				return
 			}
 			_, _ = fmt.Fprintf(writer, `{"status":%q,"provisioning_id":%q,"provider":%q,"channel":%q}`, session.Status, session.ID, session.ProviderRef, session.Channel)
