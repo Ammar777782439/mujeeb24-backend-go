@@ -8,6 +8,8 @@ x-chatwoot-base: &chatwoot-base
     NODE_ENV: production
     RAILS_ENV: production
     INSTALLATION_ENV: docker
+    POSTGRES_HOST: chatwoot-postgres
+    REDIS_URL: redis://:${REDIS_PASSWORD}@chatwoot-redis:6379
   volumes:
     - chatwoot_storage:/app/storage
   depends_on:
