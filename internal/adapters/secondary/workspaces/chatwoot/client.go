@@ -325,13 +325,19 @@ func (c *Client) findContactByIdentifier(ctx context.Context, accountID, inboxID
 			} `json:"contact_inboxes"`
 		} `json:"payload"`
 	}
-	path := "/api/v1/accounts/" + strconv.FormatInt(accountID, 10) + "/contacts/search?q=" + url.QueryEscape(identifier)
+	path := "/api/v1/accounts/" + strconv.FormatInt(accountID, 10) + "/contacts/search?q=" + url.QueryEscape(identifier) + "&include_contacts=true"
 	if _, err := c.doJSON(ctx, http.MethodGet, path, nil, &response); err != nil {
 		return ports.WorkspaceContact{}, err
 	}
 	for _, candidate := range response.Payload {
 		if candidate.ID <= 0 || candidate.Identifier != identifier {
 			continue
+		}
+		// Chatwoot search responses differ by version and authorization scope.
+		// A missing contact_inboxes field is not proof that this account-scoped
+		// contact is invalid; the create response will enforce inbox validity.
+		if len(candidate.ContactInboxes) == 0 {
+			return ports.WorkspaceContact{ID: candidate.ID, AccountID: accountID, InboxID: inboxID, Identifier: identifier}, nil
 		}
 		for _, contactInbox := range candidate.ContactInboxes {
 			if contactInbox.Inbox.ID == inboxID {

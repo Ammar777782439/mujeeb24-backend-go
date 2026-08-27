@@ -99,6 +99,31 @@ func TestClientReusesExistingContactOnlyForDuplicateIdentifierInSameInbox(t *tes
 	}
 }
 
+func TestClientReusesDuplicateContactWhenChatwootSearchOmitsContactInboxes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/accounts/12/contacts":
+			writer.Header().Set("Content-Type", "application/json")
+			writer.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = writer.Write([]byte(`{"message":"Identifier has already been taken"}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/accounts/12/contacts/search":
+			if request.URL.Query().Get("include_contacts") != "true" {
+				t.Errorf("include_contacts=%q", request.URL.Query().Get("include_contacts"))
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"payload":[{"id":56,"identifier":"social-user-1"}]}`))
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+	client := NewClient(Config{BaseURL: server.URL, APIToken: "chatwoot-token", HTTPClient: server.Client()})
+	contact, err := client.CreateContact(httptest.NewRequest(http.MethodPost, "/", nil).Context(), ports.WorkspaceContactDraft{AccountID: 12, InboxID: 34, Name: "Ali", Identifier: "social-user-1"})
+	if err != nil || contact.ID != 56 || contact.InboxID != 34 {
+		t.Fatalf("contact=%#v err=%v", contact, err)
+	}
+}
+
 func TestClientDoesNotTreatUnrelated422AsDuplicateContact(t *testing.T) {
 	var searchCalls int
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
