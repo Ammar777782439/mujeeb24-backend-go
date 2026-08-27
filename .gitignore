@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+deploy/chatwoot/.env
 *.local
 *.secret
 *.pem

@@ -23,3 +23,10 @@
 - [x] وصل Conversations وCustomers وCommunication Message/Outbound Message runtime مع PostgreSQL واختبارات HTTP.
 - [x] وصل Channel Connections (read/reconnect/disconnect) وMetrics runtime دون تشغيل provider live.
 - [x] إعادة اختبار جميع عمليات OpenAPI على PostgreSQL 16 وتحديث Postman لإزالة folders 501 المكتملة فقط.
+
+## Chatwoot Self-Hosted local stack
+
+- [x] إعداد Docker Compose مع Chatwoot وPostgreSQL وRedis وSidekiq بصورة محلية معزولة.
+- [x] إضافة `.env.example` خالٍ من الأسرار مع أوامر توليد secrets محليًا فقط.
+- [x] إضافة تعليمات Arabic لتشغيل/تهيئة/إيقاف Chatwoot وربطه مع Mujeeb محليًا دون provider live.
+- [ ] التحقق من compose config وبناء الخدمات محليًا دون تثبيت أي بيانات دخول داخل المستودع.
