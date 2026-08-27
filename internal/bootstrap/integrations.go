@@ -49,7 +49,11 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 		checks["chatwoot_autoreply"] = "configured"
 	}
 	if a.ChannelProvisioningEnabled {
-		checks["channel_provisioning"] = "configured"
+		if a.ChannelProvisioningError != nil {
+			checks["channel_provisioning"] = "misconfigured"
+		} else {
+			checks["channel_provisioning"] = "configured"
+		}
 	}
 	if a.AIRuntime != nil {
 		checks["llm_runtime"] = "configured"
@@ -74,12 +78,9 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 		}
 	}
 	if cfg.ChatwootProvisioningEnabled {
-		if cfg.SocialAPIAPIKey == "" {
-			adapters.ChannelProvisioningError = errors.New("channel provisioning requires SOCIALAPI_API_KEY")
-		} else if adapters.ChannelProvisioningWorkspace == nil {
-			adapters.ChannelProvisioningError = errors.New("channel provisioning requires CHATWOOT_PLATFORM_API_TOKEN for self-hosted Chatwoot")
-		} else if cfg.ChannelProvisioningRedirectURI == "" || cfg.ChannelProvisioningWebhookURL == "" {
-			adapters.ChannelProvisioningError = errors.New("channel provisioning requires CHANNEL_PROVISIONING_REDIRECT_URI and CHANNEL_PROVISIONING_WEBHOOK_URL")
+		adapters.ChannelProvisioningError = cfg.ValidateChannelProvisioning()
+		if adapters.ChannelProvisioningError == nil && (adapters.ChannelProvisioningSocial == nil || adapters.ChannelProvisioningWorkspace == nil) {
+			adapters.ChannelProvisioningError = errors.New("channel provisioning adapters are not configured")
 		}
 	}
 	if cfg.LLMEnabled {

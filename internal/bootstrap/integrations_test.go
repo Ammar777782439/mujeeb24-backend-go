@@ -64,3 +64,21 @@ func TestBuildExternalAdaptersReportsInvalidLLMConfiguration(t *testing.T) {
 		t.Fatalf("expected invalid LLM configuration: %#v", adapters)
 	}
 }
+
+func TestBuildExternalAdaptersMarksIncompleteProvisioningWithoutBlockingOtherRuntime(t *testing.T) {
+	adapters := BuildExternalAdapters(config.ProcessConfig{
+		SocialAPIBaseURL:            "https://example.invalid",
+		ChatwootBaseURL:             "http://example.invalid",
+		ChatwootAPIToken:            "worker-mirror-token",
+		ChatwootProvisioningEnabled: true,
+	})
+	if !adapters.ChannelProvisioningEnabled || adapters.ChannelProvisioningError == nil {
+		t.Fatalf("expected a visible provisioning configuration error: %#v", adapters)
+	}
+	if adapters.Chatwoot == nil {
+		t.Fatal("a provision failure must not remove the Chatwoot client used by worker mirror")
+	}
+	if adapters.ReadinessChecks()["channel_provisioning"] != "misconfigured" {
+		t.Fatalf("readiness=%#v", adapters.ReadinessChecks())
+	}
+}

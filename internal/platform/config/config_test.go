@@ -126,12 +126,17 @@ func TestLoadFromEnvRequiresHTTPSProvisioningURLsInProduction(t *testing.T) {
 	t.Setenv("CHATWOOT_PROVISIONING_USER_ID", "7")
 	t.Setenv("CHANNEL_PROVISIONING_REDIRECT_URI", "http://example.test/oauth/socialapi/callback")
 	t.Setenv("CHANNEL_PROVISIONING_WEBHOOK_URL", "https://example.test/webhooks/chatwoot")
-	if _, err := LoadFromEnv(); err == nil {
-		t.Fatal("LoadFromEnv accepted HTTP provisioning callback in production")
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("LoadFromEnv must not prevent worker startup: %v", err)
+	}
+	if err := cfg.ValidateChannelProvisioning(); err == nil {
+		t.Fatal("ValidateChannelProvisioning accepted HTTP provisioning callback in production")
 	}
 	t.Setenv("CHANNEL_PROVISIONING_REDIRECT_URI", "https://example.test/oauth/socialapi/callback")
-	if _, err := LoadFromEnv(); err != nil {
-		t.Fatalf("LoadFromEnv rejected HTTPS provisioning URLs: %v", err)
+	cfg, err = LoadFromEnv()
+	if err != nil || cfg.ValidateChannelProvisioning() != nil {
+		t.Fatalf("valid provisioning configuration: cfg=%#v err=%v validation=%v", cfg, err, cfg.ValidateChannelProvisioning())
 	}
 }
 
@@ -140,7 +145,11 @@ func TestLoadFromEnvRejectsIncompleteChatwootProvisioningConfiguration(t *testin
 	t.Setenv("CHATWOOT_PROVISIONING_ENABLED", "true")
 	t.Setenv("CHANNEL_PROVISIONING_REDIRECT_URI", "https://example.test/oauth/socialapi/callback")
 	t.Setenv("CHANNEL_PROVISIONING_WEBHOOK_URL", "https://example.test/api/v1/webhooks/chatwoot")
-	if _, err := LoadFromEnv(); err == nil {
-		t.Fatal("LoadFromEnv accepted incomplete Chatwoot provisioning configuration")
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("LoadFromEnv must allow worker startup with an optional misconfigured operation: %v", err)
+	}
+	if err := cfg.ValidateChannelProvisioning(); err == nil {
+		t.Fatal("ValidateChannelProvisioning accepted incomplete Chatwoot provisioning configuration")
 	}
 }

@@ -193,12 +193,21 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.ChatwootAutoReplyEnabled && (cfg.ChatwootWebhookSecret == "" || cfg.SocialAPIAPIKey == "" || !cfg.LLMEnabled) {
 		return ProcessConfig{}, errors.New("CHATWOOT_AUTOREPLY_ENABLED requires CHATWOOT_WEBHOOK_SECRET, SOCIALAPI_API_KEY, and LLM_ENABLED")
 	}
-	if cfg.ChatwootProvisioningEnabled {
-		if cfg.SocialAPIAPIKey == "" || cfg.ChatwootAPIToken == "" || cfg.ChatwootPlatformAPIToken == "" || cfg.ChatwootProvisioningUserID <= 0 || !isHTTPSURL(cfg.ChannelProvisioningRedirectURI) || !isHTTPSURL(cfg.ChannelProvisioningWebhookURL) {
-			return ProcessConfig{}, errors.New("CHATWOOT_PROVISIONING_ENABLED requires SOCIALAPI_API_KEY, CHATWOOT_API_TOKEN, CHATWOOT_PLATFORM_API_TOKEN, positive CHATWOOT_PROVISIONING_USER_ID, and HTTPS redirect/webhook URLs")
-		}
-	}
 	return cfg, nil
+}
+
+// ValidateChannelProvisioning validates an optional operation, not process startup.
+// Both API and worker load ProcessConfig, while only the API endpoint can begin a
+// new merchant connection. Keeping this check separate prevents a misconfigured
+// future-provisioning feature from stopping mirror processing for existing channels.
+func (cfg ProcessConfig) ValidateChannelProvisioning() error {
+	if !cfg.ChatwootProvisioningEnabled {
+		return nil
+	}
+	if cfg.SocialAPIAPIKey == "" || cfg.ChatwootAPIToken == "" || cfg.ChatwootPlatformAPIToken == "" || cfg.ChatwootProvisioningUserID <= 0 || !isHTTPSURL(cfg.ChannelProvisioningRedirectURI) || !isHTTPSURL(cfg.ChannelProvisioningWebhookURL) {
+		return errors.New("CHATWOOT_PROVISIONING_ENABLED requires SOCIALAPI_API_KEY, CHATWOOT_API_TOKEN, CHATWOOT_PLATFORM_API_TOKEN, positive CHATWOOT_PROVISIONING_USER_ID, and HTTPS redirect/webhook URLs")
+	}
+	return nil
 }
 
 func isHTTPSURL(value string) bool {

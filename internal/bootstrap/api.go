@@ -93,22 +93,22 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	var provisioningService *services.ChannelProvisioningService
 	if external.ChannelProvisioningEnabled {
 		if external.ChannelProvisioningError != nil {
-			return nil, external.ChannelProvisioningError
+			dependencies.BeginChannelConnection = services.ChannelProvisioningUnavailableService{Cause: external.ChannelProvisioningError}
+		} else if external.ChannelProvisioningSocial == nil || external.ChannelProvisioningWorkspace == nil {
+			dependencies.BeginChannelConnection = services.ChannelProvisioningUnavailableService{Cause: errors.New("channel provisioning adapters are not configured")}
+		} else {
+			service := services.ChannelProvisioningService{
+				Sessions:    postgres.NewChannelProvisioningStore(database),
+				Social:      external.ChannelProvisioningSocial,
+				Workspace:   external.ChannelProvisioningWorkspace,
+				Bindings:    postgres.NewChatwootWorkspaceBindingRepository(database),
+				Connections: postgres.NewChannelConnectionRepository(database),
+				RedirectURI: external.ChannelProvisioningRedirectURI,
+				WebhookURL:  external.ChannelProvisioningWebhookURL,
+			}
+			provisioningService = &service
+			dependencies.BeginChannelConnection = &services.BeginChannelConnectionHandler{Provisioning: service}
 		}
-		if external.ChannelProvisioningSocial == nil || external.ChannelProvisioningWorkspace == nil {
-			return nil, errors.New("channel provisioning adapters are not configured")
-		}
-		service := services.ChannelProvisioningService{
-			Sessions:    postgres.NewChannelProvisioningStore(database),
-			Social:      external.ChannelProvisioningSocial,
-			Workspace:   external.ChannelProvisioningWorkspace,
-			Bindings:    postgres.NewChatwootWorkspaceBindingRepository(database),
-			Connections: postgres.NewChannelConnectionRepository(database),
-			RedirectURI: external.ChannelProvisioningRedirectURI,
-			WebhookURL:  external.ChannelProvisioningWebhookURL,
-		}
-		provisioningService = &service
-		dependencies.BeginChannelConnection = &services.BeginChannelConnectionHandler{Provisioning: service}
 	}
 	eventStore := postgres.NewInboundEventStore(database)
 	outboxStore := postgres.NewPostgresOutboxStore(database)
