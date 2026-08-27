@@ -21,14 +21,16 @@ var ErrPlatformUnsupported = errors.New("chatwoot platform provisioning requires
 type PlatformConfig struct {
 	BaseURL       string
 	PlatformToken string
+	APIToken      string
 	HTTPClient    *http.Client
 	HTTPTimeout   time.Duration
 }
 
 type PlatformClient struct {
-	baseURL string
-	token   string
-	client  *http.Client
+	baseURL  string
+	token    string
+	apiToken string
+	client   *http.Client
 }
 
 func NewPlatformClient(cfg PlatformConfig) *PlatformClient {
@@ -41,7 +43,7 @@ func NewPlatformClient(cfg PlatformConfig) *PlatformClient {
 		}
 		client = &http.Client{Timeout: timeout}
 	}
-	return &PlatformClient{baseURL: baseURL, token: strings.TrimSpace(cfg.PlatformToken), client: client}
+	return &PlatformClient{baseURL: baseURL, token: strings.TrimSpace(cfg.PlatformToken), apiToken: strings.TrimSpace(cfg.APIToken), client: client}
 }
 
 func (c *PlatformClient) EnsureAccount(ctx context.Context, name, locale string) (ports.WorkspaceAccount, error) {
@@ -83,7 +85,7 @@ func (c *PlatformClient) EnsureInbox(ctx context.Context, accountID, name, chann
 	var response struct {
 		ID int64 `json:"id"`
 	}
-	_, err = c.do(ctx, http.MethodPost, "/api/v1/accounts/"+url.PathEscape(accountID)+"/inboxes", map[string]any{
+	_, err = c.doAsUser(ctx, http.MethodPost, "/api/v1/accounts/"+url.PathEscape(accountID)+"/inboxes", map[string]any{
 		"name":                   strings.TrimSpace(name),
 		"enable_auto_assignment": false,
 		"working_hours_enabled":  false,
@@ -122,6 +124,39 @@ func (c *PlatformClient) do(ctx context.Context, method, path string, body any, 
 		return "", fmt.Errorf("%w: create request", ErrInvalidRequest)
 	}
 	req.Header.Set("api_access_token", c.token)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	res, err := c.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrTransport, err)
+	}
+	defer res.Body.Close()
+	requestID := res.Header.Get("X-Request-ID")
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 4096))
+		return requestID, fmt.Errorf("%w: platform http %d", ErrInvalidResponse, res.StatusCode)
+	}
+	if response != nil {
+		if err := json.NewDecoder(io.LimitReader(res.Body, 2<<20)).Decode(response); err != nil {
+			return requestID, fmt.Errorf("%w: decode response", ErrInvalidResponse)
+		}
+	}
+	return requestID, nil
+}
+
+func (c *PlatformClient) doAsUser(ctx context.Context, method, path string, body any, response any) (string, error) {
+	if err := c.validate(); err != nil {
+		return "", err
+	}
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return "", fmt.Errorf("%w: encode request", ErrInvalidRequest)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, strings.NewReader(string(encoded)))
+	if err != nil {
+		return "", fmt.Errorf("%w: create request", ErrInvalidRequest)
+	}
+	req.Header.Set("api_access_token", c.apiToken)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 	res, err := c.client.Do(req)
