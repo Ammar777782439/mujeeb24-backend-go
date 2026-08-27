@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -288,6 +289,11 @@ func (c *Client) CreateContact(ctx context.Context, draft ports.WorkspaceContact
 	var response contactResponse
 	_, err = c.doJSON(ctx, http.MethodPost, "/api/v1/accounts/"+strconv.FormatInt(draft.AccountID, 10)+"/contacts", request, &response)
 	if err != nil {
+		// If 422 (identifier already taken), fall back to searching for the existing contact
+		var chatwootErr *Error
+		if errors.As(err, &chatwootErr) && chatwootErr.StatusCode == http.StatusUnprocessableEntity {
+			return c.findContactByIdentifier(ctx, draft.AccountID, draft.Identifier)
+		}
 		return ports.WorkspaceContact{}, err
 	}
 	if response.ID == 0 {
@@ -298,6 +304,26 @@ func (c *Client) CreateContact(ctx context.Context, draft ports.WorkspaceContact
 	}
 	return ports.WorkspaceContact{ID: response.ID, AccountID: draft.AccountID, InboxID: draft.InboxID, Identifier: draft.Identifier}, nil
 }
+
+func (c *Client) findContactByIdentifier(ctx context.Context, accountID int64, identifier string) (ports.WorkspaceContact, error) {
+	var result struct {
+		Payload []struct {
+			ID         int64  `json:"id"`
+			Identifier string `json:"identifier"`
+		} `json:"payload"`
+	}
+	_, err := c.doJSON(ctx, http.MethodGet, "/api/v1/accounts/"+strconv.FormatInt(accountID, 10)+"/contacts/search?q="+url.QueryEscape(identifier)+"&include_contacts=true", nil, &result)
+	if err != nil {
+		return ports.WorkspaceContact{}, fmt.Errorf("%w: contact search failed", ErrInvalidResponse)
+	}
+	for _, contact := range result.Payload {
+		if contact.Identifier == identifier && contact.ID > 0 {
+			return ports.WorkspaceContact{ID: contact.ID, AccountID: accountID, Identifier: identifier}, nil
+		}
+	}
+	return ports.WorkspaceContact{}, fmt.Errorf("%w: contact not found by identifier", ErrInvalidResponse)
+}
+
 
 type contactResponse struct {
 	ID      int64           `json:"id"`
@@ -435,11 +461,19 @@ func (c *Client) doJSON(ctx context.Context, method, path string, request any, r
 	if c == nil || c.httpClient == nil || c.apiToken == "" {
 		return "", ErrNotConfigured
 	}
-	encoded, err := json.Marshal(request)
-	if err != nil {
-		return "", fmt.Errorf("%w: encode request", ErrInvalidRequest)
+	var bodyReader strings.Reader
+	var req *http.Request
+	var err error
+	if request != nil {
+		encoded, encErr := json.Marshal(request)
+		if encErr != nil {
+			return "", fmt.Errorf("%w: encode request", ErrInvalidRequest)
+		}
+		bodyReader = *strings.NewReader(string(encoded))
+		req, err = http.NewRequestWithContext(ctx, method, c.baseURL+path, &bodyReader)
+	} else {
+		req, err = http.NewRequestWithContext(ctx, method, c.baseURL+path, nil)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, strings.NewReader(string(encoded)))
 	if err != nil {
 		return "", fmt.Errorf("%w: create request", ErrInvalidRequest)
 	}
