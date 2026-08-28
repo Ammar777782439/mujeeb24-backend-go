@@ -103,6 +103,34 @@ func (s *Server) dispatchAdditionalQuery(ctx context.Context, operationID string
 			return mapApplicationError(err), true
 		}
 		return messageList(view), true
+	case "listCannedReplies":
+		in := input.(*contract.CannedReplyListInput)
+		if s.deps.ListCannedReplies == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.ListCannedReplies.Handle(ctx, queries.ListCannedRepliesQuery{Meta: queryMeta(actor, "", ""), Status: in.Status, Limit: in.Limit, Cursor: in.Cursor})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		return cannedReplyList(view), true
+	case "listAutomationRules":
+		in := input.(*contract.AutomationRuleListInput)
+		if s.deps.ListAutomationRules == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.ListAutomationRules.Handle(ctx, queries.ListAutomationRulesQuery{Meta: queryMeta(actor, "", ""), Status: in.Status, Limit: in.Limit, Cursor: in.Cursor})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		return automationRuleList(view), true
 	case "getCustomer":
 		in := input.(*contract.CustomerInput)
 		if s.deps.GetCustomer == nil {
@@ -478,6 +506,44 @@ func channelProvisioningProjection(v commands.ChannelProvisioningView) contract.
 }
 func channelConnectionProjection(v commands.ChannelConnectionView) contract.ChannelConnection {
 	return contract.ChannelConnection{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), Provider: v.Provider, Channel: v.Channel, Status: v.Status, ExternalAccountReference: optionalString(v.ExternalAccountReference), ResourceVersion: string(v.ResourceVersion)}
+}
+func conversationReadProjection(v commands.ConversationReadResult) contract.ConversationRead {
+	var messageID *contract.UUID
+	if v.LastReadMessageID != nil {
+		id := contract.UUID(*v.LastReadMessageID)
+		messageID = &id
+	}
+	return contract.ConversationRead{ConversationID: contract.UUID(v.ConversationID), LastReadMessageID: messageID, Status: v.Status}
+}
+func cannedReplyProjection(v commands.CannedReplyView) contract.CannedReply {
+	return contract.CannedReply{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), Title: v.Title, Shortcut: v.Shortcut, Body: v.Body, Status: v.Status, ResourceVersion: string(v.ResourceVersion), CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt}
+}
+func singleCannedReply(v commands.CannedReplyView) *contract.Single[contract.CannedReply] {
+	out := &contract.Single[contract.CannedReply]{}
+	out.Body.Data = cannedReplyProjection(v)
+	return out
+}
+func cannedReplyList(v commands.ListResult[commands.CannedReplyView]) *contract.List[contract.CannedReply] {
+	items := make([]contract.CannedReply, 0, len(v.Items))
+	for _, item := range v.Items {
+		items = append(items, cannedReplyProjection(item))
+	}
+	return listPage(items, v.NextCursor, v.HasMore)
+}
+func automationRuleProjection(v commands.AutomationRuleView) contract.AutomationRule {
+	return contract.AutomationRule{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), Name: v.Name, Status: v.Status, TriggerKind: v.TriggerKind, Conditions: jsonObject(v.Conditions), ActionKind: v.ActionKind, ActionPayload: jsonObject(v.ActionPayload), Position: v.Position, ResourceVersion: string(v.ResourceVersion), CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt}
+}
+func singleAutomationRule(v commands.AutomationRuleView) *contract.Single[contract.AutomationRule] {
+	out := &contract.Single[contract.AutomationRule]{}
+	out.Body.Data = automationRuleProjection(v)
+	return out
+}
+func automationRuleList(v commands.ListResult[commands.AutomationRuleView]) *contract.List[contract.AutomationRule] {
+	items := make([]contract.AutomationRule, 0, len(v.Items))
+	for _, item := range v.Items {
+		items = append(items, automationRuleProjection(item))
+	}
+	return listPage(items, v.NextCursor, v.HasMore)
 }
 func channelConnectionList(v commands.ListResult[commands.ChannelConnectionView]) *contract.List[contract.ChannelConnection] {
 	items := make([]contract.ChannelConnection, 0, len(v.Items))

@@ -65,6 +65,17 @@ type MessageView struct {
 	ResourceVersion          ResourceVersion
 	Private                  bool
 }
+type CannedReplyView struct {
+	ID              CannedReplyID
+	BusinessID      BusinessID
+	Title           string
+	Shortcut        string
+	Body            string
+	Status          string
+	ResourceVersion ResourceVersion
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
 type CustomerView struct {
 	ID              CustomerID
 	BusinessID      BusinessID

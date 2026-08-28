@@ -40,6 +40,12 @@ type Dependencies struct {
 	AssignConversation           commands.AssignConversationHandler
 	UpdateConversationLabels     commands.UpdateConversationLabelsHandler
 	AddPrivateNote               commands.AddPrivateNoteHandler
+	MarkConversationRead         commands.MarkConversationReadHandler
+	CreateCannedReply            commands.CreateCannedReplyHandler
+	UpdateCannedReply            commands.UpdateCannedReplyHandler
+	SendCannedReply              commands.SendCannedReplyHandler
+	CreateAutomationRule         commands.CreateAutomationRuleHandler
+	UpdateAutomationRule         commands.UpdateAutomationRuleHandler
 	CreateCatalog                commands.CreateCatalogHandler
 	UpdateCatalog                commands.UpdateCatalogHandler
 	CreateAttributeSchemaVersion commands.CreateAttributeSchemaVersionHandler
@@ -72,6 +78,8 @@ type Dependencies struct {
 	ListChannelConnections    queries.ListChannelConnectionsHandler
 	GetChannelConnection      queries.GetChannelConnectionHandler
 	GetConnectionCapabilities queries.GetConnectionCapabilitiesHandler
+	ListCannedReplies         queries.ListCannedRepliesHandler
+	ListAutomationRules       queries.ListAutomationRulesHandler
 	ListCustomerConversations queries.ListCustomerConversationsHandler
 	ListCustomerTransactions  queries.ListCustomerTransactionsHandler
 	ListCatalogs              queries.ListCatalogsHandler

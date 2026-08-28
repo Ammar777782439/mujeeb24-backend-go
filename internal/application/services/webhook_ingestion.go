@@ -19,6 +19,7 @@ type SocialAPIWebhookService struct {
 	Events           ports.EventStore
 	Inbound          ports.ProviderInboundStore
 	DeliveryStatuses ports.DeliveryStatusStore
+	Automation       commands.ApplyInboundAutomationHandler
 	AutoReply        commands.AutoReplyHandler
 	Now              func() time.Time
 }
@@ -135,6 +136,11 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 			if materialized.Duplicate {
 				result.Duplicate = true
 				continue
+			}
+			if s.Automation != nil && event.EventType == "interaction_received" && event.Direction == channel.DirectionInbound && event.Origin == channel.OriginCustomer && strings.TrimSpace(event.ProviderMessageID) != "" {
+				if _, automationErr := s.Automation.Handle(ctx, commands.ApplyInboundAutomationCommand{BusinessID: commands.BusinessID(connection.BusinessID), ConversationID: commands.ConversationID(materialized.ConversationID), InboundEventID: commands.ID(record.ID), Channel: string(event.Channel), Text: event.Text}); automationErr != nil {
+					return commands.WebhookAcceptedResult{}, externalDependencyError("SocialAPI inbound automation could not be executed", automationErr)
+				}
 			}
 			if s.AutoReply != nil && event.EventType == "interaction_received" && event.Direction == channel.DirectionInbound && event.Origin == channel.OriginCustomer && strings.TrimSpace(event.ProviderMessageID) != "" && strings.TrimSpace(event.Text) != "" {
 				if _, autoReplyErr := s.AutoReply.Handle(ctx, commands.AutoReplyCommand{

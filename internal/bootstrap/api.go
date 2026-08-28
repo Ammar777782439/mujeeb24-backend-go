@@ -134,6 +134,14 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		service.PolicyEvaluator = services.GroundedPolicyEngine{}
 		autoReply = service
 	}
+	inboundAutomation := services.InboundAutomationService{
+		Rules:         postgres.NewAutomationRuleRepository(database),
+		Executions:    postgres.NewAutomationExecutionRepository(database),
+		Conversations: postgres.NewConversationRepository(database),
+		Reader:        postgres.NewConversationRepository(database),
+		Labels:        postgres.NewConversationLabelRepository(database),
+		Transactions:  database,
+	}
 	if external.SocialWebhook != nil {
 		dependencies.IngestSocialAPIWebhook = services.SocialAPIWebhookService{
 			Receiver:         external.SocialWebhook,
@@ -142,6 +150,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			Events:           eventStore,
 			Inbound:          postgres.NewProviderInboundStore(database),
 			DeliveryStatuses: postgres.NewDeliveryStatusStore(database),
+			Automation:       inboundAutomation,
 			AutoReply:        autoReply,
 		}
 	}

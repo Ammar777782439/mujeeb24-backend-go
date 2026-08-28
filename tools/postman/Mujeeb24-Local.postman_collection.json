@@ -153,6 +153,36 @@
           "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}, {"key": "Content-Type", "value": "application/json"}, {"key": "Idempotency-Key", "value": "{{provisioning_idempotency_key}}"}], "body": {"mode": "raw", "raw": "{\n  \"provider\": \"socialapi\",\n  \"channel\": \"instagram\",\n  \"display_name\": \"Postman merchant channel\"\n}"}, "url": "{{base_url}}/api/v1/businesses/{{business_id}}/channel-connections"}
         }
       ]
+    },
+    {
+      "name": "07 — Mujeeb Inbox V1",
+      "item": [
+        {
+          "name": "List canned replies",
+          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/canned-replies?status=active&limit=50"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 canned replies', function () { pm.response.to.have.status(200); });"]}}]
+        },
+        {
+          "name": "Create canned reply — capture ID/version",
+          "event": [{"listen": "prerequest", "script": {"type": "text/javascript", "exec": ["pm.collectionVariables.set('inbox_idempotency_key', 'postman-canned-' + Date.now());"]}}, {"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('201 canned reply', function () { pm.response.to.have.status(201); const data = pm.response.json().data; pm.collectionVariables.set('canned_reply_id', data.id); pm.collectionVariables.set('canned_reply_version', data.resource_version); });"]}}],
+          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}, {"key": "Content-Type", "value": "application/json"}, {"key": "Idempotency-Key", "value": "{{inbox_idempotency_key}}"}], "body": {"mode": "raw", "raw": "{\n  \"title\": \"ساعات العمل\",\n  \"shortcut\": \"hours\",\n  \"body\": \"نحن متاحون من السبت إلى الخميس.\"\n}"}, "url": "{{base_url}}/api/v1/businesses/{{business_id}}/canned-replies"}
+        },
+        {
+          "name": "List automation rules",
+          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/automation-rules?status=active&limit=50"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 automation rules', function () { pm.response.to.have.status(200); });"]}}]
+        },
+        {
+          "name": "Create inbound automation — add label",
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('201 constrained automation rule', function () { pm.response.to.have.status(201); const data = pm.response.json().data; pm.collectionVariables.set('automation_rule_id', data.id); pm.collectionVariables.set('automation_rule_version', data.resource_version); });"]}}],
+          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}, {"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"name\": \"تمييز طلبات الأسعار\",\n  \"conditions\": {\"text_contains\": \"سعر\"},\n  \"action_kind\": \"add_label\",\n  \"action_payload\": {\"label\": \"price-question\"},\n  \"position\": 100\n}"}, "url": "{{base_url}}/api/v1/businesses/{{business_id}}/automation-rules"}
+        },
+        {
+          "name": "Mark conversation read",
+          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/conversations/{{conversation_id}}/read"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 read cursor', function () { pm.response.to.have.status(200); });"]}}]
+        }
+      ]
     }
   ],
   "variable": [

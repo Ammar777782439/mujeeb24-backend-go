@@ -32,10 +32,15 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
 	if bytes.Contains(document, []byte("/webhooks/chatwoot/")) || bytes.Contains(document, []byte("ingestChatwootWebhook")) {
 		t.Fatal("Chatwoot webhook must not be declared in the Mujeeb-only contract")
 	}
+	for _, expected := range []string{"markConversationRead", "listCannedReplies", "createCannedReply", "updateCannedReply", "sendCannedReply", "listAutomationRules", "createAutomationRule", "updateAutomationRule"} {
+		if !bytes.Contains(document, []byte("operationId: "+expected)) {
+			t.Fatalf("Inbox V1 operation is missing: %s", expected)
+		}
+	}
 
 	operationIDs := regexp.MustCompile(`(?m)^\s+operationId: ([A-Za-z0-9_]+)$`).FindAllSubmatch(document, -1)
-	if len(operationIDs) != 75 {
-		t.Fatalf("generated %d operations, want 75", len(operationIDs))
+	if len(operationIDs) != 83 {
+		t.Fatalf("generated %d operations, want 83", len(operationIDs))
 	}
 	seen := make(map[string]struct{}, len(operationIDs))
 	for _, match := range operationIDs {

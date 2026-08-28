@@ -9,6 +9,8 @@ type ConnectionID ID
 type CustomerID ID
 type ConversationID ID
 type MessageID ID
+type CannedReplyID ID
+type AutomationRuleID ID
 type CatalogID ID
 type CatalogItemID ID
 type AttributeSchemaID ID

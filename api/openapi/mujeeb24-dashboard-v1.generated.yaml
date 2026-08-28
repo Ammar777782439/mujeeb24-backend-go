@@ -219,6 +219,52 @@ components:
         - expires_at
         - principal
       type: object
+    AutomationRule:
+      additionalProperties: false
+      properties:
+        action_kind:
+          type: string
+        action_payload:
+          additionalProperties: {}
+          type: object
+        business_id:
+          type: string
+        conditions:
+          additionalProperties: {}
+          type: object
+        created_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        position:
+          format: int64
+          type: integer
+        resource_version:
+          type: string
+        status:
+          type: string
+        trigger_kind:
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+      required:
+        - id
+        - business_id
+        - name
+        - status
+        - trigger_kind
+        - conditions
+        - action_kind
+        - action_payload
+        - position
+        - resource_version
+        - created_at
+        - updated_at
+      type: object
     BeginChannelConnectionRequest:
       additionalProperties: false
       properties:
@@ -365,6 +411,40 @@ components:
           type: string
         vertical_type:
           type: string
+      type: object
+    CannedReply:
+      additionalProperties: false
+      properties:
+        body:
+          type: string
+        business_id:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        resource_version:
+          type: string
+        shortcut:
+          type: string
+        status:
+          type: string
+        title:
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+      required:
+        - id
+        - business_id
+        - title
+        - shortcut
+        - body
+        - status
+        - resource_version
+        - created_at
+        - updated_at
       type: object
     Capability:
       additionalProperties: false
@@ -658,6 +738,19 @@ components:
         - last_activity_at
         - resource_version
       type: object
+    ConversationRead:
+      additionalProperties: false
+      properties:
+        conversation_id:
+          type: string
+        last_read_message_id:
+          type: string
+        status:
+          type: string
+      required:
+        - conversation_id
+        - status
+      type: object
     Cookie:
       additionalProperties: false
       properties:
@@ -724,6 +817,67 @@ components:
       required:
         - name
         - definitions
+      type: object
+    CreateAutomationRuleRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/CreateAutomationRuleRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        action_kind:
+          enum:
+            - add_label
+            - set_priority
+            - assign_human
+          type: string
+        action_payload:
+          additionalProperties: {}
+          type: object
+        conditions:
+          additionalProperties: {}
+          type: object
+        name:
+          maxLength: 200
+          minLength: 1
+          type: string
+        position:
+          format: int64
+          minimum: 1
+          type: integer
+      required:
+        - name
+        - conditions
+        - action_kind
+        - action_payload
+      type: object
+    CreateCannedReplyRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/CreateCannedReplyRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        body:
+          maxLength: 10000
+          minLength: 1
+          type: string
+        shortcut:
+          maxLength: 80
+          minLength: 1
+          type: string
+        title:
+          maxLength: 200
+          minLength: 1
+          type: string
+      required:
+        - title
+        - shortcut
+        - body
       type: object
     CreateCatalogItemRequest:
       additionalProperties: false
@@ -1213,6 +1367,29 @@ components:
         - pagination
         - request_id
       type: object
+    ListAutomationRuleBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListAutomationRuleBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/AutomationRule"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
     ListBusinessMembershipBody:
       additionalProperties: false
       properties:
@@ -1225,6 +1402,29 @@ components:
         data:
           items:
             $ref: "#/components/schemas/BusinessMembership"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
+    ListCannedReplyBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListCannedReplyBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/CannedReply"
           nullable: true
           type: array
         pagination:
@@ -1807,6 +2007,23 @@ components:
         - data
         - request_id
       type: object
+    SingleAutomationRuleBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleAutomationRuleBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/AutomationRule"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
     SingleBusinessBody:
       additionalProperties: false
       properties:
@@ -1835,6 +2052,23 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/BusinessPolicy"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleCannedReplyBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleCannedReplyBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/CannedReply"
         request_id:
           type: string
       required:
@@ -1937,6 +2171,23 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/Conversation"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleConversationReadBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleConversationReadBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/ConversationRead"
         request_id:
           type: string
       required:
@@ -2165,6 +2416,64 @@ components:
         - required
         - status
         - reason_codes
+      type: object
+    UpdateAutomationRuleRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/UpdateAutomationRuleRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        action_kind:
+          enum:
+            - add_label
+            - set_priority
+            - assign_human
+          type: string
+        action_payload:
+          additionalProperties: {}
+          type: object
+        conditions:
+          additionalProperties: {}
+          type: object
+        name:
+          maxLength: 200
+          type: string
+        position:
+          format: int64
+          minimum: 1
+          type: integer
+        status:
+          enum:
+            - active
+            - disabled
+          type: string
+      type: object
+    UpdateCannedReplyRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/UpdateCannedReplyRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        body:
+          maxLength: 10000
+          type: string
+        shortcut:
+          maxLength: 80
+          type: string
+        status:
+          enum:
+            - active
+            - archived
+          type: string
+        title:
+          maxLength: 200
+          type: string
       type: object
     UpdateCatalogItemRequest:
       additionalProperties: false
@@ -3322,6 +3631,532 @@ paths:
       summary: Get audit event
       tags:
         - Audit
+  /businesses/{business_id}/automation-rules:
+    get:
+      operationId: listAutomationRules
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            default: 25
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: status
+          schema:
+            enum:
+              - active
+              - disabled
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListAutomationRuleBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List constrained inbound automation rules
+      tags:
+        - Inbox
+    post:
+      operationId: createAutomationRule
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAutomationRuleRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleAutomationRuleBody"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Create constrained inbound automation rule
+      tags:
+        - Inbox
+  /businesses/{business_id}/automation-rules/{automation_rule_id}:
+    patch:
+      operationId: updateAutomationRule
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: automation_rule_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAutomationRuleRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleAutomationRuleBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Update constrained inbound automation rule
+      tags:
+        - Inbox
+  /businesses/{business_id}/canned-replies:
+    get:
+      operationId: listCannedReplies
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            default: 25
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: status
+          schema:
+            enum:
+              - active
+              - archived
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListCannedReplyBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List reusable merchant replies
+      tags:
+        - Inbox
+    post:
+      operationId: createCannedReply
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCannedReplyRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleCannedReplyBody"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Create reusable merchant reply
+      tags:
+        - Inbox
+  /businesses/{business_id}/canned-replies/{canned_reply_id}:
+    patch:
+      operationId: updateCannedReply
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: canned_reply_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCannedReplyRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleCannedReplyBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Update reusable merchant reply
+      tags:
+        - Inbox
   /businesses/{business_id}/catalog-items/{item_id}/offers:
     get:
       operationId: listOffers
@@ -5218,6 +6053,104 @@ paths:
       summary: Assign conversation
       tags:
         - Conversations
+  /businesses/{business_id}/conversations/{conversation_id}/canned-replies/{canned_reply_id}/send:
+    post:
+      operationId: sendCannedReply
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: canned_reply_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: conversation_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleMessageBody"
+          description: Accepted
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Service Unavailable
+      security:
+        - bearerAuth: []
+      summary: Queue a reusable reply for delivery
+      tags:
+        - Inbox
   /businesses/{business_id}/conversations/{conversation_id}/labels:
     post:
       operationId: updateConversationLabels
@@ -5595,6 +6528,92 @@ paths:
       security:
         - bearerAuth: []
       summary: Add private note
+      tags:
+        - Conversations
+  /businesses/{business_id}/conversations/{conversation_id}/read:
+    post:
+      operationId: markConversationRead
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: conversation_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleConversationReadBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Mark conversation read for current principal
       tags:
         - Conversations
   /businesses/{business_id}/customers:

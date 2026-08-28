@@ -57,3 +57,15 @@
 - [ ] تثبيت ودفع تصحيح Merchant Channel Provisioning وcallback routing متعدد التجار إلى GitHub.
 - [x] إضافة وتوثيق طلب Postman لبدء Merchant Channel Provisioning عبر API قبل وجود Frontend.
 - [ ] تثبيت ودفع طلب Postman الخاص بـMerchant Channel Provisioning إلى GitHub.
+
+## Mujeeb Inbox Capabilities — فرع Chatwoot-free
+
+- [x] جرد APIs وmigrations وrepositories الحالية لتحديد ما هو منفذ من حالة المحادثة والإسناد والأولوية والـlabels والملاحظات والرد اليدوي.
+- [x] توثيق نطاق الإصدار الأول: inbox list/detail، read/unread، assignment، state/priority، labels، private notes، manual outbound، canned replies، والـautomation المقيدة بالسياسة.
+- [x] تصميم عقود Mujeeb-owned للردود الجاهزة والملاحظات وقواعد الأتمتة بلا نسخ DTOs أو كود خدمة خارجية.
+- [x] إضافة migrations forward-only جديدة فقط إذا تطلبت البيانات الجديدة ذلك، مع tenant scoping وidempotency وaudit/outbox.
+- [x] توصيل عمليات صندوق الوارد بالـHTTP/Huma وOpenAPI وPostman بعد بناء application/repositories.
+- [x] تطبيق الردود الجاهزة وقواعد الأتمتة المقيدة داخليًا؛ الرد الجاهز يمر عبر Outbox، ولا network call داخل transaction ولا retry أعمى للحالة unknown.
+- [x] إضافة unit وPostgreSQL integration tests ثم تشغيل بوابة الجودة قبل طلب commit/رفع جديد.
+- [ ] تشغيل PostgreSQL integration فعلية عند توفر `POSTGRES_TEST_DSN` ومراجعة نتائج migrations `000046`–`000048` في بيئة اختبار معزولة.
+- [ ] مراجعة diff ثم إنشاء commit ورفع الفرع فقط بعد موافقة صريحة.

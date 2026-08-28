@@ -25,8 +25,12 @@ func BuildDependencies(adapter *postgres.Adapter) handlers.Dependencies {
 	decisionRepository := postgres.NewAIDecisionRepository(adapter)
 	auditRepository := postgres.NewAuditEventRepository(adapter)
 	messageRepository := postgres.NewMessageRepository(adapter)
+	readCursorRepository := postgres.NewConversationReadCursorRepository(adapter)
+	cannedReplyRepository := postgres.NewCannedReplyRepository(adapter)
 	conversationRuntime := services.ConversationRuntimeService{Repository: conversationRepository, Reader: conversationRepository, Labels: conversationLabelRepository, References: conversationReferenceRepository, Messages: messageRepository, Transactions: adapter}
 	manualOutbound := services.ManualOutboundMessageService{References: conversationReferenceRepository, Connections: postgres.NewChannelConnectionRepository(adapter), Outbound: postgres.NewOutboundMessageRepository(adapter), Outbox: postgres.NewPostgresOutboxStore(adapter), Transactions: adapter}
+	cannedReplies := services.CannedReplyService{Repository: cannedReplyRepository, Transactions: adapter}
+	automationRules := services.AutomationRuleService{Repository: postgres.NewAutomationRuleRepository(adapter), Transactions: adapter}
 	channelConnectionRepository := postgres.NewChannelConnectionRepository(adapter)
 	channelRuntime := services.ChannelRuntimeService{Reader: channelConnectionRepository, Runtime: channelConnectionRepository, Transactions: adapter}
 	channelCapabilityRepository := postgres.NewChannelCapabilityRepository(adapter)
@@ -51,9 +55,17 @@ func BuildDependencies(adapter *postgres.Adapter) handlers.Dependencies {
 		AssignConversation:        services.AssignConversationCommandService{ConversationRuntimeService: conversationRuntime},
 		UpdateConversationLabels:  services.UpdateConversationLabelsCommandService{ConversationRuntimeService: conversationRuntime},
 		AddPrivateNote:            services.AddPrivateNoteCommandService{ConversationRuntimeService: conversationRuntime},
+		MarkConversationRead:      services.MarkConversationReadService{Repository: readCursorRepository},
+		CreateCannedReply:         services.CreateCannedReplyCommandService{CannedReplyService: cannedReplies},
+		UpdateCannedReply:         services.UpdateCannedReplyCommandService{CannedReplyService: cannedReplies},
+		SendCannedReply:           services.SendCannedReplyCommandService{Repository: cannedReplyRepository, Outbound: manualOutbound},
+		CreateAutomationRule:      services.CreateAutomationRuleCommandService{AutomationRuleService: automationRules},
+		UpdateAutomationRule:      services.UpdateAutomationRuleCommandService{AutomationRuleService: automationRules},
 		GetConversation:           services.GetConversationQueryService{Repository: conversationRepository, Labels: conversationLabelRepository},
 
 		ListConversationMessages: services.MessageQueryService{Repository: messageRepository},
+		ListCannedReplies:        services.ListCannedRepliesQueryService{CannedReplyService: cannedReplies},
+		ListAutomationRules:      services.ListAutomationRulesQueryService{AutomationRuleService: automationRules},
 		CreateOutboundMessage:    manualOutbound,
 		GetConnectionCapabilities: services.ConnectionCapabilitiesQueryService{
 			Repository: channelCapabilityRepository,

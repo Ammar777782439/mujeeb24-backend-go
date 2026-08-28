@@ -156,6 +156,36 @@ type Message struct {
 	CreatedAt                time.Time `json:"created_at"`
 	Private                  bool      `json:"private"`
 }
+type ConversationRead struct {
+	ConversationID    UUID   `json:"conversation_id"`
+	LastReadMessageID *UUID  `json:"last_read_message_id,omitempty"`
+	Status            string `json:"status"`
+}
+type CannedReply struct {
+	ID              UUID      `json:"id"`
+	BusinessID      UUID      `json:"business_id"`
+	Title           string    `json:"title"`
+	Shortcut        string    `json:"shortcut"`
+	Body            string    `json:"body"`
+	Status          string    `json:"status"`
+	ResourceVersion string    `json:"resource_version"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+type AutomationRule struct {
+	ID              UUID           `json:"id"`
+	BusinessID      UUID           `json:"business_id"`
+	Name            string         `json:"name"`
+	Status          string         `json:"status"`
+	TriggerKind     string         `json:"trigger_kind"`
+	Conditions      map[string]any `json:"conditions"`
+	ActionKind      string         `json:"action_kind"`
+	ActionPayload   map[string]any `json:"action_payload"`
+	Position        int            `json:"position"`
+	ResourceVersion string         `json:"resource_version"`
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+}
 type ContactPoint struct {
 	Kind               string `json:"kind"`
 	ValueNormalized    string `json:"value_normalized"`

@@ -11,6 +11,14 @@ type ConversationPath struct {
 	BusinessID     UUID `path:"business_id" format:"uuid"`
 	ConversationID UUID `path:"conversation_id" format:"uuid"`
 }
+type CannedReplyPath struct {
+	BusinessID    UUID `path:"business_id" format:"uuid"`
+	CannedReplyID UUID `path:"canned_reply_id" format:"uuid"`
+}
+type AutomationRulePath struct {
+	BusinessID       UUID `path:"business_id" format:"uuid"`
+	AutomationRuleID UUID `path:"automation_rule_id" format:"uuid"`
+}
 type CustomerPath struct {
 	BusinessID UUID `path:"business_id" format:"uuid"`
 	CustomerID UUID `path:"customer_id" format:"uuid"`
@@ -46,6 +54,45 @@ type ConversationMessageInput struct {
 	CommandHeaders
 	Body SendMessageRequest
 }
+type ConversationReadInput struct {
+	ConversationPath
+	CommandHeaders
+}
+type CannedReplyListInput struct {
+	BusinessPath
+	ListQuery
+	Status string `query:"status" enum:"active,archived"`
+}
+type CannedReplyCreateInput struct {
+	BusinessPath
+	CommandHeaders
+	Body CreateCannedReplyRequest
+}
+type CannedReplyUpdateInput struct {
+	CannedReplyPath
+	CommandHeaders
+	Body UpdateCannedReplyRequest
+}
+type SendCannedReplyInput struct {
+	CannedReplyPath
+	ConversationID UUID `path:"conversation_id" format:"uuid"`
+	CommandHeaders
+}
+type AutomationRuleListInput struct {
+	BusinessPath
+	ListQuery
+	Status string `query:"status" enum:"active,disabled"`
+}
+type AutomationRuleCreateInput struct {
+	BusinessPath
+	CommandHeaders
+	Body CreateAutomationRuleRequest
+}
+type AutomationRuleUpdateInput struct {
+	AutomationRulePath
+	CommandHeaders
+	Body UpdateAutomationRuleRequest
+}
 type CustomerInput struct{ CustomerPath }
 type BusinessBodyInput struct {
 	BusinessPath
@@ -64,6 +111,32 @@ type LabelsRequest struct {
 }
 type PrivateNoteRequest struct {
 	Text string `json:"text" minLength:"1" maxLength:"10000"`
+}
+type CreateCannedReplyRequest struct {
+	Title    string `json:"title" minLength:"1" maxLength:"200"`
+	Shortcut string `json:"shortcut" minLength:"1" maxLength:"80"`
+	Body     string `json:"body" minLength:"1" maxLength:"10000"`
+}
+type UpdateCannedReplyRequest struct {
+	Title    *string `json:"title,omitempty" maxLength:"200"`
+	Shortcut *string `json:"shortcut,omitempty" maxLength:"80"`
+	Body     *string `json:"body,omitempty" maxLength:"10000"`
+	Status   *string `json:"status,omitempty" enum:"active,archived"`
+}
+type CreateAutomationRuleRequest struct {
+	Name          string         `json:"name" minLength:"1" maxLength:"200"`
+	Conditions    map[string]any `json:"conditions"`
+	ActionKind    string         `json:"action_kind" enum:"add_label,set_priority,assign_human"`
+	ActionPayload map[string]any `json:"action_payload"`
+	Position      int            `json:"position,omitempty" minimum:"1"`
+}
+type UpdateAutomationRuleRequest struct {
+	Name          *string        `json:"name,omitempty" maxLength:"200"`
+	Status        *string        `json:"status,omitempty" enum:"active,disabled"`
+	Conditions    map[string]any `json:"conditions,omitempty"`
+	ActionKind    *string        `json:"action_kind,omitempty" enum:"add_label,set_priority,assign_human"`
+	ActionPayload map[string]any `json:"action_payload,omitempty"`
+	Position      *int           `json:"position,omitempty" minimum:"1"`
 }
 type CreateCustomerRequest struct {
 	Profile          map[string]any      `json:"profile,omitempty"`
