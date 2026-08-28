@@ -8,8 +8,8 @@ import (
 )
 
 func TestBuildExternalAdaptersLeavesOptionalIntegrationsDisabled(t *testing.T) {
-	adapters := BuildExternalAdapters(config.ProcessConfig{SocialAPIBaseURL: "https://example.invalid", ChatwootBaseURL: "http://localhost:3000"})
-	if adapters.SocialAPI != nil || adapters.Chatwoot != nil || adapters.SocialWebhook != nil || adapters.ChatwootWebhook != nil {
+	adapters := BuildExternalAdapters(config.ProcessConfig{SocialAPIBaseURL: "https://example.invalid"})
+	if adapters.SocialAPI != nil || adapters.SocialWebhook != nil || adapters.AutoReplyEnabled || adapters.ChannelProvisioningEnabled {
 		t.Fatalf("expected no external adapters for empty credentials: %#v", adapters)
 	}
 }
@@ -20,25 +20,21 @@ func TestBuildExternalAdaptersConstructsConfiguredClientsWithoutCallingNetwork(t
 		SocialAPIAPIKey:        "test-only-placeholder",
 		SocialAPIWebhookSecret: "test-webhook-secret",
 		SocialAPIHTTPTimeout:   2 * time.Second,
-		ChatwootBaseURL:        "http://example.invalid",
-		ChatwootAPIToken:       "test-only-placeholder",
-		ChatwootWebhookSecret:  "test-webhook-secret",
-		ChatwootHTTPTimeout:    2 * time.Second,
 	})
-	if adapters.SocialAPI == nil || adapters.SocialWebhook == nil || adapters.Chatwoot == nil || adapters.ChatwootWebhook == nil {
+	if adapters.SocialAPI == nil || adapters.SocialWebhook == nil || adapters.ChannelProvisioningSocial == nil {
 		t.Fatalf("expected configured adapters: %#v", adapters)
 	}
 }
 
-func TestBuildExternalAdaptersKeepsChatwootAutoReplyDisabledByDefault(t *testing.T) {
-	adapters := BuildExternalAdapters(config.ProcessConfig{ChatwootWebhookSecret: "placeholder"})
-	if adapters.ChatwootAutoReplyEnabled {
-		t.Fatal("Chatwoot AutoReply must be disabled by default")
+func TestBuildExternalAdaptersKeepsAutoReplyDisabledByDefault(t *testing.T) {
+	adapters := BuildExternalAdapters(config.ProcessConfig{SocialAPIWebhookSecret: "placeholder"})
+	if adapters.AutoReplyEnabled {
+		t.Fatal("AutoReply must be disabled by default")
 	}
 
-	adapters = BuildExternalAdapters(config.ProcessConfig{ChatwootWebhookSecret: "placeholder", ChatwootAutoReplyEnabled: true})
-	if !adapters.ChatwootAutoReplyEnabled {
-		t.Fatal("Chatwoot AutoReply flag was not propagated")
+	adapters = BuildExternalAdapters(config.ProcessConfig{SocialAPIWebhookSecret: "placeholder", AutoReplyEnabled: true})
+	if !adapters.AutoReplyEnabled {
+		t.Fatal("AutoReply flag was not propagated")
 	}
 }
 
@@ -67,16 +63,14 @@ func TestBuildExternalAdaptersReportsInvalidLLMConfiguration(t *testing.T) {
 
 func TestBuildExternalAdaptersMarksIncompleteProvisioningWithoutBlockingOtherRuntime(t *testing.T) {
 	adapters := BuildExternalAdapters(config.ProcessConfig{
-		SocialAPIBaseURL:            "https://example.invalid",
-		ChatwootBaseURL:             "http://example.invalid",
-		ChatwootAPIToken:            "worker-mirror-token",
-		ChatwootProvisioningEnabled: true,
+		SocialAPIBaseURL:           "https://example.invalid",
+		ChannelProvisioningEnabled: true,
 	})
 	if !adapters.ChannelProvisioningEnabled || adapters.ChannelProvisioningError == nil {
 		t.Fatalf("expected a visible provisioning configuration error: %#v", adapters)
 	}
-	if adapters.Chatwoot == nil {
-		t.Fatal("a provision failure must not remove the Chatwoot client used by worker mirror")
+	if adapters.SocialAPI != nil || adapters.SocialWebhook != nil {
+		t.Fatal("a provision failure must not construct SocialAPI clients without credentials")
 	}
 	if adapters.ReadinessChecks()["channel_provisioning"] != "misconfigured" {
 		t.Fatalf("readiness=%#v", adapters.ReadinessChecks())

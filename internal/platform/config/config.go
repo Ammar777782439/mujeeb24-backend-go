@@ -34,17 +34,9 @@ type ProcessConfig struct {
 	SocialAPIAPIKey                string
 	SocialAPIWebhookSecret         string
 	SocialAPIHTTPTimeout           time.Duration
-	ChatwootBaseURL                string
-	ChatwootAPIToken               string
-	ChatwootPlatformAPIToken       string
-	ChatwootProvisioningUserID     int
-	ChatwootWebhookSecret          string
-	ChatwootHTTPTimeout            time.Duration
-	ChatwootProvisioningEnabled    bool
+	ChannelProvisioningEnabled     bool
 	ChannelProvisioningRedirectURI string
-	ChannelProvisioningWebhookURL  string
-	ChatwootAutoReplyEnabled       bool
-	ChatwootMirrorEnabled          bool
+	AutoReplyEnabled               bool
 	LLMEnabled                     bool
 	LLMBaseURL                     string
 	LLMAPIKey                      string
@@ -80,17 +72,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 		SocialAPIAPIKey:                strings.TrimSpace(os.Getenv("SOCIALAPI_API_KEY")),
 		SocialAPIWebhookSecret:         strings.TrimSpace(os.Getenv("SOCIALAPI_WEBHOOK_SECRET")),
 		SocialAPIHTTPTimeout:           10 * time.Second,
-		ChatwootBaseURL:                envOr("CHATWOOT_BASE_URL", "http://localhost:3000"),
-		ChatwootAPIToken:               strings.TrimSpace(os.Getenv("CHATWOOT_API_TOKEN")),
-		ChatwootPlatformAPIToken:       strings.TrimSpace(os.Getenv("CHATWOOT_PLATFORM_API_TOKEN")),
-		ChatwootProvisioningUserID:     0,
-		ChatwootWebhookSecret:          strings.TrimSpace(os.Getenv("CHATWOOT_WEBHOOK_SECRET")),
-		ChatwootHTTPTimeout:            10 * time.Second,
-		ChatwootProvisioningEnabled:    false,
+		ChannelProvisioningEnabled:     false,
 		ChannelProvisioningRedirectURI: strings.TrimSpace(os.Getenv("CHANNEL_PROVISIONING_REDIRECT_URI")),
-		ChannelProvisioningWebhookURL:  strings.TrimSpace(os.Getenv("CHANNEL_PROVISIONING_WEBHOOK_URL")),
-		ChatwootAutoReplyEnabled:       false,
-		ChatwootMirrorEnabled:          false,
+		AutoReplyEnabled:               false,
 		LLMEnabled:                     false,
 		LLMBaseURL:                     strings.TrimRight(strings.TrimSpace(os.Getenv("LLM_BASE_URL")), "/"),
 		LLMAPIKey:                      strings.TrimSpace(os.Getenv("LLM_API_KEY")),
@@ -143,19 +127,10 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.SocialAPIHTTPTimeout, err = durationEnv("SOCIALAPI_HTTP_TIMEOUT", cfg.SocialAPIHTTPTimeout); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.ChatwootHTTPTimeout, err = durationEnv("CHATWOOT_HTTP_TIMEOUT", cfg.ChatwootHTTPTimeout); err != nil {
+	if cfg.ChannelProvisioningEnabled, err = boolEnv("CHANNEL_PROVISIONING_ENABLED", cfg.ChannelProvisioningEnabled); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.ChatwootProvisioningEnabled, err = boolEnv("CHATWOOT_PROVISIONING_ENABLED", cfg.ChatwootProvisioningEnabled); err != nil {
-		return ProcessConfig{}, err
-	}
-	if cfg.ChatwootProvisioningUserID, err = intEnv("CHATWOOT_PROVISIONING_USER_ID", cfg.ChatwootProvisioningUserID); err != nil {
-		return ProcessConfig{}, err
-	}
-	if cfg.ChatwootAutoReplyEnabled, err = boolEnv("CHATWOOT_AUTOREPLY_ENABLED", cfg.ChatwootAutoReplyEnabled); err != nil {
-		return ProcessConfig{}, err
-	}
-	if cfg.ChatwootMirrorEnabled, err = boolEnv("CHATWOOT_MIRROR_ENABLED", cfg.ChatwootMirrorEnabled); err != nil {
+	if cfg.AutoReplyEnabled, err = boolEnv("AUTOREPLY_ENABLED", cfg.AutoReplyEnabled); err != nil {
 		return ProcessConfig{}, err
 	}
 	if cfg.LLMEnabled, err = boolEnv("LLM_ENABLED", cfg.LLMEnabled); err != nil {
@@ -187,25 +162,22 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if strings.TrimSpace(cfg.HTTPAddr) == "" {
 		return ProcessConfig{}, errors.New("HTTP_ADDR cannot be empty")
 	}
-	if cfg.ChatwootMirrorEnabled && cfg.ChatwootAPIToken == "" {
-		return ProcessConfig{}, errors.New("CHATWOOT_MIRROR_ENABLED requires CHATWOOT_API_TOKEN")
-	}
-	if cfg.ChatwootAutoReplyEnabled && (cfg.ChatwootWebhookSecret == "" || cfg.SocialAPIAPIKey == "" || !cfg.LLMEnabled) {
-		return ProcessConfig{}, errors.New("CHATWOOT_AUTOREPLY_ENABLED requires CHATWOOT_WEBHOOK_SECRET, SOCIALAPI_API_KEY, and LLM_ENABLED")
+	if cfg.AutoReplyEnabled && (cfg.SocialAPIWebhookSecret == "" || cfg.SocialAPIAPIKey == "" || !cfg.LLMEnabled) {
+		return ProcessConfig{}, errors.New("AUTOREPLY_ENABLED requires SOCIALAPI_WEBHOOK_SECRET, SOCIALAPI_API_KEY, and LLM_ENABLED")
 	}
 	return cfg, nil
 }
 
-// ValidateChannelProvisioning validates an optional operation, not process startup.
+// ValidateChannelProvisioning validates an optional SocialAPI-only operation, not process startup.
 // Both API and worker load ProcessConfig, while only the API endpoint can begin a
 // new merchant connection. Keeping this check separate prevents a misconfigured
-// future-provisioning feature from stopping mirror processing for existing channels.
+// future-provisioning feature from stopping the existing message runtime.
 func (cfg ProcessConfig) ValidateChannelProvisioning() error {
-	if !cfg.ChatwootProvisioningEnabled {
+	if !cfg.ChannelProvisioningEnabled {
 		return nil
 	}
-	if cfg.SocialAPIAPIKey == "" || cfg.ChatwootAPIToken == "" || cfg.ChatwootPlatformAPIToken == "" || cfg.ChatwootProvisioningUserID <= 0 || !isHTTPSURL(cfg.ChannelProvisioningRedirectURI) || !isHTTPSURL(cfg.ChannelProvisioningWebhookURL) {
-		return errors.New("CHATWOOT_PROVISIONING_ENABLED requires SOCIALAPI_API_KEY, CHATWOOT_API_TOKEN, CHATWOOT_PLATFORM_API_TOKEN, positive CHATWOOT_PROVISIONING_USER_ID, and HTTPS redirect/webhook URLs")
+	if cfg.SocialAPIAPIKey == "" || !isHTTPSURL(cfg.ChannelProvisioningRedirectURI) {
+		return errors.New("CHANNEL_PROVISIONING_ENABLED requires SOCIALAPI_API_KEY and an HTTPS CHANNEL_PROVISIONING_REDIRECT_URI")
 	}
 	return nil
 }

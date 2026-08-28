@@ -65,7 +65,7 @@ func (s ManualOutboundMessageService) Handle(ctx context.Context, command comman
 		if _, outboxErr := s.Outbox.Enqueue(txCtx, ports.OutboxEntryDraft{ID: newID(), BusinessID: businessID, OutboundMessageID: outbound.ID, CommandType: OutboundSendCommandType, DedupeKey: dedupeKey, AvailableAt: now, CreatedAt: now, UpdatedAt: now}); outboxErr != nil {
 			return mapAIRepositoryError(outboxErr)
 		}
-		result.Message = commands.MessageView{ID: commands.MessageID(outbound.ID), ConversationID: commands.ConversationID(outbound.ConversationID), Direction: outbound.Direction, Origin: outbound.Origin, Status: outbound.Status, Text: text, ProviderMessageReference: outbound.ProviderMessageID, ChatwootMessageReference: outbound.ChatwootMessageID, OccurredAt: now, CreatedAt: now}
+		result.Message = commands.MessageView{ID: commands.MessageID(outbound.ID), ConversationID: commands.ConversationID(outbound.ConversationID), Direction: outbound.Direction, Origin: outbound.Origin, Status: outbound.Status, Text: text, ProviderMessageReference: outbound.ProviderMessageID, OccurredAt: now, CreatedAt: now}
 		return nil
 	})
 	return result, err

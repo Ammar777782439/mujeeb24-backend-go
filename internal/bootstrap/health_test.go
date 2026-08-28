@@ -9,9 +9,9 @@ import (
 )
 
 func TestReadinessReportsOptionalFeatureConfigurationWithoutBlockingCoreReady(t *testing.T) {
-	service := readinessQueryService{Ping: func(context.Context) error { return nil }, FeatureChecks: map[string]string{"chatwoot_mirror": "configured", "llm_runtime": "disabled"}}
+	service := readinessQueryService{Ping: func(context.Context) error { return nil }, FeatureChecks: map[string]string{"auto_reply": "configured", "llm_runtime": "disabled"}}
 	view, err := service.Handle(context.Background(), commands.GetReadinessQuery{})
-	if err != nil || view.Status != "ready" || view.Checks["postgresql"] != "ok" || view.Checks["chatwoot_mirror"] != "configured" || view.Checks["llm_runtime"] != "disabled" {
+	if err != nil || view.Status != "ready" || view.Checks["postgresql"] != "ok" || view.Checks["auto_reply"] != "configured" || view.Checks["llm_runtime"] != "disabled" {
 		t.Fatalf("unexpected readiness view=%#v err=%v", view, err)
 	}
 }

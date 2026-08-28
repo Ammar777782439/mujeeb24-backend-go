@@ -68,7 +68,6 @@ type Dependencies struct {
 	GetReadiness                 commands.QueryHandler[commands.GetReadinessQuery, commands.HealthView]
 	GetMetrics                   commands.QueryHandler[commands.GetMetricsQuery, commands.MetricsView]
 	IngestSocialAPIWebhook       commands.IngestSocialAPIWebhookHandler
-	IngestChatwootWebhook        commands.IngestChatwootWebhookHandler
 
 	ListChannelConnections    queries.ListChannelConnectionsHandler
 	GetChannelConnection      queries.GetChannelConnectionHandler

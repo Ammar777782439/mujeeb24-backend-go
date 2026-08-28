@@ -16,7 +16,6 @@ type CommunicationMessageRecord struct {
 	Origin                  string
 	Transport               string
 	ProviderMessageID       *string
-	ChatwootMessageID       *string
 	ContentType             string
 	TextContent             *string
 	ContentReference        string
@@ -36,7 +35,6 @@ type CommunicationMessageDraft struct {
 	Origin                  string
 	Transport               string
 	ProviderMessageID       *string
-	ChatwootMessageID       *string
 	ContentType             string
 	TextContent             *string
 	ContentReference        string

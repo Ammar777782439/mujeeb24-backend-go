@@ -178,8 +178,8 @@ func validateInboundDraft(draft ports.InboundEventDraft) error {
 	if draft.ID == "" || draft.ProviderRef == "" || draft.ProviderConnectionRef == "" || draft.ProviderEventID == "" || draft.DedupeStrategy == "" || draft.EventType == "" || draft.ProcessingState == "" || draft.RawPayloadReference == "" || draft.PayloadHash == "" || draft.ReceivedAt.IsZero() || draft.CreatedAt.IsZero() || draft.UpdatedAt.IsZero() {
 		return invalidRepositoryInput("inbound_event.record_if_absent", "identity, event type, state, payload reference/hash, and timestamps are required")
 	}
-	if draft.BusinessID == nil && draft.ConnectionID != nil || draft.BusinessID != nil && draft.ConnectionID == nil && draft.ProviderRef != "chatwoot" {
-		return invalidRepositoryInput("inbound_event.record_if_absent", "business and connection must be provided together unless provider is chatwoot")
+	if (draft.BusinessID == nil) != (draft.ConnectionID == nil) {
+		return invalidRepositoryInput("inbound_event.record_if_absent", "business and connection must be provided together")
 	}
 	if !draft.SignatureVerified && draft.ProcessingState != "unresolved" && draft.ProcessingState != "rejected" {
 		return invalidRepositoryInput("inbound_event.record_if_absent", "unverified event must be unresolved or rejected")

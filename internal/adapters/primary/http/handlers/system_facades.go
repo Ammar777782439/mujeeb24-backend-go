@@ -162,41 +162,23 @@ func (s *Server) dispatchSystemCommand(ctx context.Context, operationID string, 
 		out := &contract.Single[contract.AIDecision]{}
 		out.Body.Data = aiDecisionProjection(result.Decision)
 		return out, true
-	case "ingestSocialAPIWebhook", "ingestChatwootWebhook":
+	case "ingestSocialAPIWebhook":
 		var routeKey, signature, timestamp, deliveryID, providerEvent, requestID string
 		var raw []byte
 		providerHeaders := make(map[string]string)
-		if operationID == "ingestSocialAPIWebhook" {
-			in := input.(*contract.SocialWebhookInput)
-			routeKey, signature, timestamp, requestID, raw = in.RouteKey, in.Signature, in.Timestamp, in.XRequestID, []byte(in.RawBody)
-			providerHeaders["X-SocialAPI-Signature"] = in.SocialAPISignature
-			providerHeaders["X-SocialAPI-Signature-V2"] = in.SocialAPISignatureV2
-			providerHeaders["X-SocialAPI-Timestamp"] = in.SocialAPITimestamp
-			providerHeaders["X-SocialAPI-Delivery"] = in.SocialAPIDelivery
-			providerHeaders["X-SocialAPI-Event"] = in.SocialAPIEvent
-			deliveryID, providerEvent = in.SocialAPIDelivery, in.SocialAPIEvent
-		} else {
-			in := input.(*contract.ChatwootWebhookInput)
-			routeKey, signature, timestamp, requestID, raw = in.RouteKey, in.Signature, in.Timestamp, in.XRequestID, []byte(in.RawBody)
-			providerHeaders["X-Chatwoot-Signature"] = in.ChatwootSignature
-			providerHeaders["X-Chatwoot-Timestamp"] = in.ChatwootTimestamp
-			providerHeaders["X-Chatwoot-Delivery"] = in.ChatwootDelivery
-			deliveryID = in.ChatwootDelivery
-		}
+		in := input.(*contract.SocialWebhookInput)
+		routeKey, signature, timestamp, requestID, raw = in.RouteKey, in.Signature, in.Timestamp, in.XRequestID, []byte(in.RawBody)
+		providerHeaders["X-SocialAPI-Signature"] = in.SocialAPISignature
+		providerHeaders["X-SocialAPI-Signature-V2"] = in.SocialAPISignatureV2
+		providerHeaders["X-SocialAPI-Timestamp"] = in.SocialAPITimestamp
+		providerHeaders["X-SocialAPI-Delivery"] = in.SocialAPIDelivery
+		providerHeaders["X-SocialAPI-Event"] = in.SocialAPIEvent
+		deliveryID, providerEvent = in.SocialAPIDelivery, in.SocialAPIEvent
 		command := commands.IngestWebhookCommand{RouteKey: routeKey, Signature: signature, Timestamp: timestamp, DeliveryID: deliveryID, ProviderEvent: providerEvent, RequestID: requestID, ProviderHeaders: providerHeaders, RawPayload: raw}
-		var result commands.WebhookAcceptedResult
-		var err error
-		if operationID == "ingestSocialAPIWebhook" {
-			if s.deps.IngestSocialAPIWebhook == nil {
-				return mapApplicationError(appErrors.NotImplemented()), true
-			}
-			result, err = s.deps.IngestSocialAPIWebhook.Handle(ctx, command)
-		} else {
-			if s.deps.IngestChatwootWebhook == nil {
-				return mapApplicationError(appErrors.NotImplemented()), true
-			}
-			result, err = s.deps.IngestChatwootWebhook.Handle(ctx, command)
+		if s.deps.IngestSocialAPIWebhook == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
 		}
+		result, err := s.deps.IngestSocialAPIWebhook.Handle(ctx, command)
 		if err != nil {
 			return mapApplicationError(err), true
 		}

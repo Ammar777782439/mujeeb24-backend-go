@@ -175,7 +175,6 @@ func registerSystemOperations(api huma.API, dispatcher DashboardOperationHandler
 	register(api, dispatcher, huma.Operation{OperationID: "getReadiness", Method: http.MethodGet, Path: "/health/ready", Tags: []string{"Operational"}, Summary: "Dependency readiness", Security: []map[string][]string{}, Errors: []int{http.StatusServiceUnavailable}}, EmptyInput{}, Single[Health]{})
 	register(api, dispatcher, huma.Operation{OperationID: "getMetrics", Method: http.MethodGet, Path: "/metrics", Tags: []string{"Operational"}, Summary: "Internal metrics", Security: []map[string][]string{}, Errors: []int{http.StatusForbidden}}, EmptyInput{}, MetricsOutput{})
 	register(api, dispatcher, huma.Operation{OperationID: "ingestSocialAPIWebhook", Method: http.MethodPost, Path: "/webhooks/socialapi/{route_key}", Tags: []string{"Webhooks"}, Summary: "Ingest SocialAPI webhook", Security: []map[string][]string{}, DefaultStatus: http.StatusAccepted, Errors: []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusRequestEntityTooLarge}}, SocialWebhookInput{}, WebhookAcceptedOutput{})
-	register(api, dispatcher, huma.Operation{OperationID: "ingestChatwootWebhook", Method: http.MethodPost, Path: "/webhooks/chatwoot/{route_key}", Tags: []string{"Webhooks"}, Summary: "Ingest Chatwoot webhook", Security: []map[string][]string{}, DefaultStatus: http.StatusAccepted, Errors: []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusRequestEntityTooLarge}}, ChatwootWebhookInput{}, WebhookAcceptedOutput{})
 }
 
 func init() { _ = registerSystemOperations }

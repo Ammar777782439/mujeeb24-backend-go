@@ -29,7 +29,7 @@ func run() error {
 		return err
 	}
 	defer runtime.Shutdown()
-	log.Printf("worker starting poll_interval=%s batch_size=%d mirror_enabled=%t provider_enabled=%t", runtime.PollInterval, runtime.BatchSize, runtime.MirrorProcessor != nil, runtime.Processor != nil)
+	log.Printf("worker starting poll_interval=%s batch_size=%d provider_enabled=%t", runtime.PollInterval, runtime.BatchSize, runtime.Processor != nil)
 
 	signalContext, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()

@@ -12,18 +12,15 @@ import (
 )
 
 type WorkerRuntime struct {
-	Database        *postgres.Adapter
-	EventStore      ports.EventStore
-	Outbox          ports.OutboxStore
-	MirrorStore     ports.ChatwootMirrorStore
-	SocialAPI       ports.ChannelProvider
-	Chatwoot        ports.CommunicationWorkspace
-	Processor       *services.OutboxProcessor
-	MirrorProcessor *services.ChatwootMirrorProcessor
-	PollInterval    time.Duration
-	CycleTimeout    time.Duration
-	BatchSize       int
-	WorkerOwner     string
+	Database     *postgres.Adapter
+	EventStore   ports.EventStore
+	Outbox       ports.OutboxStore
+	SocialAPI    ports.ChannelProvider
+	Processor    *services.OutboxProcessor
+	PollInterval time.Duration
+	CycleTimeout time.Duration
+	BatchSize    int
+	WorkerOwner  string
 }
 
 func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime, error) {
@@ -33,8 +30,7 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 	}
 	external := BuildExternalAdapters(cfg)
 	outbox := postgres.NewPostgresOutboxStore(database)
-	mirrorStore := postgres.NewChatwootMirrorStore(database)
-	runtime := &WorkerRuntime{Database: database, EventStore: postgres.NewInboundEventStore(database), Outbox: outbox, MirrorStore: mirrorStore, SocialAPI: external.SocialAPI, Chatwoot: external.Chatwoot, PollInterval: cfg.WorkerPollInterval, CycleTimeout: cfg.ShutdownTimeout, BatchSize: cfg.WorkerBatchSize, WorkerOwner: cfg.WorkerOwner}
+	runtime := &WorkerRuntime{Database: database, EventStore: postgres.NewInboundEventStore(database), Outbox: outbox, SocialAPI: external.SocialAPI, PollInterval: cfg.WorkerPollInterval, CycleTimeout: cfg.ShutdownTimeout, BatchSize: cfg.WorkerBatchSize, WorkerOwner: cfg.WorkerOwner}
 	if external.SocialAPI != nil {
 		runtime.Processor = &services.OutboxProcessor{
 			Outbox: outbox,
@@ -47,9 +43,6 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 			Messages: postgres.NewOutboundMessageRepository(database),
 			Owner:    runtime.WorkerOwner,
 		}
-	}
-	if external.Chatwoot != nil && external.ChatwootMirrorEnabled {
-		runtime.MirrorProcessor = &services.ChatwootMirrorProcessor{Store: mirrorStore, Workspace: external.Chatwoot, Owner: runtime.WorkerOwner}
 	}
 	return runtime, nil
 }
@@ -102,21 +95,6 @@ func (r *WorkerRuntime) RunOnce(ctx context.Context) (int, error) {
 		}
 		for _, entry := range entries {
 			if err := r.Processor.Process(ctx, entry.ID); err != nil {
-				return processed, err
-			}
-			processed++
-		}
-	}
-	if r.MirrorProcessor != nil {
-		if r.MirrorStore == nil {
-			return processed, errors.New("chatwoot mirror store is not configured")
-		}
-		jobs, err := r.MirrorStore.ListClaimable(ctx, limit)
-		if err != nil {
-			return processed, err
-		}
-		for _, job := range jobs {
-			if err := r.MirrorProcessor.Process(ctx, job.ID); err != nil {
 				return processed, err
 			}
 			processed++

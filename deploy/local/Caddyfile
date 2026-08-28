@@ -10,11 +10,6 @@
 		reverse_proxy mujeeb-api:3001
 	}
 
-	@chatwoot_webhooks path /api/v1/webhooks/chatwoot/*
-	handle @chatwoot_webhooks {
-		reverse_proxy mujeeb-api:3001
-	}
-
 	handle {
 		respond "not found" 404
 	}

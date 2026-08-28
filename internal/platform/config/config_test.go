@@ -56,31 +56,31 @@ func TestLoadFromEnvDisablesLLMByDefault(t *testing.T) {
 	}
 }
 
-func TestLoadFromEnvDisablesChatwootMirrorByDefaultAndReadsOverride(t *testing.T) {
+func TestLoadFromEnvDisablesAutoReplyByDefaultAndReadsOverride(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
 	cfg, err := LoadFromEnv()
 	if err != nil {
 		t.Fatalf("LoadFromEnv: %v", err)
 	}
-	if cfg.ChatwootMirrorEnabled {
-		t.Fatalf("Chatwoot mirror must be disabled by default: %#v", cfg)
+	if cfg.AutoReplyEnabled {
+		t.Fatalf("AutoReply must be disabled by default: %#v", cfg)
 	}
-	t.Setenv("CHATWOOT_MIRROR_ENABLED", "true")
-	t.Setenv("CHATWOOT_API_TOKEN", "test-chatwoot-token")
+	t.Setenv("AUTOREPLY_ENABLED", "true")
+	t.Setenv("SOCIALAPI_WEBHOOK_SECRET", "test-webhook-secret")
+	t.Setenv("SOCIALAPI_API_KEY", "test-socialapi-key")
+	t.Setenv("LLM_ENABLED", "true")
+	t.Setenv("LLM_BASE_URL", "https://llm.example/v1")
+	t.Setenv("LLM_API_KEY", "test-only-key")
+	t.Setenv("LLM_MODEL", "test-model")
 	cfg, err = LoadFromEnv()
-	if err != nil || !cfg.ChatwootMirrorEnabled {
-		t.Fatalf("Chatwoot mirror override: cfg=%#v err=%v", cfg, err)
+	if err != nil || !cfg.AutoReplyEnabled {
+		t.Fatalf("AutoReply override: cfg=%#v err=%v", cfg, err)
 	}
 }
 
 func TestLoadFromEnvRejectsIncompleteExternalFeatureEnablement(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
-	t.Setenv("CHATWOOT_MIRROR_ENABLED", "true")
-	if _, err := LoadFromEnv(); err == nil {
-		t.Fatal("LoadFromEnv accepted Chatwoot mirror without Chatwoot API token")
-	}
-	t.Setenv("CHATWOOT_MIRROR_ENABLED", "false")
-	t.Setenv("CHATWOOT_AUTOREPLY_ENABLED", "true")
+	t.Setenv("AUTOREPLY_ENABLED", "true")
 	if _, err := LoadFromEnv(); err == nil {
 		t.Fatal("LoadFromEnv accepted AutoReply without full runtime prerequisites")
 	}
@@ -119,13 +119,9 @@ func TestLoadFromEnvReadsLLMRuntimeConfiguration(t *testing.T) {
 func TestLoadFromEnvRequiresHTTPSProvisioningURLsInProduction(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
 	t.Setenv("APP_ENV", "production")
-	t.Setenv("CHATWOOT_PROVISIONING_ENABLED", "true")
+	t.Setenv("CHANNEL_PROVISIONING_ENABLED", "true")
 	t.Setenv("SOCIALAPI_API_KEY", "test-socialapi-key")
-	t.Setenv("CHATWOOT_API_TOKEN", "test-chatwoot-api-token")
-	t.Setenv("CHATWOOT_PLATFORM_API_TOKEN", "test-chatwoot-platform-token")
-	t.Setenv("CHATWOOT_PROVISIONING_USER_ID", "7")
 	t.Setenv("CHANNEL_PROVISIONING_REDIRECT_URI", "http://example.test/oauth/socialapi/callback")
-	t.Setenv("CHANNEL_PROVISIONING_WEBHOOK_URL", "https://example.test/webhooks/chatwoot")
 	cfg, err := LoadFromEnv()
 	if err != nil {
 		t.Fatalf("LoadFromEnv must not prevent worker startup: %v", err)
@@ -140,16 +136,15 @@ func TestLoadFromEnvRequiresHTTPSProvisioningURLsInProduction(t *testing.T) {
 	}
 }
 
-func TestLoadFromEnvRejectsIncompleteChatwootProvisioningConfiguration(t *testing.T) {
+func TestLoadFromEnvRejectsIncompleteSocialAPIProvisioningConfiguration(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
-	t.Setenv("CHATWOOT_PROVISIONING_ENABLED", "true")
+	t.Setenv("CHANNEL_PROVISIONING_ENABLED", "true")
 	t.Setenv("CHANNEL_PROVISIONING_REDIRECT_URI", "https://example.test/oauth/socialapi/callback")
-	t.Setenv("CHANNEL_PROVISIONING_WEBHOOK_URL", "https://example.test/api/v1/webhooks/chatwoot")
 	cfg, err := LoadFromEnv()
 	if err != nil {
 		t.Fatalf("LoadFromEnv must allow worker startup with an optional misconfigured operation: %v", err)
 	}
 	if err := cfg.ValidateChannelProvisioning(); err == nil {
-		t.Fatal("ValidateChannelProvisioning accepted incomplete Chatwoot provisioning configuration")
+		t.Fatal("ValidateChannelProvisioning accepted incomplete SocialAPI provisioning configuration")
 	}
 }

@@ -1,6 +1,6 @@
 # Cloudflare Tunnel لاستقبال SocialAPI Webhook
 
-يوفر هذا المجلد **proxy محدود المسار** بين الإنترنت وMujeeb. لا يعرّض Chatwoot أو PostgreSQL أو بقية Mujeeb API؛ يسمح فقط بطلبات المسار التالي:
+يوفر هذا المجلد **proxy محدود المسار** بين الإنترنت وMujeeb. لا يعرّض PostgreSQL أو بقية Mujeeb API؛ يسمح فقط بطلبات المسار التالي:
 
 ```text
 /api/v1/webhooks/socialapi/{route_key}

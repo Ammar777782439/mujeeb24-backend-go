@@ -462,7 +462,7 @@ func conversationList(v commands.ListResult[commands.ConversationView]) *contrac
 func messageList(v commands.ListResult[commands.MessageView]) *contract.List[contract.Message] {
 	items := make([]contract.Message, 0, len(v.Items))
 	for _, item := range v.Items {
-		items = append(items, contract.Message{ID: contract.UUID(item.ID), ConversationID: contract.UUID(item.ConversationID), Direction: item.Direction, Origin: item.Origin, Status: item.Status, Text: item.Text, ProviderMessageReference: item.ProviderMessageReference, ChatwootMessageReference: item.ChatwootMessageReference, OccurredAt: item.OccurredAt, CreatedAt: item.CreatedAt, Private: item.Private})
+		items = append(items, contract.Message{ID: contract.UUID(item.ID), ConversationID: contract.UUID(item.ConversationID), Direction: item.Direction, Origin: item.Origin, Status: item.Status, Text: item.Text, ProviderMessageReference: item.ProviderMessageReference, OccurredAt: item.OccurredAt, CreatedAt: item.CreatedAt, Private: item.Private})
 	}
 	return listPage(items, v.NextCursor, v.HasMore)
 }

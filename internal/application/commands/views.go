@@ -60,7 +60,6 @@ type MessageView struct {
 	Status                   string
 	Text                     string
 	ProviderMessageReference *string
-	ChatwootMessageReference *string
 	OccurredAt               time.Time
 	CreatedAt                time.Time
 	ResourceVersion          ResourceVersion

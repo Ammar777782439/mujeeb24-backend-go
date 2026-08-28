@@ -5,48 +5,34 @@ import (
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/openaicompatible"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/providers/socialapi"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/workspaces/chatwoot"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
 )
 
 type ExternalAdapters struct {
 	SocialAPI                      ports.ChannelProvider
-	Chatwoot                       ports.CommunicationWorkspace
 	SocialWebhook                  ports.WebhookReceiver
-	ChatwootWebhook                ports.WebhookReceiver
 	AIRuntime                      ports.AIRuntime
 	LLMConfigError                 error
-	ChatwootAutoReplyEnabled       bool
-	ChatwootMirrorEnabled          bool
+	AutoReplyEnabled               bool
 	ChannelProvisioningSocial      ports.SocialChannelProvisioner
-	ChannelProvisioningWorkspace   ports.WorkspaceProvisioner
 	ChannelProvisioningError       error
 	ChannelProvisioningEnabled     bool
 	ChannelProvisioningRedirectURI string
-	ChannelProvisioningWebhookURL  string
 }
 
 func (a ExternalAdapters) ReadinessChecks() map[string]string {
 	checks := map[string]string{
 		"socialapi_webhook":    "disabled",
-		"chatwoot_webhook":     "disabled",
-		"chatwoot_mirror":      "disabled",
-		"chatwoot_autoreply":   "disabled",
+		"auto_reply":           "disabled",
 		"channel_provisioning": "disabled",
 		"llm_runtime":          "disabled",
 	}
 	if a.SocialWebhook != nil {
 		checks["socialapi_webhook"] = "configured"
 	}
-	if a.ChatwootWebhook != nil {
-		checks["chatwoot_webhook"] = "configured"
-	}
-	if a.ChatwootMirrorEnabled {
-		checks["chatwoot_mirror"] = "configured"
-	}
-	if a.ChatwootAutoReplyEnabled {
-		checks["chatwoot_autoreply"] = "configured"
+	if a.AutoReplyEnabled {
+		checks["auto_reply"] = "configured"
 	}
 	if a.ChannelProvisioningEnabled {
 		if a.ChannelProvisioningError != nil {
@@ -69,17 +55,9 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 		adapters.SocialWebhook = client
 		adapters.ChannelProvisioningSocial = socialapi.NewProvisioningAdapter(client)
 	}
-	if cfg.ChatwootAPIToken != "" || cfg.ChatwootWebhookSecret != "" || cfg.ChatwootPlatformAPIToken != "" {
-		client := chatwoot.NewClient(chatwoot.Config{BaseURL: cfg.ChatwootBaseURL, APIToken: cfg.ChatwootAPIToken, WebhookSecret: cfg.ChatwootWebhookSecret, HTTPTimeout: cfg.ChatwootHTTPTimeout})
-		adapters.Chatwoot = client
-		adapters.ChatwootWebhook = client
-		if cfg.ChatwootPlatformAPIToken != "" {
-			adapters.ChannelProvisioningWorkspace = chatwoot.NewPlatformClient(chatwoot.PlatformConfig{BaseURL: cfg.ChatwootBaseURL, PlatformToken: cfg.ChatwootPlatformAPIToken, APIToken: cfg.ChatwootAPIToken, APIUserID: int64(cfg.ChatwootProvisioningUserID), HTTPTimeout: cfg.ChatwootHTTPTimeout})
-		}
-	}
-	if cfg.ChatwootProvisioningEnabled {
+	if cfg.ChannelProvisioningEnabled {
 		adapters.ChannelProvisioningError = cfg.ValidateChannelProvisioning()
-		if adapters.ChannelProvisioningError == nil && (adapters.ChannelProvisioningSocial == nil || adapters.ChannelProvisioningWorkspace == nil) {
+		if adapters.ChannelProvisioningError == nil && adapters.ChannelProvisioningSocial == nil {
 			adapters.ChannelProvisioningError = errors.New("channel provisioning adapters are not configured")
 		}
 	}
@@ -99,10 +77,8 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 			adapters.AIRuntime = client
 		}
 	}
-	adapters.ChatwootAutoReplyEnabled = cfg.ChatwootAutoReplyEnabled
-	adapters.ChatwootMirrorEnabled = cfg.ChatwootMirrorEnabled
-	adapters.ChannelProvisioningEnabled = cfg.ChatwootProvisioningEnabled
+	adapters.AutoReplyEnabled = cfg.AutoReplyEnabled
+	adapters.ChannelProvisioningEnabled = cfg.ChannelProvisioningEnabled
 	adapters.ChannelProvisioningRedirectURI = cfg.ChannelProvisioningRedirectURI
-	adapters.ChannelProvisioningWebhookURL = cfg.ChannelProvisioningWebhookURL
 	return adapters
 }

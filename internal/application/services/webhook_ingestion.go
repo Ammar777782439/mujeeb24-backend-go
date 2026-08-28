@@ -2,8 +2,6 @@ package services
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"strings"
 	"time"
@@ -21,6 +19,7 @@ type SocialAPIWebhookService struct {
 	Events           ports.EventStore
 	Inbound          ports.ProviderInboundStore
 	DeliveryStatuses ports.DeliveryStatusStore
+	AutoReply        commands.AutoReplyHandler
 	Now              func() time.Time
 }
 
@@ -135,91 +134,24 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 			}
 			if materialized.Duplicate {
 				result.Duplicate = true
+				continue
+			}
+			if s.AutoReply != nil && event.EventType == "interaction_received" && event.Direction == channel.DirectionInbound && event.Origin == channel.OriginCustomer && strings.TrimSpace(event.ProviderMessageID) != "" && strings.TrimSpace(event.Text) != "" {
+				if _, autoReplyErr := s.AutoReply.Handle(ctx, commands.AutoReplyCommand{
+					Meta:                   commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(connection.BusinessID)}},
+					ConversationID:         commands.ConversationID(materialized.ConversationID),
+					SourceMessageReference: event.ProviderMessageID,
+					Text:                   event.Text,
+					Channel:                string(event.Channel),
+					ProviderRef:            string(event.Provider),
+				}); autoReplyErr != nil {
+					return commands.WebhookAcceptedResult{}, externalDependencyError("SocialAPI AutoReply could not be executed", autoReplyErr)
+				}
 			}
 		}
 
 	}
 	return result, nil
-}
-
-type ChatwootWebhookService struct {
-	Receiver  ports.WebhookReceiver
-	Inbound   ports.ChatwootInboundStore
-	AutoReply *ChatwootAutoReplyBridge
-}
-
-// Chatwoot is an internal communication workspace, not Mujeeb's provider
-// transport or source of customer truth. A verified callback is materialized
-// into Mujeeb-owned records; no Chatwoot network call occurs in that transaction.
-func (s ChatwootWebhookService) Handle(ctx context.Context, command commands.IngestWebhookCommand) (commands.WebhookAcceptedResult, error) {
-	if s.Receiver == nil || s.Inbound == nil {
-		return commands.WebhookAcceptedResult{}, appErrors.NotImplemented()
-	}
-	if err := validateWebhookCommand(command); err != nil {
-		return commands.WebhookAcceptedResult{}, err
-	}
-	if err := s.Receiver.VerifyWebhook(ctx, command.ProviderHeaders, command.RawPayload); err != nil {
-		return commands.WebhookAcceptedResult{}, webhookAuthenticationError(err)
-	}
-	events, err := s.Receiver.NormalizeWebhook(ctx, command.ProviderHeaders, command.RawPayload)
-	if err != nil {
-		return commands.WebhookAcceptedResult{}, webhookAuthenticationError(err)
-	}
-	result := commands.WebhookAcceptedResult{Accepted: true, Resolved: true, RequestID: command.RequestID}
-	payloadHash := sha256.Sum256(command.RawPayload)
-	for _, event := range events {
-		accountID, inboxID, ok := splitChatwootConnectionReference(event.ProviderConnectionID)
-		if !ok {
-			return commands.WebhookAcceptedResult{}, appErrors.New(appErrors.CodeValidation, "Chatwoot callback requires account and inbox references")
-		}
-		materialized, err := s.Inbound.Materialize(ctx, ports.ChatwootInboundDraft{
-			EventID:             event.ProviderEventID,
-			EventType:           event.EventType,
-			RouteKey:            command.RouteKey,
-			AccountID:           accountID,
-			InboxID:             inboxID,
-			ConversationID:      event.ProviderConversationID,
-			ExternalUserID:      event.ExternalUserID,
-			ProviderMessageID:   event.ProviderMessageID,
-			MessageType:         event.MessageType,
-			Direction:           string(event.Direction),
-			Origin:              string(event.Origin),
-			Private:             event.Private,
-			SenderType:          event.SenderType,
-			Content:             event.Text,
-			OccurredAt:          event.ReceivedAt,
-			ReceivedAt:          event.ReceivedAt,
-			RawPayloadReference: event.RawPayloadReference,
-			PayloadHash:         hex.EncodeToString(payloadHash[:]),
-		})
-		if err != nil {
-			return commands.WebhookAcceptedResult{}, externalDependencyError("Chatwoot callback could not be materialized", err)
-		}
-		if materialized.Duplicate {
-			result.Duplicate = true
-			continue
-		}
-		if s.AutoReply == nil || event.Direction != channel.DirectionInbound || event.Private || event.EventType != "interaction_received" || strings.TrimSpace(event.ProviderMessageID) == "" || strings.TrimSpace(event.Text) == "" {
-			continue
-		}
-		autoReplyResult, autoReplyErr := s.AutoReply.Handle(ctx, commands.ChatwootAutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(materialized.BusinessID)}}, AccountID: accountID, InboxID: inboxID, ChatwootConversationID: event.ProviderConversationID, MujeebConversationID: commands.ConversationID(materialized.ConversationID), SourceMessageReference: event.ProviderMessageID, Text: event.Text})
-		if autoReplyErr != nil {
-			return commands.WebhookAcceptedResult{}, externalDependencyError("Chatwoot AutoReply could not be executed", autoReplyErr)
-		}
-		if autoReplyResult.Blocked {
-			result.Resolved = false
-		}
-
-	}
-	return result, nil
-}
-
-func splitChatwootConnectionReference(value string) (string, string, bool) {
-	parts := strings.SplitN(strings.TrimSpace(value), ":", 2)
-	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
-		return "", "", false
-	}
-	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), true
 }
 
 func validateWebhookCommand(command commands.IngestWebhookCommand) error {
@@ -271,5 +203,3 @@ func nonEmptyOr(value, fallback string) string {
 }
 
 var _ commands.IngestSocialAPIWebhookHandler = SocialAPIWebhookService{}
-var _ commands.IngestChatwootWebhookHandler = ChatwootWebhookService{}
-var _ = splitChatwootConnectionReference

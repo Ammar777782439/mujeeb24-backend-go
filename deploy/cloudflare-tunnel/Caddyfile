@@ -1,5 +1,5 @@
 # لا يكشف هذا الـgateway إلا مسار SocialAPI webhook إلى Mujeeb المحلي.
-# لا تضف /health أو Dashboard أو Chatwoot هنا بلا قرار أمني مستقل.
+# لا تضف /health أو Dashboard هنا بلا قرار أمني مستقل.
 :8080 {
 	@socialapi_webhooks path /api/v1/webhooks/socialapi/*
 	handle @socialapi_webhooks {

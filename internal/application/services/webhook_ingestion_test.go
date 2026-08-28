@@ -11,12 +11,9 @@ import (
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/providers/socialapi"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/workspaces/chatwoot"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/channel"
-	"github.com/google/uuid"
 )
 
 type webhookRawPayloadStore struct {
@@ -55,10 +52,27 @@ type webhookEventStore struct {
 	created bool
 }
 
-type chatwootInboundStore struct {
-	draft  ports.ChatwootInboundDraft
-	result ports.ChatwootInboundResult
-	err    error
+func (s *webhookEventStore) RecordIfAbsent(_ context.Context, draft ports.InboundEventDraft) (bool, ports.InboundEventRecord, error) {
+	s.draft = draft
+	return s.created, ports.InboundEventRecord{ID: draft.ID}, nil
+}
+func (s *webhookEventStore) Get(context.Context, string, string) (ports.InboundEventRecord, error) {
+	return ports.InboundEventRecord{}, errors.New("not used")
+}
+func (s *webhookEventStore) List(context.Context, ports.InboundEventFilter) (ports.InboundEventPage, error) {
+	return ports.InboundEventPage{}, errors.New("not used")
+}
+func (s *webhookEventStore) Claim(context.Context, string, ports.InboundEventLease) (ports.InboundEventClaimResult, error) {
+	return ports.InboundEventClaimResult{}, errors.New("not used")
+}
+func (s *webhookEventStore) MarkProcessed(context.Context, string, ports.InboundEventCompletion) (ports.InboundEventRecord, error) {
+	return ports.InboundEventRecord{}, errors.New("not used")
+}
+func (s *webhookEventStore) MarkRetryableFailure(context.Context, string, ports.InboundEventFailure) (ports.InboundEventRecord, error) {
+	return ports.InboundEventRecord{}, errors.New("not used")
+}
+func (s *webhookEventStore) MoveToDeadLetter(context.Context, string, ports.InboundEventFailure) (ports.InboundEventRecord, error) {
+	return ports.InboundEventRecord{}, errors.New("not used")
 }
 
 type providerInboundStore struct {
@@ -83,32 +97,16 @@ func (s *deliveryStatusStore) Apply(_ context.Context, draft ports.DeliveryStatu
 	return s.result, s.err
 }
 
-func (s *chatwootInboundStore) Materialize(_ context.Context, draft ports.ChatwootInboundDraft) (ports.ChatwootInboundResult, error) {
-	s.draft = draft
-	return s.result, s.err
+type autoReplyHandler struct {
+	command commands.AutoReplyCommand
+	calls   int
+	err     error
 }
 
-func (s *webhookEventStore) RecordIfAbsent(_ context.Context, draft ports.InboundEventDraft) (bool, ports.InboundEventRecord, error) {
-	s.draft = draft
-	return s.created, ports.InboundEventRecord{ID: draft.ID}, nil
-}
-func (s *webhookEventStore) Get(context.Context, string, string) (ports.InboundEventRecord, error) {
-	return ports.InboundEventRecord{}, errors.New("not used")
-}
-func (s *webhookEventStore) List(context.Context, ports.InboundEventFilter) (ports.InboundEventPage, error) {
-	return ports.InboundEventPage{}, errors.New("not used")
-}
-func (s *webhookEventStore) Claim(context.Context, string, ports.InboundEventLease) (ports.InboundEventClaimResult, error) {
-	return ports.InboundEventClaimResult{}, errors.New("not used")
-}
-func (s *webhookEventStore) MarkProcessed(context.Context, string, ports.InboundEventCompletion) (ports.InboundEventRecord, error) {
-	return ports.InboundEventRecord{}, errors.New("not used")
-}
-func (s *webhookEventStore) MarkRetryableFailure(context.Context, string, ports.InboundEventFailure) (ports.InboundEventRecord, error) {
-	return ports.InboundEventRecord{}, errors.New("not used")
-}
-func (s *webhookEventStore) MoveToDeadLetter(context.Context, string, ports.InboundEventFailure) (ports.InboundEventRecord, error) {
-	return ports.InboundEventRecord{}, errors.New("not used")
+func (s *autoReplyHandler) Handle(_ context.Context, command commands.AutoReplyCommand) (commands.AutoReplyResult, error) {
+	s.calls++
+	s.command = command
+	return commands.AutoReplyResult{Enqueued: true}, s.err
 }
 
 func signedSocialCommand(t *testing.T, body []byte) commands.IngestWebhookCommand {
@@ -124,18 +122,24 @@ func signedSocialCommand(t *testing.T, body []byte) commands.IngestWebhookComman
 	}, RawPayload: body}
 }
 
+func resolvedSocialWebhookService(inbound ports.ProviderInboundStore) SocialAPIWebhookService {
+	return SocialAPIWebhookService{
+		Receiver:    socialapi.NewClient(socialapi.Config{WebhookSecret: "secret"}),
+		RawPayloads: &webhookRawPayloadStore{},
+		Connections: webhookConnectionRepository{record: ports.ChannelConnectionRecord{ID: "connection-1", BusinessID: "business-1", ProviderReference: "socialapi", ProviderAccountReference: stringPointer("account-1"), ProviderConnectionRef: "connection-ref-1"}},
+		Events:      &webhookEventStore{created: true},
+		Inbound:     inbound,
+	}
+}
+
 func TestSocialAPIWebhookServiceRecordsResolvedEventAndRawPayloadHash(t *testing.T) {
 	body := []byte(`{"event":"dm.received","data":{"id":"event-1","type":"dm","platform":"instagram","account_id":"account-1","conversation_id":"conversation-1","author":{"id":"customer-1"},"content":{"text":"hello"}}}`)
 	raw := &webhookRawPayloadStore{}
 	events := &webhookEventStore{created: true}
 	inbound := &providerInboundStore{result: ports.ProviderInboundResult{BusinessID: "business-1", CustomerID: "customer-1", ConversationID: "conversation-1", ConversationReferenceID: "reference-1", CommunicationMessageID: "message-1"}}
-	service := SocialAPIWebhookService{
-		Receiver:    socialapi.NewClient(socialapi.Config{WebhookSecret: "secret"}),
-		RawPayloads: raw,
-		Connections: webhookConnectionRepository{record: ports.ChannelConnectionRecord{ID: "connection-1", BusinessID: "business-1", ProviderReference: "socialapi", ProviderAccountReference: stringPointer("account-1"), ProviderConnectionRef: "connection-ref-1"}},
-		Events:      events,
-		Inbound:     inbound,
-	}
+	service := resolvedSocialWebhookService(inbound)
+	service.RawPayloads = raw
+	service.Events = events
 	result, err := service.Handle(context.Background(), signedSocialCommand(t, body))
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
@@ -154,25 +158,43 @@ func TestSocialAPIWebhookServiceRecordsResolvedEventAndRawPayloadHash(t *testing
 	}
 }
 
-func TestSocialAPIWebhookServiceAppliesDeliveryStatusWithoutMaterializingMessage(t *testing.T) {
-	body := []byte(`{"event":"dm.status.delivered","data":{"id":"status-event-1","type":"dm_status","platform":"whatsapp","account_id":"account-1","conversation_id":"conversation-1","mids":["provider-message-1"],"status":"delivered"}}`)
-	statuses := &deliveryStatusStore{result: ports.DeliveryStatusResult{Applied: true, OutboundMessageID: "outbound-1", Status: "delivered"}}
-	inbound := &providerInboundStore{}
-	service := SocialAPIWebhookService{
-		Receiver:         socialapi.NewClient(socialapi.Config{WebhookSecret: "secret"}),
-		RawPayloads:      &webhookRawPayloadStore{},
-		Connections:      webhookConnectionRepository{record: ports.ChannelConnectionRecord{ID: "connection-1", BusinessID: "business-1", ProviderReference: "socialapi", ProviderAccountReference: stringPointer("account-1")}},
-		Events:           &webhookEventStore{created: true},
-		Inbound:          inbound,
-		DeliveryStatuses: statuses,
+func TestSocialAPIWebhookServiceRunsAutoReplyOnlyForNewInboundMessage(t *testing.T) {
+	body := []byte(`{"event":"dm.received","data":{"id":"event-1","type":"dm","platform":"instagram","account_id":"account-1","conversation_id":"conversation-1","author":{"id":"customer-1"},"content":{"text":"hello"}}}`)
+	autoReply := &autoReplyHandler{}
+	service := resolvedSocialWebhookService(&providerInboundStore{result: ports.ProviderInboundResult{BusinessID: "business-1", ConversationID: "conversation-1", CommunicationMessageID: "message-1"}})
+	service.AutoReply = autoReply
+	if _, err := service.Handle(context.Background(), signedSocialCommand(t, body)); err != nil {
+		t.Fatalf("Handle: %v", err)
 	}
-	result, err := service.Handle(context.Background(), signedSocialCommand(t, body))
-	if err != nil || !result.Accepted || !result.Resolved || statuses.draft.InboundEventID == "" || statuses.draft.ProviderMessageID != "provider-message-1" || statuses.draft.Status != "delivered" {
-		t.Fatalf("unexpected delivery status result=%#v draft=%#v err=%v", result, statuses.draft, err)
+	if autoReply.calls != 1 || autoReply.command.Meta.Actor.BusinessID != "business-1" || autoReply.command.ConversationID != "conversation-1" || autoReply.command.SourceMessageReference != "event-1" || autoReply.command.Text != "hello" || autoReply.command.ProviderRef != "socialapi" || autoReply.command.Channel != "instagram" {
+		t.Fatalf("unexpected auto reply command: %#v calls=%d", autoReply.command, autoReply.calls)
 	}
-	if inbound.draft.InboundEventID != "" {
-		t.Fatalf("delivery status must not enter provider inbound materialization: %#v", inbound.draft)
-	}
+}
+
+func TestSocialAPIWebhookServiceDoesNotRunAutoReplyForDuplicateOrDeliveryStatus(t *testing.T) {
+	t.Run("duplicate message", func(t *testing.T) {
+		body := []byte(`{"event":"dm.received","data":{"id":"event-1","type":"dm","platform":"instagram","account_id":"account-1","conversation_id":"conversation-1","author":{"id":"customer-1"},"content":{"text":"hello"}}}`)
+		autoReply := &autoReplyHandler{}
+		service := resolvedSocialWebhookService(&providerInboundStore{result: ports.ProviderInboundResult{BusinessID: "business-1", ConversationID: "conversation-1", Duplicate: true}})
+		service.AutoReply = autoReply
+		result, err := service.Handle(context.Background(), signedSocialCommand(t, body))
+		if err != nil || !result.Duplicate || autoReply.calls != 0 {
+			t.Fatalf("unexpected duplicate result=%#v err=%v calls=%d", result, err, autoReply.calls)
+		}
+	})
+	t.Run("delivery status", func(t *testing.T) {
+		body := []byte(`{"event":"dm.status.delivered","data":{"id":"status-event-1","type":"dm_status","platform":"whatsapp","account_id":"account-1","conversation_id":"conversation-1","mids":["provider-message-1"],"status":"delivered"}}`)
+		statuses := &deliveryStatusStore{result: ports.DeliveryStatusResult{Applied: true, OutboundMessageID: "outbound-1", Status: "delivered"}}
+		inbound := &providerInboundStore{}
+		autoReply := &autoReplyHandler{}
+		service := resolvedSocialWebhookService(inbound)
+		service.DeliveryStatuses = statuses
+		service.AutoReply = autoReply
+		result, err := service.Handle(context.Background(), signedSocialCommand(t, body))
+		if err != nil || !result.Accepted || !result.Resolved || statuses.draft.InboundEventID == "" || statuses.draft.ProviderMessageID != "provider-message-1" || inbound.draft.InboundEventID != "" || autoReply.calls != 0 {
+			t.Fatalf("unexpected delivery status result=%#v draft=%#v inbound=%#v err=%v calls=%d", result, statuses.draft, inbound.draft, err, autoReply.calls)
+		}
+	})
 }
 
 func TestSocialAPIWebhookServicePersistsValidUnknownConnectionAsUnresolved(t *testing.T) {
@@ -185,33 +207,15 @@ func TestSocialAPIWebhookServicePersistsValidUnknownConnectionAsUnresolved(t *te
 		Events:      events,
 	}
 	result, err := service.Handle(context.Background(), signedSocialCommand(t, body))
-	if err != nil || !result.Accepted || result.Resolved || result.Duplicate {
-		t.Fatalf("unexpected unresolved result=%#v err=%v", result, err)
-	}
-	if events.draft.BusinessID != nil || events.draft.ConnectionID != nil || events.draft.ProcessingState != "unresolved" {
-		t.Fatalf("unexpected unresolved draft: %#v", events.draft)
+	if err != nil || !result.Accepted || result.Resolved || result.Duplicate || events.draft.BusinessID != nil || events.draft.ConnectionID != nil || events.draft.ProcessingState != "unresolved" {
+		t.Fatalf("unexpected unresolved result=%#v event=%#v err=%v", result, events.draft, err)
 	}
 }
 
-func TestChatwootWebhookServiceMaterializesVerifiedCallback(t *testing.T) {
-	body := []byte(`{"event":"message_created","id":901,"content":"hello","account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56}}`)
-	store := &chatwootInboundStore{result: ports.ChatwootInboundResult{CustomerID: "customer-1", ConversationID: "conversation-1", CommunicationMessageID: "message-1"}}
-	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	mac := hmac.New(sha256.New, []byte("secret"))
-	_, _ = mac.Write([]byte(timestamp + "." + string(body)))
-	command := commands.IngestWebhookCommand{RouteKey: "chatwoot-test", ProviderHeaders: map[string]string{"X-Chatwoot-Signature": "sha256=" + hex.EncodeToString(mac.Sum(nil)), "X-Chatwoot-Timestamp": timestamp}, RawPayload: body}
-	result, err := (ChatwootWebhookService{Receiver: chatwoot.NewClient(chatwoot.Config{WebhookSecret: "secret"}), Inbound: store}).Handle(context.Background(), command)
-	if err != nil || !result.Accepted || result.Ignored || !result.Resolved || result.Duplicate {
-		t.Fatalf("unexpected result=%#v err=%v", result, err)
-	}
-	if store.draft.RouteKey != "chatwoot-test" || store.draft.AccountID != "12" || store.draft.InboxID != "34" || store.draft.ConversationID != "78" || store.draft.ExternalUserID != "56" || store.draft.ProviderMessageID != "901" || store.draft.EventType != "interaction_received" || store.draft.Content != "hello" || store.draft.PayloadHash == "" {
-		t.Fatalf("unexpected materialization draft=%#v", store.draft)
-	}
-}
-
-func TestChatwootWebhookServiceRejectsInvalidSignature(t *testing.T) {
-	command := commands.IngestWebhookCommand{RouteKey: "chatwoot", ProviderHeaders: map[string]string{"X-Chatwoot-Signature": "sha256=00", "X-Chatwoot-Timestamp": strconv.FormatInt(time.Now().Unix(), 10)}, RawPayload: []byte(`{"event":"message_created","id":901}`)}
-	_, err := (ChatwootWebhookService{Receiver: chatwoot.NewClient(chatwoot.Config{WebhookSecret: "secret"}), Inbound: &chatwootInboundStore{}}).Handle(context.Background(), command)
+func TestSocialAPIWebhookServiceRejectsInvalidSignature(t *testing.T) {
+	service := resolvedSocialWebhookService(&providerInboundStore{})
+	command := commands.IngestWebhookCommand{RouteKey: "socialapi", ProviderHeaders: map[string]string{"X-SocialAPI-Signature-V2": "sha256=00", "X-SocialAPI-Timestamp": strconv.FormatInt(time.Now().Unix(), 10)}, RawPayload: []byte(`{"event":"dm.received"}`)}
+	_, err := service.Handle(context.Background(), command)
 	var appErr *appErrors.Error
 	if !errors.As(err, &appErr) || appErr.Code != appErrors.CodeUnauthenticated {
 		t.Fatalf("unexpected error: %v", err)
@@ -220,87 +224,6 @@ func TestChatwootWebhookServiceRejectsInvalidSignature(t *testing.T) {
 
 var _ ports.ChannelConnectionRepository = webhookConnectionRepository{}
 var _ ports.EventStore = (*webhookEventStore)(nil)
-var _ ports.ChatwootInboundStore = (*chatwootInboundStore)(nil)
 var _ ports.ProviderInboundStore = (*providerInboundStore)(nil)
 var _ ports.DeliveryStatusStore = (*deliveryStatusStore)(nil)
-var _ = channel.ProviderSocialAPI
-var _ = uuid.Nil
-
-func signedChatwootCommand(t *testing.T, body []byte) commands.IngestWebhookCommand {
-	t.Helper()
-	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	mac := hmac.New(sha256.New, []byte("secret"))
-	_, _ = mac.Write([]byte(timestamp + "." + string(body)))
-	return commands.IngestWebhookCommand{RouteKey: "chatwoot-test", DeliveryID: "chatwoot-delivery", RequestID: "chatwoot-request", ProviderHeaders: map[string]string{"X-Chatwoot-Signature": "sha256=" + hex.EncodeToString(mac.Sum(nil)), "X-Chatwoot-Timestamp": timestamp}, RawPayload: body}
-}
-
-func testChatwootAutoReplyBridge() (ChatwootAutoReplyBridge, *fakeOutboxStore) {
-	reference, connection := providerReferenceBindingFixtures()
-	reference.ChatwootAccountID = stringPtr("12")
-	reference.ChatwootInboxID = stringPtr("34")
-	reference.ChatwootConversationID = stringPtr("78")
-	connection.ProviderAccountReference = stringPtr("12")
-	references := fakeReferenceRepository{record: reference}
-	outbox := &fakeOutboxStore{}
-	autoReply := NewAutoReplyService(SafeAutoReplyRuntime{}, &fakeDecisionRepository{}, references, &fakeOutboundRepository{}, outbox, fakeTransactionManager{})
-	return ChatwootAutoReplyBridge{Resolver: ChatwootProviderReferenceResolver{References: references, Connections: resolverConnectionRepository{record: connection}}, AutoReply: autoReply}, outbox
-}
-
-func TestChatwootWebhookServiceOrchestratesIncomingAutoReplyToOutbox(t *testing.T) {
-	body := []byte(`{"event":"message_created","id":1001,"content":"hello","message_type":"incoming","account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56,"type":"contact"}}`)
-	store := &chatwootInboundStore{result: ports.ChatwootInboundResult{BusinessID: "business-1", ConversationID: "conversation-1", CustomerID: "customer-1", CommunicationMessageID: "message-1"}}
-	bridge, outbox := testChatwootAutoReplyBridge()
-	service := ChatwootWebhookService{Receiver: chatwoot.NewClient(chatwoot.Config{WebhookSecret: "secret"}), Inbound: store, AutoReply: &bridge}
-	result, err := service.Handle(context.Background(), signedChatwootCommand(t, body))
-	if err != nil || !result.Accepted || !result.Resolved || result.Duplicate || outbox.calls != 1 {
-		t.Fatalf("unexpected incoming orchestration result=%#v err=%v outbox_calls=%d", result, err, outbox.calls)
-	}
-	if store.draft.Direction != "inbound" || store.draft.Origin != "customer" || store.draft.MessageType != "incoming" {
-		t.Fatalf("unexpected inbound draft=%#v", store.draft)
-	}
-}
-
-func TestChatwootWebhookServiceDoesNotAutoReplyToOutgoingOrPrivateMessages(t *testing.T) {
-	cases := []struct {
-		name string
-		body []byte
-	}{
-		{name: "outgoing", body: []byte(`{"event":"message_created","id":1002,"content":"agent reply","message_type":"outgoing","account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56,"type":"user"}}`)},
-		{name: "private", body: []byte(`{"event":"message_created","id":1003,"content":"private note","message_type":"incoming","private":true,"account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56,"type":"user"}}`)},
-		{name: "activity", body: []byte(`{"event":"message_created","id":1005,"content":"activity","message_type":"activity","account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56,"type":"user"}}`)},
-		{name: "template", body: []byte(`{"event":"message_created","id":1006,"content":"template","message_type":"template","account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56,"type":"user"}}`)},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			store := &chatwootInboundStore{result: ports.ChatwootInboundResult{BusinessID: "business-1", ConversationID: "conversation-1"}}
-			bridge, outbox := testChatwootAutoReplyBridge()
-			service := ChatwootWebhookService{Receiver: chatwoot.NewClient(chatwoot.Config{WebhookSecret: "secret"}), Inbound: store, AutoReply: &bridge}
-			result, err := service.Handle(context.Background(), signedChatwootCommand(t, tc.body))
-			if err != nil || !result.Accepted || outbox.calls != 0 {
-				t.Fatalf("unexpected echo suppression result=%#v err=%v outbox_calls=%d", result, err, outbox.calls)
-			}
-			if store.draft.Direction != "outbound" {
-				t.Fatalf("expected outbound direction, draft=%#v", store.draft)
-			}
-		})
-	}
-}
-
-func TestChatwootWebhookServiceDoesNotAutoReplyToDuplicateOrUnresolvedReference(t *testing.T) {
-	body := []byte(`{"event":"message_created","id":1004,"content":"hello again","message_type":"incoming","account":{"id":12},"inbox":{"id":34},"conversation":{"id":78},"sender":{"id":56,"type":"contact"}}`)
-	duplicateStore := &chatwootInboundStore{result: ports.ChatwootInboundResult{BusinessID: "business-1", ConversationID: "conversation-1", Duplicate: true}}
-	bridge, outbox := testChatwootAutoReplyBridge()
-	service := ChatwootWebhookService{Receiver: chatwoot.NewClient(chatwoot.Config{WebhookSecret: "secret"}), Inbound: duplicateStore, AutoReply: &bridge}
-	result, err := service.Handle(context.Background(), signedChatwootCommand(t, body))
-	if err != nil || !result.Accepted || !result.Duplicate || outbox.calls != 0 {
-		t.Fatalf("unexpected duplicate result=%#v err=%v outbox_calls=%d", result, err, outbox.calls)
-	}
-
-	unresolvedStore := &chatwootInboundStore{result: ports.ChatwootInboundResult{BusinessID: "business-1", ConversationID: "conversation-1"}}
-	unresolvedBridge := ChatwootAutoReplyBridge{Resolver: ChatwootProviderReferenceResolver{References: resolverErrorReferenceRepository{err: repositoryKindError("not_found")}, Connections: resolverConnectionRepository{}}, AutoReply: bridge.AutoReply}
-	service = ChatwootWebhookService{Receiver: chatwoot.NewClient(chatwoot.Config{WebhookSecret: "secret"}), Inbound: unresolvedStore, AutoReply: &unresolvedBridge}
-	result, err = service.Handle(context.Background(), signedChatwootCommand(t, body))
-	if err != nil || !result.Accepted || result.Resolved || outbox.calls != 0 {
-		t.Fatalf("unexpected unresolved result=%#v err=%v outbox_calls=%d", result, err, outbox.calls)
-	}
-}
+var _ commands.AutoReplyHandler = (*autoReplyHandler)(nil)

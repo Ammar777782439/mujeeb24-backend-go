@@ -3,35 +3,22 @@ package ports
 import "context"
 
 type ConversationReferenceRecord struct {
-	ID                     string
-	BusinessID             string
-	ConversationID         string
-	System                 string
-	ProviderRef            string
-	ResourceType           string
-	ResourceID             string
-	ConnectionID           *string
-	ConversationKind       *string
-	IsCurrent              bool
-	MappingStatus          string
-	ChatwootAccountID      *string
-	ChatwootInboxID        *string
-	ChatwootConversationID *string
-}
-
-type ProviderChatwootBindingDraft struct {
-	BusinessID             string
-	ReferenceID            string
-	AccountID              string
-	InboxID                string
-	ChatwootConversationID string
+	ID               string
+	BusinessID       string
+	ConversationID   string
+	System           string
+	ProviderRef      string
+	ResourceType     string
+	ResourceID       string
+	ConnectionID     *string
+	ConversationKind *string
+	IsCurrent        bool
+	MappingStatus    string
 }
 
 type ConversationReferenceRepository interface {
 	GetByID(ctx context.Context, businessID, referenceID string) (ConversationReferenceRecord, error)
 	GetCurrentByConversation(ctx context.Context, businessID, conversationID, system string) (ConversationReferenceRecord, error)
-	GetCurrentProviderByChatwoot(ctx context.Context, businessID, accountID, inboxID, conversationID string) (ConversationReferenceRecord, error)
-	BindProviderToChatwoot(ctx context.Context, draft ProviderChatwootBindingDraft) (ConversationReferenceRecord, error)
 }
 
 type OutboundMessageDraft struct {
@@ -65,7 +52,6 @@ type OutboundMessageRecord struct {
 	ProviderIdempotencyKey  string
 	Status                  string
 	ProviderMessageID       *string
-	ChatwootMessageID       *string
 	FailureCode             *string
 	AttemptCount            int
 	CorrelationID           *string

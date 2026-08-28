@@ -146,7 +146,6 @@ type MetricsOutput = dto.MetricsOutput
 type WebhookPath = dto.WebhookPath
 type WebhookHeaders = dto.WebhookHeaders
 type SocialWebhookInput = dto.SocialWebhookInput
-type ChatwootWebhookInput = dto.ChatwootWebhookInput
 type WebhookAccepted = dto.WebhookAccepted
 type WebhookAcceptedOutput = dto.WebhookAcceptedOutput
 type ConnectionCreateInput = dto.ConnectionCreateInput

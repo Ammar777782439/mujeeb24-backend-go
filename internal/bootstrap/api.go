@@ -14,6 +14,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/middleware"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/auth/ed25519jwt"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
@@ -27,9 +28,7 @@ type APIRuntime struct {
 	EventStore          ports.EventStore
 	Outbox              ports.OutboxStore
 	SocialAPI           ports.ChannelProvider
-	Chatwoot            ports.CommunicationWorkspace
 	SocialWebhook       ports.WebhookReceiver
-	ChatwootWebhook     ports.WebhookReceiver
 	ChannelProvisioning *services.ChannelProvisioningService
 	closeOnce           sync.Once
 }
@@ -80,7 +79,6 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	dependencies.GetReadiness = readinessQueryService{Ping: database.Ping, FeatureChecks: external.ReadinessChecks()}
 	dependencies.BeginChannelConnection = services.ChannelProvisioningDisabledService{}
 	dependencies.IngestSocialAPIWebhook = services.WebhookReceiverDisabledService{Receiver: "SocialAPI"}
-	dependencies.IngestChatwootWebhook = services.WebhookReceiverDisabledService{Receiver: "Chatwoot"}
 	if authentication != nil {
 		dependencies.Scope = handlers.PostgresScopeProvider{Memberships: authentication.Repository}
 		dependencies.AuthenticatePrincipal = authentication.Service
@@ -94,17 +92,14 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	if external.ChannelProvisioningEnabled {
 		if external.ChannelProvisioningError != nil {
 			dependencies.BeginChannelConnection = services.ChannelProvisioningUnavailableService{Cause: external.ChannelProvisioningError}
-		} else if external.ChannelProvisioningSocial == nil || external.ChannelProvisioningWorkspace == nil {
+		} else if external.ChannelProvisioningSocial == nil {
 			dependencies.BeginChannelConnection = services.ChannelProvisioningUnavailableService{Cause: errors.New("channel provisioning adapters are not configured")}
 		} else {
 			service := services.ChannelProvisioningService{
 				Sessions:    postgres.NewChannelProvisioningStore(database),
 				Social:      external.ChannelProvisioningSocial,
-				Workspace:   external.ChannelProvisioningWorkspace,
-				Bindings:    postgres.NewChatwootWorkspaceBindingRepository(database),
 				Connections: postgres.NewChannelConnectionRepository(database),
 				RedirectURI: external.ChannelProvisioningRedirectURI,
-				WebhookURL:  external.ChannelProvisioningWebhookURL,
 			}
 			provisioningService = &service
 			dependencies.BeginChannelConnection = &services.BeginChannelConnectionHandler{Provisioning: service}
@@ -112,53 +107,43 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	}
 	eventStore := postgres.NewInboundEventStore(database)
 	outboxStore := postgres.NewPostgresOutboxStore(database)
+	var autoReply commands.AutoReplyHandler
+	if external.AutoReplyEnabled {
+		if external.AIRuntime == nil {
+			return nil, errors.New("AutoReply requires a configured LLM runtime")
+		}
+		referenceRepository := postgres.NewConversationReferenceRepository(database)
+		service := services.NewAutoReplyService(
+			external.AIRuntime,
+			postgres.NewAIDecisionRepository(database),
+			referenceRepository,
+			postgres.NewOutboundMessageRepository(database),
+			outboxStore,
+			database,
+		)
+		contextBuilder := services.NewAutoReplyContextBuilder(
+			postgres.NewBusinessRepository(database),
+			postgres.NewConversationRepository(database),
+			postgres.NewCustomerRepository(database),
+			postgres.NewCatalogRepository(database),
+			postgres.NewMessageRepository(database),
+		)
+		contextBuilder.Knowledge = postgres.NewKnowledgeDocumentRepository(database)
+		contextBuilder.Policies = postgres.NewBusinessPolicyRepository(database)
+		service.ContextBuilder = contextBuilder
+		service.PolicyEvaluator = services.GroundedPolicyEngine{}
+		autoReply = service
+	}
 	if external.SocialWebhook != nil {
 		dependencies.IngestSocialAPIWebhook = services.SocialAPIWebhookService{
 			Receiver:         external.SocialWebhook,
 			RawPayloads:      postgres.NewRawPayloadStore(database),
 			Connections:      postgres.NewChannelConnectionRepository(database),
 			Events:           eventStore,
-			Inbound:          postgres.NewProviderInboundStoreWithMirror(database, external.ChatwootMirrorEnabled && external.Chatwoot != nil),
+			Inbound:          postgres.NewProviderInboundStore(database),
 			DeliveryStatuses: postgres.NewDeliveryStatusStore(database),
+			AutoReply:        autoReply,
 		}
-	}
-	if external.ChatwootWebhook != nil {
-		chatwootService := services.ChatwootWebhookService{Receiver: external.ChatwootWebhook, Inbound: postgres.NewChatwootInboundStore(database)}
-		if external.ChatwootAutoReplyEnabled {
-			if external.AIRuntime == nil {
-				return nil, errors.New("Chatwoot AutoReply requires a configured LLM runtime")
-			}
-			referenceRepository := postgres.NewConversationReferenceRepository(database)
-			autoReply := services.NewAutoReplyService(
-				external.AIRuntime,
-				postgres.NewAIDecisionRepository(database),
-				referenceRepository,
-				postgres.NewOutboundMessageRepository(database),
-				outboxStore,
-				database,
-			)
-			autoReplyContextBuilder := services.NewAutoReplyContextBuilder(
-				postgres.NewBusinessRepository(database),
-				postgres.NewConversationRepository(database),
-				postgres.NewCustomerRepository(database),
-				postgres.NewCatalogRepository(database),
-				postgres.NewMessageRepository(database),
-			)
-			autoReplyContextBuilder.Knowledge = postgres.NewKnowledgeDocumentRepository(database)
-			autoReplyContextBuilder.Policies = postgres.NewBusinessPolicyRepository(database)
-			autoReply.ContextBuilder = autoReplyContextBuilder
-			autoReply.PolicyEvaluator = services.GroundedPolicyEngine{}
-
-			chatwootService.AutoReply = &services.ChatwootAutoReplyBridge{
-
-				Resolver: services.ChatwootProviderReferenceResolver{
-					References:  referenceRepository,
-					Connections: postgres.NewChannelConnectionRepository(database),
-				},
-				AutoReply: autoReply,
-			}
-		}
-		dependencies.IngestChatwootWebhook = chatwootService
 	}
 	var apiMiddleware []func(ctx huma.Context, next func(huma.Context))
 	if authentication != nil {
@@ -199,7 +184,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		_, _ = writer.Write([]byte(`{"status":"ok","service":"mujeeb24-api"}`))
 	})
 	server := &http.Server{Addr: address, Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
-	return &APIRuntime{HTTP: server, Database: database, Dependencies: dependencies, EventStore: eventStore, Outbox: outboxStore, SocialAPI: external.SocialAPI, Chatwoot: external.Chatwoot, SocialWebhook: external.SocialWebhook, ChatwootWebhook: external.ChatwootWebhook, ChannelProvisioning: provisioningService}, nil
+	return &APIRuntime{HTTP: server, Database: database, Dependencies: dependencies, EventStore: eventStore, Outbox: outboxStore, SocialAPI: external.SocialAPI, SocialWebhook: external.SocialWebhook, ChannelProvisioning: provisioningService}, nil
 }
 
 func buildAuthenticationRuntime(cfg config.ProcessConfig, database *postgres.Adapter) (*authenticationRuntime, error) {

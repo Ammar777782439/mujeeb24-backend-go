@@ -1,116 +1,83 @@
-# تشغيل Mujeeb 24 وChatwoot بأمر Docker Compose واحد
+# التشغيل المحلي: Mujeeb فقط
 
-هذا هو ملف التشغيل **الاختباري الموحّد**. لا تحتاج إلى تثبيت PostgreSQL أو Redis أو Chatwoot أو Go يدويًا؛ تحتاج فقط إلى Docker Desktop مع Docker Compose.
-
-ينشئ الملف حاويات منفصلة للخدمات التالية:
+هذا Compose هو ملف تشغيل اختبار محلي موحّد لـ**Mujeeb 24**. لا يشغّل Chatwoot أو Redis، ولا يحتاج تثبيت PostgreSQL أو Go يدويًا؛ يكفي Docker Desktop مع Docker Compose.
 
 | الخدمة | الدور | الوصول من جهازك |
-|---|---|---|
-| `mujeeb-postgres` | مصدر حقيقة Mujeeb | داخلي فقط |
-| `mujeeb-migrate` | يطبق migrations المضمّنة في binary قبل الإقلاع | داخلي ومؤقت |
-| `mujeeb-api` | HTTP API وSocialAPI webhook receiver | `127.0.0.1:3001` |
-| `mujeeb-worker` | يعالج Outbox وChatwoot mirror | داخلي فقط |
-| `chatwoot-postgres` و`chatwoot-redis` | اعتمادات Chatwoot المعزولة | داخلية فقط |
-| `chatwoot-rails` و`chatwoot-sidekiq` | Chatwoot CE ومساراته الخلفية | `127.0.0.1:3002` |
-| `webhook-gateway` | proxy محدود لمسارات SocialAPI وOAuth وChatwoot callbacks | داخلي فقط |
+| --- | --- | --- |
+| `mujeeb-postgres` | قاعدة بيانات Mujeeb ومصدر الحقيقة التجاري | داخلي فقط |
+| `mujeeb-migrate` | يطبق migrations المضمّنة قبل تشغيل API | داخلي ومؤقت |
+| `mujeeb-api` | API واستقبال SocialAPI webhook وإتمام OAuth | `127.0.0.1:3001` |
+| `mujeeb-worker` | يستهلك Outbox ويرسل عبر SocialAPI عند تهيئته | داخلي فقط |
+| `webhook-gateway` | بوابة محدودة لمساري SocialAPI وOAuth فقط | داخلي فقط |
+| `quick-tunnel` / `named-tunnel` | كشف اختياري للبوابة عبر HTTPS | اختياري |
 
-## التشغيل الأول على Windows Docker Desktop
+## التشغيل الأول في Windows Terminal (CMD)
 
-من جذر المستودع في PowerShell، نفذ هذه الأوامر مرة واحدة:
+من جذر المستودع، انسخ القالب إلى ملف محلي ثم افتحه وعدّل قيمة `MUJEEB_POSTGRES_PASSWORD` إلى كلمة مرور محلية قوية. لا تضع مفاتيح SocialAPI أو LLM في Git.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/init-test-env.ps1
-docker compose --env-file deploy/local/.env -f deploy/local/compose.yaml up -d --build
-docker compose --env-file deploy/local/.env -f deploy/local/compose.yaml ps
+```cmd
+copy deploy\local\.env.example deploy\local\.env
+notepad deploy\local\.env
+docker compose --env-file deploy\local\.env -f deploy\local\compose.yaml config
+docker compose --env-file deploy\local\.env -f deploy\local\compose.yaml up -d --build
+docker compose --env-file deploy\local\.env -f deploy\local\compose.yaml ps
+curl.exe -sS http://127.0.0.1:3001/health
+curl.exe -sS http://127.0.0.1:3001/api/v1/health/ready
 ```
 
-يفترض أن تكون الحالات التالية صحيحة قبل اختبار أي تكامل خارجي:
+يجب أن تنتهي خدمة `mujeeb-migrate` بالحالة `Exited (0)` لأنها job قصيرة، بينما يبقى `mujeeb-api` و`mujeeb-worker` و`mujeeb-postgres` قيد التشغيل. عند الحاجة للفحص، استخدم:
 
-```powershell
-curl http://127.0.0.1:3001/health
-curl http://127.0.0.1:3002/api
-docker compose --env-file deploy/local/.env -f deploy/local/compose.yaml logs --tail=100 mujeeb-api mujeeb-worker chatwoot-rails
+```cmd
+docker compose --env-file deploy\local\.env -f deploy\local\compose.yaml logs --tail=100 mujeeb-api mujeeb-worker mujeeb-migrate
 ```
 
-`mujeeb-migrate` يجب أن ينتهي بـexit code `0`؛ لأنه job وليس خدمة دائمة. أما بقية الخدمات فتظهر `running` أو `healthy` حسب نوعها.
+## HTTPS لاختبار SocialAPI وOAuth
 
-تم التحقق من صياغة Compose وCaddyfile وبناء صورة Mujeeb في بيئة التطوير. لا يمكن لتلك البيئة تشغيل Compose بكامل شبكته الافتراضية بسبب قيد kernel محلي في Docker bridge؛ هذا القيد ليس جزءًا من الملفات المرفوعة ولا ينطبق على Docker Desktop المعتاد. لذلك شغّل الأمر أعلاه عندك ثم افحص `ps` وlogs، ولا تفترض اكتمال التشغيل من بناء الصورة وحده.
+بعد نجاح health checks، شغّل النفق المؤقت داخل Compose نفسه:
 
-## HTTPS مجاني لاختبار SocialAPI فقط
-
-بعد نجاح الـhealth checks شغّل Quick Tunnel داخل **نفس Compose**:
-
-```powershell
-docker compose --env-file deploy/local/.env -f deploy/local/compose.yaml --profile quick-tunnel up -d
-docker compose --env-file deploy/local/.env -f deploy/local/compose.yaml logs -f quick-tunnel
+```cmd
+docker compose --env-file deploy\local\.env -f deploy\local\compose.yaml --profile quick-tunnel up -d
+docker compose --env-file deploy\local\.env -f deploy\local\compose.yaml logs -f quick-tunnel
 ```
 
-خذ رابط `https://...trycloudflare.com` من السجل، وأضف إليه مسار SocialAPI الحقيقي:
+أضف إلى رابط HTTPS الناتج أحد المسارين الآتيين حسب الغرض:
 
 ```text
-https://...trycloudflare.com/api/v1/webhooks/socialapi/{route_key}
+https://YOUR-HOST/api/v1/webhooks/socialapi/{route_key}
+https://YOUR-HOST/oauth/socialapi/callback
 ```
 
-الرابط عام ومجاني لكنه مؤقت ويتغير عندما تتوقف حاوية Quick Tunnel. لا يشغل Chatwoot أو Mujeeb outbound تلقائيًا، ولا يجب وضعه في SocialAPI قبل أن يكون `mujeeb-api` شغالًا وأن يكون لديك `route_key` صحيح لا قيمة مخمّنة.
+النفق المؤقت للاختبار فقط، ويتغير عنوانه بعد توقفه. لا تضف مسارات عامة أخرى إلى Caddy بلا قرار أمني مستقل.
 
-## ربط قناة تاجر عبر SocialAPI وChatwoot
+## ربط قناة تاجر
 
-لا يلزم التاجر فتح Chatwoot أو إدخال Account/Inbox IDs. عند تفعيل provisioning، ينشئ Mujeeb جلسة OAuth، يستقبل callback من SocialAPI، ثم ينشئ ChannelConnection وChatwoot Account وAPI Inbox وbinding خاصًا بالقناة.
+عند تفعيل provisioning، ينشئ Mujeeb جلسة OAuth لدى SocialAPI. بعد callback موثّق، يُنشئ أو يفعّل `ChannelConnection` داخل PostgreSQL. لا يوجد Account أو Inbox أو binding خارجي في هذا المسار.
 
-قبل تفعيل ذلك، استخدم نفس عنوان HTTPS العام للمسارات الثلاثة التالية:
-
-```text
-/oauth/socialapi/callback
-/api/v1/webhooks/socialapi/{route_key}
-/api/v1/webhooks/chatwoot/{route_key}
-```
-
-في `deploy/local/.env` المحلي، اضبط المتغيرات التالية فقط بعد حصولك على القيم من الخدمات المعنية. لا ترفعها إلى Git:
+ضع القيم المتاحة محليًا فقط في `deploy\local\.env` ثم أعد بناء API وworker:
 
 ```text
-CHATWOOT_PROVISIONING_ENABLED=true
+CHANNEL_PROVISIONING_ENABLED=true
 SOCIALAPI_API_KEY=...
-CHATWOOT_PLATFORM_API_TOKEN=...
 CHANNEL_PROVISIONING_REDIRECT_URI=https://YOUR-HOST/oauth/socialapi/callback
-CHANNEL_PROVISIONING_WEBHOOK_URL=https://YOUR-HOST/api/v1/webhooks/chatwoot
 ```
 
-قيمة `CHANNEL_PROVISIONING_WEBHOOK_URL` هي **base URL**؛ لا تضف `route_key` بنفسك. ينشئ Mujeeb مقطع route خاصًا بكل ChannelConnection، ويضعه في API Inbox الذي ينشئه داخل Chatwoot. يلزم Platform API token صادر من Platform App في Chatwoot self-hosted قبل أن يبدأ provisioning الحي.
+## الرد الآلي
 
-## Named Tunnel برابط ثابت
+الرد الآلي معطل افتراضيًا. عند تفعيله، يبدأ الطلب من SocialAPI webhook الموثّق ثم materialization داخل Mujeeb، ثم Context/Policy/Outbox، ويقوم الـworker بالإرسال إلى SocialAPI. لا تنفذ API أو LLM حيًا بمجرد نجاح تشغيل الحاويات؛ فعّل كل متطلبات runtime محليًا عن قصد واختبرها في بيئة آمنة أولًا.
 
-بعد إنشاء tunnel ونطاق في Cloudflare، ضع token محليًا في `deploy/local/.env` تحت `CLOUDFLARE_TUNNEL_TOKEN` ثم شغّل:
+## الإيقاف
 
-```powershell
-docker compose --env-file deploy/local/.env -f deploy/local/compose.yaml --profile named-tunnel up -d
+هذا الأمر يوقف الحاويات الخاصة بهذا Compose فقط، ولا يحذف volumes أو قاعدة بيانات Mujeeb:
+
+```cmd
+docker compose --env-file deploy\local\.env -f deploy\local\compose.yaml down
 ```
 
-لا ترفع `deploy/local/.env`، حتى لو كان المستودع خاصًا. ستحتاج أيضًا إلى إعداد Published application في Cloudflare ليربط hostname الخاص بك بالخدمة `http://webhook-gateway:8080`.
+لا تستخدم أوامر حذف volumes أو قواعد البيانات لإعادة الاختبار من الصفر إلا بعد أخذ نسخة احتياطية ومراجعة أثر الحذف صراحة.
 
-## ما يظل معطّلًا عمدًا
+## المراجع
 
-القيم الافتراضية تبقي `CHATWOOT_MIRROR_ENABLED` و`CHATWOOT_AUTOREPLY_ENABLED` و`CHATWOOT_PROVISIONING_ENABLED` و`LLM_ENABLED` معطلة. لكي تشغّل mirroring لاحقًا، أنشئ Chatwoot Account/Inbox وApplication API token ثم ضعه محليًا في `CHATWOOT_API_TOKEN` فقط، مع binding صحيح في Mujeeb. لا تفعّل SocialAPI outbound أو LLM أو auto-reply لمجرد أن الحاويات شغالة.
+يوضح Cloudflare أن Quick Tunnels مخصص للاختبار، بينما يتطلب الرابط الثابت إعداد Tunnel ونطاق وtoken محليين.[1] [2]
 
-## الإيقاف وإعادة التهيئة
-
-```powershell
-docker compose --env-file deploy/local/.env -f deploy/local/compose.yaml down
-```
-
-لإزالة **بيانات الاختبار المحلية فقط** وإعادة البدء من الصفر:
-
-```powershell
-docker compose --env-file deploy/local/.env -f deploy/local/compose.yaml down -v
-```
-
-## لماذا توجد قاعدتا PostgreSQL؟
-
-`mujeeb-postgres` تملك بيانات Mujeeb التجارية وevent ledger وoutbox. أما `chatwoot-postgres` فتخص مساحة العمل الداخلية لـChatwoot. عدم خلطهما يحافظ على ownership والعزل ويمكّن Mujeeb من البقاء مصدر الحقيقة حتى لو تعطلت Chatwoot.
-
-## مراجع
-
-إعداد Chatwoot الذاتي الاستضافة يحتاج Rails وSidekiq مع PostgreSQL وRedis، ثم `db:chatwoot_prepare` قبل التشغيل. وتوضح Cloudflare أن Quick Tunnel للاختبار فقط، بينما يحتاج النفق الثابت حساب Cloudflare ونطاقًا وtoken محليًا.
-
-[1]: https://www.chatwoot.com/docs/self-hosted/deployment/docker/ "Chatwoot Docker deployment"
-[2]: https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/ "Cloudflare Quick Tunnels"
-[3]: https://developers.cloudflare.com/tunnel/setup/ "Cloudflare Named Tunnel setup"
+[1]: https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/ "Cloudflare Quick Tunnels"
+[2]: https://developers.cloudflare.com/tunnel/setup/ "Cloudflare Named Tunnel setup"

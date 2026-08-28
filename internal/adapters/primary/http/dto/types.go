@@ -152,7 +152,6 @@ type Message struct {
 	Status                   string    `json:"status"`
 	Text                     string    `json:"text"`
 	ProviderMessageReference *string   `json:"provider_message_reference,omitempty"`
-	ChatwootMessageReference *string   `json:"chatwoot_message_reference,omitempty"`
 	OccurredAt               time.Time `json:"occurred_at"`
 	CreatedAt                time.Time `json:"created_at"`
 	Private                  bool      `json:"private"`

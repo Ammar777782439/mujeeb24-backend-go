@@ -29,4 +29,3 @@ type WebhookAcceptedResult struct {
 	RequestID string
 }
 type IngestSocialAPIWebhookHandler = CommandHandler[IngestWebhookCommand, WebhookAcceptedResult]
-type IngestChatwootWebhookHandler = CommandHandler[IngestWebhookCommand, WebhookAcceptedResult]

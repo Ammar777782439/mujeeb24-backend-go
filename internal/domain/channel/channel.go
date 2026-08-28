@@ -6,7 +6,6 @@ type Provider string
 
 const (
 	ProviderSocialAPI Provider = "socialapi"
-	ProviderChatwoot  Provider = "chatwoot"
 )
 
 type Channel string
@@ -107,7 +106,6 @@ type OutboundMessage struct {
 	ProviderIdempotencyKey  string
 	Status                  DeliveryStatus
 	ProviderMessageID       string
-	ChatwootMessageID       string
 	AttemptCount            int
 	NextRetryAt             *time.Time
 }

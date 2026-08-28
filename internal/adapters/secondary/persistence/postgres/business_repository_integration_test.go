@@ -521,21 +521,21 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 	if _, err := messageRepo.Record(ctx, crossBusinessDraft); !IsRepositoryKind(err, RepositoryInvalid) {
 		t.Fatalf("expected cross-business FK invalid error, got %v", err)
 	}
-	chatwootDraft := invalidTextDraft
-	chatwootDraft.ID = communicationD
-	chatwootDraft.ContentType = "image"
-	chatwootDraft.TextContent = nil
-	chatwootDraft.ChatwootMessageID = strptr("chatwoot-message-1")
-	chatwootDraft.ContentReference = "content-chatwoot"
-	chatwootDraft.OccurredAt = time.Date(2025, 1, 1, 8, 0, 0, 0, time.UTC)
-	chatwootDraft.CreatedAt = time.Date(2025, 1, 1, 8, 0, 1, 0, time.UTC)
-	if _, err := messageRepo.Record(ctx, chatwootDraft); err != nil {
-		t.Fatalf("chatwoot reference record: %v", err)
+	providerMediaDraft := invalidTextDraft
+	providerMediaDraft.ID = communicationD
+	providerMediaDraft.ContentType = "image"
+	providerMediaDraft.TextContent = nil
+	providerMediaDraft.ProviderMessageID = strptr("provider-message-media-1")
+	providerMediaDraft.ContentReference = "content-provider-media"
+	providerMediaDraft.OccurredAt = time.Date(2025, 1, 1, 8, 0, 0, 0, time.UTC)
+	providerMediaDraft.CreatedAt = time.Date(2025, 1, 1, 8, 0, 1, 0, time.UTC)
+	if _, err := messageRepo.Record(ctx, providerMediaDraft); err != nil {
+		t.Fatalf("provider media record: %v", err)
 	}
-	duplicateChatwoot := chatwootDraft
-	duplicateChatwoot.ID = communicationE
-	if _, err := messageRepo.Record(ctx, duplicateChatwoot); !IsRepositoryKind(err, RepositoryConflict) {
-		t.Fatalf("expected chatwoot uniqueness conflict, got %v", err)
+	duplicateProviderMedia := providerMediaDraft
+	duplicateProviderMedia.ID = communicationE
+	if _, err := messageRepo.Record(ctx, duplicateProviderMedia); !IsRepositoryKind(err, RepositoryConflict) {
+		t.Fatalf("expected provider media uniqueness conflict, got %v", err)
 	}
 	duplicateProvider := ports.CommunicationMessageDraft{ID: communicationG, BusinessID: businessA, ConversationReferenceID: referenceA, Direction: "inbound", Origin: "customer", Transport: "provider", ProviderMessageID: strptr("provider-message-a"), ContentType: "text", TextContent: &textA, ContentReference: "content-provider-duplicate", OccurredAt: time.Date(2025, 1, 1, 7, 0, 0, 0, time.UTC), CreatedAt: time.Date(2025, 1, 1, 7, 0, 1, 0, time.UTC)}
 	if _, err := messageRepo.Record(ctx, duplicateProvider); !IsRepositoryKind(err, RepositoryConflict) {

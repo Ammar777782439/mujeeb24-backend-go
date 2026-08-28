@@ -31,7 +31,6 @@ func TestChannelProvisioningRepositoriesAgainstPostgres(t *testing.T) {
 	businessID := "00000000-0000-0000-0000-000000000037"
 	otherBusinessID := "00000000-0000-0000-0000-000000000038"
 	cleanup := func() {
-		_, _ = adapter.Pool().Exec(context.Background(), `DELETE FROM chatwoot_workspace_bindings WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
 		_, _ = adapter.Pool().Exec(context.Background(), `DELETE FROM channel_provisioning_sessions WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
 		_, _ = adapter.Pool().Exec(context.Background(), `DELETE FROM channel_connections WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
 		_, _ = adapter.Pool().Exec(context.Background(), `DELETE FROM businesses WHERE id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
@@ -72,15 +71,6 @@ func TestChannelProvisioningRepositoriesAgainstPostgres(t *testing.T) {
 	if err != nil || connection.Status != "pending" || connection.BusinessID != businessID {
 		t.Fatalf("pending connection=%#v err=%v", connection, err)
 	}
-	bindingRepo := NewChatwootWorkspaceBindingRepository(adapter)
-	bindingID, err := bindingRepo.EnsureBinding(ctx, businessID, "business/"+businessID+"/socialapi/facebook", "cw-account-1", "cw-inbox-1", "facebook")
-	if err != nil || bindingID == "" {
-		t.Fatalf("binding=%s err=%v", bindingID, err)
-	}
-	bindingAgain, err := bindingRepo.EnsureBinding(ctx, businessID, "business/"+businessID+"/socialapi/facebook", "cw-account-1", "cw-inbox-1", "facebook")
-	if err != nil || bindingAgain != bindingID {
-		t.Fatalf("idempotent binding=%s original=%s err=%v", bindingAgain, bindingID, err)
-	}
 	active, err := connections.Activate(ctx, businessID, connection.ID, "account-1", "connection-1")
 	if err != nil || active.Status != "active" || active.ProviderAccountReference == nil || *active.ProviderAccountReference != "account-1" {
 		t.Fatalf("active connection=%#v err=%v", active, err)
@@ -88,8 +78,8 @@ func TestChannelProvisioningRepositoriesAgainstPostgres(t *testing.T) {
 	if _, err := connections.GetByID(ctx, otherBusinessID, connection.ID); !IsRepositoryKind(err, RepositoryNotFound) {
 		t.Fatalf("expected tenant isolation, got %v", err)
 	}
-	final, err := store.MarkProvisioning(ctx, businessID, session.ID, ports.ChannelProvisioningPatch{Status: ports.ProvisioningConnected, ProviderAccountRef: stringPtrIntegration("account-1"), ProviderConnectionRef: stringPtrIntegration("connection-1"), ChatwootAccountID: stringPtrIntegration("cw-account-1"), ChatwootInboxID: stringPtrIntegration("cw-inbox-1"), ChannelConnectionID: stringPtrIntegration(connection.ID)})
-	if err != nil || final.Status != ports.ProvisioningConnected || final.ChannelConnectionID != connection.ID || final.ChatwootInboxID != "cw-inbox-1" {
+	final, err := store.MarkProvisioning(ctx, businessID, session.ID, ports.ChannelProvisioningPatch{Status: ports.ProvisioningConnected, ProviderAccountRef: stringPtrIntegration("account-1"), ProviderConnectionRef: stringPtrIntegration("connection-1"), ChannelConnectionID: stringPtrIntegration(connection.ID)})
+	if err != nil || final.Status != ports.ProvisioningConnected || final.ChannelConnectionID != connection.ID || final.ProviderAccountRef != "account-1" {
 		t.Fatalf("final session=%#v err=%v", final, err)
 	}
 }

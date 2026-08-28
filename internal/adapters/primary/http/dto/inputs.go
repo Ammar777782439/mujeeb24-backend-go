@@ -533,17 +533,8 @@ type WebhookHeaders struct {
 	SocialAPITimestamp   string `header:"X-SocialAPI-Timestamp"`
 	SocialAPIDelivery    string `header:"X-SocialAPI-Delivery"`
 	SocialAPIEvent       string `header:"X-SocialAPI-Event"`
-	ChatwootSignature    string `header:"X-Chatwoot-Signature"`
-	ChatwootTimestamp    string `header:"X-Chatwoot-Timestamp"`
-	ChatwootDelivery     string `header:"X-Chatwoot-Delivery"`
 }
 type SocialWebhookInput struct {
-	WebhookPath
-	WebhookHeaders
-	Body    json.RawMessage
-	RawBody []byte
-}
-type ChatwootWebhookInput struct {
 	WebhookPath
 	WebhookHeaders
 	Body    json.RawMessage

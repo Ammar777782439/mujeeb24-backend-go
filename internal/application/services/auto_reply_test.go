@@ -54,14 +54,6 @@ func (f fakeReferenceRepository) GetByID(context.Context, string, string) (ports
 	return f.record, nil
 }
 
-func (f fakeReferenceRepository) GetCurrentProviderByChatwoot(context.Context, string, string, string, string) (ports.ConversationReferenceRecord, error) {
-	return f.record, nil
-}
-
-func (f fakeReferenceRepository) BindProviderToChatwoot(context.Context, ports.ProviderChatwootBindingDraft) (ports.ConversationReferenceRecord, error) {
-	return f.record, nil
-}
-
 func (f fakeReferenceRepository) GetCurrentByConversation(context.Context, string, string, string) (ports.ConversationReferenceRecord, error) {
 	return f.record, nil
 }

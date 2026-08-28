@@ -1,47 +1,33 @@
-# Mujeeb 24 Backend Go
+# Mujeeb 24 Backend
 
-Backend مستقل ونظيف لمنصة **مجيب 24**: نظام تشغيل مبيعات ومحادثات متعدد التجار والقطاعات والقنوات، مبني بـGo.
+Backend مستقل لمنصة **مجيب 24**: نظام تشغيل للمحادثات والمبيعات متعدد التجار، مبني بـGo وPostgreSQL.
 
 > **لا تفوّت عميلك، ولو كنت مشغولًا.**
 
 ## ابدأ من هنا
 
-إذا فتحت المستودع لأول مرة، اقرأ الملفات بهذا الترتيب:
+إذا فتحت المستودع لأول مرة، ابدأ بالملفات الآتية:
 
 ```text
-1. docs/project-status-ar.md
-2. docs/developer-guide-ar.md
-3. docs/decision-log-ar.md
-4. contracts/domain_contract_index_ar.md
-5. docs/implementation-roadmap-ar.md
-6. contracts/
+1. docs/architecture/chatwoot-free-migration-ar.md
+2. docs/project-status-ar.md
+3. docs/developer-guide-ar.md
+4. docs/decision-log-ar.md
+5. contracts/domain_contract_index_ar.md
 ```
-
-هذه الملفات تحتوي على ما تم اعتماده وما لم يبدأ، لذلك لا تحتاج إلى الرجوع إلى المحادثات القديمة لفهم نقطة التوقف.
 
 ## مسؤوليات النظام
 
-يمتلك هذا المستودع **Mujeeb Sales Domain** وطبقة التكامل:
+يمتلك Mujeeb دورة البيانات التجارية كاملة، من استلام حدث القناة حتى حفظ المحادثة والرد الخارجي:
 
-- Channel Orchestration بين Provider خارجي وCommunication Workspace.
-- حفظ الأحداث الواردة ومنع التكرار وفقدان الرسائل.
-- Customer Identity وConversation References.
-- Outbound Delivery وDelivery Status وReconciliation.
-- AI Context وIntent وStructured Decisions.
-- Universal Catalog وOffers وAttributes.
-- Leads وOrders وBookings وAppointments وQuotes.
-- Dashboard API وTenant Isolation وAudit.
+| الطبقة | المسؤولية |
+| --- | --- |
+| `Mujeeb Go + PostgreSQL` | مصدر الحقيقة التجاري، العملاء، المحادثات، الرسائل، الكتالوج، القرارات، التدقيق، Event Ledger وOutbox |
+| `SocialAPI` | ناقل القنوات وOAuth والـwebhook والإرسال الخارجي |
+| `Mujeeb API` | عقود API مع عزل tenant والتحقق والمصادقة |
+| `Mujeeb worker` | معالجة Outbox وإرسال الرسائل إلى SocialAPI خارج معاملات قاعدة البيانات |
 
-## حدود الأنظمة الخارجية
-
-```text
-SocialAPI.ai = Channel Transport
-Chatwoot     = Internal Communication Workspace
-Mujeeb Go    = Orchestration + AI + Sales Domain
-Dashboard    = Merchant Experience
-```
-
-التاجر يستخدم Dashboard مجيب 24 فقط. لا نطلب منه فتح Chatwoot أو SocialAPI.ai. Domain لا يعرف Provider DTOs أو Chatwoot Models أو HTTP أو PostgreSQL؛ التفاصيل تكون في Adapters وPlatform.
+التاجر يتعامل مع Mujeeb فقط. لا تُخزّن DTOs للمزود كحقيقة تجارية، ولا يملك نموذج الذكاء الاصطناعي صلاحية الوصول المباشر إلى قاعدة البيانات أو الإرسال الخارجي.
 
 ## المعمارية
 
@@ -53,58 +39,59 @@ internal/
 │   ├── ports/
 │   ├── commands/
 │   ├── queries/
-│   ├── services/
-│   └── workers/
+│   └── services/
 ├── adapters/
 │   ├── primary/http/
 │   └── secondary/
 │       ├── providers/socialapi/
-│       ├── workspaces/chatwoot/
 │       ├── persistence/postgres/
-│       ├── queue/asynq/
-│       ├── ai/
-│       ├── storage/
-│       ├── secrets/
-│       └── observability/
+│       └── ai/openaicompatible/
 └── platform/
 ```
 
-نستخدم **Modular Monolith** في البداية. `cmd/api` و`cmd/worker` و`cmd/migrate` نقاط تشغيل رفيعة، و`bootstrap` يركب الاعتماديات.
+نستخدم **Modular Monolith**. نقاط الدخول `cmd/api` و`cmd/worker` و`cmd/migrate` رفيعة، وطبقة `bootstrap` فقط هي التي تركب الاعتماديات الخارجية.
 
 ## المبادئ غير القابلة للكسر
 
-1. نحفظ Webhook بعد التحقق وقبل ACK.
-2. نستخدم `At-Least-Once + Idempotent Processing` بدل ادعاء Exactly-Once خارجيًا.
-3. نستخدم Event Ledger وOutbox حتى لا تضيع المهمة بين database commit وqueue publish.
-4. لا نعيد إرسال outbound عندما تكون النتيجة `unknown`؛ نستخدم reconciliation.
-5. لا نخلط IDs الخاصة بـMujeeb وProvider وChatwoot والقناة الخارجية.
-6. لا يملك AI صلاحية اختراع سعر أو مخزون أو تأكيد حجز دون تحقق وتفويض.
-7. لا نستخدم Product كجذر عالمي؛ نستخدم CatalogItem وOffer وVariant وAttributes.
-8. لا نستخدم Order كمعاملة عامة؛ نستخدم CommercialTransaction بأنواع متعددة.
-9. لا نضع tokens أو webhook secrets داخل Domain أو Git.
-10. لا نضيف طبقات مكررة إذا كانت `application/ports` أو `adapters/primary` أو `adapters/secondary` تغطي المسؤولية.
+1. يُتحقق من webhook ثم يُسجل في Event Ledger قبل ACK.
+2. المعالجة الخارجية **At-Least-Once + Idempotent Processing**؛ لا يُدَّعى Exactly-Once خارجيًا.
+3. يحمي Outbox الانتقال بين database commit والإرسال الخارجي.
+4. لا توجد network calls داخل DB transaction.
+5. نتيجة الإرسال `unknown` لا تعاد محاولتها عميانيًا؛ تُعزل للمراجعة أو reconciliation.
+6. لا يُخلط معرّف Mujeeb أو مزود القناة أو المحادثة الخارجية.
+7. لا يختلق AI سعرًا أو مخزونًا أو موعدًا أو سياسة، ولا ينفذ إرسالًا أو SQL.
+8. لا تُخزن tokens أو مفاتيح webhook أو أسرار في Domain أو Git.
 
-## الحالة الحالية
+## المسار التشغيلي
 
-المشروع في مرحلة **Domain Contract وFoundation**. تم إغلاق shared وbusiness وchannel وidentity وcommunication وcatalog وsales وai وaudit كتصميمات موثقة، ولم يبدأ بعد تنفيذ Repositories أو SQL migrations أو Provider APIs أو AI runtime.
-
-الأمر التالي المعتمد هو إغلاق `application/ports`، ثم SQL migrations، ثم Reliability Foundation، ثم Provider Simulator، ثم أول Vertical Slice.
-
-## الاختبار الحالي
-
-```bash
-go test ./...
-go list ./...
+```text
+SocialAPI webhook
+  → verify / normalize
+  → inbound_event_ledger
+  → Customer + Conversation + CommunicationMessage
+  → optional AutoReply policy
+  → AIDecision + OutboundMessage + Outbox
+  → worker
+  → SocialAPI delivery
 ```
 
-نجاح الاختبارات الحالية يثبت قابلية Foundation للبناء فقط، ولا يثبت تكامل SocialAPI.ai أو Chatwoot أو القنوات الحقيقية.
+نجاح الاختبارات المحلية يثبت الوحدات والعقود ومسار PostgreSQL عندما تتوفر قاعدة اختبار؛ ولا يثبت اتصال SocialAPI حيًا أو إرسالًا خارجيًا أو جاهزية إنتاج دون دليل تشغيل مستقل.
 
-## تشغيل Docker موحّد للاختبار
+## الاختبارات
 
-لتشغيل Mujeeb API وWorker مع PostgreSQL الخاصة بهما، إلى جانب Chatwoot CE وPostgreSQL وRedis الخاصة بها، من أمر Docker Compose واحد ودون تثبيت هذه الخدمات يدويًا، راجع [دليل التشغيل الموحّد](deploy/local/README-ar.md). يبقي هذا المسار الأسرار محلية في `deploy/local/.env` ولا يرفعها إلى Git.
+```bash
+GOTOOLCHAIN=local /usr/local/go/bin/go test ./...
+GOTOOLCHAIN=local /usr/local/go/bin/go vet ./...
+```
+
+توجد أيضًا بوابة المستودع في `scripts/verify-repository.sh`.
+
+## التشغيل المحلي على Windows
+
+راجع [دليل Mujeeb-only](deploy/local/README-ar.md). لا يحتوي Compose المحلي على خدمات خارجية للمحادثات؛ يشغّل Mujeeb وPostgreSQL والـworker والبوابة المحدودة فقط. القيم الحساسة تبقى في `deploy/local/.env` المحلي ولا تُرفع إلى Git.
 
 ## المستودع
 
-هذا المستودع خاص وموجود على branch `main`:
+المسار المرجعي هو الفرع `feat/chatwoot-free` إلى أن تُراجع التغييرات ويُتخذ قرار منفصل برفعه أو دمجه.
 
 <https://github.com/Ammar777782439/mujeeb24-backend-go>

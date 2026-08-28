@@ -10,7 +10,7 @@ import (
 type ChannelProvisioningDisabledService struct{}
 
 func (ChannelProvisioningDisabledService) Handle(context.Context, commands.BeginChannelConnectionCommand) (commands.BeginChannelConnectionResult, error) {
-	return commands.BeginChannelConnectionResult{}, appErrors.New(appErrors.CodeInvalidState, "channel provisioning is disabled; enable configured SocialAPI and Chatwoot provisioning to begin a connection")
+	return commands.BeginChannelConnectionResult{}, appErrors.New(appErrors.CodeInvalidState, "channel provisioning is disabled; enable configured SocialAPI provisioning to begin a connection")
 }
 
 // ChannelProvisioningUnavailableService keeps existing channel runtimes alive
@@ -33,4 +33,3 @@ func (s WebhookReceiverDisabledService) Handle(context.Context, commands.IngestW
 var _ commands.BeginChannelConnectionHandler = ChannelProvisioningDisabledService{}
 var _ commands.BeginChannelConnectionHandler = ChannelProvisioningUnavailableService{}
 var _ commands.IngestSocialAPIWebhookHandler = WebhookReceiverDisabledService{}
-var _ commands.IngestChatwootWebhookHandler = WebhookReceiverDisabledService{}

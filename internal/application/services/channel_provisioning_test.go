@@ -17,10 +17,11 @@ func (s *provisioningSessionStore) CreateOrGet(_ context.Context, session ports.
 	if s.sessions == nil {
 		s.sessions = map[string]ports.ChannelProvisioningSession{}
 	}
-	if existing, ok := s.sessions[session.BusinessID+"/"+session.IdempotencyKey]; ok {
+	key := session.BusinessID + "/" + session.IdempotencyKey
+	if existing, ok := s.sessions[key]; ok {
 		return existing, nil
 	}
-	s.sessions[session.BusinessID+"/"+session.IdempotencyKey] = session
+	s.sessions[key] = session
 	return session, nil
 }
 func (s *provisioningSessionStore) GetByID(_ context.Context, businessID, id string) (ports.ChannelProvisioningSession, error) {
@@ -57,12 +58,6 @@ func (s *provisioningSessionStore) MarkProvisioning(_ context.Context, businessI
 		if patch.ProviderConnectionRef != nil {
 			session.ProviderConnectionRef = *patch.ProviderConnectionRef
 		}
-		if patch.ChatwootAccountID != nil {
-			session.ChatwootAccountID = *patch.ChatwootAccountID
-		}
-		if patch.ChatwootInboxID != nil {
-			session.ChatwootInboxID = *patch.ChatwootInboxID
-		}
 		if patch.ChannelConnectionID != nil {
 			session.ChannelConnectionID = *patch.ChannelConnectionID
 		}
@@ -94,43 +89,22 @@ func (s *provisioningSocial) ResolveAuthorization(_ context.Context, callback po
 	return ports.SocialAuthorization{ProviderAccountRef: "account-1", ProviderConnectionRef: "connection-1", State: callback.State}, nil
 }
 
-type provisioningWorkspace struct {
-	accounts    int
-	inboxes     int
-	inboxErr    error
-	callbackURL string
-}
-
-func (w *provisioningWorkspace) EnsureAccount(context.Context, string, string) (ports.WorkspaceAccount, error) {
-	w.accounts++
-	return ports.WorkspaceAccount{ID: "cw-account-1"}, nil
-}
-func (w *provisioningWorkspace) EnsureInbox(_ context.Context, _ string, _ string, _ string, callbackURL string) (ports.WorkspaceInbox, error) {
-	w.inboxes++
-	w.callbackURL = callbackURL
-	if w.inboxErr != nil {
-		return ports.WorkspaceInbox{}, w.inboxErr
-	}
-	return ports.WorkspaceInbox{ID: "cw-inbox-1"}, nil
-}
-
-type provisioningBinding struct{ calls int }
-
-func (b *provisioningBinding) EnsureBinding(context.Context, string, string, string, string, string) (string, error) {
-	b.calls++
-	return "binding-1", nil
-}
-
 type provisioningConnections struct {
-	pending int
-	active  int
+	pending            int
+	activationAttempts int
+	active             int
+	activateErr        error
 }
 
 func (c *provisioningConnections) CreatePending(context.Context, string, string, string, string, string) (ports.ChannelConnectionRecord, error) {
 	c.pending++
-	return ports.ChannelConnectionRecord{ID: "connection-1"}, nil
+	return ports.ChannelConnectionRecord{ID: "connection-1", Status: "pending"}, nil
 }
 func (c *provisioningConnections) Activate(context.Context, string, string, string, string) (ports.ChannelConnectionRecord, error) {
+	c.activationAttempts++
+	if c.activateErr != nil {
+		return ports.ChannelConnectionRecord{}, c.activateErr
+	}
 	c.active++
 	return ports.ChannelConnectionRecord{ID: "connection-1", Status: "active"}, nil
 }
@@ -138,10 +112,8 @@ func (c *provisioningConnections) Activate(context.Context, string, string, stri
 func TestChannelProvisioningStartIsIdempotentAndCompleteConnects(t *testing.T) {
 	store := &provisioningSessionStore{}
 	social := &provisioningSocial{}
-	workspace := &provisioningWorkspace{}
-	binding := &provisioningBinding{}
 	connections := &provisioningConnections{}
-	service := ChannelProvisioningService{Sessions: store, Social: social, Workspace: workspace, Bindings: binding, Connections: connections, RedirectURI: "https://app.example/oauth/callback", WebhookURL: "https://app.example/webhooks/chatwoot"}
+	service := ChannelProvisioningService{Sessions: store, Social: social, Connections: connections, RedirectURI: "https://app.example/oauth/callback"}
 	first, err := service.Start(context.Background(), "business-1", "socialapi", "facebook", "Acme", "idem-1")
 	if err != nil {
 		t.Fatalf("start: %v", err)
@@ -150,49 +122,56 @@ func TestChannelProvisioningStartIsIdempotentAndCompleteConnects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("idempotent start: %v", err)
 	}
-	if first.ID != second.ID || social.begin != 1 || first.Status != ports.ProvisioningPendingAuthorization || first.AuthorizationURL == "" {
+	if first.ID != second.ID || social.begin != 1 || first.Status != ports.ProvisioningPendingAuthorization || first.AuthorizationURL == "" || first.OAuthState != first.ID {
 		t.Fatalf("idempotency/start mismatch: first=%#v second=%#v begins=%d", first, second, social.begin)
-	}
-	if first.OAuthState != first.ID {
-		t.Fatalf("oauth state must be the generated provisioning session id: %#v", first)
 	}
 	completed, err := service.Complete(context.Background(), "business-1", first.ID, ports.SocialAuthorizationCallback{State: first.OAuthState, Status: "success", Platform: "facebook", AccountID: "account-1"})
 	if err != nil {
 		t.Fatalf("complete: %v", err)
 	}
-	if completed.Status != ports.ProvisioningConnected || completed.ChatwootAccountID != "cw-account-1" || completed.ChatwootInboxID != "cw-inbox-1" || completed.ChannelConnectionID != "connection-1" || social.resolve != 1 || workspace.accounts != 1 || workspace.inboxes != 1 || binding.calls != 1 || connections.pending != 1 || connections.active != 1 || workspace.callbackURL != "https://app.example/webhooks/chatwoot/cw_connection1" {
-		t.Fatalf("complete mismatch: session=%#v social=%#v workspace=%#v binding=%#v connections=%#v", completed, social, workspace, binding, connections)
+	if completed.Status != ports.ProvisioningConnected || completed.ChannelConnectionID != "connection-1" || completed.ProviderAccountRef != "account-1" || completed.ProviderConnectionRef != "connection-1" || social.resolve != 1 || connections.pending != 1 || connections.active != 1 {
+		t.Fatalf("complete mismatch: session=%#v social=%#v connections=%#v", completed, social, connections)
 	}
 }
 
-func TestChatwootCallbackURLRequiresHTTPSBaseAndOneSegmentRoute(t *testing.T) {
-	callbackURL, err := chatwootCallbackURL("https://hooks.example/api/v1/webhooks/chatwoot/", "cw_connection1")
-	if err != nil || callbackURL != "https://hooks.example/api/v1/webhooks/chatwoot/cw_connection1" {
-		t.Fatalf("callback URL=%q err=%v", callbackURL, err)
-	}
-	if _, err := chatwootCallbackURL("http://hooks.example/webhooks/chatwoot", "cw_connection1"); err == nil {
-		t.Fatal("expected non-HTTPS callback base to fail")
-	}
-	if _, err := chatwootCallbackURL("https://hooks.example/webhooks/chatwoot?x=1", "cw_connection1"); err == nil {
-		t.Fatal("expected callback base with query to fail")
-	}
-	if _, err := chatwootCallbackURL("https://hooks.example/webhooks/chatwoot", "business/connection"); err == nil {
-		t.Fatal("expected multi-segment route key to fail")
-	}
-}
-
-func TestChannelProvisioningRecordsPartialFailureWithoutActivation(t *testing.T) {
+func TestChannelProvisioningCompletesSelectionRequiredSocialCallback(t *testing.T) {
 	store := &provisioningSessionStore{}
 	social := &provisioningSocial{}
-	workspace := &provisioningWorkspace{inboxErr: errors.New("inbox unavailable")}
 	connections := &provisioningConnections{}
-	service := ChannelProvisioningService{Sessions: store, Social: social, Workspace: workspace, Bindings: &provisioningBinding{}, Connections: connections, RedirectURI: "https://app.example/oauth/callback", WebhookURL: "https://app.example/webhooks/chatwoot"}
+	service := ChannelProvisioningService{Sessions: store, Social: social, Connections: connections, RedirectURI: "https://app.example/oauth/callback"}
+	started, err := service.Start(context.Background(), "business-1", "socialapi", "facebook", "Acme", "idem-selection")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	completed, err := service.CompleteOAuthCallback(context.Background(), ports.SocialAuthorizationCallback{State: started.OAuthState, Status: "selection_required", Platform: "facebook", PageIDs: []string{"page-1"}})
+	if err != nil || !social.selection || completed.Status != ports.ProvisioningConnected || connections.active != 1 {
+		t.Fatalf("selection callback mismatch: session=%#v social=%#v connections=%#v err=%v", completed, social, connections, err)
+	}
+}
+
+func TestChannelProvisioningRecordsActivationFailureWithoutConnection(t *testing.T) {
+	store := &provisioningSessionStore{}
+	social := &provisioningSocial{}
+	connections := &provisioningConnections{activateErr: errors.New("connection activation unavailable")}
+	service := ChannelProvisioningService{Sessions: store, Social: social, Connections: connections, RedirectURI: "https://app.example/oauth/callback"}
 	started, err := service.Start(context.Background(), "business-1", "socialapi", "whatsapp", "Acme", "idem-2")
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	failed, err := service.Complete(context.Background(), "business-1", started.ID, ports.SocialAuthorizationCallback{State: started.OAuthState, Status: "success", Platform: "whatsapp", AccountID: "account-1"})
-	if err == nil || failed.Status != ports.ProvisioningFailed || failed.FailureCode != "chatwoot_inbox_provision_failed" || connections.active != 0 {
-		t.Fatalf("partial failure mismatch: session=%#v err=%v connections=%#v", failed, err, connections)
+	if err == nil || failed.Status != ports.ProvisioningFailed || failed.FailureCode != "channel_connection_activation_failed" || connections.pending != 1 || connections.active != 0 || connections.activationAttempts != 1 {
+		t.Fatalf("activation failure mismatch: session=%#v err=%v connections=%#v", failed, err, connections)
+	}
+}
+
+func TestChannelProvisioningRejectsMismatchedOAuthState(t *testing.T) {
+	store := &provisioningSessionStore{}
+	service := ChannelProvisioningService{Sessions: store, Social: &provisioningSocial{}, Connections: &provisioningConnections{}, RedirectURI: "https://app.example/oauth/callback"}
+	started, err := service.Start(context.Background(), "business-1", "socialapi", "instagram", "Acme", "idem-state")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if _, err := service.Complete(context.Background(), "business-1", started.ID, ports.SocialAuthorizationCallback{State: "wrong-state", Status: "success", Platform: "instagram"}); err == nil {
+		t.Fatal("expected mismatched OAuth state to be rejected")
 	}
 }

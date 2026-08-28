@@ -29,10 +29,13 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
 	if !bytes.Contains(document, []byte("/webhooks/socialapi/{route_key}:")) {
 		t.Fatal("SocialAPI webhook path is missing from generated document")
 	}
+	if bytes.Contains(document, []byte("/webhooks/chatwoot/")) || bytes.Contains(document, []byte("ingestChatwootWebhook")) {
+		t.Fatal("Chatwoot webhook must not be declared in the Mujeeb-only contract")
+	}
 
 	operationIDs := regexp.MustCompile(`(?m)^\s+operationId: ([A-Za-z0-9_]+)$`).FindAllSubmatch(document, -1)
-	if len(operationIDs) != 76 {
-		t.Fatalf("generated %d operations, want 76", len(operationIDs))
+	if len(operationIDs) != 75 {
+		t.Fatalf("generated %d operations, want 75", len(operationIDs))
 	}
 	seen := make(map[string]struct{}, len(operationIDs))
 	for _, match := range operationIDs {

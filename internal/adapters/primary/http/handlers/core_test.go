@@ -118,9 +118,9 @@ func TestWebhookRuntimeForwardsProviderHeadersToApplication(t *testing.T) {
 }
 
 func TestWebhookRuntimeMapsApplicationErrorStatus(t *testing.T) {
-	server := NewServer(Dependencies{IngestChatwootWebhook: errorWebhookHandler{err: &appErrors.Error{Code: appErrors.CodeUnauthenticated, Message: "signature verification failed"}}})
+	server := NewServer(Dependencies{IngestSocialAPIWebhook: errorWebhookHandler{err: &appErrors.Error{Code: appErrors.CodeUnauthenticated, Message: "signature verification failed"}}})
 	_, mux := contract.BuildAPIWithHandlers(server)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/chatwoot/chatwoot-test", bytes.NewReader([]byte(`{"event":"conversation_created","id":9001}`)))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/socialapi/socialapi-test", bytes.NewReader([]byte(`{"event":"dm.received","id":"9001"}`)))
 	res := httptest.NewRecorder()
 	mux.ServeHTTP(res, req)
 	if res.Code != http.StatusUnauthorized {
@@ -128,23 +128,14 @@ func TestWebhookRuntimeMapsApplicationErrorStatus(t *testing.T) {
 	}
 }
 
-func TestChatwootWebhookRuntimeForwardsProviderHeadersToApplication(t *testing.T) {
-	body := []byte(`{"event":"conversation_created","id":9001}`)
-	capture := &fakeWebhookHandler{}
-	server := NewServer(Dependencies{IngestChatwootWebhook: capture})
+func TestChatwootWebhookRouteIsNotRegistered(t *testing.T) {
+	server := NewServer(Dependencies{})
 	_, mux := contract.BuildAPIWithHandlers(server)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/chatwoot/chatwoot-test", bytes.NewReader(body))
-	req.Header.Set("X-Chatwoot-Signature", "sha256=signature")
-	req.Header.Set("X-Chatwoot-Timestamp", "1787659200")
-	req.Header.Set("X-Chatwoot-Delivery", "delivery-1")
-	req.Header.Set("X-Request-ID", "request-1")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/chatwoot/legacy", bytes.NewReader([]byte(`{}`)))
 	res := httptest.NewRecorder()
 	mux.ServeHTTP(res, req)
-	if res.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d body=%s", res.Code, res.Body.String())
-	}
-	if capture.command.RouteKey != "chatwoot-test" || capture.command.RequestID != "request-1" || capture.command.DeliveryID != "delivery-1" || capture.command.ProviderHeaders["X-Chatwoot-Signature"] != "sha256=signature" || capture.command.ProviderHeaders["X-Chatwoot-Timestamp"] != "1787659200" || string(capture.command.RawPayload) != string(body) {
-		t.Fatalf("Chatwoot metadata was not forwarded exactly: %#v", capture.command)
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("expected Chatwoot route to be absent (404), got %d body=%s", res.Code, res.Body.String())
 	}
 }
 

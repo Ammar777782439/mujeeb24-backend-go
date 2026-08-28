@@ -24,8 +24,6 @@ type ChannelProvisioningSession struct {
 	AuthorizationURL      string
 	ProviderAccountRef    string
 	ProviderConnectionRef string
-	ChatwootAccountID     string
-	ChatwootInboxID       string
 	ChannelConnectionID   string
 	FailureCode           string
 }
@@ -43,8 +41,6 @@ type ChannelProvisioningPatch struct {
 	AuthorizationURL      *string
 	ProviderAccountRef    *string
 	ProviderConnectionRef *string
-	ChatwootAccountID     *string
-	ChatwootInboxID       *string
 	ChannelConnectionID   *string
 	FailureCode           *string
 }
@@ -76,23 +72,6 @@ type SocialAuthorizationCallback struct {
 type SocialChannelProvisioner interface {
 	BeginAuthorization(ctx context.Context, request SocialAuthorizationRequest) (SocialAuthorization, error)
 	ResolveAuthorization(ctx context.Context, callback SocialAuthorizationCallback) (SocialAuthorization, error)
-}
-
-type WorkspaceAccount struct {
-	ID string
-}
-
-type WorkspaceInbox struct {
-	ID string
-}
-
-type WorkspaceProvisioner interface {
-	EnsureAccount(ctx context.Context, name, locale string) (WorkspaceAccount, error)
-	EnsureInbox(ctx context.Context, accountID, name, channel, webhookURL string) (WorkspaceInbox, error)
-}
-
-type ChatwootWorkspaceBindingWriter interface {
-	EnsureBinding(ctx context.Context, businessID, routeKey, accountID, inboxID, channel string) (string, error)
 }
 
 type ChannelConnectionWriter interface {

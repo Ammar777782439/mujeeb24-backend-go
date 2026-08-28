@@ -1589,8 +1589,6 @@ components:
     Message:
       additionalProperties: false
       properties:
-        chatwoot_message_reference:
-          type: string
         conversation_id:
           type: string
         created_at:
@@ -8381,110 +8379,6 @@ paths:
       summary: Internal metrics
       tags:
         - Operational
-  /webhooks/chatwoot/{route_key}:
-    post:
-      operationId: ingestChatwootWebhook
-      parameters:
-        - in: path
-          name: route_key
-          required: true
-          schema:
-            type: string
-        - in: header
-          name: X-Provider-Signature
-          schema:
-            type: string
-        - in: header
-          name: X-Provider-Timestamp
-          schema:
-            type: string
-        - in: header
-          name: X-Request-ID
-          schema:
-            type: string
-        - in: header
-          name: X-SocialAPI-Signature
-          schema:
-            type: string
-        - in: header
-          name: X-SocialAPI-Signature-V2
-          schema:
-            type: string
-        - in: header
-          name: X-SocialAPI-Timestamp
-          schema:
-            type: string
-        - in: header
-          name: X-SocialAPI-Delivery
-          schema:
-            type: string
-        - in: header
-          name: X-SocialAPI-Event
-          schema:
-            type: string
-        - in: header
-          name: X-Chatwoot-Signature
-          schema:
-            type: string
-        - in: header
-          name: X-Chatwoot-Timestamp
-          schema:
-            type: string
-        - in: header
-          name: X-Chatwoot-Delivery
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema: {}
-          application/octet-stream:
-            schema:
-              contentMediaType: application/octet-stream
-              format: binary
-              type: string
-        required: true
-      responses:
-        "202":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WebhookAccepted"
-          description: Accepted
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-          description: Bad Request
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-          description: Unauthorized
-        "413":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-          description: Request Entity Too Large
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-          description: Unprocessable Entity
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-          description: Internal Server Error
-      security: []
-      summary: Ingest Chatwoot webhook
-      tags:
-        - Webhooks
   /webhooks/socialapi/{route_key}:
     post:
       operationId: ingestSocialAPIWebhook
@@ -8524,18 +8418,6 @@ paths:
             type: string
         - in: header
           name: X-SocialAPI-Event
-          schema:
-            type: string
-        - in: header
-          name: X-Chatwoot-Signature
-          schema:
-            type: string
-        - in: header
-          name: X-Chatwoot-Timestamp
-          schema:
-            type: string
-        - in: header
-          name: X-Chatwoot-Delivery
           schema:
             type: string
       requestBody:
