@@ -183,10 +183,45 @@
           "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 read cursor', function () { pm.response.to.have.status(200); });"]}}]
         }
       ]
+    },
+    {
+      "name": "08 — Merchant team management",
+      "description": "إنشاء الدعوة يتم بحساب owner/admin. قبولها يجب أن يتم بحساب الموظف المدعو باستخدام invitee_access_token؛ لا تستخدم access_token المدير لقبول دعوة بريد موظف آخر.",
+      "item": [
+        {
+          "name": "List team members",
+          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/team/members?limit=50"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 team members', function () { pm.response.to.have.status(200); const data = pm.response.json().data; pm.expect(data).to.be.an('array'); if (data.length > 0) { pm.collectionVariables.set('team_member_id', data[0].principal_id); } });"]}}]
+        },
+        {
+          "name": "Create team invitation — captures one-time token locally",
+          "event": [{"listen": "prerequest", "script": {"type": "text/javascript", "exec": ["pm.collectionVariables.set('team_invitation_idempotency_key', 'postman-team-invite-' + Date.now());"]}}, {"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('201 team invitation', function () { pm.response.to.have.status(201); const data = pm.response.json().data; pm.expect(data.acceptance_token).to.be.a('string').and.not.empty; pm.collectionVariables.set('team_invitation_token', data.acceptance_token); });"]}}],
+          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}, {"key": "Content-Type", "value": "application/json"}, {"key": "Idempotency-Key", "value": "{{team_invitation_idempotency_key}}"}], "body": {"mode": "raw", "raw": "{\n  \"email\": \"employee@example.test\",\n  \"role\": \"agent\",\n  \"expires_in_hours\": 168\n}"}, "url": "{{base_url}}/api/v1/businesses/{{business_id}}/team/invitations"}
+        },
+        {
+          "name": "Accept team invitation — use invited employee token",
+          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{invitee_access_token}}"}, {"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"acceptance_token\": \"{{team_invitation_token}}\"\n}"}, "url": "{{base_url}}/api/v1/team/invitations/accept"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 accepted invitation', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.status).to.eql('accepted'); pm.collectionVariables.unset('team_invitation_token'); });"]}}]
+        },
+        {
+          "name": "Update member role — manual target only",
+          "request": {"method": "PATCH", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}, {"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"role\": \"agent\"\n}"}, "url": "{{base_url}}/api/v1/businesses/{{business_id}}/team/members/{{team_member_id}}/role"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 updated non-owner member', function () { pm.response.to.have.status(200); });"]}}]
+        },
+        {
+          "name": "Revoke member — manual target only",
+          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/team/members/{{team_member_id}}/revoke"},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 revoked non-owner member; 422 for last owner', function () { pm.expect([200, 422]).to.include(pm.response.code); });"]}}]
+        }
+      ]
     }
   ],
   "variable": [
     {"key": "access_token", "value": "", "type": "string"},
-    {"key": "business_id", "value": "", "type": "string"}
+    {"key": "business_id", "value": "", "type": "string"},
+    {"key": "team_member_id", "value": "", "type": "string"},
+    {"key": "team_invitation_token", "value": "", "type": "string"},
+    {"key": "team_invitation_idempotency_key", "value": "", "type": "string"},
+    {"key": "invitee_access_token", "value": "", "type": "string"}
   ]
 }

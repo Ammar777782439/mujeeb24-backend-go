@@ -8,8 +8,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/middleware"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/queries"
@@ -193,4 +195,79 @@ func TestRuntimeNonCoreRouteUsesApplicationBoundary(t *testing.T) {
 	if envelope.Error.Code != string(appErrors.CodeNotImplemented) {
 		t.Fatalf("expected not_implemented application code, got %#v", envelope.Error)
 	}
+}
+
+func TestAcceptTeamInvitationUsesAuthenticatedPrincipalWithoutBusinessScope(t *testing.T) {
+	handler := &fakeTeamInvitationAcceptance{}
+	server := NewServer(Dependencies{AcceptTeamInvitation: handler})
+	ctx := middleware.WithPrincipal(context.Background(), "00000000-0000-0000-0000-000000000101")
+
+	value, err := server.Dispatch(ctx, "acceptTeamInvitation", &contract.TeamInvitationAcceptInput{
+		Body: contract.AcceptTeamInvitationRequest{AcceptanceToken: "one-time-token"},
+	})
+	if err != nil {
+		t.Fatalf("Dispatch: %v", err)
+	}
+	result, ok := value.(*contract.Single[contract.TeamInvitation])
+	if !ok {
+		t.Fatalf("unexpected output type: %T", value)
+	}
+	if handler.command.Meta.Actor.PrincipalID != "00000000-0000-0000-0000-000000000101" || handler.command.AcceptanceToken != "one-time-token" {
+		t.Fatalf("acceptance command did not preserve authenticated principal: %#v", handler.command)
+	}
+	if result.Body.Data.Status != "accepted" || result.Body.Data.Email != "staff@example.test" {
+		t.Fatalf("unexpected response: %#v", result.Body.Data)
+	}
+}
+
+func TestAssignConversationHTTPUsesAssigneePrincipalID(t *testing.T) {
+	handler := &fakeConversationAssignment{result: commands.ConversationResult{Conversation: commands.ConversationView{
+		ID:              "00000000-0000-0000-0000-000000000201",
+		BusinessID:      "00000000-0000-0000-0000-000000000001",
+		CustomerID:      "00000000-0000-0000-0000-000000000301",
+		State:           "open",
+		Ownership:       "human",
+		AIMode:          "assist",
+		ResourceVersion: "2",
+	}}}
+	server := NewServer(Dependencies{
+		Scope:              fakeScope{actor: commands.ActorContext{BusinessID: "00000000-0000-0000-0000-000000000001", PrincipalID: "00000000-0000-0000-0000-000000000100", Role: "manager"}},
+		AssignConversation: handler,
+	})
+	_, mux := contract.BuildAPIWithHandlers(server)
+	body := []byte(`{"assignee_principal_id":"00000000-0000-0000-0000-000000000102"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/businesses/00000000-0000-0000-0000-000000000001/conversations/00000000-0000-0000-0000-000000000201/assign", bytes.NewReader(body))
+	res := httptest.NewRecorder()
+	mux.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", res.Code, res.Body.String())
+	}
+	if handler.command.AssigneePrincipalID != "00000000-0000-0000-0000-000000000102" {
+		t.Fatalf("expected assignee principal UUID, got %#v", handler.command)
+	}
+}
+
+type fakeTeamInvitationAcceptance struct {
+	command commands.AcceptTeamInvitationCommand
+}
+
+func (h *fakeTeamInvitationAcceptance) Handle(_ context.Context, command commands.AcceptTeamInvitationCommand) (commands.TeamInvitationView, error) {
+	h.command = command
+	return commands.TeamInvitationView{
+		ID:        "00000000-0000-0000-0000-000000000401",
+		Email:     "staff@example.test",
+		Role:      "agent",
+		Status:    "accepted",
+		ExpiresAt: time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC),
+	}, nil
+}
+
+type fakeConversationAssignment struct {
+	command commands.AssignConversationCommand
+	result  commands.ConversationResult
+}
+
+func (h *fakeConversationAssignment) Handle(_ context.Context, command commands.AssignConversationCommand) (commands.ConversationResult, error) {
+	h.command = command
+	return h.result, nil
 }

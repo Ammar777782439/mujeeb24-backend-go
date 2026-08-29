@@ -140,6 +140,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		Conversations: postgres.NewConversationRepository(database),
 		Reader:        postgres.NewConversationRepository(database),
 		Labels:        postgres.NewConversationLabelRepository(database),
+		Assignees:     postgres.NewTeamRepository(database),
 		Transactions:  database,
 	}
 	if external.SocialWebhook != nil {

@@ -11,6 +11,32 @@ type ConversationPath struct {
 	BusinessID     UUID `path:"business_id" format:"uuid"`
 	ConversationID UUID `path:"conversation_id" format:"uuid"`
 }
+type TeamMemberPath struct {
+	BusinessID  UUID `path:"business_id" format:"uuid"`
+	PrincipalID UUID `path:"principal_id" format:"uuid"`
+}
+type TeamMemberListInput struct {
+	BusinessPath
+	ListQuery
+}
+type TeamInvitationCreateInput struct {
+	BusinessPath
+	CommandHeaders
+	Body CreateTeamInvitationRequest
+}
+type TeamInvitationAcceptInput struct {
+	CommandHeaders
+	Body AcceptTeamInvitationRequest
+}
+type TeamMemberRoleUpdateInput struct {
+	TeamMemberPath
+	CommandHeaders
+	Body UpdateTeamMemberRoleRequest
+}
+type TeamMemberRevokeInput struct {
+	TeamMemberPath
+	CommandHeaders
+}
 type CannedReplyPath struct {
 	BusinessID    UUID `path:"business_id" format:"uuid"`
 	CannedReplyID UUID `path:"canned_reply_id" format:"uuid"`
@@ -103,7 +129,18 @@ type SendMessageRequest struct {
 	Text string `json:"text" minLength:"1" maxLength:"10000"`
 }
 type AssignConversationRequest struct {
-	AssigneeReference string `json:"assignee_reference" minLength:"1" maxLength:"200"`
+	AssigneePrincipalID UUID `json:"assignee_principal_id" format:"uuid"`
+}
+type CreateTeamInvitationRequest struct {
+	Email          string `json:"email" format:"email" minLength:"3" maxLength:"320"`
+	Role           string `json:"role" enum:"admin,manager,agent,analyst,viewer"`
+	ExpiresInHours int    `json:"expires_in_hours,omitempty" minimum:"1" maximum:"720"`
+}
+type AcceptTeamInvitationRequest struct {
+	AcceptanceToken string `json:"acceptance_token" minLength:"1" maxLength:"200"`
+}
+type UpdateTeamMemberRoleRequest struct {
+	Role string `json:"role" enum:"admin,manager,agent,analyst,viewer"`
 }
 type LabelsRequest struct {
 	Add    []string `json:"add,omitempty" maxItems:"50"`

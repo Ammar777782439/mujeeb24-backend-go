@@ -46,6 +46,10 @@ type Dependencies struct {
 	SendCannedReply              commands.SendCannedReplyHandler
 	CreateAutomationRule         commands.CreateAutomationRuleHandler
 	UpdateAutomationRule         commands.UpdateAutomationRuleHandler
+	InviteTeamMember             commands.InviteTeamMemberHandler
+	AcceptTeamInvitation         commands.AcceptTeamInvitationHandler
+	UpdateTeamMemberRole         commands.UpdateTeamMemberRoleHandler
+	RevokeTeamMember             commands.RevokeTeamMemberHandler
 	CreateCatalog                commands.CreateCatalogHandler
 	UpdateCatalog                commands.UpdateCatalogHandler
 	CreateAttributeSchemaVersion commands.CreateAttributeSchemaVersionHandler
@@ -80,6 +84,7 @@ type Dependencies struct {
 	GetConnectionCapabilities queries.GetConnectionCapabilitiesHandler
 	ListCannedReplies         queries.ListCannedRepliesHandler
 	ListAutomationRules       queries.ListAutomationRulesHandler
+	ListTeamMembers           queries.ListTeamMembersHandler
 	ListCustomerConversations queries.ListCustomerConversationsHandler
 	ListCustomerTransactions  queries.ListCustomerTransactionsHandler
 	ListCatalogs              queries.ListCatalogsHandler

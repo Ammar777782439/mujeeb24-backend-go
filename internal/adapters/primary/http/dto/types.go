@@ -89,6 +89,24 @@ type BusinessMembership struct {
 	Role        string   `json:"role"`
 	Permissions []string `json:"permissions,omitempty"`
 }
+type TeamMember struct {
+	PrincipalID UUID   `json:"principal_id"`
+	Email       string `json:"email" format:"email"`
+	DisplayName string `json:"display_name"`
+	Role        string `json:"role"`
+	Status      string `json:"status"`
+}
+type TeamInvitation struct {
+	ID        UUID      `json:"id"`
+	Email     string    `json:"email" format:"email"`
+	Role      string    `json:"role"`
+	Status    string    `json:"status"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+type TeamInvitationCreated struct {
+	Invitation      TeamInvitation `json:"invitation"`
+	AcceptanceToken string         `json:"acceptance_token"`
+}
 type BusinessPolicy struct {
 	BusinessID                UUID   `json:"business_id"`
 	AIMode                    string `json:"ai_mode"`

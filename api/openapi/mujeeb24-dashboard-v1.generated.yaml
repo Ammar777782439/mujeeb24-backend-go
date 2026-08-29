@@ -62,6 +62,22 @@ components:
       required:
         - reason
       type: object
+    AcceptTeamInvitationRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/AcceptTeamInvitationRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        acceptance_token:
+          maxLength: 200
+          minLength: 1
+          type: string
+      required:
+        - acceptance_token
+      type: object
     AssignConversationRequest:
       additionalProperties: false
       properties:
@@ -71,12 +87,11 @@ components:
           format: uri
           readOnly: true
           type: string
-        assignee_reference:
-          maxLength: 200
-          minLength: 1
+        assignee_principal_id:
+          format: uuid
           type: string
       required:
-        - assignee_reference
+        - assignee_principal_id
       type: object
     AttributeDefinition:
       additionalProperties: false
@@ -1006,6 +1021,37 @@ components:
         - availability_status
         - fulfillment_mode
       type: object
+    CreateTeamInvitationRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/CreateTeamInvitationRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        email:
+          format: email
+          maxLength: 320
+          minLength: 3
+          type: string
+        expires_in_hours:
+          format: int64
+          maximum: 720
+          minimum: 1
+          type: integer
+        role:
+          enum:
+            - admin
+            - manager
+            - agent
+            - analyst
+            - viewer
+          type: string
+      required:
+        - email
+        - role
+      type: object
     CreateTransactionDraftRequest:
       additionalProperties: false
       properties:
@@ -1712,6 +1758,29 @@ components:
         - pagination
         - request_id
       type: object
+    ListTeamMemberBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListTeamMemberBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/TeamMember"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
     ListVariantBody:
       additionalProperties: false
       properties:
@@ -2313,6 +2382,57 @@ components:
         - data
         - request_id
       type: object
+    SingleTeamInvitationBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleTeamInvitationBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/TeamInvitation"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleTeamInvitationCreatedBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleTeamInvitationCreatedBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/TeamInvitationCreated"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleTeamMemberBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleTeamMemberBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/TeamMember"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
     SingleTransactionReviewBody:
       additionalProperties: false
       properties:
@@ -2363,6 +2483,60 @@ components:
           type: array
       required:
         - reason_codes
+      type: object
+    TeamInvitation:
+      additionalProperties: false
+      properties:
+        email:
+          format: email
+          type: string
+        expires_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        role:
+          type: string
+        status:
+          type: string
+      required:
+        - id
+        - email
+        - role
+        - status
+        - expires_at
+      type: object
+    TeamInvitationCreated:
+      additionalProperties: false
+      properties:
+        acceptance_token:
+          type: string
+        invitation:
+          $ref: "#/components/schemas/TeamInvitation"
+      required:
+        - invitation
+        - acceptance_token
+      type: object
+    TeamMember:
+      additionalProperties: false
+      properties:
+        display_name:
+          type: string
+        email:
+          format: email
+          type: string
+        principal_id:
+          type: string
+        role:
+          type: string
+        status:
+          type: string
+      required:
+        - principal_id
+        - email
+        - display_name
+        - role
+        - status
       type: object
     TransactionLineInput:
       additionalProperties: false
@@ -2579,6 +2753,26 @@ components:
           type: string
         status:
           type: string
+      type: object
+    UpdateTeamMemberRoleRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/UpdateTeamMemberRoleRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        role:
+          enum:
+            - admin
+            - manager
+            - agent
+            - analyst
+            - viewer
+          type: string
+      required:
+        - role
       type: object
     UpdateTransactionDraftRequest:
       additionalProperties: false
@@ -8199,6 +8393,348 @@ paths:
       summary: Update business policy
       tags:
         - Business
+  /businesses/{business_id}/team/invitations:
+    post:
+      operationId: createTeamInvitation
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTeamInvitationRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleTeamInvitationCreatedBody"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Create a one-time team invitation
+      tags:
+        - Team
+  /businesses/{business_id}/team/members:
+    get:
+      operationId: listTeamMembers
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            default: 25
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListTeamMemberBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List active and revoked team memberships
+      tags:
+        - Team
+  /businesses/{business_id}/team/members/{principal_id}/revoke:
+    post:
+      operationId: revokeTeamMember
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: principal_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleTeamMemberBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Revoke a membership while preserving one active owner
+      tags:
+        - Team
+  /businesses/{business_id}/team/members/{principal_id}/role:
+    patch:
+      operationId: updateTeamMemberRole
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: principal_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTeamMemberRoleRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleTeamMemberBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Update a non-owner team member role
+      tags:
+        - Team
   /businesses/{business_id}/transactions:
     get:
       operationId: listTransactions
@@ -9398,6 +9934,86 @@ paths:
       summary: Internal metrics
       tags:
         - Operational
+  /team/invitations/accept:
+    post:
+      operationId: acceptTeamInvitation
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcceptTeamInvitationRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleTeamInvitationBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Accept an invitation using the authenticated principal
+      tags:
+        - Team
   /webhooks/socialapi/{route_key}:
     post:
       operationId: ingestSocialAPIWebhook

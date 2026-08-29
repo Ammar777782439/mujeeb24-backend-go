@@ -37,10 +37,15 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
 			t.Fatalf("Inbox V1 operation is missing: %s", expected)
 		}
 	}
+	for _, expected := range []string{"listTeamMembers", "createTeamInvitation", "acceptTeamInvitation", "updateTeamMemberRole", "revokeTeamMember"} {
+		if !bytes.Contains(document, []byte("operationId: "+expected)) {
+			t.Fatalf("team operation is missing: %s", expected)
+		}
+	}
 
 	operationIDs := regexp.MustCompile(`(?m)^\s+operationId: ([A-Za-z0-9_]+)$`).FindAllSubmatch(document, -1)
-	if len(operationIDs) != 83 {
-		t.Fatalf("generated %d operations, want 83", len(operationIDs))
+	if len(operationIDs) != 88 {
+		t.Fatalf("generated %d operations, want 88", len(operationIDs))
 	}
 	seen := make(map[string]struct{}, len(operationIDs))
 	for _, match := range operationIDs {

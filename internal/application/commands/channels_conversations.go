@@ -38,9 +38,9 @@ type UpdateConversationCommand struct {
 	Priority       *string
 }
 type AssignConversationCommand struct {
-	Meta              CommandMeta
-	ConversationID    ConversationID
-	AssigneeReference string
+	Meta                CommandMeta
+	ConversationID      ConversationID
+	AssigneePrincipalID PrincipalID
 }
 type UpdateConversationLabelsCommand struct {
 	Meta           CommandMeta

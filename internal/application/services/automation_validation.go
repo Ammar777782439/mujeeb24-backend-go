@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
+	"github.com/google/uuid"
 )
 
 func validateAutomationRuleInput(name string, conditions []byte, actionKind string, payload []byte, position int) (string, []byte, string, []byte, int, error) {
@@ -105,12 +106,12 @@ func normalizeAutomationAction(kind string, raw []byte) (string, []byte, error) 
 		normalized, _ = json.Marshal(payload)
 	case "assign_human":
 		var payload struct {
-			AssigneeReference string `json:"assignee_reference"`
+			AssigneePrincipalID string `json:"assignee_principal_id"`
 		}
-		if json.Unmarshal(raw, &payload) != nil || strings.TrimSpace(payload.AssigneeReference) == "" {
-			return "", nil, appErrors.New(appErrors.CodeValidation, "automation assign_human payload requires assignee_reference")
+		payload.AssigneePrincipalID = strings.TrimSpace(payload.AssigneePrincipalID)
+		if json.Unmarshal(raw, &payload) != nil || uuid.Validate(payload.AssigneePrincipalID) != nil {
+			return "", nil, appErrors.New(appErrors.CodeValidation, "automation assign_human payload requires assignee_principal_id UUID")
 		}
-		payload.AssigneeReference = strings.TrimSpace(payload.AssigneeReference)
 		normalized, _ = json.Marshal(payload)
 	}
 	return kind, normalized, nil

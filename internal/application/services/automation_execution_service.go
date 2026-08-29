@@ -18,13 +18,14 @@ type InboundAutomationService struct {
 	Conversations ports.ConversationRuntimeRepository
 	Reader        ports.ConversationRepository
 	Labels        ports.ConversationLabelRepository
+	Assignees     ports.TeamRepository
 	Transactions  ports.TransactionManager
 	Now           func() time.Time
 	NewID         func() string
 }
 
 func (s InboundAutomationService) Handle(ctx context.Context, command commands.ApplyInboundAutomationCommand) (commands.EmptyResult, error) {
-	if s.Rules == nil || s.Executions == nil || s.Conversations == nil || s.Reader == nil || s.Labels == nil || s.Transactions == nil {
+	if s.Rules == nil || s.Executions == nil || s.Conversations == nil || s.Reader == nil || s.Labels == nil || s.Assignees == nil || s.Transactions == nil {
 		return commands.EmptyResult{}, appErrors.NotImplemented()
 	}
 	if strings.TrimSpace(string(command.BusinessID)) == "" || strings.TrimSpace(string(command.ConversationID)) == "" || strings.TrimSpace(string(command.InboundEventID)) == "" {
@@ -96,13 +97,21 @@ func (s InboundAutomationService) applyAction(ctx context.Context, rule ports.Au
 		return mapAIRepositoryError(err)
 	case "assign_human":
 		var payload struct {
-			AssigneeReference string `json:"assignee_reference"`
+			AssigneePrincipalID string `json:"assignee_principal_id"`
 		}
-		if err := json.Unmarshal(rule.ActionPayload, &payload); err != nil || strings.TrimSpace(payload.AssigneeReference) == "" {
-			return appErrors.New(appErrors.CodeValidation, "automation assign_human payload requires assignee_reference")
+		payload.AssigneePrincipalID = strings.TrimSpace(payload.AssigneePrincipalID)
+		if err := json.Unmarshal(rule.ActionPayload, &payload); err != nil || uuid.Validate(payload.AssigneePrincipalID) != nil {
+			return appErrors.New(appErrors.CodeValidation, "automation assign_human payload requires assignee_principal_id UUID")
+		}
+		assignee, err := s.Assignees.ResolveActiveMember(ctx, string(command.BusinessID), payload.AssigneePrincipalID)
+		if err != nil {
+			return mapTeamRepositoryError(err)
+		}
+		if !canReceiveConversationAssignment(assignee.Role) {
+			return appErrors.New(appErrors.CodeForbidden, "team member cannot receive conversation assignments")
 		}
 		ownership := "human"
-		_, err := s.Conversations.Update(ctx, ports.ConversationUpdate{BusinessID: string(command.BusinessID), ConversationID: string(command.ConversationID), ExpectedVersion: conversation.ResourceVersion, Ownership: &ownership, AssignmentReference: automationStringPointer(strings.TrimSpace(payload.AssigneeReference))})
+		_, err = s.Conversations.Update(ctx, ports.ConversationUpdate{BusinessID: string(command.BusinessID), ConversationID: string(command.ConversationID), ExpectedVersion: conversation.ResourceVersion, Ownership: &ownership, AssignmentReference: automationStringPointer(payload.AssigneePrincipalID)})
 		return mapAIRepositoryError(err)
 	default:
 		return appErrors.New(appErrors.CodeValidation, "automation action is not supported")

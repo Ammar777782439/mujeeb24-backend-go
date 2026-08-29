@@ -12,6 +12,8 @@ func BuildDependencies(adapter *postgres.Adapter) handlers.Dependencies {
 	dashboardRepository := postgres.NewDashboardRepository(adapter)
 	customerRepository := postgres.NewCustomerRepository(adapter)
 	conversationRepository := postgres.NewConversationRepository(adapter)
+	teamRepository := postgres.NewTeamRepository(adapter)
+	teamService := services.TeamService{Repository: teamRepository}
 	conversationLabelRepository := postgres.NewConversationLabelRepository(adapter)
 	conversationReferenceRepository := postgres.NewConversationReferenceRepository(adapter)
 	customerRuntime := services.CustomerRuntimeService{Repository: customerRepository, Transactions: adapter}
@@ -27,7 +29,7 @@ func BuildDependencies(adapter *postgres.Adapter) handlers.Dependencies {
 	messageRepository := postgres.NewMessageRepository(adapter)
 	readCursorRepository := postgres.NewConversationReadCursorRepository(adapter)
 	cannedReplyRepository := postgres.NewCannedReplyRepository(adapter)
-	conversationRuntime := services.ConversationRuntimeService{Repository: conversationRepository, Reader: conversationRepository, Labels: conversationLabelRepository, References: conversationReferenceRepository, Messages: messageRepository, Transactions: adapter}
+	conversationRuntime := services.ConversationRuntimeService{Repository: conversationRepository, Reader: conversationRepository, Assignees: teamRepository, Labels: conversationLabelRepository, References: conversationReferenceRepository, Messages: messageRepository, Transactions: adapter}
 	manualOutbound := services.ManualOutboundMessageService{References: conversationReferenceRepository, Connections: postgres.NewChannelConnectionRepository(adapter), Outbound: postgres.NewOutboundMessageRepository(adapter), Outbox: postgres.NewPostgresOutboxStore(adapter), Transactions: adapter}
 	cannedReplies := services.CannedReplyService{Repository: cannedReplyRepository, Transactions: adapter}
 	automationRules := services.AutomationRuleService{Repository: postgres.NewAutomationRuleRepository(adapter), Transactions: adapter}
@@ -61,11 +63,16 @@ func BuildDependencies(adapter *postgres.Adapter) handlers.Dependencies {
 		SendCannedReply:           services.SendCannedReplyCommandService{Repository: cannedReplyRepository, Outbound: manualOutbound},
 		CreateAutomationRule:      services.CreateAutomationRuleCommandService{AutomationRuleService: automationRules},
 		UpdateAutomationRule:      services.UpdateAutomationRuleCommandService{AutomationRuleService: automationRules},
+		InviteTeamMember:          services.InviteTeamMemberCommandService{TeamService: teamService},
+		AcceptTeamInvitation:      services.AcceptTeamInvitationCommandService{TeamService: teamService},
+		UpdateTeamMemberRole:      services.UpdateTeamMemberRoleCommandService{TeamService: teamService},
+		RevokeTeamMember:          services.RevokeTeamMemberCommandService{TeamService: teamService},
 		GetConversation:           services.GetConversationQueryService{Repository: conversationRepository, Labels: conversationLabelRepository},
 
 		ListConversationMessages: services.MessageQueryService{Repository: messageRepository},
 		ListCannedReplies:        services.ListCannedRepliesQueryService{CannedReplyService: cannedReplies},
 		ListAutomationRules:      services.ListAutomationRulesQueryService{AutomationRuleService: automationRules},
+		ListTeamMembers:          services.ListTeamMembersQueryService{TeamService: teamService},
 		CreateOutboundMessage:    manualOutbound,
 		GetConnectionCapabilities: services.ConnectionCapabilitiesQueryService{
 			Repository: channelCapabilityRepository,

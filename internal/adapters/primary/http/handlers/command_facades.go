@@ -17,6 +17,12 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 	if result, handled := s.dispatchInboxCommand(ctx, operationID, input); handled {
 		return result, true
 	}
+	if result, handled := s.dispatchConversationCommand(ctx, operationID, input); handled {
+		return result, true
+	}
+	if result, handled := s.dispatchTeamCommand(ctx, operationID, input); handled {
+		return result, true
+	}
 	switch operationID {
 	case "updateBusinessProfile":
 		in := input.(*contract.BusinessUpdateInput)

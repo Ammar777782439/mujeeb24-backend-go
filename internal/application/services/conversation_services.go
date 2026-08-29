@@ -15,6 +15,7 @@ import (
 type ConversationRuntimeService struct {
 	Repository   ports.ConversationRuntimeRepository
 	Reader       ports.ConversationRepository
+	Assignees    ports.TeamRepository
 	Labels       ports.ConversationLabelRepository
 	References   ports.ConversationReferenceRepository
 	Messages     ports.MessageRepository
@@ -98,20 +99,30 @@ func (s UpdateConversationCommandService) Handle(ctx context.Context, command co
 }
 
 func (s AssignConversationCommandService) Handle(ctx context.Context, command commands.AssignConversationCommand) (commands.ConversationResult, error) {
-	if s.Repository == nil || s.Transactions == nil {
+	if s.Repository == nil || s.Assignees == nil || s.Transactions == nil {
 		return commands.ConversationResult{}, appErrors.NotImplemented()
+	}
+	if !canAssignConversations(command.Meta.Actor.Role) {
+		return commands.ConversationResult{}, appErrors.New(appErrors.CodeForbidden, "current team role cannot assign conversations")
 	}
 	expected, err := parseBusinessExpectedVersion(command.Meta.ExpectedVersion)
 	if err != nil {
 		return commands.ConversationResult{}, err
 	}
-	assignment := strings.TrimSpace(command.AssigneeReference)
-	if assignment == "" {
-		return commands.ConversationResult{}, appErrors.New(appErrors.CodeValidation, "assignee reference is required")
+	assignment := strings.TrimSpace(string(command.AssigneePrincipalID))
+	if uuid.Validate(assignment) != nil {
+		return commands.ConversationResult{}, appErrors.New(appErrors.CodeValidation, "assignee_principal_id must be a UUID")
 	}
 	ownership := "human"
 	var result commands.ConversationResult
 	err = s.Transactions.Within(ctx, func(txCtx context.Context) error {
+		assignee, assigneeErr := s.Assignees.ResolveActiveMember(txCtx, string(command.Meta.Actor.BusinessID), assignment)
+		if assigneeErr != nil {
+			return mapTeamRepositoryError(assigneeErr)
+		}
+		if !canReceiveConversationAssignment(assignee.Role) {
+			return appErrors.New(appErrors.CodeForbidden, "team member cannot receive conversation assignments")
+		}
 		record, updateErr := s.Repository.Update(txCtx, ports.ConversationUpdate{BusinessID: string(command.Meta.Actor.BusinessID), ConversationID: string(command.ConversationID), ExpectedVersion: expected, Ownership: &ownership, AssignmentReference: &assignment})
 		if updateErr != nil {
 			return updateErr

@@ -12,6 +12,9 @@ import (
 )
 
 func (s *Server) dispatchAdditionalQuery(ctx context.Context, operationID string, input any) (any, bool) {
+	if result, handled := s.dispatchTeamQuery(ctx, operationID, input); handled {
+		return result, true
+	}
 	switch operationID {
 	case "getBusinessPolicy":
 		in := input.(*contract.BusinessPath)
