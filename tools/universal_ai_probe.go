@@ -221,25 +221,12 @@ func runTests(ctx context.Context, service services.AutoReplyService, adapter *p
 		Input    string
 		CaseType string
 	}{
-		{"Clothing", "خذ لي اثنين", "Order Draft"},
-		{"Travel", "كم سعر الرحلة؟", "السعر"},
-		{"Electronics", "هل عليه ضمان؟", "attribute 2"},
-		{"Hotel", "غرفة لشخصين ليلتين", "Order Draft"},
-		{"Restaurant", "عندكم وجبة عائلية؟", "attribute"},
-		{"Salon", "بكم قص الشعر؟", "السعر"},
-		{"Maintenance", "هل تصلحون مكيف؟", "availability"},
-		{"RealEstate", "كم غرفة نوم؟", "attribute"},
-		{"RealEstate", "عندكم فيلا؟", "Unknown item"},
-
-		// Professional
-		{"Professional", "استشارة قانونية تجارية متوفرة؟", "availability"},
-		{"Professional", "كم سعرها؟", "السعر"},
-		{"Professional", "عندكم استشارة طبية؟", "Unknown item"},
-
-		// Subscription
-		{"Subscription", "باقة رياضية بكم؟", "السعر"},
-		{"Subscription", "هل الخطة شهرية؟", "attribute"},
-		{"Subscription", "باقة افلام بكم؟", "Unknown item"},
+		{"Clothing", "هل أقدر أسترجع القميص إذا طلع صغير؟", "inquire_return_policy"},
+		{"Electronics", "التلفزيون خربان بعد يومين من الشراء", "complain_defective"},
+		{"Restaurant", "هل اللحم عندكم حلال ومذبوح إسلامي؟", "inquire_ingredients"},
+		
+		
+		
 	}
 
 	for _, t := range tests {

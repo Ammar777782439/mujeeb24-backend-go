@@ -20,7 +20,7 @@ const (
 	defaultMaxResponseBytes = 1 << 20
 	proposalSchemaVersion   = 1
 	defaultBaseURL          = "https://generativelanguage.googleapis.com"
-	defaultModel            = "gemini-3.5-flash"
+	defaultModel            = "gemini-3.5-flash-lite"
 )
 
 // Config contains only runtime configuration. API keys are never copied into a
@@ -66,7 +66,7 @@ func NewClient(cfg Config) (*Client, error) {
 	}
 	model := strings.TrimSpace(cfg.Model)
 	if model == "" {
-		model = "gemini-3.6-flash"
+		model = "gemini-3.5-flash-lite"
 	}
 	requestTimeout := cfg.RequestTimeout
 	if requestTimeout <= 0 {
@@ -159,6 +159,9 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
 			delay := baseDelay * time.Duration(1<<(attempt-1))
+			if lastErr != nil && strings.Contains(lastErr.Error(), "HTTP 429") {
+				delay = 15 * time.Second
+			}
 			select {
 			case <-requestCtx.Done():
 				return ports.AIDecisionProposal{}, requestCtx.Err()
