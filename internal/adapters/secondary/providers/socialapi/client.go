@@ -392,9 +392,14 @@ type socialWebhookData struct {
 	PlatformID     string `json:"platform_id"`
 	ReceivedAt     string `json:"received_at"`
 	CreatedAt      string `json:"created_at"`
+	Text           string `json:"text"`
 	Content        struct {
 		Text string `json:"text"`
 	} `json:"content"`
+	From struct {
+		ID       string `json:"id"`
+		Username string `json:"username"`
+	} `json:"from"`
 	Author struct {
 		ID string `json:"id"`
 	} `json:"author"`
@@ -450,7 +455,15 @@ func (c *Client) NormalizeWebhook(ctx context.Context, headers map[string]string
 	providerConversationID := envelope.Data.ConversationID
 	normalizedEventType := normalizeSocialEventType(envelope.Event)
 	direction, origin := socialMessageMetadata(normalizedEventType)
-	event := channel.InboundEvent{ID: uuid.NewString(), Provider: channel.ProviderSocialAPI, Channel: providerChannel, ProviderConnectionID: envelope.Data.AccountID, ProviderEventID: providerEventID, DeliveryID: deliveryID, DedupeStrategy: dedupeStrategy, EventType: normalizedEventType, InteractionKind: interaction, ProviderMessageID: providerMessageID, ProviderConversationID: providerConversationID, ExternalUserID: envelope.Data.Author.ID, Text: envelope.Data.Content.Text, Direction: direction, Origin: origin, DeliveryStatus: strings.ToLower(strings.TrimSpace(envelope.Data.Status)), ReceivedAt: receivedAt}
+	externalUserID := envelope.Data.Author.ID
+	if externalUserID == "" {
+		externalUserID = envelope.Data.From.ID
+	}
+	text := envelope.Data.Content.Text
+	if text == "" {
+		text = envelope.Data.Text
+	}
+	event := channel.InboundEvent{ID: uuid.NewString(), Provider: channel.ProviderSocialAPI, Channel: providerChannel, ProviderConnectionID: envelope.Data.AccountID, ProviderEventID: providerEventID, DeliveryID: deliveryID, DedupeStrategy: dedupeStrategy, EventType: normalizedEventType, InteractionKind: interaction, ProviderMessageID: providerMessageID, ProviderConversationID: providerConversationID, ExternalUserID: externalUserID, Text: text, Direction: direction, Origin: origin, DeliveryStatus: strings.ToLower(strings.TrimSpace(envelope.Data.Status)), ReceivedAt: receivedAt}
 	if envelope.Data.ReceivedAt != "" || envelope.Data.CreatedAt != "" {
 		timestamp := receivedAt
 		event.ExternalCreatedAt = &timestamp

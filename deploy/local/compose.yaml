@@ -31,6 +31,7 @@ services:
     restart: "no"
 
   mujeeb-api:
+    profiles: ["docker-api"]
     build:
       context: ../..
       dockerfile: Dockerfile
@@ -63,11 +64,10 @@ services:
 
   webhook-gateway:
     image: caddy:2.10-alpine
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-    depends_on:
-      mujeeb-api:
-        condition: service_started
     restart: unless-stopped
 
   quick-tunnel:

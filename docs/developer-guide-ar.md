@@ -22,10 +22,10 @@ application/{ports,commands,queries,services,workers}
           ↓
 domain
           ↑
-adapters/secondary/{providers,workspaces,persistence,queue,ai}
+adapters/secondary/{providers/socialapi,persistence/postgres,ai/openaicompatible}
 ```
 
-`domain` لا يستورد Provider SDK أو Fiber أو PostgreSQL أو Redis أو Chatwoot DTO. `application` تنسق Use Cases وتعرّف Ports. `adapters` تنفذ Ports. `bootstrap` يركب الاعتماديات.
+`domain` لا يستورد Provider SDK أو Fiber أو PostgreSQL أو Redis. `application` تنسق Use Cases وتعرّف Ports. `adapters` تنفذ Ports. `bootstrap` يركب الاعتماديات.
 
 ## أين يذهب كل شيء؟
 
@@ -39,9 +39,8 @@ adapters/secondary/{providers,workspaces,persistence,queue,ai}
 | Interface تحتاجها Application | `internal/application/ports` |
 | HTTP Handler وDTO وMiddleware | `internal/adapters/primary/http` |
 | SocialAPI Provider | `internal/adapters/secondary/providers/socialapi` |
-| Chatwoot Workspace Adapter | `internal/adapters/secondary/workspaces/chatwoot` |
 | PostgreSQL repositories وmodels | `internal/adapters/secondary/persistence/postgres` |
-| Redis/Asynq | `internal/adapters/secondary/queue/asynq` |
+| AI Runtime (OpenAI-compatible) | `internal/adapters/secondary/ai/openaicompatible` |
 | Config/Database/HTTP lifecycle | `internal/platform` |
 | تركيب dependencies | `internal/bootstrap` |
 | SQL migrations | `migrations` |
@@ -55,7 +54,7 @@ adapters/secondary/{providers,workspaces,persistence,queue,ai}
 
 لا تجعل AI ينفذ side effects. AI ينتج Structured Decision، ثم Application يتحقق من Evidence وPolicy ويستدعي Command.
 
-لا تجعل Chatwoot Domain داخل Mujeeb. نحتفظ بـConversation References وMessage References اللازمة للمزامنة والـSales Context فقط.
+لا تعتبر أي خدمة محادثات خارجية مصدر حقيقة. يحتفظ Mujeeb بـConversation References وMessage References المملوكة له للمزامنة والـSales Context فقط.
 
 لا تجعل `Product` جذر الكتالوج. استخدم `CatalogItem` و`Offer` و`Variant` و`Attributes`، ثم `CommercialTransaction` بنوع Order أو Booking أو Appointment أو Service Request أو Quote.
 
@@ -65,7 +64,7 @@ adapters/secondary/{providers,workspaces,persistence,queue,ai}
 
 كل Outbound intent يملك Provider Idempotency Key. إذا كانت نتيجة Provider غامضة، الحالة `UNKNOWN` وتحتاج Reconciliation؛ لا نعيد الإرسال بشكل أعمى.
 
-فشل Chatwoot Mirror لا يعيد إرسال رسالة العميل إلى SocialAPI. وفشل تسجيل الحالة بعد إرسال Provider لا يساوي فشلًا مؤكدًا.
+فشل تسجيل الحالة بعد إرسال Provider لا يساوي فشلًا مؤكدًا، ولا يعيد إرسال رسالة العميل تلقائيًا.
 
 ## قواعد الأمان
 
@@ -80,8 +79,7 @@ Domain Contract
 → application/ports
 → SQL migrations
 → Event Ledger + Idempotency + Outbox
-→ Provider Simulator
-→ Chatwoot Adapter
+→ SocialAPI Provider
 → Vertical Slice
 → AI Context + Intent + Decision
 → Catalog/Lead/Transaction implementation

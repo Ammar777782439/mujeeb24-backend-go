@@ -122,14 +122,18 @@ func TestTeamRepositoriesAgainstPostgres(t *testing.T) {
 
 func cleanupTeamRepositoryFixture(t *testing.T, pool *pgxpool.Pool, businessID string, principalIDs []string) {
 	t.Helper()
-	for _, query := range []string{
-		`DELETE FROM team_invitations WHERE business_id = $1::uuid`,
-		`DELETE FROM platform_super_admins WHERE principal_id = ANY($2::uuid[])`,
-		`DELETE FROM business_memberships WHERE business_id = $1::uuid OR principal_id = ANY($2::uuid[])`,
-		`DELETE FROM principals WHERE id = ANY($2::uuid[])`,
-		`DELETE FROM businesses WHERE id = $1::uuid`,
+	type cleanupQuery struct {
+		sql  string
+		args []any
+	}
+	for _, query := range []cleanupQuery{
+		{sql: `DELETE FROM team_invitations WHERE business_id = $1::uuid`, args: []any{businessID}},
+		{sql: `DELETE FROM platform_super_admins WHERE principal_id = ANY($1::uuid[])`, args: []any{principalIDs}},
+		{sql: `DELETE FROM business_memberships WHERE business_id = $1::uuid OR principal_id = ANY($2::uuid[])`, args: []any{businessID, principalIDs}},
+		{sql: `DELETE FROM principals WHERE id = ANY($1::uuid[])`, args: []any{principalIDs}},
+		{sql: `DELETE FROM businesses WHERE id = $1::uuid`, args: []any{businessID}},
 	} {
-		if _, err := pool.Exec(context.Background(), query, businessID, principalIDs); err != nil {
+		if _, err := pool.Exec(context.Background(), query.sql, query.args...); err != nil {
 			t.Fatalf("cleanup team fixture: %v", err)
 		}
 	}

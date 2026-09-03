@@ -71,7 +71,7 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 	if err != nil || rawAgain.Reference != raw.Reference || rawAgain.SHA256 != raw.SHA256 {
 		t.Fatalf("raw payload was not idempotent: first=%#v second=%#v err=%v", raw, rawAgain, err)
 	}
-	if _, err := rawStore.Put(ctx, "socialapi", "provider-test-1", []byte(`{"event":"different"}`)); !containsRepositoryKind(err, RepositoryConflict) {
+	if _, err := rawStore.Put(ctx, "socialapi", "provider-test-1", []byte(`{"event":"different"}`)); !IsRepositoryKind(err, RepositoryConflict) {
 		t.Fatalf("expected raw payload conflict, got %v", err)
 	}
 
@@ -142,7 +142,7 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 
 	wrongDraft := draft
 	wrongDraft.BusinessID = otherBusinessID
-	if _, err := materializer.Materialize(ctx, wrongDraft); !containsRepositoryKind(err, RepositoryConflict) {
+	if _, err := materializer.Materialize(ctx, wrongDraft); !IsRepositoryKind(err, RepositoryConflict) {
 		t.Fatalf("expected tenant conflict, got %v", err)
 	}
 

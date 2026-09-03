@@ -40,6 +40,9 @@ func TestAuthenticationHTTPRuntimeAgainstPostgres(t *testing.T) {
 	}
 	defer base.Close()
 	pool := base.Pool()
+	_, _ = pool.Exec(ctx, `DELETE FROM customers WHERE business_id IN ($1::uuid, $2::uuid)`, businessA, businessB)
+	_, _ = pool.Exec(ctx, `DELETE FROM business_memberships WHERE business_id IN ($1::uuid, $2::uuid)`, businessA, businessB)
+	_, _ = pool.Exec(ctx, `DELETE FROM business_policies WHERE business_id IN ($1::uuid, $2::uuid)`, businessA, businessB)
 	for _, id := range []string{businessA, businessB} {
 		_, _ = pool.Exec(ctx, `DELETE FROM businesses WHERE id = $1::uuid`, id)
 	}
@@ -52,6 +55,7 @@ func TestAuthenticationHTTPRuntimeAgainstPostgres(t *testing.T) {
 		t.Fatalf("insert business policies: %v", err)
 	}
 	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM customers WHERE business_id IN ($1::uuid, $2::uuid)`, businessA, businessB)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM refresh_sessions WHERE principal_id = $1::uuid`, principalID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM business_memberships WHERE principal_id = $1::uuid`, principalID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM principals WHERE id = $1::uuid`, principalID)

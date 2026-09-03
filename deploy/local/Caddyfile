@@ -1,13 +1,13 @@
-# هذا الـgateway يمنع كشف أي endpoint غير SocialAPI Webhook.
+# هذا الـgateway يمنع كشف أي endpoint غير SocialAPI Webhook و OAuth Callback.
 :8080 {
-	@socialapi_webhooks path /api/v1/webhooks/socialapi/*
+	@socialapi_webhooks path /api/v1/webhooks/socialapi*
 	handle @socialapi_webhooks {
-		reverse_proxy mujeeb-api:3001
+		reverse_proxy host.docker.internal:3001
 	}
 
 	@socialapi_oauth_callback path /oauth/socialapi/callback
 	handle @socialapi_oauth_callback {
-		reverse_proxy mujeeb-api:3001
+		reverse_proxy host.docker.internal:3001
 	}
 
 	handle {

@@ -148,6 +148,9 @@ func (r *AuthenticationRepository) EnsurePrincipalAndMembership(ctx context.Cont
 	if principal.Status == "" {
 		principal.Status = "active"
 	}
+	if permissions == nil {
+		permissions = []string{}
+	}
 	permissionsJSON, err := json.Marshal(permissions)
 	if err != nil {
 		return ports.PrincipalRecord{}, err

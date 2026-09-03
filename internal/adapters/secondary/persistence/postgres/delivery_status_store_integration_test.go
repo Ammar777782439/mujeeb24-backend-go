@@ -81,7 +81,7 @@ func TestDeliveryStatusStoreAgainstPostgres(t *testing.T) {
 	if err != nil || !unmatched.Ignored || unmatched.OutboundMessageID != "" {
 		t.Fatalf("unmatched apply result=%#v err=%v", unmatched, err)
 	}
-	if _, err := store.Apply(ctx, ports.DeliveryStatusDraft{InboundEventID: eventID3, BusinessID: otherBusinessID, ConnectionID: connectionID, ProviderRef: "socialapi", ProviderAccountRef: "account-a", ProviderMessageID: "unmatched-provider-message", Status: "delivered", OccurredAt: base.Add(3 * time.Minute)}); !containsRepositoryKind(err, RepositoryConflict) {
+	if _, err := store.Apply(ctx, ports.DeliveryStatusDraft{InboundEventID: eventID3, BusinessID: otherBusinessID, ConnectionID: connectionID, ProviderRef: "socialapi", ProviderAccountRef: "account-a", ProviderMessageID: "unmatched-provider-message", Status: "delivered", OccurredAt: base.Add(3 * time.Minute)}); !IsRepositoryKind(err, RepositoryConflict) {
 		t.Fatalf("expected tenant conflict, got %v", err)
 	}
 	var status, processedState string
