@@ -108,8 +108,11 @@ func normalizeAutomationAction(kind string, raw []byte) (string, []byte, error) 
 		var payload struct {
 			AssigneePrincipalID string `json:"assignee_principal_id"`
 		}
+		if json.Unmarshal(raw, &payload) != nil {
+			return "", nil, appErrors.New(appErrors.CodeValidation, "automation assign_human payload requires assignee_principal_id UUID")
+		}
 		payload.AssigneePrincipalID = strings.TrimSpace(payload.AssigneePrincipalID)
-		if json.Unmarshal(raw, &payload) != nil || uuid.Validate(payload.AssigneePrincipalID) != nil {
+		if uuid.Validate(payload.AssigneePrincipalID) != nil {
 			return "", nil, appErrors.New(appErrors.CodeValidation, "automation assign_human payload requires assignee_principal_id UUID")
 		}
 		normalized, _ = json.Marshal(payload)

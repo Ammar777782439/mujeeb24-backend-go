@@ -279,7 +279,7 @@ func (r *CatalogRepository) GetAttributeSchema(ctx context.Context, businessID, 
 	if err := executor.QueryRow(ctx, `SELECT id::text, business_id::text, name, version FROM attribute_schemas WHERE business_id = $1::uuid AND id = $2::uuid`, businessID, schemaID).Scan(&item.ID, &item.BusinessID, &item.Name, &item.Version); err != nil {
 		return item, classifyRepositoryGetError("attribute_schema.get", err)
 	}
-	rows, err := executor.Query(ctx, `SELECT id::text, attribute_key, label, data_type, is_required, is_searchable, display_order FROM attribute_definitions WHERE schema_id = $1::uuid ORDER BY display_order ASC, id ASC`, schemaID)
+	rows, err := executor.Query(ctx, `SELECT d.id::text, d.attribute_key, d.label, d.data_type, d.is_required, d.is_searchable, d.display_order FROM attribute_definitions d JOIN attribute_schemas s ON s.id = d.schema_id WHERE d.schema_id = $1::uuid AND s.business_id = $2::uuid ORDER BY d.display_order ASC, d.id ASC`, schemaID, businessID)
 	if err != nil {
 		return ports.AttributeSchemaRecord{}, catalogRepositoryError("attribute_schema.get", err)
 	}

@@ -99,8 +99,11 @@ func (s InboundAutomationService) applyAction(ctx context.Context, rule ports.Au
 		var payload struct {
 			AssigneePrincipalID string `json:"assignee_principal_id"`
 		}
+		if err := json.Unmarshal(rule.ActionPayload, &payload); err != nil {
+			return appErrors.New(appErrors.CodeValidation, "automation assign_human payload requires assignee_principal_id UUID")
+		}
 		payload.AssigneePrincipalID = strings.TrimSpace(payload.AssigneePrincipalID)
-		if err := json.Unmarshal(rule.ActionPayload, &payload); err != nil || uuid.Validate(payload.AssigneePrincipalID) != nil {
+		if uuid.Validate(payload.AssigneePrincipalID) != nil {
 			return appErrors.New(appErrors.CodeValidation, "automation assign_human payload requires assignee_principal_id UUID")
 		}
 		assignee, err := s.Assignees.ResolveActiveMember(ctx, string(command.BusinessID), payload.AssigneePrincipalID)
