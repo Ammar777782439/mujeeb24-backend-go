@@ -339,16 +339,14 @@ func rankCatalogItems(items []ports.CatalogItemRecord, text string) []ports.Cata
 	}
 	scoredItems := make([]scored, 0, len(items))
 	for _, item := range items {
-		searchable := strings.ToLower(item.Name + " " + string(item.Attributes))
+		searchable := normalizeArabic(strings.ToLower(item.Name + " " + item.ItemType + " " + string(item.Attributes)))
 		score := 0
 		for _, token := range queryTokens {
 			if strings.Contains(searchable, token) {
 				score++
 			}
 		}
-		if score > 0 {
-			scoredItems = append(scoredItems, scored{item: item, score: score})
-		}
+		scoredItems = append(scoredItems, scored{item: item, score: score})
 	}
 	sort.SliceStable(scoredItems, func(i, j int) bool {
 		if scoredItems[i].score != scoredItems[j].score {
@@ -363,8 +361,30 @@ func rankCatalogItems(items []ports.CatalogItemRecord, text string) []ports.Cata
 	return result
 }
 
+func normalizeArabic(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch r {
+		case 'أ', 'إ', 'آ', 'ٱ':
+			b.WriteRune('ا')
+		case 'ة':
+			b.WriteRune('ه')
+		case 'ى':
+			b.WriteRune('ي')
+		case 'ؤ':
+			b.WriteRune('و')
+		case 'ئ':
+			b.WriteRune('ي')
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 func tokenize(text string) []string {
-	fields := strings.Fields(strings.ToLower(text))
+	normalized := normalizeArabic(strings.ToLower(text))
+	fields := strings.Fields(normalized)
 	result := make([]string, 0, len(fields))
 	for _, field := range fields {
 		field = strings.Trim(field, ".,!?؟:;()[]{}\"'")
@@ -419,16 +439,14 @@ func rankKnowledgeRecords(records []ports.KnowledgeDocumentRecord, text string) 
 	}
 	items := make([]scored, 0, len(records))
 	for _, record := range records {
-		searchable := strings.ToLower(record.KnowledgeKey + " " + record.Title + " " + record.Content)
+		searchable := normalizeArabic(strings.ToLower(record.KnowledgeKey + " " + record.Title + " " + record.Content))
 		score := 0
 		for _, token := range tokens {
 			if strings.Contains(searchable, token) {
 				score++
 			}
 		}
-		if score > 0 {
-			items = append(items, scored{record: record, score: score})
-		}
+		items = append(items, scored{record: record, score: score})
 	}
 	sort.SliceStable(items, func(i, j int) bool {
 		if items[i].score != items[j].score {
@@ -451,16 +469,14 @@ func rankPolicyRecords(records []ports.BusinessPolicyRecord, text string) []port
 	}
 	items := make([]scored, 0, len(records))
 	for _, record := range records {
-		searchable := strings.ToLower(record.PolicyKey + " " + record.Category + " " + record.Title + " " + record.Summary + " " + string(record.Rules))
+		searchable := normalizeArabic(strings.ToLower(record.PolicyKey + " " + record.Category + " " + record.Title + " " + record.Summary + " " + string(record.Rules)))
 		score := 0
 		for _, token := range tokens {
 			if strings.Contains(searchable, token) {
 				score++
 			}
 		}
-		if score > 0 {
-			items = append(items, scored{record: record, score: score})
-		}
+		items = append(items, scored{record: record, score: score})
 	}
 	sort.SliceStable(items, func(i, j int) bool {
 		if items[i].score != items[j].score {
