@@ -1,227 +1,1321 @@
-{
-  "info": {
-    "_postman_id": "4d1662f5-72e8-41e0-9b32-ef4cb6357b55",
-    "name": "Mujeeb 24 — Local PostgreSQL API",
-    "description": "Collection صادقة لمسارات Mujeeb 24 القابلة للاختبار محليًا. لا تحتوي أسرارًا أو refresh token. استورد معها Environment المحلي واقرأ README-ar.md قبل التنفيذ.",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "item": [
-    {
-      "name": "01 — Public health",
-      "item": [
-        {
-          "name": "Liveness",
-          "request": {"method": "GET", "header": [], "url": "{{base_url}}/api/v1/health/live"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 liveness', function () { pm.response.to.have.status(200); });"]}}]
-        },
-        {
-          "name": "Readiness (PostgreSQL)",
-          "request": {"method": "GET", "header": [], "url": "{{base_url}}/api/v1/health/ready"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 readiness', function () { pm.response.to.have.status(200); });"]}}]
-        },
-        {
-          "name": "Metrics (local PostgreSQL pool)",
-          "request": {"method": "GET", "header": [], "url": "{{base_url}}/api/v1/metrics"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 Prometheus metrics', function () { pm.response.to.have.status(200); pm.expect(pm.response.text()).to.include('mujeeb_postgres_pool_total_connections'); });"]}}]
-        }
-      ]
-    },
-    {
-      "name": "02 — Authentication and identity",
-      "item": [
-        {
-          "name": "Login — capture access token",
-          "request": {
-            "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
-            "body": {"mode": "raw", "raw": "{\n  \"email\": \"{{login_email}}\",\n  \"password\": \"{{login_password}}\"\n}"},
-            "url": "{{base_url}}/api/v1/auth/login"
-          },
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 and token only in response body', function () { pm.response.to.have.status(200); const json = pm.response.json(); pm.expect(json.data.access_token).to.be.a('string').and.not.empty; pm.expect(JSON.stringify(json)).not.to.include('refresh_token'); pm.collectionVariables.set('access_token', json.data.access_token); });", "pm.test('HttpOnly refresh cookie is issued', function () { pm.expect(pm.response.headers.get('Set-Cookie')).to.include('HttpOnly'); });"]}}]
-        },
-        {
-          "name": "Get current principal",
-          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/me"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 current principal', function () { pm.response.to.have.status(200); });"]}}]
-        },
-        {
-          "name": "List accessible businesses — capture first business ID",
-          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/me/businesses?limit=50"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 memberships and business ID', function () { pm.response.to.have.status(200); const items = pm.response.json().data; pm.expect(items).to.be.an('array').and.not.empty; pm.collectionVariables.set('business_id', items[0].business.id); });"]}}]
-        },
-        {
-          "name": "Refresh session — Cookie Jar only",
-          "request": {"method": "POST", "header": [], "url": "{{base_url}}/api/v1/auth/refresh"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 rotated refresh session', function () { pm.response.to.have.status(200); const json = pm.response.json(); pm.collectionVariables.set('access_token', json.data.access_token); });"]}}]
-        },
-        {
-          "name": "Logout — revoke current refresh session",
-          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/auth/logout"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('204 logout', function () { pm.response.to.have.status(204); pm.collectionVariables.unset('access_token'); });"]}}]
-        }
-      ]
-    },
-    {
-      "name": "03 — Scoped Catalog (runtime wired)",
-      "item": [
-        {
-          "name": "List catalogs",
-          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/catalogs?limit=50"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 scoped catalog list', function () { pm.response.to.have.status(200); });"]}}]
-        },
-        {
-          "name": "List leads",
-          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/leads?limit=50"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 scoped lead list', function () { pm.response.to.have.status(200); });"]}}]
-        },
-        {
-          "name": "List transactions",
-          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/transactions?limit=50"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 scoped transaction list', function () { pm.response.to.have.status(200); });"]}}]
-        },
-        {
-          "name": "List AI decisions",
-          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/ai-decisions?limit=50"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 scoped AI decision list', function () { pm.response.to.have.status(200); });"]}}]
-        },
-        {
-          "name": "List audit events",
-          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/audit-events?limit=50"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 scoped audit list', function () { pm.response.to.have.status(200); });"]}}]
-        }
-      ]
-    },
-    {
-      "name": "04 — Expected authorization failures",
-      "item": [
-        {
-          "name": "No bearer → 401",
-          "request": {"method": "GET", "header": [], "url": "{{base_url}}/api/v1/me"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('401 without bearer', function () { pm.response.to.have.status(401); });"]}}]
-        },
-        {
-          "name": "Other business → 403",
-          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{other_business_id}}/catalogs?limit=50"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('403 for business without active membership', function () { pm.response.to.have.status(403); });"]}}]
-        }
-      ]
-    },
-    {
-      "name": "05 — Business, conversations, and channels (runtime wired)",
-      "item": [
-        {
-          "name": "Get business profile",
-          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 business profile', function () { pm.response.to.have.status(200); pm.collectionVariables.set('business_resource_version', pm.response.json().data.resource_version); });"]}}]
-        },
-        {
-          "name": "Dashboard overview",
-          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/dashboard/overview"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 overview', function () { pm.response.to.have.status(200); });"]}}]
-        },
-        {
-          "name": "List conversations",
-          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/conversations?limit=50"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 conversations', function () { pm.response.to.have.status(200); });"]}}]
-        },
-        {
-          "name": "List customers",
-          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/customers?limit=50"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 customers', function () { pm.response.to.have.status(200); });"]}}]
-        },
-        {
-          "name": "List channel connections",
-          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/channel-connections?limit=50"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 channel connection list', function () { pm.response.to.have.status(200); });"]}}]
-        }
-      ]
-    },
-    {
-      "name": "06 — Feature-gated external runtime",
-      "item": [
-        {
-          "name": "Begin channel provisioning — disabled configuration returns 422, not 501",
-          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}, {"key": "Content-Type", "value": "application/json"}, {"key": "Idempotency-Key", "value": "postman-provisioning-disabled-001"}], "body": {"mode": "raw", "raw": "{\n  \"provider\": \"socialapi\",\n  \"channel\": \"whatsapp\",\n  \"display_name\": \"Postman local business\"\n}"}, "url": "{{base_url}}/api/v1/businesses/{{business_id}}/channel-connections"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('422 when provisioning is not configured, never 501', function () { pm.response.to.have.status(422); });"]}}]
-        },
-        {
-          "name": "Begin channel provisioning — enabled configuration starts SocialAPI OAuth",
-          "event": [
-            {"listen": "prerequest", "script": {"type": "text/javascript", "exec": ["pm.collectionVariables.set('provisioning_idempotency_key', 'postman-provisioning-' + Date.now());"]}},
-            {"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('202 accepted provisioning session', function () { pm.response.to.have.status(202); });", "pm.test('returns OAuth authorization URL without provider secrets', function () { const body = pm.response.json(); pm.expect(body.data.status).to.eql('pending_authorization'); pm.expect(body.data.authorization_url).to.be.a('string').and.not.empty; pm.collectionVariables.set('provisioning_id', body.data.provisioning_id); pm.collectionVariables.set('provisioning_authorization_url', body.data.authorization_url); });"]}}
-          ],
-          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}, {"key": "Content-Type", "value": "application/json"}, {"key": "Idempotency-Key", "value": "{{provisioning_idempotency_key}}"}], "body": {"mode": "raw", "raw": "{\n  \"provider\": \"socialapi\",\n  \"channel\": \"instagram\",\n  \"display_name\": \"Postman merchant channel\"\n}"}, "url": "{{base_url}}/api/v1/businesses/{{business_id}}/channel-connections"}
-        }
-      ]
-    },
-    {
-      "name": "07 — Mujeeb Inbox V1",
-      "item": [
-        {
-          "name": "List canned replies",
-          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/canned-replies?status=active&limit=50"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 canned replies', function () { pm.response.to.have.status(200); });"]}}]
-        },
-        {
-          "name": "Create canned reply — capture ID/version",
-          "event": [{"listen": "prerequest", "script": {"type": "text/javascript", "exec": ["pm.collectionVariables.set('inbox_idempotency_key', 'postman-canned-' + Date.now());"]}}, {"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('201 canned reply', function () { pm.response.to.have.status(201); const data = pm.response.json().data; pm.collectionVariables.set('canned_reply_id', data.id); pm.collectionVariables.set('canned_reply_version', data.resource_version); });"]}}],
-          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}, {"key": "Content-Type", "value": "application/json"}, {"key": "Idempotency-Key", "value": "{{inbox_idempotency_key}}"}], "body": {"mode": "raw", "raw": "{\n  \"title\": \"ساعات العمل\",\n  \"shortcut\": \"hours\",\n  \"body\": \"نحن متاحون من السبت إلى الخميس.\"\n}"}, "url": "{{base_url}}/api/v1/businesses/{{business_id}}/canned-replies"}
-        },
-        {
-          "name": "List automation rules",
-          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/automation-rules?status=active&limit=50"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 automation rules', function () { pm.response.to.have.status(200); });"]}}]
-        },
-        {
-          "name": "Create inbound automation — add label",
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('201 constrained automation rule', function () { pm.response.to.have.status(201); const data = pm.response.json().data; pm.collectionVariables.set('automation_rule_id', data.id); pm.collectionVariables.set('automation_rule_version', data.resource_version); });"]}}],
-          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}, {"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"name\": \"تمييز طلبات الأسعار\",\n  \"conditions\": {\"text_contains\": \"سعر\"},\n  \"action_kind\": \"add_label\",\n  \"action_payload\": {\"label\": \"price-question\"},\n  \"position\": 100\n}"}, "url": "{{base_url}}/api/v1/businesses/{{business_id}}/automation-rules"}
-        },
-        {
-          "name": "Mark conversation read",
-          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/conversations/{{conversation_id}}/read"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 read cursor', function () { pm.response.to.have.status(200); });"]}}]
-        }
-      ]
-    },
-    {
-      "name": "08 — Merchant team management",
-      "description": "إنشاء الدعوة يتم بحساب owner/admin. قبولها يجب أن يتم بحساب الموظف المدعو باستخدام invitee_access_token؛ لا تستخدم access_token المدير لقبول دعوة بريد موظف آخر.",
-      "item": [
-        {
-          "name": "List team members",
-          "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/team/members?limit=50"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 team members', function () { pm.response.to.have.status(200); const data = pm.response.json().data; pm.expect(data).to.be.an('array'); if (data.length > 0) { pm.collectionVariables.set('team_member_id', data[0].principal_id); } });"]}}]
-        },
-        {
-          "name": "Create team invitation — captures one-time token locally",
-          "event": [{"listen": "prerequest", "script": {"type": "text/javascript", "exec": ["pm.collectionVariables.set('team_invitation_idempotency_key', 'postman-team-invite-' + Date.now());"]}}, {"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('201 team invitation', function () { pm.response.to.have.status(201); const data = pm.response.json().data; pm.expect(data.acceptance_token).to.be.a('string').and.not.empty; pm.collectionVariables.set('team_invitation_token', data.acceptance_token); });"]}}],
-          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}, {"key": "Content-Type", "value": "application/json"}, {"key": "Idempotency-Key", "value": "{{team_invitation_idempotency_key}}"}], "body": {"mode": "raw", "raw": "{\n  \"email\": \"employee@example.test\",\n  \"role\": \"agent\",\n  \"expires_in_hours\": 168\n}"}, "url": "{{base_url}}/api/v1/businesses/{{business_id}}/team/invitations"}
-        },
-        {
-          "name": "Accept team invitation — use invited employee token",
-          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{invitee_access_token}}"}, {"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"acceptance_token\": \"{{team_invitation_token}}\"\n}"}, "url": "{{base_url}}/api/v1/team/invitations/accept"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 accepted invitation', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.status).to.eql('accepted'); pm.collectionVariables.unset('team_invitation_token'); });"]}}]
-        },
-        {
-          "name": "Update member role — manual target only",
-          "request": {"method": "PATCH", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}, {"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"role\": \"agent\"\n}"}, "url": "{{base_url}}/api/v1/businesses/{{business_id}}/team/members/{{team_member_id}}/role"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 updated non-owner member', function () { pm.response.to.have.status(200); });"]}}]
-        },
-        {
-          "name": "Revoke member — manual target only",
-          "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/businesses/{{business_id}}/team/members/{{team_member_id}}/revoke"},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200 revoked non-owner member; 422 for last owner', function () { pm.expect([200, 422]).to.include(pm.response.code); });"]}}]
-        }
-      ]
-    }
-  ],
-  "variable": [
-    {"key": "access_token", "value": "", "type": "string"},
-    {"key": "business_id", "value": "", "type": "string"},
-    {"key": "team_member_id", "value": "", "type": "string"},
-    {"key": "team_invitation_token", "value": "", "type": "string"},
-    {"key": "team_invitation_idempotency_key", "value": "", "type": "string"},
-    {"key": "invitee_access_token", "value": "", "type": "string"}
-  ]
+﻿{
+    "info":  {
+                 "_postman_id":  "4d1662f5-72e8-41e0-9b32-ef4cb6357b55",
+                 "name":  "Mujeeb 24 â€” Local PostgreSQL API",
+                 "description":  "Collection ØµØ§Ø¯Ù‚Ø© Ù„Ù…Ø³Ø§Ø±Ø§Øª Mujeeb 24 Ø§Ù„Ù‚Ø§Ø¨Ù„Ø© Ù„Ù„Ø§Ø®ØªØ¨Ø§Ø± Ù…Ø­Ù„ÙŠÙ‹Ø§. Ù„Ø§ ØªØ­ØªÙˆÙŠ Ø£Ø³Ø±Ø§Ø±Ù‹Ø§ Ø£Ùˆ refresh token. Ø§Ø³ØªÙˆØ±Ø¯ Ù…Ø¹Ù‡Ø§ Environment Ø§Ù„Ù…Ø­Ù„ÙŠ ÙˆØ§Ù‚Ø±Ø£ README-ar.md Ù‚Ø¨Ù„ Ø§Ù„ØªÙ†ÙÙŠØ°.",
+                 "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+             },
+    "item":  [
+                 {
+                     "name":  "01 â€” Public health",
+                     "item":  [
+                                  {
+                                      "name":  "Liveness",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/health/live"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 liveness\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Readiness (PostgreSQL)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/health/ready"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 readiness\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Metrics (local PostgreSQL pool)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/metrics"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 Prometheus metrics\u0027, function () { pm.response.to.have.status(200); pm.expect(pm.response.text()).to.include(\u0027mujeeb_postgres_pool_total_connections\u0027); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "02 â€” Authentication and identity",
+                     "item":  [
+                                  {
+                                      "name":  "Login â€” capture access token",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"email\": \"{{login_email}}\",\n  \"password\": \"{{login_password}}\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}/api/v1/auth/login"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 and token only in response body\u0027, function () { pm.response.to.have.status(200); const json = pm.response.json(); pm.expect(json.data.access_token).to.be.a(\u0027string\u0027).and.not.empty; pm.expect(JSON.stringify(json)).not.to.include(\u0027refresh_token\u0027); pm.collectionVariables.set(\u0027access_token\u0027, json.data.access_token); });",
+                                                                                    "pm.test(\u0027HttpOnly refresh cookie is issued\u0027, function () { pm.expect(pm.response.headers.get(\u0027Set-Cookie\u0027)).to.include(\u0027HttpOnly\u0027); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Get current principal",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/me"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 current principal\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "List accessible businesses â€” capture first business ID",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/me/businesses?limit=50"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 memberships and business ID\u0027, function () { pm.response.to.have.status(200); const items = pm.response.json().data; pm.expect(items).to.be.an(\u0027array\u0027).and.not.empty; pm.collectionVariables.set(\u0027business_id\u0027, items[0].business.id); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Refresh session â€” Cookie Jar only",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/auth/refresh"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 rotated refresh session\u0027, function () { pm.response.to.have.status(200); const json = pm.response.json(); pm.collectionVariables.set(\u0027access_token\u0027, json.data.access_token); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Logout â€” revoke current refresh session",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/auth/logout"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027204 logout\u0027, function () { pm.response.to.have.status(204); pm.collectionVariables.unset(\u0027access_token\u0027); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "03 — Scoped Catalog",
+                     "item":  [
+                                  {
+                                      "name":  "Catalogs",
+                                      "item":  [
+                                                   {
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/catalogs?limit=50",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{access_token}}"
+                                                                                      }
+                                                                                  ]
+                                                                   },
+                                                       "name":  "List catalogs",
+                                                       "event":  [
+                                                                     {
+                                                                         "script":  {
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027200 list catalogs\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                                 ],
+                                                                                        "type":  "text/javascript"
+                                                                                    },
+                                                                         "listen":  "test"
+                                                                     }
+                                                                 ]
+                                                   },
+                                                   {
+                                                       "request":  {
+                                                                       "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/catalogs",
+                                                                       "method":  "POST",
+                                                                       "body":  {
+                                                                                    "raw":  "{\n  \"name\": \"متجر الاختبار\",\n  \"description\": \"كتالوج اختبار لمجيب 24\"\n}",
+                                                                                    "mode":  "raw"
+                                                                                },
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{access_token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ]
+                                                                   },
+                                                       "name":  "Create catalog",
+                                                       "event":  [
+                                                                     {
+                                                                         "script":  {
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027201 create catalog\u0027, function () { pm.response.to.have.status(201); const json = pm.response.json(); pm.expect(json.data).to.have.property(\u0027id\u0027); pm.collectionVariables.set(\u0027catalog_id\u0027, json.data.id); pm.collectionVariables.set(\u0027catalog_resource_version\u0027, json.data.resource_version); });"
+                                                                                                 ],
+                                                                                        "type":  "text/javascript"
+                                                                                    },
+                                                                         "listen":  "test"
+                                                                     }
+                                                                 ]
+                                                   },
+                                                   {
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/catalogs/{{catalog_id}}",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{access_token}}"
+                                                                                      }
+                                                                                  ]
+                                                                   },
+                                                       "name":  "Get catalog",
+                                                       "event":  [
+                                                                     {
+                                                                         "script":  {
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027200 get catalog\u0027, function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.id).to.eql(pm.collectionVariables.get(\u0027catalog_id\u0027)); });"
+                                                                                                 ],
+                                                                                        "type":  "text/javascript"
+                                                                                    },
+                                                                         "listen":  "test"
+                                                                     }
+                                                                 ]
+                                                   },
+                                                   {
+                                                       "request":  {
+                                                                       "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/catalogs/{{catalog_id}}",
+                                                                       "method":  "PATCH",
+                                                                       "body":  {
+                                                                                    "raw":  "{\n  \"name\": \"متجر الاختبار المحدث\"\n}",
+                                                                                    "mode":  "raw"
+                                                                                },
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{access_token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "If-Match",
+                                                                                          "value":  "{{catalog_resource_version}}"
+                                                                                      }
+                                                                                  ]
+                                                                   },
+                                                       "name":  "Update catalog",
+                                                       "event":  [
+                                                                     {
+                                                                         "script":  {
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027200 update catalog\u0027, function () { pm.response.to.have.status(200); pm.collectionVariables.set(\u0027catalog_resource_version\u0027, pm.response.json().data.resource_version); });"
+                                                                                                 ],
+                                                                                        "type":  "text/javascript"
+                                                                                    },
+                                                                         "listen":  "test"
+                                                                     }
+                                                                 ]
+                                                   }
+                                               ]
+                                  },
+                                  {
+                                      "name":  "Catalog Items",
+                                      "item":  [
+                                                   {
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/catalogs/{{catalog_id}}/items?limit=50",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{access_token}}"
+                                                                                      }
+                                                                                  ]
+                                                                   },
+                                                       "name":  "List catalog items",
+                                                       "event":  [
+                                                                     {
+                                                                         "script":  {
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027200 list catalog items\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                                 ],
+                                                                                        "type":  "text/javascript"
+                                                                                    },
+                                                                         "listen":  "test"
+                                                                     }
+                                                                 ]
+                                                   },
+                                                   {
+                                                       "request":  {
+                                                                       "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/catalogs/{{catalog_id}}/items",
+                                                                       "method":  "POST",
+                                                                       "body":  {
+                                                                                    "raw":  "{\n  \"item_type\": \"physical_good\",\n  \"name\": \"قميص رجالي\",\n  \"pricing_mode\": \"fixed\",\n  \"availability_mode\": \"stock\",\n  \"fulfillment_mode\": \"delivery\",\n  \"requires_confirmation\": false,\n  \"attributes\": {}\n}",
+                                                                                    "mode":  "raw"
+                                                                                },
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{access_token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ]
+                                                                   },
+                                                       "name":  "Create catalog item",
+                                                       "event":  [
+                                                                     {
+                                                                         "script":  {
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027201 create catalog item\u0027, function () { pm.response.to.have.status(201); const json = pm.response.json(); pm.expect(json.data).to.have.property(\u0027id\u0027); pm.collectionVariables.set(\u0027catalog_item_id\u0027, json.data.id); pm.collectionVariables.set(\u0027catalog_item_resource_version\u0027, json.data.resource_version); });"
+                                                                                                 ],
+                                                                                        "type":  "text/javascript"
+                                                                                    },
+                                                                         "listen":  "test"
+                                                                     }
+                                                                 ]
+                                                   },
+                                                   {
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/catalogs/{{catalog_id}}/items/{{catalog_item_id}}",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{access_token}}"
+                                                                                      }
+                                                                                  ]
+                                                                   },
+                                                       "name":  "Get catalog item",
+                                                       "event":  [
+                                                                     {
+                                                                         "script":  {
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027200 get catalog item\u0027, function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.id).to.eql(pm.collectionVariables.get(\u0027catalog_item_id\u0027)); });"
+                                                                                                 ],
+                                                                                        "type":  "text/javascript"
+                                                                                    },
+                                                                         "listen":  "test"
+                                                                     }
+                                                                 ]
+                                                   },
+                                                   {
+                                                       "request":  {
+                                                                       "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/catalogs/{{catalog_id}}/items/{{catalog_item_id}}",
+                                                                       "method":  "PATCH",
+                                                                       "body":  {
+                                                                                    "raw":  "{\n  \"name\": \"قميص رجالي محدث\"\n}",
+                                                                                    "mode":  "raw"
+                                                                                },
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{access_token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "If-Match",
+                                                                                          "value":  "{{catalog_item_resource_version}}"
+                                                                                      }
+                                                                                  ]
+                                                                   },
+                                                       "name":  "Update catalog item",
+                                                       "event":  [
+                                                                     {
+                                                                         "script":  {
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027200 update catalog item\u0027, function () { pm.response.to.have.status(200); pm.collectionVariables.set(\u0027catalog_item_resource_version\u0027, pm.response.json().data.resource_version); });"
+                                                                                                 ],
+                                                                                        "type":  "text/javascript"
+                                                                                    },
+                                                                         "listen":  "test"
+                                                                     }
+                                                                 ]
+                                                   }
+                                               ]
+                                  },
+                                  {
+                                      "name":  "Variants",
+                                      "item":  [
+                                                   {
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/catalog-items/{{catalog_item_id}}/variants?limit=50",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{access_token}}"
+                                                                                      }
+                                                                                  ]
+                                                                   },
+                                                       "name":  "List variants",
+                                                       "event":  [
+                                                                     {
+                                                                         "script":  {
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027200 list variants\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                                 ],
+                                                                                        "type":  "text/javascript"
+                                                                                    },
+                                                                         "listen":  "test"
+                                                                     }
+                                                                 ]
+                                                   },
+                                                   {
+                                                       "request":  {
+                                                                       "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/catalog-items/{{catalog_item_id}}/variants",
+                                                                       "method":  "POST",
+                                                                       "body":  {
+                                                                                    "raw":  "{\n  \"name\": \"أسود 256GB\",\n  \"attributes\": {\n    \"color\": \"black\",\n    \"storage\": \"256GB\"\n  }\n}",
+                                                                                    "mode":  "raw"
+                                                                                },
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{access_token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ]
+                                                                   },
+                                                       "name":  "Create variant",
+                                                       "event":  [
+                                                                     {
+                                                                         "script":  {
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027201 create variant\u0027, function () { pm.response.to.have.status(201); const json = pm.response.json(); pm.collectionVariables.set(\u0027variant_id\u0027, json.data.id); pm.collectionVariables.set(\u0027variant_resource_version\u0027, json.data.resource_version); });"
+                                                                                                 ],
+                                                                                        "type":  "text/javascript"
+                                                                                    },
+                                                                         "listen":  "test"
+                                                                     }
+                                                                 ]
+                                                   }
+                                               ]
+                                  },
+                                  {
+                                      "name":  "Offers",
+                                      "item":  [
+                                                   {
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/catalog-items/{{catalog_item_id}}/offers?limit=50",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{access_token}}"
+                                                                                      }
+                                                                                  ]
+                                                                   },
+                                                       "name":  "List offers",
+                                                       "event":  [
+                                                                     {
+                                                                         "script":  {
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027200 list offers\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                                 ],
+                                                                                        "type":  "text/javascript"
+                                                                                    },
+                                                                         "listen":  "test"
+                                                                     }
+                                                                 ]
+                                                   },
+                                                   {
+                                                       "request":  {
+                                                                       "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/catalog-items/{{catalog_item_id}}/offers",
+                                                                       "method":  "POST",
+                                                                       "body":  {
+                                                                                    "raw":  "{\n  \"name\": \"قميص رجالي\",\n  \"pricing_mode\": \"fixed\",\n  \"amount\": 12000,\n  \"currency\": \"YER\",\n  \"availability_mode\": \"stock\",\n  \"availability_status\": \"available\",\n  \"fulfillment_mode\": \"delivery\",\n  \"status\": \"active\"\n}",
+                                                                                    "mode":  "raw"
+                                                                                },
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{access_token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ]
+                                                                   },
+                                                       "name":  "Create offer",
+                                                       "event":  [
+                                                                     {
+                                                                         "script":  {
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027201 create offer\u0027, function () { pm.response.to.have.status(201); const json = pm.response.json(); pm.collectionVariables.set(\u0027offer_id\u0027, json.data.id); pm.collectionVariables.set(\u0027offer_resource_version\u0027, json.data.resource_version); });"
+                                                                                                 ],
+                                                                                        "type":  "text/javascript"
+                                                                                    },
+                                                                         "listen":  "test"
+                                                                     }
+                                                                 ]
+                                                   }
+                                               ]
+                                  },
+                                  {
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/leads?limit=50",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ]
+                                                  },
+                                      "name":  "List leads",
+                                      "event":  [
+                                                    {
+                                                        "script":  {
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 scoped lead list\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                ],
+                                                                       "type":  "text/javascript"
+                                                                   },
+                                                        "listen":  "test"
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/transactions?limit=50",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ]
+                                                  },
+                                      "name":  "List transactions",
+                                      "event":  [
+                                                    {
+                                                        "script":  {
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 scoped transaction list\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                ],
+                                                                       "type":  "text/javascript"
+                                                                   },
+                                                        "listen":  "test"
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/ai-decisions?limit=50",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ]
+                                                  },
+                                      "name":  "List AI decisions",
+                                      "event":  [
+                                                    {
+                                                        "script":  {
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 scoped AI decision list\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                ],
+                                                                       "type":  "text/javascript"
+                                                                   },
+                                                        "listen":  "test"
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/audit-events?limit=50",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ]
+                                                  },
+                                      "name":  "List audit events",
+                                      "event":  [
+                                                    {
+                                                        "script":  {
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 scoped audit list\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                ],
+                                                                       "type":  "text/javascript"
+                                                                   },
+                                                        "listen":  "test"
+                                                    }
+                                                ]
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "04 â€” Expected authorization failures",
+                     "item":  [
+                                  {
+                                      "name":  "No bearer â†’ 401",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/me"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027401 without bearer\u0027, function () { pm.response.to.have.status(401); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Other business â†’ 403",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{other_business_id}}/catalogs?limit=50"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027403 for business without active membership\u0027, function () { pm.response.to.have.status(403); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "05 â€” Business, conversations, and channels (runtime wired)",
+                     "item":  [
+                                  {
+                                      "name":  "Get business profile",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 business profile\u0027, function () { pm.response.to.have.status(200); pm.collectionVariables.set(\u0027business_resource_version\u0027, pm.response.json().data.resource_version); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Dashboard overview",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/dashboard/overview"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 overview\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "List conversations",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/conversations?limit=50"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 conversations\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "List customers",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/customers?limit=50"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 customers\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "List channel connections",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/channel-connections?limit=50"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 channel connection list\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "06 â€” Feature-gated external runtime",
+                     "item":  [
+                                  {
+                                      "name":  "Begin channel provisioning â€” disabled configuration returns 422, not 501",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Idempotency-Key",
+                                                                         "value":  "postman-provisioning-disabled-001"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"provider\": \"socialapi\",\n  \"channel\": \"whatsapp\",\n  \"display_name\": \"Postman local business\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/channel-connections"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027422 when provisioning is not configured, never 501\u0027, function () { pm.response.to.have.status(422); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Begin channel provisioning â€” enabled configuration starts SocialAPI OAuth",
+                                      "event":  [
+                                                    {
+                                                        "listen":  "prerequest",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.collectionVariables.set(\u0027provisioning_idempotency_key\u0027, \u0027postman-provisioning-\u0027 + Date.now());"
+                                                                                ]
+                                                                   }
+                                                    },
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027202 accepted provisioning session\u0027, function () { pm.response.to.have.status(202); });",
+                                                                                    "pm.test(\u0027returns OAuth authorization URL without provider secrets\u0027, function () { const body = pm.response.json(); pm.expect(body.data.status).to.eql(\u0027pending_authorization\u0027); pm.expect(body.data.authorization_url).to.be.a(\u0027string\u0027).and.not.empty; pm.collectionVariables.set(\u0027provisioning_id\u0027, body.data.provisioning_id); pm.collectionVariables.set(\u0027provisioning_authorization_url\u0027, body.data.authorization_url); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ],
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Idempotency-Key",
+                                                                         "value":  "{{provisioning_idempotency_key}}"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"provider\": \"socialapi\",\n  \"channel\": \"instagram\",\n  \"display_name\": \"Postman merchant channel\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/channel-connections"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "07 â€” Mujeeb Inbox V1",
+                     "item":  [
+                                  {
+                                      "name":  "List canned replies",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/canned-replies?status=active\u0026limit=50"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 canned replies\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Create canned reply â€” capture ID/version",
+                                      "event":  [
+                                                    {
+                                                        "listen":  "prerequest",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.collectionVariables.set(\u0027inbox_idempotency_key\u0027, \u0027postman-canned-\u0027 + Date.now());"
+                                                                                ]
+                                                                   }
+                                                    },
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027201 canned reply\u0027, function () { pm.response.to.have.status(201); const data = pm.response.json().data; pm.collectionVariables.set(\u0027canned_reply_id\u0027, data.id); pm.collectionVariables.set(\u0027canned_reply_version\u0027, data.resource_version); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ],
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Idempotency-Key",
+                                                                         "value":  "{{inbox_idempotency_key}}"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"title\": \"Ø³Ø§Ø¹Ø§Øª Ø§Ù„Ø¹Ù…Ù„\",\n  \"shortcut\": \"hours\",\n  \"body\": \"Ù†Ø­Ù† Ù…ØªØ§Ø­ÙˆÙ† Ù…Ù† Ø§Ù„Ø³Ø¨Øª Ø¥Ù„Ù‰ Ø§Ù„Ø®Ù…ÙŠØ³.\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/canned-replies"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "List automation rules",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/automation-rules?status=active\u0026limit=50"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 automation rules\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Create inbound automation â€” add label",
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027201 constrained automation rule\u0027, function () { pm.response.to.have.status(201); const data = pm.response.json().data; pm.collectionVariables.set(\u0027automation_rule_id\u0027, data.id); pm.collectionVariables.set(\u0027automation_rule_version\u0027, data.resource_version); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ],
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"ØªÙ…ÙŠÙŠØ² Ø·Ù„Ø¨Ø§Øª Ø§Ù„Ø£Ø³Ø¹Ø§Ø±\",\n  \"conditions\": {\"text_contains\": \"Ø³Ø¹Ø±\"},\n  \"action_kind\": \"add_label\",\n  \"action_payload\": {\"label\": \"price-question\"},\n  \"position\": 100\n}"
+                                                               },
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/automation-rules"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Mark conversation read",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/conversations/{{conversation_id}}/read"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 read cursor\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "08 â€” Merchant team management",
+                     "description":  "Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø¯Ø¹ÙˆØ© ÙŠØªÙ… Ø¨Ø­Ø³Ø§Ø¨ owner/admin. Ù‚Ø¨ÙˆÙ„Ù‡Ø§ ÙŠØ¬Ø¨ Ø£Ù† ÙŠØªÙ… Ø¨Ø­Ø³Ø§Ø¨ Ø§Ù„Ù…ÙˆØ¸Ù Ø§Ù„Ù…Ø¯Ø¹Ùˆ Ø¨Ø§Ø³ØªØ®Ø¯Ø§Ù… invitee_access_tokenØ› Ù„Ø§ ØªØ³ØªØ®Ø¯Ù… access_token Ø§Ù„Ù…Ø¯ÙŠØ± Ù„Ù‚Ø¨ÙˆÙ„ Ø¯Ø¹ÙˆØ© Ø¨Ø±ÙŠØ¯ Ù…ÙˆØ¸Ù Ø¢Ø®Ø±.",
+                     "item":  [
+                                  {
+                                      "name":  "List team members",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/team/members?limit=50"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 team members\u0027, function () { pm.response.to.have.status(200); const data = pm.response.json().data; pm.expect(data).to.be.an(\u0027array\u0027); if (data.length \u003e 0) { pm.collectionVariables.set(\u0027team_member_id\u0027, data[0].principal_id); } });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Create team invitation â€” captures one-time token locally",
+                                      "event":  [
+                                                    {
+                                                        "listen":  "prerequest",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.collectionVariables.set(\u0027team_invitation_idempotency_key\u0027, \u0027postman-team-invite-\u0027 + Date.now());"
+                                                                                ]
+                                                                   }
+                                                    },
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027201 team invitation\u0027, function () { pm.response.to.have.status(201); const data = pm.response.json().data; pm.expect(data.acceptance_token).to.be.a(\u0027string\u0027).and.not.empty; pm.collectionVariables.set(\u0027team_invitation_token\u0027, data.acceptance_token); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ],
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Idempotency-Key",
+                                                                         "value":  "{{team_invitation_idempotency_key}}"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"email\": \"employee@example.test\",\n  \"role\": \"agent\",\n  \"expires_in_hours\": 168\n}"
+                                                               },
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/team/invitations"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Accept team invitation â€” use invited employee token",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{invitee_access_token}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"acceptance_token\": \"{{team_invitation_token}}\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}/api/v1/team/invitations/accept"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 accepted invitation\u0027, function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.status).to.eql(\u0027accepted\u0027); pm.collectionVariables.unset(\u0027team_invitation_token\u0027); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Update member role â€” manual target only",
+                                      "request":  {
+                                                      "method":  "PATCH",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"role\": \"agent\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/team/members/{{team_member_id}}/role"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 updated non-owner member\u0027, function () { pm.response.to.have.status(200); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Revoke member â€” manual target only",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{access_token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{base_url}}/api/v1/businesses/{{business_id}}/team/members/{{team_member_id}}/revoke"
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027200 revoked non-owner member; 422 for last owner\u0027, function () { pm.expect([200, 422]).to.include(pm.response.code); });"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  }
+                              ]
+                 }
+             ],
+    "variable":  [
+                     {
+                         "key":  "access_token",
+                         "value":  "",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "business_id",
+                         "value":  "",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "team_member_id",
+                         "value":  "",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "team_invitation_token",
+                         "value":  "",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "team_invitation_idempotency_key",
+                         "value":  "",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "invitee_access_token",
+                         "value":  "",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "catalog_id",
+                         "type":  "string",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "catalog_resource_version",
+                         "type":  "string",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "catalog_item_id",
+                         "type":  "string",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "catalog_item_resource_version",
+                         "type":  "string",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "variant_id",
+                         "type":  "string",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "variant_resource_version",
+                         "type":  "string",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "offer_id",
+                         "type":  "string",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "offer_resource_version",
+                         "type":  "string",
+                         "value":  ""
+                     }
+                 ]
 }

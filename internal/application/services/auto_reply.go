@@ -83,6 +83,11 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		if contextErr != nil {
 			return commands.AutoReplyResult{}, contextErr
 		}
+		
+		if strings.EqualFold(builtContext.Conversation.Ownership, "human") || strings.EqualFold(builtContext.Conversation.State, "waiting_human") {
+			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, nil
+		}
+		
 		aiInput.Context = &builtContext
 	}
 	proposal, err := s.Runtime.Decide(ctx, aiInput)
@@ -215,7 +220,7 @@ func validateProposal(proposal ports.AIDecisionProposal) error {
 	if strings.TrimSpace(proposal.IntentBase) == "" || strings.TrimSpace(proposal.RequestedAction) == "" || strings.TrimSpace(proposal.ConfidenceBand) == "" || proposal.SchemaVersion <= 0 || strings.TrimSpace(proposal.PolicyDecision) == "" {
 		return appErrors.New(appErrors.CodeValidation, "AI proposal must contain intent, action, confidence band, schema version, and policy decision")
 	}
-	if proposal.RequestedAction != AutoReplyActionAnswer && proposal.RequestedAction != "ask_clarification" && proposal.RequestedAction != "no_action" {
+	if proposal.RequestedAction != AutoReplyActionAnswer && proposal.RequestedAction != "ask_clarification" && proposal.RequestedAction != "no_action" && proposal.RequestedAction != "draft_order" && proposal.RequestedAction != "draft_lead" {
 		return appErrors.New(appErrors.CodeValidation, "AI proposal action is outside the first auto reply slice")
 	}
 	if proposal.PolicyDecision != "allowed" && proposal.PolicyDecision != "requires_approval" && proposal.PolicyDecision != "denied" {

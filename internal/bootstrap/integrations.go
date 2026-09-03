@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"errors"
 
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gemini"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/openaicompatible"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/providers/socialapi"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
@@ -61,7 +62,21 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 			adapters.ChannelProvisioningError = errors.New("channel provisioning adapters are not configured")
 		}
 	}
-	if cfg.LLMEnabled {
+	if cfg.GeminiAPIKey != "" {
+		client, err := gemini.NewClient(gemini.Config{
+			BaseURL:            cfg.GeminiBaseURL,
+			APIKey:             cfg.GeminiAPIKey,
+			Model:              cfg.GeminiModel,
+			RequestTimeout:     cfg.GeminiHTTPTimeout,
+			MaxOutputTokens:    cfg.LLMMaxOutputTokens,
+			MaxInputCharacters: cfg.LLMMaxInputCharacters,
+		})
+		if err != nil {
+			adapters.LLMConfigError = errors.New("Gemini adapter configuration: " + err.Error())
+		} else {
+			adapters.AIRuntime = client
+		}
+	} else if cfg.LLMEnabled {
 		client, err := openaicompatible.NewClient(openaicompatible.Config{
 			BaseURL:            cfg.LLMBaseURL,
 			APIKey:             cfg.LLMAPIKey,

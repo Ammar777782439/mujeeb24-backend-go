@@ -22,13 +22,11 @@ func (GroundedPolicyEngine) Evaluate(proposal ports.AIDecisionProposal, contextV
 		return proposal
 	}
 
-	if category == "availability" || category == "pricing" {
-		if len(contextValue.OfferEvidence) == 0 || hasStaleOffer(contextValue.OfferEvidence) {
-			return requireApproval(proposal, "verified_offer_evidence_missing_or_stale", "offer availability or price requires fresh verified offer evidence")
-		}
-	}
-	if category == "catalog" && len(contextValue.CatalogEvidence) == 0 {
+	if category == "catalog" && !referencesValidCatalogEvidence(proposal.EvidenceReferences, contextValue) {
 		return requireApproval(proposal, "verified_catalog_evidence_missing", "catalog answer requires matched catalog evidence")
+	}
+	if (category == "availability" || category == "pricing") && !referencesValidOfferEvidence(proposal.EvidenceReferences, contextValue) {
+		return requireApproval(proposal, "verified_offer_evidence_missing_or_stale", "offer availability or price requires fresh verified offer evidence")
 	}
 	if !hasPolicyCategory(contextValue.BusinessPolicyEvidence, category) {
 		return requireApproval(proposal, "business_policy_evidence_missing", "this business-policy answer requires a published merchant policy")
@@ -141,6 +139,50 @@ func appendJSONString(raw []byte, value string) []byte {
 		return raw
 	}
 	return encoded
+}
+
+func referencesValidCatalogEvidence(raw []byte, contextValue *ports.AIContext) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var references []string
+	if json.Unmarshal(raw, &references) != nil || len(references) == 0 {
+		return false
+	}
+	allowed := make(map[string]struct{})
+	for _, item := range contextValue.CatalogEvidence {
+		if item.EvidenceState != AIContextStale {
+			allowed[item.Reference] = struct{}{}
+		}
+	}
+	for _, reference := range references {
+		if _, ok := allowed[strings.TrimSpace(reference)]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func referencesValidOfferEvidence(raw []byte, contextValue *ports.AIContext) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var references []string
+	if json.Unmarshal(raw, &references) != nil || len(references) == 0 {
+		return false
+	}
+	allowed := make(map[string]struct{})
+	for _, offer := range contextValue.OfferEvidence {
+		if offer.EvidenceState != AIContextStale && !strings.EqualFold(offer.AvailabilityState, "unknown") && !strings.EqualFold(offer.AvailabilityState, "stale") {
+			allowed[offer.Reference] = struct{}{}
+		}
+	}
+	for _, reference := range references {
+		if _, ok := allowed[strings.TrimSpace(reference)]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 var _ ports.AIPolicyEvaluator = GroundedPolicyEngine{}

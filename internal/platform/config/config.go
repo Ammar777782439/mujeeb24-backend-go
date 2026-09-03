@@ -45,6 +45,10 @@ type ProcessConfig struct {
 	LLMMaxOutputTokens             int
 	LLMMaxInputCharacters          int
 	LLMOutputTokensField           string
+	GeminiAPIKey                   string
+	GeminiBaseURL                  string
+	GeminiModel                    string
+	GeminiHTTPTimeout              time.Duration
 }
 
 func LoadFromEnv() (ProcessConfig, error) {
@@ -83,6 +87,10 @@ func LoadFromEnv() (ProcessConfig, error) {
 		LLMMaxOutputTokens:             700,
 		LLMMaxInputCharacters:          12000,
 		LLMOutputTokensField:           envOr("LLM_OUTPUT_TOKENS_FIELD", "max_completion_tokens"),
+		GeminiAPIKey:                   strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
+		GeminiBaseURL:                  strings.TrimRight(strings.TrimSpace(os.Getenv("GEMINI_BASE_URL")), "/"),
+		GeminiModel:                    strings.TrimSpace(os.Getenv("GEMINI_MODEL")),
+		GeminiHTTPTimeout:              30 * time.Second,
 	}
 	if cfg.DatabaseURL == "" {
 		return ProcessConfig{}, errors.New("DATABASE_URL is required")
@@ -145,6 +153,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.LLMMaxInputCharacters, err = intEnv("LLM_MAX_INPUT_CHARACTERS", cfg.LLMMaxInputCharacters); err != nil {
 		return ProcessConfig{}, err
 	}
+	if cfg.GeminiHTTPTimeout, err = durationEnv("GEMINI_HTTP_TIMEOUT", cfg.GeminiHTTPTimeout); err != nil {
+		return ProcessConfig{}, err
+	}
 	if cfg.LLMEnabled {
 		if cfg.LLMBaseURL == "" || cfg.LLMAPIKey == "" || cfg.LLMModel == "" {
 			return ProcessConfig{}, errors.New("LLM_ENABLED requires LLM_BASE_URL, LLM_API_KEY, and LLM_MODEL")
@@ -162,8 +173,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if strings.TrimSpace(cfg.HTTPAddr) == "" {
 		return ProcessConfig{}, errors.New("HTTP_ADDR cannot be empty")
 	}
-	if cfg.AutoReplyEnabled && (cfg.SocialAPIWebhookSecret == "" || cfg.SocialAPIAPIKey == "" || !cfg.LLMEnabled) {
-		return ProcessConfig{}, errors.New("AUTOREPLY_ENABLED requires SOCIALAPI_WEBHOOK_SECRET, SOCIALAPI_API_KEY, and LLM_ENABLED")
+	hasAI := cfg.LLMEnabled || strings.TrimSpace(cfg.GeminiAPIKey) != ""
+	if cfg.AutoReplyEnabled && (cfg.SocialAPIWebhookSecret == "" || cfg.SocialAPIAPIKey == "" || !hasAI) {
+		return ProcessConfig{}, errors.New("AUTOREPLY_ENABLED requires SOCIALAPI_WEBHOOK_SECRET, SOCIALAPI_API_KEY, and LLM_ENABLED or GEMINI_API_KEY")
 	}
 	return cfg, nil
 }

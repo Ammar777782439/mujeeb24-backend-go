@@ -177,3 +177,111 @@ func TestAutoReplyServiceDoesNotEnqueueNonAnswerDecision(t *testing.T) {
 		t.Fatalf("unexpected non-answer result=%#v outbox_calls=%d", result, outbox.calls)
 	}
 }
+
+func TestAutoReplyServiceHandlesHumanOwnership(t *testing.T) {
+	builder := NewAutoReplyContextBuilder(
+		contextBusinessRepository{record: ports.BusinessRecord{ID: "business-1"}},
+		contextConversationRepository{record: ports.ConversationRecord{ID: "conversation-1", BusinessID: "business-1", CustomerID: "customer-1", Ownership: "human"}},
+		contextCustomerRepository{record: ports.CustomerRecord{ID: "customer-1", BusinessID: "business-1"}},
+		contextCatalogRepository{},
+		contextMessageRepository{},
+	)
+
+	service := NewAutoReplyService(
+		fakeAIRuntime{proposal: ports.AIDecisionProposal{IntentBase: "greeting", RequestedAction: AutoReplyActionAnswer, ConfidenceBand: "high", SchemaVersion: 1, PolicyDecision: "allowed", ResponseText: "Hello"}},
+		&fakeDecisionRepository{},
+		fakeReferenceRepository{},
+		&fakeOutboundRepository{},
+		&fakeOutboxStore{},
+		fakeTransactionManager{},
+	)
+	service.ContextBuilder = builder
+
+	result, err := service.Handle(context.Background(), commands.AutoReplyCommand{
+		Meta:                   commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}},
+		ConversationID:         "conversation-1",
+		SourceMessageReference: "msg-1",
+		Text:                   "hello",
+		Channel:                "whatsapp",
+		ProviderRef:            "provider-1",
+	})
+	if err != nil {
+		t.Fatalf("Handle failed: %v", err)
+	}
+	if result.Action != "no_action" || result.Enqueued {
+		t.Fatalf("expected no_action for human owned conversation, got %s (enqueued=%v)", result.Action, result.Enqueued)
+	}
+}
+
+func TestAutoReplyServiceHandlesWaitingHuman(t *testing.T) {
+	builder := NewAutoReplyContextBuilder(
+		contextBusinessRepository{record: ports.BusinessRecord{ID: "business-1"}},
+		contextConversationRepository{record: ports.ConversationRecord{ID: "conversation-1", BusinessID: "business-1", CustomerID: "customer-1", State: "waiting_human"}},
+		contextCustomerRepository{record: ports.CustomerRecord{ID: "customer-1", BusinessID: "business-1"}},
+		contextCatalogRepository{},
+		contextMessageRepository{},
+	)
+
+	service := NewAutoReplyService(
+		fakeAIRuntime{proposal: ports.AIDecisionProposal{IntentBase: "greeting", RequestedAction: AutoReplyActionAnswer, ConfidenceBand: "high", SchemaVersion: 1, PolicyDecision: "allowed", ResponseText: "Hello"}},
+		&fakeDecisionRepository{},
+		fakeReferenceRepository{},
+		&fakeOutboundRepository{},
+		&fakeOutboxStore{},
+		fakeTransactionManager{},
+	)
+	service.ContextBuilder = builder
+
+	result, err := service.Handle(context.Background(), commands.AutoReplyCommand{
+		Meta:                   commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}},
+		ConversationID:         "conversation-1",
+		SourceMessageReference: "msg-1",
+		Text:                   "hello",
+		Channel:                "whatsapp",
+		ProviderRef:            "provider-1",
+	})
+	if err != nil {
+		t.Fatalf("Handle failed: %v", err)
+	}
+	if result.Action != "no_action" || result.Enqueued {
+		t.Fatalf("expected no_action for waiting_human conversation, got %s (enqueued=%v)", result.Action, result.Enqueued)
+	}
+}
+
+func TestAutoReplyServiceHandlesDraftOrder(t *testing.T) {
+	outbox := &fakeOutboxStore{}
+	service := NewAutoReplyService(
+		fakeAIRuntime{proposal: ports.AIDecisionProposal{IntentBase: "purchase", RequestedAction: "draft_order", ConfidenceBand: "high", PolicyDecision: "requires_approval", PolicyVersion: "auto-reply-v1", SchemaVersion: 1, Entities: []byte(`{"items":[{"id":"item-1"}]}`), EvidenceReferences: []byte(`[]`), MissingInformation: []byte(`[]`), ReasonCodes: []byte(`[]`)}},
+		&fakeDecisionRepository{},
+		fakeReferenceRepository{},
+		&fakeOutboundRepository{},
+		outbox,
+		fakeTransactionManager{},
+	)
+	result, err := service.Handle(context.Background(), commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}}, ConversationID: "conversation-1", SourceMessageReference: "inbound-1", Text: "أريد شراء هذا", Channel: "whatsapp", ProviderRef: "socialapi"})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if result.Enqueued || outbox.calls != 0 || result.Action != "draft_order" {
+		t.Fatalf("unexpected result for draft_order=%#v outbox_calls=%d", result, outbox.calls)
+	}
+}
+
+func TestAutoReplyServiceHandlesDraftLead(t *testing.T) {
+	outbox := &fakeOutboxStore{}
+	service := NewAutoReplyService(
+		fakeAIRuntime{proposal: ports.AIDecisionProposal{IntentBase: "inquiry", RequestedAction: "draft_lead", ConfidenceBand: "high", PolicyDecision: "requires_approval", PolicyVersion: "auto-reply-v1", SchemaVersion: 1, Entities: []byte(`{"name":"Ammar"}`), EvidenceReferences: []byte(`[]`), MissingInformation: []byte(`[]`), ReasonCodes: []byte(`[]`)}},
+		&fakeDecisionRepository{},
+		fakeReferenceRepository{},
+		&fakeOutboundRepository{},
+		outbox,
+		fakeTransactionManager{},
+	)
+	result, err := service.Handle(context.Background(), commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}}, ConversationID: "conversation-1", SourceMessageReference: "inbound-1", Text: "مهتم بالخدمة", Channel: "whatsapp", ProviderRef: "socialapi"})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if result.Enqueued || outbox.calls != 0 || result.Action != "draft_lead" {
+		t.Fatalf("unexpected result for draft_lead=%#v outbox_calls=%d", result, outbox.calls)
+	}
+}
