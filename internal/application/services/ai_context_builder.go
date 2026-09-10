@@ -130,9 +130,10 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.ContextB
 			RetrievedAt:   now,
 			SchemaVersion: AIEvidenceSchemaVersion,
 		},
-		KnowledgeState: AIContextMissing,
-		GeneratedAt:    now,
-		ExpiresAt:      now.Add(ttl),
+		ConversationState: input.ConversationState,
+		KnowledgeState:    AIContextMissing,
+		GeneratedAt:       now,
+		ExpiresAt:         now.Add(ttl),
 	}
 
 	messagePage, err := b.Messages.ListByConversation(ctx, input.BusinessID, input.ConversationID, b.maxMessages(), "")
@@ -141,6 +142,53 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.ContextB
 	}
 	context.RecentMessages = buildRecentMessageEvidence(messagePage.Items, input.SourceMessageReference, now)
 
+	mode, focus, comparison := resolveRetrievalMode(input.ConversationState)
+	switch mode {
+	case retrievalScopedOffer, retrievalScopedItem, retrievalScopedCatalog, retrievalScopedVariant:
+		scopedItems, scopedOffers, scopedVariants, err := b.retrieveScoped(ctx, input.BusinessID, focus, comparison, now)
+		if err != nil {
+			// Invalid/stale focus is not validated truth: fall through to broader.
+			if !isScopedNotFound(err) {
+				return ports.AIContext{}, err
+			}
+		} else {
+			context.CatalogEvidence = scopedItems
+			context.OfferEvidence = scopedOffers
+			context.VariantEvidence = scopedVariants
+			// Candidates let AI resolve a switch to a new entity. Focused
+			// evidence stays first; validation still rejects mixing.
+			if addItems, addOffers, addVariants, err := b.augmentScopedWithCandidates(ctx, input.BusinessID, input.Text, scopedItems, now); err != nil {
+				return ports.AIContext{}, err
+			} else {
+				context.CatalogEvidence = append(context.CatalogEvidence, addItems...)
+				context.OfferEvidence = append(context.OfferEvidence, addOffers...)
+				context.VariantEvidence = append(context.VariantEvidence, addVariants...)
+			}
+			return b.finalizeContext(ctx, context, input, now)
+		}
+	case retrievalScopedComparison:
+		scopedItems, scopedOffers, scopedVariants, err := b.retrieveComparison(ctx, input.BusinessID, comparison, now)
+		if err != nil {
+			if !isScopedNotFound(err) {
+				return ports.AIContext{}, err
+			}
+		} else {
+			context.CatalogEvidence = scopedItems
+			context.OfferEvidence = scopedOffers
+			context.VariantEvidence = scopedVariants
+			// Same candidate augmentation as scoped mode, so the AI can leave
+			// the comparison cleanly when the customer asks something new.
+			if addItems, addOffers, addVariants, err := b.augmentScopedWithCandidates(ctx, input.BusinessID, input.Text, scopedItems, now); err != nil {
+				return ports.AIContext{}, err
+			} else {
+				context.CatalogEvidence = append(context.CatalogEvidence, addItems...)
+				context.OfferEvidence = append(context.OfferEvidence, addOffers...)
+				context.VariantEvidence = append(context.VariantEvidence, addVariants...)
+			}
+			return b.finalizeContext(ctx, context, input, now)
+		}
+	}
+	// Broader retrieval: active catalogs, active items, lexical rank.
 	catalogPage, err := b.Catalogs.ListCatalogs(ctx, input.BusinessID, "active", b.maxCatalogs(), "")
 	if err != nil {
 		return ports.AIContext{}, err

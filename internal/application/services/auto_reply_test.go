@@ -178,6 +178,99 @@ func TestAutoReplyServiceDoesNotEnqueueNonAnswerDecision(t *testing.T) {
 	}
 }
 
+func TestAutoReplyServiceEnqueuesAllowedClarification(t *testing.T) {
+	outbox := &fakeOutboxStore{}
+	service := NewAutoReplyService(
+		fakeAIRuntime{proposal: ports.AIDecisionProposal{IntentBase: "information_request", RequestedAction: "ask_clarification", ResponseText: "أي باقة تقصد؟", ConfidenceBand: "medium", PolicyDecision: "allowed", PolicyVersion: "auto-reply-v1", SchemaVersion: 1, Entities: []byte(`{}`), EvidenceReferences: []byte(`[]`), MissingInformation: []byte(`[]`), ReasonCodes: []byte(`[]`)}},
+		&fakeDecisionRepository{},
+		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
+		&fakeOutboundRepository{},
+		outbox,
+		fakeTransactionManager{},
+	)
+	result, err := service.Handle(context.Background(), commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}}, ConversationID: "conversation-1", SourceMessageReference: "inbound-1", Text: "كم سعرها؟", Channel: "whatsapp", ProviderRef: "socialapi"})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if !result.Enqueued || outbox.calls != 1 || result.Action != "ask_clarification" || result.OutboundMessageID == "" {
+		t.Fatalf("allowed clarification must be enqueued, got %#v outbox_calls=%d", result, outbox.calls)
+	}
+}
+
+func TestAutoReplyServiceRejectsEmptyClarificationText(t *testing.T) {
+	service := NewAutoReplyService(
+		fakeAIRuntime{proposal: ports.AIDecisionProposal{IntentBase: "information_request", RequestedAction: "ask_clarification", ConfidenceBand: "medium", PolicyDecision: "allowed", PolicyVersion: "auto-reply-v1", SchemaVersion: 1, Entities: []byte(`{}`), EvidenceReferences: []byte(`[]`), MissingInformation: []byte(`[]`), ReasonCodes: []byte(`[]`)}},
+		&fakeDecisionRepository{},
+		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
+		&fakeOutboundRepository{},
+		&fakeOutboxStore{},
+		fakeTransactionManager{},
+	)
+	if _, err := service.Handle(context.Background(), commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}}, ConversationID: "conversation-1", SourceMessageReference: "inbound-1", Text: "كم سعرها؟", Channel: "whatsapp", ProviderRef: "socialapi"}); err == nil {
+		t.Fatal("empty clarification text must fail validation")
+	}
+}
+
+type stubAIContextBuilder struct {
+	context ports.AIContext
+}
+
+func (s stubAIContextBuilder) Build(context.Context, ports.ContextBuildInput) (ports.AIContext, error) {
+	return s.context, nil
+}
+
+type stubStateRepository struct {
+	record ports.ConversationStateRecord
+	saved  *ports.ConversationStateRecord
+}
+
+func (s *stubStateRepository) Get(context.Context, string, string) (ports.ConversationStateRecord, error) {
+	return s.record, nil
+}
+
+func (s *stubStateRepository) UpsertValidated(_ context.Context, record ports.ConversationStateRecord) (ports.ConversationStateRecord, error) {
+	s.saved = &record
+	return record, nil
+}
+
+// End-to-end regression for the blocked greeting: stored focus on Basic +
+// general answer citing both offers and the parent catalog must be enqueued,
+// with the stored focus preserved (NO_REFERENCE changes nothing).
+func TestAutoReplyServiceEnqueuesGeneralAnswerAfterFocus(t *testing.T) {
+	states := &stubStateRepository{record: ports.ConversationStateRecord{
+		BusinessID: "business-1", ConversationID: "conversation-1",
+		Focus: &ports.ConversationFocus{Type: "offer", ID: "offer-basic", ItemID: stringPtr("item-basic")},
+	}}
+	outbox := &fakeOutboxStore{}
+	service := NewAutoReplyService(
+		fakeAIRuntime{proposal: ports.AIDecisionProposal{IntentBase: "information_request", RequestedAction: "answer", ResponseText: "الباقات: الأساسية والاحترافية", ConfidenceBand: "high", PolicyDecision: "allowed", PolicyVersion: "auto-reply-v1", SchemaVersion: 1, Entities: []byte(`{}`), EvidenceReferences: []byte(`["offer-basic","offer-pro","cat-1"]`), MissingInformation: []byte(`[]`), ReasonCodes: []byte(`[]`), StateProposal: &ports.AIStateProposal{Kind: "NO_REFERENCE"}}},
+		&fakeDecisionRepository{},
+		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
+		&fakeOutboundRepository{},
+		outbox,
+		fakeTransactionManager{},
+	)
+	service.ContextBuilder = stubAIContextBuilder{context: ports.AIContext{
+		CatalogEvidence: []ports.AICatalogEvidence{
+			{Reference: "item-basic", CatalogReference: "cat-1"},
+			{Reference: "item-pro", CatalogReference: "cat-1"},
+		},
+		OfferEvidence: []ports.AIOfferEvidence{
+			{Reference: "offer-basic", CatalogItemReference: "item-basic"},
+			{Reference: "offer-pro", CatalogItemReference: "item-pro"},
+		},
+		ConversationState: &states.record,
+	}}
+	service.StateRepository = states
+	result, err := service.Handle(context.Background(), commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}}, ConversationID: "conversation-1", SourceMessageReference: "inbound-1", Text: "السلام عليكم، ايش الباقات الي عندكم؟", Channel: "whatsapp", ProviderRef: "socialapi"})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if !result.Enqueued || outbox.calls != 1 || result.Action != "answer" {
+		t.Fatalf("general answer must be enqueued, got %#v outbox_calls=%d", result, outbox.calls)
+	}
+}
+
 func TestAutoReplyServiceHandlesHumanOwnership(t *testing.T) {
 	builder := NewAutoReplyContextBuilder(
 		contextBusinessRepository{record: ports.BusinessRecord{ID: "business-1"}},

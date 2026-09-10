@@ -65,15 +65,6 @@ func containsAny(value string, candidates ...string) bool {
 	return false
 }
 
-func hasStaleOffer(offers []ports.AIOfferEvidence) bool {
-	for _, offer := range offers {
-		if offer.EvidenceState == AIContextStale || strings.EqualFold(offer.AvailabilityState, "unknown") || strings.EqualFold(offer.AvailabilityState, "stale") {
-			return true
-		}
-	}
-	return false
-}
-
 func hasPolicyCategory(policies []ports.AIBusinessPolicyEvidence, category string) bool {
 	for _, policy := range policies {
 		if policy.EvidenceState == AIContextFresh && (policy.Category == category || category == "catalog" && policy.Category == "general") {

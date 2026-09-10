@@ -56,3 +56,66 @@ func TestGroundedPolicyEngineDoesNotBlockNonFactualGreeting(t *testing.T) {
 		t.Fatalf("non-factual greeting was blocked: %#v", result)
 	}
 }
+
+func TestReferencesValidCatalogEvidence(t *testing.T) {
+	contextValue := &ports.AIContext{
+		CatalogEvidence: []ports.AICatalogEvidence{
+			{Reference: "item-1", EvidenceState: AIContextFresh},
+			{Reference: "item-2", EvidenceState: AIContextStale},
+		},
+	}
+	cases := []struct {
+		name string
+		raw  []byte
+		want bool
+	}{
+		{"nil raw", nil, false},
+		{"malformed json", []byte(`not-json`), false},
+		{"empty array", []byte(`[]`), false},
+		{"fresh hit", []byte(`["item-1"]`), true},
+		{"stale only", []byte(`["item-2"]`), false},
+		{"unknown ref", []byte(`["item-ghost"]`), false},
+		{"mixed hit and ghost", []byte(`["item-ghost","item-1"]`), true},
+		{"whitespace padded", []byte(`["  item-1  "]`), true},
+	}
+	for _, tc := range cases {
+		if got := referencesValidCatalogEvidence(tc.raw, contextValue); got != tc.want {
+			t.Fatalf("%s: got %v want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestGroundedPolicyEngineAllowsVerifiedCatalogWithGeneralPolicy(t *testing.T) {
+	proposal := ports.AIDecisionProposal{IntentBase: "product_inquiry", RequestedAction: AutoReplyActionAnswer, PolicyDecision: "allowed", ConfidenceBand: "high", SchemaVersion: 1, EvidenceReferences: []byte(`["item-1"]`)}
+	contextValue := &ports.AIContext{
+		CatalogEvidence:        []ports.AICatalogEvidence{{Reference: "item-1", EvidenceState: AIContextFresh}},
+		BusinessPolicyEvidence: []ports.AIBusinessPolicyEvidence{{Reference: "policy-1", Category: "general", EvidenceState: AIContextFresh}},
+	}
+	result := (GroundedPolicyEngine{}).Evaluate(proposal, contextValue)
+	if result.PolicyDecision != "allowed" || result.RequiresHuman || string(result.EvidenceReferences) != `["item-1"]` {
+		t.Fatalf("verified catalog answer was changed unexpectedly: %#v", result)
+	}
+}
+
+func TestGroundedPolicyEngineRequiresApprovalForStaleCatalogEvidence(t *testing.T) {
+	proposal := ports.AIDecisionProposal{IntentBase: "product_inquiry", RequestedAction: AutoReplyActionAnswer, PolicyDecision: "allowed", ConfidenceBand: "high", SchemaVersion: 1, EvidenceReferences: []byte(`["item-2"]`)}
+	contextValue := &ports.AIContext{
+		CatalogEvidence:        []ports.AICatalogEvidence{{Reference: "item-2", EvidenceState: AIContextStale}},
+		BusinessPolicyEvidence: []ports.AIBusinessPolicyEvidence{{Reference: "policy-1", Category: "general", EvidenceState: AIContextFresh}},
+	}
+	result := (GroundedPolicyEngine{}).Evaluate(proposal, contextValue)
+	if result.PolicyDecision != "requires_approval" || !result.RequiresHuman || string(result.ReasonCodes) != `["verified_catalog_evidence_missing"]` {
+		t.Fatalf("stale catalog evidence was not blocked: %#v", result)
+	}
+}
+
+func TestGroundedPolicyEngineRequiresPolicyForCatalogWithoutGeneralPolicy(t *testing.T) {
+	proposal := ports.AIDecisionProposal{IntentBase: "منتج", RequestedAction: AutoReplyActionAnswer, PolicyDecision: "allowed", ConfidenceBand: "high", SchemaVersion: 1, EvidenceReferences: []byte(`["item-1"]`)}
+	contextValue := &ports.AIContext{
+		CatalogEvidence: []ports.AICatalogEvidence{{Reference: "item-1", EvidenceState: AIContextFresh}},
+	}
+	result := (GroundedPolicyEngine{}).Evaluate(proposal, contextValue)
+	if result.PolicyDecision != "requires_approval" || !result.RequiresHuman || string(result.ReasonCodes) != `["business_policy_evidence_missing"]` {
+		t.Fatalf("catalog answer without merchant policy was not blocked: %#v", result)
+	}
+}

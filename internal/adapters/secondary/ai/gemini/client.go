@@ -274,6 +274,7 @@ type promptContext struct {
 	RecentMessages         []ports.AIRecentMessageEvidence  `json:"recent_messages"`
 	PolicyEvidence         ports.AIPolicyEvidence           `json:"policy_evidence"`
 	KnowledgeState         string                           `json:"knowledge_state"`
+	ConversationState      *ports.ConversationStateRecord   `json:"conversation_state,omitempty"`
 	GeneratedAt            time.Time                        `json:"generated_at"`
 	ExpiresAt              time.Time                        `json:"expires_at"`
 }
@@ -299,6 +300,7 @@ func promptContextFrom(value *ports.AIContext) promptContext {
 		RecentMessages:         value.RecentMessages,
 		PolicyEvidence:         value.PolicyEvidence,
 		KnowledgeState:         value.KnowledgeState,
+		ConversationState:      value.ConversationState,
 		GeneratedAt:            value.GeneratedAt,
 		ExpiresAt:              value.ExpiresAt,
 	}
@@ -318,14 +320,24 @@ const defaultSystemPrompt = `أنت المساعد الذكي وممثل خدم�
 3. فهم النية والدقة:
    - إذا سأل العميل عن "مقارنة" أو "الفرق": قارن بين الباقات بنقاط مرتبة توضح ميزة وسعر كل باقة.
    - إذا سأل عن "معلومات/مميزات": اشرح المزايا التشغيلية والقيمة للنشاط.
-   - إذا سأل عن "الأسعار": اذكر السعر وطريقة الدفع بوضوح.
+    - إذا سأل عن "الأسعار": اذكر السعر وطريقة الدفع بوضوح.
+    - إذا طلب العميل الاشتراك أو التفعيل أو الشراء: intent_base=subscription_request مع requires_human=true (سيتولى النظام إرسال رسالة تأكيد ثابتة وتحويل المحادثة للموظف البشري).
 4. الالتزام بالحقائق والمخرجات:
-   - استخدم Verified Mujeeb context كمصدر الأدلة الوحيد ولا تخترع حقائق غير موجودة.
-   - استشهد بالمراجع المناسبة في evidence_references.
-   - أخرج JSON المطابق للمخطط فقط دون أي كلام خارجه.
-   - القيم المسموحة لـ requested_action: answer أو ask_clarification أو no_action.
-   - القيم المسموحة لـ policy_decision: allowed أو requires_approval أو denied.
-   - confidence_band: low أو medium أو high.`
+    - استخدم Verified Mujeeb context كمصدر الأدلة الوحيد ولا تخترع حقائق غير موجودة.
+    - استشهد بالمراجع المناسبة في evidence_references.
+    - أخرج JSON المطابق للمخطط فقط دون أي كلام خارجه.
+    - القيم المسموحة لـ requested_action: answer أو ask_clarification أو no_action.
+    - القيم المسموحة لـ policy_decision: allowed أو requires_approval أو denied.
+    - confidence_band: low أو medium أو high.
+5. تتبع مرجع المحادثة (state_proposal) — إلزامي في كل رد:
+    - اقرأ conversation_state (إن وجد) وrecent_messages لفهم ما يتحدث عنه العميل الآن.
+    - إذا كانت الرسالة تشير بوضوح إلى entity واحد موجود في catalog_evidence أو offer_evidence (بالاسم أو الضمير أو الإشارة أو سؤال متابعة ناقص)، أخرج state_proposal.kind=RESOLVED مع focus={type,id} باستخدام نفس type وid الظاهرين في الـevidence (type يكون catalog أو item أو offer أو variant، وid هو نفس Reference).
+    - إذا كانت الرسالة تقارن entity اثنين أو أكثر، أخرج kind=RESOLVED مع comparison={type,id قائمة المراجع} وfocus لأبرز entity عند الحاجة.
+    - اختر دائماً أدق مستوى ممكن: إذا كان السؤال عن عرض/سعر/مدة/توفر محدد استخدم type=offer مع id يساوي Offer Reference الظاهر في offer_evidence. إذا كان عن منتج/خدمة عامة استخدم type=item مع CatalogEvidence Reference. لا تستخدم type=catalog إلا إذا كان السؤال عن الكتالوج كله (مثل "ايش عندكم؟").
+    - إذا كانت الرسالة تحتمل أكثر من entity ولا يمكن الحسم من السياق، أخرج kind=AMBIGUOUS مع alternatives (قائمة المرشحين) واطلب clarification عبر requested_action=ask_clarification.
+    - إذا كانت الرسالة مستقلة تماماً (تحية أو موضوع جديد بلا مرجع)، أخرج kind=NO_REFERENCE ولا تمسح أي شيء.
+    - لا تخترع id غير موجود في الـevidence. لا تستخدم confidence كقرار أمان.
+    - ترتيب الـevidence مقصود: conversation_state.focus هو المرجع الحالي المُتحقق، وأول عناصر catalog_evidence/offer_evidence هي أدلة هذا المرجع. العناصر التالية مرشحات بديلة فقط. أجب من أدلة الـfocus إلا إذا أشارت الرسالة الحالية بوضوح إلى بديل، وعندها اقترحه في state_proposal مع evidence_references الخاصة به فقط.`
 
 type geminiRequest struct {
 	SystemInstruction geminiContent          `json:"systemInstruction"`
@@ -376,6 +388,15 @@ type proposalWire struct {
 	PolicyVersion      string                     `json:"policy_version"`
 	KnowledgeVersion   string                     `json:"knowledge_version"`
 	SchemaVersion      int                        `json:"schema_version"`
+	StateProposal      *stateProposalWire         `json:"state_proposal,omitempty"`
+}
+
+type stateProposalWire struct {
+	Focus         *ports.ConversationFocus      `json:"focus,omitempty"`
+	Comparison    *ports.ConversationComparison `json:"comparison,omitempty"`
+	Kind          string                        `json:"kind"`
+	ReferenceText string                        `json:"reference_text,omitempty"`
+	Alternatives  []ports.ConversationFocus     `json:"alternatives,omitempty"`
 }
 
 func (w proposalWire) toProposal(input ports.AIDecisionInput, model string) (ports.AIDecisionProposal, error) {
@@ -409,7 +430,7 @@ func (w proposalWire) toProposal(input ports.AIDecisionInput, model string) (por
 	if policyVersion == "" {
 		policyVersion = strings.TrimSpace(input.PolicyVersion)
 	}
-	return ports.AIDecisionProposal{
+	proposal := ports.AIDecisionProposal{
 		IntentBase:         strings.TrimSpace(w.IntentBase),
 		DomainContext:      strings.TrimSpace(w.DomainContext),
 		Entities:           entities,
@@ -426,7 +447,24 @@ func (w proposalWire) toProposal(input ports.AIDecisionInput, model string) (por
 		KnowledgeVersion:   strings.TrimSpace(w.KnowledgeVersion),
 		ModelReference:     "gemini/" + strings.TrimSpace(model),
 		SchemaVersion:      w.SchemaVersion,
-	}, nil
+	}
+	if w.StateProposal != nil {
+		kind := strings.ToUpper(strings.TrimSpace(w.StateProposal.Kind))
+		if kind == "" {
+			kind = "NO_REFERENCE"
+		}
+		if kind != "RESOLVED" && kind != "AMBIGUOUS" && kind != "NO_REFERENCE" {
+			kind = "NO_REFERENCE"
+		}
+		proposal.StateProposal = &ports.AIStateProposal{
+			Focus:         w.StateProposal.Focus,
+			Comparison:    w.StateProposal.Comparison,
+			Kind:          kind,
+			ReferenceText: strings.TrimSpace(w.StateProposal.ReferenceText),
+			Alternatives:  w.StateProposal.Alternatives,
+		}
+	}
+	return proposal, nil
 }
 
 func proposalJSONSchema() map[string]any {
@@ -463,6 +501,44 @@ func proposalJSONSchema() map[string]any {
 			"policy_version":      map[string]any{"type": "string"},
 			"knowledge_version":   map[string]any{"type": "string"},
 			"schema_version":      map[string]any{"type": "integer"},
+			"state_proposal": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"focus": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"type":       map[string]any{"type": "string"},
+							"id":         map[string]any{"type": "string"},
+							"catalog_id": map[string]any{"type": "string"},
+							"item_id":    map[string]any{"type": "string"},
+							"name":       map[string]any{"type": "string"},
+						},
+						"required": []string{"type", "id"},
+					},
+					"comparison": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"type": map[string]any{"type": "string"},
+							"ids":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+						},
+						"required": []string{"type", "ids"},
+					},
+					"kind":           map[string]any{"type": "string"},
+					"reference_text": map[string]any{"type": "string"},
+					"alternatives": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"type": map[string]any{"type": "string"},
+								"id":   map[string]any{"type": "string"},
+							},
+							"required": []string{"type", "id"},
+						},
+					},
+				},
+				"required": []string{"kind"},
+			},
 		},
 		"required": []string{"intent_base", "domain_context", "entities", "evidence_references", "requested_action", "response_text", "confidence_value", "confidence_band", "requires_human", "missing_information", "reason_codes", "policy_decision", "policy_version", "knowledge_version", "schema_version"},
 	}

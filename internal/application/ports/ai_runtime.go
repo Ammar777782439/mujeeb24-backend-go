@@ -26,6 +26,8 @@ type ContextBuildInput struct {
 	Text                   string
 	Channel                string
 	PolicyVersion          string
+	ConversationState      *ConversationStateRecord
+	RecentMessages         []AIRecentMessageEvidence
 }
 
 type AIContextBuilder interface {
@@ -50,8 +52,17 @@ type AIContext struct {
 	RecentMessages         []AIRecentMessageEvidence
 	PolicyEvidence         AIPolicyEvidence
 	KnowledgeState         string
+	ConversationState      *ConversationStateRecord
 	GeneratedAt            time.Time
 	ExpiresAt              time.Time
+}
+
+type AIStateProposal struct {
+	Focus         *ConversationFocus      `json:"focus,omitempty"`
+	Comparison    *ConversationComparison `json:"comparison,omitempty"`
+	Kind          string                  `json:"kind"`
+	ReferenceText string                  `json:"reference_text,omitempty"`
+	Alternatives  []ConversationFocus     `json:"alternatives,omitempty"`
 }
 
 type AIContextBusiness struct {
@@ -186,4 +197,5 @@ type AIDecisionProposal struct {
 	KnowledgeVersion   string
 	ModelReference     string
 	SchemaVersion      int
+	StateProposal      *AIStateProposal
 }

@@ -132,6 +132,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		contextBuilder.Policies = postgres.NewBusinessPolicyRepository(database)
 		service.ContextBuilder = contextBuilder
 		service.PolicyEvaluator = services.GroundedPolicyEngine{}
+		service.StateRepository = postgres.NewConversationStateRepository(database)
 		autoReply = service
 	}
 	inboundAutomation := services.InboundAutomationService{

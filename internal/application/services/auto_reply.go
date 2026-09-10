@@ -17,9 +17,32 @@ import (
 )
 
 const (
-	AutoReplyModeRestrictedAuto = "restricted_auto"
-	AutoReplyActionAnswer       = "answer"
+	AutoReplyModeRestrictedAuto     = "restricted_auto"
+	AutoReplyActionAnswer           = "answer"
+	AutoReplyActionAskClarification = "ask_clarification"
 )
+
+// HandoffFarewellMessage is fixed Mujeeb-owned farewell content for
+// subscription/activation requests. It is never model output, so sending it
+// cannot hallucinate prices or terms. The persisted decision keeps
+// RequiresHuman=true so the dashboard hands the conversation to staff.
+const HandoffFarewellMessage = "يسعدنا اختيارك! تم استلام طلبك، وسيقوم أحد ممثلي المبيعات بالتواصل معك فوراً لإتمام خطوات التفعيل والربط."
+
+// isSubscriptionHandoffIntent reports whether the model's intent asks to
+// subscribe, activate, or purchase. This is product routing (which farewell
+// flow applies), not reference resolution: it never selects catalog entities.
+func isSubscriptionHandoffIntent(intent string) bool {
+	value := strings.ToLower(strings.TrimSpace(intent))
+	if value == "" {
+		return false
+	}
+	for _, keyword := range []string{"subscri", "activat", "purchase", "اشتراك", "تفعيل", "فعّل", "شراء"} {
+		if strings.Contains(value, keyword) {
+			return true
+		}
+	}
+	return false
+}
 
 type AutoReplyService struct {
 	Runtime             ports.AIRuntime
@@ -30,6 +53,7 @@ type AutoReplyService struct {
 	OutboundRepository  ports.OutboundMessageRepository
 	Outbox              ports.OutboxStore
 	Transactions        ports.TransactionManager
+	StateRepository     ports.ConversationStateRepository
 	Mode                string
 	PolicyVersion       string
 	Now                 func() time.Time
@@ -71,6 +95,12 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		Channel:                command.Channel,
 		PolicyVersion:          policyVersion,
 	}
+	var loadedState *ports.ConversationStateRecord
+	if s.StateRepository != nil {
+		if st, err := s.StateRepository.Get(ctx, string(command.Meta.Actor.BusinessID), string(command.ConversationID)); err == nil {
+			loadedState = &st
+		}
+	}
 	if s.ContextBuilder != nil {
 		builtContext, contextErr := s.ContextBuilder.Build(ctx, ports.ContextBuildInput{
 			BusinessID:             aiInput.BusinessID,
@@ -79,15 +109,16 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			Text:                   aiInput.Text,
 			Channel:                aiInput.Channel,
 			PolicyVersion:          aiInput.PolicyVersion,
+			ConversationState:      loadedState,
 		})
 		if contextErr != nil {
 			return commands.AutoReplyResult{}, contextErr
 		}
-		
+
 		if strings.EqualFold(builtContext.Conversation.Ownership, "human") || strings.EqualFold(builtContext.Conversation.State, "waiting_human") {
 			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, nil
 		}
-		
+
 		aiInput.Context = &builtContext
 	}
 	proposal, err := s.Runtime.Decide(ctx, aiInput)
@@ -100,6 +131,38 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	if err := validateProposal(proposal); err != nil {
 		return commands.AutoReplyResult{}, err
 	}
+	// Validate state proposal without trusting AI business scope.
+	_, needsClarification, stateErr := validateStateProposal(proposal, aiInput.Context)
+	if stateErr != nil {
+		return commands.AutoReplyResult{}, stateErr
+	}
+	if needsClarification {
+		proposal.RequestedAction = "ask_clarification"
+		proposal.RequiresHuman = false
+		proposal.PolicyDecision = "requires_approval"
+	}
+	// Entity-scoped evidence: reject hallucinated cross-offer claims.
+	if !validateEvidenceIdentity(proposal, aiInput.Context) {
+		proposal.RequestedAction = "ask_clarification"
+		proposal.RequiresHuman = true
+		proposal.PolicyDecision = "requires_approval"
+		proposal.ReasonCodes = appendJSONString(proposal.ReasonCodes, "entity_evidence_mismatch")
+	}
+	// Graceful handoff for subscription/activation: never leave the customer
+	// in silence. The farewell is fixed Mujeeb-owned content (not model text)
+	// sent only when policy allows; the persisted decision keeps
+	// RequiresHuman=true so the dashboard hands the conversation to staff.
+	// Draft actions are excluded: they follow the order/lead flow, not messaging.
+	farewellHandoff := false
+	if proposal.RequiresHuman && proposal.PolicyDecision == "allowed" &&
+		proposal.RequestedAction != "draft_order" && proposal.RequestedAction != "draft_lead" &&
+		isSubscriptionHandoffIntent(proposal.IntentBase) {
+		proposal.RequestedAction = AutoReplyActionAnswer
+		proposal.ResponseText = HandoffFarewellMessage
+		proposal.ReasonCodes = appendJSONString(proposal.ReasonCodes, "handoff_farewell_sent")
+		farewellHandoff = true
+	}
+	pendingState := buildValidatedState(loadedState, string(command.Meta.Actor.BusinessID), string(command.ConversationID), proposal)
 
 	now := s.now()
 	decisionID := s.id()
@@ -140,12 +203,23 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			return mapAIRepositoryError(createErr)
 		}
 		result.Decision = aiDecisionView(decision)
+		if pendingState != nil && s.StateRepository != nil {
+			if _, stateErr := s.StateRepository.UpsertValidated(txCtx, *pendingState); stateErr != nil {
+				return mapAIRepositoryError(stateErr)
+			}
+		}
 
-		if proposal.RequestedAction != AutoReplyActionAnswer || proposal.RequiresHuman || proposal.PolicyDecision != "allowed" {
+		// Both final answers and clarification questions are customer-facing
+		// messages: deliver them when policy allows. Anything requiring human
+		// review (except the fixed farewell handoff below), denied by policy,
+		// or non-messaging (drafts/no_action) stays persisted as a decision only.
+		sendable := proposal.RequestedAction == AutoReplyActionAnswer ||
+			proposal.RequestedAction == AutoReplyActionAskClarification
+		if !sendable || (proposal.RequiresHuman && !farewellHandoff) || proposal.PolicyDecision != "allowed" {
 			return nil
 		}
 		if strings.TrimSpace(proposal.ResponseText) == "" {
-			return fmt.Errorf("%w: answer action requires response text", appErrors.New(appErrors.CodeValidation, "auto reply"))
+			return fmt.Errorf("%w: reply action requires response text", appErrors.New(appErrors.CodeValidation, "auto reply"))
 		}
 
 		reference, referenceErr := s.ReferenceRepository.GetCurrentByConversation(txCtx, string(command.Meta.Actor.BusinessID), conversationID, "provider")
@@ -220,7 +294,7 @@ func validateProposal(proposal ports.AIDecisionProposal) error {
 	if strings.TrimSpace(proposal.IntentBase) == "" || strings.TrimSpace(proposal.RequestedAction) == "" || strings.TrimSpace(proposal.ConfidenceBand) == "" || proposal.SchemaVersion <= 0 || strings.TrimSpace(proposal.PolicyDecision) == "" {
 		return appErrors.New(appErrors.CodeValidation, "AI proposal must contain intent, action, confidence band, schema version, and policy decision")
 	}
-	if proposal.RequestedAction != AutoReplyActionAnswer && proposal.RequestedAction != "ask_clarification" && proposal.RequestedAction != "no_action" && proposal.RequestedAction != "draft_order" && proposal.RequestedAction != "draft_lead" {
+	if proposal.RequestedAction != AutoReplyActionAnswer && proposal.RequestedAction != AutoReplyActionAskClarification && proposal.RequestedAction != "no_action" && proposal.RequestedAction != "draft_order" && proposal.RequestedAction != "draft_lead" {
 		return appErrors.New(appErrors.CodeValidation, "AI proposal action is outside the first auto reply slice")
 	}
 	if proposal.PolicyDecision != "allowed" && proposal.PolicyDecision != "requires_approval" && proposal.PolicyDecision != "denied" {
