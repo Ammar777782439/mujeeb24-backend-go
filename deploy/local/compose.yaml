@@ -87,5 +87,22 @@ services:
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-MISSING_TUNNEL_TOKEN}
     restart: unless-stopped
 
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@mujeeb.ai}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-Password123456!}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./servers.json:/pgadmin4/servers.json:ro
+    ports:
+      - "127.0.0.1:${PGADMIN_PORT:-8085}:80"
+    depends_on:
+      mujeeb-postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   mujeeb_postgres:
+  pgadmin_data:

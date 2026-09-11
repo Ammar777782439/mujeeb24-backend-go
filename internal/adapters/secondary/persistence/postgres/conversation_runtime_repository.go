@@ -46,7 +46,7 @@ func (r *ConversationRepository) List(ctx context.Context, businessID, state, ow
 	if decoded != nil {
 		cursorAt, cursorID = decoded.LastActivityAt, decoded.ID
 	}
-	const query = `SELECT c.id::text,c.business_id::text,c.customer_id::text,c.state,c.ownership,c.ai_mode_override,c.priority,c.assignment_reference,c.resource_version,c.last_activity_at FROM conversations AS c WHERE c.business_id=$1::uuid AND ($2='' OR c.state=$2) AND ($3='' OR c.ownership=$3) AND ($4::uuid IS NULL OR c.customer_id=$4::uuid) AND ($5='' OR EXISTS (SELECT 1 FROM conversation_references r JOIN channel_connections cc ON cc.business_id=r.business_id AND cc.id=r.connection_id WHERE r.business_id=c.business_id AND r.conversation_id=c.id AND r.is_current AND cc.channel=$5)) AND ($6::timestamptz IS NULL OR (c.last_activity_at,c.id)<($6::timestamptz,$7::uuid)) ORDER BY c.last_activity_at DESC,c.id DESC LIMIT $8`
+	const query = `SELECT c.id::text,c.business_id::text,c.customer_id::text,cu.profile->>'display_name',c.state,c.ownership,c.ai_mode_override,c.priority,c.assignment_reference,c.resource_version,c.last_activity_at FROM conversations AS c LEFT JOIN customers AS cu ON cu.business_id = c.business_id AND cu.id = c.customer_id WHERE c.business_id=$1::uuid AND ($2='' OR c.state=$2) AND ($3='' OR c.ownership=$3) AND ($4::uuid IS NULL OR c.customer_id=$4::uuid) AND ($5='' OR EXISTS (SELECT 1 FROM conversation_references r JOIN channel_connections cc ON cc.business_id=r.business_id AND cc.id=r.connection_id WHERE r.business_id=c.business_id AND r.conversation_id=c.id AND r.is_current AND cc.channel=$5)) AND ($6::timestamptz IS NULL OR (c.last_activity_at,c.id)<($6::timestamptz,$7::uuid)) ORDER BY c.last_activity_at DESC,c.id DESC LIMIT $8`
 	rows, err := executor.Query(ctx, query, businessID, strings.TrimSpace(state), strings.TrimSpace(ownership), customer, strings.TrimSpace(channel), cursorAt, cursorID, limit+1)
 	if err != nil {
 		return ports.ConversationPage{}, &RepositoryError{Operation: "conversation.list", Kind: RepositoryInvalid, Err: err}
@@ -55,7 +55,7 @@ func (r *ConversationRepository) List(ctx context.Context, businessID, state, ow
 	items := make([]ports.ConversationRecord, 0, limit)
 	for rows.Next() {
 		var item ports.ConversationRecord
-		if err := rows.Scan(&item.ID, &item.BusinessID, &item.CustomerID, &item.State, &item.Ownership, &item.AIModeOverride, &item.Priority, &item.AssignmentReference, &item.ResourceVersion, &item.LastActivityAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.BusinessID, &item.CustomerID, &item.CustomerDisplayName, &item.State, &item.Ownership, &item.AIModeOverride, &item.Priority, &item.AssignmentReference, &item.ResourceVersion, &item.LastActivityAt); err != nil {
 			return ports.ConversationPage{}, &RepositoryError{Operation: "conversation.list", Kind: RepositoryInvalid, Err: err}
 		}
 		items = append(items, item)

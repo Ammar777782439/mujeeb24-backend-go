@@ -61,7 +61,18 @@ func conversationView(record ports.ConversationRecord) commands.ConversationView
 	if record.AIModeOverride != nil {
 		aiMode = *record.AIModeOverride
 	}
-	return commands.ConversationView{ID: commands.ConversationID(record.ID), BusinessID: commands.BusinessID(record.BusinessID), CustomerID: commands.CustomerID(record.CustomerID), State: record.State, Ownership: record.Ownership, AIMode: aiMode, ResourceVersion: commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10))}
+	return commands.ConversationView{
+		ID:                  commands.ConversationID(record.ID),
+		BusinessID:          commands.BusinessID(record.BusinessID),
+		CustomerID:          commands.CustomerID(record.CustomerID),
+		CustomerDisplayName: record.CustomerDisplayName,
+		State:               record.State,
+		Ownership:           record.Ownership,
+		AIMode:              aiMode,
+		Priority:            record.Priority,
+		LastActivityAt:      record.LastActivityAt,
+		ResourceVersion:     commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10)),
+	}
 }
 
 var _ queries.GetCustomerHandler = GetCustomerQueryService{}

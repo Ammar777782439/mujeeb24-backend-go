@@ -43,14 +43,17 @@ type ChannelProvisioningView struct {
 	AuthorizationURL string
 }
 type ConversationView struct {
-	ID              ConversationID
-	BusinessID      BusinessID
-	CustomerID      CustomerID
-	State           string
-	Ownership       string
-	AIMode          string
-	Labels          []string
-	ResourceVersion ResourceVersion
+	ID                  ConversationID
+	BusinessID          BusinessID
+	CustomerID          CustomerID
+	CustomerDisplayName *string
+	State               string
+	Ownership           string
+	AIMode              string
+	Priority            string
+	Labels              []string
+	LastActivityAt      time.Time
+	ResourceVersion     ResourceVersion
 }
 type MessageView struct {
 	ID                       MessageID

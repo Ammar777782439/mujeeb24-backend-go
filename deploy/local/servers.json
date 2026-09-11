@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Mujeeb 24 PostgreSQL",
+      "Group": "Servers",
+      "Host": "mujeeb-postgres",
+      "Port": 5432,
+      "MaintenanceDB": "mujeeb24",
+      "Username": "mujeeb",
+      "SSLMode": "prefer"
+    }
+  }
+}
+

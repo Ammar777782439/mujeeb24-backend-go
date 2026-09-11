@@ -53,9 +53,9 @@ func (r *ConversationRepository) GetByID(ctx context.Context, businessID, conver
 	if err != nil {
 		return ports.ConversationRecord{}, err
 	}
-	const query = `SELECT id::text, business_id::text, customer_id::text, state, ownership, ai_mode_override, priority, assignment_reference, resource_version, last_activity_at FROM conversations WHERE business_id = $1::uuid AND id = $2::uuid`
+	const query = `SELECT c.id::text, c.business_id::text, c.customer_id::text, cu.profile->>'display_name', c.state, c.ownership, c.ai_mode_override, c.priority, c.assignment_reference, c.resource_version, c.last_activity_at FROM conversations c LEFT JOIN customers cu ON cu.business_id = c.business_id AND cu.id = c.customer_id WHERE c.business_id = $1::uuid AND c.id = $2::uuid`
 	var record ports.ConversationRecord
-	if err := executor.QueryRow(ctx, query, businessID, conversationID).Scan(&record.ID, &record.BusinessID, &record.CustomerID, &record.State, &record.Ownership, &record.AIModeOverride, &record.Priority, &record.AssignmentReference, &record.ResourceVersion, &record.LastActivityAt); err != nil {
+	if err := executor.QueryRow(ctx, query, businessID, conversationID).Scan(&record.ID, &record.BusinessID, &record.CustomerID, &record.CustomerDisplayName, &record.State, &record.Ownership, &record.AIModeOverride, &record.Priority, &record.AssignmentReference, &record.ResourceVersion, &record.LastActivityAt); err != nil {
 		return record, classifyRepositoryGetError("conversation.get_by_id", err)
 	}
 	return record, nil

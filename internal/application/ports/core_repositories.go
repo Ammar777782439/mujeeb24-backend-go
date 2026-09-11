@@ -63,6 +63,7 @@ type ConversationRecord struct {
 	ID                  string
 	BusinessID          string
 	CustomerID          string
+	CustomerDisplayName *string
 	State               string
 	Ownership           string
 	AIModeOverride      *string
