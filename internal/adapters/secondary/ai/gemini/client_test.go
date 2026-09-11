@@ -16,12 +16,21 @@ func TestClientDecideSendsStructuredGeminiRequest(t *testing.T) {
 	const apiKey = "test-gemini-key"
 	var received struct {
 		SystemInstruction struct {
-			Parts []struct{ Text string `json:"text"` } `json:"parts"`
+			Parts []struct {
+				Text string `json:"text"`
+			} `json:"parts"`
 		} `json:"systemInstruction"`
 		Contents []struct {
 			Role  string `json:"role"`
-			Parts []struct{ Text string `json:"text"` } `json:"parts"`
+			Parts []struct {
+				Text string `json:"text"`
+			} `json:"parts"`
 		} `json:"contents"`
+		Tools []struct {
+			FunctionDeclarations []struct {
+				Name string `json:"name"`
+			} `json:"functionDeclarations"`
+		} `json:"tools"`
 		GenerationConfig struct {
 			MaxOutputTokens  int            `json:"maxOutputTokens"`
 			ResponseMimeType string         `json:"responseMimeType"`
@@ -61,11 +70,64 @@ func TestClientDecideSendsStructuredGeminiRequest(t *testing.T) {
 	if len(received.Contents) != 1 || received.Contents[0].Role != "user" || !strings.Contains(received.Contents[0].Parts[0].Text, "مرحبا") {
 		t.Fatalf("unexpected contents: %#v", received.Contents)
 	}
-	if !strings.Contains(received.SystemInstruction.Parts[0].Text, "Mujeeb 24") {
-		t.Fatalf("system prompt missing: %#v", received.SystemInstruction)
+	if !strings.Contains(received.SystemInstruction.Parts[0].Text, "المساعد الذكي لخدمة العملاء") {
+		t.Fatalf("system prompt missing general rules: %#v", received.SystemInstruction)
+	}
+	if len(received.Tools) == 0 || len(received.Tools[0].FunctionDeclarations) == 0 || received.Tools[0].FunctionDeclarations[0].Name != "catalog_discovery" {
+		t.Fatalf("catalog_discovery tool declaration missing: %#v", received.Tools)
 	}
 	if proposal.IntentBase != "information_request" || proposal.RequestedAction != "answer" || proposal.PolicyDecision != "allowed" || proposal.ResponseText != "تم استلام رسالتك" || proposal.ModelReference != "gemini/test-gemini-model" {
 		t.Fatalf("unexpected proposal: %#v", proposal)
+	}
+}
+
+func TestClientExecutesCatalogDiscoveryToolCall(t *testing.T) {
+	const apiKey = "test-gemini-key"
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.Header().Set("Content-Type", "application/json")
+		if callCount == 1 {
+			// Model calls catalog_discovery
+			_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"functionCall":{"name":"catalog_discovery","args":{"query":"iphone"}}}],"role":"model"},"finishReason":"STOP"}]}`))
+			return
+		}
+		// Model receives functionResponse with full catalog and returns final proposal
+		_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"{\"intent_base\":\"product_inquiry\",\"domain_context\":\"commerce\",\"entities\":{},\"evidence_references\":[\"item-1\",\"offer-1\"],\"requested_action\":\"answer\",\"response_text\":\"آيفون 15 متوفر بسعر 250000 ريال\",\"confidence_value\":\"0.98\",\"confidence_band\":\"high\",\"requires_human\":false,\"missing_information\":[],\"reason_codes\":[\"catalog_hit\"],\"policy_decision\":\"allowed\",\"policy_version\":\"auto-reply-v1\",\"knowledge_version\":\"none\",\"schema_version\":1}"}],"role":"model"},"finishReason":"STOP"}]}`))
+	}))
+	defer server.Close()
+
+	client, err := NewClient(Config{BaseURL: server.URL, APIKey: apiKey, Model: "test-gemini-model", RequestTimeout: time.Second})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	ctxValue := &ports.AIContext{
+		CatalogEvidence: []ports.AICatalogEvidence{
+			{Reference: "item-1", CatalogReference: "cat-1", Name: "iPhone 15", ItemType: "device", Status: "active"},
+		},
+		OfferEvidence: []ports.AIOfferEvidence{
+			{Reference: "offer-1", CatalogItemReference: "item-1", Name: "iPhone 15 Offer", Amount: "250000", Currency: "YER", AvailabilityState: "available", Status: "active"},
+		},
+	}
+
+	proposal, err := client.Decide(context.Background(), ports.AIDecisionInput{
+		BusinessID:             "business-1",
+		ConversationID:         "conversation-1",
+		SourceMessageReference: "message-1",
+		Text:                   "كم سعر الآيفون 15؟",
+		Channel:                "whatsapp",
+		PolicyVersion:          "auto-reply-v1",
+		Context:                ctxValue,
+	})
+	if err != nil {
+		t.Fatalf("Decide with tool call failed: %v", err)
+	}
+	if callCount != 2 {
+		t.Fatalf("expected 2 turns (1 tool call + 1 final answer), got %d", callCount)
+	}
+	if proposal.IntentBase != "product_inquiry" || proposal.RequestedAction != "answer" || proposal.ResponseText != "آيفون 15 متوفر بسعر 250000 ريال" {
+		t.Fatalf("unexpected proposal from tool call: %#v", proposal)
 	}
 }
 
@@ -77,8 +139,8 @@ func TestClientRejectsMissingAPIKey(t *testing.T) {
 
 func TestClientRejectsInvalidOrOversizedResponses(t *testing.T) {
 	cases := []struct {
-		name    string
-		body    string
+		name string
+		body string
 	}{
 		{name: "invalid json", body: `{"candidates":[{"content":{"parts":[{"text":"not-json"}]}}]}`},
 		{name: "wrong schema version", body: `{"candidates":[{"content":{"parts":[{"text":"{\"intent_base\":\"x\",\"domain_context\":\"x\",\"entities\":{},\"evidence_references\":[],\"requested_action\":\"answer\",\"response_text\":\"x\",\"confidence_value\":\"\",\"confidence_band\":\"medium\",\"requires_human\":false,\"missing_information\":[],\"reason_codes\":[],\"policy_decision\":\"allowed\",\"policy_version\":\"v1\",\"knowledge_version\":\"none\",\"schema_version\":99}"}],"role":"model"}}]}`},

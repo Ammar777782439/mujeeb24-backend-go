@@ -121,28 +121,95 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 	}
 
 	userPrompt := buildUserPrompt(input)
-	// Gemini uses systemInstruction + contents
-	reqBody := geminiRequest{
-		SystemInstruction: geminiContent{
-			Parts: []geminiPart{{Text: c.systemPrompt}},
-		},
-		Contents: []geminiContent{
-			{Role: "user", Parts: []geminiPart{{Text: userPrompt}}},
-		},
-		GenerationConfig: geminiGenerationConfig{
-			MaxOutputTokens:  c.maxOutputTokens,
-			ResponseMimeType: "application/json",
-			ResponseSchema:   proposalJSONSchema(),
-		},
-	}
-	encoded, err := json.Marshal(reqBody)
-	if err != nil {
-		return ports.AIDecisionProposal{}, fmt.Errorf("encode Gemini request: %w", err)
+	contents := []geminiContent{
+		{Role: "user", Parts: []geminiPart{{Text: userPrompt}}},
 	}
 
 	requestCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
-	// Support both API key (?key= & x-goog-api-key) and OAuth access token (Bearer ya29.).
+
+	maxToolTurns := 10
+	for turn := 0; turn < maxToolTurns; turn++ {
+		reqBody := geminiRequest{
+			SystemInstruction: &geminiContent{
+				Parts: []geminiPart{{Text: c.systemPrompt}},
+			},
+			Contents: contents,
+			Tools:    defaultCatalogTools(),
+			GenerationConfig: geminiGenerationConfig{
+				MaxOutputTokens:  c.maxOutputTokens,
+				ResponseMimeType: "application/json",
+				ResponseSchema:   proposalJSONSchema(),
+			},
+		}
+
+		gemResp, err := c.sendRequest(requestCtx, reqBody)
+		if err != nil {
+			return ports.AIDecisionProposal{}, err
+		}
+		if len(gemResp.Candidates) == 0 || len(gemResp.Candidates[0].Content.Parts) == 0 {
+			return ports.AIDecisionProposal{}, errors.New("Gemini response did not contain a candidate")
+		}
+
+		candidate := gemResp.Candidates[0]
+		var functionCallPart *geminiFunctionCall
+		var textContent string
+
+		for _, part := range candidate.Content.Parts {
+			if part.FunctionCall != nil && strings.TrimSpace(part.FunctionCall.Name) != "" {
+				functionCallPart = part.FunctionCall
+				break
+			}
+			if strings.TrimSpace(part.Text) != "" {
+				textContent = strings.TrimSpace(part.Text)
+			}
+		}
+
+		// If model requested a tool call, execute it locally and loop back with the result
+		if functionCallPart != nil {
+			toolResult := executeCatalogDiscovery(input)
+			contents = append(contents, geminiContent{
+				Role:  "model",
+				Parts: candidate.Content.Parts,
+			})
+			contents = append(contents, geminiContent{
+				Role: "function",
+				Parts: []geminiPart{
+					{
+						FunctionResponse: &geminiFunctionResponse{
+							Name:     functionCallPart.Name,
+							Response: toolResult,
+						},
+					},
+				},
+			})
+			continue
+		}
+
+		if textContent == "" {
+			return ports.AIDecisionProposal{}, errors.New("Gemini response did not contain structured content")
+		}
+
+		var wire proposalWire
+		if err := json.Unmarshal([]byte(textContent), &wire); err != nil {
+			return ports.AIDecisionProposal{}, fmt.Errorf("decode structured Gemini proposal: %w", err)
+		}
+		proposal, err := wire.toProposal(input, c.model)
+		if err != nil {
+			return ports.AIDecisionProposal{}, err
+		}
+		return proposal, nil
+	}
+
+	return ports.AIDecisionProposal{}, errors.New("Gemini tool execution exceeded maximum turn limit")
+}
+
+func (c *Client) sendRequest(requestCtx context.Context, reqBody geminiRequest) (geminiResponse, error) {
+	encoded, err := json.Marshal(reqBody)
+	if err != nil {
+		return geminiResponse{}, fmt.Errorf("encode Gemini request: %w", err)
+	}
+
 	isOAuthToken := strings.HasPrefix(c.apiKey, "ya29.")
 	var u string
 	if isOAuthToken {
@@ -150,6 +217,7 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 	} else {
 		u = fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", c.baseURL, url.PathEscape(c.model), url.QueryEscape(c.apiKey))
 	}
+
 	var resp *http.Response
 	var body []byte
 	var lastErr error
@@ -164,14 +232,14 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 			}
 			select {
 			case <-requestCtx.Done():
-				return ports.AIDecisionProposal{}, requestCtx.Err()
+				return geminiResponse{}, requestCtx.Err()
 			case <-time.After(delay):
 			}
 		}
 
 		req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, u, bytes.NewReader(encoded))
 		if err != nil {
-			return ports.AIDecisionProposal{}, fmt.Errorf("create Gemini request: %w", err)
+			return geminiResponse{}, fmt.Errorf("create Gemini request: %w", err)
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json")
@@ -196,7 +264,7 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 			continue
 		}
 		if int64(len(body)) > c.maxResponseBytes {
-			return ports.AIDecisionProposal{}, errors.New("Gemini response exceeds configured size limit")
+			return geminiResponse{}, errors.New("Gemini response exceeds configured size limit")
 		}
 
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= http.StatusInternalServerError {
@@ -213,7 +281,7 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 			if len(snippet) > 500 {
 				snippet = snippet[:500]
 			}
-			return ports.AIDecisionProposal{}, fmt.Errorf("Gemini request returned HTTP %d: %s", resp.StatusCode, snippet)
+			return geminiResponse{}, fmt.Errorf("Gemini request returned HTTP %d: %s", resp.StatusCode, snippet)
 		}
 
 		lastErr = nil
@@ -222,30 +290,16 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 
 	if lastErr != nil {
 		if requestCtx.Err() != nil {
-			return ports.AIDecisionProposal{}, requestCtx.Err()
+			return geminiResponse{}, requestCtx.Err()
 		}
-		return ports.AIDecisionProposal{}, fmt.Errorf("Gemini request failed after %d retries: %w", maxRetries, lastErr)
+		return geminiResponse{}, fmt.Errorf("Gemini request failed after %d retries: %w", maxRetries, lastErr)
 	}
+
 	var gemResp geminiResponse
 	if err := json.Unmarshal(body, &gemResp); err != nil {
-		return ports.AIDecisionProposal{}, fmt.Errorf("decode Gemini response: %w", err)
+		return geminiResponse{}, fmt.Errorf("decode Gemini response: %w", err)
 	}
-	if len(gemResp.Candidates) == 0 || len(gemResp.Candidates[0].Content.Parts) == 0 {
-		return ports.AIDecisionProposal{}, errors.New("Gemini response did not contain a candidate")
-	}
-	textContent := strings.TrimSpace(gemResp.Candidates[0].Content.Parts[0].Text)
-	if textContent == "" {
-		return ports.AIDecisionProposal{}, errors.New("Gemini response did not contain structured content")
-	}
-	var wire proposalWire
-	if err := json.Unmarshal([]byte(textContent), &wire); err != nil {
-		return ports.AIDecisionProposal{}, fmt.Errorf("decode structured Gemini proposal: %w", err)
-	}
-	proposal, err := wire.toProposal(input, c.model)
-	if err != nil {
-		return ports.AIDecisionProposal{}, err
-	}
-	return proposal, nil
+	return gemResp, nil
 }
 
 func buildUserPrompt(input ports.AIDecisionInput) string {
@@ -306,43 +360,45 @@ func promptContextFrom(value *ports.AIContext) promptContext {
 	}
 }
 
-const defaultSystemPrompt = `أنت المساعد الذكي وممثل خدمة العملاء الرسمي لمنصة Mujeeb 24.
-مهمتك تحليل رسائل العملاء، فهم نيتهم بدقة، وتقديم ردود عربية احترافية، منسقة، وجذابة تناسب تطبيقات المحادثة (Facebook Messenger, WhatsApp, Instagram).
+const defaultSystemPrompt = `أنت المساعد الذكي لخدمة العملاء. مهمتك فهم نية العميل بدقة، استكشاف كتالوج وبيانات التاجر عند الحاجة، وتقديم ردود عربية احترافية، دقيقة، ومنسقة تناسب تطبيقات المحادثة.
 
-قواعد التنسيق وجودة النص العربي (مهمة جداً):
-1. التنسيق والترتيب البصري:
-   - استخدم أسطر جديدة وفواصل واضحة (\n) بين الفقرات والنقاط بدلاً من كتابة فقرة واحدة مكدسة.
-   - عند المقارنة أو سرد المميزات، استخدم النقاط المنظمة (•) أو الأرقام لتسهيل القراءة على الهاتف.
-   - ابدأ بترحيب لطيف ومباشر، واختم بسؤال تفاعلي لمساعدة العميل (مثال: "هل تحب نوضح لك أي تفاصيل أخرى؟").
-2. نقاء اللغة وتجنب تشويه النص (BiDi & RTL):
-   - اكتب باللغة العربية الفصحى الواضحة والجميلة.
-   - ممنوع حشر المصطلحات والأسماء الإنجليزية بين أقواس داخل الجمل العربية (مثل: تجنب وضع English words بين أقواس كـ (Unified Inbox) أو (Human Handoff) لأنها تشوه اتجاه النص وتجعله غير مفهوم). استخدم التعبير العربي الواضح فقط (مثل: صندوق الوارد الموحد، التحويل للموظف البشري، إدارة المبيعات والفرص).
-3. فهم النية والدقة:
-   - إذا سأل العميل عن "مقارنة" أو "الفرق": قارن بين الباقات بنقاط مرتبة توضح ميزة وسعر كل باقة.
-   - إذا سأل عن "معلومات/مميزات": اشرح المزايا التشغيلية والقيمة للنشاط.
-    - إذا سأل عن "الأسعار": اذكر السعر وطريقة الدفع بوضوح.
-    - إذا طلب العميل الاشتراك أو التفعيل أو الشراء: intent_base=subscription_request مع requires_human=true (سيتولى النظام إرسال رسالة تأكيد ثابتة وتحويل المحادثة للموظف البشري).
-4. الالتزام بالحقائق والمخرجات:
-    - استخدم Verified Mujeeb context كمصدر الأدلة الوحيد ولا تخترع حقائق غير موجودة.
-    - استشهد بالمراجع المناسبة في evidence_references.
-    - أخرج JSON المطابق للمخطط فقط دون أي كلام خارجه.
-    - القيم المسموحة لـ requested_action: answer أو ask_clarification أو no_action.
-    - القيم المسموحة لـ policy_decision: allowed أو requires_approval أو denied.
-    - confidence_band: low أو medium أو high.
-5. تتبع مرجع المحادثة (state_proposal) — إلزامي في كل رد:
-    - اقرأ conversation_state (إن وجد) وrecent_messages لفهم ما يتحدث عنه العميل الآن.
-    - إذا كانت الرسالة تشير بوضوح إلى entity واحد موجود في catalog_evidence أو offer_evidence (بالاسم أو الضمير أو الإشارة أو سؤال متابعة ناقص)، أخرج state_proposal.kind=RESOLVED مع focus={type,id} باستخدام نفس type وid الظاهرين في الـevidence (type يكون catalog أو item أو offer أو variant، وid هو نفس Reference).
-    - إذا كانت الرسالة تقارن entity اثنين أو أكثر، أخرج kind=RESOLVED مع comparison={type,id قائمة المراجع} وfocus لأبرز entity عند الحاجة.
-    - اختر دائماً أدق مستوى ممكن: إذا كان السؤال عن عرض/سعر/مدة/توفر محدد استخدم type=offer مع id يساوي Offer Reference الظاهر في offer_evidence. إذا كان عن منتج/خدمة عامة استخدم type=item مع CatalogEvidence Reference. لا تستخدم type=catalog إلا إذا كان السؤال عن الكتالوج كله (مثل "ايش عندكم؟").
-    - إذا كانت الرسالة تحتمل أكثر من entity ولا يمكن الحسم من السياق، أخرج kind=AMBIGUOUS مع alternatives (قائمة المرشحين) واطلب clarification عبر requested_action=ask_clarification.
-    - إذا كانت الرسالة مستقلة تماماً (تحية أو موضوع جديد بلا مرجع)، أخرج kind=NO_REFERENCE ولا تمسح أي شيء.
-    - لا تخترع id غير موجود في الـevidence. لا تستخدم confidence كقرار أمان.
-    - ترتيب الـevidence مقصود: conversation_state.focus هو المرجع الحالي المُتحقق، وأول عناصر catalog_evidence/offer_evidence هي أدلة هذا المرجع. العناصر التالية مرشحات بديلة فقط. أجب من أدلة الـfocus إلا إذا أشارت الرسالة الحالية بوضوح إلى بديل، وعندها اقترحه في state_proposal مع evidence_references الخاصة به فقط.`
+قواعد التشغيل العامة والتنسيق:
+1. التنسيق وجودة النص العربي (RTL):
+   - استخدم أسطر جديدة وفواصل واضحة (\n) بين الفقرات والنقاط لتسهيل القراءة على الهاتف.
+   - عند المقارنة أو سرد المميزات والأسعار، استخدم النقاط المنظمة (•) أو الأرقام.
+   - اكتب باللغة العربية الواضحة، وتجنب حشر الكلمات الإنجليزية بين أقواس داخل النص العربي لتفادي تشويه اتجاه النص.
+   - ابدأ بترحيب لطيف واختم بسؤال تفاعلي لمساعدة العميل.
+2. الالتزام بالحقائق والأدلة:
+   - استخدم بيانات التاجر وسياق الكتالوج الموثق كمصدر وحيد للأدلة، ولا تخترع منتجات أو أسعاراً أو سياسات غير موجودة.
+   - استشهد بالمراجع المناسبة في evidence_references.
+   - عند البحث أو المقارنة، استكشف عناصر الكتالوج المتاحة حتى إشارة اكتمال الكتالوج.
+   - إذا كان المنتج أو الخدمة غير متوفرة بعد استكشاف الكتالوج، وضح ذلك للعميل بلباقة واقترح البدائل المتاحة إن وجدت.
+3. مخرجات القرار المنظم:
+   - أخرج JSON المطابق للمخطط فقط دون أي نص خارجه.
+   - القيم المسموحة لـ requested_action: answer أو ask_clarification أو no_action.
+   - القيم المسموحة لـ policy_decision: allowed أو requires_approval أو denied.
+   - confidence_band: low أو medium أو high.
+4. تتبع حالة المحادثة (state_proposal):
+   - إذا كانت الرسالة تشير إلى منتج/عرض محدد في الأدلة، أخرج kind=RESOLVED مع focus المناسب.
+   - إذا كانت الرسالة تقارن بين خيارات، أخرج kind=RESOLVED مع comparison المناسب.
+   - إذا كانت الرسالة تحتمل أكثر من خيار ولا يمكن الحسم، أخرج kind=AMBIGUOUS واطلب التوضيح.
+   - إذا كانت الرسالة تحية أو موضوعاً عاماً جديداً، أخرج kind=NO_REFERENCE.`
 
 type geminiRequest struct {
-	SystemInstruction geminiContent          `json:"systemInstruction"`
+	SystemInstruction *geminiContent         `json:"systemInstruction,omitempty"`
 	Contents          []geminiContent        `json:"contents"`
+	Tools             []geminiTool           `json:"tools,omitempty"`
 	GenerationConfig  geminiGenerationConfig `json:"generationConfig"`
+}
+
+type geminiTool struct {
+	FunctionDeclarations []geminiFunctionDeclaration `json:"functionDeclarations,omitempty"`
+}
+
+type geminiFunctionDeclaration struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters,omitempty"`
 }
 
 type geminiContent struct {
@@ -351,7 +407,19 @@ type geminiContent struct {
 }
 
 type geminiPart struct {
-	Text string `json:"text"`
+	Text             string                  `json:"text,omitempty"`
+	FunctionCall     *geminiFunctionCall     `json:"functionCall,omitempty"`
+	FunctionResponse *geminiFunctionResponse `json:"functionResponse,omitempty"`
+}
+
+type geminiFunctionCall struct {
+	Name string          `json:"name"`
+	Args json.RawMessage `json:"args"`
+}
+
+type geminiFunctionResponse struct {
+	Name     string         `json:"name"`
+	Response map[string]any `json:"response"`
 }
 
 type geminiGenerationConfig struct {
@@ -363,10 +431,8 @@ type geminiGenerationConfig struct {
 type geminiResponse struct {
 	Candidates []struct {
 		Content struct {
-			Parts []struct {
-				Text string `json:"text"`
-			} `json:"parts"`
-			Role string `json:"role"`
+			Parts []geminiPart `json:"parts"`
+			Role  string       `json:"role"`
 		} `json:"content"`
 		FinishReason string `json:"finishReason"`
 	} `json:"candidates"`
@@ -465,6 +531,92 @@ func (w proposalWire) toProposal(input ports.AIDecisionInput, model string) (por
 		}
 	}
 	return proposal, nil
+}
+
+func defaultCatalogTools() []geminiTool {
+	return []geminiTool{
+		{
+			FunctionDeclarations: []geminiFunctionDeclaration{
+				{
+					Name:        "catalog_discovery",
+					Description: "Discover and retrieve the complete merchant catalog, including items, variants, offers, prices, and availability across any business sector (retail, clinic/services, tourism/trips, SaaS/packages, etc.). Traverses until all records are returned.",
+					Parameters: map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"query": map[string]any{
+								"type":        "string",
+								"description": "Optional search term, category, or specific item/offer reference to inspect.",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func executeCatalogDiscovery(input ports.AIDecisionInput) map[string]any {
+	var items []map[string]any
+	var offers []map[string]any
+	var variants []map[string]any
+
+	if input.Context != nil {
+		for _, item := range input.Context.CatalogEvidence {
+			var attrs map[string]any
+			if len(item.Attributes) > 0 {
+				_ = json.Unmarshal(item.Attributes, &attrs)
+			}
+			items = append(items, map[string]any{
+				"reference":         item.Reference,
+				"catalog_reference": item.CatalogReference,
+				"item_type":         item.ItemType,
+				"name":              item.Name,
+				"status":            item.Status,
+				"attributes":        attrs,
+				"evidence_state":    item.EvidenceState,
+			})
+		}
+		for _, offer := range input.Context.OfferEvidence {
+			offers = append(offers, map[string]any{
+				"reference":              offer.Reference,
+				"catalog_item_reference": offer.CatalogItemReference,
+				"variant_reference":      offer.VariantReference,
+				"name":                   offer.Name,
+				"pricing_mode":           offer.PricingMode,
+				"amount":                 offer.Amount,
+				"currency":               offer.Currency,
+				"availability_state":     offer.AvailabilityState,
+				"status":                 offer.Status,
+				"evidence_state":         offer.EvidenceState,
+			})
+		}
+		for _, variant := range input.Context.VariantEvidence {
+			var attrs map[string]any
+			if len(variant.Attributes) > 0 {
+				_ = json.Unmarshal(variant.Attributes, &attrs)
+			}
+			variants = append(variants, map[string]any{
+				"reference":              variant.Reference,
+				"catalog_item_reference": variant.CatalogItemReference,
+				"name":                   variant.Name,
+				"status":                 variant.Status,
+				"attributes":             attrs,
+				"evidence_state":         variant.EvidenceState,
+			})
+		}
+	}
+
+	return map[string]any{
+		"items":    items,
+		"offers":   offers,
+		"variants": variants,
+		"pagination": map[string]any{
+			"total_items": len(items),
+			"has_more":    false,
+			"reached_end": true,
+		},
+		"status_message": "ALL_CATALOG_RECORDS_RETRIEVED_NO_MORE_DATA",
+	}
 }
 
 func proposalJSONSchema() map[string]any {
