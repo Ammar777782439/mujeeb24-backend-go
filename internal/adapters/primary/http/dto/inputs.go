@@ -424,6 +424,7 @@ type CreateOfferRequest struct {
 	PricingMode        string   `json:"pricing_mode"`
 	Amount             *float64 `json:"amount,omitempty"`
 	Currency           *string  `json:"currency,omitempty"`
+	PricingUnit        *string  `json:"pricing_unit,omitempty"`
 	AvailabilityMode   string   `json:"availability_mode"`
 	AvailabilityStatus string   `json:"availability_status"`
 	FulfillmentMode    string   `json:"fulfillment_mode"`

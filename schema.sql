@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict eN7N1as40eswpAC4QbARumJSWY0BZNkobeeIqgvKtrqONGbzgcf4EWyc7hMRDKV
+\restrict p8IE54BhxguSZ1ooPfwTQTCq5zsA6EpZMPdTAZDafxrmT5fexEqqlTaQFGa5NrX
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -469,8 +469,6 @@ CREATE TABLE public.channel_provisioning_sessions (
     authorization_url text,
     provider_account_ref text,
     provider_connection_ref text,
-    chatwoot_account_id text,
-    chatwoot_inbox_id text,
     channel_connection_id uuid,
     failure_code text,
     created_at timestamp with time zone NOT NULL,
@@ -482,74 +480,6 @@ CREATE TABLE public.channel_provisioning_sessions (
     CONSTRAINT channel_provisioning_provider_chk CHECK ((length(btrim(provider_ref)) > 0)),
     CONSTRAINT channel_provisioning_state_chk CHECK (((oauth_state IS NULL) OR (length(btrim(oauth_state)) > 0))),
     CONSTRAINT channel_provisioning_status_chk CHECK ((status = ANY (ARRAY['pending_authorization'::text, 'provisioning'::text, 'connected'::text, 'failed'::text, 'reconnect_required'::text])))
-);
-
-
---
--- Name: chatwoot_contact_links; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.chatwoot_contact_links (
-    id uuid NOT NULL,
-    binding_id uuid NOT NULL,
-    business_id uuid NOT NULL,
-    customer_id uuid NOT NULL,
-    external_user_id text NOT NULL,
-    chatwoot_contact_id text,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    CONSTRAINT chatwoot_contact_links_contact_chk CHECK (((chatwoot_contact_id IS NULL) OR (length(btrim(chatwoot_contact_id)) > 0))),
-    CONSTRAINT chatwoot_contact_links_user_chk CHECK ((length(btrim(external_user_id)) > 0))
-);
-
-
---
--- Name: chatwoot_mirror_jobs; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.chatwoot_mirror_jobs (
-    id uuid NOT NULL,
-    business_id uuid NOT NULL,
-    communication_message_id uuid NOT NULL,
-    status text NOT NULL,
-    attempt_count integer DEFAULT 0 NOT NULL,
-    lease_owner text,
-    lease_token text,
-    lease_expires_at timestamp with time zone,
-    failure_code text,
-    result_code text,
-    chatwoot_contact_id text,
-    chatwoot_conversation_id text,
-    chatwoot_message_id text,
-    completed_at timestamp with time zone,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    CONSTRAINT chatwoot_mirror_jobs_attempt_count_chk CHECK ((attempt_count >= 0)),
-    CONSTRAINT chatwoot_mirror_jobs_failure_chk CHECK (((failure_code IS NULL) OR (length(btrim(failure_code)) > 0))),
-    CONSTRAINT chatwoot_mirror_jobs_lease_chk CHECK ((((status = 'processing'::text) AND (lease_owner IS NOT NULL) AND (lease_token IS NOT NULL) AND (lease_expires_at IS NOT NULL)) OR ((status <> 'processing'::text) AND (lease_owner IS NULL) AND (lease_token IS NULL) AND (lease_expires_at IS NULL)))),
-    CONSTRAINT chatwoot_mirror_jobs_result_chk CHECK (((result_code IS NULL) OR (length(btrim(result_code)) > 0))),
-    CONSTRAINT chatwoot_mirror_jobs_status_chk CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'dead_letter'::text])))
-);
-
-
---
--- Name: chatwoot_workspace_bindings; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.chatwoot_workspace_bindings (
-    id uuid NOT NULL,
-    business_id uuid NOT NULL,
-    route_key text NOT NULL,
-    account_id text NOT NULL,
-    inbox_id text NOT NULL,
-    channel text NOT NULL,
-    active boolean DEFAULT true NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    CONSTRAINT chatwoot_workspace_bindings_account_chk CHECK ((length(btrim(account_id)) > 0)),
-    CONSTRAINT chatwoot_workspace_bindings_channel_chk CHECK ((channel = ANY (ARRAY['facebook'::text, 'instagram'::text, 'whatsapp'::text, 'other'::text]))),
-    CONSTRAINT chatwoot_workspace_bindings_inbox_chk CHECK ((length(btrim(inbox_id)) > 0)),
-    CONSTRAINT chatwoot_workspace_bindings_route_chk CHECK ((length(btrim(route_key)) > 0))
 );
 
 
@@ -598,21 +528,19 @@ CREATE TABLE public.communication_messages (
     origin text NOT NULL,
     transport text NOT NULL,
     provider_message_id text,
-    chatwoot_message_id text,
     content_type text NOT NULL,
     text_content text,
     content_reference text NOT NULL,
     occurred_at timestamp with time zone NOT NULL,
     created_at timestamp with time zone NOT NULL,
     visibility text DEFAULT 'public'::text NOT NULL,
-    CONSTRAINT communication_messages_chatwoot_reference_chk CHECK (((chatwoot_message_id IS NULL) OR (length(btrim(chatwoot_message_id)) > 0))),
     CONSTRAINT communication_messages_content_reference_chk CHECK ((length(btrim(content_reference)) > 0)),
     CONSTRAINT communication_messages_content_type_chk CHECK ((content_type = ANY (ARRAY['text'::text, 'image'::text, 'video'::text, 'audio'::text, 'file'::text, 'mixed'::text, 'unknown'::text]))),
     CONSTRAINT communication_messages_direction_chk CHECK ((direction = ANY (ARRAY['inbound'::text, 'outbound'::text]))),
     CONSTRAINT communication_messages_external_reference_chk CHECK (((provider_message_id IS NULL) OR (length(btrim(provider_message_id)) > 0))),
     CONSTRAINT communication_messages_origin_chk CHECK ((origin = ANY (ARRAY['customer'::text, 'ai'::text, 'human'::text, 'automation'::text, 'system'::text]))),
     CONSTRAINT communication_messages_text_content_chk CHECK (((content_type <> 'text'::text) OR (text_content IS NOT NULL))),
-    CONSTRAINT communication_messages_transport_chk CHECK ((transport = ANY (ARRAY['provider'::text, 'chatwoot'::text, 'mujeeb'::text]))),
+    CONSTRAINT communication_messages_transport_chk CHECK ((transport = ANY (ARRAY['provider'::text, 'mujeeb'::text]))),
     CONSTRAINT communication_messages_visibility_chk CHECK ((visibility = ANY (ARRAY['public'::text, 'private'::text])))
 );
 
@@ -664,17 +592,13 @@ CREATE TABLE public.conversation_references (
     mapping_status text NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
-    chatwoot_account_id text,
-    chatwoot_inbox_id text,
-    chatwoot_conversation_id text,
-    CONSTRAINT conversation_references_chatwoot_binding_chk CHECK (((system <> 'provider'::text) OR (((chatwoot_account_id IS NULL) AND (chatwoot_inbox_id IS NULL) AND (chatwoot_conversation_id IS NULL)) OR ((length(btrim(chatwoot_account_id)) > 0) AND (length(btrim(chatwoot_inbox_id)) > 0) AND (length(btrim(chatwoot_conversation_id)) > 0))))),
     CONSTRAINT conversation_references_kind_chk CHECK (((conversation_kind IS NULL) OR (conversation_kind = ANY (ARRAY['dm'::text, 'comment'::text, 'story_reply'::text, 'mention'::text, 'review'::text, 'other'::text])))),
     CONSTRAINT conversation_references_mapping_status_chk CHECK ((mapping_status = ANY (ARRAY['pending'::text, 'active'::text, 'stale'::text, 'failed'::text]))),
     CONSTRAINT conversation_references_provider_chk CHECK ((length(btrim(provider_ref)) > 0)),
-    CONSTRAINT conversation_references_provider_connection_chk CHECK ((((system = 'provider'::text) AND (connection_id IS NOT NULL)) OR (system = 'chatwoot'::text))),
+    CONSTRAINT conversation_references_provider_connection_chk CHECK (((system = 'provider'::text) AND (connection_id IS NOT NULL))),
     CONSTRAINT conversation_references_resource_id_chk CHECK ((length(btrim(resource_id)) > 0)),
     CONSTRAINT conversation_references_resource_type_chk CHECK ((length(btrim(resource_type)) > 0)),
-    CONSTRAINT conversation_references_system_chk CHECK ((system = ANY (ARRAY['provider'::text, 'chatwoot'::text])))
+    CONSTRAINT conversation_references_system_chk CHECK ((system = 'provider'::text))
 );
 
 
@@ -854,7 +778,7 @@ CREATE TABLE public.inbound_event_ledger (
     CONSTRAINT inbound_event_processed_at_chk CHECK ((((processing_state = 'processed'::text) AND (processed_at IS NOT NULL)) OR ((processing_state <> 'processed'::text) AND (processed_at IS NULL)))),
     CONSTRAINT inbound_event_processing_state_chk CHECK ((processing_state = ANY (ARRAY['received'::text, 'unresolved'::text, 'processing'::text, 'processed'::text, 'retryable_failed'::text, 'dead_letter'::text, 'rejected'::text]))),
     CONSTRAINT inbound_event_provider_ref_chk CHECK ((length(btrim(provider_ref)) > 0)),
-    CONSTRAINT inbound_event_resolution_pair_chk CHECK ((((business_id IS NULL) AND (connection_id IS NULL)) OR ((business_id IS NOT NULL) AND ((connection_id IS NOT NULL) OR (provider_ref = 'chatwoot'::text))))),
+    CONSTRAINT inbound_event_resolution_pair_chk CHECK ((((business_id IS NULL) AND (connection_id IS NULL)) OR ((business_id IS NOT NULL) AND (connection_id IS NOT NULL)))),
     CONSTRAINT inbound_event_result_code_chk CHECK (((processing_result_code IS NULL) OR (length(btrim(processing_result_code)) > 0))),
     CONSTRAINT inbound_event_signature_chk CHECK ((signature_verified OR (processing_state = ANY (ARRAY['unresolved'::text, 'rejected'::text])))),
     CONSTRAINT inbound_event_type_chk CHECK ((event_type = ANY (ARRAY['interaction_received'::text, 'interaction_updated'::text, 'delivery_status_changed'::text, 'conversation_updated'::text, 'account_status_changed'::text])))
@@ -1115,7 +1039,6 @@ CREATE TABLE public.outbound_messages (
     provider_idempotency_key text NOT NULL,
     status text NOT NULL,
     provider_message_id text,
-    chatwoot_message_id text,
     failure_code text,
     attempt_count integer DEFAULT 0 NOT NULL,
     correlation_id uuid,
@@ -1130,7 +1053,7 @@ CREATE TABLE public.outbound_messages (
     CONSTRAINT outbound_messages_origin_chk CHECK ((origin = ANY (ARRAY['human'::text, 'ai'::text, 'automation'::text, 'system'::text]))),
     CONSTRAINT outbound_messages_provider_ref_chk CHECK ((length(btrim(provider_ref)) > 0)),
     CONSTRAINT outbound_messages_status_chk CHECK ((status = ANY (ARRAY['pending'::text, 'sending'::text, 'accepted'::text, 'sent'::text, 'delivered'::text, 'read'::text, 'failed'::text, 'unknown'::text]))),
-    CONSTRAINT outbound_messages_transport_chk CHECK ((transport = ANY (ARRAY['provider'::text, 'chatwoot'::text])))
+    CONSTRAINT outbound_messages_transport_chk CHECK ((transport = 'provider'::text))
 );
 
 
@@ -1562,94 +1485,6 @@ ALTER TABLE ONLY public.channel_provisioning_sessions
 
 ALTER TABLE ONLY public.channel_provisioning_sessions
     ADD CONSTRAINT channel_provisioning_sessions_pkey PRIMARY KEY (id);
-
-
---
--- Name: chatwoot_contact_links chatwoot_contact_links_binding_user_uq; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_contact_links
-    ADD CONSTRAINT chatwoot_contact_links_binding_user_uq UNIQUE (binding_id, external_user_id);
-
-
---
--- Name: chatwoot_contact_links chatwoot_contact_links_business_id_uq; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_contact_links
-    ADD CONSTRAINT chatwoot_contact_links_business_id_uq UNIQUE (business_id, id);
-
-
---
--- Name: chatwoot_contact_links chatwoot_contact_links_chatwoot_contact_uq; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_contact_links
-    ADD CONSTRAINT chatwoot_contact_links_chatwoot_contact_uq UNIQUE (binding_id, chatwoot_contact_id);
-
-
---
--- Name: chatwoot_contact_links chatwoot_contact_links_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_contact_links
-    ADD CONSTRAINT chatwoot_contact_links_pkey PRIMARY KEY (id);
-
-
---
--- Name: chatwoot_mirror_jobs chatwoot_mirror_jobs_business_id_uq; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_mirror_jobs
-    ADD CONSTRAINT chatwoot_mirror_jobs_business_id_uq UNIQUE (business_id, id);
-
-
---
--- Name: chatwoot_mirror_jobs chatwoot_mirror_jobs_message_uq; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_mirror_jobs
-    ADD CONSTRAINT chatwoot_mirror_jobs_message_uq UNIQUE (business_id, communication_message_id);
-
-
---
--- Name: chatwoot_mirror_jobs chatwoot_mirror_jobs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_mirror_jobs
-    ADD CONSTRAINT chatwoot_mirror_jobs_pkey PRIMARY KEY (id);
-
-
---
--- Name: chatwoot_workspace_bindings chatwoot_workspace_bindings_account_inbox_uq; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_workspace_bindings
-    ADD CONSTRAINT chatwoot_workspace_bindings_account_inbox_uq UNIQUE (account_id, inbox_id);
-
-
---
--- Name: chatwoot_workspace_bindings chatwoot_workspace_bindings_business_id_uq; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_workspace_bindings
-    ADD CONSTRAINT chatwoot_workspace_bindings_business_id_uq UNIQUE (business_id, id);
-
-
---
--- Name: chatwoot_workspace_bindings chatwoot_workspace_bindings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_workspace_bindings
-    ADD CONSTRAINT chatwoot_workspace_bindings_pkey PRIMARY KEY (id);
-
-
---
--- Name: chatwoot_workspace_bindings chatwoot_workspace_bindings_route_uq; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_workspace_bindings
-    ADD CONSTRAINT chatwoot_workspace_bindings_route_uq UNIQUE (route_key);
 
 
 --
@@ -2314,34 +2149,6 @@ CREATE INDEX idx_channel_provisioning_business_status ON public.channel_provisio
 
 
 --
--- Name: idx_chatwoot_contact_links_business_customer; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_chatwoot_contact_links_business_customer ON public.chatwoot_contact_links USING btree (business_id, customer_id);
-
-
---
--- Name: idx_chatwoot_mirror_jobs_business_status; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_chatwoot_mirror_jobs_business_status ON public.chatwoot_mirror_jobs USING btree (business_id, status, updated_at DESC, id DESC);
-
-
---
--- Name: idx_chatwoot_mirror_jobs_claimable; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_chatwoot_mirror_jobs_claimable ON public.chatwoot_mirror_jobs USING btree (status, created_at, id) WHERE (status = 'pending'::text);
-
-
---
--- Name: idx_chatwoot_workspace_bindings_business_active; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_chatwoot_workspace_bindings_business_active ON public.chatwoot_workspace_bindings USING btree (business_id, active);
-
-
---
 -- Name: idx_commercial_transactions_business_customer; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2650,13 +2457,6 @@ CREATE INDEX idx_outbox_owner_lease ON public.outbox_entries USING btree (lease_
 
 
 --
--- Name: idx_provider_conversation_references_chatwoot_lookup; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_provider_conversation_references_chatwoot_lookup ON public.conversation_references USING btree (business_id, chatwoot_account_id, chatwoot_inbox_id, chatwoot_conversation_id, updated_at DESC) WHERE ((system = 'provider'::text) AND is_current);
-
-
---
 -- Name: idx_transaction_reviews_business_status; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2734,13 +2534,6 @@ CREATE UNIQUE INDEX uq_channel_provisioning_oauth_state ON public.channel_provis
 
 
 --
--- Name: uq_communication_messages_chatwoot_message; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uq_communication_messages_chatwoot_message ON public.communication_messages USING btree (business_id, transport, chatwoot_message_id) WHERE (chatwoot_message_id IS NOT NULL);
-
-
---
 -- Name: uq_communication_messages_provider_message; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2773,13 +2566,6 @@ CREATE UNIQUE INDEX uq_identity_matches_pair ON public.identity_matches USING bt
 --
 
 CREATE UNIQUE INDEX uq_knowledge_documents_published_key ON public.knowledge_documents USING btree (business_id, knowledge_key) WHERE (status = 'published'::text);
-
-
---
--- Name: uq_provider_conversation_references_chatwoot_binding; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uq_provider_conversation_references_chatwoot_binding ON public.conversation_references USING btree (business_id, chatwoot_account_id, chatwoot_inbox_id, chatwoot_conversation_id) WHERE ((system = 'provider'::text) AND is_current AND (chatwoot_account_id IS NOT NULL) AND (chatwoot_inbox_id IS NOT NULL) AND (chatwoot_conversation_id IS NOT NULL));
 
 
 --
@@ -2971,62 +2757,6 @@ ALTER TABLE ONLY public.channel_provisioning_sessions
 
 ALTER TABLE ONLY public.channel_provisioning_sessions
     ADD CONSTRAINT channel_provisioning_connection_fk FOREIGN KEY (business_id, channel_connection_id) REFERENCES public.channel_connections(business_id, id) ON DELETE RESTRICT;
-
-
---
--- Name: chatwoot_contact_links chatwoot_contact_links_binding_business_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_contact_links
-    ADD CONSTRAINT chatwoot_contact_links_binding_business_fk FOREIGN KEY (business_id, binding_id) REFERENCES public.chatwoot_workspace_bindings(business_id, id) ON DELETE RESTRICT;
-
-
---
--- Name: chatwoot_contact_links chatwoot_contact_links_binding_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_contact_links
-    ADD CONSTRAINT chatwoot_contact_links_binding_fk FOREIGN KEY (binding_id) REFERENCES public.chatwoot_workspace_bindings(id) ON DELETE RESTRICT;
-
-
---
--- Name: chatwoot_contact_links chatwoot_contact_links_business_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_contact_links
-    ADD CONSTRAINT chatwoot_contact_links_business_fk FOREIGN KEY (business_id) REFERENCES public.businesses(id) ON DELETE RESTRICT;
-
-
---
--- Name: chatwoot_contact_links chatwoot_contact_links_customer_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_contact_links
-    ADD CONSTRAINT chatwoot_contact_links_customer_fk FOREIGN KEY (business_id, customer_id) REFERENCES public.customers(business_id, id) ON DELETE RESTRICT;
-
-
---
--- Name: chatwoot_mirror_jobs chatwoot_mirror_jobs_business_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_mirror_jobs
-    ADD CONSTRAINT chatwoot_mirror_jobs_business_fk FOREIGN KEY (business_id) REFERENCES public.businesses(id) ON DELETE RESTRICT;
-
-
---
--- Name: chatwoot_mirror_jobs chatwoot_mirror_jobs_message_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_mirror_jobs
-    ADD CONSTRAINT chatwoot_mirror_jobs_message_fk FOREIGN KEY (business_id, communication_message_id) REFERENCES public.communication_messages(business_id, id) ON DELETE RESTRICT;
-
-
---
--- Name: chatwoot_workspace_bindings chatwoot_workspace_bindings_business_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chatwoot_workspace_bindings
-    ADD CONSTRAINT chatwoot_workspace_bindings_business_fk FOREIGN KEY (business_id) REFERENCES public.businesses(id) ON DELETE RESTRICT;
 
 
 --
@@ -3561,5 +3291,5 @@ ALTER TABLE ONLY public.variants
 -- PostgreSQL database dump complete
 --
 
-\unrestrict eN7N1as40eswpAC4QbARumJSWY0BZNkobeeIqgvKtrqONGbzgcf4EWyc7hMRDKV
+\unrestrict p8IE54BhxguSZ1ooPfwTQTCq5zsA6EpZMPdTAZDafxrmT5fexEqqlTaQFGa5NrX
 

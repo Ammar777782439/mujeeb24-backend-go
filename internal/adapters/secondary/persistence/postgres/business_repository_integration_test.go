@@ -391,7 +391,7 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 		t.Fatalf("variant crossed tenant boundary: %v", err)
 	}
 	schemaPage, err := catalogRepo.ListAttributeSchemas(ctx, businessA, "Product attributes", nil, 25, "")
-	if err != nil || len(schemaPage.Items) != 1 || schemaPage.Items[0].ID != schemaA || schemaPage.Items[0].Version != 1 {
+	if err != nil || len(schemaPage.Items) != 1 || schemaPage.Items[0].ID != schemaA || schemaPage.Items[0].Version != 1 || len(schemaPage.Items[0].Definitions) != 1 || schemaPage.Items[0].Definitions[0].Key != "color" {
 		t.Fatalf("attribute schema list: %#v err=%v", schemaPage, err)
 	}
 	schema, err := catalogRepo.GetAttributeSchema(ctx, businessA, schemaA)

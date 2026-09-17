@@ -253,6 +253,7 @@ func (r *CatalogRepository) ListAttributeSchemas(ctx context.Context, businessID
 		if err := rows.Scan(&item.ID, &item.BusinessID, &item.Name, &item.Version); err != nil {
 			return ports.AttributeSchemaPage{}, catalogRepositoryError("attribute_schema.list", err)
 		}
+		item.Definitions = make([]ports.AttributeDefinitionRecord, 0)
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -263,6 +264,32 @@ func (r *CatalogRepository) ListAttributeSchemas(ctx context.Context, businessID
 		page.HasMore = true
 		page.Items = items[:limit]
 		page.NextCursor = encodeSchemaCursor(page.Items[len(page.Items)-1])
+	}
+	if len(page.Items) > 0 {
+		schemaIDs := make([]string, len(page.Items))
+		schemaIndexMap := make(map[string]int, len(page.Items))
+		for i, s := range page.Items {
+			schemaIDs[i] = s.ID
+			schemaIndexMap[s.ID] = i
+		}
+		defRows, err := executor.Query(ctx, `SELECT d.id::text, d.schema_id::text, d.attribute_key, d.label, d.data_type, d.is_required, d.is_searchable, d.display_order FROM attribute_definitions d JOIN attribute_schemas s ON s.id = d.schema_id WHERE d.schema_id = ANY($1::uuid[]) AND s.business_id = $2::uuid ORDER BY d.display_order ASC, d.id ASC`, schemaIDs, businessID)
+		if err != nil {
+			return ports.AttributeSchemaPage{}, catalogRepositoryError("attribute_schema.list", err)
+		}
+		defer defRows.Close()
+		for defRows.Next() {
+			var def ports.AttributeDefinitionRecord
+			var schemaID string
+			if err := defRows.Scan(&def.ID, &schemaID, &def.Key, &def.Label, &def.DataType, &def.Required, &def.Searchable, &def.DisplayOrder); err != nil {
+				return ports.AttributeSchemaPage{}, catalogRepositoryError("attribute_schema.list", err)
+			}
+			if idx, ok := schemaIndexMap[schemaID]; ok {
+				page.Items[idx].Definitions = append(page.Items[idx].Definitions, def)
+			}
+		}
+		if err := defRows.Err(); err != nil {
+			return ports.AttributeSchemaPage{}, catalogRepositoryError("attribute_schema.list", err)
+		}
 	}
 	return page, nil
 }
@@ -505,7 +532,12 @@ func (r *CatalogRepository) CreateOffer(ctx context.Context, draft ports.OfferDr
 	if draft.ID == "" || draft.BusinessID == "" || draft.CatalogItemID == "" || draft.Name == "" || draft.PricingMode == "" || draft.AvailabilityMode == "" || draft.AvailabilityStatus == "" || draft.FulfillmentMode == "" || draft.Status == "" || draft.CreatedAt.IsZero() || draft.UpdatedAt.IsZero() {
 		return ports.OfferRecord{}, invalidRepositoryInput("offer.create", "required offer fields are missing")
 	}
-	return scanOfferRecord(executor.QueryRow(ctx, `INSERT INTO offers (id, business_id, catalog_item_id, variant_id, name, pricing_mode, amount, currency, availability_mode, availability_status, fulfillment_mode, price_verification_status, status, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, CASE WHEN $7::bigint IS NULL THEN NULL ELSE $7::numeric / 100 END, $8, $9, $10, $11, 'unverified', $12, $13, $14) RETURNING id::text, business_id::text, catalog_item_id::text, variant_id::text, name, pricing_mode, amount::text, currency, availability_status, status, resource_version, created_at, updated_at`, draft.ID, draft.BusinessID, draft.CatalogItemID, draft.VariantID, draft.Name, draft.PricingMode, draft.AmountMinor, draft.Currency, draft.AvailabilityMode, draft.AvailabilityStatus, draft.FulfillmentMode, draft.Status, draft.CreatedAt, draft.UpdatedAt))
+	pricingUnit := draft.PricingUnit
+	if (pricingUnit == nil || *pricingUnit == "") && (draft.PricingMode == "per_unit" || draft.PricingMode == "per_person" || draft.PricingMode == "per_day") {
+		val := draft.PricingMode
+		pricingUnit = &val
+	}
+	return scanOfferRecord(executor.QueryRow(ctx, `INSERT INTO offers (id, business_id, catalog_item_id, variant_id, name, pricing_mode, amount, currency, pricing_unit, availability_mode, availability_status, fulfillment_mode, price_verification_status, status, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, CASE WHEN $7::bigint IS NULL THEN NULL ELSE $7::numeric / 100 END, $8, $9, $10, $11, $12, 'unverified', $13, $14, $15) RETURNING id::text, business_id::text, catalog_item_id::text, variant_id::text, name, pricing_mode, amount::text, currency, availability_status, status, resource_version, created_at, updated_at`, draft.ID, draft.BusinessID, draft.CatalogItemID, draft.VariantID, draft.Name, draft.PricingMode, draft.AmountMinor, draft.Currency, pricingUnit, draft.AvailabilityMode, draft.AvailabilityStatus, draft.FulfillmentMode, draft.Status, draft.CreatedAt, draft.UpdatedAt))
 }
 
 func (r *CatalogRepository) UpdateOffer(ctx context.Context, patch ports.OfferPatch) (ports.OfferRecord, error) {

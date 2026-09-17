@@ -228,7 +228,7 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 		if s.deps.CreateOffer == nil {
 			return mapApplicationError(appErrors.NotImplemented()), true
 		}
-		result, err := s.deps.CreateOffer.Handle(ctx, commands.CreateOfferCommand{Meta: commandMeta(ctx, actor, in.CommandHeaders), CatalogItemID: commands.CatalogItemID(in.ItemID), VariantID: optionalVariantID(in.Body.VariantID), Name: in.Body.Name, PricingMode: in.Body.PricingMode, AmountMinor: amount, Currency: in.Body.Currency, AvailabilityMode: in.Body.AvailabilityMode, AvailabilityStatus: in.Body.AvailabilityStatus, FulfillmentMode: in.Body.FulfillmentMode, Status: in.Body.Status})
+		result, err := s.deps.CreateOffer.Handle(ctx, commands.CreateOfferCommand{Meta: commandMeta(ctx, actor, in.CommandHeaders), CatalogItemID: commands.CatalogItemID(in.ItemID), VariantID: optionalVariantID(in.Body.VariantID), Name: in.Body.Name, PricingMode: in.Body.PricingMode, AmountMinor: amount, Currency: in.Body.Currency, PricingUnit: in.Body.PricingUnit, AvailabilityMode: in.Body.AvailabilityMode, AvailabilityStatus: in.Body.AvailabilityStatus, FulfillmentMode: in.Body.FulfillmentMode, Status: in.Body.Status})
 		if err != nil {
 			return mapApplicationError(err), true
 		}

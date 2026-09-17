@@ -216,7 +216,7 @@ func (s CreateOfferCommandService) Handle(ctx context.Context, command commands.
 	var record ports.OfferRecord
 	err := s.within(ctx, func(txCtx context.Context) error {
 		var err error
-		record, err = s.Repository.CreateOffer(txCtx, ports.OfferDraft{ID: s.id(), BusinessID: string(command.Meta.Actor.BusinessID), CatalogItemID: string(command.CatalogItemID), VariantID: optionalID(command.VariantID), Name: command.Name, PricingMode: command.PricingMode, AmountMinor: command.AmountMinor, Currency: command.Currency, AvailabilityMode: command.AvailabilityMode, AvailabilityStatus: command.AvailabilityStatus, FulfillmentMode: command.FulfillmentMode, Status: command.Status, CreatedAt: now, UpdatedAt: now})
+		record, err = s.Repository.CreateOffer(txCtx, ports.OfferDraft{ID: s.id(), BusinessID: string(command.Meta.Actor.BusinessID), CatalogItemID: string(command.CatalogItemID), VariantID: optionalID(command.VariantID), Name: command.Name, PricingMode: command.PricingMode, AmountMinor: command.AmountMinor, Currency: command.Currency, PricingUnit: command.PricingUnit, AvailabilityMode: command.AvailabilityMode, AvailabilityStatus: command.AvailabilityStatus, FulfillmentMode: command.FulfillmentMode, Status: command.Status, CreatedAt: now, UpdatedAt: now})
 		return mapCatalogRepositoryError(err)
 	})
 	if err != nil {

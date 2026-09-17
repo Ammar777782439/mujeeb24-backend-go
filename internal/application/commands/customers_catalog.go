@@ -83,6 +83,7 @@ type CreateOfferCommand struct {
 	PricingMode        string
 	AmountMinor        *int64
 	Currency           *string
+	PricingUnit        *string
 	AvailabilityMode   string
 	AvailabilityStatus string
 	FulfillmentMode    string
