@@ -52,8 +52,10 @@ type AutoReplyService struct {
 	ReferenceRepository ports.ConversationReferenceRepository
 	OutboundRepository  ports.OutboundMessageRepository
 	Outbox              ports.OutboxStore
+	MessageRepository   ports.MessageRepository
 	Transactions        ports.TransactionManager
 	StateRepository     ports.ConversationStateRepository
+	Conversations       ports.ConversationRuntimeRepository
 	Mode                string
 	PolicyVersion       string
 	Now                 func() time.Time
@@ -209,6 +211,29 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			}
 		}
 
+		if s.Conversations != nil {
+			var targetState *string
+			var targetOwnership *string
+			if proposal.RequiresHuman || farewellHandoff || proposal.RequestedAction == "request_human" || proposal.RequestedAction == "draft_order" || proposal.RequestedAction == "draft_lead" {
+				st := "waiting_human"
+				targetState = &st
+			} else if proposal.RequestedAction == AutoReplyActionAnswer || proposal.RequestedAction == AutoReplyActionAskClarification {
+				st := "waiting_customer"
+				targetState = &st
+				own := "ai"
+				targetOwnership = &own
+			}
+			if _, convErr := s.Conversations.TransitionLifecycle(txCtx, ports.ConversationLifecycleTransition{
+				BusinessID:     string(command.Meta.Actor.BusinessID),
+				ConversationID: conversationID,
+				State:          targetState,
+				Ownership:      targetOwnership,
+				LastActivityAt: &now,
+			}); convErr != nil {
+				return mapAIRepositoryError(convErr)
+			}
+		}
+
 		// Both final answers and clarification questions are customer-facing
 		// messages: deliver them when policy allows. Anything requiring human
 		// review (except the fixed farewell handoff below), denied by policy,
@@ -252,6 +277,26 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		})
 		if outboundErr != nil {
 			return mapAIRepositoryError(outboundErr)
+		}
+		if s.MessageRepository != nil {
+			msgDraft := ports.CommunicationMessageDraft{
+				ID:                      s.id(),
+				BusinessID:              string(command.Meta.Actor.BusinessID),
+				ConversationReferenceID: reference.ID,
+				OutboundMessageID:       &outbound.ID,
+				Direction:               "outbound",
+				Origin:                  "ai",
+				Transport:               "provider",
+				ContentType:             "text",
+				TextContent:             &proposal.ResponseText,
+				ContentReference:        contentReference,
+				Visibility:              "public",
+				OccurredAt:              now,
+				CreatedAt:               now,
+			}
+			if _, msgErr := s.MessageRepository.Record(txCtx, msgDraft); msgErr != nil {
+				return mapAIRepositoryError(msgErr)
+			}
 		}
 		outbox, outboxErr := s.Outbox.Enqueue(txCtx, ports.OutboxEntryDraft{
 			ID:                s.id(),

@@ -781,8 +781,12 @@ components:
           type: integer
         Name:
           type: string
+        Partitioned:
+          type: boolean
         Path:
           type: string
+        Quoted:
+          type: boolean
         Raw:
           type: string
         RawExpires:
@@ -802,6 +806,7 @@ components:
       required:
         - Name
         - Value
+        - Quoted
         - Path
         - Domain
         - Expires
@@ -810,6 +815,7 @@ components:
         - Secure
         - HttpOnly
         - SameSite
+        - Partitioned
         - Raw
         - Unparsed
       type: object

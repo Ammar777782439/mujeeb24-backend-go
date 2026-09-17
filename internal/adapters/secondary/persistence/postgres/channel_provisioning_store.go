@@ -28,16 +28,38 @@ func (r *ChannelProvisioningStore) CreateOrGet(ctx context.Context, session port
 		return ports.ChannelProvisioningSession{}, invalidRepositoryInput("channel_provisioning.create_or_get", "business, idempotency, provider, channel, and display name are required")
 	}
 	now := time.Now().UTC()
-	executor, err := r.adapter.Executor(ctx)
+	var result ports.ChannelProvisioningSession
+	err := r.adapter.Within(ctx, func(txCtx context.Context) error {
+		txExecutor, err := r.adapter.Executor(txCtx)
+		if err != nil {
+			return err
+		}
+		const supersedeQuery = `
+			UPDATE channel_provisioning_sessions
+			SET status = 'failed', failure_code = 'superseded', updated_at = $1
+			WHERE business_id = $2::uuid
+			  AND channel = $3
+			  AND status IN ('pending_authorization', 'provisioning')
+			  AND idempotency_key <> $4`
+		if _, err := txExecutor.Exec(txCtx, supersedeQuery, now, session.BusinessID, session.Channel, session.IdempotencyKey); err != nil {
+			return err
+		}
+		const query = `
+			INSERT INTO channel_provisioning_sessions (id, business_id, idempotency_key, provider_ref, channel, display_name, status, oauth_state, authorization_url, provider_account_ref, provider_connection_ref, channel_connection_id, failure_code, created_at, updated_at)
+			VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), NULLIF($10, ''), NULLIF($11, ''), NULLIF($12, '')::uuid, NULLIF($13, ''), $14, $14)
+			ON CONFLICT (business_id, idempotency_key) DO UPDATE SET updated_at = channel_provisioning_sessions.updated_at
+			RETURNING id::text, business_id::text, idempotency_key, provider_ref, channel, display_name, status, COALESCE(oauth_state, ''), COALESCE(authorization_url, ''), COALESCE(provider_account_ref, ''), COALESCE(provider_connection_ref, ''), COALESCE(channel_connection_id::text, ''), COALESCE(failure_code, ''), created_at, updated_at`
+		res, err := scanProvisioningSession(txExecutor.QueryRow(txCtx, query, session.ID, session.BusinessID, session.IdempotencyKey, session.ProviderRef, session.Channel, session.DisplayName, session.Status, session.OAuthState, session.AuthorizationURL, session.ProviderAccountRef, session.ProviderConnectionRef, session.ChannelConnectionID, session.FailureCode, now), "channel_provisioning.create_or_get")
+		if err != nil {
+			return err
+		}
+		result = res
+		return nil
+	})
 	if err != nil {
 		return ports.ChannelProvisioningSession{}, err
 	}
-	const query = `
-		INSERT INTO channel_provisioning_sessions (id, business_id, idempotency_key, provider_ref, channel, display_name, status, oauth_state, authorization_url, provider_account_ref, provider_connection_ref, channel_connection_id, failure_code, created_at, updated_at)
-		VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), NULLIF($10, ''), NULLIF($11, ''), NULLIF($12, '')::uuid, NULLIF($13, ''), $14, $14)
-		ON CONFLICT (business_id, idempotency_key) DO UPDATE SET updated_at = channel_provisioning_sessions.updated_at
-		RETURNING id::text, business_id::text, idempotency_key, provider_ref, channel, display_name, status, COALESCE(oauth_state, ''), COALESCE(authorization_url, ''), COALESCE(provider_account_ref, ''), COALESCE(provider_connection_ref, ''), COALESCE(channel_connection_id::text, ''), COALESCE(failure_code, '')`
-	return scanProvisioningSession(executor.QueryRow(ctx, query, session.ID, session.BusinessID, session.IdempotencyKey, session.ProviderRef, session.Channel, session.DisplayName, session.Status, session.OAuthState, session.AuthorizationURL, session.ProviderAccountRef, session.ProviderConnectionRef, session.ChannelConnectionID, session.FailureCode, now), "channel_provisioning.create_or_get")
+	return result, nil
 }
 
 func (r *ChannelProvisioningStore) GetByID(ctx context.Context, businessID, id string) (ports.ChannelProvisioningSession, error) {
@@ -51,7 +73,7 @@ func (r *ChannelProvisioningStore) GetByID(ctx context.Context, businessID, id s
 	if err != nil {
 		return ports.ChannelProvisioningSession{}, err
 	}
-	const query = `SELECT id::text, business_id::text, idempotency_key, provider_ref, channel, display_name, status, COALESCE(oauth_state, ''), COALESCE(authorization_url, ''), COALESCE(provider_account_ref, ''), COALESCE(provider_connection_ref, ''), COALESCE(channel_connection_id::text, ''), COALESCE(failure_code, '') FROM channel_provisioning_sessions WHERE business_id = $1::uuid AND id = $2::uuid`
+	const query = `SELECT id::text, business_id::text, idempotency_key, provider_ref, channel, display_name, status, COALESCE(oauth_state, ''), COALESCE(authorization_url, ''), COALESCE(provider_account_ref, ''), COALESCE(provider_connection_ref, ''), COALESCE(channel_connection_id::text, ''), COALESCE(failure_code, ''), created_at, updated_at FROM channel_provisioning_sessions WHERE business_id = $1::uuid AND id = $2::uuid`
 	return scanProvisioningSession(executor.QueryRow(ctx, query, businessID, id), "channel_provisioning.get_by_id")
 }
 
@@ -66,7 +88,7 @@ func (r *ChannelProvisioningStore) GetByOAuthState(ctx context.Context, state st
 	if err != nil {
 		return ports.ChannelProvisioningSession{}, err
 	}
-	const query = `SELECT id::text, business_id::text, idempotency_key, provider_ref, channel, display_name, status, COALESCE(oauth_state, ''), COALESCE(authorization_url, ''), COALESCE(provider_account_ref, ''), COALESCE(provider_connection_ref, ''), COALESCE(channel_connection_id::text, ''), COALESCE(failure_code, '') FROM channel_provisioning_sessions WHERE oauth_state = $1 ORDER BY updated_at DESC LIMIT 1`
+	const query = `SELECT id::text, business_id::text, idempotency_key, provider_ref, channel, display_name, status, COALESCE(oauth_state, ''), COALESCE(authorization_url, ''), COALESCE(provider_account_ref, ''), COALESCE(provider_connection_ref, ''), COALESCE(channel_connection_id::text, ''), COALESCE(failure_code, ''), created_at, updated_at FROM channel_provisioning_sessions WHERE oauth_state = $1 ORDER BY updated_at DESC LIMIT 1`
 	return scanProvisioningSession(executor.QueryRow(ctx, query, state), "channel_provisioning.get_by_oauth_state")
 }
 
@@ -93,7 +115,7 @@ func (r *ChannelProvisioningStore) MarkProvisioning(ctx context.Context, busines
 		    failure_code = COALESCE($9, failure_code),
 		    updated_at = $10
 		WHERE business_id = $1::uuid AND id = $2::uuid
-		RETURNING id::text, business_id::text, idempotency_key, provider_ref, channel, display_name, status, COALESCE(oauth_state, ''), COALESCE(authorization_url, ''), COALESCE(provider_account_ref, ''), COALESCE(provider_connection_ref, ''), COALESCE(channel_connection_id::text, ''), COALESCE(failure_code, '')`
+		RETURNING id::text, business_id::text, idempotency_key, provider_ref, channel, display_name, status, COALESCE(oauth_state, ''), COALESCE(authorization_url, ''), COALESCE(provider_account_ref, ''), COALESCE(provider_connection_ref, ''), COALESCE(channel_connection_id::text, ''), COALESCE(failure_code, ''), created_at, updated_at`
 	return scanProvisioningSession(executor.QueryRow(ctx, query, businessID, id, patch.Status, patch.OAuthState, patch.AuthorizationURL, patch.ProviderAccountRef, patch.ProviderConnectionRef, optionalString(patch.ChannelConnectionID), patch.FailureCode, now), "channel_provisioning.mark")
 }
 
@@ -107,7 +129,7 @@ func optionalString(value *string) any {
 func scanProvisioningSession(row pgx.Row, operation string) (ports.ChannelProvisioningSession, error) {
 	var session ports.ChannelProvisioningSession
 	var status string
-	if err := row.Scan(&session.ID, &session.BusinessID, &session.IdempotencyKey, &session.ProviderRef, &session.Channel, &session.DisplayName, &status, &session.OAuthState, &session.AuthorizationURL, &session.ProviderAccountRef, &session.ProviderConnectionRef, &session.ChannelConnectionID, &session.FailureCode); err != nil {
+	if err := row.Scan(&session.ID, &session.BusinessID, &session.IdempotencyKey, &session.ProviderRef, &session.Channel, &session.DisplayName, &status, &session.OAuthState, &session.AuthorizationURL, &session.ProviderAccountRef, &session.ProviderConnectionRef, &session.ChannelConnectionID, &session.FailureCode, &session.CreatedAt, &session.UpdatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ports.ChannelProvisioningSession{}, &RepositoryError{Operation: operation, Kind: RepositoryNotFound, Err: err}
 		}

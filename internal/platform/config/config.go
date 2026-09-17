@@ -49,6 +49,7 @@ type ProcessConfig struct {
 	GeminiBaseURL                  string
 	GeminiModel                    string
 	GeminiHTTPTimeout              time.Duration
+	FrontendURL                    string
 }
 
 func LoadFromEnv() (ProcessConfig, error) {
@@ -91,6 +92,7 @@ func LoadFromEnv() (ProcessConfig, error) {
 		GeminiBaseURL:                  strings.TrimRight(strings.TrimSpace(os.Getenv("GEMINI_BASE_URL")), "/"),
 		GeminiModel:                    strings.TrimSpace(os.Getenv("GEMINI_MODEL")),
 		GeminiHTTPTimeout:              30 * time.Second,
+		FrontendURL:                    strings.TrimRight(strings.TrimSpace(os.Getenv("FRONTEND_URL")), "/"),
 	}
 	if cfg.DatabaseURL == "" {
 		return ProcessConfig{}, errors.New("DATABASE_URL is required")

@@ -20,6 +20,7 @@ type ExternalAdapters struct {
 	ChannelProvisioningError       error
 	ChannelProvisioningEnabled     bool
 	ChannelProvisioningRedirectURI string
+	FrontendURL                    string
 }
 
 func (a ExternalAdapters) ReadinessChecks() map[string]string {
@@ -95,5 +96,6 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 	adapters.AutoReplyEnabled = cfg.AutoReplyEnabled
 	adapters.ChannelProvisioningEnabled = cfg.ChannelProvisioningEnabled
 	adapters.ChannelProvisioningRedirectURI = cfg.ChannelProvisioningRedirectURI
+	adapters.FrontendURL = cfg.FrontendURL
 	return adapters
 }

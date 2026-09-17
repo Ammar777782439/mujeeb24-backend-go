@@ -94,10 +94,20 @@ type ConversationUpdate struct {
 	AssignmentReference *string
 }
 
+type ConversationLifecycleTransition struct {
+	BusinessID     string
+	ConversationID string
+	State          *string
+	Ownership      *string
+	Priority       *string
+	LastActivityAt *time.Time
+}
+
 type ConversationRuntimeRepository interface {
 	List(ctx context.Context, businessID, state, ownership, channel string, customerID *string, limit int, cursor string) (ConversationPage, error)
 	Update(ctx context.Context, update ConversationUpdate) (ConversationRecord, error)
 	AdvanceVersion(ctx context.Context, businessID, conversationID string, expectedVersion int64) (ConversationRecord, error)
+	TransitionLifecycle(ctx context.Context, transition ConversationLifecycleTransition) (ConversationRecord, error)
 }
 
 type ChannelConnectionRecord struct {

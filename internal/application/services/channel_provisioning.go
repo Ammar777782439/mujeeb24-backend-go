@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/google/uuid"
@@ -13,6 +14,7 @@ import (
 
 const (
 	provisioningProviderSocialAPI = "socialapi"
+	OAuthSessionTTL               = 15 * time.Minute
 )
 
 type ChannelProvisioningService struct {
@@ -89,6 +91,9 @@ func (s ChannelProvisioningService) Complete(ctx context.Context, businessID, se
 	}
 	if session.Status != ports.ProvisioningPendingAuthorization && session.Status != ports.ProvisioningReconnectRequired {
 		return session, fmt.Errorf("channel provisioning session is not awaiting authorization: %s", session.Status)
+	}
+	if !session.CreatedAt.IsZero() && time.Since(session.CreatedAt) > OAuthSessionTTL {
+		return s.fail(ctx, session, ports.FailureCodeExpired, errors.New("channel provisioning oauth session expired"))
 	}
 	if callback.State == "" || callback.State != session.OAuthState {
 		return session, errors.New("channel provisioning oauth state mismatch")

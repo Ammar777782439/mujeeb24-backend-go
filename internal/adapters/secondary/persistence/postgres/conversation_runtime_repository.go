@@ -115,6 +115,29 @@ func (r *ConversationRepository) AdvanceVersion(ctx context.Context, businessID,
 	return ports.ConversationRecord{}, classifyCoreStaleOrNotFound(ctx, executor, "conversation.advance_version", "conversations", businessID, conversationID, err)
 }
 
+func (r *ConversationRepository) TransitionLifecycle(ctx context.Context, transition ports.ConversationLifecycleTransition) (ports.ConversationRecord, error) {
+	if r == nil || r.adapter == nil {
+		return ports.ConversationRecord{}, ErrPoolClosed
+	}
+	if strings.TrimSpace(transition.BusinessID) == "" || strings.TrimSpace(transition.ConversationID) == "" {
+		return ports.ConversationRecord{}, invalidRepositoryInput("conversation.transition_lifecycle", "business and conversation ids are required")
+	}
+	if transition.State == nil && transition.Ownership == nil && transition.Priority == nil && transition.LastActivityAt == nil {
+		return ports.ConversationRecord{}, invalidRepositoryInput("conversation.transition_lifecycle", "at least one field is required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.ConversationRecord{}, err
+	}
+	const query = `UPDATE conversations SET state=COALESCE($3,state),ownership=COALESCE($4,ownership),priority=COALESCE($5,priority),last_activity_at=COALESCE($6,last_activity_at),resource_version=resource_version+1,updated_at=now() WHERE business_id=$1::uuid AND id=$2::uuid RETURNING id::text,business_id::text,customer_id::text,state,ownership,ai_mode_override,priority,assignment_reference,resource_version,last_activity_at`
+	var record ports.ConversationRecord
+	err = executor.QueryRow(ctx, query, transition.BusinessID, transition.ConversationID, nilIfBlank(transition.State), nilIfBlank(transition.Ownership), nilIfBlank(transition.Priority), transition.LastActivityAt).Scan(&record.ID, &record.BusinessID, &record.CustomerID, &record.State, &record.Ownership, &record.AIModeOverride, &record.Priority, &record.AssignmentReference, &record.ResourceVersion, &record.LastActivityAt)
+	if err == nil {
+		return record, nil
+	}
+	return ports.ConversationRecord{}, classifyCoreStaleOrNotFound(ctx, executor, "conversation.transition_lifecycle", "conversations", transition.BusinessID, transition.ConversationID, err)
+}
+
 func encodeConversationCursor(record ports.ConversationRecord) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(record.LastActivityAt.UTC().Format(time.RFC3339Nano) + "|" + record.ID))
 }

@@ -140,6 +140,38 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 		t.Fatalf("unexpected communication message projection transport=%s direction=%s origin=%s content=%s", transport, direction, origin, content)
 	}
 
+	// Update conversation to waiting_customer and test reopening on new inbound message
+	if _, err := adapter.Pool().Exec(ctx, `UPDATE conversations SET state = 'waiting_customer' WHERE id = $1::uuid`, first.ConversationID); err != nil {
+		t.Fatalf("set waiting_customer: %v", err)
+	}
+	subsequentEventID := uuid.NewString()
+	subsequentEventDraft := eventDraft
+	subsequentEventDraft.ID = subsequentEventID
+	subsequentEventDraft.ProviderEventID = "provider-event-subsequent"
+	subsequentEventDraft.ProviderMessageID = stringPointerForProviderInbound("provider-message-subsequent")
+	if _, _, err := eventStore.RecordIfAbsent(ctx, subsequentEventDraft); err != nil {
+		t.Fatalf("record subsequent event: %v", err)
+	}
+	subsequentDraft := draft
+	subsequentDraft.InboundEventID = subsequentEventID
+	subsequentDraft.ProviderEventID = "provider-event-subsequent"
+	subsequentDraft.ProviderMessageID = "provider-message-subsequent"
+	subsequentDraft.Text = "هل تم الرد؟"
+	subsequentResult, err := materializer.Materialize(ctx, subsequentDraft)
+	if err != nil {
+		t.Fatalf("subsequent materialize: %v", err)
+	}
+	if subsequentResult.ConversationID != first.ConversationID {
+		t.Fatalf("expected same conversation ID %s, got %s", first.ConversationID, subsequentResult.ConversationID)
+	}
+	var reopenedState string
+	if err := adapter.Pool().QueryRow(ctx, `SELECT state FROM conversations WHERE id = $1::uuid`, first.ConversationID).Scan(&reopenedState); err != nil {
+		t.Fatalf("get reopened state: %v", err)
+	}
+	if reopenedState != "open" {
+		t.Fatalf("expected reopened state 'open', got %q", reopenedState)
+	}
+
 	wrongDraft := draft
 	wrongDraft.BusinessID = otherBusinessID
 	if _, err := materializer.Materialize(ctx, wrongDraft); !IsRepositoryKind(err, RepositoryConflict) {

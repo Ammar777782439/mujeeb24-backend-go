@@ -12,13 +12,15 @@ import (
 )
 
 type ManualOutboundMessageService struct {
-	References   ports.ConversationReferenceRepository
-	Connections  ports.ChannelConnectionRepository
-	Outbound     ports.OutboundMessageRepository
-	Outbox       ports.OutboxStore
-	Transactions ports.TransactionManager
-	Now          func() time.Time
-	NewID        func() string
+	References    ports.ConversationReferenceRepository
+	Connections   ports.ChannelConnectionRepository
+	Outbound      ports.OutboundMessageRepository
+	Outbox        ports.OutboxStore
+	Messages      ports.MessageRepository
+	Conversations ports.ConversationRuntimeRepository
+	Transactions  ports.TransactionManager
+	Now           func() time.Time
+	NewID         func() string
 }
 
 func (s ManualOutboundMessageService) Handle(ctx context.Context, command commands.CreateOutboundMessageCommand) (commands.MessageResult, error) {
@@ -62,8 +64,41 @@ func (s ManualOutboundMessageService) Handle(ctx context.Context, command comman
 		if outboundErr != nil {
 			return mapAIRepositoryError(outboundErr)
 		}
+		if s.Messages != nil {
+			msgDraft := ports.CommunicationMessageDraft{
+				ID:                      newID(),
+				BusinessID:              businessID,
+				ConversationReferenceID: reference.ID,
+				OutboundMessageID:       &outbound.ID,
+				Direction:               "outbound",
+				Origin:                  "human",
+				Transport:               "provider",
+				ContentType:             "text",
+				TextContent:             &text,
+				ContentReference:        EncodeInlineTextContentReference(text),
+				Visibility:              "public",
+				OccurredAt:              now,
+				CreatedAt:               now,
+			}
+			if _, msgErr := s.Messages.Record(txCtx, msgDraft); msgErr != nil {
+				return mapAIRepositoryError(msgErr)
+			}
+		}
 		if _, outboxErr := s.Outbox.Enqueue(txCtx, ports.OutboxEntryDraft{ID: newID(), BusinessID: businessID, OutboundMessageID: outbound.ID, CommandType: OutboundSendCommandType, DedupeKey: dedupeKey, AvailableAt: now, CreatedAt: now, UpdatedAt: now}); outboxErr != nil {
 			return mapAIRepositoryError(outboxErr)
+		}
+		if s.Conversations != nil {
+			waitingCustomerState := "waiting_customer"
+			humanOwnership := "human"
+			if _, convErr := s.Conversations.TransitionLifecycle(txCtx, ports.ConversationLifecycleTransition{
+				BusinessID:     businessID,
+				ConversationID: conversationID,
+				State:          &waitingCustomerState,
+				Ownership:      &humanOwnership,
+				LastActivityAt: &now,
+			}); convErr != nil {
+				return mapAIRepositoryError(convErr)
+			}
 		}
 		result.Message = commands.MessageView{ID: commands.MessageID(outbound.ID), ConversationID: commands.ConversationID(outbound.ConversationID), Direction: outbound.Direction, Origin: outbound.Origin, Status: outbound.Status, Text: text, ProviderMessageReference: outbound.ProviderMessageID, OccurredAt: now, CreatedAt: now}
 		return nil

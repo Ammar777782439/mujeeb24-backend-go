@@ -58,6 +58,17 @@ func TestChannelProvisioningRepositoriesAgainstPostgres(t *testing.T) {
 	if err != nil || updated.OAuthState != state || updated.AuthorizationURL != authURL {
 		t.Fatalf("mark session=%#v err=%v", updated, err)
 	}
+
+	// Test superseding previous pending session with a new idempotency key
+	newSession := ports.ChannelProvisioningSession{ID: "00000000-0000-0000-0000-000000000337", BusinessID: businessID, IdempotencyKey: "connect-2-new", ProviderRef: "socialapi", Channel: "facebook", DisplayName: "Provisioning Shop New", Status: ports.ProvisioningPendingAuthorization}
+	supersededOld, err := store.CreateOrGet(ctx, newSession)
+	if err != nil || supersededOld.ID != newSession.ID {
+		t.Fatalf("create new session after previous: %#v err=%v", supersededOld, err)
+	}
+	oldCheck, err := store.GetByID(ctx, businessID, session.ID)
+	if err != nil || oldCheck.Status != ports.ProvisioningFailed || oldCheck.FailureCode != ports.FailureCodeSuperseded {
+		t.Fatalf("expected old session to be superseded, got %#v err=%v", oldCheck, err)
+	}
 	byState, err := store.GetByOAuthState(ctx, state)
 	if err != nil || byState.ID != session.ID || byState.BusinessID != businessID {
 		t.Fatalf("get state=%#v err=%v", byState, err)
@@ -67,19 +78,19 @@ func TestChannelProvisioningRepositoriesAgainstPostgres(t *testing.T) {
 	}
 
 	connections := NewChannelConnectionRepository(adapter)
-	connection, err := connections.CreatePending(ctx, businessID, "socialapi", "facebook", "pending-connection-1", "channel-provisioning/"+session.ID)
+	connection, err := connections.CreatePending(ctx, businessID, "socialapi", "facebook", "pending-connection-37", "channel-provisioning/"+newSession.ID)
 	if err != nil || connection.Status != "pending" || connection.BusinessID != businessID {
 		t.Fatalf("pending connection=%#v err=%v", connection, err)
 	}
-	active, err := connections.Activate(ctx, businessID, connection.ID, "account-1", "connection-1")
-	if err != nil || active.Status != "active" || active.ProviderAccountReference == nil || *active.ProviderAccountReference != "account-1" {
+	active, err := connections.Activate(ctx, businessID, connection.ID, "account-37", "connection-37")
+	if err != nil || active.Status != "active" || active.ProviderAccountReference == nil || *active.ProviderAccountReference != "account-37" {
 		t.Fatalf("active connection=%#v err=%v", active, err)
 	}
 	if _, err := connections.GetByID(ctx, otherBusinessID, connection.ID); !IsRepositoryKind(err, RepositoryNotFound) {
 		t.Fatalf("expected tenant isolation, got %v", err)
 	}
-	final, err := store.MarkProvisioning(ctx, businessID, session.ID, ports.ChannelProvisioningPatch{Status: ports.ProvisioningConnected, ProviderAccountRef: stringPtrIntegration("account-1"), ProviderConnectionRef: stringPtrIntegration("connection-1"), ChannelConnectionID: stringPtrIntegration(connection.ID)})
-	if err != nil || final.Status != ports.ProvisioningConnected || final.ChannelConnectionID != connection.ID || final.ProviderAccountRef != "account-1" {
+	final, err := store.MarkProvisioning(ctx, businessID, newSession.ID, ports.ChannelProvisioningPatch{Status: ports.ProvisioningConnected, ProviderAccountRef: stringPtrIntegration("account-37"), ProviderConnectionRef: stringPtrIntegration("connection-37"), ChannelConnectionID: stringPtrIntegration(connection.ID)})
+	if err != nil || final.Status != ports.ProvisioningConnected || final.ChannelConnectionID != connection.ID || final.ProviderAccountRef != "account-37" {
 		t.Fatalf("final session=%#v err=%v", final, err)
 	}
 }

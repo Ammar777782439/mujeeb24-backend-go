@@ -93,4 +93,21 @@ func TestConversationRuntimeRepositoryAgainstPostgres(t *testing.T) {
 	if err != nil || rolled.ResourceVersion != assigned.ResourceVersion {
 		t.Fatalf("rollback persisted: %#v err=%v", rolled, err)
 	}
+
+	targetState := "waiting_customer"
+	targetOwnership := "ai"
+	now := time.Now().UTC()
+	transitioned, err := repo.TransitionLifecycle(ctx, ports.ConversationLifecycleTransition{
+		BusinessID:     businessA,
+		ConversationID: conversationA,
+		State:          &targetState,
+		Ownership:      &targetOwnership,
+		LastActivityAt: &now,
+	})
+	if err != nil {
+		t.Fatalf("TransitionLifecycle: %v", err)
+	}
+	if transitioned.State != targetState || transitioned.Ownership != targetOwnership || transitioned.ResourceVersion != rolled.ResourceVersion+1 {
+		t.Fatalf("unexpected transitioned record: %#v", transitioned)
+	}
 }

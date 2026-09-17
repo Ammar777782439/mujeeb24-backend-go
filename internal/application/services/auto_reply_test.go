@@ -112,6 +112,30 @@ func (fakeTransactionManager) Within(ctx context.Context, fn func(context.Contex
 	return fn(ctx)
 }
 
+type fakeConversationRuntimeRepository struct {
+	transitions []ports.ConversationLifecycleTransition
+}
+
+func (f *fakeConversationRuntimeRepository) List(context.Context, string, string, string, string, *string, int, string) (ports.ConversationPage, error) {
+	return ports.ConversationPage{}, nil
+}
+
+func (f *fakeConversationRuntimeRepository) Update(context.Context, ports.ConversationUpdate) (ports.ConversationRecord, error) {
+	return ports.ConversationRecord{}, nil
+}
+
+func (f *fakeConversationRuntimeRepository) AdvanceVersion(context.Context, string, string, int64) (ports.ConversationRecord, error) {
+	return ports.ConversationRecord{}, nil
+}
+
+func (f *fakeConversationRuntimeRepository) TransitionLifecycle(_ context.Context, transition ports.ConversationLifecycleTransition) (ports.ConversationRecord, error) {
+	f.transitions = append(f.transitions, transition)
+	return ports.ConversationRecord{
+		BusinessID: transition.BusinessID,
+		ID:         transition.ConversationID,
+	}, nil
+}
+
 func TestSafeAutoReplyRuntimeProducesStructuredAnswer(t *testing.T) {
 	proposal, err := (SafeAutoReplyRuntime{}).Decide(context.Background(), ports.AIDecisionInput{Text: "مرحبا", PolicyVersion: "auto-reply-v1"})
 	if err != nil {
@@ -126,6 +150,8 @@ func TestAutoReplyServicePersistsDecisionAndEnqueuesAnswerAtomically(t *testing.
 	decisions := &fakeDecisionRepository{}
 	outbound := &fakeOutboundRepository{}
 	outbox := &fakeOutboxStore{}
+	messages := &fakeMessageRepository{}
+	convRepo := &fakeConversationRuntimeRepository{}
 	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
 	service := NewAutoReplyService(
 		fakeAIRuntime{proposal: ports.AIDecisionProposal{IntentBase: "information_request", DomainContext: "safe_ack", Entities: []byte(`{}`), EvidenceReferences: []byte(`[]`), RequestedAction: "answer", ResponseText: "تم استلام رسالتك", ConfidenceBand: "medium", PolicyDecision: "allowed", PolicyVersion: "auto-reply-v1", ModelReference: "test-runtime", SchemaVersion: 1, MissingInformation: []byte(`[]`), ReasonCodes: []byte(`["safe"]`)}},
@@ -135,8 +161,10 @@ func TestAutoReplyServicePersistsDecisionAndEnqueuesAnswerAtomically(t *testing.
 		outbox,
 		fakeTransactionManager{},
 	)
+	service.MessageRepository = messages
+	service.Conversations = convRepo
 	service.Now = func() time.Time { return now }
-	ids := []string{"decision-1", "outbound-1", "outbox-1"}
+	ids := []string{"decision-1", "outbound-1", "msg-1", "outbox-1"}
 	service.NewID = func() string {
 		value := ids[0]
 		ids = ids[1:]
@@ -156,6 +184,19 @@ func TestAutoReplyServicePersistsDecisionAndEnqueuesAnswerAtomically(t *testing.
 	}
 	if outbound.record.Status != "pending" || outbound.record.Origin != "ai" || outbound.record.Transport != "provider" || outbox.record.CommandType != OutboundSendCommandType || outbox.record.DedupeKey != "auto-reply:inbound-1" || outbox.calls != 1 {
 		t.Fatalf("unexpected persistence: outbound=%#v outbox=%#v calls=%d", outbound.record, outbox.record, outbox.calls)
+	}
+	if messages.recorded.ID == "" || messages.recorded.Origin != "ai" || messages.recorded.Direction != "outbound" {
+		t.Fatalf("unexpected communication message: %#v", messages.recorded)
+	}
+	if messages.recorded.OutboundMessageID == nil || *messages.recorded.OutboundMessageID != "outbound-1" {
+		t.Fatalf("expected communication message outbound_message_id outbound-1, got %v", messages.recorded.OutboundMessageID)
+	}
+	if len(convRepo.transitions) != 1 {
+		t.Fatalf("expected 1 conversation transition, got %d", len(convRepo.transitions))
+	}
+	tr := convRepo.transitions[0]
+	if tr.BusinessID != "business-1" || tr.ConversationID != "conversation-1" || tr.State == nil || *tr.State != "waiting_customer" || tr.Ownership == nil || *tr.Ownership != "ai" {
+		t.Errorf("unexpected conversation transition: %#v", tr)
 	}
 }
 
@@ -343,6 +384,7 @@ func TestAutoReplyServiceHandlesWaitingHuman(t *testing.T) {
 
 func TestAutoReplyServiceHandlesDraftOrder(t *testing.T) {
 	outbox := &fakeOutboxStore{}
+	convRepo := &fakeConversationRuntimeRepository{}
 	service := NewAutoReplyService(
 		fakeAIRuntime{proposal: ports.AIDecisionProposal{IntentBase: "purchase", RequestedAction: "draft_order", ConfidenceBand: "high", PolicyDecision: "requires_approval", PolicyVersion: "auto-reply-v1", SchemaVersion: 1, Entities: []byte(`{"items":[{"id":"item-1"}]}`), EvidenceReferences: []byte(`[]`), MissingInformation: []byte(`[]`), ReasonCodes: []byte(`[]`)}},
 		&fakeDecisionRepository{},
@@ -351,6 +393,7 @@ func TestAutoReplyServiceHandlesDraftOrder(t *testing.T) {
 		outbox,
 		fakeTransactionManager{},
 	)
+	service.Conversations = convRepo
 	result, err := service.Handle(context.Background(), commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}}, ConversationID: "conversation-1", SourceMessageReference: "inbound-1", Text: "أريد شراء هذا", Channel: "whatsapp", ProviderRef: "socialapi"})
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
@@ -358,10 +401,17 @@ func TestAutoReplyServiceHandlesDraftOrder(t *testing.T) {
 	if result.Enqueued || outbox.calls != 0 || result.Action != "draft_order" {
 		t.Fatalf("unexpected result for draft_order=%#v outbox_calls=%d", result, outbox.calls)
 	}
+	if len(convRepo.transitions) != 1 {
+		t.Fatalf("expected 1 conversation transition, got %d", len(convRepo.transitions))
+	}
+	if convRepo.transitions[0].State == nil || *convRepo.transitions[0].State != "waiting_human" {
+		t.Errorf("expected state waiting_human for draft_order, got %#v", convRepo.transitions[0])
+	}
 }
 
 func TestAutoReplyServiceHandlesDraftLead(t *testing.T) {
 	outbox := &fakeOutboxStore{}
+	convRepo := &fakeConversationRuntimeRepository{}
 	service := NewAutoReplyService(
 		fakeAIRuntime{proposal: ports.AIDecisionProposal{IntentBase: "inquiry", RequestedAction: "draft_lead", ConfidenceBand: "high", PolicyDecision: "requires_approval", PolicyVersion: "auto-reply-v1", SchemaVersion: 1, Entities: []byte(`{"name":"Ammar"}`), EvidenceReferences: []byte(`[]`), MissingInformation: []byte(`[]`), ReasonCodes: []byte(`[]`)}},
 		&fakeDecisionRepository{},
@@ -370,11 +420,18 @@ func TestAutoReplyServiceHandlesDraftLead(t *testing.T) {
 		outbox,
 		fakeTransactionManager{},
 	)
+	service.Conversations = convRepo
 	result, err := service.Handle(context.Background(), commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}}, ConversationID: "conversation-1", SourceMessageReference: "inbound-1", Text: "مهتم بالخدمة", Channel: "whatsapp", ProviderRef: "socialapi"})
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
 	if result.Enqueued || outbox.calls != 0 || result.Action != "draft_lead" {
 		t.Fatalf("unexpected result for draft_lead=%#v outbox_calls=%d", result, outbox.calls)
+	}
+	if len(convRepo.transitions) != 1 {
+		t.Fatalf("expected 1 conversation transition, got %d", len(convRepo.transitions))
+	}
+	if convRepo.transitions[0].State == nil || *convRepo.transitions[0].State != "waiting_human" {
+		t.Errorf("expected state waiting_human for draft_lead, got %#v", convRepo.transitions[0])
 	}
 }

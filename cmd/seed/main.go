@@ -71,6 +71,66 @@ func main() {
 		ON CONFLICT (principal_id) DO NOTHING;
 	`, principalID, now)
 
+	// Clean Merchant (Zero Channels & Fresh State)
+	cleanMerchantEmail := "merchant@mujeeb.ai"
+	cleanBusinessID := "00000000-0000-0000-0000-000000000002"
+	cleanPrincipalID := "00000000-0000-0000-0000-000000000002"
+
+	log.Println("1b. Ensuring Clean Merchant (Zero Channels) credentials...")
+	_, err = pool.Exec(ctx, `
+		INSERT INTO principals (id, email, display_name, password_hash, status, created_at, updated_at)
+		VALUES ($1::uuid, $2, $3, $4, 'active', $5, $5)
+		ON CONFLICT (id) DO UPDATE
+		SET email = EXCLUDED.email,
+		    display_name = EXCLUDED.display_name,
+		    password_hash = EXCLUDED.password_hash,
+		    updated_at = EXCLUDED.updated_at;
+	`, cleanPrincipalID, cleanMerchantEmail, "التاجر الجديد (بدون قنوات)", string(passHash), now)
+	if err != nil {
+		log.Fatalf("Failed to upsert clean merchant principal: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO businesses (id, name, slug, status, vertical_type, timezone, default_currency, locale, created_at, updated_at, resource_version)
+		VALUES ($1::uuid, $2, $3, 'active', 'retail', 'Asia/Riyadh', 'SAR', 'ar-SA', $4, $4, 1)
+		ON CONFLICT (id) DO UPDATE
+		SET name = EXCLUDED.name,
+		    slug = EXCLUDED.slug,
+		    vertical_type = EXCLUDED.vertical_type,
+		    timezone = EXCLUDED.timezone,
+		    default_currency = EXCLUDED.default_currency,
+		    locale = EXCLUDED.locale,
+		    updated_at = EXCLUDED.updated_at;
+	`, cleanBusinessID, "متجر التجربة الجديد (بدون قنوات)", "fresh-store", now)
+	if err != nil {
+		log.Fatalf("Failed to upsert clean merchant business: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO business_policies (business_id, ai_mode, default_human_review, allow_auto_reply, allow_auto_lead_creation, allow_auto_transaction_draft, allow_auto_confirmation, created_at, updated_at)
+		VALUES ($1::uuid, 'restricted_auto', false, true, true, true, true, $2, $2)
+		ON CONFLICT (business_id) DO UPDATE
+		SET ai_mode = EXCLUDED.ai_mode,
+		    allow_auto_reply = EXCLUDED.allow_auto_reply,
+		    allow_auto_lead_creation = EXCLUDED.allow_auto_lead_creation,
+		    allow_auto_transaction_draft = EXCLUDED.allow_auto_transaction_draft,
+		    allow_auto_confirmation = EXCLUDED.allow_auto_confirmation,
+		    updated_at = EXCLUDED.updated_at;
+	`, cleanBusinessID, now)
+	if err != nil {
+		log.Fatalf("Failed to upsert clean merchant business policy: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO business_memberships (business_id, principal_id, role, permissions, status, created_at, updated_at)
+		VALUES ($1::uuid, $2::uuid, 'owner', '["*"]'::jsonb, 'active', $3, $3)
+		ON CONFLICT (business_id, principal_id) DO UPDATE
+		SET role = 'owner', permissions = '["*"]'::jsonb, status = 'active', updated_at = EXCLUDED.updated_at;
+	`, cleanBusinessID, cleanPrincipalID, now)
+	if err != nil {
+		log.Fatalf("Failed to upsert clean merchant membership: %v", err)
+	}
+
 	log.Println("2. Ensuring Main Business and Policies...")
 	_, err = pool.Exec(ctx, `
 		INSERT INTO businesses (id, name, slug, status, vertical_type, timezone, default_currency, locale, created_at, updated_at, resource_version)
@@ -537,14 +597,20 @@ func main() {
 	}
 
 	customers := []seedCustomer{
-		{"00000000-0000-0000-0000-000000000201", "خالد بن عبدالله الشمري", "+966501112233", "khalid.shammari@example.com", "الرياض", 4},
-		{"00000000-0000-0000-0000-000000000202", "سارة بنت فهد القحطاني", "+966552223344", "sara.qahtani@example.com", "جدة", 2},
-		{"00000000-0000-0000-0000-000000000203", "محمد بن علي الغامدي", "+966543334455", "mohammed.ghamdi@example.com", "الدمام", 1},
-		{"00000000-0000-0000-0000-000000000204", "ريم بنت إبراهيم المحمدي", "+966564445566", "reem.mohammadi@example.com", "المدينة المنورة", 0},
-		{"00000000-0000-0000-0000-000000000205", "أحمد بن صالح السبيعي", "+966505556677", "ahmed.subaie@example.com", "الخبر", 6},
-		{"00000000-0000-0000-0000-000000000206", "فهد بن عبدالعزيز الدوسري", "+966536667788", "fahad.dossary@example.com", "مكة المكرمة", 3},
-		{"00000000-0000-0000-0000-000000000207", "نورة بنت سلطان العمري", "+966587778899", "noura.omari@example.com", "الرياض", 1},
-		{"00000000-0000-0000-0000-000000000208", "عبدالله بن ماجد الرويلي", "+966598889900", "abdullah.ruwaili@example.com", "تبوك", 0},
+		{"10000000-0000-0000-0000-000000000001", "خالد بن عبدالله الشمري", "+966501112233", "khalid.shammari@example.com", "الرياض", 4},
+		{"10000000-0000-0000-0000-000000000002", "سارة بنت فهد القحطاني", "+966552223344", "sara.qahtani@example.com", "جدة", 2},
+		{"10000000-0000-0000-0000-000000000003", "محمد بن علي الغامدي", "+966543334455", "mohammed.ghamdi@example.com", "الدمام", 1},
+		{"10000000-0000-0000-0000-000000000004", "ريم بنت إبراهيم المحمدي", "+966564445566", "reem.mohammadi@example.com", "المدينة المنورة", 0},
+		{"10000000-0000-0000-0000-000000000005", "أحمد بن صالح السبيعي", "+966505556677", "ahmed.subaie@example.com", "الخبر", 6},
+		{"10000000-0000-0000-0000-000000000006", "فهد بن عبدالعزيز الدوسري", "+966536667788", "fahad.dossary@example.com", "مكة المكرمة", 3},
+		{"10000000-0000-0000-0000-000000000007", "نورة بنت سلطان العمري", "+966587778899", "noura.omari@example.com", "الرياض", 1},
+		{"10000000-0000-0000-0000-000000000008", "عبدالله بن ماجد الرويلي", "+966598889900", "abdullah.ruwaili@example.com", "تبوك", 0},
+		{"10000000-0000-0000-0000-000000000009", "عبدالرحمن بن خالد المطيري", "+966512345678", "abdulrahman.mutairi@example.com", "بريدة", 2},
+		{"10000000-0000-0000-0000-000000000010", "منى بنت عبدالعزيز التميمي", "+966523456789", "mona.tamimi@example.com", "الرياض", 5},
+		{"10000000-0000-0000-0000-000000000011", "سلطان بن حمد الهاجري", "+966534567890", "sultan.hajri@example.com", "الأحساء", 1},
+		{"10000000-0000-0000-0000-000000000012", "هند بنت ناصر السديري", "+966545678901", "hind.sudairi@example.com", "جدة", 3},
+		{"10000000-0000-0000-0000-000000000013", "طارق بن فيصل الشهري", "+966556789012", "tariq.shehri@example.com", "أبها", 2},
+		{"10000000-0000-0000-0000-000000000014", "لولوة بنت عثمان الدخيل", "+966567890123", "loulwa.dakheel@example.com", "حائل", 0},
 	}
 
 	for _, c := range customers {
@@ -592,8 +658,8 @@ func main() {
 
 	convs := []seedConv{
 		{
-			id:           "00000000-0000-0000-0000-000000000301",
-			customerID:   "00000000-0000-0000-0000-000000000201",
+			id:           "10000000-0000-0000-0000-000000000101",
+			customerID:   "10000000-0000-0000-0000-000000000001",
 			channelID:    whatsappConnID,
 			state:        "ai_handling",
 			ownership:    "ai",
@@ -612,8 +678,8 @@ func main() {
 			},
 		},
 		{
-			id:           "00000000-0000-0000-0000-000000000302",
-			customerID:   "00000000-0000-0000-0000-000000000202",
+			id:           "10000000-0000-0000-0000-000000000102",
+			customerID:   "10000000-0000-0000-0000-000000000002",
 			channelID:    instagramConnID,
 			state:        "waiting_customer",
 			ownership:    "ai",
@@ -630,8 +696,8 @@ func main() {
 			},
 		},
 		{
-			id:           "00000000-0000-0000-0000-000000000303",
-			customerID:   "00000000-0000-0000-0000-000000000205",
+			id:           "10000000-0000-0000-0000-000000000103",
+			customerID:   "10000000-0000-0000-0000-000000000005",
 			channelID:    whatsappConnID,
 			state:        "human_handling",
 			ownership:    "human",
@@ -649,8 +715,8 @@ func main() {
 			},
 		},
 		{
-			id:           "00000000-0000-0000-0000-000000000304",
-			customerID:   "00000000-0000-0000-0000-000000000206",
+			id:           "10000000-0000-0000-0000-000000000104",
+			customerID:   "10000000-0000-0000-0000-000000000006",
 			channelID:    whatsappConnID,
 			state:        "closed",
 			ownership:    "none",
@@ -667,8 +733,8 @@ func main() {
 			},
 		},
 		{
-			id:           "00000000-0000-0000-0000-000000000305",
-			customerID:   "00000000-0000-0000-0000-000000000204",
+			id:           "10000000-0000-0000-0000-000000000105",
+			customerID:   "10000000-0000-0000-0000-000000000004",
 			channelID:    facebookConnID,
 			state:        "open",
 			ownership:    "ai",
@@ -684,15 +750,127 @@ func main() {
 				{"outbound", "ai", "وعليكم السلام أختي ريم! نعم، نوفر الشحن والتوصيل لكافة أحياء المدينة المنورة خلال 24 إلى 48 ساعة فقط عبر سمسا وأرامكس، والشحن مجاني للطلبات فوق 300 ريال.", 11},
 			},
 		},
+		{
+			id:           "10000000-0000-0000-0000-000000000106",
+			customerID:   "10000000-0000-0000-0000-000000000009",
+			channelID:    whatsappConnID,
+			state:        "ai_handling",
+			ownership:    "ai",
+			priority:     "high",
+			lastActivity: 8 * time.Minute,
+			messages: []struct {
+				direction string
+				origin    string
+				text      string
+				offsetMin int
+			}{
+				{"inbound", "customer", "مساكم الله بالخير، جهاز PlayStation 5 Pro 2TB متوفر بالمخزن للشحن المباشر لبريدة؟ وهل يجي معه يد تحكم إضافية؟", 16},
+				{"outbound", "ai", "مساك الله بالنور والسرور أستاذ عبدالرحمن! 🎮\n\nنعم، جهاز **PlayStation 5 Pro 2TB (النسخة الرقمية)** متوفر في المخزن وجاهز للشحن الفوري.\n\n🔹 **المواصفات:** سعة 2TB SSD مع يد تحكم لاسلكية DualSense المرفقة بالجهاز.\n🔹 **السعر:** 3,199 ريال شامل الضريبة وضمان سنتين من وكيل سوني الرسمي.\n🔹 **العرض الخاص:** يمكنك إضافة يد تحكم ثانية بخصم 20% عند الشراء مع الجهاز.\n🔹 **التوصيل:** يصلك إلى بريدة خلال 24 إلى 48 ساعة عبر سمسا إكسبريس.\n\nهل ترغب في إضافة يد التحكم الإضافية وتأكيد حجز طلبك؟", 12},
+				{"inbound", "customer", "إي نعم ضيف اليد الإضافية باللون الأبيض واعطيني رابط الدفع ببطاقة مدى", 9},
+				{"outbound", "ai", "تم تجهيز سلتك بنجاح! تم تطبيق خصم اليد الإضافية وتأكيد الشحن إلى القصيم (بريدة). تفضل رابط إتمام الدفع المباشر عبر مدى بكل سهولة وسرعة 💳✨", 8},
+			},
+		},
+		{
+			id:           "10000000-0000-0000-0000-000000000107",
+			customerID:   "10000000-0000-0000-0000-000000000010",
+			channelID:    instagramConnID,
+			state:        "waiting_customer",
+			ownership:    "ai",
+			priority:     "normal",
+			lastActivity: 18 * time.Minute,
+			messages: []struct {
+				direction string
+				origin    string
+				text      string
+				offsetMin int
+			}{
+				{"inbound", "customer", "أهلاً، حابة أسأل عن ساعة Apple Watch Series 10 مقاس 46mm باللون الأسود الجيت بلاك، هل هي متوفرة؟ وإيش الفرق بينها وبين ساعة ألترا؟", 24},
+				{"outbound", "ai", "أهلاً بكِ أختي منى! ⌚✨\n\nنعم، **Apple Watch Series 10 مقاس 46mm (Jet Black)** متوفرة بسعر **1,799 ر.س**.\n\n🌟 **الفرق الرئيسي باختصار:**\n• **Series 10:** أنحف وأخف ساعة من آبل، شاشتها كبيرة وأنيقة جداً للمناسبات والاستخدام اليومي والرياضات الخفيفة وشحنها فائق السرعة.\n• **Ultra 2:** مصممة للغوص والرياضات الجبلية القاسية، هيكلها تيتانيوم صلب وحجمها 49mm وبطاريتها تدوم حتى 72 ساعة ولكن حجمها ووزنها أكبر وسعرها 3,399 ر.س.\n\nللاستخدام اليومي والدوام والمظهر الأنيق فإن **Series 10** هي الخيار الأنسب والأجمل!", 20},
+			},
+		},
+		{
+			id:           "10000000-0000-0000-0000-000000000108",
+			customerID:   "10000000-0000-0000-0000-000000000011",
+			channelID:    whatsappConnID,
+			state:        "ai_handling",
+			ownership:    "ai",
+			priority:     "normal",
+			lastActivity: 45 * time.Minute,
+			messages: []struct {
+				direction string
+				origin    string
+				text      string
+				offsetMin int
+			}{
+				{"inbound", "customer", "السلام عليكم، أحتاج ماوس Logitech MX Master 3S مع شاحن أنكر 100W، هل متوفرين؟ وكم التكلفة الإجمالية للأحساء؟", 55},
+				{"outbound", "ai", "وعليكم السلام ورحمة الله وبركاته أستاذ سلطان! 💼\n\nكلا المنتجين متوفران للشحن الفوري:\n1. **ماوس Logitech MX Master 3S (رمادي جرافيت):** 449 ر.س\n2. **شاحن Anker Prime 100W GaN الجداري:** 279 ر.س\n\n💰 **الإجمالي:** 728 ريال شامل الضريبة.\n🚚 **الشحن:** مجاني بالكامل للأحساء لأن الطلب يتجاوز 300 ريال.\n\nتفضل رابط السلة المباشرة للدفع بـ مدى أو Apple Pay مع شحن مباشر اليوم!", 46},
+			},
+		},
+		{
+			id:           "10000000-0000-0000-0000-000000000109",
+			customerID:   "10000000-0000-0000-0000-000000000012",
+			channelID:    facebookConnID,
+			state:        "human_handling",
+			ownership:    "human",
+			priority:     "urgent",
+			lastActivity: 90 * time.Minute,
+			messages: []struct {
+				direction string
+				origin    string
+				text      string
+				offsetMin int
+			}{
+				{"inbound", "customer", "مرحبا، طلبت آيباد برو M4 قبل يومين برقم شحنة 982341234، وأبي أعدل عنوان الاستلام في جدة من حي الروضة إلى حي الشاطئ، هل يمدي قبل ما يطلع المندوب؟", 110},
+				{"outbound", "ai", "أهلاً بكِ أستاذة هند! تم تحويل طلبك ذو الأولوية العاجلة فوراً إلى قسم خدمة العملاء والتوصيل للتواصل مع مندوب سمسا وتحديث موقع التسليم قبل خروج الشحنة.", 100},
+				{"outbound", "human", "مرحباً أستاذة هند، معك ريان من فريق الشحن والتسليم. تم التواصل مع المندوب بنجاح وتحديث العنوان إلى حي الشاطئ بجدة، وسيتواصل معك خلال ساعتين للتسليم إن شاء الله.", 91},
+			},
+		},
+		{
+			id:           "10000000-0000-0000-0000-000000000110",
+			customerID:   "10000000-0000-0000-0000-000000000013",
+			channelID:    whatsappConnID,
+			state:        "ai_handling",
+			ownership:    "ai",
+			priority:     "normal",
+			lastActivity: 2 * time.Hour,
+			messages: []struct {
+				direction string
+				origin    string
+				text      string
+				offsetMin int
+			}{
+				{"inbound", "customer", "السلام عليكم، أعمل في المونتاج وصناعة المحتوى، هل لابتوب MacBook Pro 16 M4 Max يشغل مشاريع 8K بسلاسة مع تصحيح الألوان؟", 130},
+				{"outbound", "ai", "وعليكم السلام ورحمة الله أستاذ طارق! 🎬🔥\n\nبكل تأكيد! جهاز **MacBook Pro 16 M4 Max** مصمم خصيصاً لمثل هذا العمل الشاق:\n\n• محرك وسائط فائق السرعة يدعم تدفق حتى 10 مسارات فيديو بدقة 8K ProRes في نفس اللحظة.\n• بطاقة رسومات تصل إلى 40 نواة مع دعم تتبع الأشعة وتشفير وتسريع AV1.\n• رندرة وتصدير فوري في DaVinci Resolve وFinal Cut Pro وPremiere بدون أي دروب فريم.\n\nالجهاز متوفر مع ضمان حاسبات العرب سنتين وشحن سريع إلى مدينة أبها ⛰️.", 121},
+			},
+		},
+		{
+			id:           "10000000-0000-0000-0000-000000000111",
+			customerID:   "10000000-0000-0000-0000-000000000014",
+			channelID:    instagramConnID,
+			state:        "closed",
+			ownership:    "none",
+			priority:     "normal",
+			lastActivity: 6 * time.Hour,
+			messages: []struct {
+				direction string
+				origin    string
+				text      string
+				offsetMin int
+			}{
+				{"inbound", "customer", "مساء الخير، هل أجهزة آبل عندكم عليها ضمان وكيل معتمد بالسعودية مثل جرير وإكسترا؟", 380},
+				{"outbound", "ai", "مساء النور والسرور أختي لولوة! 🌟\n\nنعم، جميع أجهزة آبل في متجر مجيب 24 أصلية 100% ومشمولة بـ **ضمان الوكيل الرسمي المعتمد في المملكة (حاسبات العرب / آبل الشرق الأوسط) لمدة سنتين كاملتين**، ويمكن مراجعة أي مركز صيانة معتمد داخل السعودية بالفاتورة الإلكترونية الصادرة منا.", 370},
+				{"inbound", "customer", "شكراً جزيلاً، رد سريع وواضح جداً ما قصرتم 🤍", 365},
+			},
+		},
 	}
 
-	for _, cv := range convs {
+	for convIdx, cv := range convs {
 		lastActTime := now.Add(-cv.lastActivity)
 		_, err = pool.Exec(ctx, `
 			INSERT INTO conversations (id, business_id, customer_id, state, ownership, priority, last_activity_at, created_at, updated_at)
 			VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $7, $7)
 			ON CONFLICT (id) DO UPDATE
-			SET state = EXCLUDED.state, ownership = EXCLUDED.ownership, priority = EXCLUDED.priority, last_activity_at = EXCLUDED.last_activity_at, updated_at = EXCLUDED.updated_at;
+			SET business_id = EXCLUDED.business_id, customer_id = EXCLUDED.customer_id, state = EXCLUDED.state, ownership = EXCLUDED.ownership, priority = EXCLUDED.priority, last_activity_at = EXCLUDED.last_activity_at, updated_at = EXCLUDED.updated_at;
 		`, cv.id, businessID, cv.customerID, cv.state, cv.ownership, cv.priority, lastActTime)
 		if err != nil {
 			log.Fatalf("Failed to upsert conversation (%s): %v", cv.id, err)
@@ -709,9 +887,9 @@ func main() {
 			log.Printf("Upsert conv ref: %v", err)
 		}
 
-		// Insert Messages
+		// Insert Messages with unique deterministically numbered IDs
 		for idx, msg := range cv.messages {
-			msgID := fmt.Sprintf("00000000-0000-0000-0000-%012d", 4000+idx*10+len(msg.text)%1000)
+			msgID := fmt.Sprintf("10000000-0000-0000-0000-%012d", 1000+convIdx*100+idx+1)
 			msgTime := now.Add(-time.Duration(msg.offsetMin) * time.Minute)
 			_, err = pool.Exec(ctx, `
 				INSERT INTO communication_messages (id, business_id, conversation_reference_id, direction, origin, transport, content_type, text_content, content_reference, occurred_at, created_at)
@@ -726,26 +904,26 @@ func main() {
 
 	log.Println("9. Seeding Leads and Commercial Transactions...")
 	// Lead 1
-	lead1ID := "00000000-0000-0000-0000-000000000501"
+	lead1ID := "10000000-0000-0000-0000-000000000301"
 	_, _ = pool.Exec(ctx, `
 		INSERT INTO leads (id, business_id, customer_id, status, current_score_value, current_score_band, created_by, qualified_by, qualification_context, created_at, updated_at)
-		VALUES ($1::uuid, $2::uuid, '00000000-0000-0000-0000-000000000201'::uuid, 'qualified', 92.50, 'high', 'ai', 'ai', '{"target_product": "iPhone 16 Pro Max", "buying_intent": "high"}'::jsonb, $3, $3)
+		VALUES ($1::uuid, $2::uuid, '10000000-0000-0000-0000-000000000001'::uuid, 'qualified', 92.50, 'high', 'ai', 'ai', '{"target_product": "iPhone 16 Pro Max", "buying_intent": "high"}'::jsonb, $3, $3)
 		ON CONFLICT (id) DO NOTHING;
 	`, lead1ID, businessID, now.Add(-2*time.Hour))
 
 	// Lead 2 (B2B Bulk)
-	lead2ID := "00000000-0000-0000-0000-000000000502"
+	lead2ID := "10000000-0000-0000-0000-000000000302"
 	_, _ = pool.Exec(ctx, `
 		INSERT INTO leads (id, business_id, customer_id, status, current_score_value, current_score_band, created_by, qualified_by, qualification_context, created_at, updated_at)
-		VALUES ($1::uuid, $2::uuid, '00000000-0000-0000-0000-000000000205'::uuid, 'interested', 98.00, 'high', 'ai', 'human', '{"target_product": "MacBook Pro 14 M4 Pro", "quantity": 10, "type": "B2B"}'::jsonb, $3, $3)
+		VALUES ($1::uuid, $2::uuid, '10000000-0000-0000-0000-000000000005'::uuid, 'interested', 98.00, 'high', 'ai', 'human', '{"target_product": "MacBook Pro 14 M4 Pro", "quantity": 10, "type": "B2B"}'::jsonb, $3, $3)
 		ON CONFLICT (id) DO NOTHING;
 	`, lead2ID, businessID, now.Add(-1*time.Hour))
 
 	// Transaction 1 (Confirmed Order)
-	tx1ID := "00000000-0000-0000-0000-000000000601"
+	tx1ID := "10000000-0000-0000-0000-000000000401"
 	_, _ = pool.Exec(ctx, `
 		INSERT INTO commercial_transactions (id, business_id, customer_id, lead_id, transaction_type, state, currency, total_amount, schema_version, created_at, updated_at)
-		VALUES ($1::uuid, $2::uuid, '00000000-0000-0000-0000-000000000206'::uuid, NULL, 'order', 'completed', 'SAR', 578.00, 1, $3, $3)
+		VALUES ($1::uuid, $2::uuid, '10000000-0000-0000-0000-000000000006'::uuid, NULL, 'order', 'completed', 'SAR', 578.00, 1, $3, $3)
 		ON CONFLICT (id) DO NOTHING;
 	`, tx1ID, businessID, now.Add(-5*time.Hour))
 
@@ -753,8 +931,8 @@ func main() {
 	_, _ = pool.Exec(ctx, `
 		INSERT INTO order_lines (id, business_id, transaction_id, catalog_item_id, item_name_snapshot, quantity, unit_price_snapshot, line_total_snapshot, currency, created_at, updated_at)
 		VALUES 
-		('00000000-0000-0000-0000-000000000701'::uuid, $1::uuid, $2::uuid, '00000000-0000-0000-0000-000000000112'::uuid, 'Anker Prime 100W GaN Fast Wall Charger', 1, 279.00, 279.00, 'SAR', $3, $3),
-		('00000000-0000-0000-0000-000000000702'::uuid, $1::uuid, $2::uuid, '00000000-0000-0000-0000-000000000113'::uuid, 'Anker MagGo 10,000mAh Qi2 Power Bank', 1, 299.00, 299.00, 'SAR', $3, $3)
+		('10000000-0000-0000-0000-000000000402'::uuid, $1::uuid, $2::uuid, '00000000-0000-0000-0000-000000000112'::uuid, 'Anker Prime 100W GaN Fast Wall Charger', 1, 279.00, 279.00, 'SAR', $3, $3),
+		('10000000-0000-0000-0000-000000000403'::uuid, $1::uuid, $2::uuid, '00000000-0000-0000-0000-000000000113'::uuid, 'Anker MagGo 10,000mAh Qi2 Power Bank', 1, 299.00, 299.00, 'SAR', $3, $3)
 		ON CONFLICT (id) DO NOTHING;
 	`, businessID, tx1ID, now.Add(-5*time.Hour))
 
@@ -772,8 +950,8 @@ func main() {
 		entities map[string]any
 	}{
 		{
-			id:       "00000000-0000-0000-0000-000000000801",
-			convID:   "00000000-0000-0000-0000-000000000301",
+			id:       "10000000-0000-0000-0000-000000000501",
+			convID:   "10000000-0000-0000-0000-000000000101",
 			intent:   "product_inquiry",
 			action:   "answer",
 			conf:     0.9850,
@@ -789,8 +967,8 @@ func main() {
 			},
 		},
 		{
-			id:       "00000000-0000-0000-0000-000000000802",
-			convID:   "00000000-0000-0000-0000-000000000302",
+			id:       "10000000-0000-0000-0000-000000000502",
+			convID:   "10000000-0000-0000-0000-000000000102",
 			intent:   "product_comparison",
 			action:   "answer",
 			conf:     0.9620,
@@ -802,8 +980,8 @@ func main() {
 			},
 		},
 		{
-			id:       "00000000-0000-0000-0000-000000000803",
-			convID:   "00000000-0000-0000-0000-000000000303",
+			id:       "10000000-0000-0000-0000-000000000503",
+			convID:   "10000000-0000-0000-0000-000000000103",
 			intent:   "b2b_bulk_quote",
 			action:   "request_human",
 			conf:     0.9910,
@@ -816,8 +994,8 @@ func main() {
 			},
 		},
 		{
-			id:       "00000000-0000-0000-0000-000000000804",
-			convID:   "00000000-0000-0000-0000-000000000305",
+			id:       "10000000-0000-0000-0000-000000000504",
+			convID:   "10000000-0000-0000-0000-000000000105",
 			intent:   "shipping_policy_inquiry",
 			action:   "answer",
 			conf:     0.9950,
@@ -827,6 +1005,88 @@ func main() {
 				"delivery_time":     "24-48 ساعة",
 				"shipping_cost":     "مجاني للطلبات فوق 300 ريال",
 				"shipping_provider": "سمسا / أرامكس",
+			},
+		},
+		{
+			id:       "10000000-0000-0000-0000-000000000505",
+			convID:   "10000000-0000-0000-0000-000000000106",
+			intent:   "gaming_console_inquiry",
+			action:   "answer",
+			conf:     0.9890,
+			confBand: "high",
+			entities: map[string]any{
+				"product":     "PlayStation 5 Pro 2TB",
+				"price":       3199.00,
+				"accessory":   "يد تحكم DualSense إضافية بخصم 20%",
+				"destination": "القصيم - بريدة",
+			},
+		},
+		{
+			id:       "10000000-0000-0000-0000-000000000506",
+			convID:   "10000000-0000-0000-0000-000000000107",
+			intent:   "smartwatch_inquiry",
+			action:   "answer",
+			conf:     0.9780,
+			confBand: "high",
+			entities: map[string]any{
+				"product":    "Apple Watch Series 10 46mm",
+				"color":      "Jet Black",
+				"price":      1799.00,
+				"comparison": "مقارنة مع Ultra 2 للتصميم والأنشطة",
+			},
+		},
+		{
+			id:       "10000000-0000-0000-0000-000000000507",
+			convID:   "10000000-0000-0000-0000-000000000108",
+			intent:   "office_accessory_bundle",
+			action:   "answer",
+			conf:     0.9920,
+			confBand: "high",
+			entities: map[string]any{
+				"items":        []string{"Logitech MX Master 3S", "Anker Prime 100W"},
+				"total_amount": 728.00,
+				"currency":     "SAR",
+				"shipping":     "مجاني للأحساء",
+			},
+		},
+		{
+			id:       "10000000-0000-0000-0000-000000000508",
+			convID:   "10000000-0000-0000-0000-000000000109",
+			intent:   "delivery_address_change",
+			action:   "request_human",
+			conf:     0.9960,
+			confBand: "high",
+			entities: map[string]any{
+				"tracking_number": "982341234",
+				"current_status":  "مع المندوب",
+				"old_address":     "جدة - حي الروضة",
+				"new_address":     "جدة - حي الشاطئ",
+			},
+		},
+		{
+			id:       "10000000-0000-0000-0000-000000000509",
+			convID:   "10000000-0000-0000-0000-000000000110",
+			intent:   "workstation_laptop_specs",
+			action:   "answer",
+			conf:     0.9840,
+			confBand: "high",
+			entities: map[string]any{
+				"product":     "MacBook Pro 16 M4 Max",
+				"use_case":    "مونتاج فيديو 8K وتصحيح ألوان",
+				"destination": "أبها",
+			},
+		},
+		{
+			id:       "10000000-0000-0000-0000-000000000510",
+			convID:   "10000000-0000-0000-0000-000000000111",
+			intent:   "warranty_policy_inquiry",
+			action:   "answer",
+			conf:     0.9970,
+			confBand: "high",
+			entities: map[string]any{
+				"brand":            "Apple",
+				"warranty_period":  "سنتان",
+				"warranty_partner": "حاسبات العرب المعتمد",
 			},
 		},
 	}
@@ -843,12 +1103,13 @@ func main() {
 
 	log.Println("==========================================================")
 	log.Println("🎉 Database Demo Seeder Complete Successfully!")
-	log.Printf("👤 Admin User: %s (Password: %s)", defaultAdminEmail, defaultAdminPass)
-	log.Printf("🏢 Business:   %s (%s)", "متجر مجيب 24 الذكي للإلكترونيات", defaultBusinessID)
-	log.Println("📦 Products:   15+ Core Smart Gadgets, Laptops, Audio, Gaming & Accessories")
-	log.Println("💬 Chats:      5 Realistic Multiturn Conversations across WhatsApp, IG & Telegram")
-	log.Println("👥 Customers:  8 Profiles with Contact Points and Cities")
-	log.Println("📊 Leads & Tx: B2B Leads, Confirmed Orders & AI Decisions Seeded")
+	log.Printf("👤 Admin User:    %s (Password: %s) -> Business: %s (With 3 Channels & Full Demo Data)", defaultAdminEmail, defaultAdminPass, defaultBusinessID)
+	log.Printf("👤 Clean User:    %s (Password: %s) -> Business: %s (Zero Channels & Fresh State)", cleanMerchantEmail, defaultAdminPass, cleanBusinessID)
+	log.Printf("🏢 Main Business: %s (%s)", "متجر مجيب 24 الذكي للإلكترونيات", defaultBusinessID)
+	log.Println("📦 Products:      15+ Core Smart Gadgets, Laptops, Audio, Gaming & Accessories")
+	log.Printf("💬 Chats:         %d Realistic Multiturn Conversations across WhatsApp, IG & Facebook", len(convs))
+	log.Printf("👥 Customers:     %d Profiles with Contact Points and Cities", len(customers))
+	log.Println("📊 Leads & Tx:    B2B Leads, Confirmed Orders & AI Decisions Seeded")
 	log.Println("==========================================================")
 }
 

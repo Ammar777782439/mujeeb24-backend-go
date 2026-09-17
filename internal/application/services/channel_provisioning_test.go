@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
@@ -173,5 +174,26 @@ func TestChannelProvisioningRejectsMismatchedOAuthState(t *testing.T) {
 	}
 	if _, err := service.Complete(context.Background(), "business-1", started.ID, ports.SocialAuthorizationCallback{State: "wrong-state", Status: "success", Platform: "instagram"}); err == nil {
 		t.Fatal("expected mismatched OAuth state to be rejected")
+	}
+}
+
+func TestChannelProvisioningRejectsExpiredSession(t *testing.T) {
+	store := &provisioningSessionStore{
+		sessions: map[string]ports.ChannelProvisioningSession{
+			"business-1/idem-expired": {
+				ID:             "session-expired",
+				BusinessID:     "business-1",
+				IdempotencyKey: "idem-expired",
+				Channel:        "instagram",
+				Status:         ports.ProvisioningPendingAuthorization,
+				OAuthState:     "state-expired",
+				CreatedAt:      time.Now().UTC().Add(-20 * time.Minute),
+			},
+		},
+	}
+	service := ChannelProvisioningService{Sessions: store, Social: &provisioningSocial{}, Connections: &provisioningConnections{}, RedirectURI: "https://app.example/oauth/callback"}
+	failed, err := service.Complete(context.Background(), "business-1", "session-expired", ports.SocialAuthorizationCallback{State: "state-expired", Status: "success", Platform: "instagram"})
+	if err == nil || failed.Status != ports.ProvisioningFailed || failed.FailureCode != ports.FailureCodeExpired {
+		t.Fatalf("expected session to fail with expired code, got session=%#v err=%v", failed, err)
 	}
 }

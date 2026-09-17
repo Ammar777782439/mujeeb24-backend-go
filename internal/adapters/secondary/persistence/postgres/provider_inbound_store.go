@@ -160,7 +160,7 @@ func findOrCreateProviderConversation(ctx context.Context, executor SQLExecutor,
 		if existingCustomerID != customerID {
 			return "", "", &RepositoryError{Operation: "provider_inbound.conversation.get", Kind: RepositoryConflict, Err: errors.New("provider conversation is linked to another customer")}
 		}
-		if _, err := executor.Exec(ctx, `UPDATE conversations SET last_activity_at = $2, updated_at = $2 WHERE business_id = $1::uuid AND id = $3::uuid`, draft.BusinessID, draft.ReceivedAt, conversationID); err != nil {
+		if _, err := executor.Exec(ctx, `UPDATE conversations SET state = CASE WHEN state IN ('closed', 'waiting_customer') THEN 'open' ELSE state END, ownership = CASE WHEN state = 'closed' THEN 'none' ELSE ownership END, last_activity_at = $2, updated_at = $2 WHERE business_id = $1::uuid AND id = $3::uuid`, draft.BusinessID, draft.ReceivedAt, conversationID); err != nil {
 			return "", "", classifyRepositoryWriteError("provider_inbound.conversation.touch", err)
 		}
 		return conversationID, referenceID, nil

@@ -1,6 +1,9 @@
 package ports
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type ChannelProvisioningStatus string
 
@@ -10,6 +13,11 @@ const (
 	ProvisioningConnected            ChannelProvisioningStatus = "connected"
 	ProvisioningFailed               ChannelProvisioningStatus = "failed"
 	ProvisioningReconnectRequired    ChannelProvisioningStatus = "reconnect_required"
+)
+
+const (
+	FailureCodeExpired    = "authorization_expired"
+	FailureCodeSuperseded = "superseded"
 )
 
 type ChannelProvisioningSession struct {
@@ -26,6 +34,8 @@ type ChannelProvisioningSession struct {
 	ProviderConnectionRef string
 	ChannelConnectionID   string
 	FailureCode           string
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
 }
 
 type ChannelProvisioningStore interface {

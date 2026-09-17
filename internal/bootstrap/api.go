@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -133,6 +134,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		service.ContextBuilder = contextBuilder
 		service.PolicyEvaluator = services.GroundedPolicyEngine{}
 		service.StateRepository = postgres.NewConversationStateRepository(database)
+		service.MessageRepository = postgres.NewMessageRepository(database)
+		service.Conversations = postgres.NewConversationRepository(database)
 		autoReply = service
 	}
 	inboundAutomation := services.InboundAutomationService{
@@ -177,6 +180,16 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 				}
 			}
 			session, err := provisioningService.CompleteOAuthCallback(request.Context(), callback)
+			if external.FrontendURL != "" {
+				var redirectURL string
+				if err != nil {
+					redirectURL = fmt.Sprintf("%s/channels?status=failed&error=%s", external.FrontendURL, url.QueryEscape(err.Error()))
+				} else {
+					redirectURL = fmt.Sprintf("%s/channels?status=connected&channel=%s&provisioning_id=%s", external.FrontendURL, url.QueryEscape(session.Channel), url.QueryEscape(session.ID))
+				}
+				http.Redirect(writer, request, redirectURL, http.StatusFound)
+				return
+			}
 			writer.Header().Set("Content-Type", "application/json")
 			if err != nil {
 				writer.WriteHeader(http.StatusBadRequest)

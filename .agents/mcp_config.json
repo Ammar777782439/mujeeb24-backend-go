@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://mujeeb:551f7de64c01ce392e5a8ce35d8c8a66447e6d90fe8bd9de@127.0.0.1:5433/mujeeb24?sslmode=disable"
+      ]
+    }
+  }
+}

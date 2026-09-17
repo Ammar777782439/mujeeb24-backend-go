@@ -271,3 +271,48 @@ func (h *fakeConversationAssignment) Handle(_ context.Context, command commands.
 	h.command = command
 	return h.result, nil
 }
+
+type fakeConversationUpdate struct {
+	command commands.UpdateConversationCommand
+	result  commands.ConversationResult
+}
+
+func (h *fakeConversationUpdate) Handle(_ context.Context, command commands.UpdateConversationCommand) (commands.ConversationResult, error) {
+	h.command = command
+	return h.result, nil
+}
+
+func TestUpdateConversationHTTPDispatchesCorrectly(t *testing.T) {
+	handler := &fakeConversationUpdate{result: commands.ConversationResult{Conversation: commands.ConversationView{
+		ID:              "00000000-0000-0000-0000-000000000201",
+		BusinessID:      "00000000-0000-0000-0000-000000000001",
+		CustomerID:      "00000000-0000-0000-0000-000000000301",
+		State:           "human_handling",
+		Ownership:       "human",
+		AIMode:          "disabled",
+		ResourceVersion: "4",
+	}}}
+	server := NewServer(Dependencies{
+		Scope:              fakeScope{actor: commands.ActorContext{BusinessID: "00000000-0000-0000-0000-000000000001", PrincipalID: "00000000-0000-0000-0000-000000000100", Role: "agent"}},
+		UpdateConversation: handler,
+	})
+	_, mux := contract.BuildAPIWithHandlers(server)
+	body := []byte(`{"state":"human_handling","ownership":"human","ai_mode_override":"disabled"}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/businesses/00000000-0000-0000-0000-000000000001/conversations/00000000-0000-0000-0000-000000000201", bytes.NewReader(body))
+	req.Header.Set("If-Match", "3")
+	res := httptest.NewRecorder()
+	mux.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", res.Code, res.Body.String())
+	}
+	if handler.command.State == nil || *handler.command.State != "human_handling" {
+		t.Fatalf("expected state human_handling, got %#v", handler.command)
+	}
+	if handler.command.Ownership == nil || *handler.command.Ownership != "human" {
+		t.Fatalf("expected ownership human, got %#v", handler.command)
+	}
+	if handler.command.AIModeOverride == nil || *handler.command.AIModeOverride != "disabled" {
+		t.Fatalf("expected ai_mode_override disabled, got %#v", handler.command)
+	}
+}
+

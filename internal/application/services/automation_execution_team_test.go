@@ -138,6 +138,10 @@ func (r *automationConversationFixture) AdvanceVersion(context.Context, string, 
 	return r.record, nil
 }
 
+func (r *automationConversationFixture) TransitionLifecycle(context.Context, ports.ConversationLifecycleTransition) (ports.ConversationRecord, error) {
+	return r.record, nil
+}
+
 type automationLabelsFixture struct{}
 
 func (automationLabelsFixture) List(context.Context, string, string) ([]string, error) {
