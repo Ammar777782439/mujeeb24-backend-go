@@ -127,6 +127,9 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	if err != nil {
 		return commands.AutoReplyResult{}, err
 	}
+	if aiInput.Context != nil {
+		ports.IncorporateProposalEvidence(aiInput.Context, proposal)
+	}
 	if s.PolicyEvaluator != nil {
 		proposal = s.PolicyEvaluator.Evaluate(proposal, aiInput.Context)
 	}

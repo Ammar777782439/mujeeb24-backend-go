@@ -16,6 +16,12 @@ func (GroundedPolicyEngine) Evaluate(proposal ports.AIDecisionProposal, contextV
 	if contextValue == nil || proposal.RequestedAction != AutoReplyActionAnswer {
 		return proposal
 	}
+	if proposal.CatalogRetrievalState == ports.CatalogRetrievalSafetyBudgetExhausted || proposal.SafetyBudgetExhausted {
+		return requireApproval(proposal, "safety_budget_exhausted", "technical safety budget exhausted before complete catalog retrieval")
+	}
+	if proposal.CatalogRetrievalState == ports.CatalogRetrievalInProgress || proposal.CatalogIncomplete {
+		return requireApproval(proposal, "catalog_retrieval_incomplete", "cannot auto-answer while catalog retrieval is incomplete")
+	}
 	intent := strings.ToLower(strings.TrimSpace(proposal.IntentBase))
 	category := policyCategoryForIntent(intent)
 	if category == "" {

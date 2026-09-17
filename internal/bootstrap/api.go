@@ -50,7 +50,21 @@ func BuildAPI(ctx context.Context, cfg config.ProcessConfig) (*APIRuntime, error
 		database.Close()
 		return nil, err
 	}
-	runtime, err := newAPIWithExternalAndAuthentication(database, cfg.HTTPAddr, BuildExternalAdapters(cfg), authentication)
+	catalogRepository := postgres.NewCatalogRepository(database)
+	capabilityRegistry := services.NewCapabilityRegistry()
+	catalogCapability := services.NewCatalogDataCapability(
+		services.ListCatalogsQueryService{Repository: catalogRepository},
+		services.ListCatalogItemsQueryService{Repository: catalogRepository},
+		services.GetCatalogItemQueryService{Repository: catalogRepository},
+		services.ListOffersQueryService{Repository: catalogRepository},
+		services.ListVariantsQueryService{Repository: catalogRepository},
+		services.GetAttributeSchemaQueryService{Repository: catalogRepository},
+	)
+	if err := capabilityRegistry.Register(catalogCapability); err != nil {
+		database.Close()
+		return nil, err
+	}
+	runtime, err := newAPIWithExternalAndAuthentication(database, cfg.HTTPAddr, BuildExternalAdapters(cfg, capabilityRegistry), authentication)
 	if err != nil {
 		database.Close()
 		return nil, err

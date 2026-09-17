@@ -119,3 +119,44 @@ func TestGroundedPolicyEngineRequiresPolicyForCatalogWithoutGeneralPolicy(t *tes
 		t.Fatalf("catalog answer without merchant policy was not blocked: %#v", result)
 	}
 }
+
+func TestGroundedPolicyEngineBlocksIncompleteCatalogData(t *testing.T) {
+	proposal := ports.AIDecisionProposal{
+		IntentBase:         "product_inquiry",
+		RequestedAction:    AutoReplyActionAnswer,
+		PolicyDecision:     "allowed",
+		ConfidenceBand:     "high",
+		SchemaVersion:      1,
+		EvidenceReferences: []byte(`["item-1"]`),
+		CatalogIncomplete:  true,
+	}
+	contextValue := &ports.AIContext{
+		CatalogEvidence:        []ports.AICatalogEvidence{{Reference: "item-1", EvidenceState: AIContextFresh}},
+		BusinessPolicyEvidence: []ports.AIBusinessPolicyEvidence{{Reference: "policy-1", Category: "general", EvidenceState: AIContextFresh}},
+	}
+	result := (GroundedPolicyEngine{}).Evaluate(proposal, contextValue)
+	if result.PolicyDecision != "requires_approval" || !result.RequiresHuman || string(result.ReasonCodes) != `["catalog_retrieval_incomplete"]` {
+		t.Fatalf("incomplete catalog data was not blocked: %#v", result)
+	}
+}
+
+func TestGroundedPolicyEngineBlocksSafetyBudgetExhaustion(t *testing.T) {
+	proposal := ports.AIDecisionProposal{
+		IntentBase:            "product_inquiry",
+		RequestedAction:       AutoReplyActionAnswer,
+		PolicyDecision:        "allowed",
+		ConfidenceBand:        "high",
+		SchemaVersion:         1,
+		EvidenceReferences:    []byte(`["item-1"]`),
+		SafetyBudgetExhausted: true,
+		CatalogIncomplete:     true,
+	}
+	contextValue := &ports.AIContext{
+		CatalogEvidence:        []ports.AICatalogEvidence{{Reference: "item-1", EvidenceState: AIContextFresh}},
+		BusinessPolicyEvidence: []ports.AIBusinessPolicyEvidence{{Reference: "policy-1", Category: "general", EvidenceState: AIContextFresh}},
+	}
+	result := (GroundedPolicyEngine{}).Evaluate(proposal, contextValue)
+	if result.PolicyDecision != "requires_approval" || !result.RequiresHuman || string(result.ReasonCodes) != `["safety_budget_exhausted"]` {
+		t.Fatalf("safety budget exhaustion was not blocked: %#v", result)
+	}
+}

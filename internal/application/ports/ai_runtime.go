@@ -180,22 +180,132 @@ type AIPolicyEvidence struct {
 	SchemaVersion int
 }
 
+// Explicit Catalog Retrieval States for the current AI decision.
+const (
+	CatalogRetrievalNoneRequired          = "none_required"
+	CatalogRetrievalInProgress            = "in_progress"
+	CatalogRetrievalExhausted             = "exhausted"
+	CatalogRetrievalSafetyBudgetExhausted = "safety_budget_exhausted"
+)
+
+// CatalogStreamState tracks an individual paginated operation cursor chain.
+type CatalogStreamState struct {
+	Operation    string `json:"operation"`
+	StreamKey    string `json:"stream_key"`
+	HasMore      bool   `json:"has_more"`
+	NextCursor   string `json:"next_cursor"`
+	PagesFetched int    `json:"pages_fetched"`
+}
+
+// CatalogRetrievalSession tracks all initiated catalog operations and cursor chains
+// for an AI decision to determine true data-driven catalog completeness.
+type CatalogRetrievalSession struct {
+	Streams map[string]*CatalogStreamState `json:"streams"`
+}
+
+func NewCatalogRetrievalSession() *CatalogRetrievalSession {
+	return &CatalogRetrievalSession{
+		Streams: make(map[string]*CatalogStreamState),
+	}
+}
+
+func (s *CatalogRetrievalSession) RecordOperation(operation, streamKey string, hasMore bool, nextCursor string) {
+	if s == nil || streamKey == "" {
+		return
+	}
+	existing, ok := s.Streams[streamKey]
+	if !ok {
+		s.Streams[streamKey] = &CatalogStreamState{
+			Operation:    operation,
+			StreamKey:    streamKey,
+			HasMore:      hasMore,
+			NextCursor:   nextCursor,
+			PagesFetched: 1,
+		}
+		return
+	}
+	existing.HasMore = hasMore
+	existing.NextCursor = nextCursor
+	existing.PagesFetched++
+}
+
+func (s *CatalogRetrievalSession) State(safetyBudgetExhausted bool) string {
+	if s == nil || len(s.Streams) == 0 {
+		if safetyBudgetExhausted {
+			return CatalogRetrievalSafetyBudgetExhausted
+		}
+		return CatalogRetrievalNoneRequired
+	}
+	if safetyBudgetExhausted {
+		return CatalogRetrievalSafetyBudgetExhausted
+	}
+	for _, stream := range s.Streams {
+		if stream.HasMore {
+			return CatalogRetrievalInProgress
+		}
+	}
+	return CatalogRetrievalExhausted
+}
+
+func (s *CatalogRetrievalSession) HasIncompleteStreams() bool {
+	if s == nil || len(s.Streams) == 0 {
+		return false
+	}
+	for _, stream := range s.Streams {
+		if stream.HasMore {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *CatalogRetrievalSession) IncompleteStreams() []CatalogStreamState {
+	if s == nil || len(s.Streams) == 0 {
+		return nil
+	}
+	var res []CatalogStreamState
+	for _, stream := range s.Streams {
+		if stream.HasMore {
+			res = append(res, *stream)
+		}
+	}
+	return res
+}
+
+func (s *CatalogRetrievalSession) AllStreams() []CatalogStreamState {
+	if s == nil || len(s.Streams) == 0 {
+		return nil
+	}
+	res := make([]CatalogStreamState, 0, len(s.Streams))
+	for _, stream := range s.Streams {
+		res = append(res, *stream)
+	}
+	return res
+}
+
 type AIDecisionProposal struct {
-	IntentBase         string
-	DomainContext      string
-	Entities           []byte
-	EvidenceReferences []byte
-	RequestedAction    string
-	ResponseText       string
-	ConfidenceValue    string
-	ConfidenceBand     string
-	RequiresHuman      bool
-	MissingInformation []byte
-	ReasonCodes        []byte
-	PolicyDecision     string
-	PolicyVersion      string
-	KnowledgeVersion   string
-	ModelReference     string
-	SchemaVersion      int
-	StateProposal      *AIStateProposal
+	IntentBase                string
+	DomainContext             string
+	Entities                  []byte
+	EvidenceReferences        []byte
+	RequestedAction           string
+	ResponseText              string
+	ConfidenceValue           string
+	ConfidenceBand            string
+	RequiresHuman             bool
+	MissingInformation        []byte
+	ReasonCodes               []byte
+	PolicyDecision            string
+	PolicyVersion             string
+	KnowledgeVersion          string
+	ModelReference            string
+	SchemaVersion             int
+	StateProposal             *AIStateProposal
+	DiscoveredCatalogEvidence []AICatalogEvidence
+	DiscoveredOfferEvidence   []AIOfferEvidence
+	DiscoveredVariantEvidence []AIVariantEvidence
+	CatalogRetrievalState     string
+	CatalogStreams            []CatalogStreamState
+	CatalogIncomplete         bool
+	SafetyBudgetExhausted     bool
 }

@@ -16,11 +16,12 @@ import (
 )
 
 const (
-	defaultMaxOutputTokens  = 2048
-	defaultMaxResponseBytes = 1 << 20
-	proposalSchemaVersion   = 1
-	defaultBaseURL          = "https://generativelanguage.googleapis.com"
-	defaultModel            = "gemini-3.5-flash-lite"
+	defaultMaxOutputTokens    = 2048
+	defaultMaxResponseBytes   = 1 << 20
+	defaultSafetyTurnBudget   = 25
+	proposalSchemaVersion     = 1
+	defaultBaseURL            = "https://generativelanguage.googleapis.com"
+	defaultModel              = "gemini-3.5-flash-lite"
 )
 
 // Config contains only runtime configuration. API keys are never copied into a
@@ -34,7 +35,9 @@ type Config struct {
 	MaxOutputTokens    int
 	MaxResponseBytes   int64
 	MaxInputCharacters int
+	SafetyTurnBudget   int
 	SystemPrompt       string
+	Capabilities       ports.AICapabilityDispatcher
 }
 
 // Client is a Gemini JSON/HTTP implementation of ports.AIRuntime.
@@ -49,7 +52,9 @@ type Client struct {
 	maxOutputTokens    int
 	maxResponseBytes   int64
 	maxInputCharacters int
+	safetyTurnBudget   int
 	systemPrompt       string
+	capabilities       ports.AICapabilityDispatcher
 }
 
 func NewClient(cfg Config) (*Client, error) {
@@ -84,6 +89,10 @@ func NewClient(cfg Config) (*Client, error) {
 	if maxInputCharacters <= 0 {
 		maxInputCharacters = 12000
 	}
+	safetyTurnBudget := cfg.SafetyTurnBudget
+	if safetyTurnBudget <= 0 {
+		safetyTurnBudget = defaultSafetyTurnBudget
+	}
 	client := cfg.HTTPClient
 	if client == nil {
 		client = &http.Client{}
@@ -101,7 +110,9 @@ func NewClient(cfg Config) (*Client, error) {
 		maxOutputTokens:    maxOutputTokens,
 		maxResponseBytes:   maxResponseBytes,
 		maxInputCharacters: maxInputCharacters,
+		safetyTurnBudget:   safetyTurnBudget,
 		systemPrompt:       systemPrompt,
+		capabilities:       cfg.Capabilities,
 	}, nil
 }
 
@@ -128,14 +139,46 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 	requestCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
 
-	maxToolTurns := 10
-	for turn := 0; turn < maxToolTurns; turn++ {
+	var tools []geminiTool
+	if c.capabilities != nil {
+		defs := c.capabilities.Definitions()
+		if len(defs) > 0 {
+			var funcDecls []geminiFunctionDeclaration
+			for _, def := range defs {
+				funcDecls = append(funcDecls, geminiFunctionDeclaration{
+					Name:        def.Name,
+					Description: def.Description,
+					Parameters:  def.Parameters,
+				})
+			}
+			tools = []geminiTool{
+				{FunctionDeclarations: funcDecls},
+			}
+		}
+	}
+
+	execCtx := ports.AICapabilityExecutionContext{
+		BusinessID:     input.BusinessID,
+		ConversationID: input.ConversationID,
+	}
+
+	var (
+		discoveredCatalog  []ports.AICatalogEvidence
+		discoveredOffers   []ports.AIOfferEvidence
+		discoveredVariants []ports.AIVariantEvidence
+		session            = ports.NewCatalogRetrievalSession()
+		loopFinishedNormally bool
+		finalProposal       ports.AIDecisionProposal
+	)
+
+	safetyBudget := c.safetyTurnBudget
+	for turn := 0; turn < safetyBudget; turn++ {
 		reqBody := geminiRequest{
 			SystemInstruction: &geminiContent{
 				Parts: []geminiPart{{Text: c.systemPrompt}},
 			},
 			Contents: contents,
-			Tools:    defaultCatalogTools(),
+			Tools:    tools,
 			GenerationConfig: geminiGenerationConfig{
 				MaxOutputTokens:  c.maxOutputTokens,
 				ResponseMimeType: "application/json",
@@ -165,9 +208,49 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 			}
 		}
 
-		// If model requested a tool call, execute it locally and loop back with the result
+		// If model requested a tool call, execute via application capability dispatcher
 		if functionCallPart != nil {
-			toolResult := executeCatalogDiscovery(input)
+			var toolResponse map[string]any
+			if c.capabilities != nil {
+				capResult, capErr := c.capabilities.Execute(requestCtx, execCtx, functionCallPart.Name, functionCallPart.Args)
+				if capErr != nil {
+					toolResponse = map[string]any{
+						"error": capErr.Error(),
+					}
+				} else {
+					if dataMap, ok := capResult.Data.(map[string]any); ok {
+						toolResponse = dataMap
+					} else {
+						encoded, _ := json.Marshal(capResult.Data)
+						var m map[string]any
+						if err := json.Unmarshal(encoded, &m); err == nil {
+							toolResponse = m
+						} else {
+							toolResponse = map[string]any{"result": capResult.Data}
+						}
+					}
+					// Record the operation and cursor chain in the session
+					streamKey := capResult.StreamKey
+					if streamKey == "" {
+						streamKey = functionCallPart.Name
+					}
+					session.RecordOperation(capResult.Operation, streamKey, capResult.HasMore, capResult.NextCursor)
+
+					// Accumulate evidence for the proposal without mutating input.Context directly
+					if len(capResult.CatalogEvidence) > 0 {
+						discoveredCatalog = append(discoveredCatalog, capResult.CatalogEvidence...)
+					}
+					if len(capResult.OfferEvidence) > 0 {
+						discoveredOffers = append(discoveredOffers, capResult.OfferEvidence...)
+					}
+					if len(capResult.VariantEvidence) > 0 {
+						discoveredVariants = append(discoveredVariants, capResult.VariantEvidence...)
+					}
+				}
+			} else {
+				toolResponse = map[string]any{"error": fmt.Sprintf("capability %q not available", functionCallPart.Name)}
+			}
+
 			contents = append(contents, geminiContent{
 				Role:  "model",
 				Parts: candidate.Content.Parts,
@@ -178,7 +261,7 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 					{
 						FunctionResponse: &geminiFunctionResponse{
 							Name:     functionCallPart.Name,
-							Response: toolResult,
+							Response: toolResponse,
 						},
 					},
 				},
@@ -190,6 +273,27 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 			return ports.AIDecisionProposal{}, errors.New("Gemini response did not contain structured content")
 		}
 
+		// If model tries to return a proposal while a catalog stream has HasMore=true,
+		// prompt the model to continue pagination if turn budget permits.
+		if session.HasIncompleteStreams() {
+			incomplete := session.IncompleteStreams()
+			if turn < safetyBudget-1 && len(incomplete) > 0 {
+				contents = append(contents, geminiContent{
+					Role:  "model",
+					Parts: candidate.Content.Parts,
+				})
+				contents = append(contents, geminiContent{
+					Role: "user",
+					Parts: []geminiPart{
+						{
+							Text: fmt.Sprintf("Notice: Catalog retrieval for stream %q is incomplete (has_more is true, next_cursor is %q). You must continue fetching remaining pages with catalog_data before finalizing your decision.", incomplete[0].StreamKey, incomplete[0].NextCursor),
+						},
+					},
+				})
+				continue
+			}
+		}
+
 		var wire proposalWire
 		if err := json.Unmarshal([]byte(textContent), &wire); err != nil {
 			return ports.AIDecisionProposal{}, fmt.Errorf("decode structured Gemini proposal: %w", err)
@@ -198,10 +302,51 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 		if err != nil {
 			return ports.AIDecisionProposal{}, err
 		}
-		return proposal, nil
+
+		proposal.DiscoveredCatalogEvidence = discoveredCatalog
+		proposal.DiscoveredOfferEvidence = discoveredOffers
+		proposal.DiscoveredVariantEvidence = discoveredVariants
+		proposal.CatalogStreams = session.AllStreams()
+		proposal.CatalogRetrievalState = session.State(false)
+		proposal.CatalogIncomplete = session.HasIncompleteStreams()
+		proposal.SafetyBudgetExhausted = false
+
+		if proposal.CatalogIncomplete {
+			proposal.RequiresHuman = true
+			proposal.PolicyDecision = "requires_approval"
+			proposal.ReasonCodes = appendJSONString(proposal.ReasonCodes, "catalog_retrieval_incomplete")
+			proposal.MissingInformation = appendJSONString(proposal.MissingInformation, "catalog retrieval stream is incomplete; remaining records not exhausted")
+		}
+
+		finalProposal = proposal
+		loopFinishedNormally = true
+		break
 	}
 
-	return ports.AIDecisionProposal{}, errors.New("Gemini tool execution exceeded maximum turn limit")
+	if loopFinishedNormally {
+		return finalProposal, nil
+	}
+
+	// Technical safety budget exhausted before model concluded.
+	return ports.AIDecisionProposal{
+		IntentBase:                "catalog_safety_budget_exhausted",
+		DomainContext:             "catalog",
+		RequestedAction:           "ask_clarification",
+		RequiresHuman:             true,
+		PolicyDecision:            "requires_approval",
+		ReasonCodes:               []byte(`["safety_budget_exhausted","catalog_retrieval_incomplete"]`),
+		MissingInformation:        []byte(`["catalog data retrieval halted by technical safety budget"]`),
+		PolicyVersion:             input.PolicyVersion,
+		ModelReference:            "gemini/" + strings.TrimSpace(c.model),
+		SchemaVersion:             proposalSchemaVersion,
+		DiscoveredCatalogEvidence: discoveredCatalog,
+		DiscoveredOfferEvidence:   discoveredOffers,
+		DiscoveredVariantEvidence: discoveredVariants,
+		CatalogRetrievalState:     ports.CatalogRetrievalSafetyBudgetExhausted,
+		CatalogStreams:            session.AllStreams(),
+		CatalogIncomplete:         true,
+		SafetyBudgetExhausted:     true,
+	}, nil
 }
 
 func (c *Client) sendRequest(requestCtx context.Context, reqBody geminiRequest) (geminiResponse, error) {
@@ -371,8 +516,7 @@ const defaultSystemPrompt = `أنت المساعد الذكي لخدمة الع�
 2. الالتزام بالحقائق والأدلة:
    - استخدم بيانات التاجر وسياق الكتالوج الموثق كمصدر وحيد للأدلة، ولا تخترع منتجات أو أسعاراً أو سياسات غير موجودة.
    - استشهد بالمراجع المناسبة في evidence_references.
-   - عند البحث أو المقارنة، استكشف عناصر الكتالوج المتاحة حتى إشارة اكتمال الكتالوج.
-   - إذا كان المنتج أو الخدمة غير متوفرة بعد استكشاف الكتالوج، وضح ذلك للعميل بلباقة واقترح البدائل المتاحة إن وجدت.
+   - إذا كان المنتج أو الخدمة غير متوفرة، وضح ذلك للعميل بلباقة واقترح البدائل المتاحة إن وجدت.
 3. مخرجات القرار المنظم:
    - أخرج JSON المطابق للمخطط فقط دون أي نص خارجه.
    - القيم المسموحة لـ requested_action: answer أو ask_clarification أو no_action.
@@ -533,92 +677,6 @@ func (w proposalWire) toProposal(input ports.AIDecisionInput, model string) (por
 	return proposal, nil
 }
 
-func defaultCatalogTools() []geminiTool {
-	return []geminiTool{
-		{
-			FunctionDeclarations: []geminiFunctionDeclaration{
-				{
-					Name:        "catalog_discovery",
-					Description: "Discover and retrieve the complete merchant catalog, including items, variants, offers, prices, and availability across any business sector (retail, clinic/services, tourism/trips, SaaS/packages, etc.). Traverses until all records are returned.",
-					Parameters: map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"query": map[string]any{
-								"type":        "string",
-								"description": "Optional search term, category, or specific item/offer reference to inspect.",
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-func executeCatalogDiscovery(input ports.AIDecisionInput) map[string]any {
-	var items []map[string]any
-	var offers []map[string]any
-	var variants []map[string]any
-
-	if input.Context != nil {
-		for _, item := range input.Context.CatalogEvidence {
-			var attrs map[string]any
-			if len(item.Attributes) > 0 {
-				_ = json.Unmarshal(item.Attributes, &attrs)
-			}
-			items = append(items, map[string]any{
-				"reference":         item.Reference,
-				"catalog_reference": item.CatalogReference,
-				"item_type":         item.ItemType,
-				"name":              item.Name,
-				"status":            item.Status,
-				"attributes":        attrs,
-				"evidence_state":    item.EvidenceState,
-			})
-		}
-		for _, offer := range input.Context.OfferEvidence {
-			offers = append(offers, map[string]any{
-				"reference":              offer.Reference,
-				"catalog_item_reference": offer.CatalogItemReference,
-				"variant_reference":      offer.VariantReference,
-				"name":                   offer.Name,
-				"pricing_mode":           offer.PricingMode,
-				"amount":                 offer.Amount,
-				"currency":               offer.Currency,
-				"availability_state":     offer.AvailabilityState,
-				"status":                 offer.Status,
-				"evidence_state":         offer.EvidenceState,
-			})
-		}
-		for _, variant := range input.Context.VariantEvidence {
-			var attrs map[string]any
-			if len(variant.Attributes) > 0 {
-				_ = json.Unmarshal(variant.Attributes, &attrs)
-			}
-			variants = append(variants, map[string]any{
-				"reference":              variant.Reference,
-				"catalog_item_reference": variant.CatalogItemReference,
-				"name":                   variant.Name,
-				"status":                 variant.Status,
-				"attributes":             attrs,
-				"evidence_state":         variant.EvidenceState,
-			})
-		}
-	}
-
-	return map[string]any{
-		"items":    items,
-		"offers":   offers,
-		"variants": variants,
-		"pagination": map[string]any{
-			"total_items": len(items),
-			"has_more":    false,
-			"reached_end": true,
-		},
-		"status_message": "ALL_CATALOG_RECORDS_RETRIEVED_NO_MORE_DATA",
-	}
-}
-
 func proposalJSONSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -682,6 +740,24 @@ func proposalJSONSchema() map[string]any {
 		},
 		"required": []string{"intent_base", "domain_context", "entities", "evidence_references", "requested_action", "response_text", "confidence_value", "confidence_band", "requires_human", "missing_information", "reason_codes", "policy_decision", "policy_version", "knowledge_version", "schema_version"},
 	}
+}
+
+func appendJSONString(raw []byte, value string) []byte {
+	var values []string
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &values)
+	}
+	for _, v := range values {
+		if v == value {
+			return raw
+		}
+	}
+	values = append(values, value)
+	encoded, err := json.Marshal(values)
+	if err != nil {
+		return raw
+	}
+	return encoded
 }
 
 var _ ports.AIRuntime = (*Client)(nil)
