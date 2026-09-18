@@ -365,3 +365,9 @@ type AuditEvent struct {
 	Metadata       map[string]any `json:"metadata"`
 	OccurredAt     time.Time      `json:"occurred_at"`
 }
+
+type MerchantAIChatResponse struct {
+	Message   string `json:"message" doc:"Assistant response or clarification text in Arabic"`
+	Action    string `json:"action" enum:"answer,ask_clarification,no_action" doc:"Assistant conversational outcome"`
+	SessionID *UUID  `json:"session_id,omitempty" format:"uuid" doc:"Session ID for continuing multi-turn interaction"`
+}

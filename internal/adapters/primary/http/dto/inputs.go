@@ -742,3 +742,14 @@ type CreateCustomerInput struct {
 	XRequestID     string `header:"X-Request-ID"`
 	Body           CreateCustomerRequest
 }
+
+type MerchantAIChatInput struct {
+	BusinessPath
+	CommandHeaders
+	Body MerchantAIChatRequest
+}
+
+type MerchantAIChatRequest struct {
+	Message   string `json:"message" minLength:"1" maxLength:"10000" doc:"Merchant natural language input message"`
+	SessionID *UUID  `json:"session_id,omitempty" format:"uuid" doc:"Optional assistant session ID to continue multi-turn interaction"`
+}

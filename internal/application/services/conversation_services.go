@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ type ConversationRuntimeService struct {
 	References   ports.ConversationReferenceRepository
 	Messages     ports.MessageRepository
 	Transactions ports.TransactionManager
+	Realtime     ports.RealtimePublisher
 }
 
 type ListConversationsQueryService struct{ ConversationRuntimeService }
@@ -95,6 +97,18 @@ func (s UpdateConversationCommandService) Handle(ctx context.Context, command co
 		result.ResourceVersion = view.ResourceVersion
 		return nil
 	})
+	if err == nil && s.Realtime != nil {
+		data, _ := json.Marshal(result.Conversation)
+		_ = s.Realtime.Publish(ctx, ports.RealtimeEvent{
+			EventID:      uuid.NewString(),
+			EventType:    "conversation.state_changed",
+			BusinessID:   string(command.Meta.Actor.BusinessID),
+			ResourceType: "conversation",
+			ResourceID:   string(command.ConversationID),
+			OccurredAt:   time.Now().UTC(),
+			Data:         data,
+		})
+	}
 	return result, err
 }
 
@@ -135,6 +149,18 @@ func (s AssignConversationCommandService) Handle(ctx context.Context, command co
 		result.ResourceVersion = view.ResourceVersion
 		return nil
 	})
+	if err == nil && s.Realtime != nil {
+		data, _ := json.Marshal(result.Conversation)
+		_ = s.Realtime.Publish(ctx, ports.RealtimeEvent{
+			EventID:      uuid.NewString(),
+			EventType:    "conversation.assigned",
+			BusinessID:   string(command.Meta.Actor.BusinessID),
+			ResourceType: "conversation",
+			ResourceID:   string(command.ConversationID),
+			OccurredAt:   time.Now().UTC(),
+			Data:         data,
+		})
+	}
 	return result, err
 }
 
@@ -198,6 +224,18 @@ func (s AddPrivateNoteCommandService) Handle(ctx context.Context, command comman
 		result.Message = messageView(message)
 		return nil
 	})
+	if err == nil && s.Realtime != nil {
+		data, _ := json.Marshal(result.Message)
+		_ = s.Realtime.Publish(ctx, ports.RealtimeEvent{
+			EventID:      uuid.NewString(),
+			EventType:    "conversation.note_added",
+			BusinessID:   string(command.Meta.Actor.BusinessID),
+			ResourceType: "conversation",
+			ResourceID:   string(command.ConversationID),
+			OccurredAt:   time.Now().UTC(),
+			Data:         data,
+		})
+	}
 	return result, err
 }
 

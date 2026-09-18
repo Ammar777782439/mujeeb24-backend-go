@@ -19,9 +19,13 @@ func (f fakeAIRuntime) Decide(context.Context, ports.AIDecisionInput) (ports.AID
 
 type fakeDecisionRepository struct {
 	record ports.AIDecisionRecord
+	err    error
 }
 
 func (f *fakeDecisionRepository) CreateProposed(_ context.Context, draft ports.AIDecisionDraft) (ports.AIDecisionRecord, error) {
+	if f.err != nil {
+		return ports.AIDecisionRecord{}, f.err
+	}
 	f.record = ports.AIDecisionRecord{
 		ID: draft.ID, BusinessID: draft.BusinessID, ConversationID: draft.ConversationID,
 		SourceMessageReference: draft.SourceMessageReference, IntentBase: draft.IntentBase,
@@ -29,7 +33,7 @@ func (f *fakeDecisionRepository) CreateProposed(_ context.Context, draft ports.A
 		RequestedAction: draft.RequestedAction, ConfidenceValue: draft.ConfidenceValue, ConfidenceBand: draft.ConfidenceBand,
 		RequiresHuman: draft.RequiresHuman, MissingInformation: draft.MissingInformation, ReasonCodes: draft.ReasonCodes,
 		PolicyVersion: draft.PolicyVersion, ModelReference: draft.ModelReference, SchemaVersion: draft.SchemaVersion,
-		Lifecycle: draft.Lifecycle, PolicyDecision: draft.PolicyDecision, CorrelationID: draft.CorrelationID,
+		Lifecycle: draft.Lifecycle, PolicyDecision: draft.PolicyDecision, ExecutionReference: draft.ExecutionReference, CorrelationID: draft.CorrelationID,
 		CausationID: draft.CausationID, ExpiresAt: draft.ExpiresAt, CreatedAt: draft.CreatedAt, UpdatedAt: draft.UpdatedAt,
 		ResourceVersion: 1,
 	}

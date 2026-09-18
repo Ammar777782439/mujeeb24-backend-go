@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ type ManualOutboundMessageService struct {
 	Messages      ports.MessageRepository
 	Conversations ports.ConversationRuntimeRepository
 	Transactions  ports.TransactionManager
+	Realtime      ports.RealtimePublisher
 	Now           func() time.Time
 	NewID         func() string
 }
@@ -103,6 +105,23 @@ func (s ManualOutboundMessageService) Handle(ctx context.Context, command comman
 		result.Message = commands.MessageView{ID: commands.MessageID(outbound.ID), ConversationID: commands.ConversationID(outbound.ConversationID), Direction: outbound.Direction, Origin: outbound.Origin, Status: outbound.Status, Text: text, ProviderMessageReference: outbound.ProviderMessageID, OccurredAt: now, CreatedAt: now}
 		return nil
 	})
+	if err == nil && s.Realtime != nil {
+		data, _ := json.Marshal(result.Message)
+		var correlationID *string
+		if command.Meta.CorrelationID != "" {
+			correlationID = &command.Meta.CorrelationID
+		}
+		_ = s.Realtime.Publish(ctx, ports.RealtimeEvent{
+			EventID:       uuid.NewString(),
+			EventType:     "conversation.message_sent",
+			BusinessID:    businessID,
+			ResourceType:  "conversation",
+			ResourceID:    conversationID,
+			OccurredAt:    now,
+			CorrelationID: correlationID,
+			Data:          data,
+		})
+	}
 	return result, err
 }
 

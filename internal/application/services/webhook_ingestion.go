@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/channel"
+	"github.com/google/uuid"
 )
 
 type SocialAPIWebhookService struct {
@@ -21,6 +23,7 @@ type SocialAPIWebhookService struct {
 	DeliveryStatuses ports.DeliveryStatusStore
 	Automation       commands.ApplyInboundAutomationHandler
 	AutoReply        commands.AutoReplyHandler
+	Realtime         ports.RealtimePublisher
 	Now              func() time.Time
 }
 
@@ -104,6 +107,21 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 			}
 			if statusResult.Duplicate {
 				result.Duplicate = true
+			} else if s.Realtime != nil {
+				statusData, _ := json.Marshal(map[string]any{
+					"provider_message_id": event.ProviderMessageID,
+					"status":              event.DeliveryStatus,
+					"occurred_at":         event.ReceivedAt,
+				})
+				_ = s.Realtime.Publish(ctx, ports.RealtimeEvent{
+					EventID:      uuid.NewString(),
+					EventType:    "conversation.message_status_changed",
+					BusinessID:   connection.BusinessID,
+					ResourceType: "message",
+					ResourceID:   event.ProviderMessageID,
+					OccurredAt:   event.ReceivedAt,
+					Data:         statusData,
+				})
 			}
 			continue
 		}
@@ -136,6 +154,27 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 			if materialized.Duplicate {
 				result.Duplicate = true
 				continue
+			}
+			if s.Realtime != nil {
+				msgData, _ := json.Marshal(map[string]any{
+					"message_id":          materialized.CommunicationMessageID,
+					"conversation_id":     materialized.ConversationID,
+					"direction":           "inbound",
+					"origin":              "customer",
+					"text":                event.Text,
+					"provider_message_id": event.ProviderMessageID,
+					"channel":             string(event.Channel),
+					"received_at":         event.ReceivedAt,
+				})
+				_ = s.Realtime.Publish(ctx, ports.RealtimeEvent{
+					EventID:      uuid.NewString(),
+					EventType:    "conversation.message_received",
+					BusinessID:   connection.BusinessID,
+					ResourceType: "conversation",
+					ResourceID:   materialized.ConversationID,
+					OccurredAt:   event.ReceivedAt,
+					Data:         msgData,
+				})
 			}
 			if s.Automation != nil && event.EventType == "interaction_received" && event.Direction == channel.DirectionInbound && event.Origin == channel.OriginCustomer && strings.TrimSpace(event.ProviderMessageID) != "" {
 				if _, automationErr := s.Automation.Handle(ctx, commands.ApplyInboundAutomationCommand{BusinessID: commands.BusinessID(connection.BusinessID), ConversationID: commands.ConversationID(materialized.ConversationID), InboundEventID: commands.ID(record.ID), Channel: string(event.Channel), Text: event.Text}); automationErr != nil {

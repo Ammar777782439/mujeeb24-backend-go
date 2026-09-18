@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -375,6 +376,213 @@ func mapCatalogRepositoryError(err error) error {
 	}
 }
 
+type AuthorCatalogItemCommandService struct{ CatalogCommandServices }
+
+func (s AuthorCatalogItemCommandService) Handle(ctx context.Context, command commands.AuthorCatalogItemCommand) (commands.AuthorCatalogItemResult, error) {
+	var result commands.AuthorCatalogItemResult
+	businessID := string(command.Meta.Actor.BusinessID)
+	if businessID == "" {
+		return result, appErrors.New(appErrors.CodeValidation, "business ID is required")
+	}
+	if command.CatalogID == "" {
+		return result, appErrors.New(appErrors.CodeValidation, "catalog ID is required")
+	}
+	name := strings.TrimSpace(command.Name)
+	if name == "" {
+		return result, appErrors.New(appErrors.CodeValidation, "item name is required")
+	}
+
+	// Role authorization defense: viewer and analyst cannot author catalog data
+	role := normalizeTeamRole(command.Meta.Actor.Role)
+	if role == TeamRoleViewer || role == TeamRoleAnalyst {
+		return result, appErrors.New(appErrors.CodeForbidden, "role "+role+" is not authorized to author catalog items")
+	}
+
+	itemType := strings.TrimSpace(command.ItemType)
+	if itemType == "" {
+		itemType = "product"
+	}
+	pricingMode := strings.TrimSpace(command.PricingMode)
+	if pricingMode == "" {
+		pricingMode = "fixed"
+	}
+	availabilityMode := strings.TrimSpace(command.AvailabilityMode)
+	if availabilityMode == "" {
+		availabilityMode = "in_stock"
+	}
+	fulfillmentMode := strings.TrimSpace(command.FulfillmentMode)
+	if fulfillmentMode == "" {
+		fulfillmentMode = "standard"
+	}
+
+	attributes, err := encodeObject(command.Attributes)
+	if err != nil {
+		return result, err
+	}
+
+	var schemaVersion *int
+	if command.AttributeSchemaID != nil {
+		if *command.AttributeSchemaID == "" {
+			return result, appErrors.New(appErrors.CodeValidation, "attribute schema id is invalid")
+		}
+		schema, err := s.Repository.GetAttributeSchema(ctx, businessID, string(*command.AttributeSchemaID))
+		if err != nil {
+			return result, mapCatalogRepositoryError(err)
+		}
+		schemaVersion = &schema.Version
+	}
+
+	now := s.now()
+	var itemRecord ports.CatalogItemRecord
+	var variantRecords []ports.VariantRecord
+	var offerRecords []ports.OfferRecord
+
+	err = s.within(ctx, func(txCtx context.Context) error {
+		itemID := s.id()
+		var err error
+		itemRecord, err = s.Repository.CreateCatalogItem(txCtx, ports.CatalogItemDraft{
+			ID:                     itemID,
+			BusinessID:             businessID,
+			CatalogID:              string(command.CatalogID),
+			AttributeSchemaID:      optionalID(command.AttributeSchemaID),
+			AttributeSchemaVersion: schemaVersion,
+			ItemType:               itemType,
+			Name:                   name,
+			PricingMode:            pricingMode,
+			AvailabilityMode:       availabilityMode,
+			FulfillmentMode:        fulfillmentMode,
+			RequiresConfirmation:   command.RequiresConfirmation,
+			Attributes:             attributes,
+			CreatedAt:              now,
+			UpdatedAt:              now,
+		})
+		if err != nil {
+			return mapCatalogRepositoryError(err)
+		}
+
+		variantMap := make(map[string]string, len(command.Variants))
+		variantRecords = make([]ports.VariantRecord, 0, len(command.Variants))
+		for _, v := range command.Variants {
+			vName := strings.TrimSpace(v.Name)
+			if vName == "" {
+				return appErrors.New(appErrors.CodeValidation, "variant name is required")
+			}
+			vAttrs, err := encodeObject(v.Attributes)
+			if err != nil {
+				return err
+			}
+			vRecord, err := s.Repository.CreateVariant(txCtx, ports.VariantDraft{
+				ID:            s.id(),
+				BusinessID:    businessID,
+				CatalogItemID: itemID,
+				Name:          vName,
+				Attributes:    vAttrs,
+				Status:        "active",
+				CreatedAt:     now,
+				UpdatedAt:     now,
+			})
+			if err != nil {
+				return mapCatalogRepositoryError(err)
+			}
+			variantMap[vName] = vRecord.ID
+			variantRecords = append(variantRecords, vRecord)
+		}
+
+		offerRecords = make([]ports.OfferRecord, 0, len(command.Offers))
+		for _, o := range command.Offers {
+			oName := strings.TrimSpace(o.Name)
+			if oName == "" {
+				oName = name
+			}
+			oPricingMode := strings.TrimSpace(o.PricingMode)
+			if oPricingMode == "" {
+				oPricingMode = pricingMode
+			}
+			if oPricingMode == "fixed" || oPricingMode == "per_unit" || oPricingMode == "per_person" || oPricingMode == "per_day" {
+				if o.AmountMinor == nil {
+					return appErrors.New(appErrors.CodeValidation, "offer amount is required for pricing mode "+oPricingMode)
+				}
+				if *o.AmountMinor < 0 {
+					return appErrors.New(appErrors.CodeValidation, "offer amount must not be negative")
+				}
+				if o.Currency == nil || strings.TrimSpace(*o.Currency) == "" {
+					return appErrors.New(appErrors.CodeValidation, "offer currency is required when amount is specified")
+				}
+			}
+			var variantID *string
+			if o.VariantName != nil && strings.TrimSpace(*o.VariantName) != "" {
+				if vid, ok := variantMap[strings.TrimSpace(*o.VariantName)]; ok {
+					variantID = &vid
+				} else {
+					return appErrors.New(appErrors.CodeValidation, "unknown variant name "+*o.VariantName)
+				}
+			} else if o.VariantIndex != nil && *o.VariantIndex >= 0 && *o.VariantIndex < len(variantRecords) {
+				vid := variantRecords[*o.VariantIndex].ID
+				variantID = &vid
+			}
+
+			oAvailMode := strings.TrimSpace(o.AvailabilityMode)
+			if oAvailMode == "" {
+				oAvailMode = availabilityMode
+			}
+			oAvailStatus := strings.TrimSpace(o.AvailabilityStatus)
+			if oAvailStatus == "" {
+				oAvailStatus = "available"
+			}
+			oFulfillMode := strings.TrimSpace(o.FulfillmentMode)
+			if oFulfillMode == "" {
+				oFulfillMode = fulfillmentMode
+			}
+			oStatus := strings.TrimSpace(o.Status)
+			if oStatus == "" {
+				oStatus = "active"
+			}
+
+			oRecord, err := s.Repository.CreateOffer(txCtx, ports.OfferDraft{
+				ID:                 s.id(),
+				BusinessID:         businessID,
+				CatalogItemID:      itemID,
+				VariantID:          variantID,
+				Name:               oName,
+				PricingMode:        oPricingMode,
+				AmountMinor:        o.AmountMinor,
+				Currency:           o.Currency,
+				PricingUnit:        o.PricingUnit,
+				AvailabilityMode:   oAvailMode,
+				AvailabilityStatus: oAvailStatus,
+				FulfillmentMode:    oFulfillMode,
+				Status:             oStatus,
+				CreatedAt:          now,
+				UpdatedAt:          now,
+			})
+			if err != nil {
+				return mapCatalogRepositoryError(err)
+			}
+			offerRecords = append(offerRecords, oRecord)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return result, err
+	}
+
+	result.Item = catalogItemView(itemRecord)
+	result.Variants = make([]commands.VariantView, 0, len(variantRecords))
+	for _, v := range variantRecords {
+		result.Variants = append(result.Variants, variantView(v))
+	}
+	result.Offers = make([]commands.OfferView, 0, len(offerRecords))
+	for _, o := range offerRecords {
+		result.Offers = append(result.Offers, offerView(o))
+	}
+	result.ResourceID = commands.ID(itemRecord.ID)
+	result.ResourceVersion = commands.ResourceVersion(strconv.FormatInt(itemRecord.ResourceVersion, 10))
+	result.Status = itemRecord.Status
+	result.Accepted = true
+	return result, nil
+}
+
 var _ commands.CreateCatalogHandler = CreateCatalogCommandService{}
 var _ commands.UpdateCatalogHandler = UpdateCatalogCommandService{}
 var _ commands.CreateAttributeSchemaVersionHandler = CreateAttributeSchemaVersionCommandService{}
@@ -384,3 +592,4 @@ var _ commands.CreateOfferHandler = CreateOfferCommandService{}
 var _ commands.UpdateOfferHandler = UpdateOfferCommandService{}
 var _ commands.CreateVariantHandler = CreateVariantCommandService{}
 var _ commands.UpdateVariantHandler = UpdateVariantCommandService{}
+var _ commands.AuthorCatalogItemHandler = AuthorCatalogItemCommandService{}

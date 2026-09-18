@@ -56,6 +56,7 @@ type AutoReplyService struct {
 	Transactions        ports.TransactionManager
 	StateRepository     ports.ConversationStateRepository
 	Conversations       ports.ConversationRuntimeRepository
+	Realtime            ports.RealtimePublisher
 	Mode                string
 	PolicyVersion       string
 	Now                 func() time.Time
@@ -321,6 +322,48 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	})
 	if err != nil {
 		return commands.AutoReplyResult{}, err
+	}
+	if s.Realtime != nil {
+		if result.Enqueued {
+			data, _ := json.Marshal(map[string]any{
+				"decision_id":         result.Decision.ID,
+				"outbound_message_id": result.OutboundMessageID,
+				"conversation_id":     conversationID,
+				"text":                proposal.ResponseText,
+				"action":              result.Action,
+			})
+			var correlationID *string
+			if command.Meta.CorrelationID != "" {
+				correlationID = &command.Meta.CorrelationID
+			}
+			_ = s.Realtime.Publish(ctx, ports.RealtimeEvent{
+				EventID:       uuid.NewString(),
+				EventType:     "conversation.ai_replied",
+				BusinessID:    string(command.Meta.Actor.BusinessID),
+				ResourceType:  "conversation",
+				ResourceID:    conversationID,
+				OccurredAt:    now,
+				CorrelationID: correlationID,
+				Data:          data,
+			})
+		}
+		if proposal.RequiresHuman || farewellHandoff || proposal.RequestedAction == "request_human" {
+			data, _ := json.Marshal(map[string]any{
+				"decision_id":     result.Decision.ID,
+				"conversation_id": conversationID,
+				"reason_codes":    proposal.ReasonCodes,
+				"intent":          proposal.IntentBase,
+			})
+			_ = s.Realtime.Publish(ctx, ports.RealtimeEvent{
+				EventID:      uuid.NewString(),
+				EventType:    "ai.human_handoff_triggered",
+				BusinessID:   string(command.Meta.Actor.BusinessID),
+				ResourceType: "conversation",
+				ResourceID:   conversationID,
+				OccurredAt:   now,
+				Data:         data,
+			})
+		}
 	}
 	return result, nil
 }

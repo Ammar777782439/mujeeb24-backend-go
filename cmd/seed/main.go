@@ -14,10 +14,10 @@ import (
 )
 
 const (
-	defaultAdminEmail   = "admin@mujeeb.ai"
-	defaultAdminPass    = "Password123456!"
-	defaultBusinessID   = "00000000-0000-0000-0000-000000000001"
-	defaultPrincipalID  = "2818b77d-d94d-455f-8ca3-2ca18075160f"
+	defaultAdminEmail  = "admin@mujeeb.ai"
+	defaultAdminPass   = "Password123456!"
+	defaultBusinessID  = "00000000-0000-0000-0000-000000000001"
+	defaultPrincipalID = "2818b77d-d94d-455f-8ca3-2ca18075160f"
 )
 
 func main() {

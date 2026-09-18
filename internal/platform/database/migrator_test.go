@@ -12,8 +12,8 @@ func TestLoadMigrations_SequenceIntegrity(t *testing.T) {
 		t.Fatalf("LoadMigrations() failed: %v", err)
 	}
 
-	if len(loaded) < 53 {
-		t.Fatalf("expected at least 53 migrations, got %d", len(loaded))
+	if len(loaded) < 54 {
+		t.Fatalf("expected at least 54 migrations, got %d", len(loaded))
 	}
 
 	for i, m := range loaded {
@@ -29,9 +29,9 @@ func TestLoadMigrations_SequenceIntegrity(t *testing.T) {
 		}
 	}
 
-	// Verify last migration is 000053_remove_chatwoot_artifacts
+	// Verify last migration is 000054_merchant_ai_sessions
 	last := loaded[len(loaded)-1]
-	if last.Version != 53 || last.Name != "remove_chatwoot_artifacts" {
-		t.Errorf("expected migration 53 to be remove_chatwoot_artifacts, got version=%d name=%s", last.Version, last.Name)
+	if last.Version != 54 || last.Name != "merchant_ai_sessions" {
+		t.Errorf("expected migration 54 to be merchant_ai_sessions, got version=%d name=%s", last.Version, last.Name)
 	}
 }

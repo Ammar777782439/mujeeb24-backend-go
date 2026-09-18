@@ -81,12 +81,12 @@ func TestClientDecideSendsStructuredGeminiRequest(t *testing.T) {
 	}
 
 	client, err := NewClient(Config{
-		BaseURL:          server.URL,
-		APIKey:           apiKey,
-		Model:            "test-gemini-model",
-		RequestTimeout:   time.Second,
-		MaxOutputTokens:  321,
-		Capabilities:     dispatcher,
+		BaseURL:         server.URL,
+		APIKey:          apiKey,
+		Model:           "test-gemini-model",
+		RequestTimeout:  time.Second,
+		MaxOutputTokens: 321,
+		Capabilities:    dispatcher,
 	})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)

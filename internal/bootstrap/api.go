@@ -15,6 +15,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/middleware"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/auth/ed25519jwt"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
+	realtimePostgres "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/realtime/postgres"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
@@ -31,6 +32,8 @@ type APIRuntime struct {
 	SocialAPI           ports.ChannelProvider
 	SocialWebhook       ports.WebhookReceiver
 	ChannelProvisioning *services.ChannelProvisioningService
+	RealtimeBroker      *realtimePostgres.Broker
+	RealtimeHub         *realtimePostgres.LocalHub
 	closeOnce           sync.Once
 }
 
@@ -64,6 +67,19 @@ func BuildAPI(ctx context.Context, cfg config.ProcessConfig) (*APIRuntime, error
 		database.Close()
 		return nil, err
 	}
+	catalogCommands := services.NewCatalogCommandServices(catalogRepository, database)
+	catalogAuthoringCapability := services.NewCatalogAuthoringCapability(
+		services.AuthorCatalogItemCommandService{CatalogCommandServices: catalogCommands},
+		services.CreateCatalogCommandService{CatalogCommandServices: catalogCommands},
+		services.CreateCatalogItemCommandService{CatalogCommandServices: catalogCommands},
+		services.CreateOfferCommandService{CatalogCommandServices: catalogCommands},
+		services.CreateVariantCommandService{CatalogCommandServices: catalogCommands},
+		services.CreateAttributeSchemaVersionCommandService{CatalogCommandServices: catalogCommands},
+	)
+	if err := capabilityRegistry.Register(catalogAuthoringCapability); err != nil {
+		database.Close()
+		return nil, err
+	}
 	runtime, err := newAPIWithExternalAndAuthentication(database, cfg.HTTPAddr, BuildExternalAdapters(cfg, capabilityRegistry), authentication)
 	if err != nil {
 		database.Close()
@@ -90,7 +106,11 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	if address == "" {
 		return nil, errors.New("http address is required")
 	}
-	dependencies := BuildDependencies(database)
+	realtimeHub := realtimePostgres.NewLocalHub()
+	realtimeBroker := realtimePostgres.NewBroker(database.Pool(), realtimeHub)
+	realtimeBroker.StartListener(context.Background())
+
+	dependencies := BuildDependenciesWithRealtime(database, realtimeBroker)
 	dependencies.GetReadiness = readinessQueryService{Ping: database.Ping, FeatureChecks: external.ReadinessChecks()}
 	dependencies.BeginChannelConnection = services.ChannelProvisioningDisabledService{}
 	dependencies.IngestSocialAPIWebhook = services.WebhookReceiverDisabledService{Receiver: "SocialAPI"}
@@ -150,7 +170,18 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		service.StateRepository = postgres.NewConversationStateRepository(database)
 		service.MessageRepository = postgres.NewMessageRepository(database)
 		service.Conversations = postgres.NewConversationRepository(database)
+		service.Realtime = realtimeBroker
 		autoReply = service
+	}
+	if external.AIRuntime != nil {
+		merchantAISessionRepository := postgres.NewMerchantAISessionRepository(database)
+		decisionRepository := postgres.NewAIDecisionRepository(database)
+		dependencies.ChatWithMerchantAI = services.NewMerchantAIChatService(
+			merchantAISessionRepository,
+			external.AIRuntime,
+			decisionRepository,
+			database,
+		)
 	}
 	inboundAutomation := services.InboundAutomationService{
 		Rules:         postgres.NewAutomationRuleRepository(database),
@@ -171,6 +202,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			DeliveryStatuses: postgres.NewDeliveryStatusStore(database),
 			Automation:       inboundAutomation,
 			AutoReply:        autoReply,
+			Realtime:         realtimeBroker,
 		}
 	}
 	var apiMiddleware []func(ctx huma.Context, next func(huma.Context))
@@ -178,6 +210,14 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		apiMiddleware = append(apiMiddleware, middleware.RequireAccessTokenHuma(authentication.Verifier))
 	}
 	_, mux := contract.BuildAPIWithHandlersAndMiddleware(handlers.NewServer(dependencies), apiMiddleware)
+
+	realtimeSSEHandler := handlers.NewRealtimeSSEHandler(realtimeHub, dependencies.Scope)
+	var sseHTTPHandler http.Handler = realtimeSSEHandler
+	if authentication != nil {
+		sseHTTPHandler = middleware.RequireAccessToken(authentication.Verifier, realtimeSSEHandler)
+	}
+	mux.Handle("GET /api/v1/businesses/{business_id}/realtime/events", sseHTTPHandler)
+
 	if provisioningService != nil {
 		mux.HandleFunc("/oauth/socialapi/callback", func(writer http.ResponseWriter, request *http.Request) {
 			if request.Method != http.MethodGet {
@@ -222,7 +262,18 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		_, _ = writer.Write([]byte(`{"status":"ok","service":"mujeeb24-api"}`))
 	})
 	server := &http.Server{Addr: address, Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
-	return &APIRuntime{HTTP: server, Database: database, Dependencies: dependencies, EventStore: eventStore, Outbox: outboxStore, SocialAPI: external.SocialAPI, SocialWebhook: external.SocialWebhook, ChannelProvisioning: provisioningService}, nil
+	return &APIRuntime{
+		HTTP:                server,
+		Database:            database,
+		Dependencies:        dependencies,
+		EventStore:          eventStore,
+		Outbox:              outboxStore,
+		SocialAPI:           external.SocialAPI,
+		SocialWebhook:       external.SocialWebhook,
+		ChannelProvisioning: provisioningService,
+		RealtimeBroker:      realtimeBroker,
+		RealtimeHub:         realtimeHub,
+	}, nil
 }
 
 func buildAuthenticationRuntime(cfg config.ProcessConfig, database *postgres.Adapter) (*authenticationRuntime, error) {
@@ -255,6 +306,9 @@ func (r *APIRuntime) Shutdown(ctx context.Context) error {
 	}
 	var shutdownErr error
 	r.closeOnce.Do(func() {
+		if r.RealtimeBroker != nil {
+			r.RealtimeBroker.Close()
+		}
 		if r.HTTP != nil {
 			shutdownErr = r.HTTP.Shutdown(ctx)
 		}

@@ -42,10 +42,13 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
 			t.Fatalf("team operation is missing: %s", expected)
 		}
 	}
+	if !bytes.Contains(document, []byte("operationId: chatWithMerchantAI")) {
+		t.Fatal("chatWithMerchantAI operation is missing from generated document")
+	}
 
 	operationIDs := regexp.MustCompile(`(?m)^\s+operationId: ([A-Za-z0-9_]+)$`).FindAllSubmatch(document, -1)
-	if len(operationIDs) != 88 {
-		t.Fatalf("generated %d operations, want 88", len(operationIDs))
+	if len(operationIDs) != 89 {
+		t.Fatalf("generated %d operations, want 89", len(operationIDs))
 	}
 	seen := make(map[string]struct{}, len(operationIDs))
 	for _, match := range operationIDs {

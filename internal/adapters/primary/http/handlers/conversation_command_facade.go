@@ -90,4 +90,3 @@ func (s *Server) assignConversation(ctx context.Context, input *contract.Convers
 
 	return singleConversation(result.Conversation)
 }
-

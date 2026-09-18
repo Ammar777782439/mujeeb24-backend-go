@@ -139,3 +139,46 @@ type CreateOfferHandler = CommandHandler[CreateOfferCommand, OfferResult]
 type UpdateOfferHandler = CommandHandler[UpdateOfferCommand, OfferResult]
 type CreateVariantHandler = CommandHandler[CreateVariantCommand, VariantResult]
 type UpdateVariantHandler = CommandHandler[UpdateVariantCommand, VariantResult]
+
+type AuthorCatalogItemCommand struct {
+	Meta                 CommandMeta
+	CatalogID            CatalogID
+	AttributeSchemaID    *AttributeSchemaID
+	ItemType             string
+	Name                 string
+	PricingMode          string
+	AvailabilityMode     string
+	FulfillmentMode      string
+	RequiresConfirmation bool
+	Attributes           map[string]any
+	Variants             []AuthorVariantInput
+	Offers               []AuthorOfferInput
+}
+
+type AuthorVariantInput struct {
+	Name       string
+	Attributes map[string]any
+}
+
+type AuthorOfferInput struct {
+	Name               string
+	PricingMode        string
+	AmountMinor        *int64
+	Currency           *string
+	PricingUnit        *string
+	VariantName        *string
+	VariantIndex       *int
+	AvailabilityMode   string
+	AvailabilityStatus string
+	FulfillmentMode    string
+	Status             string
+}
+
+type AuthorCatalogItemResult struct {
+	MutationResult
+	Item     CatalogItemView
+	Variants []VariantView
+	Offers   []OfferView
+}
+
+type AuthorCatalogItemHandler = CommandHandler[AuthorCatalogItemCommand, AuthorCatalogItemResult]

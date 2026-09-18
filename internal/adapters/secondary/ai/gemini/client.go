@@ -16,12 +16,12 @@ import (
 )
 
 const (
-	defaultMaxOutputTokens    = 2048
-	defaultMaxResponseBytes   = 1 << 20
-	defaultSafetyTurnBudget   = 25
-	proposalSchemaVersion     = 1
-	defaultBaseURL            = "https://generativelanguage.googleapis.com"
-	defaultModel              = "gemini-3.5-flash-lite"
+	defaultMaxOutputTokens  = 2048
+	defaultMaxResponseBytes = 1 << 20
+	defaultSafetyTurnBudget = 25
+	proposalSchemaVersion   = 1
+	defaultBaseURL          = "https://generativelanguage.googleapis.com"
+	defaultModel            = "gemini-3.5-flash-lite"
 )
 
 // Config contains only runtime configuration. API keys are never copied into a
@@ -163,12 +163,12 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 	}
 
 	var (
-		discoveredCatalog  []ports.AICatalogEvidence
-		discoveredOffers   []ports.AIOfferEvidence
-		discoveredVariants []ports.AIVariantEvidence
-		session            = ports.NewCatalogRetrievalSession()
+		discoveredCatalog    []ports.AICatalogEvidence
+		discoveredOffers     []ports.AIOfferEvidence
+		discoveredVariants   []ports.AIVariantEvidence
+		session              = ports.NewCatalogRetrievalSession()
 		loopFinishedNormally bool
-		finalProposal       ports.AIDecisionProposal
+		finalProposal        ports.AIDecisionProposal
 	)
 
 	safetyBudget := c.safetyTurnBudget
@@ -505,7 +505,7 @@ func promptContextFrom(value *ports.AIContext) promptContext {
 	}
 }
 
-const defaultSystemPrompt = `أنت المساعد الذكي لخدمة العملاء. مهمتك فهم نية العميل بدقة، استكشاف كتالوج وبيانات التاجر عند الحاجة، وتقديم ردود عربية احترافية، دقيقة، ومنسقة تناسب تطبيقات المحادثة.
+const defaultSystemPrompt = `أنت المساعد الذكي لخدمة العملاء وإدارة الكتالوج. مهمتك فهم نية المستخدم بدقة، استكشاف كتالوج وبيانات التاجر عند الحاجة، تنفيذ عمليات إضافة وتعديل المنتجات المعتمدة، وتقديم ردود عربية احترافية، دقيقة، ومنسقة تناسب تطبيقات المحادثة.
 
 قواعد التشغيل العامة والتنسيق:
 1. التنسيق وجودة النص العربي (RTL):
@@ -526,7 +526,12 @@ const defaultSystemPrompt = `أنت المساعد الذكي لخدمة الع�
    - إذا كانت الرسالة تشير إلى منتج/عرض محدد في الأدلة، أخرج kind=RESOLVED مع focus المناسب.
    - إذا كانت الرسالة تقارن بين خيارات، أخرج kind=RESOLVED مع comparison المناسب.
    - إذا كانت الرسالة تحتمل أكثر من خيار ولا يمكن الحسم، أخرج kind=AMBIGUOUS واطلب التوضيح.
-   - إذا كانت الرسالة تحية أو موضوعاً عاماً جديداً، أخرج kind=NO_REFERENCE.`
+   - إذا كانت الرسالة تحية أو موضوعاً عاماً جديداً، أخرج kind=NO_REFERENCE.
+5. إضافة وتأليف منتجات الكتالوج (Catalog Authoring):
+   - عند طلب التاجر إضافة أو إنشاء منتج جديد، افهم البيانات المذكورة (الاسم، السعر، المقاسات، الخصائص).
+   - إذا كانت هناك بيانات تجارية إلزامية ناقصة (مثل السعر أو العرض) ولم تذكر في المحادثة، اطلب فقط المعلومة الناقصة (requested_action: ask_clarification).
+   - لا تطلب مجدداً أي معلومة ذكرها التاجر سابقاً في سياق المحادثة.
+   - إذا توفرت المعلومات الكافية، نفذ أداة catalog_authoring مباشرة لإنشاء المنتج والعروض والمتغيرات، ثم أكد الإضافة للتاجر بوضوح (requested_action: answer).`
 
 type geminiRequest struct {
 	SystemInstruction *geminiContent         `json:"systemInstruction,omitempty"`

@@ -315,4 +315,3 @@ func TestUpdateConversationHTTPDispatchesCorrectly(t *testing.T) {
 		t.Fatalf("expected ai_mode_override disabled, got %#v", handler.command)
 	}
 }
-

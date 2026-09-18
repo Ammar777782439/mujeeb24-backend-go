@@ -3,10 +3,15 @@ package bootstrap
 import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/handlers"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 )
 
 func BuildDependencies(adapter *postgres.Adapter) handlers.Dependencies {
+	return BuildDependenciesWithRealtime(adapter, nil)
+}
+
+func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.RealtimePublisher) handlers.Dependencies {
 	businessRepository := postgres.NewBusinessRepository(adapter)
 	businessManagement := services.BusinessManagementService{Repository: businessRepository, Transactions: adapter}
 	dashboardRepository := postgres.NewDashboardRepository(adapter)
@@ -29,8 +34,9 @@ func BuildDependencies(adapter *postgres.Adapter) handlers.Dependencies {
 	messageRepository := postgres.NewMessageRepository(adapter)
 	readCursorRepository := postgres.NewConversationReadCursorRepository(adapter)
 	cannedReplyRepository := postgres.NewCannedReplyRepository(adapter)
-	conversationRuntime := services.ConversationRuntimeService{Repository: conversationRepository, Reader: conversationRepository, Assignees: teamRepository, Labels: conversationLabelRepository, References: conversationReferenceRepository, Messages: messageRepository, Transactions: adapter}
-	manualOutbound := services.ManualOutboundMessageService{References: conversationReferenceRepository, Connections: postgres.NewChannelConnectionRepository(adapter), Outbound: postgres.NewOutboundMessageRepository(adapter), Outbox: postgres.NewPostgresOutboxStore(adapter), Messages: messageRepository, Conversations: conversationRepository, Transactions: adapter}
+	merchantAISessionRepository := postgres.NewMerchantAISessionRepository(adapter)
+	conversationRuntime := services.ConversationRuntimeService{Repository: conversationRepository, Reader: conversationRepository, Assignees: teamRepository, Labels: conversationLabelRepository, References: conversationReferenceRepository, Messages: messageRepository, Transactions: adapter, Realtime: realtime}
+	manualOutbound := services.ManualOutboundMessageService{References: conversationReferenceRepository, Connections: postgres.NewChannelConnectionRepository(adapter), Outbound: postgres.NewOutboundMessageRepository(adapter), Outbox: postgres.NewPostgresOutboxStore(adapter), Messages: messageRepository, Conversations: conversationRepository, Transactions: adapter, Realtime: realtime}
 	cannedReplies := services.CannedReplyService{Repository: cannedReplyRepository, Transactions: adapter}
 	automationRules := services.AutomationRuleService{Repository: postgres.NewAutomationRuleRepository(adapter), Transactions: adapter}
 	channelConnectionRepository := postgres.NewChannelConnectionRepository(adapter)
@@ -123,6 +129,7 @@ func BuildDependencies(adapter *postgres.Adapter) handlers.Dependencies {
 		GetTransactionReview:     services.GetTransactionReviewQueryService{Repository: transactionRepository},
 
 		RequestHumanReview: services.NewRequestHumanReviewCommandService(decisionRepository, auditRepository, adapter),
+		ChatWithMerchantAI: services.NewMerchantAIChatService(merchantAISessionRepository, nil, decisionRepository, adapter),
 		ListAIDecisions:    services.ListAIDecisionsQueryService{Repository: decisionRepository},
 		GetAIDecision:      services.GetAIDecisionQueryService{Repository: decisionRepository},
 		ListAuditEvents:    services.ListAuditEventsQueryService{Repository: auditRepository},

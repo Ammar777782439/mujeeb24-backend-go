@@ -17,6 +17,11 @@ type AICapabilityDefinition struct {
 type AICapabilityExecutionContext struct {
 	BusinessID     string
 	ConversationID string
+	PrincipalID    string
+	Role           string
+	Permissions    []string
+	RequestID      string
+	CorrelationID  string
 }
 
 // AICapabilityResult contains the bounded factual data returned to the LLM
