@@ -173,16 +173,6 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		service.Realtime = realtimeBroker
 		autoReply = service
 	}
-	if external.AIRuntime != nil {
-		merchantAISessionRepository := postgres.NewMerchantAISessionRepository(database)
-		decisionRepository := postgres.NewAIDecisionRepository(database)
-		dependencies.ChatWithMerchantAI = services.NewMerchantAIChatService(
-			merchantAISessionRepository,
-			external.AIRuntime,
-			decisionRepository,
-			database,
-		)
-	}
 	inboundAutomation := services.InboundAutomationService{
 		Rules:         postgres.NewAutomationRuleRepository(database),
 		Executions:    postgres.NewAutomationExecutionRepository(database),

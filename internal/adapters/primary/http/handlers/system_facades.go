@@ -162,13 +162,6 @@ func (s *Server) dispatchSystemCommand(ctx context.Context, operationID string, 
 		out := &contract.Single[contract.AIDecision]{}
 		out.Body.Data = aiDecisionProjection(result.Decision)
 		return out, true
-	case "chatWithMerchantAI":
-		in := input.(*contract.MerchantAIChatInput)
-		out, err := s.ChatWithMerchantAI(ctx, in)
-		if err != nil {
-			return err, true
-		}
-		return out, true
 	case "ingestSocialAPIWebhook":
 		var routeKey, signature, timestamp, deliveryID, providerEvent, requestID string
 		var raw []byte

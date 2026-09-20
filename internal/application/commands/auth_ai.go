@@ -45,16 +45,4 @@ type AIDecisionResult struct {
 }
 type RequestHumanReviewHandler = CommandHandler[RequestHumanReviewCommand, AIDecisionResult]
 
-type MerchantAIChatCommand struct {
-	Meta      CommandMeta
-	SessionID *string
-	Message   string
-}
 
-type MerchantAIChatResult struct {
-	Message   string
-	Action    string
-	SessionID string
-}
-
-type MerchantAIChatHandler = CommandHandler[MerchantAIChatCommand, MerchantAIChatResult]
