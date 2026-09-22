@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -46,7 +47,8 @@ func (r *ConversationRepository) List(ctx context.Context, businessID, state, ow
 	if decoded != nil {
 		cursorAt, cursorID = decoded.LastActivityAt, decoded.ID
 	}
-	const query = `SELECT c.id::text,c.business_id::text,c.customer_id::text,cu.profile->>'display_name',c.state,c.ownership,c.ai_mode_override,c.priority,c.assignment_reference,c.resource_version,c.last_activity_at FROM conversations AS c LEFT JOIN customers AS cu ON cu.business_id = c.business_id AND cu.id = c.customer_id WHERE c.business_id=$1::uuid AND ($2='' OR c.state=$2) AND ($3='' OR c.ownership=$3) AND ($4::uuid IS NULL OR c.customer_id=$4::uuid) AND ($5='' OR EXISTS (SELECT 1 FROM conversation_references r JOIN channel_connections cc ON cc.business_id=r.business_id AND cc.id=r.connection_id WHERE r.business_id=c.business_id AND r.conversation_id=c.id AND r.is_current AND cc.channel=$5)) AND ($6::timestamptz IS NULL OR (c.last_activity_at,c.id)<($6::timestamptz,$7::uuid)) ORDER BY c.last_activity_at DESC,c.id DESC LIMIT $8`
+	// Per migration 000057: include last_gemini_interaction_id per contract ③ §4.
+	const query = `SELECT c.id::text,c.business_id::text,c.customer_id::text,cu.profile->>'display_name',c.state,c.ownership,c.ai_mode_override,c.priority,c.assignment_reference,c.resource_version,c.last_activity_at,c.last_gemini_interaction_id FROM conversations AS c LEFT JOIN customers AS cu ON cu.business_id = c.business_id AND cu.id = c.customer_id WHERE c.business_id=$1::uuid AND ($2='' OR c.state=$2) AND ($3='' OR c.ownership=$3) AND ($4::uuid IS NULL OR c.customer_id=$4::uuid) AND ($5='' OR EXISTS (SELECT 1 FROM conversation_references r JOIN channel_connections cc ON cc.business_id=r.business_id AND cc.id=r.connection_id WHERE r.business_id=c.business_id AND r.conversation_id=c.id AND r.is_current AND cc.channel=$5)) AND ($6::timestamptz IS NULL OR (c.last_activity_at,c.id)<($6::timestamptz,$7::uuid)) ORDER BY c.last_activity_at DESC,c.id DESC LIMIT $8`
 	rows, err := executor.Query(ctx, query, businessID, strings.TrimSpace(state), strings.TrimSpace(ownership), customer, strings.TrimSpace(channel), cursorAt, cursorID, limit+1)
 	if err != nil {
 		return ports.ConversationPage{}, &RepositoryError{Operation: "conversation.list", Kind: RepositoryInvalid, Err: err}
@@ -55,7 +57,7 @@ func (r *ConversationRepository) List(ctx context.Context, businessID, state, ow
 	items := make([]ports.ConversationRecord, 0, limit)
 	for rows.Next() {
 		var item ports.ConversationRecord
-		if err := rows.Scan(&item.ID, &item.BusinessID, &item.CustomerID, &item.CustomerDisplayName, &item.State, &item.Ownership, &item.AIModeOverride, &item.Priority, &item.AssignmentReference, &item.ResourceVersion, &item.LastActivityAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.BusinessID, &item.CustomerID, &item.CustomerDisplayName, &item.State, &item.Ownership, &item.AIModeOverride, &item.Priority, &item.AssignmentReference, &item.ResourceVersion, &item.LastActivityAt, &item.LastGeminiInteractionID); err != nil {
 			return ports.ConversationPage{}, &RepositoryError{Operation: "conversation.list", Kind: RepositoryInvalid, Err: err}
 		}
 		items = append(items, item)
@@ -136,6 +138,47 @@ func (r *ConversationRepository) TransitionLifecycle(ctx context.Context, transi
 		return record, nil
 	}
 	return ports.ConversationRecord{}, classifyCoreStaleOrNotFound(ctx, executor, "conversation.transition_lifecycle", "conversations", transition.BusinessID, transition.ConversationID, err)
+}
+
+// UpdateLastGeminiInteractionID per contract ③ §4 + migration 000057.
+//
+// Persists the gemini_interaction_id returned by the most recent customer-facing
+// Gemini call for this conversation, so the next turn can pass it as
+// previous_interaction_id (Gemini Interactions API chaining with store=true
+// per contract ③ §9).
+//
+// Per contract ③ §5: Mujeeb retention is canonical; this column just enables
+// Gemini continuity. If Gemini is unavailable, Mujeeb does not lose any
+// conversation/message/state — only the chaining breaks.
+//
+// The interactionID may be empty to clear the value (e.g., after Gemini history
+// expiry per contract ③ §9 — 1 day free tier, 55 days paid tier).
+//
+// Per contract ⑧ §17, the update is tenant-scoped via business_id; a mismatch
+// returns "not found" (per contract ⑥ §8: "Do not expose the resource / Do not
+// treat it as valid / Do not leak its existence").
+func (r *ConversationRepository) UpdateLastGeminiInteractionID(ctx context.Context, businessID, conversationID, interactionID string) error {
+	if r == nil || r.adapter == nil {
+		return ErrPoolClosed
+	}
+	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(conversationID) == "" {
+		return invalidRepositoryInput("conversation.update_last_gemini_interaction", "business and conversation ids are required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return err
+	}
+	// NULLIF converts empty string to NULL (cleaner storage; matches the
+	// nullable column semantics in migration 000057).
+	const query = `UPDATE conversations SET last_gemini_interaction_id = NULLIF($3, ''), updated_at = now() WHERE business_id = $1::uuid AND id = $2::uuid`
+	tag, err := executor.Exec(ctx, query, businessID, conversationID, strings.TrimSpace(interactionID))
+	if err != nil {
+		return &RepositoryError{Operation: "conversation.update_last_gemini_interaction", Kind: RepositoryInvalid, Err: err}
+	}
+	if tag.RowsAffected() == 0 {
+		return &RepositoryError{Operation: "conversation.update_last_gemini_interaction", Kind: RepositoryNotFound, Err: fmt.Errorf("conversation %s not found in business %s", conversationID, businessID)}
+	}
+	return nil
 }
 
 func encodeConversationCursor(record ports.ConversationRecord) string {

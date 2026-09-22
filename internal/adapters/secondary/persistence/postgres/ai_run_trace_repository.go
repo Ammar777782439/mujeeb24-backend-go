@@ -90,8 +90,8 @@ func (r *AIRunTraceRepository) GetRun(ctx context.Context, businessID, runID str
 	var (
 		failureStage, failureCategory, failureReason                  string
 		geminiInteractionID, previousInteractionID                    string
-		contextBuiltAt, runningStartedAt, waitingToolAt, validatingAt *string
-		authorizedAt, executingAt, completedAt, failedAt, cancelledAt *string
+		contextBuiltAt, runningStartedAt, waitingToolAt, validatingAt *time.Time
+		authorizedAt, executingAt, completedAt, failedAt, cancelledAt *time.Time
 	)
 	if err := row.Scan(
 		&rec.ID, &rec.BusinessID, &rec.ConversationID, &rec.MessageID, &rec.SourceEventID,
@@ -112,15 +112,15 @@ func (r *AIRunTraceRepository) GetRun(ctx context.Context, businessID, runID str
 	rec.FailureReason = failureReason
 	rec.GeminiInteractionID = geminiInteractionID
 	rec.PreviousInteractionID = previousInteractionID
-	rec.ContextBuiltAt = parseTimestampPtr(contextBuiltAt)
-	rec.RunningStartedAt = parseTimestampPtr(runningStartedAt)
-	rec.WaitingToolAt = parseTimestampPtr(waitingToolAt)
-	rec.ValidatingAt = parseTimestampPtr(validatingAt)
-	rec.AuthorizedAt = parseTimestampPtr(authorizedAt)
-	rec.ExecutingAt = parseTimestampPtr(executingAt)
-	rec.CompletedAt = parseTimestampPtr(completedAt)
-	rec.FailedAt = parseTimestampPtr(failedAt)
-	rec.CancelledAt = parseTimestampPtr(cancelledAt)
+	rec.ContextBuiltAt = contextBuiltAt
+	rec.RunningStartedAt = runningStartedAt
+	rec.WaitingToolAt = waitingToolAt
+	rec.ValidatingAt = validatingAt
+	rec.AuthorizedAt = authorizedAt
+	rec.ExecutingAt = executingAt
+	rec.CompletedAt = completedAt
+	rec.FailedAt = failedAt
+	rec.CancelledAt = cancelledAt
 	return rec, nil
 }
 
@@ -314,7 +314,7 @@ func (r *AIRunTraceRepository) ListAttempts(ctx context.Context, runID string) (
 	for rows.Next() {
 		var a ports.AIRunAttemptRecord
 		var fStage, fCat, fReason, payload string
-		var finishedAt *string
+		var finishedAt *time.Time
 		if err := rows.Scan(&a.ID, &a.AIRunID, &a.AttemptNumber, &a.Provider, &a.Model,
 			&a.Status, &fStage, &fCat, &fReason, &payload,
 			&a.StartedAt, &finishedAt, &a.CreatedAt); err != nil {
@@ -324,7 +324,7 @@ func (r *AIRunTraceRepository) ListAttempts(ctx context.Context, runID string) (
 		a.FailureCategory = fCat
 		a.FailureReason = fReason
 		a.RequestPayloadHash = payload
-		a.FinishedAt = parseTimestampPtr(finishedAt)
+		a.FinishedAt = finishedAt
 		out = append(out, a)
 	}
 	return out, rows.Err()
@@ -405,7 +405,7 @@ func (r *AIRunTraceRepository) ListToolCalls(ctx context.Context, runID string) 
 		var c ports.AIToolCallRecord
 		var toolCallID, failureReason string
 		var params, resultPayload string
-		var finishedAt *string
+		var finishedAt *time.Time
 		var latencyMs int
 		if err := rows.Scan(&c.ID, &c.AIRunID, &c.AttemptID, &c.ToolName, &toolCallID,
 			&c.Status, &params, &resultPayload, &failureReason,
@@ -416,7 +416,7 @@ func (r *AIRunTraceRepository) ListToolCalls(ctx context.Context, runID string) 
 		c.FailureReason = failureReason
 		c.RequestParams = []byte(params)
 		c.ResultPayload = []byte(resultPayload)
-		c.FinishedAt = parseTimestampPtr(finishedAt)
+		c.FinishedAt = finishedAt
 		c.LatencyMs = latencyMs
 		out = append(out, c)
 	}
@@ -472,7 +472,7 @@ func (r *AIRunTraceRepository) ListGeminiInteractions(ctx context.Context, runID
 	for rows.Next() {
 		var i ports.AIGeminiInteractionRecord
 		var prevID, sysHash, toolsHash, genHash string
-		var finishedAt *string
+		var finishedAt *time.Time
 		if err := rows.Scan(&i.ID, &i.AIRunID, &i.AttemptID, &i.GeminiInteractionID,
 			&prevID, &i.Model, &sysHash, &toolsHash, &genHash,
 			&i.StartedAt, &finishedAt, &i.CreatedAt); err != nil {
@@ -482,7 +482,7 @@ func (r *AIRunTraceRepository) ListGeminiInteractions(ctx context.Context, runID
 		i.SystemInstructionHash = sysHash
 		i.ToolsHash = toolsHash
 		i.GenerationConfigHash = genHash
-		i.FinishedAt = parseTimestampPtr(finishedAt)
+		i.FinishedAt = finishedAt
 		out = append(out, i)
 	}
 	return out, rows.Err()
@@ -562,15 +562,15 @@ func (r *AIRunTraceRepository) ListCatalogBatches(ctx context.Context, runID str
 	for rows.Next() {
 		var b ports.AICatalogBatchRecord
 		var failureReason string
-		var startedAt, completedAt *string
+		var startedAt, completedAt *time.Time
 		if err := rows.Scan(&b.ID, &b.AIRunID, &b.BatchNumber, &b.Status, &b.ItemsCount,
 			&b.SchemasCount, &b.InputTokens, &b.CandidateCount, &failureReason,
 			&startedAt, &completedAt, &b.CreatedAt, &b.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan batch: %w", err)
 		}
 		b.FailureReason = failureReason
-		b.StartedAt = parseTimestampPtr(startedAt)
-		b.CompletedAt = parseTimestampPtr(completedAt)
+		b.StartedAt = startedAt
+		b.CompletedAt = completedAt
 		out = append(out, b)
 	}
 	return out, rows.Err()
@@ -653,23 +653,17 @@ func indexOf(s, sub string) int {
 	return -1
 }
 
-// parseTimestampPtr and timeToTimestampPtr are helpers to bridge *time.Time and
-// the optional *string shape used in scans. They are best-effort and used
-// only for optional timestamp columns.
-func parseTimestampPtr(s *string) *time.Time {
-	if s == nil || *s == "" {
-		return nil
-	}
-	// We avoid a full time.Parse here; the value is in PostgreSQL TIMESTAMPTZ
-	// format which we leave to the caller to interpret if needed.
-	return nil
-}
-
+// timeToTimestampPtr returns the *time.Time directly so pgx can bind it
+// as NULL (when nil) or as a TIMESTAMPTZ value (when non-nil). pgx v5
+// natively handles *time.Time for nullable timestamp columns.
+//
+// Per contract ⑧ §17, every trace record is tenant-scoped via business_id;
+// timestamps are UTC per contract ⑧ §13.
 func timeToTimestampPtr(t *time.Time) any {
 	if t == nil {
 		return nil
 	}
-	return *t
+	return t
 }
 
 var _ ports.AIRunRepository = (*AIRunTraceRepository)(nil)

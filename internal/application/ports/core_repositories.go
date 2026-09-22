@@ -71,6 +71,18 @@ type ConversationRecord struct {
 	AssignmentReference *string
 	ResourceVersion     int64
 	LastActivityAt      time.Time
+	// LastGeminiInteractionID per contract ③ §4 + migration 000057.
+	//
+	// Per contract ③ §4, this is the gemini_interaction_id returned by the
+	// previous successful customer-facing Gemini call for this conversation.
+	// Empty/nil for the first turn or after Gemini history expiry (1 day free
+	// tier, 55 days paid tier per contract ③ §9).
+	//
+	// Per contract ③ §5: "Mujeeb retention = canonical; Gemini retention =
+	// convenience only." This column does NOT hold conversation truth —
+	// Mujeeb's canonical state lives in messages/conversation_state/business
+	// data. This column just enables previous_interaction_id chaining.
+	LastGeminiInteractionID *string
 }
 
 type ConversationRepository interface {
@@ -108,6 +120,17 @@ type ConversationRuntimeRepository interface {
 	Update(ctx context.Context, update ConversationUpdate) (ConversationRecord, error)
 	AdvanceVersion(ctx context.Context, businessID, conversationID string, expectedVersion int64) (ConversationRecord, error)
 	TransitionLifecycle(ctx context.Context, transition ConversationLifecycleTransition) (ConversationRecord, error)
+	// UpdateLastGeminiInteractionID per contract ③ §4 + migration 000057.
+	//
+	// Persists the gemini_interaction_id returned by the most recent
+	// customer-facing Gemini call for this conversation, so the next turn can
+	// pass it as previous_interaction_id (Gemini Interactions API chaining
+	// with store=true per contract ③ §9).
+	//
+	// Per contract ③ §5: Mujeeb retention is canonical; this column just
+	// enables Gemini continuity. If Gemini is unavailable, Mujeeb does not
+	// lose any conversation/message/state — only the chaining breaks.
+	UpdateLastGeminiInteractionID(ctx context.Context, businessID, conversationID, interactionID string) error
 }
 
 type ChannelConnectionRecord struct {
