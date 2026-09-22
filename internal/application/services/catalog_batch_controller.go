@@ -21,6 +21,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -56,6 +57,11 @@ import (
 //   - Identifies candidates
 //   - Explains why each candidate is in the candidate set
 type CatalogBatchController struct {
+	// Catalogs is the Postgres-backed catalog repository used to fetch the
+	// raw items/variants/offers/schemas for the projection per contract ① §6.
+	// Per contract ⑤ §13, the data access boundary is Read Only, Tenant
+	// Scoped, Structured, No SQL.
+	Catalogs          ports.CatalogRepository
 	ProjectionBuilder *CatalogAIProjectionBuilder
 	TokenCounter      TokenCounter
 	Gemini            BatchGeminiClient
@@ -207,17 +213,248 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 }
 
 // buildProjection builds the contract ① Catalog AI Projection from the
-// merchant's actual catalog data. Per contract ① §6, Mujeeb is the builder.
+// merchant's actual catalog data in PostgreSQL. Per contract ① §6, Mujeeb
+// is the sole builder of the Projection.
+//
+// Per contract ⑤ §13, the data access boundary is:
+//   - Read Only — no writes via this path
+//   - Tenant Scoped — all reads filter by business_id
+//   - Structured — returns Projection shapes, not raw rows
+//   - No SQL — the AI never sees query strings
+//
+// Per contract ① §2, only the AttributeSchemas USED by the Items in the
+// projection are sent. We do NOT send unused schemas.
+//
+// Per contract ① §5, the Projection does NOT contain: business_id, SQL,
+// database metadata, created_at, updated_at, search_query, semantic_search,
+// matching logic, or ranking logic.
+//
+// Flow:
+//  1. List catalog_items for the given (businessID, catalogScope) with
+//     status='active' — per contract ① §6, Mujeeb determines the scope.
+//  2. For each item, list its variants and offers (also active only).
+//  3. For each item's attribute_schema_id, fetch the schema + definitions.
+//  4. Assemble the CatalogAIProjection with nested variants+offers per item.
+//  5. Deduplicate schemas — per contract ① §2, each schema appears once.
+//
+// Per contract ⑧ §17, every read is tenant-scoped via business_id. A
+// cross-tenant read returns empty (per contract ⑥ §8: do not leak existence).
 func (c *CatalogBatchController) buildProjection(ctx context.Context, businessID, catalogScope string) (CatalogAIProjection, error) {
-	// In a fully wired deployment, this calls the CatalogAIProjectionBuilder
-	// which reads from PostgreSQL via the CatalogProjectionDataSource.
-	// The builder enforces tenant isolation per contract ① §6.
-	//
-	// For now, this is a placeholder that returns an empty projection.
-	// The concrete wiring is in the postgres adapter's catalog repository.
-	_ = businessID
-	_ = catalogScope
-	return CatalogAIProjection{}, nil
+	if c.Catalogs == nil {
+		return CatalogAIProjection{}, errors.New("catalog repository is not wired on CatalogBatchController per contract ① §6")
+	}
+	if strings.TrimSpace(businessID) == "" {
+		return CatalogAIProjection{}, errors.New("business_id is required for projection build per contract ⑧ §17")
+	}
+
+	// Per contract ① §6, Mujeeb determines the catalog scope. catalogScope
+	// is the catalog_id; if empty, we list all catalogs for the business and
+	// iterate items across all of them.
+	catalogIDs := make([]string, 0)
+	if strings.TrimSpace(catalogScope) != "" {
+		catalogIDs = append(catalogIDs, catalogScope)
+	} else {
+		// List all active catalogs for the business.
+		catPage, err := c.Catalogs.ListCatalogs(ctx, businessID, "active", 100, "")
+		if err != nil {
+			return CatalogAIProjection{}, fmt.Errorf("list catalogs: %w", err)
+		}
+		for _, cat := range catPage.Items {
+			catalogIDs = append(catalogIDs, cat.ID)
+		}
+	}
+
+	projection := CatalogAIProjection{
+		Items:            make([]CatalogAIItem, 0),
+		AttributeSchemas: make([]CatalogAIAttributeSchema, 0),
+	}
+	schemaCache := make(map[string]CatalogAIAttributeSchema) // dedup per contract ① §2
+
+	for _, catalogID := range catalogIDs {
+		// List active items for this catalog. Per contract ① §6, we send
+		// only active items (drafts are not yet published).
+		cursor := ""
+		for {
+			itemPage, err := c.Catalogs.ListCatalogItems(ctx, businessID, catalogID, "", "active", 200, cursor)
+			if err != nil {
+				return CatalogAIProjection{}, fmt.Errorf("list catalog items for catalog %s: %w", catalogID, err)
+			}
+			for _, itemRec := range itemPage.Items {
+				item := mapCatalogItemRecordToProjection(itemRec)
+
+				// Fetch variants for this item (active only).
+				variants, err := c.fetchVariants(ctx, businessID, itemRec.ID)
+				if err != nil {
+					return CatalogAIProjection{}, fmt.Errorf("fetch variants for item %s: %w", itemRec.ID, err)
+				}
+				item.Variants = variants
+
+				// Fetch offers for this item (active only).
+				offers, err := c.fetchOffers(ctx, businessID, itemRec.ID)
+				if err != nil {
+					return CatalogAIProjection{}, fmt.Errorf("fetch offers for item %s: %w", itemRec.ID, err)
+				}
+				item.Offers = offers
+
+				// Fetch the attribute schema if the item references one.
+				if itemRec.AttributeSchemaID != nil && *itemRec.AttributeSchemaID != "" {
+					schemaID := *itemRec.AttributeSchemaID
+					if _, ok := schemaCache[schemaID]; !ok {
+						schemaRec, err := c.Catalogs.GetAttributeSchema(ctx, businessID, schemaID)
+						if err != nil {
+							return CatalogAIProjection{}, fmt.Errorf("fetch attribute schema %s: %w", schemaID, err)
+						}
+						schema := mapAttributeSchemaRecordToProjection(schemaRec)
+						schemaCache[schemaID] = schema
+					}
+				}
+
+				projection.Items = append(projection.Items, item)
+			}
+			if !itemPage.HasMore {
+				break
+			}
+			cursor = itemPage.NextCursor
+		}
+	}
+
+	// Per contract ① §2: only the schemas actually used by items[] are sent.
+	for _, schema := range schemaCache {
+		projection.AttributeSchemas = append(projection.AttributeSchemas, schema)
+	}
+
+	return projection, nil
+}
+
+// fetchVariants reads active variants for a catalog item.
+// Per contract ⑧ §17, the read is tenant-scoped via business_id.
+func (c *CatalogBatchController) fetchVariants(ctx context.Context, businessID, itemID string) ([]CatalogAIVariant, error) {
+	page, err := c.Catalogs.ListVariants(ctx, businessID, itemID, "active", 200, "")
+	if err != nil {
+		return nil, err
+	}
+	out := make([]CatalogAIVariant, 0, len(page.Items))
+	for _, v := range page.Items {
+		out = append(out, CatalogAIVariant{
+			ID:         v.ID,
+			Name:       v.Name,
+			Attributes: parseJSONAttributes(v.Attributes),
+			Status:     v.Status,
+		})
+	}
+	return out, nil
+}
+
+// fetchOffers reads active offers for a catalog item.
+// Per contract ⑧ §17, the read is tenant-scoped via business_id.
+func (c *CatalogBatchController) fetchOffers(ctx context.Context, businessID, itemID string) ([]CatalogAIOffer, error) {
+	page, err := c.Catalogs.ListOffers(ctx, businessID, itemID, "active", 200, "")
+	if err != nil {
+		return nil, err
+	}
+	out := make([]CatalogAIOffer, 0, len(page.Items))
+	for _, o := range page.Items {
+		out = append(out, CatalogAIOffer{
+			ID:                      o.ID,
+			VariantID:               o.VariantID,
+			Name:                    o.Name,
+			PricingMode:             o.PricingMode,
+			Amount:                  o.Amount,
+			Currency:                o.Currency,
+			PricingUnit:             o.PricingUnit,
+			PriceSource:             o.PriceSource,
+			PriceVerificationStatus: stringPtrOrNil(o.PriceVerificationStatus),
+			AvailabilityMode:        stringPtrOrNil(o.AvailabilityMode),
+			AvailabilityStatus:      stringPtrOrNil(o.AvailabilityStatus),
+			FulfillmentMode:         stringPtrOrNil(o.FulfillmentMode),
+			ValidityFrom:            formatTimePtr(o.ValidityFrom),
+			ValidityUntil:           formatTimePtr(o.ValidityUntil),
+			Status:                  o.Status,
+		})
+	}
+	return out, nil
+}
+
+// mapCatalogItemRecordToProjection converts a ports.CatalogItemRecord to a
+// CatalogAIItem per contract ① §1. Per contract ① §5, the projection does
+// NOT carry business_id, SQL, database metadata, created_at, updated_at.
+func mapCatalogItemRecordToProjection(r ports.CatalogItemRecord) CatalogAIItem {
+	return CatalogAIItem{
+		ID:                     r.ID,
+		CatalogID:              r.CatalogID,
+		AttributeSchemaID:      r.AttributeSchemaID,
+		AttributeSchemaVersion: r.AttributeSchemaVersion,
+		ItemType:               r.ItemType,
+		Name:                   r.Name,
+		ShortDescription:       r.ShortDescription,
+		LongDescription:        r.LongDescription,
+		Status:                 r.Status,
+		PricingMode:            r.PricingMode,
+		AvailabilityMode:       r.AvailabilityMode,
+		FulfillmentMode:        r.FulfillmentMode,
+		RequiresConfirmation:   r.RequiresConfirmation,
+		Attributes:             parseJSONAttributes(r.Attributes),
+	}
+}
+
+// mapAttributeSchemaRecordToProjection converts a ports.AttributeSchemaRecord
+// to a CatalogAIAttributeSchema per contract ① §1.
+func mapAttributeSchemaRecordToProjection(r ports.AttributeSchemaRecord) CatalogAIAttributeSchema {
+	defs := make([]CatalogAIAttributeDefinition, 0, len(r.Definitions))
+	for _, d := range r.Definitions {
+		defs = append(defs, CatalogAIAttributeDefinition{
+			ID:           d.ID,
+			SchemaID:     r.ID,
+			AttributeKey: d.Key,
+			Label:        d.Label,
+			DataType:     d.DataType,
+			IsRequired:   d.Required,
+			IsSearchable: d.Searchable,
+			DisplayOrder: d.DisplayOrder,
+		})
+	}
+	return CatalogAIAttributeSchema{
+		ID:          r.ID,
+		Name:        r.Name,
+		Version:     r.Version,
+		Definitions: defs,
+	}
+}
+
+// parseJSONAttributes parses the JSONB attributes column into map[string]any.
+// Per contract ① §5 + migration 000016 catalog_items_attributes_object_chk,
+// attributes is always a JSON object. Returns empty map for nil/empty.
+func parseJSONAttributes(raw []byte) map[string]any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// stringPtrOrNil converts a non-empty string to *string, nil for empty.
+func stringPtrOrNil(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// formatTimePtr formats a *time.Time as ISO8601 string pointer for the
+// projection (per contract ① §1, the projection uses ISO8601 strings for
+// timestamps, not Go time.Time).
+func formatTimePtr(t *time.Time) *string {
+	if t == nil {
+		return nil
+	}
+	s := t.UTC().Format(time.RFC3339)
+	return &s
 }
 
 // splitIntoBatches implements contract ② §2 token-based splitting.

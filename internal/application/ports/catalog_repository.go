@@ -24,27 +24,48 @@ type CatalogItemRecord struct {
 	AttributeSchemaVersion *int
 	ItemType               string
 	Name                   string
-	Status                 string
-	Attributes             []byte
-	ResourceVersion        int64
-	CreatedAt              time.Time
-	UpdatedAt              time.Time
+	// Per migration 000016: short_description, long_description,
+	// pricing_mode, availability_mode, fulfillment_mode, requires_confirmation
+	// are NOT NULL columns. Added here so the Catalog AI Projection (contract ① §1)
+	// can carry the full commercial truth.
+	ShortDescription     *string
+	LongDescription      *string
+	Status               string
+	PricingMode          string
+	AvailabilityMode     string
+	FulfillmentMode      string
+	RequiresConfirmation bool
+	Attributes           []byte
+	ResourceVersion      int64
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 type OfferRecord struct {
-	ID                 string
-	BusinessID         string
-	CatalogItemID      string
-	VariantID          *string
-	Name               string
-	PricingMode        string
-	Amount             *string
-	Currency           *string
-	AvailabilityStatus string
-	Status             string
-	ResourceVersion    int64
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	ID            string
+	BusinessID    string
+	CatalogItemID string
+	VariantID     *string
+	Name          string
+	PricingMode   string
+	Amount        *string
+	Currency      *string
+	// Per migration 000018: added PricingUnit, PriceSource,
+	// PriceVerificationStatus, AvailabilityMode, FulfillmentMode,
+	// ValidityFrom, ValidityUntil so the projection carries the full
+	// commercial truth per contract ① §1.
+	PricingUnit             *string
+	PriceSource             *string
+	PriceVerificationStatus string
+	AvailabilityMode        string
+	FulfillmentMode         string
+	ValidityFrom            *time.Time
+	ValidityUntil           *time.Time
+	AvailabilityStatus      string
+	Status                  string
+	ResourceVersion         int64
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
 }
 
 type VariantRecord struct {

@@ -100,7 +100,7 @@ func (r *CatalogRepository) ListCatalogItems(ctx context.Context, businessID, ca
 	if decoded != nil {
 		updatedAt, id = decoded.UpdatedAt, decoded.ID
 	}
-	rows, err := executor.Query(ctx, `SELECT id::text, business_id::text, catalog_id::text, attribute_schema_id::text, attribute_schema_version, item_type, name, status, attributes, resource_version, created_at, updated_at FROM catalog_items WHERE business_id = $1::uuid AND catalog_id = $2::uuid AND ($3 = '' OR status = $3) AND ($4 = '' OR name ILIKE '%' || $4 || '%') AND ($5::timestamptz IS NULL OR (updated_at, id) < ($5::timestamptz, $6::uuid)) ORDER BY updated_at DESC, id DESC LIMIT $7`, businessID, catalogID, status, search, updatedAt, id, limit+1)
+	rows, err := executor.Query(ctx, `SELECT id::text, business_id::text, catalog_id::text, attribute_schema_id::text, attribute_schema_version, item_type, name, short_description, long_description, status, pricing_mode, availability_mode, fulfillment_mode, requires_confirmation, attributes, resource_version, created_at, updated_at FROM catalog_items WHERE business_id = $1::uuid AND catalog_id = $2::uuid AND ($3 = '' OR status = $3) AND ($4 = '' OR name ILIKE '%' || $4 || '%') AND ($5::timestamptz IS NULL OR (updated_at, id) < ($5::timestamptz, $6::uuid)) ORDER BY updated_at DESC, id DESC LIMIT $7`, businessID, catalogID, status, search, updatedAt, id, limit+1)
 	if err != nil {
 		return ports.CatalogItemPage{}, catalogRepositoryError("catalog_item.list", err)
 	}
@@ -134,7 +134,7 @@ func (r *CatalogRepository) GetCatalogItem(ctx context.Context, businessID, cata
 		return ports.CatalogItemRecord{}, invalidRepositoryInput("catalog_item.get", "business, catalog, and item ids are required")
 	}
 	var item ports.CatalogItemRecord
-	if err := executor.QueryRow(ctx, `SELECT id::text, business_id::text, catalog_id::text, attribute_schema_id::text, attribute_schema_version, item_type, name, status, attributes, resource_version, created_at, updated_at FROM catalog_items WHERE business_id = $1::uuid AND catalog_id = $2::uuid AND id = $3::uuid`, businessID, catalogID, itemID).Scan(&item.ID, &item.BusinessID, &item.CatalogID, &item.AttributeSchemaID, &item.AttributeSchemaVersion, &item.ItemType, &item.Name, &item.Status, &item.Attributes, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt); err != nil {
+	if err := executor.QueryRow(ctx, `SELECT id::text, business_id::text, catalog_id::text, attribute_schema_id::text, attribute_schema_version, item_type, name, short_description, long_description, status, pricing_mode, availability_mode, fulfillment_mode, requires_confirmation, attributes, resource_version, created_at, updated_at FROM catalog_items WHERE business_id = $1::uuid AND catalog_id = $2::uuid AND id = $3::uuid`, businessID, catalogID, itemID).Scan(&item.ID, &item.BusinessID, &item.CatalogID, &item.AttributeSchemaID, &item.AttributeSchemaVersion, &item.ItemType, &item.Name, &item.ShortDescription, &item.LongDescription, &item.Status, &item.PricingMode, &item.AvailabilityMode, &item.FulfillmentMode, &item.RequiresConfirmation, &item.Attributes, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt); err != nil {
 		return item, classifyRepositoryGetError("catalog_item.get", err)
 	}
 	return item, nil
@@ -157,7 +157,7 @@ func (r *CatalogRepository) ListOffers(ctx context.Context, businessID, itemID, 
 	if decoded != nil {
 		updatedAt, id = decoded.UpdatedAt, decoded.ID
 	}
-	rows, err := executor.Query(ctx, `SELECT id::text, business_id::text, catalog_item_id::text, variant_id::text, name, pricing_mode, amount::text, currency, availability_status, status, resource_version, created_at, updated_at FROM offers WHERE business_id = $1::uuid AND catalog_item_id = $2::uuid AND ($3 = '' OR status = $3) AND ($4::timestamptz IS NULL OR (updated_at, id) < ($4::timestamptz, $5::uuid)) ORDER BY updated_at DESC, id DESC LIMIT $6`, businessID, itemID, status, updatedAt, id, limit+1)
+	rows, err := executor.Query(ctx, `SELECT id::text, business_id::text, catalog_item_id::text, variant_id::text, name, pricing_mode, amount::text, currency, pricing_unit, price_source, price_verification_status, availability_mode, fulfillment_mode, validity_from, validity_until, availability_status, status, resource_version, created_at, updated_at FROM offers WHERE business_id = $1::uuid AND catalog_item_id = $2::uuid AND ($3 = '' OR status = $3) AND ($4::timestamptz IS NULL OR (updated_at, id) < ($4::timestamptz, $5::uuid)) ORDER BY updated_at DESC, id DESC LIMIT $6`, businessID, itemID, status, updatedAt, id, limit+1)
 	if err != nil {
 		return ports.OfferPage{}, catalogRepositoryError("offer.list", err)
 	}
@@ -446,7 +446,7 @@ func decodeSchemaCursor(value string) (*schemaCursor, error) {
 
 func scanCatalogItem(row interface{ Scan(...any) error }) (ports.CatalogItemRecord, error) {
 	var item ports.CatalogItemRecord
-	err := row.Scan(&item.ID, &item.BusinessID, &item.CatalogID, &item.AttributeSchemaID, &item.AttributeSchemaVersion, &item.ItemType, &item.Name, &item.Status, &item.Attributes, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt)
+	err := row.Scan(&item.ID, &item.BusinessID, &item.CatalogID, &item.AttributeSchemaID, &item.AttributeSchemaVersion, &item.ItemType, &item.Name, &item.ShortDescription, &item.LongDescription, &item.Status, &item.PricingMode, &item.AvailabilityMode, &item.FulfillmentMode, &item.RequiresConfirmation, &item.Attributes, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt)
 	return item, err
 }
 
@@ -501,7 +501,7 @@ func (r *CatalogRepository) CreateCatalogItem(ctx context.Context, draft ports.C
 	if len(attributes) == 0 {
 		attributes = []byte(`{}`)
 	}
-	return scanCatalogItem(executor.QueryRow(ctx, `INSERT INTO catalog_items (id, business_id, catalog_id, attribute_schema_id, attribute_schema_version, item_type, name, status, pricing_mode, availability_mode, fulfillment_mode, requires_confirmation, attributes, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, 'draft', $8, $9, $10, $11, $12::jsonb, $13, $14) RETURNING id::text, business_id::text, catalog_id::text, attribute_schema_id::text, attribute_schema_version, item_type, name, status, attributes, resource_version, created_at, updated_at`, draft.ID, draft.BusinessID, draft.CatalogID, draft.AttributeSchemaID, draft.AttributeSchemaVersion, draft.ItemType, draft.Name, draft.PricingMode, draft.AvailabilityMode, draft.FulfillmentMode, draft.RequiresConfirmation, attributes, draft.CreatedAt, draft.UpdatedAt))
+	return scanCatalogItem(executor.QueryRow(ctx, `INSERT INTO catalog_items (id, business_id, catalog_id, attribute_schema_id, attribute_schema_version, item_type, name, status, pricing_mode, availability_mode, fulfillment_mode, requires_confirmation, attributes, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, 'draft', $8, $9, $10, $11, $12::jsonb, $13, $14) RETURNING id::text, business_id::text, catalog_id::text, attribute_schema_id::text, attribute_schema_version, item_type, name, short_description, long_description, status, pricing_mode, availability_mode, fulfillment_mode, requires_confirmation, attributes, resource_version, created_at, updated_at`, draft.ID, draft.BusinessID, draft.CatalogID, draft.AttributeSchemaID, draft.AttributeSchemaVersion, draft.ItemType, draft.Name, draft.PricingMode, draft.AvailabilityMode, draft.FulfillmentMode, draft.RequiresConfirmation, attributes, draft.CreatedAt, draft.UpdatedAt))
 }
 
 func (r *CatalogRepository) UpdateCatalogItem(ctx context.Context, patch ports.CatalogItemPatch) (ports.CatalogItemRecord, error) {
@@ -517,7 +517,7 @@ func (r *CatalogRepository) UpdateCatalogItem(ctx context.Context, patch ports.C
 	if len(attributes) == 0 {
 		attributes = nil
 	}
-	err = executor.QueryRow(ctx, `UPDATE catalog_items SET name = COALESCE($3, name), status = COALESCE($4, status), attributes = COALESCE($5::jsonb, attributes), resource_version = resource_version + 1, updated_at = $6 WHERE business_id = $1::uuid AND id = $2::uuid AND resource_version = $7 RETURNING id::text, business_id::text, catalog_id::text, attribute_schema_id::text, attribute_schema_version, item_type, name, status, attributes, resource_version, created_at, updated_at`, patch.BusinessID, patch.ID, patch.Name, patch.Status, attributes, patch.UpdatedAt, patch.ExpectedVersion).Scan(&item.ID, &item.BusinessID, &item.CatalogID, &item.AttributeSchemaID, &item.AttributeSchemaVersion, &item.ItemType, &item.Name, &item.Status, &item.Attributes, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt)
+	err = executor.QueryRow(ctx, `UPDATE catalog_items SET name = COALESCE($3, name), status = COALESCE($4, status), attributes = COALESCE($5::jsonb, attributes), resource_version = resource_version + 1, updated_at = $6 WHERE business_id = $1::uuid AND id = $2::uuid AND resource_version = $7 RETURNING id::text, business_id::text, catalog_id::text, attribute_schema_id::text, attribute_schema_version, item_type, name, short_description, long_description, status, pricing_mode, availability_mode, fulfillment_mode, requires_confirmation, attributes, resource_version, created_at, updated_at`, patch.BusinessID, patch.ID, patch.Name, patch.Status, attributes, patch.UpdatedAt, patch.ExpectedVersion).Scan(&item.ID, &item.BusinessID, &item.CatalogID, &item.AttributeSchemaID, &item.AttributeSchemaVersion, &item.ItemType, &item.Name, &item.ShortDescription, &item.LongDescription, &item.Status, &item.PricingMode, &item.AvailabilityMode, &item.FulfillmentMode, &item.RequiresConfirmation, &item.Attributes, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt)
 	if err == nil {
 		return item, nil
 	}
@@ -537,7 +537,7 @@ func (r *CatalogRepository) CreateOffer(ctx context.Context, draft ports.OfferDr
 		val := draft.PricingMode
 		pricingUnit = &val
 	}
-	return scanOfferRecord(executor.QueryRow(ctx, `INSERT INTO offers (id, business_id, catalog_item_id, variant_id, name, pricing_mode, amount, currency, pricing_unit, availability_mode, availability_status, fulfillment_mode, price_verification_status, status, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, CASE WHEN $7::bigint IS NULL THEN NULL ELSE $7::numeric / 100 END, $8, $9, $10, $11, $12, 'unverified', $13, $14, $15) RETURNING id::text, business_id::text, catalog_item_id::text, variant_id::text, name, pricing_mode, amount::text, currency, availability_status, status, resource_version, created_at, updated_at`, draft.ID, draft.BusinessID, draft.CatalogItemID, draft.VariantID, draft.Name, draft.PricingMode, draft.AmountMinor, draft.Currency, pricingUnit, draft.AvailabilityMode, draft.AvailabilityStatus, draft.FulfillmentMode, draft.Status, draft.CreatedAt, draft.UpdatedAt))
+	return scanOfferRecord(executor.QueryRow(ctx, `INSERT INTO offers (id, business_id, catalog_item_id, variant_id, name, pricing_mode, amount, currency, pricing_unit, availability_mode, availability_status, fulfillment_mode, price_verification_status, status, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, CASE WHEN $7::bigint IS NULL THEN NULL ELSE $7::numeric / 100 END, $8, $9, $10, $11, $12, 'unverified', $13, $14, $15) RETURNING id::text, business_id::text, catalog_item_id::text, variant_id::text, name, pricing_mode, amount::text, currency, pricing_unit, price_source, price_verification_status, availability_mode, fulfillment_mode, validity_from, validity_until, availability_status, status, resource_version, created_at, updated_at`, draft.ID, draft.BusinessID, draft.CatalogItemID, draft.VariantID, draft.Name, draft.PricingMode, draft.AmountMinor, draft.Currency, pricingUnit, draft.AvailabilityMode, draft.AvailabilityStatus, draft.FulfillmentMode, draft.Status, draft.CreatedAt, draft.UpdatedAt))
 }
 
 func (r *CatalogRepository) UpdateOffer(ctx context.Context, patch ports.OfferPatch) (ports.OfferRecord, error) {
@@ -549,7 +549,7 @@ func (r *CatalogRepository) UpdateOffer(ctx context.Context, patch ports.OfferPa
 		return ports.OfferRecord{}, invalidRepositoryInput("offer.update", "id, business, and positive expected version are required")
 	}
 	var offer ports.OfferRecord
-	err = executor.QueryRow(ctx, `UPDATE offers SET name = COALESCE($3, name), amount = CASE WHEN $4::bigint IS NULL THEN amount ELSE $4::numeric / 100 END, availability_status = COALESCE($5, availability_status), status = COALESCE($6, status), resource_version = resource_version + 1, updated_at = $7 WHERE business_id = $1::uuid AND id = $2::uuid AND resource_version = $8 RETURNING id::text, business_id::text, catalog_item_id::text, variant_id::text, name, pricing_mode, amount::text, currency, availability_status, status, resource_version, created_at, updated_at`, patch.BusinessID, patch.ID, patch.Name, patch.AmountMinor, patch.AvailabilityStatus, patch.Status, patch.UpdatedAt, patch.ExpectedVersion).Scan(&offer.ID, &offer.BusinessID, &offer.CatalogItemID, &offer.VariantID, &offer.Name, &offer.PricingMode, &offer.Amount, &offer.Currency, &offer.AvailabilityStatus, &offer.Status, &offer.ResourceVersion, &offer.CreatedAt, &offer.UpdatedAt)
+	err = executor.QueryRow(ctx, `UPDATE offers SET name = COALESCE($3, name), amount = CASE WHEN $4::bigint IS NULL THEN amount ELSE $4::numeric / 100 END, availability_status = COALESCE($5, availability_status), status = COALESCE($6, status), resource_version = resource_version + 1, updated_at = $7 WHERE business_id = $1::uuid AND id = $2::uuid AND resource_version = $8 RETURNING id::text, business_id::text, catalog_item_id::text, variant_id::text, name, pricing_mode, amount::text, currency, pricing_unit, price_source, price_verification_status, availability_mode, fulfillment_mode, validity_from, validity_until, availability_status, status, resource_version, created_at, updated_at`, patch.BusinessID, patch.ID, patch.Name, patch.AmountMinor, patch.AvailabilityStatus, patch.Status, patch.UpdatedAt, patch.ExpectedVersion).Scan(&offer.ID, &offer.BusinessID, &offer.CatalogItemID, &offer.VariantID, &offer.Name, &offer.PricingMode, &offer.Amount, &offer.Currency, &offer.PricingUnit, &offer.PriceSource, &offer.PriceVerificationStatus, &offer.AvailabilityMode, &offer.FulfillmentMode, &offer.ValidityFrom, &offer.ValidityUntil, &offer.AvailabilityStatus, &offer.Status, &offer.ResourceVersion, &offer.CreatedAt, &offer.UpdatedAt)
 	if err == nil {
 		return offer, nil
 	}
@@ -631,7 +631,7 @@ func scanCatalogRecord(row pgx.Row) (ports.CatalogRecord, error) {
 
 func scanOfferRecord(row pgx.Row) (ports.OfferRecord, error) {
 	var record ports.OfferRecord
-	if err := row.Scan(&record.ID, &record.BusinessID, &record.CatalogItemID, &record.VariantID, &record.Name, &record.PricingMode, &record.Amount, &record.Currency, &record.AvailabilityStatus, &record.Status, &record.ResourceVersion, &record.CreatedAt, &record.UpdatedAt); err != nil {
+	if err := row.Scan(&record.ID, &record.BusinessID, &record.CatalogItemID, &record.VariantID, &record.Name, &record.PricingMode, &record.Amount, &record.Currency, &record.PricingUnit, &record.PriceSource, &record.PriceVerificationStatus, &record.AvailabilityMode, &record.FulfillmentMode, &record.ValidityFrom, &record.ValidityUntil, &record.AvailabilityStatus, &record.Status, &record.ResourceVersion, &record.CreatedAt, &record.UpdatedAt); err != nil {
 		return record, classifyRepositoryWriteError("offer", err)
 	}
 	return record, nil
