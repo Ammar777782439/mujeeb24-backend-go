@@ -188,7 +188,6 @@ type ConversationUpdateInput = dto.ConversationUpdateInput
 type CustomerUpdateInput = dto.CustomerUpdateInput
 type UpdateCustomerRequest = dto.UpdateCustomerRequest
 
-
 type Single[T any] struct {
 	Body struct {
 		Data      T      `json:"data"`
@@ -213,3 +212,16 @@ type List[T any] struct {
 }
 
 type ErrorResponse struct{ Body ErrorEnvelope }
+
+// MerchantAIChatInput per contract 11 §6 — B2B Merchant Catalog AI turn.
+type MerchantAIChatInput = dto.MerchantAIChatInput
+type MerchantAIChatRequest = dto.MerchantAIChatRequest
+
+// MerchantAIChatResponse is the B2B Merchant Catalog AI proposal projection.
+// Per contract 11 §5, the agent returns a CatalogOperationProposal.
+type MerchantAIChatResponse struct {
+	Operation    string `json:"operation"`
+	Status       string `json:"status"`
+	ResponseText string `json:"response_text,omitempty"`
+	SessionID    string `json:"session_id"`
+}

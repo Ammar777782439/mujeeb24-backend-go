@@ -243,7 +243,54 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	if authentication != nil {
 		apiMiddleware = append(apiMiddleware, middleware.RequireAccessTokenHuma(authentication.Verifier))
 	}
-	_, mux := contract.BuildAPIWithHandlersAndMiddleware(handlers.NewServer(dependencies), apiMiddleware)
+
+	// Per contract 11 §2, the Merchant Catalog AI is a SEPARATE B2B agent.
+	// Wire it only when the Gemini ContractClient is configured (external.AIRuntime
+	// is a *gemini.Client). Per contract ④ §8, ContractRuntime is the only
+	// contract-aligned way to call Gemini.
+	dashboardServer := handlers.NewServer(dependencies)
+	if external.AutoReplyEnabled && external.AIRuntime != nil {
+		if geminiClient, ok := external.AIRuntime.(*gemini.Client); ok {
+			// Per contract ④ §8, wrap the legacy Client with ContractClient.
+			contractClient, err := gemini.NewContractClient(geminiClient)
+			if err != nil {
+				database.Close()
+				return nil, fmt.Errorf("build merchant AI contract client: %w", err)
+			}
+			// Per contract 11 §2, the dedicated MerchantContextBuilder
+			// is separate from the B2C AutoReplyContextBuilder.
+			merchantContextBuilder := services.NewMerchantContextBuilder(
+				postgres.NewBusinessRepository(database),
+				postgres.NewMerchantAISessionRepository(database),
+				postgres.NewCatalogRepository(database),
+			)
+			// Per contract ⑤ §7, build the Catalog Entity Contract
+			// payload once and reuse for every call.
+			entityContract := services.BuildCatalogEntityContractPayload()
+			if payloadBytes, err := json.Marshal(entityContract); err == nil {
+				merchantContextBuilder.EntityContractPayload = payloadBytes
+			}
+			// Per contract ⑥ §2, reuse the validation pipeline
+			// (the same PostgresReferenceValidator + PostgresTenantValidator
+			// wired for B2C). Per contract 11 §2, Validation primitives
+			// ARE shared infrastructure between B2B and B2C.
+			merchantAgent := services.NewMerchantCatalogAIAgent(
+				contractClient,
+				merchantContextBuilder,
+				services.NewValidationPipeline(
+					postgres.NewPostgresReferenceValidator(database),
+					postgres.NewPostgresTenantValidator(database),
+					nil, // PolicyEvaluator: nil = default-allow per contract ⑥ §12
+					nil, // AuthorizationService: nil = PolicyDecision is final
+				),
+				postgres.NewAIRunTraceRepository(database),
+				postgres.NewMerchantAISessionRepository(database),
+			)
+			merchantHandler := handlers.NewMerchantAIHandler(merchantAgent)
+			dashboardServer = dashboardServer.WithMerchantAI(handlers.MerchantAIDeps{Handler: merchantHandler})
+		}
+	}
+	_, mux := contract.BuildAPIWithHandlersAndMiddleware(dashboardServer, apiMiddleware)
 
 	realtimeSSEHandler := handlers.NewRealtimeSSEHandler(realtimeHub, dependencies.Scope)
 	var sseHTTPHandler http.Handler = realtimeSSEHandler

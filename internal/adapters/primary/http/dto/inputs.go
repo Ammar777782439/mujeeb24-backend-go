@@ -743,3 +743,23 @@ type CreateCustomerInput struct {
 	Body           CreateCustomerRequest
 }
 
+// MerchantAIChatInput is the HTTP input for one Merchant Catalog AI turn
+// per contract 11 §6. Exposed at POST /businesses/{business_id}/merchant-ai/turns.
+//
+// Per contract 11 §2, this is the B2B entrypoint — separate from the B2C
+// AutoReply flow. The merchant_dashboard channel is hardcoded per contract ④ §3.
+type MerchantAIChatInput struct {
+	BusinessPath
+	CommandHeaders
+	Body MerchantAIChatRequest
+}
+
+// MerchantAIChatRequest is the body of a merchant AI turn request.
+type MerchantAIChatRequest struct {
+	// SessionID is the merchant_ai_sessions.id per migration 000054.
+	// Empty for the first turn (the agent creates a new session).
+	// Non-empty for subsequent turns (the agent appends to the existing session).
+	SessionID string `json:"session_id,omitempty"`
+	// Message is the merchant's current text per contract ④ §3 user_message.
+	Message string `json:"message" minLength:"1" maxLength:"8000"`
+}

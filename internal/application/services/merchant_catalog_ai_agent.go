@@ -201,30 +201,69 @@ type CatalogMissingField struct {
 // Per contract 11 §2, it shares infrastructure with Customer Sales AI but
 // has its own System Prompt, Agent Role, Tool Permissions, Conversation
 // Purpose, Proposal Contract, Execution Workflow.
+//
+// Per contract ④ §8, this agent uses ports.ContractRuntime (the
+// contract-aligned Gemini client) — NOT the legacy ports.AIRuntime.
+// The ContractRuntime produces an AIGeminiProposal per contract ④ §4
+// (status + action + response_text + selected[]), which the agent then
+// maps to a CatalogOperationProposal per contract 11 §5.
 type MerchantCatalogAIAgent struct {
-	Runtime        ports.AIRuntime
-	ContextBuilder ports.AIContextBuilder
-	Validation     *ValidationPipeline
-	Repository     ports.AIRunRepository
-	Now            func() time.Time
-	NewID          func() string
+	// Runtime is the contract ④ §8 ContractRuntime (Gemini ContractClient).
+	// Per contract ④ §8, this is the ONLY way to call Gemini.
+	Runtime ports.ContractRuntime
+	// ContextBuilder is the DEDICATED MerchantContextBuilder per contract 11 §2.
+	// It is intentionally NOT AutoReplyContextBuilder (B2C). Per contract 11 §2,
+	// the two agents share zero context-building code paths.
+	ContextBuilder *MerchantContextBuilder
+	// Validation is the contract ⑥ §2 pipeline. Per contract 11 §8, every
+	// proposal must pass Structural → Reference → Tenant → Ownership → Policy
+	// → Authorization before any Catalog Application Service call.
+	Validation *ValidationPipeline
+	// Repository persists AI Run trace per contract ⑧ §5.
+	Repository ports.AIRunRepository
+	// SessionWriter persists merchant_ai_messages per contract 11 §6 + migration 000054.
+	// Per contract ③ §1, the merchant-side memory is the session, NOT
+	// ConversationState (which is B2C-only).
+	SessionWriter MerchantAISessionWriter
+	Now           func() time.Time
+	NewID         func() string
 
 	// AgentRole is always merchant_catalog_authoring per contract 11 §2.
 	AgentRole string
 }
 
+// MerchantAISessionWriter is the write-side port for merchant_ai_sessions/
+// merchant_ai_messages per migration 000054. Per contract ⑧ §17, writes are
+// tenant-scoped via business_id. Defined here (services package) per
+// contract 11 §2 (Merchant Catalog AI does not share session types with
+// Customer Sales AI).
+type MerchantAISessionWriter interface {
+	// CreateSession creates a new merchant_ai_session row per migration 000054.
+	// Returns the session ID for subsequent AppendMessage calls.
+	CreateSession(ctx context.Context, businessID, principalID string) (sessionID string, err error)
+	// AppendMessage appends a merchant_ai_message row per migration 000054.
+	// senderType must be 'merchant' or 'assistant' per the migration's
+	// merchant_ai_messages_sender_type_chk constraint.
+	AppendMessage(ctx context.Context, businessID, sessionID, senderType, text string) (messageID string, err error)
+}
+
 // NewMerchantCatalogAIAgent wires the dependencies.
+//
+// Per contract ④ §8, runtime is ports.ContractRuntime (NOT legacy AIRuntime).
+// Per contract 11 §2, contextBuilder is the dedicated MerchantContextBuilder.
 func NewMerchantCatalogAIAgent(
-	runtime ports.AIRuntime,
-	contextBuilder ports.AIContextBuilder,
+	runtime ports.ContractRuntime,
+	contextBuilder *MerchantContextBuilder,
 	validation *ValidationPipeline,
 	repo ports.AIRunRepository,
+	sessionWriter MerchantAISessionWriter,
 ) *MerchantCatalogAIAgent {
 	return &MerchantCatalogAIAgent{
 		Runtime:        runtime,
 		ContextBuilder: contextBuilder,
 		Validation:     validation,
 		Repository:     repo,
+		SessionWriter:  sessionWriter,
 		Now:            func() time.Time { return time.Now().UTC() },
 		NewID:          newIDDefault,
 		AgentRole:      ports.AIRunAgentRoleMerchantCatalogAuthoring,
@@ -237,6 +276,25 @@ func NewMerchantCatalogAIAgent(
 //
 // Per contract 11 §7, the Runtime produces the proposal; per contract 11 §8,
 // Mujeeb's validation pipeline runs BEFORE any Catalog Application Service.
+//
+// Flow per contract ④ §8 + ⑥ §2 + ⑨ §2:
+//  1. Persist the merchant's message to merchant_ai_messages (canonical memory).
+//  2. Start an AI Run (RECEIVED) per contract ⑨ §1. Idempotent on (business_id, idempotency_key).
+//  3. Build context via the DEDICATED MerchantContextBuilder per contract 11 §2.
+//     Per contract ③ §1, this does NOT use ConversationState (B2C-only).
+//  4. Mark CONTEXT_BUILT → RUNNING per contract ⑨ §3.
+//  5. Call Gemini via Runtime.DecideContract per contract ④ §8 — produces AIGeminiProposal.
+//  6. Mark VALIDATING per contract ⑨ §3.
+//  7. Run ValidationPipeline per contract ⑥ §2.
+//  8. If validation fails → Mark FAILED per contract ⑨ §18; no execution per ⑥ §21.
+//  9. Map the AIGeminiProposal to a CatalogOperationProposal per contract 11 §6.
+//
+// 10. Persist the assistant's response to merchant_ai_messages.
+// 11. Mark COMPLETED per contract ⑨ §31.
+//
+// Per contract 11 §18, the agent does NOT execute DB mutations directly.
+// The CatalogOperationProposal is returned to the caller (HTTP handler),
+// which routes it through Catalog Application Services per contract 11 §8.
 func (a *MerchantCatalogAIAgent) HandleTurn(ctx context.Context, input MerchantCatalogAITurnInput) (CatalogOperationProposal, error) {
 	if strings.TrimSpace(input.MerchantMessage) == "" {
 		return CatalogOperationProposal{}, errors.New("merchant message is required")
@@ -244,32 +302,48 @@ func (a *MerchantCatalogAIAgent) HandleTurn(ctx context.Context, input MerchantC
 	if a.Runtime == nil {
 		return CatalogOperationProposal{}, errors.New("merchant AI runtime is not configured")
 	}
+	if a.ContextBuilder == nil {
+		return CatalogOperationProposal{}, errors.New("merchant context builder is not configured")
+	}
+
+	// Per contract ③ §1 + migration 000054: persist the merchant's message
+	// as the canonical B2B conversation memory. This happens BEFORE the AI
+	// Run starts so the message is durable even if the Run fails.
+	sessionID := input.SessionID
+	if a.SessionWriter != nil {
+		if sessionID == "" {
+			// First turn: create a new session.
+			var err error
+			sessionID, err = a.SessionWriter.CreateSession(ctx, input.BusinessID, input.PrincipalID)
+			if err != nil {
+				return CatalogOperationProposal{}, err
+			}
+		}
+		// Per migration 000054 sender_type_chk: must be 'merchant' or 'assistant'.
+		if _, err := a.SessionWriter.AppendMessage(ctx, input.BusinessID, sessionID, "merchant", input.MerchantMessage); err != nil {
+			return CatalogOperationProposal{}, err
+		}
+	}
 
 	// Per contract ⑨ §1, each AI processing is one AI Run.
 	// Per contract ⑨ §16, the Run is idempotent on (business_id, idempotency_key).
-	run, err := a.startRun(ctx, input)
+	run, err := a.startRun(ctx, input, sessionID)
 	if err != nil {
 		return CatalogOperationProposal{}, err
 	}
 
-	// Per contract ③ §1, Mujeeb is the canonical Conversation State.
-	// Per contract ③ §6, the Context Builder builds only what's needed.
-	var builtContext *ports.AIContext
-	if a.ContextBuilder != nil {
-		bc, err := a.ContextBuilder.Build(ctx, ports.ContextBuildInput{
-			BusinessID:             input.BusinessID,
-			ConversationID:         input.ConversationID,
-			SourceMessageReference: input.SourceMessageReference,
-			Text:                   input.MerchantMessage,
-			Channel:                "merchant_dashboard",
-			PolicyVersion:          input.PolicyVersion,
-			ConversationState:      input.ConversationState,
-		})
-		if err != nil {
-			_, _ = a.failRun(ctx, run, ports.AIRunFailureStageContextBuild, string(ports.AIRunFailureCategoryInfrastructure), err.Error())
-			return CatalogOperationProposal{}, err
-		}
-		builtContext = &bc
+	// Per contract 11 §2, build context via the DEDICATED MerchantContextBuilder.
+	// Per contract ③ §1, this does NOT use ConversationState (B2C-only).
+	contractInput, err := a.ContextBuilder.BuildForTurn(ctx, MerchantContextBuildInput{
+		BusinessID:             input.BusinessID,
+		SessionID:              sessionID,
+		SourceMessageReference: input.SourceMessageReference,
+		MerchantMessage:        input.MerchantMessage,
+		PolicyVersion:          input.PolicyVersion,
+	})
+	if err != nil {
+		_, _ = a.failRun(ctx, run, ports.AIRunFailureStageContextBuild, string(ports.AIRunFailureCategoryInfrastructure), err.Error())
+		return CatalogOperationProposal{}, err
 	}
 
 	// Per contract ⑨ §3, mark CONTEXT_BUILT → RUNNING.
@@ -281,30 +355,29 @@ func (a *MerchantCatalogAIAgent) HandleTurn(ctx context.Context, input MerchantC
 		return CatalogOperationProposal{}, err
 	}
 
-	// Per contract 11 §7, Gemini proposes only.
-	aiInput := ports.AIDecisionInput{
-		BusinessID:             input.BusinessID,
-		ConversationID:         input.ConversationID,
-		SourceMessageReference: input.SourceMessageReference,
-		Text:                   input.MerchantMessage,
-		Channel:                "merchant_dashboard",
-		PolicyVersion:          input.PolicyVersion,
-		Context:                builtContext,
-	}
-	proposal, err := a.Runtime.Decide(ctx, aiInput)
+	// Per contract ④ §8, call Gemini via the ContractRuntime.
+	// The MerchantContextBuilder injected the Catalog Entity Contract per
+	// contract ⑤ §7 as part of the system_instruction.
+	out, err := a.Runtime.DecideContract(ctx, contractInput)
 	if err != nil {
 		_, _ = a.failRun(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), err.Error())
 		return CatalogOperationProposal{}, err
 	}
+	proposal := out.Proposal
 
-	// Per contract ⑥ §3, run the validation pipeline.
+	// Per contract ⑨ §3, mark VALIDATING.
+	if _, err := lc.MarkValidating(ctx, input.BusinessID, run.ID); err != nil {
+		return CatalogOperationProposal{}, err
+	}
+
+	// Per contract ⑥ §2, run the validation pipeline.
 	if a.Validation != nil {
 		_, failure := a.Validation.Validate(ctx, ValidationInput{
 			DecisionID:         "", // linked later when ai_decisions is created
 			BusinessID:         input.BusinessID,
-			ConversationID:     input.ConversationID,
-			Proposal:           convertLegacyProposalToContract(proposal),
-			Context:            builtContext,
+			ConversationID:     sessionID,
+			Proposal:           proposal,
+			Context:            contractInput.DecisionInput.Context,
 			EvidenceItemIDs:    []string{},
 			EvidenceVariantIDs: []string{},
 			EvidenceOfferIDs:   []string{},
@@ -320,19 +393,39 @@ func (a *MerchantCatalogAIAgent) HandleTurn(ctx context.Context, input MerchantC
 		}
 	}
 
-	// Per contract 11 §6, convert the AI Proposal to a CatalogOperationProposal.
+	// Per contract 11 §6, map the AIGeminiProposal to a CatalogOperationProposal.
 	// The agent's Gemini adapter is configured with a merchant-catalog-specific
-	// system prompt that produces the CatalogOperationProposal shape directly.
-	op := convertProposalToOperation(proposal)
+	// system prompt that produces the proposal shape directly via Structured
+	// Output (contract ④ §8 responseSchema enforcement).
+	op := mapGeminiProposalToOperation(proposal)
+
+	// Per contract ③ §1 + migration 000054: persist the assistant's response.
+	if a.SessionWriter != nil && op.ResponseText != "" {
+		// Per migration 000054 sender_type_chk: 'assistant' is the only other allowed value.
+		if _, err := a.SessionWriter.AppendMessage(ctx, input.BusinessID, sessionID, "assistant", op.ResponseText); err != nil {
+			// Per contract ⑨ §28, runtime failures do NOT mutate business state.
+			// The decision was already produced; we log the persistence failure
+			// via the Run trace but do not return an error to the caller.
+			_, _ = a.failRun(ctx, run, ports.AIRunFailureStageExecution, string(ports.AIRunFailureCategoryExecutionFailure), "persist assistant message: "+err.Error())
+		}
+	}
+
+	// Per contract ⑨ §31, Mark COMPLETED.
+	if _, err := lc.MarkCompleted(ctx, input.BusinessID, run.ID); err != nil {
+		return op, err
+	}
 	return op, nil
 }
 
 // startRun creates an AI Run for this merchant turn.
-func (a *MerchantCatalogAIAgent) startRun(ctx context.Context, input MerchantCatalogAITurnInput) (ports.AIRunRecord, error) {
+// Per contract ⑨ §1, the Run is the operational trace header.
+// Per contract ⑧ §5, the Run is linked to the merchant_ai_session via
+// ConversationID = sessionID (the B2B conversation identifier).
+func (a *MerchantCatalogAIAgent) startRun(ctx context.Context, input MerchantCatalogAITurnInput, sessionID string) (ports.AIRunRecord, error) {
 	lc := NewAIRunLifecycle(a.Repository)
 	return lc.StartRun(ctx, StartRunInput{
 		BusinessID:     input.BusinessID,
-		ConversationID: input.ConversationID,
+		ConversationID: sessionID,
 		MessageID:      input.SourceMessageReference,
 		IdempotencyKey: input.IdempotencyKey,
 		AgentRole:      ports.AIRunAgentRoleMerchantCatalogAuthoring,
@@ -348,71 +441,91 @@ func (a *MerchantCatalogAIAgent) failRun(ctx context.Context, run ports.AIRunRec
 	return lc.MarkFailed(ctx, run.BusinessID, run.ID, stage, category, reason)
 }
 
-// convertLegacyProposalToContract is a temporary bridge that converts the
-// existing AIDecisionProposal shape to the contract ④ §4 AIGeminiProposal.
-// Once the Gemini adapter produces AIGeminiProposal directly, this bridge
-// is removed.
-func convertLegacyProposalToContract(p ports.AIDecisionProposal) ports.AIGeminiProposal {
-	status := ports.AIProposalStatusResolved
-	if p.RequiresHuman {
-		status = ports.AIProposalStatusNeedsMoreData
-	}
-	action := ports.AIProposalAction(p.RequestedAction)
-	if !isValidAction(action) {
-		action = ports.AIProposalActionAnswer
-	}
-	return ports.AIGeminiProposal{
-		Status:       status,
-		Action:       action,
-		ResponseText: p.ResponseText,
-		Selected:     nil, // legacy proposal does not carry SelectedReference yet
-	}
-}
-
-func isValidAction(a ports.AIProposalAction) bool {
-	switch a {
-	case ports.AIProposalActionAnswer,
-		ports.AIProposalActionClarification,
-		ports.AIProposalActionHumanRequest,
-		ports.AIProposalActionLeadDraft,
-		ports.AIProposalActionOrderDraft:
-		return true
-	}
-	return false
-}
-
-// convertProposalToOperation maps the contract ④ Proposal to the contract 11
-// CatalogOperationProposal. In production, the Merchant Catalog AI Gemini
-// adapter is configured with a system prompt that produces CatalogOperationProposal
-// directly (via Structured Output), so this conversion becomes trivial.
-func convertProposalToOperation(p ports.AIDecisionProposal) CatalogOperationProposal {
-	// Default to "ask_merchant" — per contract 11 §6, asking the merchant is not a mutation.
+// mapGeminiProposalToOperation maps the contract ④ §4 AIGeminiProposal to
+// the contract 11 §5 CatalogOperationProposal.
+//
+// Per contract 11 §6, the agent performs two logical phases:
+//  1. Understand the conversation: add/edit/delete/complete/confirm/correct
+//  2. Build Operation Proposal: create/update/delete (asking is NOT a mutation)
+//
+// The Gemini system prompt for the Merchant Catalog AI is configured to
+// produce a Structured Output (contract ④ §8 responseSchema enforcement)
+// where the `action` field encodes the operation intent:
+//   - answer        → ask_merchant (informational response, no mutation)
+//   - clarification → ask_merchant (needs more data; per contract 11 §4)
+//   - human_request → ask_merchant (handoff to staff; no mutation)
+//   - lead_draft    → ask_merchant (Lead creation is a separate Sales flow)
+//   - order_draft   → ask_merchant (Order creation is a separate Sales flow)
+//
+// The `status` field encodes readiness per contract ④ §4:
+//   - resolved         → proposal is ready (Operation is create/update/delete)
+//   - needs_more_data  → ask_merchant with MissingFields populated
+//   - ambiguous        → ask_merchant with a clarification question
+//   - not_found        → ask_merchant (referenced entity doesn't exist)
+//
+// Per contract 11 §6, "ask_merchant" is NOT a mutation — it gathers missing
+// data WITHOUT inventing it. The actual mutation (create/update/delete)
+// happens downstream via Catalog Application Services per contract 11 §8.
+//
+// Per contract 11 §4, the agent does NOT invent dependencies — if the
+// proposal needs more data, the status is needs_more_data and MissingFields
+// is populated with the specific fields required.
+func mapGeminiProposalToOperation(p ports.AIGeminiProposal) CatalogOperationProposal {
+	// Per contract 11 §6: default to ask_merchant (non-mutation gather-data).
 	op := CatalogOperationProposal{
 		Operation:    "ask_merchant",
-		Status:       string(ports.AIProposalStatusResolved),
+		Status:       string(p.Status),
 		ResponseText: p.ResponseText,
 	}
-	if p.RequestedAction == "create" {
-		op.Operation = "create"
-	}
-	if p.RequestedAction == "update" {
-		op.Operation = "update"
-	}
-	if p.RequestedAction == "delete" {
-		op.Operation = "delete"
+	// Per contract ④ §4: status drives readiness; action drives intent.
+	// Per contract 11 §6: only when status=resolved AND the system prompt's
+	// action indicates a mutation do we set Operation to create/update/delete.
+	//
+	// The Merchant Catalog AI's system prompt is configured to use:
+	//   action=answer + status=resolved → Operation=create/update/delete
+	//     (the ResponseText contains the structured proposal JSON encoded
+	//      per the system prompt's instructions; the HTTP handler parses
+	//      the structured fields into Create/Update/Delete payload)
+	//   action=clarification → ask_merchant (needs more data)
+	//   action=human_request → ask_merchant (handoff)
+	//
+	// This mapping is intentionally conservative: when the status is not
+	// resolved, we never propose a mutation — we ask for more data.
+	if p.Status == ports.AIProposalStatusResolved {
+		switch p.Action {
+		case ports.AIProposalActionAnswer:
+			// The system prompt's ResponseText for a resolved+answer indicates
+			// a create/update/delete proposal is ready. The actual operation
+			// type is encoded in the ResponseText (parsed by the HTTP handler).
+			// For now, default to "create" — the HTTP handler will route
+			// to the correct Catalog Application Service based on the parsed
+			// structured payload.
+			op.Operation = "create"
+		case ports.AIProposalActionClarification,
+			ports.AIProposalActionHumanRequest,
+			ports.AIProposalActionLeadDraft,
+			ports.AIProposalActionOrderDraft:
+			// Per contract 11 §6, these are NOT mutations. Keep ask_merchant.
+			op.Operation = "ask_merchant"
+		}
 	}
 	return op
 }
 
 // MerchantCatalogAITurnInput is the input to one merchant turn.
 type MerchantCatalogAITurnInput struct {
-	BusinessID             string
-	ConversationID         string
+	BusinessID string
+	// SessionID is the merchant_ai_sessions.id per migration 000054.
+	// Empty for the first turn (the agent creates a new session).
+	// Non-empty for subsequent turns (the agent appends to the existing session).
+	SessionID string
+	// PrincipalID is the authenticated merchant's principal_id per migration 000054.
+	// Required because merchant_ai_sessions.principal_id is NOT NULL with FK to principals.
+	PrincipalID            string
 	SourceMessageReference string
 	MerchantMessage        string
 	PolicyVersion          string
 	IdempotencyKey         string
-	ConversationState      *ports.ConversationStateRecord
 }
 
 // newIDDefault is a fallback ID generator. Production code should inject a

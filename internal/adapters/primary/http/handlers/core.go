@@ -108,9 +108,27 @@ type Dependencies struct {
 	GetAuditEvent             queries.GetAuditEventHandler
 }
 
-type Server struct{ deps Dependencies }
+// MerchantAIDeps holds the B2B Merchant Catalog AI handler. Per contract 11 §2,
+// this is strictly separated from B2C handlers. The dispatch case routes
+// merchantAIChat operations here.
+type MerchantAIDeps struct {
+	Handler *MerchantAIHandler
+}
+
+type Server struct {
+	deps       Dependencies
+	merchantAI MerchantAIDeps
+}
 
 func NewServer(deps Dependencies) *Server { return &Server{deps: deps} }
+
+// WithMerchantAI wires the B2B Merchant Catalog AI handler per contract 11 §2.
+// This is intentionally a separate setter from NewServer to make the B2B
+// boundary explicit in the bootstrap wiring code.
+func (s *Server) WithMerchantAI(merchantAI MerchantAIDeps) *Server {
+	s.merchantAI = merchantAI
+	return s
+}
 
 func (s *Server) requireScope(ctx context.Context, businessID contract.UUID) (commands.ActorContext, error) {
 	if s.deps.Scope == nil {
@@ -213,8 +231,6 @@ func (s *Server) ListCustomers(ctx context.Context, in *contract.CustomerListInp
 	out.Body.Pagination = contract.Page{NextCursor: optionalString(result.NextCursor), HasMore: result.HasMore}
 	return out, nil
 }
-
-
 
 type dashboardHTTPError struct {
 	contract.ErrorEnvelope
@@ -323,6 +339,20 @@ func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (a
 		return s.CreateOutboundMessage(ctx, input.(*contract.ConversationMessageInput))
 	case "listCustomers":
 		return s.ListCustomers(ctx, input.(*contract.CustomerListInput))
+	case "merchantAIChat":
+		// Per contract 11 §2, this is the B2B entrypoint — strictly
+		// separated from B2C AutoReply. Per contract ⑥ §9, business_id
+		// comes from the Authenticated Context (requireScope), NOT from
+		// Gemini or the request body.
+		in := input.(*contract.MerchantAIChatInput)
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return nil, mapApplicationError(err)
+		}
+		if s.merchantAI.Handler == nil {
+			return nil, mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "merchant AI handler is not wired"))
+		}
+		return s.merchantAI.Handler.HandleTurn(ctx, in, actor)
 	default:
 		return nil, mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "application handler is not wired: "+operationID))
 	}
