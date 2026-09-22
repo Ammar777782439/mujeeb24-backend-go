@@ -690,7 +690,7 @@ func (c *CatalogAuthoringCapability) Definition() ports.AICapabilityDefinition {
 				},
 				"availability_mode": map[string]any{
 					"type":        "string",
-					"description": "Availability mode (e.g. in_stock).",
+					"description": "Availability mode per SQL migration 000016/000018: stock, schedule, supplier_check, always_available, unknown.",
 				},
 				"availability_status": map[string]any{
 					"type":        "string",
@@ -1157,7 +1157,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 		}
 		availabilityMode := strings.TrimSpace(params.AvailabilityMode)
 		if availabilityMode == "" {
-			availabilityMode = "in_stock"
+			availabilityMode = "stock"
 		}
 		fulfillmentMode := strings.TrimSpace(params.FulfillmentMode)
 		if fulfillmentMode == "" {
@@ -1262,7 +1262,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 
 		availMode := strings.TrimSpace(params.AvailabilityMode)
 		if availMode == "" {
-			availMode = "in_stock"
+			availMode = "stock"
 		}
 		availStatus := strings.TrimSpace(params.AvailabilityStatus)
 		if availStatus == "" {

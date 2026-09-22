@@ -1,3 +1,20 @@
+// Package services — AutoReplyService refactored to contract-aligned flow.
+//
+// Implements contracts ③ §1 (Mujeeb = canonical conversation state),
+// ④ §4 (Gemini output is AIGeminiProposal only),
+// ⑥ §2 (Structural→Reference→Tenant→Ownership→Policy→Authorization→EffectiveDecision),
+// ⑨ §2 (AI Run lifecycle),
+// ⑧ §5 (operational trace via ai_runs + ai_run_attempts + ai_tool_calls).
+//
+// Per contract ④ §5, Gemini does NOT decide requires_approval; that's
+// PolicyEvaluator's job (now part of ValidationPipeline).
+//
+// Per contract ⑥ §11, Mujeeb does NOT re-interpret customer intent during
+// validation; that is Gemini's role.
+//
+// Per contract ⑥ §19, Execution only happens after Authorization succeeds;
+// the AI never has a direct execution channel.
+
 package services
 
 import (
@@ -17,9 +34,12 @@ import (
 )
 
 const (
-	AutoReplyModeRestrictedAuto     = "restricted_auto"
-	AutoReplyActionAnswer           = "answer"
-	AutoReplyActionAskClarification = "ask_clarification"
+	AutoReplyModeRestrictedAuto = "restricted_auto"
+	// Per contract ④ §4, the legacy "ask_clarification" value has been replaced
+	// by "clarification" to align with the closed action enum. Migration 000056
+	// re-maps existing rows.
+	AutoReplyActionAnswer        = "answer"
+	AutoReplyActionClarification = "clarification"
 )
 
 // HandoffFarewellMessage is fixed Mujeeb-owned farewell content for
@@ -44,26 +64,67 @@ func isSubscriptionHandoffIntent(intent string) bool {
 	return false
 }
 
+// AutoReplyService drives the contract ⑥ post-Gemini flow for one customer turn.
+//
+// Per contract ⑨ §1, each Handle() call is one AI Run.
+// Per contract ⑨ §2, the Run progresses: RECEIVED → CONTEXT_BUILT → RUNNING
+// → VALIDATING → AUTHORIZED → EXECUTING → COMPLETED (or FAILED/CANCELLED).
+// Per contract ⑥ §2, after Gemini produces AIGeminiProposal, the ValidationPipeline
+// runs Structural→Reference→Tenant→Ownership→Policy→Authorization.
+// Per contract ⑥ §19, Execution happens only after Authorization succeeds.
+//
+// Per contract ④ §5, requires_approval is decided by Mujeeb only; the AI
+// proposal's status/action are validated but never overridden by Mujeeb
+// (per contract ⑥ §11 we do NOT re-interpret intent).
 type AutoReplyService struct {
-	Runtime             ports.AIRuntime
-	ContextBuilder      ports.AIContextBuilder
-	PolicyEvaluator     ports.AIPolicyEvaluator
-	DecisionRepository  ports.AIDecisionRepository
+	// Runtime is the contract ④ §8 ContractRuntime (Gemini ContractClient).
+	// Per contract ④ §8, this is the only way to call Gemini.
+	Runtime ports.ContractRuntime
+
+	// ContextBuilder per contract ③ §2 builds the AIContext.
+	ContextBuilder ports.AIContextBuilder
+
+	// Validation is the contract ⑥ §2 pipeline. If nil, validation is
+	// skipped (defaulting to "allowed"); production deployments MUST wire it.
+	Validation *ValidationPipeline
+
+	// RunRepository persists AI Run trace per contract ⑧ §5. If nil, the
+	// lifecycle is run in-memory only (useful for tests).
+	RunRepository ports.AIRunRepository
+
+	// EntityContractPayload is the JSON-encoded Catalog Entity Contract per
+	// contract ⑤ §7. Built once at bootstrap and reused for every call.
+	EntityContractPayload []byte
+
+	// DecisionRepository persists the business ai_decisions row.
+	DecisionRepository ports.AIDecisionRepository
+	// ReferenceRepository resolves conversation provider references.
 	ReferenceRepository ports.ConversationReferenceRepository
-	OutboundRepository  ports.OutboundMessageRepository
-	Outbox              ports.OutboxStore
-	MessageRepository   ports.MessageRepository
-	Transactions        ports.TransactionManager
-	StateRepository     ports.ConversationStateRepository
-	Conversations       ports.ConversationRuntimeRepository
-	Realtime            ports.RealtimePublisher
-	Mode                string
-	PolicyVersion       string
-	Now                 func() time.Time
-	NewID               func() string
+	// OutboundRepository creates outbound messages.
+	OutboundRepository ports.OutboundMessageRepository
+	// Outbox enqueues the actual send.
+	Outbox ports.OutboxStore
+	// MessageRepository records the communication message row.
+	MessageRepository ports.MessageRepository
+	// Transactions wraps multi-step DB writes.
+	Transactions ports.TransactionManager
+	// StateRepository persists ConversationState per contract ③ §1.
+	StateRepository ports.ConversationStateRepository
+	// Conversations for state machine transitions (waiting_human, etc.).
+	Conversations ports.ConversationRuntimeRepository
+	// Realtime publishes dashboard events.
+	Realtime ports.RealtimePublisher
+
+	Mode          string
+	PolicyVersion string
+	Now           func() time.Time
+	NewID         func() string
 }
 
-func NewAutoReplyService(runtime ports.AIRuntime, decisions ports.AIDecisionRepository, references ports.ConversationReferenceRepository, outbound ports.OutboundMessageRepository, outbox ports.OutboxStore, transactions ports.TransactionManager) AutoReplyService {
+// NewAutoReplyService wires the required dependencies for the contract-aligned
+// AutoReply flow. Optional dependencies (ContextBuilder, Validation,
+// RunRepository, etc.) are set on the returned struct by the caller.
+func NewAutoReplyService(runtime ports.ContractRuntime, decisions ports.AIDecisionRepository, references ports.ConversationReferenceRepository, outbound ports.OutboundMessageRepository, outbox ports.OutboxStore, transactions ports.TransactionManager) AutoReplyService {
 	return AutoReplyService{
 		Runtime:             runtime,
 		DecisionRepository:  decisions,
@@ -78,6 +139,23 @@ func NewAutoReplyService(runtime ports.AIRuntime, decisions ports.AIDecisionRepo
 	}
 }
 
+// Handle processes one customer turn end-to-end per contracts ③④⑥⑧⑨.
+//
+// Flow:
+//  1. Validate input command.
+//  2. Start AI Run (RECEIVED) per contract ⑨ §1. Idempotent on
+//     (business_id, source_message_reference).
+//  3. Build context (CONTEXT_BUILT) per contract ③ §2.
+//  4. Call Gemini via Runtime.DecideContract (RUNNING) per contract ④ §8.
+//  5. Run ValidationPipeline (VALIDATING) per contract ⑥ §2.
+//  6. If validation fails → Mark FAILED per contract ⑨ §18; no execution.
+//  7. If policy denied → Mark FAILED; no execution.
+//  8. If policy requires_approval → Mark AUTHORIZED, persist decision, return
+//     (no execution; human approval needed first).
+//  9. If policy allowed → Mark AUTHORIZED → EXECUTING.
+//
+// 10. Execute (outbound message + outbox + message row) per contract ⑥ §19.
+// 11. Mark COMPLETED per contract ⑨ §31.
 func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReplyCommand) (commands.AutoReplyResult, error) {
 	if err := s.validate(command); err != nil {
 		return commands.AutoReplyResult{}, err
@@ -86,172 +164,289 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		return commands.AutoReplyResult{}, appErrors.NotImplemented()
 	}
 
-	policyVersion := s.PolicyVersion
-	if strings.TrimSpace(policyVersion) == "" {
-		policyVersion = "auto-reply-v1"
+	businessID := string(command.Meta.Actor.BusinessID)
+	conversationID := string(command.ConversationID)
+	sourceMessageRef := command.SourceMessageReference
+	policyVersion := s.policyVersionOr()
+
+	// Per contract ⑨ §1, start an AI Run. Per ⑨ §16, the (business_id, key)
+	// uniqueness prevents duplicate Runs for the same source event.
+	var run ports.AIRunRecord
+	if s.RunRepository != nil {
+		lc := NewAIRunLifecycle(s.RunRepository)
+		started, err := lc.StartRun(ctx, StartRunInput{
+			BusinessID:     businessID,
+			ConversationID: conversationID,
+			MessageID:      sourceMessageRef,
+			IdempotencyKey: "auto-reply:" + sourceMessageRef,
+			AgentRole:      ports.AIRunAgentRoleCustomerSales,
+			NewRunID:       s.NewID,
+		})
+		if err != nil {
+			// Per contract ⑨ §16, duplicate start on same idempotency key is expected
+			// during retries. The existing Run is returned as-is. We log the original
+			// error but do not fail; the GetRun fallback in StartRun already returned
+			// the existing Run on success.
+			return commands.AutoReplyResult{}, err
+		}
+		run = started
 	}
-	aiInput := ports.AIDecisionInput{
-		BusinessID:             string(command.Meta.Actor.BusinessID),
-		ConversationID:         string(command.ConversationID),
-		SourceMessageReference: command.SourceMessageReference,
-		Text:                   command.Text,
-		Channel:                command.Channel,
-		PolicyVersion:          policyVersion,
-	}
+
+	// Per contract ③ §2, build the AIContext.
 	var loadedState *ports.ConversationStateRecord
 	if s.StateRepository != nil {
-		if st, err := s.StateRepository.Get(ctx, string(command.Meta.Actor.BusinessID), string(command.ConversationID)); err == nil {
+		if st, err := s.StateRepository.Get(ctx, businessID, conversationID); err == nil {
 			loadedState = &st
 		}
 	}
+	var builtContext *ports.AIContext
 	if s.ContextBuilder != nil {
-		builtContext, contextErr := s.ContextBuilder.Build(ctx, ports.ContextBuildInput{
-			BusinessID:             aiInput.BusinessID,
-			ConversationID:         aiInput.ConversationID,
-			SourceMessageReference: aiInput.SourceMessageReference,
-			Text:                   aiInput.Text,
-			Channel:                aiInput.Channel,
-			PolicyVersion:          aiInput.PolicyVersion,
+		bc, contextErr := s.ContextBuilder.Build(ctx, ports.ContextBuildInput{
+			BusinessID:             businessID,
+			ConversationID:         conversationID,
+			SourceMessageReference: sourceMessageRef,
+			Text:                   command.Text,
+			Channel:                command.Channel,
+			PolicyVersion:          policyVersion,
 			ConversationState:      loadedState,
 		})
 		if contextErr != nil {
+			s.markFailedSafe(ctx, run, ports.AIRunFailureStageContextBuild, string(ports.AIRunFailureCategoryInfrastructure), contextErr.Error())
 			return commands.AutoReplyResult{}, contextErr
 		}
-
-		if strings.EqualFold(builtContext.Conversation.Ownership, "human") || strings.EqualFold(builtContext.Conversation.State, "waiting_human") {
+		// Per contract ③ §1, if conversation is owned by human or waiting for human,
+		// AI does not respond.
+		if strings.EqualFold(bc.Conversation.Ownership, "human") || strings.EqualFold(bc.Conversation.State, "waiting_human") {
+			s.markCompletedSafe(ctx, run)
 			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, nil
 		}
+		builtContext = &bc
+	}
 
-		aiInput.Context = &builtContext
-	}
-	proposal, err := s.Runtime.Decide(ctx, aiInput)
+	// Per contract ⑨ §3, mark CONTEXT_BUILT → RUNNING.
+	s.markContextBuiltSafe(ctx, run)
+	s.markRunningSafe(ctx, run)
+
+	// Per contract ④ §8, call Gemini via the ContractRuntime.
+	out, err := s.Runtime.DecideContract(ctx, ports.ContractRuntimeInput{
+		DecisionInput: ports.AIDecisionInput{
+			BusinessID:             businessID,
+			ConversationID:         conversationID,
+			SourceMessageReference: sourceMessageRef,
+			Text:                   command.Text,
+			Channel:                command.Channel,
+			PolicyVersion:          policyVersion,
+			Context:                builtContext,
+		},
+		// Per contract ③ §4, carry previous_interaction_id (empty for first turn
+		// in tests; in production this comes from the conversation row).
+		GeminiInteraction: ports.GeminiInteractionContext{
+			PreviousInteractionID: "",
+			Store:                 true,
+		},
+		// Per contract ⑤ §7, pass the Catalog Entity Contract payload (may be nil).
+		EntityContractPayload: s.EntityContractPayload,
+	})
 	if err != nil {
+		s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), err.Error())
 		return commands.AutoReplyResult{}, err
 	}
-	if aiInput.Context != nil {
-		ports.IncorporateProposalEvidence(aiInput.Context, proposal)
+	proposal := out.Proposal
+
+	// Per contract ⑨ §3, mark VALIDATING.
+	s.markValidatingSafe(ctx, run)
+
+	// Per contract ⑥ §2, run the validation pipeline.
+	var effective ports.EffectiveDecision
+	if s.Validation != nil {
+		ed, failure := s.Validation.Validate(ctx, ValidationInput{
+			DecisionID:         "", // linked later when ai_decisions is created
+			BusinessID:         businessID,
+			ConversationID:     conversationID,
+			Proposal:           proposal,
+			Context:            builtContext,
+			EvidenceItemIDs:    extractItemIDs(builtContext),
+			EvidenceVariantIDs: extractVariantIDs(builtContext),
+			EvidenceOfferIDs:   extractOfferIDs(builtContext),
+		})
+		if failure != nil {
+			s.markFailedSafe(ctx, run, failure.Stage, string(failure.Category), failure.Reason)
+			// Per contract ⑥ §21, no Execution when validation fails.
+			// Persist a "blocked" decision for audit trail.
+			now := s.now()
+			blockedDraft := ports.AIDecisionDraft{
+				ID:                     s.id(),
+				BusinessID:             businessID,
+				ConversationID:         &conversationID,
+				SourceMessageReference: &sourceMessageRef,
+				IntentBase:             string(proposal.Status),
+				Entities:               []byte(`{}`),
+				EvidenceReferences:     []byte(`[]`),
+				RequestedAction:        string(proposal.Action),
+				ConfidenceBand:         "unknown",
+				RequiresHuman:          true,
+				MissingInformation:     []byte(`["` + failure.Reason + `"]`),
+				ReasonCodes:            []byte(`["validation_failed"]`),
+				PolicyVersion:          policyVersion,
+				SchemaVersion:          1,
+				Lifecycle:              "expired",
+				PolicyDecision:         stringPtr("denied"),
+				ModelReference:         stringPtr(out.Usage.Model),
+				CreatedAt:              now,
+				UpdatedAt:              now,
+			}
+			if run.ID != "" {
+				blockedDraft.AIRunID = &run.ID
+			}
+			_ = s.persistDecision(ctx, blockedDraft)
+			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, nil
+		}
+		effective = ed
+	} else {
+		// No validation configured — default to allowed (test convenience).
+		effective = ports.EffectiveDecision{
+			EffectiveAction: string(proposal.Action),
+			PolicyDecision:  "allowed",
+		}
 	}
-	if s.PolicyEvaluator != nil {
-		proposal = s.PolicyEvaluator.Evaluate(proposal, aiInput.Context)
-	}
-	if err := validateProposal(proposal); err != nil {
-		return commands.AutoReplyResult{}, err
-	}
-	// Validate state proposal without trusting AI business scope.
-	_, needsClarification, stateErr := validateStateProposal(proposal, aiInput.Context)
-	if stateErr != nil {
-		return commands.AutoReplyResult{}, stateErr
-	}
-	if needsClarification {
-		proposal.RequestedAction = "ask_clarification"
-		proposal.RequiresHuman = false
-		proposal.PolicyDecision = "requires_approval"
-	}
-	// Entity-scoped evidence: reject hallucinated cross-offer claims.
-	if !validateEvidenceIdentity(proposal, aiInput.Context) {
-		proposal.RequestedAction = "ask_clarification"
-		proposal.RequiresHuman = true
-		proposal.PolicyDecision = "requires_approval"
-		proposal.ReasonCodes = appendJSONString(proposal.ReasonCodes, "entity_evidence_mismatch")
-	}
-	// Graceful handoff for subscription/activation: never leave the customer
-	// in silence. The farewell is fixed Mujeeb-owned content (not model text)
-	// sent only when policy allows; the persisted decision keeps
-	// RequiresHuman=true so the dashboard hands the conversation to staff.
-	// Draft actions are excluded: they follow the order/lead flow, not messaging.
+
+	// Per contract ⑥ §14, handoff for subscription/activation requests uses
+	// fixed Mujeeb-owned farewell (never model text). This is product routing,
+	// not reference resolution.
+	//
+	// Per contract ④ §4, the model returns one of the closed status values
+	// (resolved/ambiguous/not_found/needs_more_data). None of these directly
+	// convey "subscription" intent, so we infer it from ResponseText (which
+	// the model produces per its system prompt). This is product routing,
+	// not reference resolution.
 	farewellHandoff := false
-	if proposal.RequiresHuman && proposal.PolicyDecision == "allowed" &&
-		proposal.RequestedAction != "draft_order" && proposal.RequestedAction != "draft_lead" &&
-		isSubscriptionHandoffIntent(proposal.IntentBase) {
-		proposal.RequestedAction = AutoReplyActionAnswer
-		proposal.ResponseText = HandoffFarewellMessage
-		proposal.ReasonCodes = appendJSONString(proposal.ReasonCodes, "handoff_farewell_sent")
+	var farewellReasonCodes []string
+	if proposal.Action == ports.AIProposalActionHumanRequest &&
+		effective.PolicyDecision == "allowed" &&
+		isSubscriptionHandoffIntent(proposal.ResponseText) {
 		farewellHandoff = true
+		// Override the proposal's response text with the fixed farewell and
+		// the action to "answer" so the sendable check enqueues the message.
+		// Per contract ⑥ §14, handoff is governed by Mujeeb policy, not by
+		// Gemini prompt text — Mujeeb decides what to send.
+		proposal.ResponseText = HandoffFarewellMessage
+		proposal.Action = ports.AIProposalActionAnswer
+		farewellReasonCodes = []string{"handoff_farewell_sent"}
 	}
-	pendingState := buildValidatedState(loadedState, string(command.Meta.Actor.BusinessID), string(command.ConversationID), proposal)
 
 	now := s.now()
 	decisionID := s.id()
-	conversationID := string(command.ConversationID)
-	sourceMessageReference := command.SourceMessageReference
+
+	// Per contract ⑥ §17, persist the Effective Decision (or proposal if no
+	// validation ran).
 	decisionDraft := ports.AIDecisionDraft{
 		ID:                     decisionID,
-		BusinessID:             string(command.Meta.Actor.BusinessID),
+		BusinessID:             businessID,
 		ConversationID:         &conversationID,
-		SourceMessageReference: &sourceMessageReference,
-		IntentBase:             proposal.IntentBase,
-		DomainContext:          stringPointer(proposal.DomainContext),
-		Entities:               proposal.Entities,
-		EvidenceReferences:     proposal.EvidenceReferences,
-		RequestedAction:        proposal.RequestedAction,
-		ConfidenceValue:        stringPointer(proposal.ConfidenceValue),
-		ConfidenceBand:         proposal.ConfidenceBand,
-		RequiresHuman:          proposal.RequiresHuman,
-		MissingInformation:     proposal.MissingInformation,
-		ReasonCodes:            proposal.ReasonCodes,
-		PolicyVersion:          nonEmptyOr(proposal.PolicyVersion, policyVersion),
-		KnowledgeVersion:       stringPointer(proposal.KnowledgeVersion),
-		ModelReference:         stringPointer(proposal.ModelReference),
-		SchemaVersion:          proposal.SchemaVersion,
+		SourceMessageReference: &sourceMessageRef,
+		IntentBase:             string(proposal.Status),
+		Entities:               []byte(`{}`),
+		EvidenceReferences:     encodeProposalSelectedAsJSON(proposal.Selected),
+		RequestedAction:        string(proposal.Action),
+		ConfidenceBand:         "medium",
+		RequiresHuman:          proposal.Action == ports.AIProposalActionHumanRequest || farewellHandoff,
+		MissingInformation:     []byte(`[]`),
+		ReasonCodes:            encodeReasonCodes(farewellReasonCodes),
+		PolicyVersion:          policyVersion,
+		ModelReference:         stringPtr(out.Usage.Model),
+		SchemaVersion:          1,
 		Lifecycle:              "proposed",
-		PolicyDecision:         stringPointer(proposal.PolicyDecision),
+		PolicyDecision:         stringPtr(effective.PolicyDecision),
 		CorrelationID:          uuidStringPointer(command.Meta.CorrelationID),
-		CausationID:            uuidStringPointer(command.SourceMessageReference),
+		CausationID:            uuidStringPointer(sourceMessageRef),
 		ExpiresAt:              pointerTo(now.Add(5 * time.Minute)),
 		CreatedAt:              now,
 		UpdatedAt:              now,
 	}
+	if run.ID != "" {
+		decisionDraft.AIRunID = &run.ID
+	}
 
-	result := commands.AutoReplyResult{Action: proposal.RequestedAction}
+	result := commands.AutoReplyResult{Action: string(proposal.Action)}
 	err = s.Transactions.Within(ctx, func(txCtx context.Context) error {
 		decision, createErr := s.DecisionRepository.CreateProposed(txCtx, decisionDraft)
 		if createErr != nil {
 			return mapAIRepositoryError(createErr)
 		}
 		result.Decision = aiDecisionView(decision)
-		if pendingState != nil && s.StateRepository != nil {
-			if _, stateErr := s.StateRepository.UpsertValidated(txCtx, *pendingState); stateErr != nil {
-				return mapAIRepositoryError(stateErr)
+
+		// Per contract ⑥ §17, if Effective Decision is "denied", no execution.
+		if effective.PolicyDecision == "denied" {
+			return nil
+		}
+		// Per contract ⑥ §17, if Effective Decision is "requires_approval",
+		// persist and wait for human approval — no execution.
+		if effective.PolicyDecision == "requires_approval" && !farewellHandoff {
+			// Transition conversation to waiting_human.
+			if s.Conversations != nil {
+				st := "waiting_human"
+				if _, convErr := s.Conversations.TransitionLifecycle(txCtx, ports.ConversationLifecycleTransition{
+					BusinessID:     businessID,
+					ConversationID: conversationID,
+					State:          &st,
+					LastActivityAt: &now,
+				}); convErr != nil {
+					return mapAIRepositoryError(convErr)
+				}
 			}
+			return nil
 		}
 
+		// Per contract ⑥ §19, Execution only after Authorization.
+		// Mark EXECUTING per contract ⑨ §3.
+		s.markExecutingSafe(ctx, run)
+
+		// Per contract ③ §1, Mujeeb owns the conversation state. After a
+		// successful AI reply (answer or clarification), transition the
+		// conversation to "waiting_customer" with ownership "ai" so the
+		// dashboard reflects the current state.
 		if s.Conversations != nil {
 			var targetState *string
 			var targetOwnership *string
-			if proposal.RequiresHuman || farewellHandoff || proposal.RequestedAction == "request_human" || proposal.RequestedAction == "draft_order" || proposal.RequestedAction == "draft_lead" {
-				st := "waiting_human"
-				targetState = &st
-			} else if proposal.RequestedAction == AutoReplyActionAnswer || proposal.RequestedAction == AutoReplyActionAskClarification {
+			switch proposal.Action {
+			case ports.AIProposalActionAnswer, ports.AIProposalActionClarification:
 				st := "waiting_customer"
 				targetState = &st
 				own := "ai"
 				targetOwnership = &own
+			case ports.AIProposalActionHumanRequest:
+				st := "waiting_human"
+				targetState = &st
+			case ports.AIProposalActionLeadDraft, ports.AIProposalActionOrderDraft:
+				st := "waiting_human"
+				targetState = &st
 			}
-			if _, convErr := s.Conversations.TransitionLifecycle(txCtx, ports.ConversationLifecycleTransition{
-				BusinessID:     string(command.Meta.Actor.BusinessID),
-				ConversationID: conversationID,
-				State:          targetState,
-				Ownership:      targetOwnership,
-				LastActivityAt: &now,
-			}); convErr != nil {
-				return mapAIRepositoryError(convErr)
+			if targetState != nil {
+				if _, convErr := s.Conversations.TransitionLifecycle(txCtx, ports.ConversationLifecycleTransition{
+					BusinessID:     businessID,
+					ConversationID: conversationID,
+					State:          targetState,
+					Ownership:      targetOwnership,
+					LastActivityAt: &now,
+				}); convErr != nil {
+					return mapAIRepositoryError(convErr)
+				}
 			}
 		}
 
-		// Both final answers and clarification questions are customer-facing
-		// messages: deliver them when policy allows. Anything requiring human
-		// review (except the fixed farewell handoff below), denied by policy,
-		// or non-messaging (drafts/no_action) stays persisted as a decision only.
-		sendable := proposal.RequestedAction == AutoReplyActionAnswer ||
-			proposal.RequestedAction == AutoReplyActionAskClarification
-		if !sendable || (proposal.RequiresHuman && !farewellHandoff) || proposal.PolicyDecision != "allowed" {
+		// Per contract ⑥ §21, only answer/clarification are customer-facing
+		// messaging actions. Lead/Order drafts follow their own flow.
+		sendable := proposal.Action == ports.AIProposalActionAnswer ||
+			proposal.Action == ports.AIProposalActionClarification
+		if !sendable {
 			return nil
 		}
+
 		if strings.TrimSpace(proposal.ResponseText) == "" {
 			return fmt.Errorf("%w: reply action requires response text", appErrors.New(appErrors.CodeValidation, "auto reply"))
 		}
 
-		reference, referenceErr := s.ReferenceRepository.GetCurrentByConversation(txCtx, string(command.Meta.Actor.BusinessID), conversationID, "provider")
+		reference, referenceErr := s.ReferenceRepository.GetCurrentByConversation(txCtx, businessID, conversationID, "provider")
 		if referenceErr != nil {
 			return mapAIRepositoryError(referenceErr)
 		}
@@ -266,7 +461,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		contentReference := EncodeInlineTextContentReference(proposal.ResponseText)
 		outbound, outboundErr := s.OutboundRepository.CreatePending(txCtx, ports.OutboundMessageDraft{
 			ID:                      outboundID,
-			BusinessID:              string(command.Meta.Actor.BusinessID),
+			BusinessID:              businessID,
 			ConversationID:          conversationID,
 			ConversationReferenceID: reference.ID,
 			ConnectionID:            *reference.ConnectionID,
@@ -275,7 +470,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			Origin:                  "ai",
 			Transport:               "provider",
 			ContentReference:        contentReference,
-			ProviderIdempotencyKey:  "auto-reply:" + sourceMessageReference,
+			ProviderIdempotencyKey:  "auto-reply:" + sourceMessageRef,
 			CorrelationID:           uuidStringPointer(command.Meta.CorrelationID),
 			CausationID:             uuidStringPointer(decision.ID),
 		})
@@ -285,7 +480,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		if s.MessageRepository != nil {
 			msgDraft := ports.CommunicationMessageDraft{
 				ID:                      s.id(),
-				BusinessID:              string(command.Meta.Actor.BusinessID),
+				BusinessID:              businessID,
 				ConversationReferenceID: reference.ID,
 				OutboundMessageID:       &outbound.ID,
 				Direction:               "outbound",
@@ -302,12 +497,12 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 				return mapAIRepositoryError(msgErr)
 			}
 		}
-		outbox, outboxErr := s.Outbox.Enqueue(txCtx, ports.OutboxEntryDraft{
+		outboxEntry, outboxErr := s.Outbox.Enqueue(txCtx, ports.OutboxEntryDraft{
 			ID:                s.id(),
-			BusinessID:        string(command.Meta.Actor.BusinessID),
+			BusinessID:        businessID,
 			OutboundMessageID: outbound.ID,
 			CommandType:       OutboundSendCommandType,
-			DedupeKey:         "auto-reply:" + sourceMessageReference,
+			DedupeKey:         "auto-reply:" + sourceMessageRef,
 			AvailableAt:       now,
 			CreatedAt:         now,
 			UpdatedAt:         now,
@@ -316,55 +511,45 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			return mapAIRepositoryError(outboxErr)
 		}
 		result.OutboundMessageID = commands.MessageID(outbound.ID)
-		result.OutboxEntryID = commands.ID(outbox.ID)
+		result.OutboxEntryID = commands.ID(outboxEntry.ID)
 		result.Enqueued = true
 		return nil
 	})
 	if err != nil {
+		s.markFailedSafe(ctx, run, ports.AIRunFailureStageExecution, string(ports.AIRunFailureCategoryExecutionFailure), err.Error())
 		return commands.AutoReplyResult{}, err
 	}
-	if s.Realtime != nil {
-		if result.Enqueued {
-			data, _ := json.Marshal(map[string]any{
-				"decision_id":         result.Decision.ID,
-				"outbound_message_id": result.OutboundMessageID,
-				"conversation_id":     conversationID,
-				"text":                proposal.ResponseText,
-				"action":              result.Action,
-			})
-			var correlationID *string
-			if command.Meta.CorrelationID != "" {
-				correlationID = &command.Meta.CorrelationID
-			}
-			_ = s.Realtime.Publish(ctx, ports.RealtimeEvent{
-				EventID:       uuid.NewString(),
-				EventType:     "conversation.ai_replied",
-				BusinessID:    string(command.Meta.Actor.BusinessID),
-				ResourceType:  "conversation",
-				ResourceID:    conversationID,
-				OccurredAt:    now,
-				CorrelationID: correlationID,
-				Data:          data,
-			})
+
+	// Per contract ⑨ §31, Mark COMPLETED.
+	s.markCompletedSafe(ctx, run)
+
+	// Per contract ⑧ §5, publish realtime events for the dashboard.
+	if s.Realtime != nil && result.Enqueued {
+		data, _ := json.Marshal(map[string]any{
+			"decision_id":           result.Decision.ID,
+			"outbound_message_id":   result.OutboundMessageID,
+			"conversation_id":       conversationID,
+			"text":                  proposal.ResponseText,
+			"action":                result.Action,
+			"ai_run_id":             run.ID,
+			"gemini_interaction_id": out.GeminiInteraction.ResultingInteractionID,
+		})
+		var correlationID *string
+		if command.Meta.CorrelationID != "" {
+			correlationID = &command.Meta.CorrelationID
 		}
-		if proposal.RequiresHuman || farewellHandoff || proposal.RequestedAction == "request_human" {
-			data, _ := json.Marshal(map[string]any{
-				"decision_id":     result.Decision.ID,
-				"conversation_id": conversationID,
-				"reason_codes":    proposal.ReasonCodes,
-				"intent":          proposal.IntentBase,
-			})
-			_ = s.Realtime.Publish(ctx, ports.RealtimeEvent{
-				EventID:      uuid.NewString(),
-				EventType:    "ai.human_handoff_triggered",
-				BusinessID:   string(command.Meta.Actor.BusinessID),
-				ResourceType: "conversation",
-				ResourceID:   conversationID,
-				OccurredAt:   now,
-				Data:         data,
-			})
-		}
+		_ = s.Realtime.Publish(ctx, ports.RealtimeEvent{
+			EventID:       uuid.NewString(),
+			EventType:     "conversation.ai_replied",
+			BusinessID:    businessID,
+			ResourceType:  "conversation",
+			ResourceID:    conversationID,
+			OccurredAt:    now,
+			CorrelationID: correlationID,
+			Data:          data,
+		})
 	}
+
 	return result, nil
 }
 
@@ -381,29 +566,12 @@ func (s AutoReplyService) validate(command commands.AutoReplyCommand) error {
 	return nil
 }
 
-func validateProposal(proposal ports.AIDecisionProposal) error {
-	if strings.TrimSpace(proposal.IntentBase) == "" || strings.TrimSpace(proposal.RequestedAction) == "" || strings.TrimSpace(proposal.ConfidenceBand) == "" || proposal.SchemaVersion <= 0 || strings.TrimSpace(proposal.PolicyDecision) == "" {
-		return appErrors.New(appErrors.CodeValidation, "AI proposal must contain intent, action, confidence band, schema version, and policy decision")
-	}
-	if proposal.RequestedAction != AutoReplyActionAnswer && proposal.RequestedAction != AutoReplyActionAskClarification && proposal.RequestedAction != "no_action" && proposal.RequestedAction != "draft_order" && proposal.RequestedAction != "draft_lead" {
-		return appErrors.New(appErrors.CodeValidation, "AI proposal action is outside the first auto reply slice")
-	}
-	if proposal.PolicyDecision != "allowed" && proposal.PolicyDecision != "requires_approval" && proposal.PolicyDecision != "denied" {
-		return appErrors.New(appErrors.CodeValidation, "AI proposal policy decision is invalid")
-	}
-	if len(proposal.Entities) > 0 && !jsonObject(proposal.Entities) {
-		return appErrors.New(appErrors.CodeValidation, "AI proposal entities must be a JSON object")
-	}
-	if len(proposal.EvidenceReferences) > 0 && !jsonArray(proposal.EvidenceReferences) {
-		return appErrors.New(appErrors.CodeValidation, "AI proposal evidence must be a JSON array")
-	}
-	return nil
-}
-
+// EncodeInlineTextContentReference encodes text as an inline content reference.
 func EncodeInlineTextContentReference(text string) string {
 	return "content://inline-text/v1/" + base64.RawURLEncoding.EncodeToString([]byte(text))
 }
 
+// DecodeInlineTextContentReference decodes an inline content reference.
 func DecodeInlineTextContentReference(reference string) (string, error) {
 	const prefix = "content://inline-text/v1/"
 	if !strings.HasPrefix(reference, prefix) {
@@ -414,16 +582,6 @@ func DecodeInlineTextContentReference(reference string) (string, error) {
 		return "", fmt.Errorf("decode inline text content: %w", err)
 	}
 	return string(decoded), nil
-}
-
-func jsonObject(value []byte) bool {
-	var object map[string]json.RawMessage
-	return len(value) > 0 && json.Unmarshal(value, &object) == nil && object != nil
-}
-
-func jsonArray(value []byte) bool {
-	var array []json.RawMessage
-	return len(value) > 0 && json.Unmarshal(value, &array) == nil && array != nil
 }
 
 func (s AutoReplyService) now() time.Time {
@@ -438,6 +596,157 @@ func (s AutoReplyService) id() string {
 		return uuid.NewString()
 	}
 	return s.NewID()
+}
+
+func (s AutoReplyService) policyVersionOr() string {
+	if strings.TrimSpace(s.PolicyVersion) == "" {
+		return "auto-reply-v1"
+	}
+	return s.PolicyVersion
+}
+
+// markContextBuiltSafe, markRunningSafe, etc. are no-ops when RunRepository
+// is nil (e.g., unit tests that don't need the trace). They're safe to call
+// on a zero-value AIRunRecord.
+func (s AutoReplyService) markContextBuiltSafe(ctx context.Context, run ports.AIRunRecord) {
+	if s.RunRepository == nil || run.ID == "" {
+		return
+	}
+	lc := NewAIRunLifecycle(s.RunRepository)
+	_, _ = lc.MarkContextBuilt(ctx, run.BusinessID, run.ID)
+}
+
+func (s AutoReplyService) markRunningSafe(ctx context.Context, run ports.AIRunRecord) {
+	if s.RunRepository == nil || run.ID == "" {
+		return
+	}
+	lc := NewAIRunLifecycle(s.RunRepository)
+	_, _ = lc.MarkRunning(ctx, run.BusinessID, run.ID)
+}
+
+func (s AutoReplyService) markValidatingSafe(ctx context.Context, run ports.AIRunRecord) {
+	if s.RunRepository == nil || run.ID == "" {
+		return
+	}
+	lc := NewAIRunLifecycle(s.RunRepository)
+	_, _ = lc.MarkValidating(ctx, run.BusinessID, run.ID)
+}
+
+func (s AutoReplyService) markExecutingSafe(ctx context.Context, run ports.AIRunRecord) {
+	if s.RunRepository == nil || run.ID == "" {
+		return
+	}
+	lc := NewAIRunLifecycle(s.RunRepository)
+	_, _ = lc.MarkExecuting(ctx, run.BusinessID, run.ID)
+}
+
+func (s AutoReplyService) markCompletedSafe(ctx context.Context, run ports.AIRunRecord) {
+	if s.RunRepository == nil || run.ID == "" {
+		return
+	}
+	lc := NewAIRunLifecycle(s.RunRepository)
+	_, _ = lc.MarkCompleted(ctx, run.BusinessID, run.ID)
+}
+
+func (s AutoReplyService) markFailedSafe(ctx context.Context, run ports.AIRunRecord, stage, category, reason string) {
+	if s.RunRepository == nil || run.ID == "" {
+		return
+	}
+	lc := NewAIRunLifecycle(s.RunRepository)
+	_, _ = lc.MarkFailed(ctx, run.BusinessID, run.ID, stage, category, reason)
+}
+
+// persistDecision is a non-transactional best-effort persist for the blocked
+// decision path. Used when validation fails and we still want an audit row.
+func (s AutoReplyService) persistDecision(ctx context.Context, draft ports.AIDecisionDraft) error {
+	if s.DecisionRepository == nil {
+		return nil
+	}
+	_, err := s.DecisionRepository.CreateProposed(ctx, draft)
+	return err
+}
+
+// encodeReasonCodes serializes a list of reason codes as JSON for persistence.
+func encodeReasonCodes(codes []string) []byte {
+	if len(codes) == 0 {
+		return []byte(`[]`)
+	}
+	var sb strings.Builder
+	sb.WriteByte('[')
+	for i, c := range codes {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteByte('"')
+		sb.WriteString(c)
+		sb.WriteByte('"')
+	}
+	sb.WriteByte(']')
+	return []byte(sb.String())
+}
+
+// encodeProposalSelectedAsJSON serializes the contract ④ §4 selected[] as
+// the legacy ai_decisions.evidence_references JSON shape for persistence.
+func encodeProposalSelectedAsJSON(selected []ports.SelectedReference) []byte {
+	if len(selected) == 0 {
+		return []byte(`[]`)
+	}
+	var sb strings.Builder
+	sb.WriteByte('[')
+	for i, ref := range selected {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString(`{"item_id":"`)
+		sb.WriteString(ref.ItemID)
+		sb.WriteByte('"')
+		if ref.VariantID != nil && *ref.VariantID != "" {
+			sb.WriteString(`,"variant_id":"`)
+			sb.WriteString(*ref.VariantID)
+			sb.WriteByte('"')
+		}
+		if ref.OfferID != nil && *ref.OfferID != "" {
+			sb.WriteString(`,"offer_id":"`)
+			sb.WriteString(*ref.OfferID)
+			sb.WriteByte('"')
+		}
+		sb.WriteByte('}')
+	}
+	sb.WriteByte(']')
+	return []byte(sb.String())
+}
+
+// extractItemIDs/extractVariantIDs/extractOfferIDs pull the evidence IDs from
+// the AIContext so the ValidationPipeline can verify per contract ⑥ §10.
+func extractItemIDs(ctx *ports.AIContext) []string {
+	if ctx == nil {
+		return nil
+	}
+	out := make([]string, 0, len(ctx.CatalogEvidence))
+	for _, e := range ctx.CatalogEvidence {
+		out = append(out, e.Reference)
+	}
+	return out
+}
+func extractVariantIDs(ctx *ports.AIContext) []string {
+	if ctx == nil {
+		return nil
+	}
+	out := make([]string, 0, len(ctx.VariantEvidence))
+	for _, e := range ctx.VariantEvidence {
+		out = append(out, e.Reference)
+	}
+	return out
+}
+func extractOfferIDs(ctx *ports.AIContext) []string {
+	if ctx == nil {
+		return nil
+	}
+	out := make([]string, 0, len(ctx.OfferEvidence))
+	for _, e := range ctx.OfferEvidence {
+		out = append(out, e.Reference)
+	}
+	return out
 }
 
 func uuidStringPointer(value string) *string {

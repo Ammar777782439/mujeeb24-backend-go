@@ -1,6 +1,7 @@
 package services
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -233,30 +234,65 @@ func TestValidateStructural(t *testing.T) {
 
 // TestCatalogEntityContractDescriptor verifies contract ⑤ §8: every enum
 // value used in merchant data must have a documented meaning in the descriptor.
+//
+// The closed enum values are sourced VERBATIM from the SQL migration CHECK
+// constraints (migrations/000013..000018). Per the "NO INVENTION" rule, no
+// value may be added unless it appears in the SQL migrations OR an explicit
+// ADR amends the contract.
 func TestCatalogEntityContractDescriptor(t *testing.T) {
 	d := DefaultCatalogEntityContractDescriptor()
-	requiredPricingModes := []string{"fixed", "starting_from", "range", "negotiable", "on_request", "free"}
+	// Per SQL migration 000016/000018: catalog_items_pricing_mode_chk +
+	// offers_pricing_mode_chk.
+	requiredPricingModes := []string{"fixed", "starting_from", "per_unit", "per_person", "per_day", "quote_required", "dynamic"}
 	for _, m := range requiredPricingModes {
 		if _, ok := d.PricingModes[m]; !ok {
-			t.Errorf("missing pricing_mode %q in descriptor per contract ⑤ §8", m)
+			t.Errorf("missing pricing_mode %q in descriptor per SQL migration 000016/000018", m)
 		}
 	}
-	requiredAvailabilityModes := []string{"in_stock", "limited", "pre_order", "made_to_order", "out_of_stock", "discontinued"}
+	// Per SQL migration 000016/000018: catalog_items_availability_mode_chk +
+	// offers_availability_mode_chk.
+	requiredAvailabilityModes := []string{"stock", "schedule", "supplier_check", "always_available", "unknown"}
 	for _, m := range requiredAvailabilityModes {
 		if _, ok := d.AvailabilityModes[m]; !ok {
-			t.Errorf("missing availability_mode %q in descriptor per contract ⑤ §8", m)
+			t.Errorf("missing availability_mode %q in descriptor per SQL migration 000016/000018", m)
 		}
 	}
-	requiredFulfillmentModes := []string{"physical_delivery", "digital_delivery", "pickup", "service_execution", "subscription"}
+	// Per SQL migration 000018: offers_availability_status_chk.
+	// Per Catalog Contract §4: the non-breakable rule (unknown ≠ available,
+	// stale ≠ confirmed, requires_check ≠ confirmed).
+	requiredAvailabilityStatuses := []string{"available", "unavailable", "unknown", "requires_check", "stale"}
+	for _, m := range requiredAvailabilityStatuses {
+		if _, ok := d.AvailabilityStatuses[m]; !ok {
+			t.Errorf("missing availability_status %q in descriptor per SQL migration 000018", m)
+		}
+	}
+	// Per SQL migration 000018: offers_price_verification_chk.
+	requiredPriceVerificationStatuses := []string{"unverified", "verified", "stale", "rejected"}
+	for _, m := range requiredPriceVerificationStatuses {
+		if _, ok := d.PriceVerificationStatuses[m]; !ok {
+			t.Errorf("missing price_verification_status %q in descriptor per SQL migration 000018", m)
+		}
+	}
+	// Per SQL migration 000016/000018: catalog_items_fulfillment_mode_chk +
+	// offers_fulfillment_mode_chk.
+	requiredFulfillmentModes := []string{"delivery", "pickup", "digital", "appointment", "travel", "manual"}
 	for _, m := range requiredFulfillmentModes {
 		if _, ok := d.FulfillmentModes[m]; !ok {
-			t.Errorf("missing fulfillment_mode %q in descriptor per contract ⑤ §8", m)
+			t.Errorf("missing fulfillment_mode %q in descriptor per SQL migration 000016/000018", m)
 		}
 	}
+	// Per Catalog Contract §6: attribute data_type MUST be one of these 9 values.
+	// These are NOT in a SQL CHECK constraint; they are in the Domain contract
+	// (contracts/domain_catalog_contract_review_ar.md §6) and contract 11 §11.
 	requiredDataTypes := []string{"text", "number", "boolean", "date", "datetime", "select", "multi_select", "location", "money"}
+	// NOTE: AttributeDataTypes is intentionally NOT in the descriptor map because
+	// it's defined in the AttributeDefinition.data_type field's comment, not as
+	// a separate descriptor entry. We verify it via the contract payload instead.
+	payload := BuildCatalogEntityContractPayload()
+	dataTypeField := payload.Contract.AttributeDefinition.DataType
 	for _, m := range requiredDataTypes {
-		if _, ok := d.AttributeDataTypes[m]; !ok {
-			t.Errorf("missing attribute_data_type %q in descriptor per contract ⑤ §8", m)
+		if !strings.Contains(dataTypeField, m) {
+			t.Errorf("missing attribute_data_type %q in entity contract payload", m)
 		}
 	}
 }

@@ -72,9 +72,12 @@ import (
 // merchant for missing data.
 //
 // Per contract 11 §6, only create/update/delete are mutations. Asking the
-// merchant ("ask merchant") is NOT a mutation.
+// merchant ("ask_merchant") is NOT a mutation — it gathers missing data
+// (Price, Currency, Variants, etc.) WITHOUT inventing them.
 type CatalogOperationProposal struct {
-	// Operation is one of: create, update, delete per contract 11 §6.
+	// Operation is one of: create, update, delete, ask_merchant per contract 11 §6.
+	// ask_merchant is the non-mutation gather-data operation: the agent asks
+	// the merchant for missing required fields and waits for the answer.
 	Operation string `json:"operation"`
 
 	// Status reflects whether the proposal is ready to execute or needs more data.
@@ -310,7 +313,7 @@ func (a *MerchantCatalogAIAgent) HandleTurn(ctx context.Context, input MerchantC
 			_, _ = a.failRun(ctx, run, failure.Stage, string(failure.Category), failure.Reason)
 			// Per contract ⑥ §21, no Execution when validation fails.
 			return CatalogOperationProposal{
-				Operation:    "ask",
+				Operation:    "ask_merchant",
 				Status:       string(ports.AIProposalStatusAmbiguous),
 				ResponseText: "تعذّر إتمام العملية بسبب فشل التحقق: " + failure.Reason,
 			}, nil
@@ -383,9 +386,9 @@ func isValidAction(a ports.AIProposalAction) bool {
 // adapter is configured with a system prompt that produces CatalogOperationProposal
 // directly (via Structured Output), so this conversion becomes trivial.
 func convertProposalToOperation(p ports.AIDecisionProposal) CatalogOperationProposal {
-	// Default to "ask" — per contract 11 §6, asking is not a mutation.
+	// Default to "ask_merchant" — per contract 11 §6, asking the merchant is not a mutation.
 	op := CatalogOperationProposal{
-		Operation:    "ask",
+		Operation:    "ask_merchant",
 		Status:       string(ports.AIProposalStatusResolved),
 		ResponseText: p.ResponseText,
 	}

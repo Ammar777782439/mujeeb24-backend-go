@@ -502,3 +502,71 @@ type AICatalogBatchPatch struct {
 	StartedAt      *time.Time
 	CompletedAt    *time.Time
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// Contract ④ §8 — ContractRuntime interface (replaces legacy AIRuntime)
+// ════════════════════════════════════════════════════════════════════════════
+
+// ContractRuntime is the contract ④ §8 mapping of Mujeeb Contract to Gemini API.
+//
+// Per contract ④ §8:
+//   Mujeeb System Contract → system_instruction
+//   Mujeeb Input Context → input (contents)
+//   Catalog boundary → Function Calling / tool
+//   Mujeeb Output Contract → Structured Output (responseSchema)
+//
+// ContractRuntime replaces the legacy AIRuntime interface. New code MUST
+// use ContractRuntime; the legacy AIRuntime is kept only for migration.
+//
+// Per contract ③ §4, this interface carries GeminiInteractionContext with
+// previous_interaction_id chaining.
+//
+// Per contract ⑤ §7, the Catalog Entity Contract is sent as part of system
+// instruction; it is passed through as opaque JSON.
+type ContractRuntime interface {
+	DecideContract(ctx context.Context, input ContractRuntimeInput) (ContractRuntimeOutput, error)
+}
+
+// ContractRuntimeInput is the input to ContractRuntime.DecideContract.
+type ContractRuntimeInput struct {
+	// DecisionInput carries business_id, conversation_id, message text, channel,
+	// and the built AIContext (per contract ③ §2).
+	DecisionInput AIDecisionInput
+
+	// GeminiInteraction per contract ③ §4. Empty PreviousInteractionID means
+	// this is the first turn (no chaining). ResultingInteractionID is populated
+	// by the runtime after a successful Gemini call.
+	GeminiInteraction GeminiInteractionContext
+
+	// EntityContractPayload is the JSON-serializable Catalog Entity Contract
+	// payload per contract ⑤ §7. Passed as raw bytes to avoid a circular
+	// dependency between ports and services (where CatalogEntityContractPayload
+	// is defined). The runtime passes it through to Gemini as system_instruction.
+	EntityContractPayload []byte
+}
+
+// ContractRuntimeOutput is the output of ContractRuntime.DecideContract.
+type ContractRuntimeOutput struct {
+	// Proposal is the contract ④ §4 structured Gemini output.
+	Proposal AIGeminiProposal
+
+	// GeminiInteraction echoes the input and is populated with the
+	// ResultingInteractionID returned by Gemini. Caller persists this as the
+	// new last_gemini_interaction_id on the conversation row per contract ③ §4.
+	GeminiInteraction GeminiInteractionContext
+
+	// Usage per contract ⑧ §8 (token counts + estimated cost).
+	Usage ContractUsageTelemetry
+
+	// LatencyMs per contract ⑧ §9 (the Gemini API call latency).
+	LatencyMs int64
+}
+
+// ContractUsageTelemetry is the per-call usage data per contract ⑧ §8.
+type ContractUsageTelemetry struct {
+	InputTokens          int
+	CachedTokens         int
+	OutputTokens         int
+	Model                string
+	EstimatedCostMicros  int64
+}

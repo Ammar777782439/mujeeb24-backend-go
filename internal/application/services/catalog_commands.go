@@ -408,7 +408,7 @@ func (s AuthorCatalogItemCommandService) Handle(ctx context.Context, command com
 	}
 	availabilityMode := strings.TrimSpace(command.AvailabilityMode)
 	if availabilityMode == "" {
-		availabilityMode = "in_stock"
+		availabilityMode = "stock"
 	}
 	fulfillmentMode := strings.TrimSpace(command.FulfillmentMode)
 	if fulfillmentMode == "" {

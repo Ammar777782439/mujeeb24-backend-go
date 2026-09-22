@@ -289,7 +289,7 @@ func TestAutoReplyVerticalSliceAgainstPostgres(t *testing.T) {
 	referenceRepo := NewConversationReferenceRepository(adapter)
 	outboundRepo := NewOutboundMessageRepository(adapter)
 	outboxRepo := NewPostgresOutboxStore(adapter)
-	service := services.NewAutoReplyService(services.SafeAutoReplyRuntime{}, decisionRepo, referenceRepo, outboundRepo, outboxRepo, adapter)
+	service := services.NewAutoReplyService(services.FakeContractRuntimeForLegacyTests{}, decisionRepo, referenceRepo, outboundRepo, outboxRepo, adapter)
 	result, err := service.Handle(ctx, commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessID)}}, ConversationID: commands.ConversationID(conversationID), SourceMessageReference: "inbound-success", Text: "مرحبا", Channel: "facebook", ProviderRef: "socialapi"})
 	if err != nil {
 		t.Fatalf("auto reply success: %v", err)
@@ -311,7 +311,7 @@ func TestAutoReplyVerticalSliceAgainstPostgres(t *testing.T) {
 		t.Fatalf("auto reply persistence counts decision=%d outbound=%d outbox=%d", decisionCount, outboundCount, outboxCount)
 	}
 
-	failingService := services.NewAutoReplyService(services.SafeAutoReplyRuntime{}, decisionRepo, referenceRepo, outboundRepo, failingEnqueueOutbox{OutboxStore: outboxRepo}, adapter)
+	failingService := services.NewAutoReplyService(services.FakeContractRuntimeForLegacyTests{}, decisionRepo, referenceRepo, outboundRepo, failingEnqueueOutbox{OutboxStore: outboxRepo}, adapter)
 	if _, err := failingService.Handle(ctx, commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessID)}}, ConversationID: commands.ConversationID(conversationID), SourceMessageReference: "inbound-rollback", Text: "رسالة ثانية", Channel: "facebook", ProviderRef: "socialapi"}); err == nil {
 		t.Fatal("expected forced outbox failure")
 	}
