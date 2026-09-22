@@ -30,6 +30,16 @@
 | ADR-022 | Domain Review قبل Implementation | الكود يجب أن يترجم تصميمًا مغلقًا لا يخترعه | معتمد |
 | ADR-023 | Dashboard HTTP API Contract مستقل عن Providers | التاجر يرى Mujeeb فقط؛ Webhooks وSocialAPI وChatwoot حدود داخلية منفصلة | معتمد تصميميًا |
 | ADR-024 | JWT Access Authentication لـDashboard V1 | Token قصير العمر، Business Scope من Membership لا من Claims، وفصل Auth عن Providers | معتمد تصميميًا |
+| ADR-025 | Catalog AI Projection v1 — Read Model لـ AI فقط، attribute_schemas[] + items[] مع variants+offers nested، لا business_id/SQL/search/semantic | العقود ① ⑤ تحسم الشكل النهائي وتمنع اختلاط Entity Contract ببيانات التاجر | مغلق |
+| ADR-026 | Catalog Evaluation + Batching — Token-based، Mujeeb يضمن Coverage، Gemini يرجع candidates فقط، لا previous_interaction_id بين Batches | العقد ② يمنع semantic search وعدد ثابت للـItems في Batch | مغلق |
+| ADR-027 | Conversation Context Contract — Mujeeb = canonical conversation state، Gemini = previous_interaction_id، ConversationState = focus/previous/comparison/preferences/constraints/pending/version | العقد ③ يمنع استخدام Gemini كمخزن للحقيقة | مغلق |
+| ADR-028 | Gemini System + AI I/O Contract — Output = status+action+response_text+selected، Actions = answer/clarification/human_request/lead_draft/order_draft، لا requires_approval من Gemini | العقد ④ يجعل PolicyEvaluator هو صاحب القرار النهائي | مغلق |
+| ADR-029 | AI Validation + Authorization Boundary — Structural→Reference→Tenant→Ownership→Policy→Authorization→Effective Decision، لا semantic re-matching داخل Mujeeb، لا AI ثانٍ للتحقق من AI | العقد ⑥ يفصل Effective Decision عن AI Proposal | مغلق |
+| ADR-030 | Observability + Audit + AI Trace — ثلاث طبقات منفصلة، ai_run_id يربط Business→Conversation→Message→Run→Interaction→ToolCall→Validation→Auth→Execution | العقد ⑧ يمنع وضع Metrics داخل Domain ويمنع أسرار داخل Trace | مغلق |
+| ADR-031 | AI Runtime Lifecycle — RECEIVED→CONTEXT_BUILT→RUNNING→WAITING_TOOL→VALIDATING→AUTHORIZED→EXECUTING→COMPLETED/FAILED/CANCELLED، Retryable vs Non-Retryable، لا رقم ثابت للـRetries في Domain | العقد ⑨ يجعل Retry/Backoff/Timeout مسؤولية Runtime فقط | مغلق |
+| ADR-032 | Merchant Catalog AI Authoring v2 — وكيل محادثي مستقل يبني CatalogOperationProposal (create/update/delete)، يستبدل AIAuthoringProposal/GenerateCatalogDraft القديمة | العقد 11 يلغي v1 ويفرض فصل Customer Sales AI عن Merchant Catalog AI | مغلق |
+| ADR-033 | Breaking change على ai_decisions.requested_action — استبدال القيم القديمة بـ answer/clarification/human_request/lead_draft/order_draft وفقًا للعقد ④ | العقد ④ يفرض قيمًا محددة فقط؛ لا حاجة للتوافق التشغيلي القديم | مغلق |
+| ADR-034 | AI Run + Attempt + Tool Call + Gemini Interaction + Catalog Batch + Usage Telemetry — جداول تشغيلية منفصلة عن ai_decisions التجارية | العقود ⑧ ⑨ تفرض الفصل بين الـRun والقرار التجاري | مغلق |
 
 ## قرارات لم تُحسم بعد
 
