@@ -92,6 +92,15 @@ type AutoReplyService struct {
 	// lifecycle is run in-memory only (useful for tests).
 	RunRepository ports.AIRunRepository
 
+	// CatalogBatchController drives the contract ② token-aware batching
+	// when Gemini's first response indicates catalog data is needed.
+	// Per contract ② §9, the flow is: Gemini → needs_catalog → build
+	// projection → token-count → batch → evaluate → aggregate candidates
+	// → final evaluate → AIGeminiProposal.
+	// If nil, catalog evaluation is skipped (the AI replies with whatever
+	// it can infer from the context alone).
+	CatalogBatch *CatalogBatchController
+
 	// EntityContractPayload is the JSON-encoded Catalog Entity Contract per
 	// contract ⑤ §7. Built once at bootstrap and reused for every call.
 	EntityContractPayload []byte
@@ -252,6 +261,61 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		return commands.AutoReplyResult{}, err
 	}
 	proposal := out.Proposal
+
+	// Per contract ② §9 — Catalog Evaluation flow.
+	//
+	// When Gemini's first response indicates it needs catalog data
+	// (status=needs_more_data AND the context lacks catalog evidence),
+	// invoke the CatalogBatchController to:
+	//   1. Build the Catalog AI Projection from PostgreSQL (contract ① §6)
+	//   2. Token-count and split into batches (contract ② §2)
+	//   3. Evaluate each batch independently (contract ② §5-8)
+	//   4. Aggregate candidates and run Final Evaluation (contract ② §6)
+	//
+	// The Final Evaluation produces a new AIGeminiProposal that replaces
+	// the initial one. This is the contract ② §9 flow:
+	//   Customer Message → Gemini → needs_catalog? → Catalog Evaluation
+	//   → Final Gemini → AI Proposal → Validation → Execution
+	//
+	// Per contract ② "ما أغلقناه": no semantic search, no product matching
+	// inside Mujeeb. Mujeeb only builds the projection and counts tokens.
+	if s.CatalogBatch != nil && proposal.Status == ports.AIProposalStatusNeedsMoreData {
+		// Per contract ② §9, only invoke catalog evaluation when the
+		// context lacks catalog evidence (otherwise Gemini already has
+		// what it needs).
+		if builtContext == nil || len(builtContext.CatalogEvidence) == 0 {
+			// Per contract ⑨ §3, mark RUNNING again (back from VALIDATING
+			// to RUNNING for the batch evaluation loop).
+			s.markRunningSafe(ctx, run)
+
+			// Per contract ② §9, run the full catalog evaluation pipeline.
+			entityContract := CatalogEntityContractPayload{}
+			if len(s.EntityContractPayload) > 0 {
+				_ = json.Unmarshal(s.EntityContractPayload, &entityContract)
+			}
+			finalProposal, err := s.CatalogBatch.RunCatalogEvaluation(ctx, CatalogEvaluationInput{
+				AIRunID:             run.ID,
+				AttemptID:           "", // no separate attempt tracking in this path
+				BusinessID:          businessID,
+				ConversationID:      conversationID,
+				CatalogScope:        "", // evaluate all active catalogs for the business
+				CustomerMessage:     command.Text,
+				ConversationContext: derefAIContext(builtContext),
+				EntityContract:      entityContract,
+			})
+			if err != nil {
+				// Per contract ⑨ §18, mark FAILED. The initial proposal
+				// (needs_more_data) is still persisted for audit.
+				s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), "catalog evaluation: "+err.Error())
+				// Fall back to the initial proposal — the customer gets
+				// a needs_more_data response instead of silence.
+			} else {
+				// Replace the initial proposal with the final one from
+				// the contract ② §6 Final Evaluation.
+				proposal = finalProposal
+			}
+		}
+	}
 
 	// Per contract ⑨ §3, mark VALIDATING.
 	s.markValidatingSafe(ctx, run)
@@ -714,6 +778,16 @@ func encodeProposalSelectedAsJSON(selected []ports.SelectedReference) []byte {
 	}
 	sb.WriteByte(']')
 	return []byte(sb.String())
+}
+
+// derefAIContext safely dereferences a *ports.AIContext, returning a zero
+// value if nil. Used when passing the context to CatalogBatchController
+// which expects a value (not a pointer).
+func derefAIContext(ctx *ports.AIContext) ports.AIContext {
+	if ctx == nil {
+		return ports.AIContext{}
+	}
+	return *ctx
 }
 
 // extractItemIDs/extractVariantIDs/extractOfferIDs pull the evidence IDs from

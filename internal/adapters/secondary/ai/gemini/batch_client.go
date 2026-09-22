@@ -30,6 +30,7 @@ import (
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/prompts"
 )
 
 // BatchClientConfig configures the BatchClient.
@@ -76,7 +77,7 @@ func NewBatchClient(cfg BatchClientConfig) (*BatchClient, error) {
 	}
 	systemPrompt := strings.TrimSpace(cfg.SystemPrompt)
 	if systemPrompt == "" {
-		systemPrompt = defaultBatchSystemPrompt
+		systemPrompt = prompts.BatchEvaluationSystemPrompt
 	}
 	return &BatchClient{
 		baseURL:        baseURL,
@@ -88,22 +89,8 @@ func NewBatchClient(cfg BatchClientConfig) (*BatchClient, error) {
 	}, nil
 }
 
-// defaultBatchSystemPrompt is the contract ② §5 system prompt for batch
-// evaluation. Per contract ② §5, Gemini returns ONLY candidates, not the
-// items back. Per contract ② §1, Gemini infers and compares; Mujeeb does
-// NOT do semantic search or product matching (per contract ② "ما أغلقناه").
-const defaultBatchSystemPrompt = `You are the Catalog Evaluation agent inside Mujeeb 24.
-
-Your job: examine the catalog items in this batch against the customer's message
-and identify which items are candidates that match the customer's intent.
-
-Rules:
-1. Return ONLY item_id values that you actually saw in this batch's items[].
-2. Do NOT invent item_id, variant_id, or offer_id values.
-3. For each candidate, include a short reason explaining why it matches.
-4. If no items in this batch match the customer's intent, return an empty candidates array.
-5. You are NOT the final decision maker — you only identify candidates.
-   The final decision happens in a separate Final Evaluation call.`
+// defaultBatchSystemPrompt moved to internal/domain/ai/prompts/prompts.go
+// (Day 5 Gap #13 — versioned system prompts as reviewable assets).
 
 // EvaluateBatch implements services.BatchGeminiClient.EvaluateBatch per
 // contract ② §5. Sends one batch to Gemini and returns the candidate set.

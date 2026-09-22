@@ -23,6 +23,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/google/uuid"
 )
 
 type APIRuntime struct {
@@ -201,20 +202,58 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// a real row in catalog_items/variants/offers. Per contract ⑥ §8-9
 		// the TenantValidator checks that every selected reference
 		// belongs to the current authenticated business (cross-tenant
-		// protection). The AuthorizationService is left nil for now;
-		// per the pipeline logic, nil Authorization means the
-		// PolicyDecision is treated as final (allowed → proceed,
-		// requires_approval → wait for human, denied → no execution).
+		// protection).
+		//
+		// Per contract ⑥ §12-13, the PolicyEvaluator is the
+		// Postgres-backed evaluator that reads business_policies per
+		// migration 000002 and decides requires_approval — NOT Gemini.
+		// Per contract ④ §5, requires_approval is decided by Mujeeb only.
+		//
+		// The AuthorizationService is left nil; per the pipeline logic,
+		// nil Authorization means the PolicyDecision is treated as final
+		// (allowed → proceed, requires_approval → wait for human,
+		// denied → no execution).
 		service.Validation = services.NewValidationPipeline(
 			postgres.NewPostgresReferenceValidator(database),
 			postgres.NewPostgresTenantValidator(database),
-			nil, // PolicyEvaluator: nil means default-allow per contract ⑥ §12
+			postgres.NewPostgresPolicyEvaluator(postgres.NewBusinessRepository(database)),
 			nil, // AuthorizationService: nil means PolicyDecision is final
 		)
 		service.StateRepository = postgres.NewConversationStateRepository(database)
 		service.MessageRepository = postgres.NewMessageRepository(database)
 		service.Conversations = postgres.NewConversationRepository(database)
 		service.Realtime = realtimeBroker
+
+		// Per contract ② §9, wire the CatalogBatchController into the
+		// AutoReply flow. When Gemini's first response indicates
+		// needs_more_data AND the context lacks catalog evidence, the
+		// controller is invoked: build projection → token-count → batch
+		// → evaluate → aggregate candidates → final evaluate.
+		//
+		// Per contract ② §2, TokenBudget is token-based (no hardcoded
+		// item count). 8000 is a sensible default per runtime config.
+		if geminiClient, gok := external.AIRuntime.(*gemini.Client); gok {
+			batchTokenCounter, _ := gemini.NewTokenCounter(gemini.TokenCounterConfig{
+				BaseURL: geminiClient.BaseURL(),
+				APIKey:  geminiClient.APIKey(),
+				Model:   geminiClient.Model(),
+			})
+			batchClient, _ := gemini.NewBatchClient(gemini.BatchClientConfig{
+				BaseURL: geminiClient.BaseURL(),
+				APIKey:  geminiClient.APIKey(),
+				Model:   geminiClient.Model(),
+			})
+			service.CatalogBatch = &services.CatalogBatchController{
+				Catalogs:     postgres.NewCatalogRepository(database),
+				TokenCounter: batchTokenCounter,
+				Gemini:       batchClient,
+				RunRepo:      postgres.NewAIRunTraceRepository(database),
+				TokenBudget:  8000,
+				Now:          func() time.Time { return time.Now().UTC() },
+				NewID:        uuid.NewString,
+			}
+		}
+
 		autoReply = service
 	}
 	inboundAutomation := services.InboundAutomationService{
