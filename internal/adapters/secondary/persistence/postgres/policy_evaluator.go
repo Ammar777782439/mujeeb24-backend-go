@@ -44,8 +44,6 @@ package postgres
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
@@ -199,17 +197,3 @@ func evaluatePolicyAgainstAction(policy ports.BusinessRuntimePolicyRecord, actio
 
 // Compile-time assertion: PostgresPolicyEvaluator implements ports.AIPolicyEvaluator.
 var _ ports.AIPolicyEvaluator = (*PostgresPolicyEvaluator)(nil)
-
-// ErrPolicyEvaluationFailed is returned when the policy evaluator cannot
-// fetch the business policy from PostgreSQL. The evaluator treats this as
-// requires_approval (safe default) rather than returning an error, per
-// contract ⑥ §13.
-var ErrPolicyEvaluationFailed = errors.New("policy evaluation failed — defaulting to requires_approval per contract ⑥ §13")
-
-// formatPolicyDecision formats the decision for logging/audit per contract ⑧ §11.
-func formatPolicyDecision(policy ports.BusinessRuntimePolicyRecord, action, decision string) string {
-	return fmt.Sprintf("ai_mode=%s action=%s decision=%s (default_human_review=%v allow_auto_reply=%v allow_auto_lead=%v allow_auto_transaction=%v)",
-		policy.AIMode, action, decision,
-		policy.DefaultHumanReview, policy.AllowAutoReply,
-		policy.AllowAutoLeadCreation, policy.AllowAutoTransactionDraft)
-}

@@ -510,10 +510,11 @@ type AICatalogBatchPatch struct {
 // ContractRuntime is the contract ④ §8 mapping of Mujeeb Contract to Gemini API.
 //
 // Per contract ④ §8:
-//   Mujeeb System Contract → system_instruction
-//   Mujeeb Input Context → input (contents)
-//   Catalog boundary → Function Calling / tool
-//   Mujeeb Output Contract → Structured Output (responseSchema)
+//
+//	Mujeeb System Contract → system_instruction
+//	Mujeeb Input Context → input (contents)
+//	Catalog boundary → Function Calling / tool
+//	Mujeeb Output Contract → Structured Output (responseSchema)
 //
 // ContractRuntime replaces the legacy AIRuntime interface. New code MUST
 // use ContractRuntime; the legacy AIRuntime is kept only for migration.
@@ -564,9 +565,9 @@ type ContractRuntimeOutput struct {
 
 // ContractUsageTelemetry is the per-call usage data per contract ⑧ §8.
 type ContractUsageTelemetry struct {
-	InputTokens          int
-	CachedTokens         int
-	OutputTokens         int
-	Model                string
-	EstimatedCostMicros  int64
+	InputTokens         int
+	CachedTokens        int
+	OutputTokens        int
+	Model               string
+	EstimatedCostMicros int64
 }

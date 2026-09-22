@@ -30,7 +30,6 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -409,8 +408,3 @@ type TenantValidator interface {
 type AuthorizationService interface {
 	Authorize(ctx context.Context, input ValidationInput, decision ports.EffectiveDecision) (ports.EffectiveDecision, error)
 }
-
-// ErrNoExecutionForHumanRequest is returned when Gemini's action is human_request
-// but Mujeeb's handoff policy declined. Per contract ⑥ §14, Gemini cannot force
-// handoff by prompt text alone.
-var ErrNoExecutionForHumanRequest = errors.New("human handoff is governed by Mujeeb policy, not Gemini prompt text per contract ⑥ §14")

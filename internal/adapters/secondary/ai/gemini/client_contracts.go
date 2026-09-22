@@ -64,7 +64,7 @@ func NewContractClient(base *Client) (*ContractClient, error) {
 		httpClient:     base.httpClient,
 		baseURL:        base.baseURL,
 		apiKey:         base.apiKey,
-		model:         base.model,
+		model:          base.model,
 		requestTimeout: base.requestTimeout,
 	}, nil
 }
@@ -89,9 +89,9 @@ func (c *ContractClient) DecideContract(ctx context.Context, input ports.Contrac
 
 	// Build the Gemini Interactions API request body.
 	reqBody := contractGeminiRequest{
-		Model:                c.model,
+		Model:                 c.model,
 		PreviousInteractionID: input.GeminiInteraction.PreviousInteractionID,
-		Store:                input.GeminiInteraction.Store,
+		Store:                 input.GeminiInteraction.Store,
 		SystemInstruction:     c.buildContractSystemInstruction(input.EntityContractPayload),
 		Contents:              c.buildContractContents(input.DecisionInput),
 		GenerationConfig: contractGenerationConfig{
@@ -120,11 +120,11 @@ func (c *ContractClient) DecideContract(ctx context.Context, input ports.Contrac
 			Store:                  input.GeminiInteraction.Store,
 		},
 		Usage: ports.ContractUsageTelemetry{
-			InputTokens:          resp.UsageMetadata.PromptTokenCount,
-			CachedTokens:         resp.UsageMetadata.CachedContentTokenCount,
-			OutputTokens:         resp.UsageMetadata.CandidatesTokenCount,
-			Model:                c.model,
-			EstimatedCostMicros:  0, // computed by caller using pricing table
+			InputTokens:         resp.UsageMetadata.PromptTokenCount,
+			CachedTokens:        resp.UsageMetadata.CachedContentTokenCount,
+			OutputTokens:        resp.UsageMetadata.CandidatesTokenCount,
+			Model:               c.model,
+			EstimatedCostMicros: 0, // computed by caller using pricing table
 		},
 		LatencyMs: latencyMs,
 	}, nil
@@ -277,11 +277,11 @@ func contractProposalResponseSchema() map[string]any {
 
 // contractGeminiRequest is the Interactions API request body.
 type contractGeminiRequest struct {
-	Model                 string                  `json:"model"`
-	PreviousInteractionID string                  `json:"previous_interaction_id,omitempty"`
-	Store                 bool                    `json:"store"`
-	SystemInstruction      *contractContent         `json:"systemInstruction,omitempty"`
-	Contents              []contractContent       `json:"contents"`
+	Model                 string                   `json:"model"`
+	PreviousInteractionID string                   `json:"previous_interaction_id,omitempty"`
+	Store                 bool                     `json:"store"`
+	SystemInstruction     *contractContent         `json:"systemInstruction,omitempty"`
+	Contents              []contractContent        `json:"contents"`
 	GenerationConfig      contractGenerationConfig `json:"generationConfig"`
 }
 

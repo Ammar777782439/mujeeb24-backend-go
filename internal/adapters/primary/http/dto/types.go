@@ -365,4 +365,3 @@ type AuditEvent struct {
 	Metadata       map[string]any `json:"metadata"`
 	OccurredAt     time.Time      `json:"occurred_at"`
 }
-

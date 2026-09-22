@@ -22,7 +22,6 @@ package services
 
 import (
 	"context"
-	"errors"
 	"math/rand"
 	"strings"
 	"time"
@@ -235,19 +234,6 @@ func (p *PartialProgressPolicy) CoverageComplete(batches []ports.AICatalogBatchR
 	}
 	return true
 }
-
-// ErrNoRetryableAttempts is returned when a Run has exhausted its retry budget
-// and MustFail. Per contract ⑨ §6, this is the FAILED terminal transition.
-var ErrNoRetryableAttempts = errors.New("no retryable attempts remaining per contract ⑨ §6")
-
-// ErrNonRetryableFailure is returned when the failure category is Non-Retryable.
-// Per contract ⑨ §7, no retry is attempted; the Run fails immediately.
-var ErrNonRetryableFailure = errors.New("non-retryable failure per contract ⑨ §7")
-
-// ErrIdempotencyViolation is returned when an attempt is made to create a
-// duplicate AI Run for the same source event. Per contract ⑨ §16, this is
-// prevented at the DB uniqueness level too.
-var ErrIdempotencyViolation = errors.New("idempotency violation: AI Run already exists for this source event per contract ⑨ §16")
 
 // ClassifyError maps a raw error from a Gemini call, tool call, or execution
 // to one of the closed AIRunFailureCategory values per contract ⑨ §6-7.
