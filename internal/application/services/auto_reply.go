@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -166,15 +167,19 @@ func NewAutoReplyService(runtime ports.ContractRuntime, decisions ports.AIDecisi
 // 10. Execute (outbound message + outbox + message row) per contract ⑥ §19.
 // 11. Mark COMPLETED per contract ⑨ §31.
 func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReplyCommand) (commands.AutoReplyResult, error) {
+	businessID := string(command.Meta.Actor.BusinessID)
+	conversationID := string(command.ConversationID)
+	log.Printf("[AutoReply] START business=%s conversation=%s text=%q", businessID, conversationID, truncate(command.Text, 80))
+
 	if err := s.validate(command); err != nil {
+		log.Printf("[AutoReply] VALIDATE_FAILED business=%s err=%v", businessID, err)
 		return commands.AutoReplyResult{}, err
 	}
 	if s.Runtime == nil || s.DecisionRepository == nil || s.ReferenceRepository == nil || s.OutboundRepository == nil || s.Outbox == nil || s.Transactions == nil {
+		log.Printf("[AutoReply] NOT_WIRED business=%s runtime=%v decisions=%v", businessID, s.Runtime != nil, s.DecisionRepository != nil)
 		return commands.AutoReplyResult{}, appErrors.NotImplemented()
 	}
 
-	businessID := string(command.Meta.Actor.BusinessID)
-	conversationID := string(command.ConversationID)
 	sourceMessageRef := command.SourceMessageReference
 	policyVersion := s.policyVersionOr()
 
@@ -237,6 +242,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	s.markRunningSafe(ctx, run)
 
 	// Per contract ④ §8, call Gemini via the ContractRuntime.
+	log.Printf("[AutoReply] GEMINI_CALL business=%s conversation=%s run=%s", businessID, conversationID, run.ID)
 	out, err := s.Runtime.DecideContract(ctx, ports.ContractRuntimeInput{
 		DecisionInput: ports.AIDecisionInput{
 			BusinessID:             businessID,
@@ -257,10 +263,13 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		EntityContractPayload: s.EntityContractPayload,
 	})
 	if err != nil {
+		log.Printf("[AutoReply] GEMINI_FAILED business=%s err=%v", businessID, err)
 		s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), err.Error())
 		return commands.AutoReplyResult{}, err
 	}
 	proposal := out.Proposal
+	log.Printf("[AutoReply] GEMINI_OK business=%s status=%s action=%s tokens_in=%d tokens_out=%d latency=%dms",
+		businessID, proposal.Status, proposal.Action, out.Usage.InputTokens, out.Usage.OutputTokens, out.LatencyMs)
 
 	// Per contract ② §9 — Catalog Evaluation flow.
 	//
@@ -580,12 +589,15 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		return nil
 	})
 	if err != nil {
+		log.Printf("[AutoReply] EXECUTE_FAILED business=%s err=%v", businessID, err)
 		s.markFailedSafe(ctx, run, ports.AIRunFailureStageExecution, string(ports.AIRunFailureCategoryExecutionFailure), err.Error())
 		return commands.AutoReplyResult{}, err
 	}
 
 	// Per contract ⑨ §31, Mark COMPLETED.
 	s.markCompletedSafe(ctx, run)
+	log.Printf("[AutoReply] COMPLETED business=%s action=%s enqueued=%v outbound=%s outbox=%s",
+		businessID, result.Action, result.Enqueued, result.OutboundMessageID, result.OutboxEntryID)
 
 	// Per contract ⑧ §5, publish realtime events for the dashboard.
 	if s.Realtime != nil && result.Enqueued {
@@ -835,5 +847,13 @@ func uuidStringPointer(value string) *string {
 }
 
 func pointerTo(value time.Time) *time.Time { return &value }
+
+// truncate shortens a string for logging, appending "..." if truncated.
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
+}
 
 var _ commands.AutoReplyHandler = AutoReplyService{}
