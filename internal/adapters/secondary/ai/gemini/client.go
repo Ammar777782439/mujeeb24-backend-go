@@ -1,12 +1,33 @@
+// Package gemini — Gemini HTTP Client (Config Holder + Prompt Builder).
+//
+// This file holds ONLY:
+//   1. Client struct (config: API key, model, base URL, HTTP client, system prompt)
+//   2. NewClient constructor
+//   3. Getters (BaseURL, APIKey, Model) — used by ContractClient and bootstrap
+//   4. buildUserPrompt — used by ContractClient to build the user-facing prompt
+//
+// The LEGACY Client.Decide method, proposalWire, proposalJSONSchema,
+// safetyTurnBudget loop, sendRequest, and all legacy types were REMOVED
+// per the "purge dead code" directive. The contract-aligned path uses
+// ContractClient.DecideContract (in client_contracts.go) which has its
+// own HTTP send method and Structured Output enforcement.
+//
+// Per contract ④ §8:
+//   Mujeeb System Contract → system_instruction
+//   Mujeeb Input Context → input (contents)
+//   Catalog boundary → Structured Output (responseSchema)
+//   Mujeeb Output Contract → AIGeminiProposal
+//
+// Per contract ④ §3 (No Execution): the Gemini adapter contains NO database
+// imports (no pgx, no sql, no database). It does HTTP only.
+
 package gemini
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -17,16 +38,13 @@ import (
 )
 
 const (
-	defaultMaxOutputTokens  = 2048
-	defaultMaxResponseBytes = 1 << 20
-	defaultSafetyTurnBudget = 25
-	proposalSchemaVersion   = 1
-	defaultBaseURL          = "https://generativelanguage.googleapis.com"
-	defaultModel            = "gemini-3.5-flash-lite"
+	defaultMaxOutputTokens = 2048
+	defaultBaseURL         = "https://generativelanguage.googleapis.com"
+	defaultModel           = "gemini-3.5-flash-lite"
 )
 
-// Config contains only runtime configuration. API keys are never copied into a
-// proposal, error, log, or domain record.
+// Config contains only runtime configuration. API keys are never copied
+// into a proposal, error, log, or domain record (per contract ⑧ §23).
 type Config struct {
 	BaseURL            string
 	APIKey             string
@@ -34,16 +52,17 @@ type Config struct {
 	HTTPClient         *http.Client
 	RequestTimeout     time.Duration
 	MaxOutputTokens    int
-	MaxResponseBytes   int64
 	MaxInputCharacters int
-	SafetyTurnBudget   int
 	SystemPrompt       string
 	Capabilities       ports.AICapabilityDispatcher
 }
 
-// Client is a Gemini JSON/HTTP implementation of ports.AIRuntime.
-// It asks the model for a structured proposal only; AutoReplyService remains
-// responsible for validation, policy, persistence, and side effects.
+// Client is the Gemini HTTP client. It holds config only — the actual
+// contract-aligned API calls are in ContractClient (client_contracts.go)
+// which wraps this Client.
+//
+// Per contract ④ §3 (No Execution): this client does HTTP only.
+// No database imports, no external API calls beyond Gemini.
 type Client struct {
 	baseURL            string
 	apiKey             string
@@ -51,13 +70,15 @@ type Client struct {
 	httpClient         *http.Client
 	requestTimeout     time.Duration
 	maxOutputTokens    int
-	maxResponseBytes   int64
 	maxInputCharacters int
-	safetyTurnBudget   int
 	systemPrompt       string
 	capabilities       ports.AICapabilityDispatcher
 }
 
+// NewClient creates a Gemini HTTP client with the given config.
+//
+// Per contract ④ §2, the system prompt defaults to the versioned
+// prompts.CustomerSalesSystemPrompt from the prompts package.
 func NewClient(cfg Config) (*Client, error) {
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
 	if baseURL == "" {
@@ -72,7 +93,7 @@ func NewClient(cfg Config) (*Client, error) {
 	}
 	model := strings.TrimSpace(cfg.Model)
 	if model == "" {
-		model = "gemini-3.5-flash-lite"
+		model = defaultModel
 	}
 	requestTimeout := cfg.RequestTimeout
 	if requestTimeout <= 0 {
@@ -82,17 +103,9 @@ func NewClient(cfg Config) (*Client, error) {
 	if maxOutputTokens <= 0 {
 		maxOutputTokens = defaultMaxOutputTokens
 	}
-	maxResponseBytes := cfg.MaxResponseBytes
-	if maxResponseBytes <= 0 {
-		maxResponseBytes = defaultMaxResponseBytes
-	}
 	maxInputCharacters := cfg.MaxInputCharacters
 	if maxInputCharacters <= 0 {
 		maxInputCharacters = 12000
-	}
-	safetyTurnBudget := cfg.SafetyTurnBudget
-	if safetyTurnBudget <= 0 {
-		safetyTurnBudget = defaultSafetyTurnBudget
 	}
 	client := cfg.HTTPClient
 	if client == nil {
@@ -100,8 +113,7 @@ func NewClient(cfg Config) (*Client, error) {
 	}
 	systemPrompt := strings.TrimSpace(cfg.SystemPrompt)
 	if systemPrompt == "" {
-		// Per contract ④ §2, the system prompt is a versioned asset. Use the
-		// canonical prompt from the prompts package (Day 5 Gap #13).
+		// Per contract ④ §2, the system prompt is a versioned asset.
 		systemPrompt = prompts.CustomerSalesSystemPrompt
 	}
 	return &Client{
@@ -111,327 +123,48 @@ func NewClient(cfg Config) (*Client, error) {
 		httpClient:         client,
 		requestTimeout:     requestTimeout,
 		maxOutputTokens:    maxOutputTokens,
-		maxResponseBytes:   maxResponseBytes,
 		maxInputCharacters: maxInputCharacters,
-		safetyTurnBudget:   safetyTurnBudget,
 		systemPrompt:       systemPrompt,
 		capabilities:       cfg.Capabilities,
 	}, nil
 }
 
-// BaseURL returns the configured Gemini API base URL. Used by the bootstrap
-// to wire the TokenCounter and BatchClient with the same credentials.
+// BaseURL returns the configured Gemini API base URL.
 func (c *Client) BaseURL() string { return c.baseURL }
 
-// APIKey returns the configured Gemini API key. Used by the bootstrap to
-// wire the TokenCounter and BatchClient.
+// APIKey returns the configured Gemini API key.
 func (c *Client) APIKey() string { return c.apiKey }
 
-// Model returns the configured Gemini model name. Used by the bootstrap to
-// wire the TokenCounter and BatchClient with the same model.
+// Model returns the configured Gemini model name.
 func (c *Client) Model() string { return c.model }
 
-func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports.AIDecisionProposal, error) {
-	if c == nil {
-		return ports.AIDecisionProposal{}, errors.New("gemini client is not configured")
-	}
-	if err := ctx.Err(); err != nil {
-		return ports.AIDecisionProposal{}, err
-	}
-	text := strings.TrimSpace(input.Text)
-	if text == "" {
-		return ports.AIDecisionProposal{}, errors.New("AI input text is required")
-	}
-	if len([]rune(text)) > c.maxInputCharacters {
-		return ports.AIDecisionProposal{}, fmt.Errorf("AI input text exceeds %d characters", c.maxInputCharacters)
-	}
+// SystemPrompt returns the configured system prompt.
+func (c *Client) SystemPrompt() string { return c.systemPrompt }
 
-	userPrompt := buildUserPrompt(input)
-	contents := []geminiContent{
-		{Role: "user", Parts: []geminiPart{{Text: userPrompt}}},
-	}
+// MaxInputCharacters returns the max input character limit.
+func (c *Client) MaxInputCharacters() int { return c.maxInputCharacters }
 
-	requestCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
-	defer cancel()
+// MaxOutputTokens returns the max output token limit.
+func (c *Client) MaxOutputTokens() int { return c.maxOutputTokens }
 
-	var tools []geminiTool
-	if c.capabilities != nil {
-		defs := c.capabilities.Definitions()
-		if len(defs) > 0 {
-			var funcDecls []geminiFunctionDeclaration
-			for _, def := range defs {
-				funcDecls = append(funcDecls, geminiFunctionDeclaration{
-					Name:        def.Name,
-					Description: def.Description,
-					Parameters:  def.Parameters,
-				})
-			}
-			tools = []geminiTool{
-				{FunctionDeclarations: funcDecls},
-			}
-		}
-	}
+// RequestTimeout returns the configured request timeout.
+func (c *Client) RequestTimeout() time.Duration { return c.requestTimeout }
 
-	execCtx := ports.AICapabilityExecutionContext{
-		BusinessID:     input.BusinessID,
-		ConversationID: input.ConversationID,
-	}
+// HTTPClient returns the configured HTTP client (shared with ContractClient).
+func (c *Client) HTTPClient() *http.Client { return c.httpClient }
 
-	var (
-		discoveredCatalog  []ports.AICatalogEvidence
-		discoveredOffers   []ports.AIOfferEvidence
-		discoveredVariants []ports.AIVariantEvidence
-		// session tracker removed per contract ④ §5 (legacy mixing)
-		loopFinishedNormally bool
-		finalProposal        ports.AIDecisionProposal
-	)
+// Capabilities returns the configured AI capability dispatcher.
+func (c *Client) Capabilities() ports.AICapabilityDispatcher { return c.capabilities }
 
-	safetyBudget := c.safetyTurnBudget
-	for turn := 0; turn < safetyBudget; turn++ {
-		reqBody := geminiRequest{
-			SystemInstruction: &geminiContent{
-				Parts: []geminiPart{{Text: c.systemPrompt}},
-			},
-			Contents: contents,
-			Tools:    tools,
-			GenerationConfig: geminiGenerationConfig{
-				MaxOutputTokens:  c.maxOutputTokens,
-				ResponseMimeType: "application/json",
-				ResponseSchema:   proposalJSONSchema(),
-			},
-		}
-
-		gemResp, err := c.sendRequest(requestCtx, reqBody)
-		if err != nil {
-			return ports.AIDecisionProposal{}, err
-		}
-		if len(gemResp.Candidates) == 0 || len(gemResp.Candidates[0].Content.Parts) == 0 {
-			return ports.AIDecisionProposal{}, errors.New("Gemini response did not contain a candidate")
-		}
-
-		candidate := gemResp.Candidates[0]
-		var functionCallPart *geminiFunctionCall
-		var textContent string
-
-		for _, part := range candidate.Content.Parts {
-			if part.FunctionCall != nil && strings.TrimSpace(part.FunctionCall.Name) != "" {
-				functionCallPart = part.FunctionCall
-				break
-			}
-			if strings.TrimSpace(part.Text) != "" {
-				textContent = strings.TrimSpace(part.Text)
-			}
-		}
-
-		// If model requested a tool call, execute via application capability dispatcher
-		if functionCallPart != nil {
-			var toolResponse map[string]any
-			if c.capabilities != nil {
-				capResult, capErr := c.capabilities.Execute(requestCtx, execCtx, functionCallPart.Name, functionCallPart.Args)
-				if capErr != nil {
-					toolResponse = map[string]any{
-						"error": capErr.Error(),
-					}
-				} else {
-					if dataMap, ok := capResult.Data.(map[string]any); ok {
-						toolResponse = dataMap
-					} else {
-						encoded, _ := json.Marshal(capResult.Data)
-						var m map[string]any
-						if err := json.Unmarshal(encoded, &m); err == nil {
-							toolResponse = m
-						} else {
-							toolResponse = map[string]any{"result": capResult.Data}
-						}
-					}
-					// Record the operation and cursor chain in the session
-					streamKey := capResult.StreamKey
-					if streamKey == "" {
-						streamKey = functionCallPart.Name
-					}
-					_ = streamKey // session tracker removed
-
-					// Accumulate evidence for the proposal without mutating input.Context directly
-					if len(capResult.CatalogEvidence) > 0 {
-						discoveredCatalog = append(discoveredCatalog, capResult.CatalogEvidence...)
-					}
-					if len(capResult.OfferEvidence) > 0 {
-						discoveredOffers = append(discoveredOffers, capResult.OfferEvidence...)
-					}
-					if len(capResult.VariantEvidence) > 0 {
-						discoveredVariants = append(discoveredVariants, capResult.VariantEvidence...)
-					}
-				}
-			} else {
-				toolResponse = map[string]any{"error": fmt.Sprintf("capability %q not available", functionCallPart.Name)}
-			}
-
-			contents = append(contents, geminiContent{
-				Role:  "model",
-				Parts: candidate.Content.Parts,
-			})
-			contents = append(contents, geminiContent{
-				Role: "function",
-				Parts: []geminiPart{
-					{
-						FunctionResponse: &geminiFunctionResponse{
-							Name:     functionCallPart.Name,
-							Response: toolResponse,
-						},
-					},
-				},
-			})
-			continue
-		}
-
-		if textContent == "" {
-			return ports.AIDecisionProposal{}, errors.New("Gemini response did not contain structured content")
-		}
-
-		// If model tries to return a proposal while a catalog stream has HasMore=true,
-		// prompt the model to continue pagination if turn budget permits.
-		// Coverage check moved to CatalogBatchController per contract ② §3.
-		// The legacy in-prompt pagination continuation has been removed;
-		// coverage is enforced deterministically via ai_catalog_batches state
-		// (per contract ⑨ §22-23) and PartialProgressPolicy retries.
-		_ = turn // turn is now unused; safety budget logic moved out.
-
-		var wire proposalWire
-		if err := json.Unmarshal([]byte(textContent), &wire); err != nil {
-			return ports.AIDecisionProposal{}, fmt.Errorf("decode structured Gemini proposal: %w", err)
-		}
-		proposal, err := wire.toProposal(input, c.model)
-		if err != nil {
-			return ports.AIDecisionProposal{}, err
-		}
-
-		// Deprecated catalog retrieval fields removed per contract ④ §5 + ⑥ §20.
-		// Coverage tracking is now handled by ai_catalog_batches table
-		// (per contract ⑧ §5 + ⑨ §22) via CatalogBatchController.
-
-		finalProposal = proposal
-		loopFinishedNormally = true
-		break
-	}
-
-	if loopFinishedNormally {
-		return finalProposal, nil
-	}
-
-	// Technical safety budget exhausted before model concluded.
-	return ports.AIDecisionProposal{
-		IntentBase:         "catalog_safety_budget_exhausted",
-		DomainContext:      "catalog",
-		RequestedAction:    "ask_clarification",
-		RequiresHuman:      true,
-		PolicyDecision:     "requires_approval",
-		ReasonCodes:        []byte(`["safety_budget_exhausted","catalog_retrieval_incomplete"]`),
-		MissingInformation: []byte(`["catalog data retrieval halted by technical safety budget"]`),
-		PolicyVersion:      input.PolicyVersion,
-		ModelReference:     "gemini/" + strings.TrimSpace(c.model),
-		SchemaVersion:      proposalSchemaVersion}, nil
-}
-
-func (c *Client) sendRequest(requestCtx context.Context, reqBody geminiRequest) (geminiResponse, error) {
-	encoded, err := json.Marshal(reqBody)
-	if err != nil {
-		return geminiResponse{}, fmt.Errorf("encode Gemini request: %w", err)
-	}
-
-	isOAuthToken := strings.HasPrefix(c.apiKey, "ya29.")
-	var u string
-	if isOAuthToken {
-		u = fmt.Sprintf("%s/v1beta/models/%s:generateContent", c.baseURL, url.PathEscape(c.model))
-	} else {
-		u = fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", c.baseURL, url.PathEscape(c.model), url.QueryEscape(c.apiKey))
-	}
-
-	var resp *http.Response
-	var body []byte
-	var lastErr error
-	maxRetries := 3
-	baseDelay := 500 * time.Millisecond
-
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		if attempt > 0 {
-			delay := baseDelay * time.Duration(1<<(attempt-1))
-			if lastErr != nil && strings.Contains(lastErr.Error(), "HTTP 429") {
-				delay = 15 * time.Second
-			}
-			select {
-			case <-requestCtx.Done():
-				return geminiResponse{}, requestCtx.Err()
-			case <-time.After(delay):
-			}
-		}
-
-		req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, u, bytes.NewReader(encoded))
-		if err != nil {
-			return geminiResponse{}, fmt.Errorf("create Gemini request: %w", err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
-		if isOAuthToken {
-			req.Header.Set("Authorization", "Bearer "+c.apiKey)
-		} else {
-			req.Header.Set("x-goog-api-key", c.apiKey)
-		}
-
-		resp, err = c.httpClient.Do(req)
-		if err != nil {
-			lastErr = fmt.Errorf("network error: %w", err)
-			continue
-		}
-
-		limited := io.LimitReader(resp.Body, c.maxResponseBytes+1)
-		body, err = io.ReadAll(limited)
-		resp.Body.Close()
-
-		if err != nil {
-			lastErr = fmt.Errorf("read response: %w", err)
-			continue
-		}
-		if int64(len(body)) > c.maxResponseBytes {
-			return geminiResponse{}, errors.New("Gemini response exceeds configured size limit")
-		}
-
-		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= http.StatusInternalServerError {
-			snippet := strings.TrimSpace(string(body))
-			if len(snippet) > 500 {
-				snippet = snippet[:500]
-			}
-			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, snippet)
-			continue
-		}
-
-		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-			snippet := strings.TrimSpace(string(body))
-			if len(snippet) > 500 {
-				snippet = snippet[:500]
-			}
-			return geminiResponse{}, fmt.Errorf("Gemini request returned HTTP %d: %s", resp.StatusCode, snippet)
-		}
-
-		lastErr = nil
-		break
-	}
-
-	if lastErr != nil {
-		if requestCtx.Err() != nil {
-			return geminiResponse{}, requestCtx.Err()
-		}
-		return geminiResponse{}, fmt.Errorf("Gemini request failed after %d retries: %w", maxRetries, lastErr)
-	}
-
-	var gemResp geminiResponse
-	if err := json.Unmarshal(body, &gemResp); err != nil {
-		return geminiResponse{}, fmt.Errorf("decode Gemini response: %w", err)
-	}
-	return gemResp, nil
-}
-
+// buildUserPrompt encodes the AIContext + customer message into the
+// user-facing prompt text for Gemini. Used by ContractClient.
+//
+// Per contract ④ §3, the input includes: business_context,
+// conversation_context, conversation_state, catalog_evidence, user_message.
 func buildUserPrompt(input ports.AIDecisionInput) string {
-	prompt := fmt.Sprintf("Business ID: %s\nConversation ID: %s\nChannel: %s\nPolicy version: %s\nSource message reference: %s\nCustomer message:\n%s", input.BusinessID, input.ConversationID, input.Channel, input.PolicyVersion, input.SourceMessageReference, strings.TrimSpace(input.Text))
+	prompt := fmt.Sprintf("Business ID: %s\nConversation ID: %s\nChannel: %s\nPolicy version: %s\nSource message reference: %s\nCustomer message:\n%s",
+		input.BusinessID, input.ConversationID, input.Channel, input.PolicyVersion,
+		input.SourceMessageReference, strings.TrimSpace(input.Text))
 	if input.Context == nil {
 		return prompt
 	}
@@ -442,6 +175,7 @@ func buildUserPrompt(input ports.AIDecisionInput) string {
 	return prompt + "\nVerified Mujeeb context (evidence only; do not infer missing facts):\n" + string(encoded)
 }
 
+// promptContext is the JSON-serialized context sent to Gemini.
 type promptContext struct {
 	SchemaVersion          int                              `json:"schema_version"`
 	Freshness              string                           `json:"freshness"`
@@ -488,239 +222,123 @@ func promptContextFrom(value *ports.AIContext) promptContext {
 	}
 }
 
-// defaultSystemPrompt moved to internal/domain/ai/prompts/prompts.go
-// (Day 5 Gap #13 — versioned system prompts as reviewable assets).
-
-type geminiRequest struct {
-	SystemInstruction *geminiContent         `json:"systemInstruction,omitempty"`
-	Contents          []geminiContent        `json:"contents"`
-	Tools             []geminiTool           `json:"tools,omitempty"`
-	GenerationConfig  geminiGenerationConfig `json:"generationConfig"`
-}
-
-type geminiTool struct {
-	FunctionDeclarations []geminiFunctionDeclaration `json:"functionDeclarations,omitempty"`
-}
-
-type geminiFunctionDeclaration struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Parameters  map[string]any `json:"parameters,omitempty"`
-}
-
-type geminiContent struct {
-	Role  string       `json:"role,omitempty"`
-	Parts []geminiPart `json:"parts"`
-}
-
-type geminiPart struct {
-	Text             string                  `json:"text,omitempty"`
-	FunctionCall     *geminiFunctionCall     `json:"functionCall,omitempty"`
-	FunctionResponse *geminiFunctionResponse `json:"functionResponse,omitempty"`
-}
-
-type geminiFunctionCall struct {
-	Name string          `json:"name"`
-	Args json.RawMessage `json:"args"`
-}
-
-type geminiFunctionResponse struct {
-	Name     string         `json:"name"`
-	Response map[string]any `json:"response"`
-}
-
-type geminiGenerationConfig struct {
-	MaxOutputTokens  int            `json:"maxOutputTokens,omitempty"`
-	ResponseMimeType string         `json:"responseMimeType,omitempty"`
-	ResponseSchema   map[string]any `json:"responseSchema,omitempty"`
-}
-
-type geminiResponse struct {
-	Candidates []struct {
-		Content struct {
-			Parts []geminiPart `json:"parts"`
-			Role  string       `json:"role"`
-		} `json:"content"`
-		FinishReason string `json:"finishReason"`
-	} `json:"candidates"`
-}
-
-type proposalWire struct {
-	IntentBase         string                     `json:"intent_base"`
-	DomainContext      string                     `json:"domain_context"`
-	Entities           map[string]json.RawMessage `json:"entities"`
-	EvidenceReferences []string                   `json:"evidence_references"`
-	RequestedAction    string                     `json:"requested_action"`
-	ResponseText       string                     `json:"response_text"`
-	ConfidenceValue    string                     `json:"confidence_value"`
-	ConfidenceBand     string                     `json:"confidence_band"`
-	RequiresHuman      bool                       `json:"requires_human"`
-	MissingInformation []string                   `json:"missing_information"`
-	ReasonCodes        []string                   `json:"reason_codes"`
-	PolicyDecision     string                     `json:"policy_decision"`
-	PolicyVersion      string                     `json:"policy_version"`
-	KnowledgeVersion   string                     `json:"knowledge_version"`
-	SchemaVersion      int                        `json:"schema_version"`
-	StateProposal      *stateProposalWire         `json:"state_proposal,omitempty"`
-}
-
-type stateProposalWire struct {
-	Focus         *ports.ConversationFocus      `json:"focus,omitempty"`
-	Comparison    *ports.ConversationComparison `json:"comparison,omitempty"`
-	Kind          string                        `json:"kind"`
-	ReferenceText string                        `json:"reference_text,omitempty"`
-	Alternatives  []ports.ConversationFocus     `json:"alternatives,omitempty"`
-}
-
-func (w proposalWire) toProposal(input ports.AIDecisionInput, model string) (ports.AIDecisionProposal, error) {
-	if w.SchemaVersion != proposalSchemaVersion {
-		return ports.AIDecisionProposal{}, fmt.Errorf("unsupported AI proposal schema version %d", w.SchemaVersion)
+// Decide implements ports.AIRuntime with a SIMPLE single-call flow.
+//
+// This is NOT the legacy tool-calling loop. It makes one generateContent
+// call, parses the structured JSON response, and returns AIDecisionProposal.
+//
+// Production code uses ContractClient.DecideContract (in client_contracts.go)
+// which returns the contract ④ §4 AIGeminiProposal with Structured Output
+// enforcement. This method exists only to satisfy the ports.AIRuntime
+// interface so the bootstrap type assertion works.
+func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports.AIDecisionProposal, error) {
+	if c == nil {
+		return ports.AIDecisionProposal{}, errors.New("gemini client is not configured")
 	}
-	if strings.TrimSpace(w.IntentBase) == "" || strings.TrimSpace(w.RequestedAction) == "" || strings.TrimSpace(w.ConfidenceBand) == "" || strings.TrimSpace(w.PolicyDecision) == "" {
-		return ports.AIDecisionProposal{}, errors.New("Gemini structured proposal is missing required decision fields")
+	if err := ctx.Err(); err != nil {
+		return ports.AIDecisionProposal{}, err
 	}
-	entities := []byte(`{}`)
-	if w.Entities != nil {
-		var err error
-		entities, err = json.Marshal(w.Entities)
-		if err != nil {
-			return ports.AIDecisionProposal{}, fmt.Errorf("encode Gemini entities: %w", err)
-		}
+	text := strings.TrimSpace(input.Text)
+	if text == "" {
+		return ports.AIDecisionProposal{}, errors.New("AI input text is required")
 	}
-	evidence, err := json.Marshal(w.EvidenceReferences)
+	if len([]rune(text)) > c.maxInputCharacters {
+		return ports.AIDecisionProposal{}, fmt.Errorf("AI input text exceeds %d characters", c.maxInputCharacters)
+	}
+
+	userPrompt := buildUserPrompt(input)
+	reqBody := map[string]any{
+		"systemInstruction": map[string]any{
+			"parts": []map[string]any{{"text": c.systemPrompt}},
+		},
+		"contents": []map[string]any{
+			{"role": "user", "parts": []map[string]any{{"text": userPrompt}}},
+		},
+		"generationConfig": map[string]any{
+			"maxOutputTokens":  c.maxOutputTokens,
+			"responseMimeType": "application/json",
+		},
+	}
+	encoded, err := json.Marshal(reqBody)
 	if err != nil {
-		return ports.AIDecisionProposal{}, fmt.Errorf("encode Gemini evidence: %w", err)
+		return ports.AIDecisionProposal{}, fmt.Errorf("encode request: %w", err)
 	}
-	missing, err := json.Marshal(w.MissingInformation)
+
+	requestCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
+	defer cancel()
+
+	u := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", c.baseURL, url.PathEscape(c.model), url.QueryEscape(c.apiKey))
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, u, strings.NewReader(string(encoded)))
 	if err != nil {
-		return ports.AIDecisionProposal{}, fmt.Errorf("encode Gemini missing information: %w", err)
+		return ports.AIDecisionProposal{}, fmt.Errorf("create request: %w", err)
 	}
-	reasons, err := json.Marshal(w.ReasonCodes)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return ports.AIDecisionProposal{}, fmt.Errorf("encode Gemini reason codes: %w", err)
+		return ports.AIDecisionProposal{}, fmt.Errorf("send request: %w", err)
 	}
-	policyVersion := strings.TrimSpace(w.PolicyVersion)
+	defer resp.Body.Close()
+
+	var gemResp struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&gemResp); err != nil {
+		return ports.AIDecisionProposal{}, fmt.Errorf("decode response: %w", err)
+	}
+	if len(gemResp.Candidates) == 0 || len(gemResp.Candidates[0].Content.Parts) == 0 {
+		return ports.AIDecisionProposal{}, errors.New("Gemini response did not contain a candidate")
+	}
+	rawText := strings.TrimSpace(gemResp.Candidates[0].Content.Parts[0].Text)
+	if rawText == "" {
+		return ports.AIDecisionProposal{}, errors.New("Gemini response did not contain structured content")
+	}
+
+	var wire struct {
+		IntentBase      string `json:"intent_base"`
+		DomainContext   string `json:"domain_context"`
+		RequestedAction string `json:"requested_action"`
+		ResponseText    string `json:"response_text"`
+		ConfidenceBand  string `json:"confidence_band"`
+		PolicyDecision  string `json:"policy_decision"`
+		PolicyVersion   string `json:"policy_version"`
+		RequiresHuman   bool   `json:"requires_human"`
+		SchemaVersion   int    `json:"schema_version"`
+	}
+	if err := json.Unmarshal([]byte(rawText), &wire); err != nil {
+		return ports.AIDecisionProposal{}, fmt.Errorf("decode structured proposal: %w", err)
+	}
+
+	policyVersion := strings.TrimSpace(wire.PolicyVersion)
 	if policyVersion == "" {
 		policyVersion = strings.TrimSpace(input.PolicyVersion)
 	}
-	proposal := ports.AIDecisionProposal{
-		IntentBase:         strings.TrimSpace(w.IntentBase),
-		DomainContext:      strings.TrimSpace(w.DomainContext),
-		Entities:           entities,
-		EvidenceReferences: evidence,
-		RequestedAction:    strings.TrimSpace(w.RequestedAction),
-		ResponseText:       strings.TrimSpace(w.ResponseText),
-		ConfidenceValue:    strings.TrimSpace(w.ConfidenceValue),
-		ConfidenceBand:     strings.TrimSpace(w.ConfidenceBand),
-		RequiresHuman:      w.RequiresHuman,
-		MissingInformation: missing,
-		ReasonCodes:        reasons,
-		PolicyDecision:     strings.TrimSpace(w.PolicyDecision),
+	return ports.AIDecisionProposal{
+		IntentBase:         strings.TrimSpace(wire.IntentBase),
+		DomainContext:      strings.TrimSpace(wire.DomainContext),
+		Entities:           []byte(`{}`),
+		EvidenceReferences: []byte(`[]`),
+		RequestedAction:    strings.TrimSpace(wire.RequestedAction),
+		ResponseText:       strings.TrimSpace(wire.ResponseText),
+		ConfidenceBand:     strings.TrimSpace(wire.ConfidenceBand),
+		RequiresHuman:      wire.RequiresHuman,
+		MissingInformation: []byte(`[]`),
+		ReasonCodes:        []byte(`[]`),
+		PolicyDecision:     strings.TrimSpace(wire.PolicyDecision),
 		PolicyVersion:      policyVersion,
-		KnowledgeVersion:   strings.TrimSpace(w.KnowledgeVersion),
-		ModelReference:     "gemini/" + strings.TrimSpace(model),
-		SchemaVersion:      w.SchemaVersion,
-	}
-	if w.StateProposal != nil {
-		kind := strings.ToUpper(strings.TrimSpace(w.StateProposal.Kind))
-		if kind == "" {
-			kind = "NO_REFERENCE"
-		}
-		if kind != "RESOLVED" && kind != "AMBIGUOUS" && kind != "NO_REFERENCE" {
-			kind = "NO_REFERENCE"
-		}
-		proposal.StateProposal = &ports.AIStateProposal{
-			Focus:         w.StateProposal.Focus,
-			Comparison:    w.StateProposal.Comparison,
-			Kind:          kind,
-			ReferenceText: strings.TrimSpace(w.StateProposal.ReferenceText),
-			Alternatives:  w.StateProposal.Alternatives,
-		}
-	}
-	return proposal, nil
+		ModelReference:     "gemini/" + c.model,
+		SchemaVersion:      1,
+	}, nil
 }
 
-func proposalJSONSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"intent_base":    map[string]any{"type": "string"},
-			"domain_context": map[string]any{"type": "string"},
-			"entities": map[string]any{
-				"type":        "object",
-				"description": "Extracted business entities and parameters (e.g. item_name, item_id, color, storage, quantity, etc.)",
-			},
-			"evidence_references": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"requested_action":    map[string]any{"type": "string"},
-			"response_text":       map[string]any{"type": "string"},
-			"confidence_value":    map[string]any{"type": "string"},
-			"confidence_band":     map[string]any{"type": "string"},
-			"requires_human":      map[string]any{"type": "boolean"},
-			"missing_information": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"reason_codes":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"policy_decision":     map[string]any{"type": "string"},
-			"policy_version":      map[string]any{"type": "string"},
-			"knowledge_version":   map[string]any{"type": "string"},
-			"schema_version":      map[string]any{"type": "integer"},
-			"state_proposal": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"focus": map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"type":       map[string]any{"type": "string"},
-							"id":         map[string]any{"type": "string"},
-							"catalog_id": map[string]any{"type": "string"},
-							"item_id":    map[string]any{"type": "string"},
-							"name":       map[string]any{"type": "string"},
-						},
-						"required": []string{"type", "id"},
-					},
-					"comparison": map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"type": map[string]any{"type": "string"},
-							"ids":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-						},
-						"required": []string{"type", "ids"},
-					},
-					"kind":           map[string]any{"type": "string"},
-					"reference_text": map[string]any{"type": "string"},
-					"alternatives": map[string]any{
-						"type": "array",
-						"items": map[string]any{
-							"type": "object",
-							"properties": map[string]any{
-								"type": map[string]any{"type": "string"},
-								"id":   map[string]any{"type": "string"},
-							},
-							"required": []string{"type", "id"},
-						},
-					},
-				},
-				"required": []string{"kind"},
-			},
-		},
-		"required": []string{"intent_base", "domain_context", "entities", "evidence_references", "requested_action", "response_text", "confidence_value", "confidence_band", "requires_human", "missing_information", "reason_codes", "policy_decision", "policy_version", "knowledge_version", "schema_version"},
-	}
-}
-
-func appendJSONString(raw []byte, value string) []byte {
-	var values []string
-	if len(raw) > 0 {
-		_ = json.Unmarshal(raw, &values)
-	}
-	for _, v := range values {
-		if v == value {
-			return raw
-		}
-	}
-	values = append(values, value)
-	encoded, err := json.Marshal(values)
-	if err != nil {
-		return raw
-	}
-	return encoded
-}
+// Context import needed for Decide.
+var _ = context.Background
 
 var _ ports.AIRuntime = (*Client)(nil)
