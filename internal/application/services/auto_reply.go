@@ -225,12 +225,15 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			ConversationState:      loadedState,
 		})
 		if contextErr != nil {
+			log.Printf("[AutoReply] CONTEXT_BUILD_FAILED business=%s err=%v", businessID, contextErr)
 			s.markFailedSafe(ctx, run, ports.AIRunFailureStageContextBuild, string(ports.AIRunFailureCategoryInfrastructure), contextErr.Error())
 			return commands.AutoReplyResult{}, contextErr
 		}
+		log.Printf("[AutoReply] CONTEXT_BUILT business=%s ownership=%s state=%s", businessID, bc.Conversation.Ownership, bc.Conversation.State)
 		// Per contract ③ §1, if conversation is owned by human or waiting for human,
 		// AI does not respond.
 		if strings.EqualFold(bc.Conversation.Ownership, "human") || strings.EqualFold(bc.Conversation.State, "waiting_human") {
+			log.Printf("[AutoReply] SKIPPED business=%s reason=human_owned_or_waiting_human ownership=%s state=%s", businessID, bc.Conversation.Ownership, bc.Conversation.State)
 			s.markCompletedSafe(ctx, run)
 			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, nil
 		}
