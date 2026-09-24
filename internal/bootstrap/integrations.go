@@ -2,11 +2,14 @@ package bootstrap
 
 import (
 	"errors"
+	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gemini"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/merchantgemini"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/openaicompatible"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/providers/socialapi"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
 )
 
@@ -14,6 +17,7 @@ type ExternalAdapters struct {
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
 	AIRuntime                      ports.AIRuntime
+	MerchantAIRuntime              ports.MerchantAIRuntime
 	LLMConfigError                 error
 	AutoReplyEnabled               bool
 	ChannelProvisioningSocial      ports.SocialChannelProvisioner
@@ -46,18 +50,31 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 	if a.AIRuntime != nil {
 		checks["llm_runtime"] = "configured"
 	}
+	if a.MerchantAIRuntime != nil {
+		checks["merchant_ai_runtime"] = "configured"
+	}
 	return checks
 }
 
 func BuildExternalAdapters(cfg config.ProcessConfig, capabilities ...ports.AICapabilityDispatcher) ExternalAdapters {
-	var caps ports.AICapabilityDispatcher
+	var customerCaps ports.AICapabilityDispatcher
+	var merchantCaps ports.AICapabilityDispatcher
 	if len(capabilities) > 0 {
-		caps = capabilities[0]
+		customerCaps = capabilities[0]
 	}
-	return BuildExternalAdaptersWithCapabilities(cfg, caps)
+	if len(capabilities) > 1 {
+		merchantCaps = capabilities[1]
+	} else {
+		merchantCaps = customerCaps
+	}
+	return BuildExternalAdaptersWithBothCapabilities(cfg, customerCaps, merchantCaps)
 }
 
 func BuildExternalAdaptersWithCapabilities(cfg config.ProcessConfig, capabilities ports.AICapabilityDispatcher) ExternalAdapters {
+	return BuildExternalAdaptersWithBothCapabilities(cfg, capabilities, capabilities)
+}
+
+func BuildExternalAdaptersWithBothCapabilities(cfg config.ProcessConfig, customerCaps ports.AICapabilityDispatcher, merchantCaps ports.AICapabilityDispatcher) ExternalAdapters {
 	adapters := ExternalAdapters{}
 	if cfg.SocialAPIAPIKey != "" || cfg.SocialAPIWebhookSecret != "" {
 		client := socialapi.NewClient(socialapi.Config{BaseURL: cfg.SocialAPIBaseURL, APIKey: cfg.SocialAPIAPIKey, WebhookSecret: cfg.SocialAPIWebhookSecret, HTTPTimeout: cfg.SocialAPIHTTPTimeout})
@@ -79,7 +96,7 @@ func BuildExternalAdaptersWithCapabilities(cfg config.ProcessConfig, capabilitie
 			RequestTimeout:     cfg.GeminiHTTPTimeout,
 			MaxOutputTokens:    cfg.LLMMaxOutputTokens,
 			MaxInputCharacters: cfg.LLMMaxInputCharacters,
-			Capabilities:       capabilities,
+			Capabilities:       customerCaps,
 		})
 		if err != nil {
 			adapters.LLMConfigError = errors.New("Gemini adapter configuration: " + err.Error())
@@ -102,9 +119,46 @@ func BuildExternalAdaptersWithCapabilities(cfg config.ProcessConfig, capabilitie
 			adapters.AIRuntime = client
 		}
 	}
+	if cfg.MerchantAIEnabled || cfg.MerchantAIGeminiAPIKey != "" {
+		merchantRuntime, err := BuildMerchantAIRuntime(cfg, merchantCaps)
+		if err == nil {
+			adapters.MerchantAIRuntime = merchantRuntime
+		}
+	}
 	adapters.AutoReplyEnabled = cfg.AutoReplyEnabled
 	adapters.ChannelProvisioningEnabled = cfg.ChannelProvisioningEnabled
 	adapters.ChannelProvisioningRedirectURI = cfg.ChannelProvisioningRedirectURI
 	adapters.FrontendURL = cfg.FrontendURL
 	return adapters
+}
+
+// BuildMerchantAIRuntime builds a dedicated, independent Gemini AIRuntime instance for the Merchant Copilot.
+func BuildMerchantAIRuntime(cfg config.ProcessConfig, capabilities ports.AICapabilityDispatcher) (ports.MerchantAIRuntime, error) {
+	apiKey := cfg.MerchantAIGeminiAPIKey
+	if apiKey == "" {
+		apiKey = cfg.GeminiAPIKey
+	}
+	if apiKey == "" {
+		return nil, errors.New("MERCHANT_AI_GEMINI_API_KEY (or GEMINI_API_KEY) is not configured")
+	}
+
+	model := cfg.MerchantAIGeminiModel
+	if model == "" {
+		model = "gemini-2.5-flash"
+	}
+	timeout := cfg.MerchantAIGeminiTimeout
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+
+	return merchantgemini.NewClient(merchantgemini.Config{
+		BaseURL:            cfg.MerchantAIGeminiBaseURL,
+		APIKey:             apiKey,
+		Model:              model,
+		RequestTimeout:     timeout,
+		MaxOutputTokens:    2048,
+		MaxInputCharacters: 15000,
+		SystemPrompt:       services.MerchantAISystemPrompt,
+		Capabilities:       capabilities,
+	})
 }

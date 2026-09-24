@@ -54,7 +54,8 @@ func BuildAPI(ctx context.Context, cfg config.ProcessConfig) (*APIRuntime, error
 		return nil, err
 	}
 	catalogRepository := postgres.NewCatalogRepository(database)
-	capabilityRegistry := services.NewCapabilityRegistry()
+	customerCapabilityRegistry := services.NewCapabilityRegistry()
+
 	catalogCapability := services.NewCatalogDataCapability(
 		services.ListCatalogsQueryService{Repository: catalogRepository},
 		services.ListCatalogItemsQueryService{Repository: catalogRepository},
@@ -63,24 +64,23 @@ func BuildAPI(ctx context.Context, cfg config.ProcessConfig) (*APIRuntime, error
 		services.ListVariantsQueryService{Repository: catalogRepository},
 		services.GetAttributeSchemaQueryService{Repository: catalogRepository},
 	)
-	if err := capabilityRegistry.Register(catalogCapability); err != nil {
+	if err := customerCapabilityRegistry.Register(catalogCapability); err != nil {
 		database.Close()
 		return nil, err
 	}
+
 	catalogCommands := services.NewCatalogCommandServices(catalogRepository, database)
-	catalogAuthoringCapability := services.NewCatalogAuthoringCapability(
+	merchantAICapabilities := services.NewMerchantAICapabilityRegistry(
+		catalogRepository,
 		services.AuthorCatalogItemCommandService{CatalogCommandServices: catalogCommands},
 		services.CreateCatalogCommandService{CatalogCommandServices: catalogCommands},
-		services.CreateCatalogItemCommandService{CatalogCommandServices: catalogCommands},
-		services.CreateOfferCommandService{CatalogCommandServices: catalogCommands},
+		services.UpdateCatalogItemCommandService{CatalogCommandServices: catalogCommands},
+		services.UpdateOfferCommandService{CatalogCommandServices: catalogCommands},
 		services.CreateVariantCommandService{CatalogCommandServices: catalogCommands},
-		services.CreateAttributeSchemaVersionCommandService{CatalogCommandServices: catalogCommands},
 	)
-	if err := capabilityRegistry.Register(catalogAuthoringCapability); err != nil {
-		database.Close()
-		return nil, err
-	}
-	runtime, err := newAPIWithExternalAndAuthentication(database, cfg.HTTPAddr, BuildExternalAdapters(cfg, capabilityRegistry), authentication)
+
+	externalAdapters := BuildExternalAdapters(cfg, customerCapabilityRegistry, merchantAICapabilities)
+	runtime, err := newAPIWithExternalAndAuthentication(database, cfg.HTTPAddr, externalAdapters, authentication)
 	if err != nil {
 		database.Close()
 		return nil, err
@@ -172,6 +172,14 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		service.Conversations = postgres.NewConversationRepository(database)
 		service.Realtime = realtimeBroker
 		autoReply = service
+	}
+	if external.MerchantAIRuntime != nil {
+		merchantSessionRepo := postgres.NewMerchantAISessionRepository(database)
+		dependencies.ChatWithMerchantAI = services.NewMerchantAIChatService(
+			merchantSessionRepo,
+			external.MerchantAIRuntime,
+			database,
+		)
 	}
 	inboundAutomation := services.InboundAutomationService{
 		Rules:         postgres.NewAutomationRuleRepository(database),
@@ -308,3 +316,4 @@ func (r *APIRuntime) Shutdown(ctx context.Context) error {
 	})
 	return shutdownErr
 }
+

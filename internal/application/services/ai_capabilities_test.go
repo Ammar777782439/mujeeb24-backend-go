@@ -352,8 +352,8 @@ func TestCatalogDataCapabilityPaginationAndContinuation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("page 1 failed: %v", err)
 	}
-	if !res1.HasMore || res1.NextCursor != "cursor-page-2" {
-		t.Fatalf("expected HasMore=true and NextCursor='cursor-page-2', got HasMore=%v, NextCursor=%s", res1.HasMore, res1.NextCursor)
+	if !res1.Data.(map[string]any)["has_more"].(bool) || res1.Data.(map[string]any)["next_cursor"].(string) != "cursor-page-2" {
+		t.Fatalf("expected HasMore=true and NextCursor='cursor-page-2', got HasMore=%v, NextCursor=%s", res1.Data.(map[string]any)["has_more"].(bool), res1.Data.(map[string]any)["next_cursor"].(string))
 	}
 	data1, ok := res1.Data.(map[string]any)
 	if !ok || data1["has_more"] != true || data1["next_cursor"] != "cursor-page-2" {
@@ -365,8 +365,8 @@ func TestCatalogDataCapabilityPaginationAndContinuation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("page 2 failed: %v", err)
 	}
-	if res2.HasMore || res2.NextCursor != "" {
-		t.Fatalf("expected HasMore=false and NextCursor='', got HasMore=%v, NextCursor=%s", res2.HasMore, res2.NextCursor)
+	if res2.Data.(map[string]any)["has_more"].(bool) || res2.Data.(map[string]any)["next_cursor"].(string) != "" {
+		t.Fatalf("expected HasMore=false and NextCursor='', got HasMore=%v, NextCursor=%s", res2.Data.(map[string]any)["has_more"].(bool), res2.Data.(map[string]any)["next_cursor"].(string))
 	}
 	data2, ok := res2.Data.(map[string]any)
 	if !ok || data2["has_more"] != false {

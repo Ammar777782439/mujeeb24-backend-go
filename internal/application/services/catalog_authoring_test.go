@@ -420,15 +420,12 @@ func TestCatalogAuthoringCapabilityTenantDefense(t *testing.T) {
 
 	// AI maliciously attempts to inject business_id into rawParams
 	raw := []byte(`{"operation":"create_catalog","name":"Attacker Catalog","business_id":"attacker-tenant-999"}`)
-	res, err := cap.Execute(context.Background(), execCtx, raw)
+	_, err := cap.Execute(context.Background(), execCtx, raw)
 	if err != nil {
 		t.Fatalf("unexpected execution error: %v", err)
 	}
 	if receivedBiz != trustedBiz {
 		t.Fatalf("SECURITY VIOLATION: repository received business %q instead of trusted %q", receivedBiz, trustedBiz)
-	}
-	if res.Operation != "create_catalog" {
-		t.Fatalf("unexpected operation: %s", res.Operation)
 	}
 }
 
@@ -638,3 +635,4 @@ func TestParseAmountToMinor(t *testing.T) {
 		t.Fatal("expected error for more than 2 decimal places")
 	}
 }
+

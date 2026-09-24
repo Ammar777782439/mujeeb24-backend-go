@@ -31,11 +31,6 @@ type AICapabilityResult struct {
 	CatalogEvidence []AICatalogEvidence `json:"catalog_evidence,omitempty"`
 	OfferEvidence   []AIOfferEvidence   `json:"offer_evidence,omitempty"`
 	VariantEvidence []AIVariantEvidence `json:"variant_evidence,omitempty"`
-	HasMore         bool                `json:"has_more,omitempty"`
-	NextCursor      string              `json:"next_cursor,omitempty"`
-	Incomplete      bool                `json:"incomplete,omitempty"`
-	Operation       string              `json:"operation,omitempty"`
-	StreamKey       string              `json:"stream_key,omitempty"`
 }
 
 // AICapability represents an individual application-level AI capability.

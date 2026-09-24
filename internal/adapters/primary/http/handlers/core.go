@@ -74,6 +74,7 @@ type Dependencies struct {
 	RotateRefreshSession         commands.RotateRefreshSessionHandler
 	RevokeRefreshSession         commands.RevokeRefreshSessionHandler
 	RequestHumanReview           commands.RequestHumanReviewHandler
+	ChatWithMerchantAI           commands.MerchantAIChatHandler
 	GetLiveness                  commands.QueryHandler[commands.GetLivenessQuery, commands.HealthView]
 	GetReadiness                 commands.QueryHandler[commands.GetReadinessQuery, commands.HealthView]
 	GetMetrics                   commands.QueryHandler[commands.GetMetricsQuery, commands.MetricsView]

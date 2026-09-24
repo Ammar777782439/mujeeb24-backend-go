@@ -49,6 +49,11 @@ type ProcessConfig struct {
 	GeminiBaseURL                  string
 	GeminiModel                    string
 	GeminiHTTPTimeout              time.Duration
+	MerchantAIEnabled              bool
+	MerchantAIGeminiAPIKey         string
+	MerchantAIGeminiBaseURL        string
+	MerchantAIGeminiModel          string
+	MerchantAIGeminiTimeout        time.Duration
 	FrontendURL                    string
 }
 
@@ -92,6 +97,11 @@ func LoadFromEnv() (ProcessConfig, error) {
 		GeminiBaseURL:                  strings.TrimRight(strings.TrimSpace(os.Getenv("GEMINI_BASE_URL")), "/"),
 		GeminiModel:                    strings.TrimSpace(os.Getenv("GEMINI_MODEL")),
 		GeminiHTTPTimeout:              30 * time.Second,
+		MerchantAIEnabled:              false,
+		MerchantAIGeminiAPIKey:         strings.TrimSpace(os.Getenv("MERCHANT_AI_GEMINI_API_KEY")),
+		MerchantAIGeminiBaseURL:        strings.TrimRight(strings.TrimSpace(os.Getenv("MERCHANT_AI_GEMINI_BASE_URL")), "/"),
+		MerchantAIGeminiModel:          envOr("MERCHANT_AI_GEMINI_MODEL", "gemini-2.5-flash"),
+		MerchantAIGeminiTimeout:        30 * time.Second,
 		FrontendURL:                    strings.TrimRight(strings.TrimSpace(os.Getenv("FRONTEND_URL")), "/"),
 	}
 	if cfg.DatabaseURL == "" {
@@ -157,6 +167,15 @@ func LoadFromEnv() (ProcessConfig, error) {
 	}
 	if cfg.GeminiHTTPTimeout, err = durationEnv("GEMINI_HTTP_TIMEOUT", cfg.GeminiHTTPTimeout); err != nil {
 		return ProcessConfig{}, err
+	}
+	if cfg.MerchantAIEnabled, err = boolEnv("MERCHANT_AI_ENABLED", cfg.MerchantAIEnabled); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.MerchantAIGeminiTimeout, err = durationEnv("MERCHANT_AI_GEMINI_TIMEOUT", cfg.MerchantAIGeminiTimeout); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.MerchantAIEnabled && cfg.MerchantAIGeminiAPIKey == "" {
+		return ProcessConfig{}, errors.New("MERCHANT_AI_ENABLED requires MERCHANT_AI_GEMINI_API_KEY")
 	}
 	if cfg.LLMEnabled {
 		if cfg.LLMBaseURL == "" || cfg.LLMAPIKey == "" || cfg.LLMModel == "" {

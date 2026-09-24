@@ -265,7 +265,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 				Status:      item.Status,
 			})
 		}
-		streamKey := fmt.Sprintf("list_catalogs:status=%s", params.Status)
+
 		return ports.AICapabilityResult{
 			Data: map[string]any{
 				"catalogs":    projections,
@@ -273,10 +273,10 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 				"has_more":    res.HasMore,
 				"next_cursor": res.NextCursor,
 			},
-			HasMore:    res.HasMore,
-			NextCursor: res.NextCursor,
-			Operation:  "list_catalogs",
-			StreamKey:  streamKey,
+
+
+
+
 		}, nil
 
 	case "list_catalog_items":
@@ -331,7 +331,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 				SchemaVersion:    AIEvidenceSchemaVersion,
 			})
 		}
-		streamKey := fmt.Sprintf("list_catalog_items:catalog=%s:status=%s", catalogID, params.Status)
+
 		return ports.AICapabilityResult{
 			Data: map[string]any{
 				"items":       projections,
@@ -340,10 +340,10 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 				"next_cursor": res.NextCursor,
 			},
 			CatalogEvidence: evidence,
-			HasMore:         res.HasMore,
-			NextCursor:      res.NextCursor,
-			Operation:       "list_catalog_items",
-			StreamKey:       streamKey,
+
+
+
+
 		}, nil
 
 	case "get_catalog_item":
@@ -395,13 +395,13 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 				SchemaVersion:    AIEvidenceSchemaVersion,
 			},
 		}
-		streamKey := fmt.Sprintf("get_catalog_item:catalog=%s:item=%s", catalogID, itemID)
+
 		return ports.AICapabilityResult{
 			Data:            projection,
 			CatalogEvidence: evidence,
-			HasMore:         false,
-			Operation:       "get_catalog_item",
-			StreamKey:       streamKey,
+
+
+
 		}, nil
 
 	case "list_offers":
@@ -460,7 +460,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 				SchemaVersion:        AIEvidenceSchemaVersion,
 			})
 		}
-		streamKey := fmt.Sprintf("list_offers:item=%s:status=%s", itemID, params.Status)
+
 		return ports.AICapabilityResult{
 			Data: map[string]any{
 				"offers":      projections,
@@ -469,10 +469,10 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 				"next_cursor": res.NextCursor,
 			},
 			OfferEvidence: evidence,
-			HasMore:       res.HasMore,
-			NextCursor:    res.NextCursor,
-			Operation:     "list_offers",
-			StreamKey:     streamKey,
+
+
+
+
 		}, nil
 
 	case "list_variants":
@@ -518,7 +518,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 				SchemaVersion:        AIEvidenceSchemaVersion,
 			})
 		}
-		streamKey := fmt.Sprintf("list_variants:item=%s:status=%s", itemID, params.Status)
+
 		return ports.AICapabilityResult{
 			Data: map[string]any{
 				"variants":    projections,
@@ -527,10 +527,10 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 				"next_cursor": res.NextCursor,
 			},
 			VariantEvidence: evidence,
-			HasMore:         res.HasMore,
-			NextCursor:      res.NextCursor,
-			Operation:       "list_variants",
-			StreamKey:       streamKey,
+
+
+
+
 		}, nil
 
 	case "get_attribute_schema":
@@ -560,7 +560,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 				DisplayOrder: d.DisplayOrder,
 			})
 		}
-		streamKey := fmt.Sprintf("get_attribute_schema:schema=%s", schemaID)
+
 		return ports.AICapabilityResult{
 			Data: AttributeSchemaProjection{
 				ID:          string(schema.ID),
@@ -568,9 +568,9 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 				Version:     schema.Version,
 				Definitions: defs,
 			},
-			HasMore:   false,
-			Operation: "get_attribute_schema",
-			StreamKey: streamKey,
+
+
+
 		}, nil
 
 	default:
@@ -1105,8 +1105,8 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 			CatalogEvidence: catEvidence,
 			VariantEvidence: variantEvidence,
 			OfferEvidence:   offerEvidence,
-			Operation:       "author_catalog_item",
-			StreamKey:       fmt.Sprintf("author_catalog_item:catalog=%s:item=%s", catalogID, res.Item.ID),
+
+
 		}, nil
 
 	case "create_catalog":
@@ -1132,7 +1132,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 				Description: res.Catalog.Description,
 				Status:      res.Catalog.Status,
 			},
-			Operation: "create_catalog",
+
 		}, nil
 
 	case "create_catalog_item":
@@ -1221,7 +1221,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 		return ports.AICapabilityResult{
 			Data:            projection,
 			CatalogEvidence: catEvidence,
-			Operation:       "create_catalog_item",
+
 		}, nil
 
 	case "create_offer":
@@ -1330,7 +1330,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 		return ports.AICapabilityResult{
 			Data:          projection,
 			OfferEvidence: offerEvidence,
-			Operation:     "create_offer",
+
 		}, nil
 
 	case "create_variant":
@@ -1382,7 +1382,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 		return ports.AICapabilityResult{
 			Data:            projection,
 			VariantEvidence: variantEvidence,
-			Operation:       "create_variant",
+
 		}, nil
 
 	case "create_attribute_schema":
@@ -1432,7 +1432,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 				Version:     res.Schema.Version,
 				Definitions: defProjections,
 			},
-			Operation: "create_attribute_schema",
+
 		}, nil
 
 	default:

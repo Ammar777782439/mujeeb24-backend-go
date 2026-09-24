@@ -187,6 +187,9 @@ type ConnectionListInput = dto.ConnectionListInput
 type ConversationUpdateInput = dto.ConversationUpdateInput
 type CustomerUpdateInput = dto.CustomerUpdateInput
 type UpdateCustomerRequest = dto.UpdateCustomerRequest
+type MerchantAIChatRequest = dto.MerchantAIChatRequest
+type MerchantAIChatInput = dto.MerchantAIChatInput
+type MerchantAIChatResponse = dto.MerchantAIChatResponse
 
 
 type Single[T any] struct {

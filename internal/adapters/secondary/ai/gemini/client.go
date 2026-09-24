@@ -19,9 +19,8 @@ const (
 	defaultMaxOutputTokens  = 2048
 	defaultMaxResponseBytes = 1 << 20
 	defaultSafetyTurnBudget = 25
-	proposalSchemaVersion   = 1
 	defaultBaseURL          = "https://generativelanguage.googleapis.com"
-	defaultModel            = "gemini-3.5-flash-lite"
+	defaultModel            = "gemini-2.5-flash"
 )
 
 // Config contains only runtime configuration. API keys are never copied into a
@@ -40,9 +39,8 @@ type Config struct {
 	Capabilities       ports.AICapabilityDispatcher
 }
 
-// Client is a Gemini JSON/HTTP implementation of ports.AIRuntime.
-// It asks the model for a structured proposal only; AutoReplyService remains
-// responsible for validation, policy, persistence, and side effects.
+// Client is a Gemini JSON/HTTP implementation of ports.AIRuntime for customer support.
+// It executes tool calls via AICapabilityDispatcher and returns natural language responses.
 type Client struct {
 	baseURL            string
 	apiKey             string
@@ -71,7 +69,7 @@ func NewClient(cfg Config) (*Client, error) {
 	}
 	model := strings.TrimSpace(cfg.Model)
 	if model == "" {
-		model = "gemini-3.5-flash-lite"
+		model = defaultModel
 	}
 	requestTimeout := cfg.RequestTimeout
 	if requestTimeout <= 0 {
@@ -132,8 +130,9 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 	}
 
 	userPrompt := buildUserPrompt(input)
+	userPart, _ := json.Marshal(geminiPart{Text: userPrompt})
 	contents := []geminiContent{
-		{Role: "user", Parts: []geminiPart{{Text: userPrompt}}},
+		{Role: "user", Parts: []json.RawMessage{userPart}},
 	}
 
 	requestCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
@@ -166,23 +165,57 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 		discoveredCatalog    []ports.AICatalogEvidence
 		discoveredOffers     []ports.AIOfferEvidence
 		discoveredVariants   []ports.AIVariantEvidence
-		session              = ports.NewCatalogRetrievalSession()
+
 		loopFinishedNormally bool
 		finalProposal        ports.AIDecisionProposal
 	)
 
 	safetyBudget := c.safetyTurnBudget
 	for turn := 0; turn < safetyBudget; turn++ {
+		systemPart, _ := json.Marshal(geminiPart{Text: c.systemPrompt})
 		reqBody := geminiRequest{
 			SystemInstruction: &geminiContent{
-				Parts: []geminiPart{{Text: c.systemPrompt}},
+				Parts: []json.RawMessage{systemPart},
 			},
 			Contents: contents,
 			Tools:    tools,
 			GenerationConfig: geminiGenerationConfig{
 				MaxOutputTokens:  c.maxOutputTokens,
 				ResponseMimeType: "application/json",
-				ResponseSchema:   proposalJSONSchema(),
+				ResponseSchema: &geminiSchema{
+					Type: "OBJECT",
+					Properties: map[string]geminiSchema{
+						"intent_base": {
+							Type:        "STRING",
+							Description: "The base intent of the user (e.g. information_request, comparison, etc.)",
+						},
+						"requested_action": {
+							Type:        "STRING",
+							Description: "The final action to take (must be 'answer' or 'handoff')",
+						},
+						"requires_human": {
+							Type:        "BOOLEAN",
+							Description: "True if the question is unrelated to the store or too complex to answer safely.",
+						},
+						"response_text": {
+							Type:        "STRING",
+							Description: "The final response to the customer. MUST be based STRICTLY on retrieved catalog evidence. Do not invent products or prices. For exact product requests, state the price if found. For comparisons, explicitly list the names and prices of compared items. For explorations, list actual available items. Do not use generic marketing filler. Do not repeat text. If no evidence is found, state that it is unavailable.",
+						},
+						"confidence_value": {
+							Type:        "STRING",
+							Description: "Confidence score between 0.0 and 1.0",
+						},
+						"confidence_band": {
+							Type:        "STRING",
+							Description: "Confidence band (high, medium, low)",
+						},
+						"policy_decision": {
+							Type:        "STRING",
+							Description: "Policy decision (allowed, denied, handoff)",
+						},
+					},
+					Required: []string{"intent_base", "requested_action", "requires_human", "response_text", "confidence_value", "confidence_band", "policy_decision"},
+				},
 			},
 		}
 
@@ -198,13 +231,16 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 		var functionCallPart *geminiFunctionCall
 		var textContent string
 
-		for _, part := range candidate.Content.Parts {
-			if part.FunctionCall != nil && strings.TrimSpace(part.FunctionCall.Name) != "" {
-				functionCallPart = part.FunctionCall
-				break
-			}
-			if strings.TrimSpace(part.Text) != "" {
-				textContent = strings.TrimSpace(part.Text)
+		for _, rawPart := range candidate.Content.Parts {
+			var part geminiPart
+			if err := json.Unmarshal(rawPart, &part); err == nil {
+				if part.FunctionCall != nil && strings.TrimSpace(part.FunctionCall.Name) != "" {
+					functionCallPart = part.FunctionCall
+					break
+				}
+				if strings.TrimSpace(part.Text) != "" {
+					textContent = strings.TrimSpace(part.Text)
+				}
 			}
 		}
 
@@ -229,12 +265,7 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 							toolResponse = map[string]any{"result": capResult.Data}
 						}
 					}
-					// Record the operation and cursor chain in the session
-					streamKey := capResult.StreamKey
-					if streamKey == "" {
-						streamKey = functionCallPart.Name
-					}
-					session.RecordOperation(capResult.Operation, streamKey, capResult.HasMore, capResult.NextCursor)
+
 
 					// Accumulate evidence for the proposal without mutating input.Context directly
 					if len(capResult.CatalogEvidence) > 0 {
@@ -251,74 +282,118 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 				toolResponse = map[string]any{"error": fmt.Sprintf("capability %q not available", functionCallPart.Name)}
 			}
 
+			// Append model's function call turn
 			contents = append(contents, geminiContent{
 				Role:  "model",
 				Parts: candidate.Content.Parts,
 			})
-			contents = append(contents, geminiContent{
-				Role: "function",
-				Parts: []geminiPart{
-					{
-						FunctionResponse: &geminiFunctionResponse{
-							Name:     functionCallPart.Name,
-							Response: toolResponse,
-						},
-					},
+			funcRespPart, _ := json.Marshal(geminiPart{
+				FunctionResponse: &geminiFunctionResponse{
+					Name:     functionCallPart.Name,
+					Response: toolResponse,
 				},
+			})
+			// Append tool execution result using role "user" (Gemini REST API requires role 'user' for functionResponse)
+			contents = append(contents, geminiContent{
+				Role:  "user",
+				Parts: []json.RawMessage{funcRespPart},
 			})
 			continue
 		}
 
 		if textContent == "" {
-			return ports.AIDecisionProposal{}, errors.New("Gemini response did not contain structured content")
+			return ports.AIDecisionProposal{}, errors.New("Gemini response did not contain text content")
 		}
 
-		// If model tries to return a proposal while a catalog stream has HasMore=true,
-		// prompt the model to continue pagination if turn budget permits.
-		if session.HasIncompleteStreams() {
-			incomplete := session.IncompleteStreams()
-			if turn < safetyBudget-1 && len(incomplete) > 0 {
-				contents = append(contents, geminiContent{
-					Role:  "model",
-					Parts: candidate.Content.Parts,
-				})
-				contents = append(contents, geminiContent{
-					Role: "user",
-					Parts: []geminiPart{
-						{
-							Text: fmt.Sprintf("Notice: Catalog retrieval for stream %q is incomplete (has_more is true, next_cursor is %q). You must continue fetching remaining pages with catalog_data before finalizing your decision.", incomplete[0].StreamKey, incomplete[0].NextCursor),
-						},
-					},
-				})
-				continue
+		policyVersion := strings.TrimSpace(input.PolicyVersion)
+		if policyVersion == "" {
+			policyVersion = "auto-reply-v1"
+		}
+
+		type llmResponse struct {
+			IntentBase      string `json:"intent_base"`
+			RequestedAction string `json:"requested_action"`
+			RequiresHuman   bool   `json:"requires_human"`
+			ResponseText    string `json:"response_text"`
+			ConfidenceValue string `json:"confidence_value"`
+			ConfidenceBand  string `json:"confidence_band"`
+			PolicyDecision  string `json:"policy_decision"`
+		}
+		var llmResp llmResponse
+
+		cleanText := textContent
+		if strings.HasPrefix(cleanText, "```json") {
+			cleanText = strings.TrimPrefix(cleanText, "```json")
+			cleanText = strings.TrimSuffix(strings.TrimSpace(cleanText), "```")
+		} else if strings.HasPrefix(cleanText, "```") {
+			cleanText = strings.TrimPrefix(cleanText, "```")
+			cleanText = strings.TrimSuffix(strings.TrimSpace(cleanText), "```")
+		}
+
+		if err := json.Unmarshal([]byte(cleanText), &llmResp); err != nil {
+			llmResp.IntentBase = "unrecognized_intent"
+			llmResp.RequestedAction = "ask_clarification"
+			llmResp.RequiresHuman = true
+			llmResp.ResponseText = "عذراً، لم أتمكن من معالجة طلبك بشكل صحيح. سأقوم بتحويلك لممثل خدمة العملاء لمساعدتك."
+			llmResp.ConfidenceValue = "0.0"
+			llmResp.ConfidenceBand = "low"
+			llmResp.PolicyDecision = "requires_approval"
+		} else {
+			// Semantic validation of Enums (fallback to handoff if model hallucinates an invalid enum)
+			if llmResp.RequestedAction != "answer" && llmResp.RequestedAction != "handoff" {
+				llmResp.RequestedAction = "handoff"
+				llmResp.RequiresHuman = true
+			}
+			if llmResp.PolicyDecision != "allowed" && llmResp.PolicyDecision != "denied" && llmResp.PolicyDecision != "handoff" {
+				llmResp.PolicyDecision = "handoff"
+				llmResp.RequiresHuman = true
+			}
+
+			// Validate response_text
+			if llmResp.RequestedAction == "answer" && strings.TrimSpace(llmResp.ResponseText) == "" {
+				llmResp.RequestedAction = "handoff"
+				llmResp.RequiresHuman = true
+				llmResp.ResponseText = "عذراً، أواجه صعوبة فنية. سيتم تحويلك إلى موظف خدمة العملاء."
+			}
+
+			// Validate output length to prevent catastrophic repetition hallucination
+			if len(llmResp.ResponseText) > 2000 {
+				// Prevent dumping massive hallucinated texts
+				llmResp.RequestedAction = "handoff"
+				llmResp.RequiresHuman = true
+				llmResp.ResponseText = "عذراً، أواجه صعوبة فنية. سيتم تحويلك إلى موظف خدمة العملاء."
+			}
+
+			validBands := map[string]bool{"high": true, "medium": true, "low": true}
+			if !validBands[llmResp.ConfidenceBand] {
+				llmResp.ConfidenceBand = "low"
 			}
 		}
 
-		var wire proposalWire
-		if err := json.Unmarshal([]byte(textContent), &wire); err != nil {
-			return ports.AIDecisionProposal{}, fmt.Errorf("decode structured Gemini proposal: %w", err)
-		}
-		proposal, err := wire.toProposal(input, c.model)
-		if err != nil {
-			return ports.AIDecisionProposal{}, err
+		finalProposal = ports.AIDecisionProposal{
+			IntentBase:                llmResp.IntentBase,
+			DomainContext:             "customer_support",
+			Entities:                  []byte(`{}`),
+			EvidenceReferences:        []byte(`[]`),
+			RequestedAction:           llmResp.RequestedAction,
+			ResponseText:              llmResp.ResponseText,
+			ConfidenceValue:           llmResp.ConfidenceValue,
+			ConfidenceBand:            llmResp.ConfidenceBand,
+			RequiresHuman:             llmResp.RequiresHuman,
+			MissingInformation:        []byte(`[]`),
+			ReasonCodes:               []byte(`[]`),
+			PolicyDecision:            llmResp.PolicyDecision,
+			PolicyVersion:             policyVersion,
+			ModelReference:            "gemini/" + strings.TrimSpace(c.model),
+			SchemaVersion:             1,
+			DiscoveredCatalogEvidence: discoveredCatalog,
+			DiscoveredOfferEvidence:   discoveredOffers,
+			DiscoveredVariantEvidence: discoveredVariants,
+			CatalogRetrievalState:     ports.CatalogRetrievalNoneRequired,
+			CatalogIncomplete:         false,
+			SafetyBudgetExhausted:     false,
 		}
 
-		proposal.DiscoveredCatalogEvidence = discoveredCatalog
-		proposal.DiscoveredOfferEvidence = discoveredOffers
-		proposal.DiscoveredVariantEvidence = discoveredVariants
-		proposal.CatalogStreams = session.AllStreams()
-		proposal.CatalogRetrievalState = session.State(false)
-		proposal.CatalogIncomplete = session.HasIncompleteStreams()
-		proposal.SafetyBudgetExhausted = false
-
-		if proposal.CatalogIncomplete {
-			proposal.RequiresHuman = true
-			proposal.PolicyDecision = "requires_approval"
-			proposal.ReasonCodes = appendJSONString(proposal.ReasonCodes, "catalog_retrieval_incomplete")
-			proposal.MissingInformation = appendJSONString(proposal.MissingInformation, "catalog retrieval stream is incomplete; remaining records not exhausted")
-		}
-
-		finalProposal = proposal
 		loopFinishedNormally = true
 		break
 	}
@@ -327,23 +402,32 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
 		return finalProposal, nil
 	}
 
+	policyVersion := strings.TrimSpace(input.PolicyVersion)
+	if policyVersion == "" {
+		policyVersion = "auto-reply-v1"
+	}
+
 	// Technical safety budget exhausted before model concluded.
 	return ports.AIDecisionProposal{
-		IntentBase:                "catalog_safety_budget_exhausted",
-		DomainContext:             "catalog",
+		IntentBase:                "safety_budget_exhausted",
+		DomainContext:             "customer_support",
+		Entities:                  []byte(`{}`),
+		EvidenceReferences:        []byte(`[]`),
 		RequestedAction:           "ask_clarification",
+		ResponseText:              "يرجى توضيح استفسارك لنتمكن من خدمتك بشكل أفضل.",
+		ConfidenceValue:           "0.50",
+		ConfidenceBand:            "low",
 		RequiresHuman:             true,
 		PolicyDecision:            "requires_approval",
 		ReasonCodes:               []byte(`["safety_budget_exhausted","catalog_retrieval_incomplete"]`),
 		MissingInformation:        []byte(`["catalog data retrieval halted by technical safety budget"]`),
-		PolicyVersion:             input.PolicyVersion,
+		PolicyVersion:             policyVersion,
 		ModelReference:            "gemini/" + strings.TrimSpace(c.model),
-		SchemaVersion:             proposalSchemaVersion,
+		SchemaVersion:             1,
 		DiscoveredCatalogEvidence: discoveredCatalog,
 		DiscoveredOfferEvidence:   discoveredOffers,
 		DiscoveredVariantEvidence: discoveredVariants,
 		CatalogRetrievalState:     ports.CatalogRetrievalSafetyBudgetExhausted,
-		CatalogStreams:            session.AllStreams(),
 		CatalogIncomplete:         true,
 		SafetyBudgetExhausted:     true,
 	}, nil
@@ -505,33 +589,29 @@ func promptContextFrom(value *ports.AIContext) promptContext {
 	}
 }
 
-const defaultSystemPrompt = `أنت المساعد الذكي لخدمة العملاء وإدارة الكتالوج. مهمتك فهم نية المستخدم بدقة، استكشاف كتالوج وبيانات التاجر عند الحاجة، تنفيذ عمليات إضافة وتعديل المنتجات المعتمدة، وتقديم ردود عربية احترافية، دقيقة، ومنسقة تناسب تطبيقات المحادثة.
+const defaultSystemPrompt = `أنت Customer AI (مساعد خدمة العملاء) ولست Merchant AI. مهمتك فهم استفسارات العميل والإجابة عليها بناءً على الأدلة (Catalog Evidence) التي تستخرجها عبر الأدوات (Function Calling).
 
-قواعد التشغيل العامة والتنسيق:
-1. التنسيق وجودة النص العربي (RTL):
-   - استخدم أسطر جديدة وفواصل واضحة (\n) بين الفقرات والنقاط لتسهيل القراءة على الهاتف.
-   - عند المقارنة أو سرد المميزات والأسعار، استخدم النقاط المنظمة (•) أو الأرقام.
-   - اكتب باللغة العربية الواضحة، وتجنب حشر الكلمات الإنجليزية بين أقواس داخل النص العربي لتفادي تشويه اتجاه النص.
-   - ابدأ بترحيب لطيف واختم بسؤال تفاعلي لمساعدة العميل.
-2. الالتزام بالحقائق والأدلة:
-   - استخدم بيانات التاجر وسياق الكتالوج الموثق كمصدر وحيد للأدلة، ولا تخترع منتجات أو أسعاراً أو سياسات غير موجودة.
-   - استشهد بالمراجع المناسبة في evidence_references.
-   - إذا كان المنتج أو الخدمة غير متوفرة، وضح ذلك للعميل بلباقة واقترح البدائل المتاحة إن وجدت.
-3. مخرجات القرار المنظم:
-   - أخرج JSON المطابق للمخطط فقط دون أي نص خارجه.
-   - القيم المسموحة لـ requested_action: answer أو ask_clarification أو no_action.
-   - القيم المسموحة لـ policy_decision: allowed أو requires_approval أو denied.
-   - confidence_band: low أو medium أو high.
-4. تتبع حالة المحادثة (state_proposal):
-   - إذا كانت الرسالة تشير إلى منتج/عرض محدد في الأدلة، أخرج kind=RESOLVED مع focus المناسب.
-   - إذا كانت الرسالة تقارن بين خيارات، أخرج kind=RESOLVED مع comparison المناسب.
-   - إذا كانت الرسالة تحتمل أكثر من خيار ولا يمكن الحسم، أخرج kind=AMBIGUOUS واطلب التوضيح.
-   - إذا كانت الرسالة تحية أو موضوعاً عاماً جديداً، أخرج kind=NO_REFERENCE.
-5. إضافة وتأليف منتجات الكتالوج (Catalog Authoring):
-   - عند طلب التاجر إضافة أو إنشاء منتج جديد، افهم البيانات المذكورة (الاسم، السعر، المقاسات، الخصائص).
-   - إذا كانت هناك بيانات تجارية إلزامية ناقصة (مثل السعر أو العرض) ولم تذكر في المحادثة، اطلب فقط المعلومة الناقصة (requested_action: ask_clarification).
-   - لا تطلب مجدداً أي معلومة ذكرها التاجر سابقاً في سياق المحادثة.
-   - إذا توفرت المعلومات الكافية، نفذ أداة catalog_authoring مباشرة لإنشاء المنتج والعروض والمتغيرات، ثم أكد الإضافة للتاجر بوضوح (requested_action: answer).`
+القواعد الصارمة:
+1. لا تخترع منتجاً، أو سعراً، أو توفراً، أو سياسة. أي معلومة تجارية يجب أن تكون مستندة حرفياً إلى الأدلة المستلمة.
+2. إذا كان السؤال يتطلب مقارنة، يجب سرد المنتجات بوضوح مع أسعارها وخصائصها المستخرجة من الكتالوج. لا تستخدم كلاماً تسويقياً عاماً لملء الفراغ.
+3. إذا طلب العميل استكشاف المنتجات، يجب سرد المنتجات الفعلية المتوفرة في الأدلة.
+4. إذا سأل العميل عن منتج محدد والسعر موجود في الأدلة، يجب ذكر السعر صراحة.
+5. إذا لم توجد أدلة كافية أو أرجعت الأداة has_more: true، قم باستدعاء الأداة مرة أخرى باستخدام next_cursor إذا كنت بحاجة للمزيد (مثلاً في المقارنات أو الاستكشاف).
+6. توقف عن استدعاء الأدوات فور حصولك على الأدلة الكافية للإجابة ولا تستمر بلا حاجة.
+7. إذا استنفدت الأدلة ولم تجد المنتج، صرّح بوضوح أنه غير متوفر. يُسمح بل يُفضل اقتراح أقرب المنتجات المتاحة من داخل الكتالوج فقط (مثل اقتراح الإصدار الأقدم).
+8. لا تمارس الحشو التسويقي الزائد. لا تكرر النصوص أو الجمل أبداً.
+9. اعتمد فقط على الأدلة ولا تستخدم معرفتك العامة للإجابة عن توفر المنتجات.
+
+عند الانتهاء من البحث واتخاذ القرار، يجب أن يكون ردك النهائي عبارة عن كائن JSON فقط (بدون أي نصوص إضافية أو علامات Markdown) يحتوي على الحقول التالية:
+{
+  "intent_base": "information_request",
+  "requested_action": "answer",
+  "requires_human": false,
+  "response_text": "نص الرد النهائي الذي سيتم إرساله للعميل...",
+  "confidence_value": "0.95",
+  "confidence_band": "high",
+  "policy_decision": "allowed"
+}`
 
 type geminiRequest struct {
 	SystemInstruction *geminiContent         `json:"systemInstruction,omitempty"`
@@ -551,8 +631,8 @@ type geminiFunctionDeclaration struct {
 }
 
 type geminiContent struct {
-	Role  string       `json:"role,omitempty"`
-	Parts []geminiPart `json:"parts"`
+	Role  string            `json:"role,omitempty"`
+	Parts []json.RawMessage `json:"parts"`
 }
 
 type geminiPart struct {
@@ -571,198 +651,28 @@ type geminiFunctionResponse struct {
 	Response map[string]any `json:"response"`
 }
 
+type geminiSchema struct {
+	Type        string                  `json:"type"`
+	Description string                  `json:"description,omitempty"`
+	Properties  map[string]geminiSchema `json:"properties,omitempty"`
+	Required    []string                `json:"required,omitempty"`
+	Enum        []string                `json:"enum,omitempty"`
+}
+
 type geminiGenerationConfig struct {
-	MaxOutputTokens  int            `json:"maxOutputTokens,omitempty"`
-	ResponseMimeType string         `json:"responseMimeType,omitempty"`
-	ResponseSchema   map[string]any `json:"responseSchema,omitempty"`
+	MaxOutputTokens  int           `json:"maxOutputTokens,omitempty"`
+	ResponseMimeType string        `json:"responseMimeType,omitempty"`
+	ResponseSchema   *geminiSchema `json:"responseSchema,omitempty"`
 }
 
 type geminiResponse struct {
 	Candidates []struct {
 		Content struct {
-			Parts []geminiPart `json:"parts"`
-			Role  string       `json:"role"`
+			Parts []json.RawMessage `json:"parts"`
+			Role  string            `json:"role"`
 		} `json:"content"`
 		FinishReason string `json:"finishReason"`
 	} `json:"candidates"`
-}
-
-type proposalWire struct {
-	IntentBase         string                     `json:"intent_base"`
-	DomainContext      string                     `json:"domain_context"`
-	Entities           map[string]json.RawMessage `json:"entities"`
-	EvidenceReferences []string                   `json:"evidence_references"`
-	RequestedAction    string                     `json:"requested_action"`
-	ResponseText       string                     `json:"response_text"`
-	ConfidenceValue    string                     `json:"confidence_value"`
-	ConfidenceBand     string                     `json:"confidence_band"`
-	RequiresHuman      bool                       `json:"requires_human"`
-	MissingInformation []string                   `json:"missing_information"`
-	ReasonCodes        []string                   `json:"reason_codes"`
-	PolicyDecision     string                     `json:"policy_decision"`
-	PolicyVersion      string                     `json:"policy_version"`
-	KnowledgeVersion   string                     `json:"knowledge_version"`
-	SchemaVersion      int                        `json:"schema_version"`
-	StateProposal      *stateProposalWire         `json:"state_proposal,omitempty"`
-}
-
-type stateProposalWire struct {
-	Focus         *ports.ConversationFocus      `json:"focus,omitempty"`
-	Comparison    *ports.ConversationComparison `json:"comparison,omitempty"`
-	Kind          string                        `json:"kind"`
-	ReferenceText string                        `json:"reference_text,omitempty"`
-	Alternatives  []ports.ConversationFocus     `json:"alternatives,omitempty"`
-}
-
-func (w proposalWire) toProposal(input ports.AIDecisionInput, model string) (ports.AIDecisionProposal, error) {
-	if w.SchemaVersion != proposalSchemaVersion {
-		return ports.AIDecisionProposal{}, fmt.Errorf("unsupported AI proposal schema version %d", w.SchemaVersion)
-	}
-	if strings.TrimSpace(w.IntentBase) == "" || strings.TrimSpace(w.RequestedAction) == "" || strings.TrimSpace(w.ConfidenceBand) == "" || strings.TrimSpace(w.PolicyDecision) == "" {
-		return ports.AIDecisionProposal{}, errors.New("Gemini structured proposal is missing required decision fields")
-	}
-	entities := []byte(`{}`)
-	if w.Entities != nil {
-		var err error
-		entities, err = json.Marshal(w.Entities)
-		if err != nil {
-			return ports.AIDecisionProposal{}, fmt.Errorf("encode Gemini entities: %w", err)
-		}
-	}
-	evidence, err := json.Marshal(w.EvidenceReferences)
-	if err != nil {
-		return ports.AIDecisionProposal{}, fmt.Errorf("encode Gemini evidence: %w", err)
-	}
-	missing, err := json.Marshal(w.MissingInformation)
-	if err != nil {
-		return ports.AIDecisionProposal{}, fmt.Errorf("encode Gemini missing information: %w", err)
-	}
-	reasons, err := json.Marshal(w.ReasonCodes)
-	if err != nil {
-		return ports.AIDecisionProposal{}, fmt.Errorf("encode Gemini reason codes: %w", err)
-	}
-	policyVersion := strings.TrimSpace(w.PolicyVersion)
-	if policyVersion == "" {
-		policyVersion = strings.TrimSpace(input.PolicyVersion)
-	}
-	proposal := ports.AIDecisionProposal{
-		IntentBase:         strings.TrimSpace(w.IntentBase),
-		DomainContext:      strings.TrimSpace(w.DomainContext),
-		Entities:           entities,
-		EvidenceReferences: evidence,
-		RequestedAction:    strings.TrimSpace(w.RequestedAction),
-		ResponseText:       strings.TrimSpace(w.ResponseText),
-		ConfidenceValue:    strings.TrimSpace(w.ConfidenceValue),
-		ConfidenceBand:     strings.TrimSpace(w.ConfidenceBand),
-		RequiresHuman:      w.RequiresHuman,
-		MissingInformation: missing,
-		ReasonCodes:        reasons,
-		PolicyDecision:     strings.TrimSpace(w.PolicyDecision),
-		PolicyVersion:      policyVersion,
-		KnowledgeVersion:   strings.TrimSpace(w.KnowledgeVersion),
-		ModelReference:     "gemini/" + strings.TrimSpace(model),
-		SchemaVersion:      w.SchemaVersion,
-	}
-	if w.StateProposal != nil {
-		kind := strings.ToUpper(strings.TrimSpace(w.StateProposal.Kind))
-		if kind == "" {
-			kind = "NO_REFERENCE"
-		}
-		if kind != "RESOLVED" && kind != "AMBIGUOUS" && kind != "NO_REFERENCE" {
-			kind = "NO_REFERENCE"
-		}
-		proposal.StateProposal = &ports.AIStateProposal{
-			Focus:         w.StateProposal.Focus,
-			Comparison:    w.StateProposal.Comparison,
-			Kind:          kind,
-			ReferenceText: strings.TrimSpace(w.StateProposal.ReferenceText),
-			Alternatives:  w.StateProposal.Alternatives,
-		}
-	}
-	return proposal, nil
-}
-
-func proposalJSONSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"intent_base":    map[string]any{"type": "string"},
-			"domain_context": map[string]any{"type": "string"},
-			"entities": map[string]any{
-				"type":        "object",
-				"description": "Extracted business entities and parameters (e.g. item_name, item_id, color, storage, quantity, etc.)",
-			},
-			"evidence_references": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"requested_action":    map[string]any{"type": "string"},
-			"response_text":       map[string]any{"type": "string"},
-			"confidence_value":    map[string]any{"type": "string"},
-			"confidence_band":     map[string]any{"type": "string"},
-			"requires_human":      map[string]any{"type": "boolean"},
-			"missing_information": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"reason_codes":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"policy_decision":     map[string]any{"type": "string"},
-			"policy_version":      map[string]any{"type": "string"},
-			"knowledge_version":   map[string]any{"type": "string"},
-			"schema_version":      map[string]any{"type": "integer"},
-			"state_proposal": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"focus": map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"type":       map[string]any{"type": "string"},
-							"id":         map[string]any{"type": "string"},
-							"catalog_id": map[string]any{"type": "string"},
-							"item_id":    map[string]any{"type": "string"},
-							"name":       map[string]any{"type": "string"},
-						},
-						"required": []string{"type", "id"},
-					},
-					"comparison": map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"type": map[string]any{"type": "string"},
-							"ids":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-						},
-						"required": []string{"type", "ids"},
-					},
-					"kind":           map[string]any{"type": "string"},
-					"reference_text": map[string]any{"type": "string"},
-					"alternatives": map[string]any{
-						"type": "array",
-						"items": map[string]any{
-							"type": "object",
-							"properties": map[string]any{
-								"type": map[string]any{"type": "string"},
-								"id":   map[string]any{"type": "string"},
-							},
-							"required": []string{"type", "id"},
-						},
-					},
-				},
-				"required": []string{"kind"},
-			},
-		},
-		"required": []string{"intent_base", "domain_context", "entities", "evidence_references", "requested_action", "response_text", "confidence_value", "confidence_band", "requires_human", "missing_information", "reason_codes", "policy_decision", "policy_version", "knowledge_version", "schema_version"},
-	}
-}
-
-func appendJSONString(raw []byte, value string) []byte {
-	var values []string
-	if len(raw) > 0 {
-		_ = json.Unmarshal(raw, &values)
-	}
-	for _, v := range values {
-		if v == value {
-			return raw
-		}
-	}
-	values = append(values, value)
-	encoded, err := json.Marshal(values)
-	if err != nil {
-		return raw
-	}
-	return encoded
 }
 
 var _ ports.AIRuntime = (*Client)(nil)
