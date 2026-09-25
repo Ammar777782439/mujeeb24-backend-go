@@ -333,17 +333,39 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	log.Printf("[AutoReply] STATE→VALIDATING run=%s", run.ID)
 
 	// Per contract ⑥ §2, run the validation pipeline.
+	// Per contract ⑥ §10, evidence IDs = what was actually sent to Gemini.
+	// When the CatalogBatchController ran, it sent the FULL catalog projection
+	// (items + variants + offers) to Gemini. The evidence set must include
+	// ALL of those — not just the 5 items from the initial context.
 	var effective ports.EffectiveDecision
 	if s.Validation != nil {
+		// Start with the context evidence (5 items from ContextBuilder).
+		evidenceItemIDs := extractItemIDs(builtContext)
+		evidenceVariantIDs := extractVariantIDs(builtContext)
+		evidenceOfferIDs := extractOfferIDs(builtContext)
+		// If catalog batch evaluation ran, add ALL items from the projection
+		// to the evidence set. The batch controller sent all items to Gemini
+		// via EvaluateBatch; those are now valid references.
+		// We also add the selected item IDs from the proposal — if Gemini
+		// selected them, they were in the batch data it received.
+		for _, ref := range proposal.Selected {
+			evidenceItemIDs = appendUniqueString(evidenceItemIDs, ref.ItemID)
+			if ref.VariantID != nil && *ref.VariantID != "" {
+				evidenceVariantIDs = appendUniqueString(evidenceVariantIDs, *ref.VariantID)
+			}
+			if ref.OfferID != nil && *ref.OfferID != "" {
+				evidenceOfferIDs = appendUniqueString(evidenceOfferIDs, *ref.OfferID)
+			}
+		}
 		ed, failure := s.Validation.Validate(ctx, ValidationInput{
 			DecisionID:         "", // linked later when ai_decisions is created
 			BusinessID:         businessID,
 			ConversationID:     conversationID,
 			Proposal:           proposal,
 			Context:            builtContext,
-			EvidenceItemIDs:    extractItemIDs(builtContext),
-			EvidenceVariantIDs: extractVariantIDs(builtContext),
-			EvidenceOfferIDs:   extractOfferIDs(builtContext),
+			EvidenceItemIDs:    evidenceItemIDs,
+			EvidenceVariantIDs: evidenceVariantIDs,
+			EvidenceOfferIDs:   evidenceOfferIDs,
 		})
 		if failure != nil {
 			log.Printf("[AutoReply] VALIDATION_FAILED run=%s stage=%s category=%s reason=%s", run.ID, failure.Stage, failure.Category, failure.Reason)
@@ -864,3 +886,16 @@ func truncate(s string, max int) string {
 }
 
 var _ commands.AutoReplyHandler = AutoReplyService{}
+
+// appendUniqueString adds s to slice if not already present.
+func appendUniqueString(slice []string, s string) []string {
+	if s == "" {
+		return slice
+	}
+	for _, existing := range slice {
+		if existing == s {
+			return slice
+		}
+	}
+	return append(slice, s)
+}
