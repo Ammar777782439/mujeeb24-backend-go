@@ -197,10 +197,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			NewRunID:       s.NewID,
 		})
 		if err != nil {
-			// Per contract ⑨ §16, duplicate start on same idempotency key is expected
-			// during retries. The existing Run is returned as-is. We log the original
-			// error but do not fail; the GetRun fallback in StartRun already returned
-			// the existing Run on success.
+			log.Printf("[AutoReply] START_RUN_FAILED business=%s err=%v", businessID, err)
 			return commands.AutoReplyResult{}, err
 		}
 		run = started
