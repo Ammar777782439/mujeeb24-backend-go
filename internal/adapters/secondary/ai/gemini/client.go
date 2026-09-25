@@ -197,6 +197,13 @@ type promptContext struct {
         // recent_messages). Per ADR-039. Empty when the conversation is
         // short (less than SummaryInterval turns).
         ConversationSummary    string                           `json:"conversation_summary,omitempty"`
+        // MerchantCatalogs is the list of the merchant's catalogs. Per
+        // ADR-041, this is sent in the B2B flow only. The AI reads these
+        // to answer informational queries and to formulate questions when
+        // the CatalogResolutionService asks the merchant. The AI is
+        // FORBIDDEN from populating TargetCatalogID itself — that's the
+        // code's job.
+        MerchantCatalogs       []ports.MerchantCatalogEntry     `json:"merchant_catalogs,omitempty"`
         GeneratedAt            time.Time                        `json:"generated_at"`
         ExpiresAt              time.Time                        `json:"expires_at"`
 }
@@ -225,6 +232,7 @@ func promptContextFrom(value *ports.AIContext) promptContext {
                 ConversationState:      value.ConversationState,
                 CatalogSummary:         value.CatalogSummary,
                 ConversationSummary:    value.ConversationSummary,
+                MerchantCatalogs:       value.MerchantCatalogs,
                 GeneratedAt:            value.GeneratedAt,
                 ExpiresAt:              value.ExpiresAt,
         }

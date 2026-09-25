@@ -339,6 +339,17 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                                 postgres.NewAIRunTraceRepository(database),
                                 postgres.NewMerchantAISessionRepository(database),
                         )
+                        // Per ADR-041: wire the deterministic catalog selection
+                        // service. The merchant_ai_session repository implements
+                        // MerchantAISessionCatalogWriter (SetTargetCatalog /
+                        // GetTargetCatalog), so we pass it directly.
+                        merchantSessionRepo := postgres.NewMerchantAISessionRepository(database)
+                        merchantAgent.CatalogResolution = &services.CatalogResolutionService{
+                                SessionWriter: merchantSessionRepo,
+                        }
+                        // Per ADR-040 fix: inject a real UUID generator so AI Run IDs
+                        // are not empty strings (would fail CreateRun validation).
+                        merchantAgent.NewID = uuid.NewString
                         merchantHandler := handlers.NewMerchantAIHandler(merchantAgent)
                         dashboardServer = dashboardServer.WithMerchantAI(handlers.MerchantAIDeps{Handler: merchantHandler})
                 }

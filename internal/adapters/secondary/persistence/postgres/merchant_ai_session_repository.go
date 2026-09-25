@@ -44,14 +44,15 @@
 package postgres
 
 import (
-	"context"
-	"fmt"
-	"strings"
-	"time"
+        "context"
+        "fmt"
+        "strings"
+        "time"
 
-	"github.com/google/uuid"
+        "github.com/google/uuid"
+        "github.com/jackc/pgx/v5"
 
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
+        "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 )
 
 // MerchantAISessionRepository implements services.MerchantAISessionReader
@@ -60,7 +61,7 @@ type MerchantAISessionRepository struct{ adapter *Adapter }
 
 // NewMerchantAISessionRepository wires the repository to a Postgres Adapter.
 func NewMerchantAISessionRepository(adapter *Adapter) *MerchantAISessionRepository {
-	return &MerchantAISessionRepository{adapter: adapter}
+        return &MerchantAISessionRepository{adapter: adapter}
 }
 
 // CreateSession inserts a new merchant_ai_sessions row per migration 000054.
@@ -72,26 +73,26 @@ func NewMerchantAISessionRepository(adapter *Adapter) *MerchantAISessionReposito
 // Per contract ⑧ §17, the write is tenant-scoped via business_id.
 // Per contract ⑧ §23, no secrets are stored.
 func (r *MerchantAISessionRepository) CreateSession(ctx context.Context, businessID, principalID string) (string, error) {
-	if r == nil || r.adapter == nil {
-		return "", ErrPoolClosed
-	}
-	if strings.TrimSpace(businessID) == "" {
-		return "", invalidRepositoryInput("merchant_ai_session.create", "business_id is required per contract ⑧ §17")
-	}
-	if strings.TrimSpace(principalID) == "" {
-		return "", invalidRepositoryInput("merchant_ai_session.create", "principal_id is required per migration 000054 NOT NULL constraint")
-	}
-	executor, err := r.adapter.Executor(ctx)
-	if err != nil {
-		return "", err
-	}
-	sessionID := uuid.NewString()
-	now := time.Now().UTC()
-	const query = `INSERT INTO merchant_ai_sessions (id, business_id, principal_id, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5)`
-	if _, err := executor.Exec(ctx, query, sessionID, businessID, principalID, now, now); err != nil {
-		return "", &RepositoryError{Operation: "merchant_ai_session.create", Kind: RepositoryInvalid, Err: fmt.Errorf("insert merchant_ai_session: %w", err)}
-	}
-	return sessionID, nil
+        if r == nil || r.adapter == nil {
+                return "", ErrPoolClosed
+        }
+        if strings.TrimSpace(businessID) == "" {
+                return "", invalidRepositoryInput("merchant_ai_session.create", "business_id is required per contract ⑧ §17")
+        }
+        if strings.TrimSpace(principalID) == "" {
+                return "", invalidRepositoryInput("merchant_ai_session.create", "principal_id is required per migration 000054 NOT NULL constraint")
+        }
+        executor, err := r.adapter.Executor(ctx)
+        if err != nil {
+                return "", err
+        }
+        sessionID := uuid.NewString()
+        now := time.Now().UTC()
+        const query = `INSERT INTO merchant_ai_sessions (id, business_id, principal_id, created_at, updated_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5)`
+        if _, err := executor.Exec(ctx, query, sessionID, businessID, principalID, now, now); err != nil {
+                return "", &RepositoryError{Operation: "merchant_ai_session.create", Kind: RepositoryInvalid, Err: fmt.Errorf("insert merchant_ai_session: %w", err)}
+        }
+        return sessionID, nil
 }
 
 // AppendMessage inserts a new merchant_ai_messages row per migration 000054.
@@ -104,30 +105,30 @@ func (r *MerchantAISessionRepository) CreateSession(ctx context.Context, busines
 // merchant_ai_messages table is the source of truth for merchant-side
 // multi-turn history (NOT ConversationState, which is B2C-only per contract ③).
 func (r *MerchantAISessionRepository) AppendMessage(ctx context.Context, businessID, sessionID, senderType, text string) (string, error) {
-	if r == nil || r.adapter == nil {
-		return "", ErrPoolClosed
-	}
-	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(sessionID) == "" {
-		return "", invalidRepositoryInput("merchant_ai_message.append", "business_id and session_id are required per contract ⑧ §17")
-	}
-	// Per migration 000054 merchant_ai_messages_sender_type_chk.
-	if senderType != "merchant" && senderType != "assistant" {
-		return "", invalidRepositoryInput("merchant_ai_message.append", fmt.Sprintf("sender_type must be 'merchant' or 'assistant' per migration 000054, got %q", senderType))
-	}
-	if strings.TrimSpace(text) == "" {
-		return "", invalidRepositoryInput("merchant_ai_message.append", "text is required per migration 000054 TEXT NOT NULL")
-	}
-	executor, err := r.adapter.Executor(ctx)
-	if err != nil {
-		return "", err
-	}
-	messageID := uuid.NewString()
-	now := time.Now().UTC()
-	const query = `INSERT INTO merchant_ai_messages (id, business_id, session_id, sender_type, text, created_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6)`
-	if _, err := executor.Exec(ctx, query, messageID, businessID, sessionID, senderType, text, now); err != nil {
-		return "", &RepositoryError{Operation: "merchant_ai_message.append", Kind: RepositoryInvalid, Err: fmt.Errorf("insert merchant_ai_message: %w", err)}
-	}
-	return messageID, nil
+        if r == nil || r.adapter == nil {
+                return "", ErrPoolClosed
+        }
+        if strings.TrimSpace(businessID) == "" || strings.TrimSpace(sessionID) == "" {
+                return "", invalidRepositoryInput("merchant_ai_message.append", "business_id and session_id are required per contract ⑧ §17")
+        }
+        // Per migration 000054 merchant_ai_messages_sender_type_chk.
+        if senderType != "merchant" && senderType != "assistant" {
+                return "", invalidRepositoryInput("merchant_ai_message.append", fmt.Sprintf("sender_type must be 'merchant' or 'assistant' per migration 000054, got %q", senderType))
+        }
+        if strings.TrimSpace(text) == "" {
+                return "", invalidRepositoryInput("merchant_ai_message.append", "text is required per migration 000054 TEXT NOT NULL")
+        }
+        executor, err := r.adapter.Executor(ctx)
+        if err != nil {
+                return "", err
+        }
+        messageID := uuid.NewString()
+        now := time.Now().UTC()
+        const query = `INSERT INTO merchant_ai_messages (id, business_id, session_id, sender_type, text, created_at) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6)`
+        if _, err := executor.Exec(ctx, query, messageID, businessID, sessionID, senderType, text, now); err != nil {
+                return "", &RepositoryError{Operation: "merchant_ai_message.append", Kind: RepositoryInvalid, Err: fmt.Errorf("insert merchant_ai_message: %w", err)}
+        }
+        return messageID, nil
 }
 
 // ListMessages returns the merchant_ai_messages for a session, ordered by
@@ -142,49 +143,119 @@ func (r *MerchantAISessionRepository) AppendMessage(ctx context.Context, busines
 // only the most recent `limit` messages. The caller (MerchantContextBuilder)
 // passes a reasonable limit (default 12).
 func (r *MerchantAISessionRepository) ListMessages(ctx context.Context, businessID, sessionID string, limit int) ([]services.MerchantAIMessage, error) {
-	if r == nil || r.adapter == nil {
-		return nil, ErrPoolClosed
-	}
-	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(sessionID) == "" {
-		return nil, invalidRepositoryInput("merchant_ai_message.list", "business_id and session_id are required per contract ⑧ §17")
-	}
-	if limit <= 0 {
-		limit = 12
-	}
-	if limit > 10000 {
-		limit = 100
-	}
-	executor, err := r.adapter.Executor(ctx)
-	if err != nil {
-		return nil, err
-	}
-	// Per migration 000054 idx_merchant_ai_messages_session_created
-	// (business_id, session_id, created_at ASC), this query uses the index
-	// efficiently: it filters by (business_id, session_id) and orders by
-	// created_at ASC. We take the last `limit` rows by using a subquery
-	// with DESC + outer ASC.
-	const query = `SELECT id::text, business_id::text, session_id::text, sender_type, text, created_at FROM merchant_ai_messages WHERE business_id = $1::uuid AND session_id = $2::uuid ORDER BY created_at DESC LIMIT $3`
-	rows, err := executor.Query(ctx, query, businessID, sessionID, limit)
-	if err != nil {
-		return nil, &RepositoryError{Operation: "merchant_ai_message.list", Kind: RepositoryInvalid, Err: fmt.Errorf("query merchant_ai_messages: %w", err)}
-	}
-	defer rows.Close()
-	var out []services.MerchantAIMessage
-	for rows.Next() {
-		var m services.MerchantAIMessage
-		if err := rows.Scan(&m.ID, &m.BusinessID, &m.SessionID, &m.SenderType, &m.Text, &m.CreatedAt); err != nil {
-			return nil, &RepositoryError{Operation: "merchant_ai_message.list", Kind: RepositoryInvalid, Err: fmt.Errorf("scan merchant_ai_message: %w", err)}
-		}
-		out = append(out, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, &RepositoryError{Operation: "merchant_ai_message.list", Kind: RepositoryInvalid, Err: err}
-	}
-	// Reverse to chronological (oldest first) for the context builder.
-	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
-		out[i], out[j] = out[j], out[i]
-	}
-	return out, nil
+        if r == nil || r.adapter == nil {
+                return nil, ErrPoolClosed
+        }
+        if strings.TrimSpace(businessID) == "" || strings.TrimSpace(sessionID) == "" {
+                return nil, invalidRepositoryInput("merchant_ai_message.list", "business_id and session_id are required per contract ⑧ §17")
+        }
+        if limit <= 0 {
+                limit = 12
+        }
+        if limit > 10000 {
+                limit = 100
+        }
+        executor, err := r.adapter.Executor(ctx)
+        if err != nil {
+                return nil, err
+        }
+        // Per migration 000054 idx_merchant_ai_messages_session_created
+        // (business_id, session_id, created_at ASC), this query uses the index
+        // efficiently: it filters by (business_id, session_id) and orders by
+        // created_at ASC. We take the last `limit` rows by using a subquery
+        // with DESC + outer ASC.
+        const query = `SELECT id::text, business_id::text, session_id::text, sender_type, text, created_at FROM merchant_ai_messages WHERE business_id = $1::uuid AND session_id = $2::uuid ORDER BY created_at DESC LIMIT $3`
+        rows, err := executor.Query(ctx, query, businessID, sessionID, limit)
+        if err != nil {
+                return nil, &RepositoryError{Operation: "merchant_ai_message.list", Kind: RepositoryInvalid, Err: fmt.Errorf("query merchant_ai_messages: %w", err)}
+        }
+        defer rows.Close()
+        var out []services.MerchantAIMessage
+        for rows.Next() {
+                var m services.MerchantAIMessage
+                if err := rows.Scan(&m.ID, &m.BusinessID, &m.SessionID, &m.SenderType, &m.Text, &m.CreatedAt); err != nil {
+                        return nil, &RepositoryError{Operation: "merchant_ai_message.list", Kind: RepositoryInvalid, Err: fmt.Errorf("scan merchant_ai_message: %w", err)}
+                }
+                out = append(out, m)
+        }
+        if err := rows.Err(); err != nil {
+                return nil, &RepositoryError{Operation: "merchant_ai_message.list", Kind: RepositoryInvalid, Err: err}
+        }
+        // Reverse to chronological (oldest first) for the context builder.
+        for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+                out[i], out[j] = out[j], out[i]
+        }
+        return out, nil
+}
+
+// SetTargetCatalog persists the sticky target_catalog_id for the session
+// per ADR-041 layer 2. Called by CatalogResolutionService after layer 1
+// (explicit HTTP param) or layer 3 (single-catalog auto-select) resolves
+// successfully. Subsequent turns read this via GetTargetCatalog and skip
+// the param requirement.
+//
+// Per contract ⑧ §17, the write is tenant-scoped via business_id.
+// Per migration 000059, target_catalog_id has FK to catalogs(business_id, id)
+// with ON DELETE SET NULL — so a deleted catalog clears the sticky
+// automatically.
+func (r *MerchantAISessionRepository) SetTargetCatalog(ctx context.Context, businessID, sessionID, catalogID string) error {
+        if r == nil || r.adapter == nil {
+                return ErrPoolClosed
+        }
+        businessID = strings.TrimSpace(businessID)
+        sessionID = strings.TrimSpace(sessionID)
+        catalogID = strings.TrimSpace(catalogID)
+        if businessID == "" || sessionID == "" {
+                return invalidRepositoryInput("merchant_ai_session.set_target_catalog", "business_id and session_id are required per contract ⑧ §17")
+        }
+        if catalogID == "" {
+                return invalidRepositoryInput("merchant_ai_session.set_target_catalog", "catalog_id is required")
+        }
+        executor, err := r.adapter.Executor(ctx)
+        if err != nil {
+                return err
+        }
+        const q = `UPDATE merchant_ai_sessions SET target_catalog_id = $1::uuid, target_catalog_set_at = $2 WHERE business_id = $3::uuid AND id = $4::uuid`
+        now := time.Now().UTC()
+        tag, err := executor.Exec(ctx, q, catalogID, now, businessID, sessionID)
+        if err != nil {
+                return &RepositoryError{Operation: "merchant_ai_session.set_target_catalog", Kind: RepositoryInvalid, Err: fmt.Errorf("update target_catalog_id: %w", err)}
+        }
+        if tag.RowsAffected() == 0 {
+                return &RepositoryError{Operation: "merchant_ai_session.set_target_catalog", Kind: RepositoryNotFound, Err: fmt.Errorf("session %s not found for business %s", sessionID, businessID)}
+        }
+        return nil
+}
+
+// GetTargetCatalog reads the sticky target_catalog_id stored by
+// SetTargetCatalog. Returns ("", nil) if no sticky catalog is set.
+// This is per ADR-041 layer 2.
+func (r *MerchantAISessionRepository) GetTargetCatalog(ctx context.Context, businessID, sessionID string) (string, error) {
+        if r == nil || r.adapter == nil {
+                return "", ErrPoolClosed
+        }
+        businessID = strings.TrimSpace(businessID)
+        sessionID = strings.TrimSpace(sessionID)
+        if businessID == "" || sessionID == "" {
+                return "", invalidRepositoryInput("merchant_ai_session.get_target_catalog", "business_id and session_id are required per contract ⑧ §17")
+        }
+        executor, err := r.adapter.Executor(ctx)
+        if err != nil {
+                return "", err
+        }
+        var catalogID *string // nullable
+        const q = `SELECT target_catalog_id::text FROM merchant_ai_sessions WHERE business_id = $1::uuid AND id = $2::uuid`
+        err = executor.QueryRow(ctx, q, businessID, sessionID).Scan(&catalogID)
+        if err != nil {
+                if err == pgx.ErrNoRows {
+                        return "", &RepositoryError{Operation: "merchant_ai_session.get_target_catalog", Kind: RepositoryNotFound, Err: fmt.Errorf("session %s not found", sessionID)}
+                }
+                return "", &RepositoryError{Operation: "merchant_ai_session.get_target_catalog", Kind: RepositoryInvalid, Err: fmt.Errorf("query target_catalog_id: %w", err)}
+        }
+        if catalogID == nil {
+                return "", nil // no sticky set yet
+        }
+        return *catalogID, nil
 }
 
 // Compile-time assertions that the repository satisfies both interfaces.

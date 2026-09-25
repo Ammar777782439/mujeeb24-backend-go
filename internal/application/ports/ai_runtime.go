@@ -67,6 +67,27 @@ type AIContext struct {
         // RecentMessages so it can understand long conversation context
         // without us sending the full history verbatim.
         ConversationSummary string
+        // MerchantCatalogs is the list of ALL the merchant's catalogs. Per
+        // ADR-041, this is loaded by the MerchantContextBuilder (B2B flow)
+        // and sent to Gemini as evidence so the AI knows what catalogs exist
+        // and can answer informational queries like "how many catalogs do I
+        // have?". The AI is FORBIDDEN from selecting a catalog itself; the
+        // deterministic CatalogResolutionService handles selection.
+        MerchantCatalogs []MerchantCatalogEntry
+}
+
+// MerchantCatalogEntry is a lightweight catalog reference for the B2B
+// Merchant Catalog AI. Per ADR-041, this is sent to Gemini so it can:
+//   - answer informational queries ("how many catalogs?")
+//   - formulate a question to the merchant when selection is ambiguous
+//     ("for which catalog? you have: X / Y / Z")
+// The AI is NEVER allowed to use these IDs to populate TargetCatalogID
+// in a proposal — that's the CatalogResolutionService's job.
+type MerchantCatalogEntry struct {
+        ID         string `json:"id"`
+        Name       string `json:"name"`
+        Status     string `json:"status"`
+        ItemsCount int    `json:"items_count"`
 }
 
 // CatalogSummaryEntry is a lightweight catalog item reference — just

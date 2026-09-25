@@ -98,6 +98,10 @@ func (h *MerchantAIHandler) HandleTurn(ctx context.Context, in *contract.Merchan
                 MerchantMessage:        in.Body.Message,
                 PolicyVersion:          "merchant-catalog-ai-v1",
                 IdempotencyKey:         idempotencyKey,
+                // Per ADR-041 layer 1: pass the explicit catalog selection from
+                // the dashboard dropdown. Empty when the merchant didn't pick —
+                // CatalogResolutionService then tries layers 2/3/4.
+                TargetCatalogID:        in.Body.TargetCatalogID,
         })
         if err != nil {
                 log.Printf("[MerchantAIHandler] ERROR business=%s session=%s err=%v",

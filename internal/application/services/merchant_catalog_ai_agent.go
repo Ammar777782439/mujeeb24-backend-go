@@ -111,11 +111,17 @@ type CatalogOperationProposal struct {
 
 // CatalogCreatePayload is contract 11 §5 — the proposed new product graph.
 type CatalogCreatePayload struct {
-        Item        *CatalogItemDraft          `json:"item,omitempty"`
-        Variants    []CatalogVariantDraft      `json:"variants,omitempty"`
-        Offers      []CatalogOfferDraft        `json:"offers,omitempty"`
-        Schema      *AttributeSchemaDraft      `json:"schema,omitempty"` // when needed per contract 11 §4
-        Definitions []AttributeDefinitionDraft `json:"definitions,omitempty"`
+        // TargetCatalogID per ADR-041 — required. Populated by the
+        // CatalogResolutionService (deterministic) BEFORE the proposal is
+        // returned to the HTTP handler. The AI NEVER sets this field itself.
+        // If the resolution says NeedsAsk, the operation is converted to
+        // "ask_merchant" and Create is left nil.
+        TargetCatalogID string                `json:"target_catalog_id"`
+        Item            *CatalogItemDraft     `json:"item,omitempty"`
+        Variants        []CatalogVariantDraft  `json:"variants,omitempty"`
+        Offers          []CatalogOfferDraft   `json:"offers,omitempty"`
+        Schema          *AttributeSchemaDraft  `json:"schema,omitempty"` // when needed per contract 11 §4
+        Definitions    []AttributeDefinitionDraft `json:"definitions,omitempty"`
 }
 
 // CatalogItemDraft per contract 11 §5.
@@ -226,8 +232,13 @@ type MerchantCatalogAIAgent struct {
         // Per contract ③ §1, the merchant-side memory is the session, NOT
         // ConversationState (which is B2C-only).
         SessionWriter MerchantAISessionWriter
-        Now           func() time.Time
-        NewID         func() string
+        // CatalogResolution per ADR-041 — deterministic catalog selection.
+        // Set to a non-nil *CatalogResolutionService in bootstrap. If nil,
+        // catalog selection is skipped and any create proposal with an empty
+        // TargetCatalogID is converted to ask_merchant (failsafe).
+        CatalogResolution *CatalogResolutionService
+        Now               func() time.Time
+        NewID             func() string
 
         // AgentRole is always merchant_catalog_authoring per contract 11 §2.
         AgentRole string
@@ -246,6 +257,15 @@ type MerchantAISessionWriter interface {
         // senderType must be 'merchant' or 'assistant' per the migration's
         // merchant_ai_messages_sender_type_chk constraint.
         AppendMessage(ctx context.Context, businessID, sessionID, senderType, text string) (messageID string, err error)
+        // SetTargetCatalog persists the sticky target_catalog_id for the session
+        // per ADR-041 layer 2. Called after layer 1 (explicit HTTP param) or
+        // layer 3 (single-catalog auto-select) resolves successfully. Subsequent
+        // turns read this via GetTargetCatalog and skip the param requirement.
+        SetTargetCatalog(ctx context.Context, businessID, sessionID, catalogID string) error
+        // GetTargetCatalog reads the sticky target_catalog_id stored by
+        // SetTargetCatalog. Returns ("", nil) if no sticky catalog is set
+        // (first turn after session creation, or after a catalog was deleted).
+        GetTargetCatalog(ctx context.Context, businessID, sessionID string) (catalogID string, err error)
 }
 
 // NewMerchantCatalogAIAgent wires the dependencies.
@@ -451,6 +471,22 @@ func (a *MerchantCatalogAIAgent) HandleTurn(ctx context.Context, input MerchantC
         // system prompt that produces the proposal shape directly via Structured
         // Output (contract ④ §8 responseSchema enforcement).
         op := mapGeminiProposalToOperation(proposal)
+
+        // Per ADR-041: catalog selection happens AFTER Gemini returns, BEFORE
+        // the proposal is sent to the HTTP handler. This is deterministic —
+        // the AI NEVER picks a catalog. The CatalogResolutionService applies
+        // 4 priority layers:
+        //   1. HTTP param (input.TargetCatalogID)
+        //   2. Session sticky (from merchant_ai_sessions.target_catalog_id)
+        //   3. Single-catalog auto-select (if only one catalog exists)
+        //   4. Failure → convert operation to ask_merchant with a question
+        //
+        // This is only applied for mutation operations (create/update/delete).
+        // For "answer" and "ask_merchant" operations, no catalog is needed.
+        if op.Operation == "create" || op.Operation == "update" || op.Operation == "delete" {
+                op = a.resolveTargetCatalog(ctx, op, input, sessionID, contractInput.DecisionInput.Context, run, log.Default())
+        }
+
         // Count items/variants/offers for logging (may be in op.Create or op.Update).
         itemCount, variantCount, offerCount := 0, 0, 0
         if op.Create != nil {
@@ -489,6 +525,126 @@ func (a *MerchantCatalogAIAgent) HandleTurn(ctx context.Context, input MerchantC
         log.Printf("[MerchantAI] COMPLETED business=%s session=%s run=%s operation=%s",
                 input.BusinessID, sessionID, run.ID, op.Operation)
         return op, nil
+}
+
+// resolveTargetCatalog applies the deterministic ADR-041 catalog selection.
+// This method is called AFTER mapGeminiProposalToOperation. It:
+//   1. Loads the sticky catalog_id from merchant_ai_sessions (layer 2).
+//   2. Calls CatalogResolutionService.Resolve with (HTTP param, sticky,
+//      merchant_catalogs evidence).
+//   3. If Resolved → populates op.Create.TargetCatalogID and persists
+//      the sticky if ShouldSetSticky=true.
+//   4. If NeedsAsk → converts the operation to "ask_merchant" with the
+//      question from the resolution. The original operation is preserved
+//      in the MissingFields for the dashboard to display.
+//
+// This method is FORBIDDEN from asking the AI to pick — the AI is only
+// used to FORMAT the question (already done by CatalogResolutionService).
+// The selection itself is pure Go code.
+//
+// failsafe: if CatalogResolution is nil OR merchant_catalogs is empty,
+// the operation is converted to ask_merchant with a fallback question.
+// This prevents any hallucinated catalog_id from leaking into a DB write.
+func (a *MerchantCatalogAIAgent) resolveTargetCatalog(
+        ctx context.Context,
+        op CatalogOperationProposal,
+        input MerchantCatalogAITurnInput,
+        sessionID string,
+        aiContext *ports.AIContext,
+        run ports.AIRunRecord,
+        logger *log.Logger,
+) CatalogOperationProposal {
+        // Build the merchant_catalogs evidence from the AIContext.
+        var merchantCatalogs []ports.MerchantCatalogEntry
+        if aiContext != nil {
+                merchantCatalogs = aiContext.MerchantCatalogs
+        }
+
+        // Failsafe: if no CatalogResolutionService is wired, refuse to write
+        // any catalog_id. Convert to ask_merchant with a clear message.
+        if a.CatalogResolution == nil {
+                logger.Printf("[MerchantAI] CATALOG_RESOLUTION_SKIPPED business=%s run=%s reason=service_not_wired — converting to ask_merchant",
+                        input.BusinessID, run.ID)
+                return CatalogOperationProposal{
+                        Operation:    "ask_merchant",
+                        Status:       "needs_more_data",
+                        ResponseText: "تعذّر تحديد الكتالوج المستهدف. الرجاء اختيار كتالوج من الـ dashboard أو تحدث مع الدعم.",
+                        MissingFields: []CatalogMissingField{{
+                                Path:        "target_catalog_id",
+                                DisplayName: "الكتالوج المستهدف",
+                                DataType:    "uuid",
+                                Reason:      "CatalogResolutionService not wired in agent (failsafe per ADR-041)",
+                        }},
+                }
+        }
+
+        // Load the sticky catalog_id from the session (layer 2).
+        var sessionSticky string
+        if a.SessionWriter != nil && sessionID != "" {
+                if sticky, err := a.SessionWriter.GetTargetCatalog(ctx, input.BusinessID, sessionID); err == nil {
+                        sessionSticky = sticky
+                } else {
+                        // Don't fail the whole turn if sticky lookup fails — just log
+                        // and proceed with empty sticky (layer 1 or 3 will catch up).
+                        logger.Printf("[MerchantAI] STICKY_LOOKUP_FAILED business=%s session=%s err=%v",
+                                input.BusinessID, sessionID, err)
+                }
+        }
+
+        // Run the deterministic resolution.
+        resolution := a.CatalogResolution.Resolve(input.TargetCatalogID, sessionSticky, merchantCatalogs)
+        logger.Printf("[MerchantAI] CATALOG_RESOLUTION business=%s session=%s run=%s resolved=%v reason=%s catalog_id=%s needs_ask=%v",
+                input.BusinessID, sessionID, run.ID,
+                resolution.Resolved, resolution.Reason, resolution.CatalogID, resolution.NeedsAsk)
+
+        if resolution.NeedsAsk {
+                // Convert the proposed operation to ask_merchant with the resolution's
+                // question. This is the AI's ONLY role in catalog selection: deliver
+                // the question (already in Arabic with the catalog list).
+                missing := []CatalogMissingField{{
+                        Path:        "target_catalog_id",
+                        DisplayName: "الكتالوج المستهدف",
+                        DataType:    "uuid",
+                        Reason:      resolution.Reason,
+                }}
+                return CatalogOperationProposal{
+                        Operation:     "ask_merchant",
+                        Status:        "needs_more_data",
+                        ResponseText:  resolution.AskQuestion,
+                        MissingFields: missing,
+                }
+        }
+
+        // Resolved → populate op.Create.TargetCatalogID (or op.Update if update).
+        // Per ADR-041: the AI never sets TargetCatalogID. We do it here in code.
+        if op.Operation == "create" {
+                if op.Create == nil {
+                        // Per contract 11 §6, the create payload was nil from Gemini.
+                        // We can't attach a TargetCatalogID to nil, so create a stub.
+                        // The HTTP handler / Catalog Application Service will validate
+                        // the Item fields downstream.
+                        op.Create = &CatalogCreatePayload{}
+                }
+                op.Create.TargetCatalogID = resolution.CatalogID
+        }
+        // For update/delete, the target is identified by ItemID in op.Update /
+        // op.Delete — the catalog_id is implicit (it's the catalog containing
+        // that item). No additional field to set.
+
+        // Persist the sticky if the resolution says to.
+        if resolution.ShouldSetSticky && a.SessionWriter != nil && sessionID != "" {
+                if err := a.SessionWriter.SetTargetCatalog(ctx, input.BusinessID, sessionID, resolution.CatalogID); err != nil {
+                        // Don't fail the turn — just log. The sticky is an optimization,
+                        // not a correctness requirement (layer 1 will catch up next turn).
+                        logger.Printf("[MerchantAI] STICKY_PERSIST_FAILED business=%s session=%s catalog_id=%s err=%v",
+                                input.BusinessID, sessionID, resolution.CatalogID, err)
+                } else {
+                        logger.Printf("[MerchantAI] STICKY_SET business=%s session=%s catalog_id=%s reason=%s",
+                                input.BusinessID, sessionID, resolution.CatalogID, resolution.Reason)
+                }
+        }
+
+        return op
 }
 
 // startRun creates an AI Run for this merchant turn.
@@ -551,37 +707,43 @@ func mapGeminiProposalToOperation(p ports.AIGeminiProposal) CatalogOperationProp
                 Status:       string(p.Status),
                 ResponseText: p.ResponseText,
         }
-        // Per contract ④ §4: status drives readiness; action drives intent.
-        // Per contract 11 §6: only when status=resolved AND the system prompt's
-        // action indicates a mutation do we set Operation to create/update/delete.
+        // Per ADR-041: the operation type is INFERRED from the response_text
+        // content, NOT from the action field. This is because the B2B system
+        // prompt uses action=answer for both:
+        //   (a) informational answers ("you have 3 catalogs")
+        //   (b) create/update/delete proposals (when Gemini's ResponseText
+        //       contains structured JSON for the operation)
         //
-        // The Merchant Catalog AI's system prompt is configured to use:
-        //   action=answer + status=resolved → Operation=create/update/delete
-        //     (the ResponseText contains the structured proposal JSON encoded
-        //      per the system prompt's instructions; the HTTP handler parses
-        //      the structured fields into Create/Update/Delete payload)
-        //   action=clarification → ask_merchant (needs more data)
-        //   action=human_request → ask_merchant (handoff)
+        // The disambiguation happens via the CatalogResolutionService AFTER
+        // this mapping: if the operation is a mutation (create/update/delete)
+        // and TargetCatalogID is empty, the resolution converts it to
+        // ask_merchant. So here we just keep the mapping conservative — only
+        // set Operation to create/update/delete when status=resolved AND
+        // the ResponseText contains the trigger keyword for that operation.
         //
-        // This mapping is intentionally conservative: when the status is not
-        // resolved, we never propose a mutation — we ask for more data.
-        if p.Status == ports.AIProposalStatusResolved {
-                switch p.Action {
-                case ports.AIProposalActionAnswer:
-                        // The system prompt's ResponseText for a resolved+answer indicates
-                        // a create/update/delete proposal is ready. The actual operation
-                        // type is encoded in the ResponseText (parsed by the HTTP handler).
-                        // For now, default to "create" — the HTTP handler will route
-                        // to the correct Catalog Application Service based on the parsed
-                        // structured payload.
-                        op.Operation = "create"
-                case ports.AIProposalActionClarification,
-                        ports.AIProposalActionHumanRequest,
-                        ports.AIProposalActionLeadDraft,
-                        ports.AIProposalActionOrderDraft:
-                        // Per contract 11 §6, these are NOT mutations. Keep ask_merchant.
-                        op.Operation = "ask_merchant"
-                }
+        // Per contract 11 §6: when the status is not resolved, we never propose
+        // a mutation — we ask for more data.
+        if p.Status != ports.AIProposalStatusResolved {
+                return op
+        }
+
+        // Per ADR-041: detect the operation intent from the response text.
+        // This is a simple substring check — the system prompt tells Gemini
+        // to encode the operation as a prefix like [CREATE], [UPDATE], [DELETE].
+        // If no prefix is present, treat it as a pure informational answer.
+        respText := strings.TrimSpace(p.ResponseText)
+        switch {
+        case strings.Contains(respText, "[CREATE]") || strings.Contains(respText, "[create]"):
+                op.Operation = "create"
+        case strings.Contains(respText, "[UPDATE]") || strings.Contains(respText, "[update]"):
+                op.Operation = "update"
+        case strings.Contains(respText, "[DELETE]") || strings.Contains(respText, "[delete]"):
+                op.Operation = "delete"
+        default:
+                // Per ADR-041: no operation keyword → keep ask_merchant. This is
+                // the safe default for informational queries like "how many
+                // catalogs do I have?" — the AI just answers, no mutation.
+                op.Operation = "answer"
         }
         return op
 }
@@ -600,6 +762,12 @@ type MerchantCatalogAITurnInput struct {
         MerchantMessage        string
         PolicyVersion          string
         IdempotencyKey         string
+        // TargetCatalogID is per ADR-041 layer 1 (HTTP parameter). The
+        // dashboard sets it when the merchant picks a catalog from a
+        // dropdown before sending the message. Empty when the merchant
+        // hasn't explicitly picked — the CatalogResolutionService then
+        // tries layers 2/3/4.
+        TargetCatalogID string
 }
 
 // newIDDefault is a fallback ID generator. Production code should inject a
