@@ -781,12 +781,8 @@ components:
           type: integer
         Name:
           type: string
-        Partitioned:
-          type: boolean
         Path:
           type: string
-        Quoted:
-          type: boolean
         Raw:
           type: string
         RawExpires:
@@ -806,7 +802,6 @@ components:
       required:
         - Name
         - Value
-        - Quoted
         - Path
         - Domain
         - Expires
@@ -815,7 +810,6 @@ components:
         - Secure
         - HttpOnly
         - SameSite
-        - Partitioned
         - Raw
         - Unparsed
       type: object
@@ -1843,6 +1837,43 @@ components:
       required:
         - lost_reason
       type: object
+    MerchantAIChatRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/MerchantAIChatRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        message:
+          maxLength: 8000
+          minLength: 1
+          type: string
+        session_id:
+          type: string
+        target_catalog_id:
+          format: uuid
+          type: string
+      required:
+        - message
+      type: object
+    MerchantAIChatResponse:
+      additionalProperties: false
+      properties:
+        operation:
+          type: string
+        response_text:
+          type: string
+        session_id:
+          type: string
+        status:
+          type: string
+      required:
+        - operation
+        - status
+        - session_id
+      type: object
     MergeCustomerRequest:
       additionalProperties: false
       properties:
@@ -2333,6 +2364,23 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/Lead"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleMerchantAIChatResponseBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleMerchantAIChatResponseBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/MerchantAIChatResponse"
         request_id:
           type: string
       required:
@@ -8160,6 +8208,92 @@ paths:
       summary: List lead scores
       tags:
         - Leads
+  /businesses/{business_id}/merchant-ai/turns:
+    post:
+      operationId: merchantAIChat
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MerchantAIChatRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleMerchantAIChatResponseBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Process one Merchant Catalog AI turn (contract 11)
+      tags:
+        - MerchantAI
   /businesses/{business_id}/offers/{offer_id}:
     patch:
       operationId: updateOffer
