@@ -25,13 +25,14 @@
 package handlers
 
 import (
-	"context"
-	"strings"
+        "context"
+        "log"
+        "strings"
 
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
-	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
+        "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
+        "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
+        appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
+        "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 )
 
 // MerchantAIHandler is the contract 11 §6 B2B HTTP handler.
@@ -39,12 +40,12 @@ import (
 // Per contract 11 §2, it is a SEPARATE handler from the Customer Sales AI
 // command facades. It does NOT share dispatch code with the B2C flow.
 type MerchantAIHandler struct {
-	Agent *services.MerchantCatalogAIAgent
+        Agent *services.MerchantCatalogAIAgent
 }
 
 // NewMerchantAIHandler wires the handler.
 func NewMerchantAIHandler(agent *services.MerchantCatalogAIAgent) *MerchantAIHandler {
-	return &MerchantAIHandler{Agent: agent}
+        return &MerchantAIHandler{Agent: agent}
 }
 
 // HandleTurn processes one merchant turn per contract 11 §6.
@@ -64,50 +65,60 @@ func NewMerchantAIHandler(agent *services.MerchantCatalogAIAgent) *MerchantAIHan
 // Status=ambiguous + ResponseText explaining the failure (no HTTP 500 —
 // the agent handled the failure gracefully per contract ⑥ §2).
 func (h *MerchantAIHandler) HandleTurn(ctx context.Context, in *contract.MerchantAIChatInput, actor commands.ActorContext) (*contract.Single[contract.MerchantAIChatResponse], error) {
-	if h == nil || h.Agent == nil {
-		return nil, appErrors.NotImplemented()
-	}
-	// Per contract ④ §3, user_message is required. Per contract ⑥ §3,
-	// structural validation runs in the ValidationPipeline; we do a cheap
-	// pre-check here to avoid starting an AI Run for empty input.
-	if strings.TrimSpace(in.Body.Message) == "" {
-		return nil, appErrors.New(appErrors.CodeValidation, "message is required per contract ④ §3")
-	}
+        if h == nil || h.Agent == nil {
+                log.Printf("[MerchantAIHandler] REJECTED business=%s reason=agent_not_configured", in.BusinessID)
+                return nil, appErrors.NotImplemented()
+        }
+        // Per contract ④ §3, user_message is required. Per contract ⑥ §3,
+        // structural validation runs in the ValidationPipeline; we do a cheap
+        // pre-check here to avoid starting an AI Run for empty input.
+        if strings.TrimSpace(in.Body.Message) == "" {
+                log.Printf("[MerchantAIHandler] REJECTED business=%s reason=empty_message", in.BusinessID)
+                return nil, appErrors.New(appErrors.CodeValidation, "message is required per contract ④ §3")
+        }
 
-	// Per contract ⑨ §16, idempotency_key prevents duplicate AI Runs.
-	// The merchant's Idempotency-Key header (per CommandHeaders) is used.
-	idempotencyKey := in.IdempotencyKey
-	if idempotencyKey == "" {
-		// Fall back to a deterministic key derived from the message + session
-		// to prevent accidental duplicates when the merchant double-clicks.
-		idempotencyKey = "merchant-ai:" + in.Body.SessionID + ":" + in.Body.Message
-	}
+        log.Printf("[MerchantAIHandler] REQUEST business=%s session=%s principal=%s msg_len=%d",
+                in.BusinessID, in.Body.SessionID, actor.PrincipalID, len(in.Body.Message))
 
-	// Per contract 11 §6, call the agent.
-	op, err := h.Agent.HandleTurn(ctx, services.MerchantCatalogAITurnInput{
-		BusinessID:             string(in.BusinessID),
-		SessionID:              in.Body.SessionID,
-		PrincipalID:            string(actor.PrincipalID),
-		SourceMessageReference: in.XRequestID,
-		MerchantMessage:        in.Body.Message,
-		PolicyVersion:          "merchant-catalog-ai-v1",
-		IdempotencyKey:         idempotencyKey,
-	})
-	if err != nil {
-		return nil, mapApplicationError(err)
-	}
+        // Per contract ⑨ §16, idempotency_key prevents duplicate AI Runs.
+        // The merchant's Idempotency-Key header (per CommandHeaders) is used.
+        idempotencyKey := in.IdempotencyKey
+        if idempotencyKey == "" {
+                // Fall back to a deterministic key derived from the message + session
+                // to prevent accidental duplicates when the merchant double-clicks.
+                idempotencyKey = "merchant-ai:" + in.Body.SessionID + ":" + in.Body.Message
+        }
 
-	// Project to the HTTP response per contract 11 §5.
-	out := &contract.Single[contract.MerchantAIChatResponse]{}
-	out.Body.Data = contract.MerchantAIChatResponse{
-		Operation:    op.Operation,
-		Status:       op.Status,
-		ResponseText: op.ResponseText,
-		// SessionID is returned so the dashboard can send the next turn with
-		// the same session_id (continuity per contract ③ §1 + migration 000054).
-		// We extract it from the input if provided; the agent creates a new
-		// session when input.SessionID is empty.
-		SessionID: in.Body.SessionID,
-	}
-	return out, nil
+        // Per contract 11 §6, call the agent.
+        op, err := h.Agent.HandleTurn(ctx, services.MerchantCatalogAITurnInput{
+                BusinessID:             string(in.BusinessID),
+                SessionID:              in.Body.SessionID,
+                PrincipalID:            string(actor.PrincipalID),
+                SourceMessageReference: in.XRequestID,
+                MerchantMessage:        in.Body.Message,
+                PolicyVersion:          "merchant-catalog-ai-v1",
+                IdempotencyKey:         idempotencyKey,
+        })
+        if err != nil {
+                log.Printf("[MerchantAIHandler] ERROR business=%s session=%s err=%v",
+                        in.BusinessID, in.Body.SessionID, err)
+                return nil, mapApplicationError(err)
+        }
+
+        log.Printf("[MerchantAIHandler] RESPONSE business=%s session=%s operation=%s status=%s",
+                in.BusinessID, in.Body.SessionID, op.Operation, op.Status)
+
+        // Project to the HTTP response per contract 11 §5.
+        out := &contract.Single[contract.MerchantAIChatResponse]{}
+        out.Body.Data = contract.MerchantAIChatResponse{
+                Operation:    op.Operation,
+                Status:       op.Status,
+                ResponseText: op.ResponseText,
+                // SessionID is returned so the dashboard can send the next turn with
+                // the same session_id (continuity per contract ③ §1 + migration 000054).
+                // We extract it from the input if provided; the agent creates a new
+                // session when input.SessionID is empty.
+                SessionID: in.Body.SessionID,
+        }
+        return out, nil
 }
