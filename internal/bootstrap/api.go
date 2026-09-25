@@ -321,7 +321,13 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                                 APIKey:             geminiClient.APIKey(),
                                 Model:              geminiClient.Model(),
                                 SystemPrompt:       prompts.MerchantCatalogSystemPrompt, // ← KEY DIFFERENCE
-                                RequestTimeout:     geminiClient.RequestTimeout(),
+                                // Per ADR-053: B2B merchant AI needs longer timeout
+                                // because multi-product requests (file upload, bulk
+                                // list) take longer for Gemini to process. B2C
+                                // customer messages are short and fast (3-5s), but
+                                // B2B merchant messages can be long lists requiring
+                                // 60+ seconds for structured proposal generation.
+                                RequestTimeout:     90 * time.Second,
                                 MaxOutputTokens:    geminiClient.MaxOutputTokens(),
                                 MaxInputCharacters: geminiClient.MaxInputCharacters(),
                                 HTTPClient:          geminiClient.HTTPClient(),
