@@ -163,7 +163,7 @@ type AIOfferEvidence struct {
         PricingMode          string
         Amount               string
         Currency             string
-        AvailabilityState    string
+        AvailabilityStatus   string `json:"availability_status"`
         Status               string
         EvidenceState        string
         RetrievedAt          time.Time

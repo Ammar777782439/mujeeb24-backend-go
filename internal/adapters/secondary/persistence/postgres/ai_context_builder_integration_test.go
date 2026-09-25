@@ -113,7 +113,7 @@ func TestAutoReplyContextBuilderGroundsCatalogAgainstPostgres(t *testing.T) {
 	if contextValue.Business.Reference != businessID || contextValue.Conversation.Reference != conversationID || contextValue.Customer.Reference != customerID {
 		t.Fatalf("wrong tenant context: %#v", contextValue)
 	}
-	if len(contextValue.CatalogEvidence) != 1 || contextValue.CatalogEvidence[0].Reference != itemID || len(contextValue.OfferEvidence) != 1 || contextValue.OfferEvidence[0].Reference != offerID || contextValue.OfferEvidence[0].AvailabilityState != "available" || contextValue.OfferEvidence[0].Amount != "250000.0000" || len(contextValue.VariantEvidence) != 1 || contextValue.VariantEvidence[0].Reference != variantID {
+	if len(contextValue.CatalogEvidence) != 1 || contextValue.CatalogEvidence[0].Reference != itemID || len(contextValue.OfferEvidence) != 1 || contextValue.OfferEvidence[0].Reference != offerID || contextValue.OfferEvidence[0].AvailabilityStatus != "available" || contextValue.OfferEvidence[0].Amount != "250000.0000" || len(contextValue.VariantEvidence) != 1 || contextValue.VariantEvidence[0].Reference != variantID {
 		t.Fatalf("grounding mismatch: %#v", contextValue)
 	}
 	if len(contextValue.RecentMessages) != 1 || contextValue.RecentMessages[0].Text != "أريد هاتفًا" {

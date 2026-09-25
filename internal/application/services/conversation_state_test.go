@@ -16,8 +16,8 @@ func testBusinessCtx() *ports.AIContext {
 			{Reference: "item-pro", CatalogReference: "cat-1", Name: "Pro"},
 		},
 		OfferEvidence: []ports.AIOfferEvidence{
-			{Reference: "offer-basic", CatalogItemReference: "item-basic", Name: "Basic", PricingMode: "fixed", Amount: "100", Currency: "YER", AvailabilityState: "available", Status: "active"},
-			{Reference: "offer-pro", CatalogItemReference: "item-pro", Name: "Pro", PricingMode: "fixed", Amount: "200", Currency: "YER", AvailabilityState: "available", Status: "active"},
+			{Reference: "offer-basic", CatalogItemReference: "item-basic", Name: "Basic", PricingMode: "fixed", Amount: "100", Currency: "YER", AvailabilityStatus: "available", Status: "active"},
+			{Reference: "offer-pro", CatalogItemReference: "item-pro", Name: "Pro", PricingMode: "fixed", Amount: "200", Currency: "YER", AvailabilityStatus: "available", Status: "active"},
 		},
 	}
 }

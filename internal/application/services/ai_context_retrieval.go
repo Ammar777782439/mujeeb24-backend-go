@@ -99,7 +99,7 @@ func (b AutoReplyContextBuilder) retrieveScopedOffer(ctx context.Context, busine
 	offerEvidence := []ports.AIOfferEvidence{{
 		Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 		Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-		AvailabilityState: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
+		AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
 		RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 	}}
 	var variantEvidence []ports.AIVariantEvidence
@@ -142,7 +142,7 @@ func (b AutoReplyContextBuilder) retrieveScopedItem(ctx context.Context, busines
 		offerEvidence = append(offerEvidence, ports.AIOfferEvidence{
 			Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 			Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-			AvailabilityState: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
+			AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
 			RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 		})
 	}
@@ -212,7 +212,7 @@ func (b AutoReplyContextBuilder) retrieveScopedCatalog(ctx context.Context, busi
 			offerEvidence = append(offerEvidence, ports.AIOfferEvidence{
 				Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 				Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-				AvailabilityState: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
+				AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
 				RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 			})
 		}
@@ -261,7 +261,7 @@ func (b AutoReplyContextBuilder) retrieveScopedVariant(ctx context.Context, busi
 			offerEvidence = append(offerEvidence, ports.AIOfferEvidence{
 				Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 				Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-				AvailabilityState: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
+				AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
 				RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 			})
 		}
@@ -332,7 +332,7 @@ func toOfferEvidence(offer ports.OfferRecord, now time.Time) ports.AIOfferEviden
 	return ports.AIOfferEvidence{
 		Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 		Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-		AvailabilityState: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
+		AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
 		RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 	}
 }
@@ -524,7 +524,7 @@ func (b AutoReplyContextBuilder) augmentScopedWithCandidates(ctx context.Context
 			addOffers = append(addOffers, ports.AIOfferEvidence{
 				Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 				Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-				AvailabilityState: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
+				AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
 				RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 			})
 		}

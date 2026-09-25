@@ -329,7 +329,7 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.ContextB
                                 PricingMode:          offer.PricingMode,
                                 Amount:               stringValue(offer.Amount),
                                 Currency:             stringValue(offer.Currency),
-                                AvailabilityState:    offer.AvailabilityStatus,
+                                AvailabilityStatus:   offer.AvailabilityStatus,
                                 Status:               offer.Status,
                                 EvidenceState:        evidenceState,
                                 RetrievedAt:          now,
