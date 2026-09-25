@@ -81,15 +81,18 @@ func (h *MerchantAIHandler) HandleTurn(ctx context.Context, in *contract.Merchan
                 in.BusinessID, in.Body.SessionID, actor.PrincipalID, len(in.Body.Message))
 
         // Per contract ⑨ §16, idempotency_key prevents duplicate AI Runs.
-        // The merchant's Idempotency-Key header (per CommandHeaders) is used.
-        idempotencyKey := in.IdempotencyKey
-        if idempotencyKey == "" {
-                // Fall back to a deterministic key derived from the message + session
-                // to prevent accidental duplicates when the merchant double-clicks.
-                idempotencyKey = "merchant-ai:" + in.Body.SessionID + ":" + in.Body.Message
-        }
-
-        // Per contract 11 §6, call the agent.
+        //
+        // Per ADR-043 fix: we do NOT generate a fallback key in the handler
+        // anymore. The agent generates it AFTER session creation, so the key
+        // is always scoped to a real session_id (not the empty string from
+        // the first turn). This prevents the "idempotency collision" bug where
+        // two first-turn messages with the same text would collide on the
+        // key "merchant-ai::<message>" and the second request would return
+        // the first request's completed run, causing:
+        //   illegal AI Run transition: completed → context_built
+        //
+        // Now: pass the Idempotency-Key header (if the merchant provided one)
+        // OR empty (the agent will compute a session-scoped key).
         op, err := h.Agent.HandleTurn(ctx, services.MerchantCatalogAITurnInput{
                 BusinessID:             string(in.BusinessID),
                 SessionID:              in.Body.SessionID,
@@ -97,7 +100,7 @@ func (h *MerchantAIHandler) HandleTurn(ctx context.Context, in *contract.Merchan
                 SourceMessageReference: in.XRequestID,
                 MerchantMessage:        in.Body.Message,
                 PolicyVersion:          "merchant-catalog-ai-v1",
-                IdempotencyKey:         idempotencyKey,
+                IdempotencyKey:         in.IdempotencyKey, // empty OK — agent generates session-scoped key if not provided
                 // Per ADR-041 layer 1: pass the explicit catalog selection from
                 // the dashboard dropdown. Empty when the merchant didn't pick —
                 // CatalogResolutionService then tries layers 2/3/4.

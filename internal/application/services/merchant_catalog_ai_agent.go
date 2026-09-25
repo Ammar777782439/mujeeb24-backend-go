@@ -367,6 +367,23 @@ func (a *MerchantCatalogAIAgent) HandleTurn(ctx context.Context, input MerchantC
 
         // Per contract ⑨ §1, each AI processing is one AI Run.
         // Per contract ⑨ §16, the Run is idempotent on (business_id, idempotency_key).
+        //
+        // Per ADR-043 fix: generate the idempotency key HERE (in the agent, after
+        // session creation), not in the handler. This way:
+        //   - First turn (input.SessionID=""): the agent creates a new session,
+        //     then builds the key with the resolved sessionID. Different sessions
+        //     → different keys → no collision across "first turn" messages with
+        //     the same text.
+        //   - Subsequent turns (input.SessionID non-empty): the handler passes
+        //     the existing sessionID, and the key is built with it. Double-clicks
+        //     within the same session get the same key → correctly deduped.
+        //
+        // If the merchant provided an explicit Idempotency-Key header (per
+        // CommandHeaders), that takes precedence — the merchant is responsible
+        // for the key semantics in that case.
+        if strings.TrimSpace(input.IdempotencyKey) == "" {
+                input.IdempotencyKey = "merchant-ai:" + sessionID + ":" + input.MerchantMessage
+        }
         run, err := a.startRun(ctx, input, sessionID)
         if err != nil {
                 log.Printf("[MerchantAI] RUN_START_FAILED business=%s session=%s err=%v",
