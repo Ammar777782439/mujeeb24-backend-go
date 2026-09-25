@@ -244,13 +244,14 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 				Model:   geminiClient.Model(),
 			})
 			service.CatalogBatch = &services.CatalogBatchController{
-				Catalogs:     postgres.NewCatalogRepository(database),
-				TokenCounter: batchTokenCounter,
-				Gemini:       batchClient,
-				RunRepo:      postgres.NewAIRunTraceRepository(database),
-				TokenBudget:  8000,
-				Now:          func() time.Time { return time.Now().UTC() },
-				NewID:        uuid.NewString,
+				Catalogs:          postgres.NewCatalogRepository(database),
+				ProjectionBuilder: &services.CatalogAIProjectionBuilder{},
+				TokenCounter:      batchTokenCounter,
+				Gemini:            batchClient,
+				RunRepo:           postgres.NewAIRunTraceRepository(database),
+				TokenBudget:       8000,
+				Now:               func() time.Time { return time.Now().UTC() },
+				NewID:             uuid.NewString,
 			}
 		}
 
