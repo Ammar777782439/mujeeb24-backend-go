@@ -89,6 +89,39 @@ func NewBatchClient(cfg BatchClientConfig) (*BatchClient, error) {
 	}, nil
 }
 
+// buildBatchSystemInstruction builds the Gemini system_instruction content
+// combining the Batch Evaluation system prompt + the Catalog Entity Contract
+// JSON per contract ⑤ §7. Mirrors ContractClient.buildContractSystemInstruction
+// — same authoritative ordering: part 0 = system prompt, part 1 = Catalog
+// Entity Contract. Per ADR-047: before this fix, BatchClient ignored the
+// EntityContract field available in BatchEvaluationInput, causing Gemini to
+// evaluate catalog batches without authoritative field/type/enum definitions.
+func (c *BatchClient) buildBatchSystemInstruction(entityContract services.CatalogEntityContractPayload) *batchContent {
+	parts := []batchPart{{Text: c.systemPrompt}}
+	contractJSON, err := json.Marshal(entityContract)
+	if err == nil && len(contractJSON) > 0 {
+		parts = append(parts, batchPart{
+			Text: "\n\n# Catalog Entity Contract (contract ⑤ §7)\n\n" + string(contractJSON),
+		})
+	}
+	return &batchContent{Role: "system", Parts: parts}
+}
+
+// buildBatchSystemInstructionWithSuffix is the same as buildBatchSystemInstruction
+// but appends a suffix to the system prompt (used by FinalEvaluateWithDetails
+// for the FINAL EVALUATION mode marker). The Catalog Entity Contract is always
+// injected as part 1, same as the non-suffix variant.
+func (c *BatchClient) buildBatchSystemInstructionWithSuffix(entityContract services.CatalogEntityContractPayload, suffix string) *batchContent {
+	parts := []batchPart{{Text: c.systemPrompt + suffix}}
+	contractJSON, err := json.Marshal(entityContract)
+	if err == nil && len(contractJSON) > 0 {
+		parts = append(parts, batchPart{
+			Text: "\n\n# Catalog Entity Contract (contract ⑤ §7)\n\n" + string(contractJSON),
+		})
+	}
+	return &batchContent{Role: "system", Parts: parts}
+}
+
 // defaultBatchSystemPrompt moved to internal/domain/ai/prompts/prompts.go
 // (Day 5 Gap #13 — versioned system prompts as reviewable assets).
 
@@ -123,10 +156,7 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
 	// Build the Gemini request with Structured Output enforcement.
 	reqBody := batchGeminiRequest{
 		Model: c.model,
-		SystemInstruction: &batchContent{
-			Role:  "system",
-			Parts: []batchPart{{Text: c.systemPrompt}},
-		},
+		SystemInstruction: c.buildBatchSystemInstruction(input.EntityContract),
 		Contents: []batchContent{
 			{Role: "user", Parts: []batchPart{{Text: userPrompt}}},
 		},
@@ -181,10 +211,8 @@ func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input servic
 	// AIGeminiProposal per contract ④ §4.
 	reqBody := batchGeminiRequest{
 		Model: c.model,
-		SystemInstruction: &batchContent{
-			Role:  "system",
-			Parts: []batchPart{{Text: c.systemPrompt + "\n\nYou are now in FINAL EVALUATION mode. You have received the full product details for each candidate. Compose a complete Arabic response with product names, prices, descriptions, and availability. Do NOT invent item_ids that were not in the candidate set."}},
-		},
+		SystemInstruction: c.buildBatchSystemInstructionWithSuffix(input.EntityContract,
+			"\n\nYou are now in FINAL EVALUATION mode. You have received the full product details for each candidate. Compose a complete Arabic response with product names, prices, descriptions, and availability. Do NOT invent item_ids that were not in the candidate set."),
 		Contents: []batchContent{
 			{Role: "user", Parts: []batchPart{{Text: userPrompt}}},
 		},
