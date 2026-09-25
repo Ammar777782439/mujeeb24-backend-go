@@ -233,6 +233,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
                         return commands.AutoReplyResult{}, contextErr
                 }
                 log.Printf("[AutoReply] CONTEXT_BUILT business=%s ownership=%s state=%s", businessID, bc.Conversation.Ownership, bc.Conversation.State)
+		log.Printf("[AutoReply] CONTEXT_DEBUG catalog_names=%v catalog_summary_count=%d catalog_evidence_count=%d", bc.CatalogNames, len(bc.CatalogSummary), len(bc.CatalogEvidence))
                 // Per contract ③ §1, if conversation is owned by human or waiting for human,
                 // AI does not respond.
                 if strings.EqualFold(bc.Conversation.Ownership, "human") || strings.EqualFold(bc.Conversation.State, "waiting_human") {
