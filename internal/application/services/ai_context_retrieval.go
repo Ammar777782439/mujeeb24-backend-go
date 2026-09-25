@@ -556,6 +556,40 @@ func rankPositive(items []ports.CatalogItemRecord, text string) []ports.CatalogI
 }
 
 func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports.AIContext, input ports.ContextBuildInput, now time.Time) (ports.AIContext, error) {
+	// Per ADR-048: Always populate catalog_names + catalog_summary
+	// regardless of retrieval mode. In scoped mode, the catalog loop
+	// in Build() is skipped (early return), so catalog_names and
+	// catalog_summary were empty. This ensures Gemini always sees
+	// category names for hierarchical navigation ("what do you have?").
+	if b.Catalogs != nil && len(base.CatalogNames) == 0 {
+		catalogPage, catalogErr := b.Catalogs.ListCatalogs(ctx, input.BusinessID, "active", b.maxCatalogs(), "")
+		if catalogErr == nil {
+			for _, catalog := range catalogPage.Items {
+				base.CatalogNames = append(base.CatalogNames, catalog.Name)
+				// Also populate catalog_summary if empty (scoped mode skips it)
+				if len(base.CatalogSummary) == 0 {
+					summaryCursor := ""
+					for {
+						summaryItems, summaryErr := b.Catalogs.ListCatalogItems(ctx, input.BusinessID, catalog.ID, "", "active", 500, summaryCursor)
+						if summaryErr != nil {
+							break
+						}
+						for _, item := range summaryItems.Items {
+							base.CatalogSummary = append(base.CatalogSummary, ports.CatalogSummaryEntry{
+								ID:          item.ID,
+								Name:        item.Name,
+								CatalogName: catalog.Name,
+							})
+						}
+						if !summaryItems.HasMore {
+							break
+						}
+						summaryCursor = summaryItems.NextCursor
+					}
+				}
+			}
+		}
+	}
 	if b.Knowledge != nil {
 		knowledgeRecords, listErr := b.Knowledge.ListPublished(ctx, input.BusinessID, "", now, b.maxKnowledge()*3)
 		if listErr != nil {

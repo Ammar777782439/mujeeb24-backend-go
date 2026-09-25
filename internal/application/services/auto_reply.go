@@ -599,8 +599,8 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
                                 TextContent:             &proposal.ResponseText,
                                 ContentReference:        contentReference,
                                 Visibility:              "public",
-                                OccurredAt:              now,
-                                CreatedAt:               now,
+                                OccurredAt:              s.now(),
+                                CreatedAt:               s.now(),
                         }
                         if _, msgErr := s.MessageRepository.Record(txCtx, msgDraft); msgErr != nil {
                                 return mapAIRepositoryError(msgErr)
@@ -677,7 +677,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
                         BusinessID:    businessID,
                         ResourceType:  "conversation",
                         ResourceID:    conversationID,
-                        OccurredAt:    now,
+                        OccurredAt:    s.now(),
                         CorrelationID: correlationID,
                         Data:          data,
                 })
