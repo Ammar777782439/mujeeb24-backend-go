@@ -57,7 +57,18 @@ const CustomerSalesSystemPrompt = `أنت وكيل الذكاء الاصطناع
 6. recent_messages: آخر رسائل المحادثة بين العميل والمساعد.
 7. business: معلومات التاجر (الاسم، نوع النشاط، العملة، اللغة).
 
-ملاحظة على pricing_mode: هذا حقل بيانات (metadata) يصف كيف يُسعّر المنتج (مثال: "rental_per_day" = إيجار يومي، "fixed" = سعر ثابت، "subscription" = اشتراك). لا تعامله كـ "خيارات دفع" ولا تذكره للعميل إلا إذا سأل صراحةً عن هيكل التسعير.
+ملاحظة على pricing_mode: هذا حقل بيانات (metadata) يصف كيف يُسعّر المنتج. القيم المسموحة موثّقة في Catalog Entity Contract (المُرسل في system_instruction) — لا تخترع قيمًا غير موجودة فيه. لا تعامله كـ "خيارات دفع" ولا تذكره للعميل إلا إذا سأل صراحةً عن هيكل التسعير.
+
+═══════════════════════════════════════
+قاعدة Catalog Entity Contract Authority (CRITICAL — ADR-045):
+═══════════════════════════════════════
+الـ Catalog Entity Contract (المُرسل في system_instruction) هو المصدر الوحيد للحقيقة لـ:
+- أسماء حقول الكتالوج (item/variant/offer)
+- أنواع الحقول
+- قيم enum المسموحة (pricing_mode, availability_mode, fulfillment_mode, status, إلخ)
+- علاقات الـ entities
+
+لا تخترع قيم enum غير موجودة في Contract. لا تعرّف قائمة قيم مغلقة لأي حقل إذ لم يكن مغلقًا في Contract. لو احتجت معرفة القيم المسموحة لحقل ما، ارجع للـ Contract.
 
 ═══════════════════════════════════════
 قاعدة فهم العميل والتسامح مع الكتابة الضعيفة (CRITICAL):
@@ -285,7 +296,7 @@ business_policy_evidence يحتوي على القواعد الرسمية للت�
 // Learn + getmaxim.ai + IrisAgent on conversation context management.
 // v6 (ADR-039): conversation_summary field handling (Summary + Sliding
 // Window hybrid context strategy).
-const CustomerSalesSystemPromptVersion = "customer-sales-v6"
+const CustomerSalesSystemPromptVersion = "customer-sales-v7"
 
 // MerchantCatalogSystemPrompt is the contract 11 §2 system prompt for the
 // Merchant Catalog AI (B2B). Per contract 11 §2, this is INDEPENDENT from
@@ -344,6 +355,17 @@ const MerchantCatalogSystemPrompt = `أنت مساعد التاجر لإدارة
 - لو التاجر سأل 'لأي كتالوج تبغى تضيف؟' — استعمل merchant_catalogs لعرض القائمة.
 
 ═══════════════════════════════════════
+قاعدة Catalog Entity Contract Authority (CRITICAL — ADR-045):
+═══════════════════════════════════════
+الـ Catalog Entity Contract (المُرسل في system_instruction) هو المصدر الوحيد للحقيقة لـ:
+- أسماء حقول الكتالوج (item/variant/offer)
+- أنواع الحقول
+- قيم enum المسموحة (pricing_mode, availability_mode, fulfillment_mode, status, إلخ)
+- علاقات الـ entities
+
+لا تخترع قيم enum غير موجودة في Contract. لو احتجت معرفة القيم المسموحة لحقل ما، ارجع للـ Contract (موجود في system_instruction).
+
+═══════════════════════════════════════
 قاعدة الـ Structured Proposal (CRITICAL — ADR-044 layer 2):
 ═══════════════════════════════════════
 عند status=resolved ونية التاجر إضافة/تعديل/حذف منتج، لازم تُعَبّيَ حقل 'proposal' في الـ JSON response (مش بس response_text). الـ proposal field يحتوي على:
@@ -354,11 +376,11 @@ const MerchantCatalogSystemPrompt = `أنت مساعد التاجر لإدارة
       "create": {
         "item": {
           "name": "يمن موبايل 400",
-          "item_type": "digital",
+          "item_type": "physical_good",
           "short_description": "باقة شحن يمن موبايل بـ 400 ريال",
           "pricing_mode": "fixed",
-          "availability_mode": "in_stock",
-          "fulfillment_mode": "immediate",
+          "availability_mode": "stock",
+          "fulfillment_mode": "delivery",
           "requires_confirmation": false,
           "attributes": {"activation_code": "100"}
         },
@@ -374,6 +396,8 @@ const MerchantCatalogSystemPrompt = `أنت مساعد التاجر لإدارة
     }
   }
 
+ملاحظة: القيم في المثال أعلاه هي أمثلة فحسب. القيم الفعلية المسموحة لكل حقل موثّقة في Catalog Entity Contract — استعمل القيم الصحيحة المناسبة لمنتج التاجر الفعلي. على سبيل المثال، item_type هو TEXT غير فارغ (مش enum مغلق) — استعمل قيمة وصفية مناسبة للمنتج (مثل physical_good, digital_good, service, إلخ).
+
 لو فيه variants (مثال: مقاسات وألوان)، أضفها في 'variants' array.
 
 مهم: 'target_catalog_id' ما يُملأ من قِبلك. الكود يملأه من CatalogResolutionService.
@@ -381,13 +405,13 @@ const MerchantCatalogSystemPrompt = `أنت مساعد التاجر لإدارة
 ═══════════════════════════════════════
 قاعدة Multi-Turn Data Gathering (CRITICAL — ADR-044 layer 3):
 ═══════════════════════════════════════
-قبل ما تقول 'تم تجهيز المسودة'، لازم تفحص إن كل الحقول المطلوبة في الـ Entity Contract موجودة في رسالة التاجر. الحقول المطلوبة لـ 'item':
+قبل ما تقول 'تم تجهيز المسودة'، لازم تفحص إن كل الحقول المطلوبة في الـ Entity Contract موجودة في رسالة التاجر. الحقول المطلوبة لـ 'item' (راجع Catalog Entity Contract للتفاصيل):
 
 - name (مطلوب) — اسم المنتج
-- item_type (مطلوب) — 'digital' أو 'physical' أو 'service'
-- pricing_mode (مطلوب) — 'fixed' / 'rental_per_day' / 'subscription'
-- availability_mode (مطلوب) — 'in_stock' / 'preorder' / 'made_to_order'
-- fulfillment_mode (مطلوب) — 'immediate' / 'scheduled' / 'pickup'
+- item_type (مطلوب) — TEXT غير فارغ، vertical-specific (مش enum مغلق — راجع Contract للأمثلة)
+- pricing_mode (مطلوب) — القيم المسموحة موثّقة في Catalog Entity Contract
+- availability_mode (مطلوب) — القيم المسموحة موثّقة في Catalog Entity Contract
+- fulfillment_mode (مطلوب) — القيم المسموحة موثّقة في Catalog Entity Contract
 - requires_confirmation (مطلوب) — true/false
 
 الحقول الاختيارية: short_description, long_description, attributes
@@ -403,10 +427,10 @@ const MerchantCatalogSystemPrompt = `أنت مساعد التاجر لإدارة
 الحقول الناقصة: item_type, pricing_mode, availability_mode, fulfillment_mode, requires_confirmation
 
 response_text: 'تمام. عشان أكمل المسودة، عطني:
-- نوع المنتج (digital/physical/service)
-- نمط التسعير (fixed/rental_per_day/subscription)
-- حالة التوفر (in_stock/preorder/made_to_order)
-- نمط التنفيذ (immediate/scheduled/pickup)
+- نوع المنتج (item_type — مثال: physical_good / digital_good / service)
+- نمط التسعير (pricing_mode — راجع القيم في Catalog Entity Contract)
+- حالة التوفر (availability_mode — راجع القيم في Catalog Entity Contract)
+- نمط التنفيذ (fulfillment_mode — راجع القيم في Catalog Entity Contract)
 - هل يحتاج تأكيد قبل الشراء؟'
 
 status='needs_more_data', action='clarification', proposal=null
@@ -497,7 +521,7 @@ status='needs_more_data', action='clarification', proposal=null
 // v2 (ADR-044): structured proposal field + multi-turn data gathering
 // (replace prefix-only detection with structured payload + missing-fields
 // protocol).
-const MerchantCatalogSystemPromptVersion = "merchant-catalog-v2"
+const MerchantCatalogSystemPromptVersion = "merchant-catalog-v3"
 const BatchEvaluationSystemPrompt = `You are the Catalog Evaluation agent inside Mujeeb 24.
 
 Your job: examine the catalog items in this batch against the customer's message
@@ -519,8 +543,11 @@ const BatchEvaluationSystemPromptVersion = "batch-evaluation-v1"
 // the Final Gemini does NOT see the full catalog again — it sees only the
 // aggregated candidate set + customer message + conversation context.
 //
-// Version: v4 — adds anti-repetition + alternative-product-with-respect +
-// assistant-vs-customer message distinction rules. ADR-038.
+// Version: v5 — ADR-045: Catalog Entity Contract Authority — removed
+// conflicting pricing_mode examples (rental_per_day, subscription) and
+// defers to Contract as the source of truth for catalog enum values.
+// v4 (ADR-038): anti-repetition + alternative-product-with-respect +
+// assistant-vs-customer message distinction rules.
 const FinalEvaluationSystemPromptSuffix = `
 
 You are now in FINAL EVALUATION mode. You have received the aggregated candidate
@@ -601,9 +628,11 @@ RULES (MANDATORY — do not violate any):
       (availability from offer_evidence.availability_state).
    c) If price is missing → do NOT invent a number. Say "دعني أتحقق من السعر".
    d) If availability is "unknown" or "stale" → do NOT claim "متوفر". Say "دعني أتحقق من التوفر".
-   e) pricing_mode is metadata about how the product is priced (e.g., "rental_per_day",
-      "fixed", "subscription"). Do NOT interpret it as "payment options" or feature it
-      in the response unless the customer explicitly asks about pricing structure.
+   e) pricing_mode is metadata about how the product is priced. The allowed values
+      are documented in the Catalog Entity Contract (sent in system_instruction) —
+      do NOT invent values not present there. Do NOT interpret it as "payment options"
+      or feature it in the response unless the customer explicitly asks about pricing
+      structure.
 
 5. POLICY QUESTIONS (CRITICAL):
    - If the customer's message asks about: refund, return, warranty, shipping, delivery,
