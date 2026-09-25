@@ -290,40 +290,41 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	// Per contract ② "ما أغلقناه": no semantic search, no product matching
 	// inside Mujeeb. Mujeeb only builds the projection and counts tokens.
 	if s.CatalogBatch != nil && proposal.Status == ports.AIProposalStatusNeedsMoreData {
-		// Per contract ② §9, only invoke catalog evaluation when the
-		// context lacks catalog evidence (otherwise Gemini already has
-		// what it needs).
-		if builtContext == nil || len(builtContext.CatalogEvidence) == 0 {
-			// Per contract ⑨ §3, mark RUNNING again (back from VALIDATING
-			// to RUNNING for the batch evaluation loop).
-			s.markRunningSafe(ctx, run)
+		// Per contract ② §9, invoke catalog evaluation whenever Gemini
+		// says it needs more data — regardless of whether some evidence
+		// already exists. The fact that Gemini returned needs_more_data
+		// means the 5-item context summary was insufficient; the batch
+		// evaluation will provide the FULL catalog for Gemini to reason over.
+		//
+		// Previous condition `len(builtContext.CatalogEvidence) == 0` was
+		// wrong: the ContextBuilder always puts 5 items in the evidence,
+		// so the condition was never true, and the batch evaluation never ran.
+		log.Printf("[AutoReply] CATALOG_EVAL_TRIGGER run=%s reason=needs_more_data current_evidence=%d", run.ID, len(builtContext.CatalogEvidence))
+		// Per contract ⑨ §3, mark RUNNING again (back from VALIDATING
+		// to RUNNING for the batch evaluation loop).
+		s.markRunningSafe(ctx, run)
 
-			// Per contract ② §9, run the full catalog evaluation pipeline.
-			entityContract := CatalogEntityContractPayload{}
-			if len(s.EntityContractPayload) > 0 {
-				_ = json.Unmarshal(s.EntityContractPayload, &entityContract)
-			}
-			finalProposal, err := s.CatalogBatch.RunCatalogEvaluation(ctx, CatalogEvaluationInput{
-				AIRunID:             run.ID,
-				AttemptID:           "", // no separate attempt tracking in this path
-				BusinessID:          businessID,
-				ConversationID:      conversationID,
-				CatalogScope:        "", // evaluate all active catalogs for the business
-				CustomerMessage:     command.Text,
-				ConversationContext: derefAIContext(builtContext),
-				EntityContract:      entityContract,
-			})
-			if err != nil {
-				// Per contract ⑨ §18, mark FAILED. The initial proposal
-				// (needs_more_data) is still persisted for audit.
-				s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), "catalog evaluation: "+err.Error())
-				// Fall back to the initial proposal — the customer gets
-				// a needs_more_data response instead of silence.
-			} else {
-				// Replace the initial proposal with the final one from
-				// the contract ② §6 Final Evaluation.
-				proposal = finalProposal
-			}
+		// Per contract ② §9, run the full catalog evaluation pipeline.
+		entityContract := CatalogEntityContractPayload{}
+		if len(s.EntityContractPayload) > 0 {
+			_ = json.Unmarshal(s.EntityContractPayload, &entityContract)
+		}
+		finalProposal, err := s.CatalogBatch.RunCatalogEvaluation(ctx, CatalogEvaluationInput{
+			AIRunID:             run.ID,
+			AttemptID:           "", // no separate attempt tracking in this path
+			BusinessID:          businessID,
+			ConversationID:      conversationID,
+			CatalogScope:        "", // evaluate all active catalogs for the business
+			CustomerMessage:     command.Text,
+			ConversationContext: derefAIContext(builtContext),
+			EntityContract:      entityContract,
+		})
+		if err != nil {
+			log.Printf("[AutoReply] CATALOG_EVAL_FAILED run=%s err=%v", run.ID, err)
+			s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), "catalog evaluation: "+err.Error())
+		} else {
+			log.Printf("[AutoReply] CATALOG_EVAL_OK run=%s final_status=%s final_action=%s", run.ID, finalProposal.Status, finalProposal.Action)
+			proposal = finalProposal
 		}
 	}
 
