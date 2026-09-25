@@ -269,8 +269,8 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		return commands.AutoReplyResult{}, err
 	}
 	proposal := out.Proposal
-	log.Printf("[AutoReply] GEMINI_OK business=%s status=%s action=%s tokens_in=%d tokens_out=%d latency=%dms",
-		businessID, proposal.Status, proposal.Action, out.Usage.InputTokens, out.Usage.OutputTokens, out.LatencyMs)
+	log.Printf("[AutoReply] GEMINI_OK business=%s status=%s action=%s tokens_in=%d tokens_out=%d latency=%dms response=%q",
+		businessID, proposal.Status, proposal.Action, out.Usage.InputTokens, out.Usage.OutputTokens, out.LatencyMs, truncate(proposal.ResponseText, 200))
 
 	// Per contract ② §9 — Catalog Evaluation flow.
 	//
@@ -323,7 +323,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			log.Printf("[AutoReply] CATALOG_EVAL_FAILED run=%s err=%v", run.ID, err)
 			s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), "catalog evaluation: "+err.Error())
 		} else {
-			log.Printf("[AutoReply] CATALOG_EVAL_OK run=%s final_status=%s final_action=%s", run.ID, finalProposal.Status, finalProposal.Action)
+			log.Printf("[AutoReply] CATALOG_EVAL_OK run=%s final_status=%s final_action=%s response=%q", run.ID, finalProposal.Status, finalProposal.Action, truncate(finalProposal.ResponseText, 200))
 			proposal = finalProposal
 		}
 	}
