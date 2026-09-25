@@ -1861,6 +1861,15 @@ components:
     MerchantAIChatResponse:
       additionalProperties: false
       properties:
+        create:
+          $ref: "#/components/schemas/MerchantAIProposalCreate"
+        delete:
+          $ref: "#/components/schemas/MerchantAIProposalDelete"
+        missing_fields:
+          items:
+            $ref: "#/components/schemas/MerchantAIMissingField"
+          nullable: true
+          type: array
         operation:
           type: string
         response_text:
@@ -1869,10 +1878,155 @@ components:
           type: string
         status:
           type: string
+        target_catalog_id:
+          type: string
+        update:
+          $ref: "#/components/schemas/MerchantAIProposalUpdate"
       required:
         - operation
         - status
         - session_id
+      type: object
+    MerchantAIMissingField:
+      additionalProperties: false
+      properties:
+        data_type:
+          type: string
+        display_name:
+          type: string
+        path:
+          type: string
+        reason:
+          type: string
+      required:
+        - path
+        - display_name
+        - data_type
+        - reason
+      type: object
+    MerchantAIProposalCreate:
+      additionalProperties: false
+      properties:
+        item:
+          $ref: "#/components/schemas/MerchantAIProposalItem"
+        offers:
+          items:
+            $ref: "#/components/schemas/MerchantAIProposalOffer"
+          nullable: true
+          type: array
+        target_catalog_id:
+          type: string
+        variants:
+          items:
+            $ref: "#/components/schemas/MerchantAIProposalVariant"
+          nullable: true
+          type: array
+      type: object
+    MerchantAIProposalDelete:
+      additionalProperties: false
+      properties:
+        confirmed:
+          type: boolean
+        item_id:
+          type: string
+        reason_given:
+          type: string
+      required:
+        - item_id
+        - confirmed
+      type: object
+    MerchantAIProposalItem:
+      additionalProperties: false
+      properties:
+        attributes:
+          additionalProperties: {}
+          type: object
+        availability_mode:
+          type: string
+        fulfillment_mode:
+          type: string
+        item_type:
+          type: string
+        long_description:
+          type: string
+        name:
+          type: string
+        pricing_mode:
+          type: string
+        requires_confirmation:
+          type: boolean
+        short_description:
+          type: string
+      required:
+        - name
+        - item_type
+        - pricing_mode
+        - availability_mode
+        - fulfillment_mode
+        - requires_confirmation
+      type: object
+    MerchantAIProposalOffer:
+      additionalProperties: false
+      properties:
+        amount:
+          type: string
+        availability_mode:
+          type: string
+        availability_status:
+          type: string
+        currency:
+          type: string
+        fulfillment_mode:
+          type: string
+        name:
+          type: string
+        price_source:
+          type: string
+        pricing_mode:
+          type: string
+        pricing_unit:
+          type: string
+        validity_from:
+          type: string
+        validity_until:
+          type: string
+        variant_name_ref:
+          type: string
+      required:
+        - name
+        - pricing_mode
+      type: object
+    MerchantAIProposalUpdate:
+      additionalProperties: false
+      properties:
+        changes:
+          $ref: "#/components/schemas/MerchantAIProposalItem"
+        item_id:
+          type: string
+        new_offers:
+          items:
+            $ref: "#/components/schemas/MerchantAIProposalOffer"
+          nullable: true
+          type: array
+        new_variants:
+          items:
+            $ref: "#/components/schemas/MerchantAIProposalVariant"
+          nullable: true
+          type: array
+      required:
+        - item_id
+        - changes
+      type: object
+    MerchantAIProposalVariant:
+      additionalProperties: false
+      properties:
+        attributes:
+          additionalProperties: {}
+          type: object
+        name:
+          type: string
+      required:
+        - name
       type: object
     MergeCustomerRequest:
       additionalProperties: false

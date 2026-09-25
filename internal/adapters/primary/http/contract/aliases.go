@@ -1,9 +1,9 @@
 package contract
 
 import (
-	"net/http"
+        "net/http"
 
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/dto"
+        "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/dto"
 )
 
 type UUID = dto.UUID
@@ -189,26 +189,26 @@ type CustomerUpdateInput = dto.CustomerUpdateInput
 type UpdateCustomerRequest = dto.UpdateCustomerRequest
 
 type Single[T any] struct {
-	Body struct {
-		Data      T      `json:"data"`
-		RequestID string `json:"request_id"`
-	}
+        Body struct {
+                Data      T      `json:"data"`
+                RequestID string `json:"request_id"`
+        }
 }
 
 type AuthOutput struct {
-	SetCookie *http.Cookie `header:"Set-Cookie"`
-	Body      struct {
-		Data      AuthResponse `json:"data"`
-		RequestID string       `json:"request_id"`
-	}
+        SetCookie *http.Cookie `header:"Set-Cookie"`
+        Body      struct {
+                Data      AuthResponse `json:"data"`
+                RequestID string       `json:"request_id"`
+        }
 }
 
 type List[T any] struct {
-	Body struct {
-		Data       []T    `json:"data"`
-		Pagination Page   `json:"pagination"`
-		RequestID  string `json:"request_id"`
-	}
+        Body struct {
+                Data       []T    `json:"data"`
+                Pagination Page   `json:"pagination"`
+                RequestID  string `json:"request_id"`
+        }
 }
 
 type ErrorResponse struct{ Body ErrorEnvelope }
@@ -219,9 +219,102 @@ type MerchantAIChatRequest = dto.MerchantAIChatRequest
 
 // MerchantAIChatResponse is the B2B Merchant Catalog AI proposal projection.
 // Per contract 11 §5, the agent returns a CatalogOperationProposal.
+//
+// Per ADR-044 layer 2: the structured Create/Update/Delete payloads are
+// returned alongside the human-readable response_text. The frontend
+// renders these as a card with approve/reject buttons. When the merchant
+// approves, the frontend calls the catalog application service (separate
+// endpoint) to execute the mutation.
+//
+// Per ADR-044 layer 3: MissingFields is populated when status=needs_more_data
+// — the frontend can render these as a form for the merchant to fill in.
 type MerchantAIChatResponse struct {
-	Operation    string `json:"operation"`
-	Status       string `json:"status"`
-	ResponseText string `json:"response_text,omitempty"`
-	SessionID    string `json:"session_id"`
+        Operation    string                          `json:"operation"`
+        Status       string                          `json:"status"`
+        ResponseText string                          `json:"response_text,omitempty"`
+        SessionID    string                          `json:"session_id"`
+        // Per ADR-044 layer 2: structured proposal payload. Present only when
+        // Operation is create/update/delete (NOT ask_merchant/answer).
+        // The frontend renders this as an approval card.
+        Create       *MerchantAIProposalCreate       `json:"create,omitempty"`
+        Update       *MerchantAIProposalUpdate       `json:"update,omitempty"`
+        Delete       *MerchantAIProposalDelete       `json:"delete,omitempty"`
+        // Per ADR-044 layer 3: fields the agent needs from the merchant
+        // before the proposal can be executed. The frontend can render these
+        // as a form instead of asking the merchant to type the answer.
+        MissingFields []MerchantAIMissingField       `json:"missing_fields,omitempty"`
+        // TargetCatalogID per ADR-041 — populated by CatalogResolutionService
+        // when the operation is a mutation. The frontend displays "ستُضاف إلى:
+        // <catalog_name>" using this ID.
+        TargetCatalogID string                       `json:"target_catalog_id,omitempty"`
+}
+
+// MerchantAIProposalCreate mirrors services.CatalogCreatePayload for the
+// HTTP response. Defined here (contract package) to avoid importing the
+// services package into the dto layer (would create an import cycle).
+type MerchantAIProposalCreate struct {
+        TargetCatalogID string                          `json:"target_catalog_id,omitempty"`
+        Item            *MerchantAIProposalItem         `json:"item,omitempty"`
+        Variants        []MerchantAIProposalVariant      `json:"variants,omitempty"`
+        Offers          []MerchantAIProposalOffer        `json:"offers,omitempty"`
+}
+
+// MerchantAIProposalUpdate mirrors services.CatalogUpdatePayload.
+type MerchantAIProposalUpdate struct {
+        ItemID      string                          `json:"item_id"`
+        Changes     MerchantAIProposalItem          `json:"changes"`
+        NewVariants []MerchantAIProposalVariant     `json:"new_variants,omitempty"`
+        NewOffers   []MerchantAIProposalOffer      `json:"new_offers,omitempty"`
+}
+
+// MerchantAIProposalDelete mirrors services.CatalogDeletePayload.
+type MerchantAIProposalDelete struct {
+        ItemID      string `json:"item_id"`
+        Confirmed   bool   `json:"confirmed"`
+        ReasonGiven string `json:"reason_given,omitempty"`
+}
+
+// MerchantAIProposalItem is the HTTP projection of the AI-proposed item.
+type MerchantAIProposalItem struct {
+        Name                 string         `json:"name"`
+        ItemType             string         `json:"item_type"`
+        ShortDescription     string         `json:"short_description,omitempty"`
+        LongDescription      string         `json:"long_description,omitempty"`
+        PricingMode          string         `json:"pricing_mode"`
+        AvailabilityMode     string         `json:"availability_mode"`
+        FulfillmentMode      string         `json:"fulfillment_mode"`
+        RequiresConfirmation bool           `json:"requires_confirmation"`
+        Attributes           map[string]any `json:"attributes,omitempty"`
+}
+
+// MerchantAIProposalVariant is the HTTP projection of the AI-proposed variant.
+type MerchantAIProposalVariant struct {
+        Name       string         `json:"name"`
+        Attributes map[string]any `json:"attributes,omitempty"`
+}
+
+// MerchantAIProposalOffer is the HTTP projection of the AI-proposed offer.
+type MerchantAIProposalOffer struct {
+        VariantNameRef     string  `json:"variant_name_ref,omitempty"`
+        Name               string  `json:"name"`
+        PricingMode        string  `json:"pricing_mode"`
+        Amount             *string `json:"amount,omitempty"`
+        Currency           *string `json:"currency,omitempty"`
+        PricingUnit        *string `json:"pricing_unit,omitempty"`
+        PriceSource        *string `json:"price_source,omitempty"`
+        AvailabilityMode   *string `json:"availability_mode,omitempty"`
+        AvailabilityStatus *string `json:"availability_status,omitempty"`
+        FulfillmentMode    *string `json:"fulfillment_mode,omitempty"`
+        ValidityFrom       *string `json:"validity_from,omitempty"`
+        ValidityUntil      *string `json:"validity_until,omitempty"`
+}
+
+// MerchantAIMissingField is the HTTP projection of services.CatalogMissingField.
+// Per ADR-044 layer 3, the frontend can render these as a form for the
+// merchant to fill in (instead of asking them to type the answer in chat).
+type MerchantAIMissingField struct {
+        Path        string `json:"path"`
+        DisplayName string `json:"display_name"`
+        DataType    string `json:"data_type"`
+        Reason      string `json:"reason"`
 }

@@ -24,8 +24,8 @@
 package ports
 
 import (
-	"context"
-	"time"
+        "context"
+        "time"
 )
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -39,10 +39,10 @@ import (
 type AIProposalStatus string
 
 const (
-	AIProposalStatusResolved      AIProposalStatus = "resolved"
-	AIProposalStatusAmbiguous     AIProposalStatus = "ambiguous"
-	AIProposalStatusNotFound      AIProposalStatus = "not_found"
-	AIProposalStatusNeedsMoreData AIProposalStatus = "needs_more_data"
+        AIProposalStatusResolved      AIProposalStatus = "resolved"
+        AIProposalStatusAmbiguous     AIProposalStatus = "ambiguous"
+        AIProposalStatusNotFound      AIProposalStatus = "not_found"
+        AIProposalStatusNeedsMoreData AIProposalStatus = "needs_more_data"
 )
 
 // AIProposalAction — the five closed action values per contract ④ §4.
@@ -57,11 +57,11 @@ const (
 type AIProposalAction string
 
 const (
-	AIProposalActionAnswer        AIProposalAction = "answer"
-	AIProposalActionClarification AIProposalAction = "clarification"
-	AIProposalActionHumanRequest  AIProposalAction = "human_request"
-	AIProposalActionLeadDraft     AIProposalAction = "lead_draft"
-	AIProposalActionOrderDraft    AIProposalAction = "order_draft"
+        AIProposalActionAnswer        AIProposalAction = "answer"
+        AIProposalActionClarification AIProposalAction = "clarification"
+        AIProposalActionHumanRequest  AIProposalAction = "human_request"
+        AIProposalActionLeadDraft     AIProposalAction = "lead_draft"
+        AIProposalActionOrderDraft    AIProposalAction = "order_draft"
 )
 
 // SelectedReference is a per-contract ④ §4 reference to a catalog entity that
@@ -71,9 +71,9 @@ const (
 // variant_id and offer_id may be nil when the relation does not apply or is
 // not required (e.g., a service-type item with no variants).
 type SelectedReference struct {
-	ItemID    string  `json:"item_id"`
-	VariantID *string `json:"variant_id,omitempty"`
-	OfferID   *string `json:"offer_id,omitempty"`
+        ItemID    string  `json:"item_id"`
+        VariantID *string `json:"variant_id,omitempty"`
+        OfferID   *string `json:"offer_id,omitempty"`
 }
 
 // CatalogBatchCandidate is per-contract ② §5 — the per-batch evaluation result
@@ -83,10 +83,10 @@ type SelectedReference struct {
 // variant_ids and offer_ids are plural because one item may produce multiple
 // variants/offers that are all candidates.
 type CatalogBatchCandidate struct {
-	ItemID     string   `json:"item_id"`
-	VariantIDs []string `json:"variant_ids,omitempty"`
-	OfferIDs   []string `json:"offer_ids,omitempty"`
-	Reason     string   `json:"reason,omitempty"`
+        ItemID     string   `json:"item_id"`
+        VariantIDs []string `json:"variant_ids,omitempty"`
+        OfferIDs   []string `json:"offer_ids,omitempty"`
+        Reason     string   `json:"reason,omitempty"`
 }
 
 // AIGeminiProposal is the contract ④ §4 final output of one Gemini interaction
@@ -102,10 +102,109 @@ type CatalogBatchCandidate struct {
 //
 // Such fields are Mujeeb's responsibility and live in EffectiveDecision.
 type AIGeminiProposal struct {
-	Status       AIProposalStatus    `json:"status"`
-	Action       AIProposalAction    `json:"action"`
-	ResponseText string              `json:"response_text"`
-	Selected     []SelectedReference `json:"selected,omitempty"`
+        Status       AIProposalStatus    `json:"status"`
+        Action       AIProposalAction    `json:"action"`
+        ResponseText string              `json:"response_text"`
+        Selected     []SelectedReference `json:"selected,omitempty"`
+        // Proposal per ADR-044 layer 2 — structured catalog operation payload.
+        // Populated by Gemini ONLY for B2B MerchantCatalogAI mutations
+        // (create/update/delete) when status=resolved. The agent uses this
+        // to populate CatalogCreatePayload / CatalogUpdatePayload / CatalogDeletePayload
+        // directly instead of parsing the response_text.
+        //
+        // The response_text still contains a human-readable summary for the
+        // merchant, but the structured Proposal field carries the actual
+        // data the merchant is approving. The frontend renders this as a
+        // card with approve/reject buttons.
+        //
+        // For B2C CustomerSalesAI, this field is unused (B2C's proposal
+        // is just selected[] references to existing catalog items, not a
+        // mutation payload).
+        Proposal *CatalogProposalPayload `json:"proposal,omitempty"`
+}
+
+// CatalogProposalPayload is the structured payload Gemini returns for
+// B2B mutations per ADR-044 layer 2. Defined in ports package to avoid
+// import cycle (services → ports → services). The agent's
+// mapGeminiProposalToOperation maps these to its own
+// CatalogCreatePayload / CatalogUpdatePayload / CatalogDeletePayload
+// (which live in services package).
+//
+// Per ADR-041, TargetCatalogID is NEVER populated by Gemini — the
+// agent's CatalogResolutionService populates it after Gemini returns.
+type CatalogProposalPayload struct {
+        // Operation is one of: create, update, delete per contract 11 §6.
+        Operation string `json:"operation"`
+        // Create is populated when Operation == "create".
+        Create *CatalogProposalCreate `json:"create,omitempty"`
+        // Update is populated when Operation == "update".
+        Update *CatalogProposalUpdate `json:"update,omitempty"`
+        // Delete is populated when Operation == "delete".
+        Delete *CatalogProposalDelete `json:"delete,omitempty"`
+}
+
+// CatalogProposalCreate holds the proposed new product graph.
+// Pure data (no DB IDs, no BusinessID, no CatalogID — agent fills those).
+//
+// NOTE: Schema and Definitions are omitted from the AI proposal payload
+// for now (they require complex attribute-schema wiring that's outside
+// the scope of ADR-044 layer 2). The agent can still receive them via
+// the response_text or a future schema-typed proposal extension.
+type CatalogProposalCreate struct {
+        Item     *CatalogProposalItem     `json:"item,omitempty"`
+        Variants []CatalogProposalVariant `json:"variants,omitempty"`
+        Offers   []CatalogProposalOffer   `json:"offers,omitempty"`
+}
+
+// CatalogProposalUpdate holds the proposed changes for an existing item.
+type CatalogProposalUpdate struct {
+        ItemID      string                     `json:"item_id"`
+        Changes     CatalogProposalItem        `json:"changes"`
+        NewVariants []CatalogProposalVariant   `json:"new_variants,omitempty"`
+        NewOffers   []CatalogProposalOffer     `json:"new_offers,omitempty"`
+}
+
+// CatalogProposalDelete identifies the item to delete.
+type CatalogProposalDelete struct {
+        ItemID      string `json:"item_id"`
+        Confirmed   bool   `json:"confirmed"`
+        ReasonGiven string `json:"reason_given,omitempty"`
+}
+
+// CatalogProposalItem is the AI-proposed item draft (pure data, no DB IDs).
+// Mirrors the agent's services.CatalogItemDraft minus internal fields.
+type CatalogProposalItem struct {
+        Name                 string         `json:"name"`
+        ItemType             string         `json:"item_type"`
+        ShortDescription     string         `json:"short_description,omitempty"`
+        LongDescription      string         `json:"long_description,omitempty"`
+        PricingMode          string         `json:"pricing_mode"`
+        AvailabilityMode     string         `json:"availability_mode"`
+        FulfillmentMode      string         `json:"fulfillment_mode"`
+        RequiresConfirmation bool           `json:"requires_confirmation"`
+        Attributes           map[string]any `json:"attributes,omitempty"`
+}
+
+// CatalogProposalVariant is the AI-proposed variant draft.
+type CatalogProposalVariant struct {
+        Name       string         `json:"name"`
+        Attributes map[string]any `json:"attributes,omitempty"`
+}
+
+// CatalogProposalOffer is the AI-proposed offer draft.
+type CatalogProposalOffer struct {
+        VariantNameRef     string  `json:"variant_name_ref,omitempty"`
+        Name               string  `json:"name"`
+        PricingMode        string  `json:"pricing_mode"`
+        Amount             *string `json:"amount,omitempty"`
+        Currency           *string `json:"currency,omitempty"`
+        PricingUnit        *string `json:"pricing_unit,omitempty"`
+        PriceSource        *string `json:"price_source,omitempty"`
+        AvailabilityMode   *string `json:"availability_mode,omitempty"`
+        AvailabilityStatus *string `json:"availability_status,omitempty"`
+        FulfillmentMode    *string `json:"fulfillment_mode,omitempty"`
+        ValidityFrom       *string `json:"validity_from,omitempty"`
+        ValidityUntil      *string `json:"validity_until,omitempty"`
 }
 
 // CatalogBatchResult is the contract ② §5 per-batch evaluation output.
@@ -114,8 +213,8 @@ type AIGeminiProposal struct {
 // "completed". Mujeeb (the Catalog Batch Controller) owns coverage; Gemini only
 // returns the candidates it inferred from the items in this batch.
 type CatalogBatchResult struct {
-	BatchNumber int                     `json:"batch_number"`
-	Candidates  []CatalogBatchCandidate `json:"candidates"`
+        BatchNumber int                     `json:"batch_number"`
+        Candidates  []CatalogBatchCandidate `json:"candidates"`
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -131,23 +230,23 @@ type CatalogBatchResult struct {
 // internal continuity; if Gemini is unavailable, Mujeeb does not lose any
 // conversation, message, state, or business context.
 type GeminiInteractionContext struct {
-	// PreviousInteractionID is the gemini_interaction_id returned by the
-	// previous successful customer-facing Gemini call for this conversation.
-	// Empty for the first turn of a new conversation or after Gemini history
-	// expiry (1 day free tier, 55 days paid tier per contract ③ §9).
-	PreviousInteractionID string
+        // PreviousInteractionID is the gemini_interaction_id returned by the
+        // previous successful customer-facing Gemini call for this conversation.
+        // Empty for the first turn of a new conversation or after Gemini history
+        // expiry (1 day free tier, 55 days paid tier per contract ③ §9).
+        PreviousInteractionID string
 
-	// ResultingInteractionID is populated by the AI Runtime after a successful
-	// Gemini call. Mujeeb persists this as the new last_gemini_interaction_id
-	// on the conversation row, to be used as PreviousInteractionID in the
-	// next turn.
-	ResultingInteractionID string
+        // ResultingInteractionID is populated by the AI Runtime after a successful
+        // Gemini call. Mujeeb persists this as the new last_gemini_interaction_id
+        // on the conversation row, to be used as PreviousInteractionID in the
+        // next turn.
+        ResultingInteractionID string
 
-	// Store controls whether Gemini server-side history is used. Per contract
-	// ③ §9, Mujeeb uses store=true to enable previous_interaction_id chaining.
-	// When store=false, PreviousInteractionID MUST be empty and chaining is
-	// disabled for that interaction.
-	Store bool
+        // Store controls whether Gemini server-side history is used. Per contract
+        // ③ §9, Mujeeb uses store=true to enable previous_interaction_id chaining.
+        // When store=false, PreviousInteractionID MUST be empty and chaining is
+        // disabled for that interaction.
+        Store bool
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -161,35 +260,35 @@ type GeminiInteractionContext struct {
 // to the AI Contract; those are internal layer resultss. The EffectiveDecision
 // carries the authoritative action and the policy decision Mujeeb reached.
 type EffectiveDecision struct {
-	// DecisionID is the ai_decisions.id this Effective Decision is attached to.
-	DecisionID string
+        // DecisionID is the ai_decisions.id this Effective Decision is attached to.
+        DecisionID string
 
-	// EffectiveAction may differ from the AI proposal's action when policy or
-	// authorization overrode it. For example, if Gemini proposed "answer" but
-	// policy requires approval, EffectiveAction becomes "blocked" until
-	// approval arrives, then transitions to the original action.
-	//
-	// Allowed values: same as AIProposalAction plus "no_action" and "blocked".
-	EffectiveAction string
+        // EffectiveAction may differ from the AI proposal's action when policy or
+        // authorization overrode it. For example, if Gemini proposed "answer" but
+        // policy requires approval, EffectiveAction becomes "blocked" until
+        // approval arrives, then transitions to the original action.
+        //
+        // Allowed values: same as AIProposalAction plus "no_action" and "blocked".
+        EffectiveAction string
 
-	// PolicyDecision is the PolicyEvaluator's verdict per contract ⑥ §12-13.
-	//   allowed           — proceed without human approval
-	//   requires_approval — handoff to human queue; do not execute yet
-	//   denied            — do not execute at all
-	PolicyDecision string
+        // PolicyDecision is the PolicyEvaluator's verdict per contract ⑥ §12-13.
+        //   allowed           — proceed without human approval
+        //   requires_approval — handoff to human queue; do not execute yet
+        //   denied            — do not execute at all
+        PolicyDecision string
 
-	// Reason captures the policy key or authorization reason that produced
-	// this Effective Decision. Useful for audit and human review.
-	Reason string
+        // Reason captures the policy key or authorization reason that produced
+        // this Effective Decision. Useful for audit and human review.
+        Reason string
 
-	// AuthorizedAt is when the Authorization step completed successfully.
-	// Empty if PolicyDecision == "denied".
-	AuthorizedAt *time.Time
+        // AuthorizedAt is when the Authorization step completed successfully.
+        // Empty if PolicyDecision == "denied".
+        AuthorizedAt *time.Time
 
-	// ExecutedAt is when the Executor completed the authorized action.
-	// Per contract ⑥ §14, Execution Result is tracked separately in
-	// ai_runs.status (EXECUTING → COMPLETED/FAILED), not here.
-	ExecutedAt *time.Time
+        // ExecutedAt is when the Executor completed the authorized action.
+        // Per contract ⑥ §14, Execution Result is tracked separately in
+        // ai_runs.status (EXECUTING → COMPLETED/FAILED), not here.
+        ExecutedAt *time.Time
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -203,16 +302,16 @@ type EffectiveDecision struct {
 // (proposed → validated → authorized → executed/expired), while ai_runs.status
 // is the OPERATIONAL trace lifecycle.
 const (
-	AIRunStatusReceived     = "received"
-	AIRunStatusContextBuilt = "context_built"
-	AIRunStatusRunning      = "running"
-	AIRunStatusWaitingTool  = "waiting_tool"
-	AIRunStatusValidating   = "validating"
-	AIRunStatusAuthorized   = "authorized"
-	AIRunStatusExecuting    = "executing"
-	AIRunStatusCompleted    = "completed"
-	AIRunStatusFailed       = "failed"
-	AIRunStatusCancelled    = "cancelled"
+        AIRunStatusReceived     = "received"
+        AIRunStatusContextBuilt = "context_built"
+        AIRunStatusRunning      = "running"
+        AIRunStatusWaitingTool  = "waiting_tool"
+        AIRunStatusValidating   = "validating"
+        AIRunStatusAuthorized   = "authorized"
+        AIRunStatusExecuting    = "executing"
+        AIRunStatusCompleted    = "completed"
+        AIRunStatusFailed       = "failed"
+        AIRunStatusCancelled    = "cancelled"
 )
 
 // AIRunAgentRole — the closed agent roles per contract 11 §2.
@@ -221,61 +320,61 @@ const (
 // infrastructure (Catalog Contract, Validation, Audit, Gemini) but have distinct
 // system prompts, agent roles, tool permissions, and proposal contracts.
 const (
-	AIRunAgentRoleCustomerSales            = "customer_sales"
-	AIRunAgentRoleMerchantCatalogAuthoring = "merchant_catalog_authoring"
+        AIRunAgentRoleCustomerSales            = "customer_sales"
+        AIRunAgentRoleMerchantCatalogAuthoring = "merchant_catalog_authoring"
 )
 
 // AIRunFailureStage per contract ⑨ §30 — pinpoints where the run failed.
 const (
-	AIRunFailureStageContextBuild  = "context_build"
-	AIRunFailureStageGeminiRequest = "gemini_request"
-	AIRunFailureStageToolCall      = "tool_call"
-	AIRunFailureStageValidation    = "validation"
-	AIRunFailureStagePolicy        = "policy"
-	AIRunFailureStageAuthorization = "authorization"
-	AIRunFailureStageExecution     = "execution"
+        AIRunFailureStageContextBuild  = "context_build"
+        AIRunFailureStageGeminiRequest = "gemini_request"
+        AIRunFailureStageToolCall      = "tool_call"
+        AIRunFailureStageValidation    = "validation"
+        AIRunFailureStagePolicy        = "policy"
+        AIRunFailureStageAuthorization = "authorization"
+        AIRunFailureStageExecution     = "execution"
 )
 
 // AIRunFailureCategory per contract ⑨ §6-7 and ⑧ §10 — Retryable vs Non-Retryable.
 //
 // Per contract ⑨ §6-7:
 //
-//	Retryable (transient):  provider_temporary, network, timeout, rate_limit, infrastructure
-//	Non-Retryable:           provider_permanent, invalid_ai_output, invalid_tool_arguments,
-//	                         tenant_violation, invalid_reference, policy_denial,
-//	                         authorization_denial, unsupported_action, execution_failure
+//      Retryable (transient):  provider_temporary, network, timeout, rate_limit, infrastructure
+//      Non-Retryable:           provider_permanent, invalid_ai_output, invalid_tool_arguments,
+//                               tenant_violation, invalid_reference, policy_denial,
+//                               authorization_denial, unsupported_action, execution_failure
 //
 // The Retry Policy service (services/ai_runtime_retry.go) uses this category
 // to decide whether to retry the attempt or fail the run.
 const (
-	AIRunFailureCategoryProviderTemporary    = "provider_temporary"
-	AIRunFailureCategoryProviderPermanent    = "provider_permanent"
-	AIRunFailureCategoryNetwork              = "network"
-	AIRunFailureCategoryTimeout              = "timeout"
-	AIRunFailureCategoryRateLimit            = "rate_limit"
-	AIRunFailureCategoryInvalidAIOutput      = "invalid_ai_output"
-	AIRunFailureCategoryInvalidToolArguments = "invalid_tool_arguments"
-	AIRunFailureCategoryTenantViolation      = "tenant_violation"
-	AIRunFailureCategoryInvalidReference     = "invalid_reference"
-	AIRunFailureCategoryPolicyDenial         = "policy_denial"
-	AIRunFailureCategoryAuthorizationDenial  = "authorization_denial"
-	AIRunFailureCategoryUnsupportedAction    = "unsupported_action"
-	AIRunFailureCategoryExecutionFailure     = "execution_failure"
-	AIRunFailureCategoryInfrastructure       = "infrastructure"
+        AIRunFailureCategoryProviderTemporary    = "provider_temporary"
+        AIRunFailureCategoryProviderPermanent    = "provider_permanent"
+        AIRunFailureCategoryNetwork              = "network"
+        AIRunFailureCategoryTimeout              = "timeout"
+        AIRunFailureCategoryRateLimit            = "rate_limit"
+        AIRunFailureCategoryInvalidAIOutput      = "invalid_ai_output"
+        AIRunFailureCategoryInvalidToolArguments = "invalid_tool_arguments"
+        AIRunFailureCategoryTenantViolation      = "tenant_violation"
+        AIRunFailureCategoryInvalidReference     = "invalid_reference"
+        AIRunFailureCategoryPolicyDenial         = "policy_denial"
+        AIRunFailureCategoryAuthorizationDenial  = "authorization_denial"
+        AIRunFailureCategoryUnsupportedAction    = "unsupported_action"
+        AIRunFailureCategoryExecutionFailure     = "execution_failure"
+        AIRunFailureCategoryInfrastructure       = "infrastructure"
 )
 
 // IsRetryable returns true when the failure category represents a transient
 // error that may succeed on a fresh attempt, per contract ⑨ §6.
 func (c AIRunFailureCategory) IsRetryable() bool {
-	switch c {
-	case AIRunFailureCategoryProviderTemporary,
-		AIRunFailureCategoryNetwork,
-		AIRunFailureCategoryTimeout,
-		AIRunFailureCategoryRateLimit,
-		AIRunFailureCategoryInfrastructure:
-		return true
-	}
-	return false
+        switch c {
+        case AIRunFailureCategoryProviderTemporary,
+                AIRunFailureCategoryNetwork,
+                AIRunFailureCategoryTimeout,
+                AIRunFailureCategoryRateLimit,
+                AIRunFailureCategoryInfrastructure:
+                return true
+        }
+        return false
 }
 
 // AIRunFailureCategory is a string type for type-safety in service code.
@@ -292,131 +391,131 @@ type AIRunFailureCategory string
 // conversation, message, and (optionally) source event. It is NOT a Domain
 // Entity — it is an operational record.
 type AIRunRecord struct {
-	ID                    string
-	BusinessID            string
-	ConversationID        string
-	MessageID             string
-	SourceEventID         string
-	IdempotencyKey        string
-	AgentRole             string
-	Status                string
-	FailureStage          string
-	FailureCategory       string
-	FailureReason         string
-	GeminiInteractionID   string
-	PreviousInteractionID string
+        ID                    string
+        BusinessID            string
+        ConversationID        string
+        MessageID             string
+        SourceEventID         string
+        IdempotencyKey        string
+        AgentRole             string
+        Status                string
+        FailureStage          string
+        FailureCategory       string
+        FailureReason         string
+        GeminiInteractionID   string
+        PreviousInteractionID string
 
-	StartedAt        time.Time
-	ContextBuiltAt   *time.Time
-	RunningStartedAt *time.Time
-	WaitingToolAt    *time.Time
-	ValidatingAt     *time.Time
-	AuthorizedAt     *time.Time
-	ExecutingAt      *time.Time
-	CompletedAt      *time.Time
-	FailedAt         *time.Time
-	CancelledAt      *time.Time
+        StartedAt        time.Time
+        ContextBuiltAt   *time.Time
+        RunningStartedAt *time.Time
+        WaitingToolAt    *time.Time
+        ValidatingAt     *time.Time
+        AuthorizedAt     *time.Time
+        ExecutingAt      *time.Time
+        CompletedAt      *time.Time
+        FailedAt         *time.Time
+        CancelledAt      *time.Time
 
-	CreatedAt time.Time
-	UpdatedAt time.Time
+        CreatedAt time.Time
+        UpdatedAt time.Time
 }
 
 // AIRunAttemptRecord mirrors ai_run_attempts row. Per contract ⑨ §27, an
 // Attempt is one operational execution attempt within a logical AI Run.
 type AIRunAttemptRecord struct {
-	ID                 string
-	AIRunID            string
-	AttemptNumber      int
-	Provider           string
-	Model              string
-	Status             string
-	FailureStage       string
-	FailureCategory    string
-	FailureReason      string
-	RequestPayloadHash string
-	StartedAt          time.Time
-	FinishedAt         *time.Time
-	CreatedAt          time.Time
+        ID                 string
+        AIRunID            string
+        AttemptNumber      int
+        Provider           string
+        Model              string
+        Status             string
+        FailureStage       string
+        FailureCategory    string
+        FailureReason      string
+        RequestPayloadHash string
+        StartedAt          time.Time
+        FinishedAt         *time.Time
+        CreatedAt          time.Time
 }
 
 // AIToolCallRecord mirrors ai_tool_calls row. Per contract ⑧ §7, every
 // function/tool invocation by Gemini is traced here.
 type AIToolCallRecord struct {
-	ID            string
-	AIRunID       string
-	AttemptID     string
-	ToolName      string
-	ToolCallID    string
-	Status        string
-	RequestParams []byte
-	ResultPayload []byte
-	FailureReason string
-	StartedAt     time.Time
-	FinishedAt    *time.Time
-	LatencyMs     int
-	CreatedAt     time.Time
+        ID            string
+        AIRunID       string
+        AttemptID     string
+        ToolName      string
+        ToolCallID    string
+        Status        string
+        RequestParams []byte
+        ResultPayload []byte
+        FailureReason string
+        StartedAt     time.Time
+        FinishedAt    *time.Time
+        LatencyMs     int
+        CreatedAt     time.Time
 }
 
 // AIGeminiInteractionRecord mirrors ai_gemini_interactions row.
 type AIGeminiInteractionRecord struct {
-	ID                    string
-	AIRunID               string
-	AttemptID             string
-	GeminiInteractionID   string
-	PreviousInteractionID string
-	Model                 string
-	SystemInstructionHash string
-	ToolsHash             string
-	GenerationConfigHash  string
-	StartedAt             time.Time
-	FinishedAt            *time.Time
-	CreatedAt             time.Time
+        ID                    string
+        AIRunID               string
+        AttemptID             string
+        GeminiInteractionID   string
+        PreviousInteractionID string
+        Model                 string
+        SystemInstructionHash string
+        ToolsHash             string
+        GenerationConfigHash  string
+        StartedAt             time.Time
+        FinishedAt            *time.Time
+        CreatedAt             time.Time
 }
 
 // AICatalogBatchRecord mirrors ai_catalog_batches row. Per contract ② §22 and
 // ⑨ §22, every batch in a Catalog Evaluation has a tracked state.
 type AICatalogBatchRecord struct {
-	ID             string
-	AIRunID        string
-	BatchNumber    int
-	Status         string
-	ItemsCount     int
-	SchemasCount   int
-	InputTokens    int
-	CandidateCount int
-	FailureReason  string
-	StartedAt      *time.Time
-	CompletedAt    *time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+        ID             string
+        AIRunID        string
+        BatchNumber    int
+        Status         string
+        ItemsCount     int
+        SchemasCount   int
+        InputTokens    int
+        CandidateCount int
+        FailureReason  string
+        StartedAt      *time.Time
+        CompletedAt    *time.Time
+        CreatedAt      time.Time
+        UpdatedAt      time.Time
 }
 
 // AIUsageTelemetryRecord mirrors ai_usage_telemetry row. Per contract ⑧ §8.
 type AIUsageTelemetryRecord struct {
-	ID                      string
-	AIRunID                 string
-	AttemptID               string
-	Provider                string
-	Model                   string
-	InputTokens             int
-	CachedTokens            int
-	OutputTokens            int
-	ToolCallsCount          int
-	CatalogProjectionTokens int
-	EstimatedCostMicros     int64
-	Currency                string
-	MeasuredAt              time.Time
-	CreatedAt               time.Time
+        ID                      string
+        AIRunID                 string
+        AttemptID               string
+        Provider                string
+        Model                   string
+        InputTokens             int
+        CachedTokens            int
+        OutputTokens            int
+        ToolCallsCount          int
+        CatalogProjectionTokens int
+        EstimatedCostMicros     int64
+        Currency                string
+        MeasuredAt              time.Time
+        CreatedAt               time.Time
 }
 
 // AIStageLatencyRecord mirrors ai_stage_latencies row. Per contract ⑧ §9.
 type AIStageLatencyRecord struct {
-	ID         string
-	AIRunID    string
-	Stage      string
-	LatencyMs  int
-	MeasuredAt time.Time
-	CreatedAt  time.Time
+        ID         string
+        AIRunID    string
+        Stage      string
+        LatencyMs  int
+        MeasuredAt time.Time
+        CreatedAt  time.Time
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -430,77 +529,77 @@ type AIStageLatencyRecord struct {
 // event. The idempotency_key + business_id uniqueness enforces this at the DB
 // level (see uq_ai_runs_idempotency index).
 type AIRunRepository interface {
-	CreateRun(ctx context.Context, run AIRunRecord) (AIRunRecord, error)
-	GetRun(ctx context.Context, businessID, runID string) (AIRunRecord, error)
-	GetByIdempotencyKey(ctx context.Context, businessID, idempotencyKey string) (AIRunRecord, error)
-	UpdateRunStatus(ctx context.Context, businessID, runID string, patch AIRunStatusPatch) (AIRunRecord, error)
-	ListRunsByConversation(ctx context.Context, businessID, conversationID string, limit int) ([]AIRunRecord, error)
+        CreateRun(ctx context.Context, run AIRunRecord) (AIRunRecord, error)
+        GetRun(ctx context.Context, businessID, runID string) (AIRunRecord, error)
+        GetByIdempotencyKey(ctx context.Context, businessID, idempotencyKey string) (AIRunRecord, error)
+        UpdateRunStatus(ctx context.Context, businessID, runID string, patch AIRunStatusPatch) (AIRunRecord, error)
+        ListRunsByConversation(ctx context.Context, businessID, conversationID string, limit int) ([]AIRunRecord, error)
 
-	CreateAttempt(ctx context.Context, attempt AIRunAttemptRecord) (AIRunAttemptRecord, error)
-	UpdateAttempt(ctx context.Context, attemptID string, patch AIRunAttemptPatch) (AIRunAttemptRecord, error)
-	ListAttempts(ctx context.Context, runID string) ([]AIRunAttemptRecord, error)
+        CreateAttempt(ctx context.Context, attempt AIRunAttemptRecord) (AIRunAttemptRecord, error)
+        UpdateAttempt(ctx context.Context, attemptID string, patch AIRunAttemptPatch) (AIRunAttemptRecord, error)
+        ListAttempts(ctx context.Context, runID string) ([]AIRunAttemptRecord, error)
 
-	CreateToolCall(ctx context.Context, call AIToolCallRecord) (AIToolCallRecord, error)
-	UpdateToolCall(ctx context.Context, callID string, patch AIToolCallPatch) (AIToolCallRecord, error)
-	ListToolCalls(ctx context.Context, runID string) ([]AIToolCallRecord, error)
+        CreateToolCall(ctx context.Context, call AIToolCallRecord) (AIToolCallRecord, error)
+        UpdateToolCall(ctx context.Context, callID string, patch AIToolCallPatch) (AIToolCallRecord, error)
+        ListToolCalls(ctx context.Context, runID string) ([]AIToolCallRecord, error)
 
-	CreateGeminiInteraction(ctx context.Context, interaction AIGeminiInteractionRecord) (AIGeminiInteractionRecord, error)
-	ListGeminiInteractions(ctx context.Context, runID string) ([]AIGeminiInteractionRecord, error)
+        CreateGeminiInteraction(ctx context.Context, interaction AIGeminiInteractionRecord) (AIGeminiInteractionRecord, error)
+        ListGeminiInteractions(ctx context.Context, runID string) ([]AIGeminiInteractionRecord, error)
 
-	CreateCatalogBatch(ctx context.Context, batch AICatalogBatchRecord) (AICatalogBatchRecord, error)
-	UpdateCatalogBatch(ctx context.Context, batchID string, patch AICatalogBatchPatch) (AICatalogBatchRecord, error)
-	ListCatalogBatches(ctx context.Context, runID string) ([]AICatalogBatchRecord, error)
+        CreateCatalogBatch(ctx context.Context, batch AICatalogBatchRecord) (AICatalogBatchRecord, error)
+        UpdateCatalogBatch(ctx context.Context, batchID string, patch AICatalogBatchPatch) (AICatalogBatchRecord, error)
+        ListCatalogBatches(ctx context.Context, runID string) ([]AICatalogBatchRecord, error)
 
-	RecordUsage(ctx context.Context, usage AIUsageTelemetryRecord) (AIUsageTelemetryRecord, error)
-	RecordStageLatency(ctx context.Context, latency AIStageLatencyRecord) (AIStageLatencyRecord, error)
+        RecordUsage(ctx context.Context, usage AIUsageTelemetryRecord) (AIUsageTelemetryRecord, error)
+        RecordStageLatency(ctx context.Context, latency AIStageLatencyRecord) (AIStageLatencyRecord, error)
 }
 
 // AIRunStatusPatch is the partial update for an AI Run.
 type AIRunStatusPatch struct {
-	Status                string
-	FailureStage          *string
-	FailureCategory       *string
-	FailureReason         *string
-	GeminiInteractionID   *string
-	PreviousInteractionID *string
+        Status                string
+        FailureStage          *string
+        FailureCategory       *string
+        FailureReason         *string
+        GeminiInteractionID   *string
+        PreviousInteractionID *string
 
-	ContextBuiltAt   *time.Time
-	RunningStartedAt *time.Time
-	WaitingToolAt    *time.Time
-	ValidatingAt     *time.Time
-	AuthorizedAt     *time.Time
-	ExecutingAt      *time.Time
-	CompletedAt      *time.Time
-	FailedAt         *time.Time
-	CancelledAt      *time.Time
+        ContextBuiltAt   *time.Time
+        RunningStartedAt *time.Time
+        WaitingToolAt    *time.Time
+        ValidatingAt     *time.Time
+        AuthorizedAt     *time.Time
+        ExecutingAt      *time.Time
+        CompletedAt      *time.Time
+        FailedAt         *time.Time
+        CancelledAt      *time.Time
 }
 
 // AIRunAttemptPatch is the partial update for an Attempt.
 type AIRunAttemptPatch struct {
-	Status          string
-	FailureStage    *string
-	FailureCategory *string
-	FailureReason   *string
-	FinishedAt      *time.Time
+        Status          string
+        FailureStage    *string
+        FailureCategory *string
+        FailureReason   *string
+        FinishedAt      *time.Time
 }
 
 // AIToolCallPatch is the partial update for a Tool Call.
 type AIToolCallPatch struct {
-	Status        string
-	ResultPayload []byte
-	FailureReason *string
-	FinishedAt    *time.Time
-	LatencyMs     *int
+        Status        string
+        ResultPayload []byte
+        FailureReason *string
+        FinishedAt    *time.Time
+        LatencyMs     *int
 }
 
 // AICatalogBatchPatch is the partial update for a Catalog Batch.
 type AICatalogBatchPatch struct {
-	Status         string
-	CandidateCount *int
-	InputTokens    *int
-	FailureReason  *string
-	StartedAt      *time.Time
-	CompletedAt    *time.Time
+        Status         string
+        CandidateCount *int
+        InputTokens    *int
+        FailureReason  *string
+        StartedAt      *time.Time
+        CompletedAt    *time.Time
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -511,10 +610,10 @@ type AICatalogBatchPatch struct {
 //
 // Per contract ④ §8:
 //
-//	Mujeeb System Contract → system_instruction
-//	Mujeeb Input Context → input (contents)
-//	Catalog boundary → Function Calling / tool
-//	Mujeeb Output Contract → Structured Output (responseSchema)
+//      Mujeeb System Contract → system_instruction
+//      Mujeeb Input Context → input (contents)
+//      Catalog boundary → Function Calling / tool
+//      Mujeeb Output Contract → Structured Output (responseSchema)
 //
 // ContractRuntime replaces the legacy AIRuntime interface. New code MUST
 // use ContractRuntime; the legacy AIRuntime is kept only for migration.
@@ -525,49 +624,49 @@ type AICatalogBatchPatch struct {
 // Per contract ⑤ §7, the Catalog Entity Contract is sent as part of system
 // instruction; it is passed through as opaque JSON.
 type ContractRuntime interface {
-	DecideContract(ctx context.Context, input ContractRuntimeInput) (ContractRuntimeOutput, error)
+        DecideContract(ctx context.Context, input ContractRuntimeInput) (ContractRuntimeOutput, error)
 }
 
 // ContractRuntimeInput is the input to ContractRuntime.DecideContract.
 type ContractRuntimeInput struct {
-	// DecisionInput carries business_id, conversation_id, message text, channel,
-	// and the built AIContext (per contract ③ §2).
-	DecisionInput AIDecisionInput
+        // DecisionInput carries business_id, conversation_id, message text, channel,
+        // and the built AIContext (per contract ③ §2).
+        DecisionInput AIDecisionInput
 
-	// GeminiInteraction per contract ③ §4. Empty PreviousInteractionID means
-	// this is the first turn (no chaining). ResultingInteractionID is populated
-	// by the runtime after a successful Gemini call.
-	GeminiInteraction GeminiInteractionContext
+        // GeminiInteraction per contract ③ §4. Empty PreviousInteractionID means
+        // this is the first turn (no chaining). ResultingInteractionID is populated
+        // by the runtime after a successful Gemini call.
+        GeminiInteraction GeminiInteractionContext
 
-	// EntityContractPayload is the JSON-serializable Catalog Entity Contract
-	// payload per contract ⑤ §7. Passed as raw bytes to avoid a circular
-	// dependency between ports and services (where CatalogEntityContractPayload
-	// is defined). The runtime passes it through to Gemini as system_instruction.
-	EntityContractPayload []byte
+        // EntityContractPayload is the JSON-serializable Catalog Entity Contract
+        // payload per contract ⑤ §7. Passed as raw bytes to avoid a circular
+        // dependency between ports and services (where CatalogEntityContractPayload
+        // is defined). The runtime passes it through to Gemini as system_instruction.
+        EntityContractPayload []byte
 }
 
 // ContractRuntimeOutput is the output of ContractRuntime.DecideContract.
 type ContractRuntimeOutput struct {
-	// Proposal is the contract ④ §4 structured Gemini output.
-	Proposal AIGeminiProposal
+        // Proposal is the contract ④ §4 structured Gemini output.
+        Proposal AIGeminiProposal
 
-	// GeminiInteraction echoes the input and is populated with the
-	// ResultingInteractionID returned by Gemini. Caller persists this as the
-	// new last_gemini_interaction_id on the conversation row per contract ③ §4.
-	GeminiInteraction GeminiInteractionContext
+        // GeminiInteraction echoes the input and is populated with the
+        // ResultingInteractionID returned by Gemini. Caller persists this as the
+        // new last_gemini_interaction_id on the conversation row per contract ③ §4.
+        GeminiInteraction GeminiInteractionContext
 
-	// Usage per contract ⑧ §8 (token counts + estimated cost).
-	Usage ContractUsageTelemetry
+        // Usage per contract ⑧ §8 (token counts + estimated cost).
+        Usage ContractUsageTelemetry
 
-	// LatencyMs per contract ⑧ §9 (the Gemini API call latency).
-	LatencyMs int64
+        // LatencyMs per contract ⑧ §9 (the Gemini API call latency).
+        LatencyMs int64
 }
 
 // ContractUsageTelemetry is the per-call usage data per contract ⑧ §8.
 type ContractUsageTelemetry struct {
-	InputTokens         int
-	CachedTokens        int
-	OutputTokens        int
-	Model               string
-	EstimatedCostMicros int64
+        InputTokens         int
+        CachedTokens        int
+        OutputTokens        int
+        Model               string
+        EstimatedCostMicros int64
 }

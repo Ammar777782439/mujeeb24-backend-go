@@ -115,17 +115,144 @@ func (h *MerchantAIHandler) HandleTurn(ctx context.Context, in *contract.Merchan
         log.Printf("[MerchantAIHandler] RESPONSE business=%s session=%s operation=%s status=%s",
                 in.BusinessID, in.Body.SessionID, op.Operation, op.Status)
 
-        // Project to the HTTP response per contract 11 §5.
+        // Per ADR-044 layer 2: project the structured proposal fields into
+        // the HTTP response. The frontend renders these as an approval card.
+        // Per ADR-044 layer 3: MissingFields is populated when the agent
+        // needs more data (status=needs_more_data) — the frontend can render
+        // a form for these.
         out := &contract.Single[contract.MerchantAIChatResponse]{}
-        out.Body.Data = contract.MerchantAIChatResponse{
+        resp := contract.MerchantAIChatResponse{
                 Operation:    op.Operation,
                 Status:       op.Status,
                 ResponseText: op.ResponseText,
-                // SessionID is returned so the dashboard can send the next turn with
-                // the same session_id (continuity per contract ③ §1 + migration 000054).
-                // We extract it from the input if provided; the agent creates a new
-                // session when input.SessionID is empty.
+                // Per ADR-043 fix: also return the resolved session ID (not the
+                // input session_id which may be empty on first turn).
                 SessionID: in.Body.SessionID,
         }
+        if op.Create != nil {
+                resp.Create = mapCreateToHTTP(op.Create)
+                resp.TargetCatalogID = op.Create.TargetCatalogID
+        }
+        if op.Update != nil {
+                resp.Update = mapUpdateToHTTP(op.Update)
+        }
+        if op.Delete != nil {
+                resp.Delete = mapDeleteToHTTP(op.Delete)
+        }
+        if len(op.MissingFields) > 0 {
+                resp.MissingFields = make([]contract.MerchantAIMissingField, 0, len(op.MissingFields))
+                for _, f := range op.MissingFields {
+                        resp.MissingFields = append(resp.MissingFields, contract.MerchantAIMissingField{
+                                Path:        f.Path,
+                                DisplayName: f.DisplayName,
+                                DataType:    f.DataType,
+                                Reason:      f.Reason,
+                        })
+                }
+        }
+        out.Body.Data = resp
         return out, nil
+}
+
+// mapCreateToHTTP converts the agent's CatalogCreatePayload to the HTTP
+// projection per ADR-044 layer 2.
+func mapCreateToHTTP(c *services.CatalogCreatePayload) *contract.MerchantAIProposalCreate {
+        if c == nil {
+                return nil
+        }
+        out := &contract.MerchantAIProposalCreate{
+                TargetCatalogID: c.TargetCatalogID,
+        }
+        if c.Item != nil {
+                out.Item = &contract.MerchantAIProposalItem{
+                        Name:                 c.Item.Name,
+                        ItemType:             c.Item.ItemType,
+                        ShortDescription:     c.Item.ShortDescription,
+                        LongDescription:      c.Item.LongDescription,
+                        PricingMode:          c.Item.PricingMode,
+                        AvailabilityMode:     c.Item.AvailabilityMode,
+                        FulfillmentMode:      c.Item.FulfillmentMode,
+                        RequiresConfirmation: c.Item.RequiresConfirmation,
+                        Attributes:           c.Item.Attributes,
+                }
+        }
+        for _, v := range c.Variants {
+                out.Variants = append(out.Variants, contract.MerchantAIProposalVariant{
+                        Name:       v.Name,
+                        Attributes: v.Attributes,
+                })
+        }
+        for _, o := range c.Offers {
+                out.Offers = append(out.Offers, contract.MerchantAIProposalOffer{
+                        VariantNameRef:     o.VariantNameRef,
+                        Name:               o.Name,
+                        PricingMode:        o.PricingMode,
+                        Amount:             o.Amount,
+                        Currency:           o.Currency,
+                        PricingUnit:        o.PricingUnit,
+                        PriceSource:        o.PriceSource,
+                        AvailabilityMode:   o.AvailabilityMode,
+                        AvailabilityStatus: o.AvailabilityStatus,
+                        FulfillmentMode:    o.FulfillmentMode,
+                        ValidityFrom:       o.ValidityFrom,
+                        ValidityUntil:      o.ValidityUntil,
+                })
+        }
+        return out
+}
+
+// mapUpdateToHTTP converts the agent's CatalogUpdatePayload to the HTTP projection.
+func mapUpdateToHTTP(u *services.CatalogUpdatePayload) *contract.MerchantAIProposalUpdate {
+        if u == nil {
+                return nil
+        }
+        out := &contract.MerchantAIProposalUpdate{
+                ItemID: u.ItemID,
+                Changes: contract.MerchantAIProposalItem{
+                        Name:                  u.Changes.Name,
+                        ItemType:              u.Changes.ItemType,
+                        ShortDescription:      u.Changes.ShortDescription,
+                        LongDescription:       u.Changes.LongDescription,
+                        PricingMode:           u.Changes.PricingMode,
+                        AvailabilityMode:      u.Changes.AvailabilityMode,
+                        FulfillmentMode:       u.Changes.FulfillmentMode,
+                        RequiresConfirmation: u.Changes.RequiresConfirmation,
+                        Attributes:            u.Changes.Attributes,
+                },
+        }
+        for _, v := range u.NewVariants {
+                out.NewVariants = append(out.NewVariants, contract.MerchantAIProposalVariant{
+                        Name:       v.Name,
+                        Attributes: v.Attributes,
+                })
+        }
+        for _, o := range u.NewOffers {
+                out.NewOffers = append(out.NewOffers, contract.MerchantAIProposalOffer{
+                        VariantNameRef:     o.VariantNameRef,
+                        Name:               o.Name,
+                        PricingMode:        o.PricingMode,
+                        Amount:             o.Amount,
+                        Currency:           o.Currency,
+                        PricingUnit:        o.PricingUnit,
+                        PriceSource:        o.PriceSource,
+                        AvailabilityMode:   o.AvailabilityMode,
+                        AvailabilityStatus: o.AvailabilityStatus,
+                        FulfillmentMode:    o.FulfillmentMode,
+                        ValidityFrom:       o.ValidityFrom,
+                        ValidityUntil:      o.ValidityUntil,
+                })
+        }
+        return out
+}
+
+// mapDeleteToHTTP converts the agent's CatalogDeletePayload to the HTTP projection.
+func mapDeleteToHTTP(d *services.CatalogDeletePayload) *contract.MerchantAIProposalDelete {
+        if d == nil {
+                return nil
+        }
+        return &contract.MerchantAIProposalDelete{
+                ItemID:      d.ItemID,
+                Confirmed:   d.Confirmed,
+                ReasonGiven: d.ReasonGiven,
+        }
 }

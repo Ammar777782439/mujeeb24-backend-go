@@ -719,42 +719,56 @@ func (a *MerchantCatalogAIAgent) failRun(ctx context.Context, run ports.AIRunRec
 // is populated with the specific fields required.
 func mapGeminiProposalToOperation(p ports.AIGeminiProposal) CatalogOperationProposal {
         // Per contract 11 §6: default to ask_merchant (non-mutation gather-data).
+        // Per ADR-044 layer 1: strip the [CREATE]/[UPDATE]/[DELETE] prefix from
+        // response_text — the prefix is internal routing metadata, not for the
+        // merchant to see. The agent reads it to determine operation type, then
+        // removes it from the human-readable text.
+        respText := stripOperationPrefix(strings.TrimSpace(p.ResponseText))
         op := CatalogOperationProposal{
                 Operation:    "ask_merchant",
                 Status:       string(p.Status),
-                ResponseText: p.ResponseText,
+                ResponseText: respText,
         }
-        // Per ADR-041: the operation type is INFERRED from the response_text
-        // content, NOT from the action field. This is because the B2B system
-        // prompt uses action=answer for both:
-        //   (a) informational answers ("you have 3 catalogs")
-        //   (b) create/update/delete proposals (when Gemini's ResponseText
-        //       contains structured JSON for the operation)
-        //
-        // The disambiguation happens via the CatalogResolutionService AFTER
-        // this mapping: if the operation is a mutation (create/update/delete)
-        // and TargetCatalogID is empty, the resolution converts it to
-        // ask_merchant. So here we just keep the mapping conservative — only
-        // set Operation to create/update/delete when status=resolved AND
-        // the ResponseText contains the trigger keyword for that operation.
-        //
         // Per contract 11 §6: when the status is not resolved, we never propose
         // a mutation — we ask for more data.
         if p.Status != ports.AIProposalStatusResolved {
                 return op
         }
 
-        // Per ADR-041: detect the operation intent from the response text.
-        // This is a simple substring check — the system prompt tells Gemini
-        // to encode the operation as a prefix like [CREATE], [UPDATE], [DELETE].
-        // If no prefix is present, treat it as a pure informational answer.
-        respText := strings.TrimSpace(p.ResponseText)
+        // Per ADR-044 layer 2: PREFER the structured `proposal` field if Gemini
+        // populated it. This is the source of truth — the prefix in response_text
+        // is a fallback for backward compatibility.
+        if p.Proposal != nil && p.Proposal.Operation != "" {
+                switch p.Proposal.Operation {
+                case "create":
+                        if p.Proposal.Create != nil {
+                                op.Operation = "create"
+                                op.Create = mapProposalCreateToPayload(p.Proposal.Create)
+                        }
+                case "update":
+                        if p.Proposal.Update != nil {
+                                op.Operation = "update"
+                                op.Update = mapProposalUpdateToPayload(p.Proposal.Update)
+                        }
+                case "delete":
+                        if p.Proposal.Delete != nil {
+                                op.Operation = "delete"
+                                op.Delete = mapProposalDeleteToPayload(p.Proposal.Delete)
+                        }
+                }
+                return op
+        }
+
+        // Fallback (no structured proposal): infer operation from the prefix.
+        // This path is taken when an older Gemini prompt didn't populate the
+        // proposal field. The prefix was already stripped above.
+        respTextWithPrefix := strings.TrimSpace(p.ResponseText)
         switch {
-        case strings.Contains(respText, "[CREATE]") || strings.Contains(respText, "[create]"):
+        case strings.Contains(respTextWithPrefix, "[CREATE]") || strings.Contains(respTextWithPrefix, "[create]"):
                 op.Operation = "create"
-        case strings.Contains(respText, "[UPDATE]") || strings.Contains(respText, "[update]"):
+        case strings.Contains(respTextWithPrefix, "[UPDATE]") || strings.Contains(respTextWithPrefix, "[update]"):
                 op.Operation = "update"
-        case strings.Contains(respText, "[DELETE]") || strings.Contains(respText, "[delete]"):
+        case strings.Contains(respTextWithPrefix, "[DELETE]") || strings.Contains(respTextWithPrefix, "[delete]"):
                 op.Operation = "delete"
         default:
                 // Per ADR-041: no operation keyword → keep ask_merchant. This is
@@ -763,6 +777,133 @@ func mapGeminiProposalToOperation(p ports.AIGeminiProposal) CatalogOperationProp
                 op.Operation = "answer"
         }
         return op
+}
+
+// stripOperationPrefix removes the [CREATE]/[UPDATE]/[DELETE]/[create]/[update]/[delete]
+// prefix from response_text per ADR-044 layer 1. The prefix is internal
+// routing metadata; the merchant should never see it in the chat.
+//
+// Examples:
+//   "[CREATE] تم تجهيز مسودة..." → "تم تجهيز مسودة..."
+//   "[UPDATE] تم تعديل السعر..." → "تم تعديل السعر..."
+//
+// Per ADR-042, the prefix is also encoded by the prompt as an instruction
+// to Gemini. After Gemini returns, the agent strips it before returning
+// the proposal to the HTTP handler (which then sends it to the frontend).
+func stripOperationPrefix(text string) string {
+        for _, prefix := range []string{"[CREATE]", "[UPDATE]", "[DELETE]", "[create]", "[update]", "[delete]"} {
+                if strings.HasPrefix(text, prefix) {
+                        return strings.TrimSpace(strings.TrimPrefix(text, prefix))
+                }
+        }
+        return text
+}
+
+// mapProposalCreateToPayload converts the ports-level proposal create struct
+// to the agent's CatalogCreatePayload. Per ADR-041, TargetCatalogID is
+// intentionally NOT mapped here — it's populated by resolveTargetCatalog
+// after the CatalogResolutionService runs.
+func mapProposalCreateToPayload(p *ports.CatalogProposalCreate) *CatalogCreatePayload {
+        if p == nil {
+                return nil
+        }
+        out := &CatalogCreatePayload{}
+        if p.Item != nil {
+                out.Item = &CatalogItemDraft{
+                        Name:                 p.Item.Name,
+                        ItemType:             p.Item.ItemType,
+                        ShortDescription:     p.Item.ShortDescription,
+                        LongDescription:      p.Item.LongDescription,
+                        PricingMode:          p.Item.PricingMode,
+                        AvailabilityMode:     p.Item.AvailabilityMode,
+                        FulfillmentMode:      p.Item.FulfillmentMode,
+                        RequiresConfirmation: p.Item.RequiresConfirmation,
+                        Attributes:           p.Item.Attributes,
+                }
+        }
+        for _, v := range p.Variants {
+                out.Variants = append(out.Variants, CatalogVariantDraft{
+                        Name:       v.Name,
+                        Attributes: v.Attributes,
+                })
+        }
+        for _, o := range p.Offers {
+                out.Offers = append(out.Offers, CatalogOfferDraft{
+                        VariantNameRef:     o.VariantNameRef,
+                        Name:               o.Name,
+                        PricingMode:        o.PricingMode,
+                        Amount:             o.Amount,
+                        Currency:           o.Currency,
+                        PricingUnit:        o.PricingUnit,
+                        PriceSource:        o.PriceSource,
+                        AvailabilityMode:   o.AvailabilityMode,
+                        AvailabilityStatus: o.AvailabilityStatus,
+                        FulfillmentMode:    o.FulfillmentMode,
+                        ValidityFrom:       o.ValidityFrom,
+                        ValidityUntil:      o.ValidityUntil,
+                })
+        }
+        // Note: Schema/Definitions are not carried over from the AI proposal
+        // payload (omitted per ADR-044 layer 2 scope).
+        return out
+}
+
+// mapProposalUpdateToPayload converts the ports-level proposal update struct
+// to the agent's CatalogUpdatePayload.
+func mapProposalUpdateToPayload(p *ports.CatalogProposalUpdate) *CatalogUpdatePayload {
+        if p == nil {
+                return nil
+        }
+        out := &CatalogUpdatePayload{
+                ItemID:  p.ItemID,
+                Changes: CatalogItemDraft{
+                        Name:                  p.Changes.Name,
+                        ItemType:              p.Changes.ItemType,
+                        ShortDescription:      p.Changes.ShortDescription,
+                        LongDescription:       p.Changes.LongDescription,
+                        PricingMode:           p.Changes.PricingMode,
+                        AvailabilityMode:      p.Changes.AvailabilityMode,
+                        FulfillmentMode:       p.Changes.FulfillmentMode,
+                        RequiresConfirmation: p.Changes.RequiresConfirmation,
+                        Attributes:            p.Changes.Attributes,
+                },
+        }
+        for _, v := range p.NewVariants {
+                out.NewVariants = append(out.NewVariants, CatalogVariantDraft{
+                        Name:       v.Name,
+                        Attributes: v.Attributes,
+                })
+        }
+        for _, o := range p.NewOffers {
+                out.NewOffers = append(out.NewOffers, CatalogOfferDraft{
+                        VariantNameRef:     o.VariantNameRef,
+                        Name:               o.Name,
+                        PricingMode:        o.PricingMode,
+                        Amount:             o.Amount,
+                        Currency:           o.Currency,
+                        PricingUnit:        o.PricingUnit,
+                        PriceSource:        o.PriceSource,
+                        AvailabilityMode:   o.AvailabilityMode,
+                        AvailabilityStatus: o.AvailabilityStatus,
+                        FulfillmentMode:    o.FulfillmentMode,
+                        ValidityFrom:       o.ValidityFrom,
+                        ValidityUntil:      o.ValidityUntil,
+                })
+        }
+        return out
+}
+
+// mapProposalDeleteToPayload converts the ports-level proposal delete struct
+// to the agent's CatalogDeletePayload.
+func mapProposalDeleteToPayload(p *ports.CatalogProposalDelete) *CatalogDeletePayload {
+        if p == nil {
+                return nil
+        }
+        return &CatalogDeletePayload{
+                ItemID:      p.ItemID,
+                Confirmed:   p.Confirmed,
+                ReasonGiven: p.ReasonGiven,
+        }
 }
 
 // MerchantCatalogAITurnInput is the input to one merchant turn.
