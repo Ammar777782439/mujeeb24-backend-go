@@ -1,208 +1,214 @@
 package ports
 
 import (
-	"context"
-	"time"
+        "context"
+        "time"
 )
 
 type AIRuntime interface {
-	Decide(context.Context, AIDecisionInput) (AIDecisionProposal, error)
+        Decide(context.Context, AIDecisionInput) (AIDecisionProposal, error)
 }
 
 type AIDecisionInput struct {
-	BusinessID             string
-	ConversationID         string
-	SourceMessageReference string
-	Text                   string
-	Channel                string
-	PolicyVersion          string
-	Context                *AIContext
+        BusinessID             string
+        ConversationID         string
+        SourceMessageReference string
+        Text                   string
+        Channel                string
+        PolicyVersion          string
+        Context                *AIContext
 }
 
 type ContextBuildInput struct {
-	BusinessID             string
-	ConversationID         string
-	SourceMessageReference string
-	Text                   string
-	Channel                string
-	PolicyVersion          string
-	ConversationState      *ConversationStateRecord
-	RecentMessages         []AIRecentMessageEvidence
+        BusinessID             string
+        ConversationID         string
+        SourceMessageReference string
+        Text                   string
+        Channel                string
+        PolicyVersion          string
+        ConversationState      *ConversationStateRecord
+        RecentMessages         []AIRecentMessageEvidence
 }
 
 type AIContextBuilder interface {
-	Build(context.Context, ContextBuildInput) (AIContext, error)
+        Build(context.Context, ContextBuildInput) (AIContext, error)
 }
 
 type AIPolicyEvaluator interface {
-	Evaluate(AIDecisionProposal, *AIContext) AIDecisionProposal
+        Evaluate(AIDecisionProposal, *AIContext) AIDecisionProposal
 }
 
 type AIContext struct {
-	SchemaVersion          int
-	Freshness              string
-	Business               AIContextBusiness
-	Conversation           AIContextConversation
-	Customer               AIContextCustomer
-	CatalogEvidence        []AICatalogEvidence
-	OfferEvidence          []AIOfferEvidence
-	VariantEvidence        []AIVariantEvidence
-	KnowledgeEvidence      []AIKnowledgeEvidence
-	BusinessPolicyEvidence []AIBusinessPolicyEvidence
-	RecentMessages         []AIRecentMessageEvidence
-	PolicyEvidence         AIPolicyEvidence
-	KnowledgeState         string
-	ConversationState      *ConversationStateRecord
-	GeneratedAt            time.Time
-	ExpiresAt              time.Time
-	// CatalogSummary is a lightweight list of ALL active catalog items
-	// (just ID + name) so Gemini knows the full catalog exists, even
-	// though only MaxItems have full evidence. When a customer asks
-	// about a product that's in the summary but not in the detailed
-	// evidence, Gemini returns needs_more_data → triggers batch evaluation.
-	CatalogSummary []CatalogSummaryEntry
+        SchemaVersion          int
+        Freshness              string
+        Business               AIContextBusiness
+        Conversation           AIContextConversation
+        Customer               AIContextCustomer
+        CatalogEvidence        []AICatalogEvidence
+        OfferEvidence          []AIOfferEvidence
+        VariantEvidence        []AIVariantEvidence
+        KnowledgeEvidence      []AIKnowledgeEvidence
+        BusinessPolicyEvidence []AIBusinessPolicyEvidence
+        RecentMessages         []AIRecentMessageEvidence
+        PolicyEvidence         AIPolicyEvidence
+        KnowledgeState         string
+        ConversationState      *ConversationStateRecord
+        GeneratedAt            time.Time
+        ExpiresAt              time.Time
+        // CatalogSummary is a lightweight list of ALL active catalog items
+        // (just ID + name) so Gemini knows the full catalog exists, even
+        // though only MaxItems have full evidence. When a customer asks
+        // about a product that's in the summary but not in the detailed
+        // evidence, Gemini returns needs_more_data → triggers batch evaluation.
+        CatalogSummary []CatalogSummaryEntry
+        // ConversationSummary is the LLM-generated running summary of older
+        // conversation turns (everything older than the sliding window of
+        // recent messages). Per ADR-039, this is sent to Gemini alongside
+        // RecentMessages so it can understand long conversation context
+        // without us sending the full history verbatim.
+        ConversationSummary string
 }
 
 // CatalogSummaryEntry is a lightweight catalog item reference — just
 // enough for Gemini to know the product exists without loading full
 // evidence for every item (which would exceed token limits).
 type CatalogSummaryEntry struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+        ID   string `json:"id"`
+        Name string `json:"name"`
 }
 
 type AIStateProposal struct {
-	Focus         *ConversationFocus      `json:"focus,omitempty"`
-	Comparison    *ConversationComparison `json:"comparison,omitempty"`
-	Kind          string                  `json:"kind"`
-	ReferenceText string                  `json:"reference_text,omitempty"`
-	Alternatives  []ConversationFocus     `json:"alternatives,omitempty"`
+        Focus         *ConversationFocus      `json:"focus,omitempty"`
+        Comparison    *ConversationComparison `json:"comparison,omitempty"`
+        Kind          string                  `json:"kind"`
+        ReferenceText string                  `json:"reference_text,omitempty"`
+        Alternatives  []ConversationFocus     `json:"alternatives,omitempty"`
 }
 
 type AIContextBusiness struct {
-	Reference       string
-	Name            string
-	VerticalType    string
-	Locale          string
-	DefaultCurrency string
+        Reference       string
+        Name            string
+        VerticalType    string
+        Locale          string
+        DefaultCurrency string
 }
 
 type AIContextConversation struct {
-	Reference           string
-	CustomerReference   string
-	State               string
-	Ownership           string
-	Priority            string
-	AIModeOverride      string
-	AssignmentReference string
+        Reference           string
+        CustomerReference   string
+        State               string
+        Ownership           string
+        Priority            string
+        AIModeOverride      string
+        AssignmentReference string
 }
 
 type AIContextCustomer struct {
-	Reference        string
-	LocalePreference string
-	Status           string
-	Profile          []byte
-	ContactPoints    []byte
+        Reference        string
+        LocalePreference string
+        Status           string
+        Profile          []byte
+        ContactPoints    []byte
 }
 
 type AICatalogEvidence struct {
-	Reference        string
-	CatalogReference string
-	ItemType         string
-	Name             string
-	Status           string
-	Attributes       []byte
-	EvidenceState    string
-	RetrievedAt      time.Time
-	SchemaVersion    int
-	// Per contract ① §1 + migration 000016 — the following fields are NOT NULL
-	// in the DB and MUST be included in the evidence sent to Gemini.
-	// Without them, Gemini can see the product exists but cannot answer
-	// price/availability/fulfillment questions — leading to hallucination
-	// or "we don't have this product" responses.
-	ShortDescription     *string
-	LongDescription      *string
-	PricingMode          string
-	AvailabilityMode     string
-	FulfillmentMode      string
-	RequiresConfirmation bool
+        Reference        string
+        CatalogReference string
+        ItemType         string
+        Name             string
+        Status           string
+        Attributes       []byte
+        EvidenceState    string
+        RetrievedAt      time.Time
+        SchemaVersion    int
+        // Per contract ① §1 + migration 000016 — the following fields are NOT NULL
+        // in the DB and MUST be included in the evidence sent to Gemini.
+        // Without them, Gemini can see the product exists but cannot answer
+        // price/availability/fulfillment questions — leading to hallucination
+        // or "we don't have this product" responses.
+        ShortDescription     *string
+        LongDescription      *string
+        PricingMode          string
+        AvailabilityMode     string
+        FulfillmentMode      string
+        RequiresConfirmation bool
 }
 
 type AIOfferEvidence struct {
-	Reference            string
-	CatalogItemReference string
-	VariantReference     string
-	Name                 string
-	PricingMode          string
-	Amount               string
-	Currency             string
-	AvailabilityState    string
-	Status               string
-	EvidenceState        string
-	RetrievedAt          time.Time
-	SchemaVersion        int
+        Reference            string
+        CatalogItemReference string
+        VariantReference     string
+        Name                 string
+        PricingMode          string
+        Amount               string
+        Currency             string
+        AvailabilityState    string
+        Status               string
+        EvidenceState        string
+        RetrievedAt          time.Time
+        SchemaVersion        int
 }
 
 type AIKnowledgeEvidence struct {
-	Reference       string
-	KnowledgeKey    string
-	Title           string
-	Content         string
-	ContentType     string
-	SourceReference string
-	Authority       string
-	EvidenceState   string
-	Version         int
-	ValidFrom       time.Time
-	ValidUntil      *time.Time
-	RetrievedAt     time.Time
-	SchemaVersion   int
+        Reference       string
+        KnowledgeKey    string
+        Title           string
+        Content         string
+        ContentType     string
+        SourceReference string
+        Authority       string
+        EvidenceState   string
+        Version         int
+        ValidFrom       time.Time
+        ValidUntil      *time.Time
+        RetrievedAt     time.Time
+        SchemaVersion   int
 }
 
 type AIBusinessPolicyEvidence struct {
-	Reference     string
-	PolicyKey     string
-	Category      string
-	Title         string
-	Summary       string
-	Rules         []byte
-	Authority     string
-	EvidenceState string
-	Version       int
-	ValidFrom     time.Time
-	ValidUntil    *time.Time
-	RetrievedAt   time.Time
-	SchemaVersion int
+        Reference     string
+        PolicyKey     string
+        Category      string
+        Title         string
+        Summary       string
+        Rules         []byte
+        Authority     string
+        EvidenceState string
+        Version       int
+        ValidFrom     time.Time
+        ValidUntil    *time.Time
+        RetrievedAt   time.Time
+        SchemaVersion int
 }
 
 type AIVariantEvidence struct {
-	Reference            string
-	CatalogItemReference string
-	Name                 string
-	Status               string
-	Attributes           []byte
-	EvidenceState        string
-	RetrievedAt          time.Time
-	SchemaVersion        int
+        Reference            string
+        CatalogItemReference string
+        Name                 string
+        Status               string
+        Attributes           []byte
+        EvidenceState        string
+        RetrievedAt          time.Time
+        SchemaVersion        int
 }
 
 type AIRecentMessageEvidence struct {
-	Reference     string
-	Direction     string
-	Origin        string
-	Text          string
-	OccurredAt    time.Time
-	EvidenceState string
-	SchemaVersion int
+        Reference     string
+        Direction     string
+        Origin        string
+        Text          string
+        OccurredAt    time.Time
+        EvidenceState string
+        SchemaVersion int
 }
 
 type AIPolicyEvidence struct {
-	Reference     string
-	Version       string
-	State         string
-	MissingReason string
-	RetrievedAt   time.Time
-	SchemaVersion int
+        Reference     string
+        Version       string
+        State         string
+        MissingReason string
+        RetrievedAt   time.Time
+        SchemaVersion int
 }
 
 // Catalog Retrieval State tracking has been REMOVED per contract ④ §5 + ⑥ §20.
@@ -221,24 +227,24 @@ type AIPolicyEvidence struct {
 // This struct is kept only as the persistence shape for ai_decisions (the
 // business decision row), NOT as Gemini's output contract.
 type AIDecisionProposal struct {
-	IntentBase         string
-	DomainContext      string
-	Entities           []byte
-	EvidenceReferences []byte
-	RequestedAction    string
-	ResponseText       string
-	ConfidenceValue    string
-	ConfidenceBand     string
-	RequiresHuman      bool
-	MissingInformation []byte
-	ReasonCodes        []byte
-	PolicyDecision     string
-	PolicyVersion      string
-	KnowledgeVersion   string
-	ModelReference     string
-	SchemaVersion      int
-	StateProposal      *AIStateProposal
-	// Deprecated Mujeeb-side tracking fields (per contract ④ §5 + ⑥ §20):
-	// Removed in favor of ai_runs table (operational) + ValidationPipeline
-	// (deterministic). Kept struct minimal for persistence migration.
+        IntentBase         string
+        DomainContext      string
+        Entities           []byte
+        EvidenceReferences []byte
+        RequestedAction    string
+        ResponseText       string
+        ConfidenceValue    string
+        ConfidenceBand     string
+        RequiresHuman      bool
+        MissingInformation []byte
+        ReasonCodes        []byte
+        PolicyDecision     string
+        PolicyVersion      string
+        KnowledgeVersion   string
+        ModelReference     string
+        SchemaVersion      int
+        StateProposal      *AIStateProposal
+        // Deprecated Mujeeb-side tracking fields (per contract ④ §5 + ⑥ §20):
+        // Removed in favor of ai_runs table (operational) + ValidationPipeline
+        // (deterministic). Kept struct minimal for persistence migration.
 }

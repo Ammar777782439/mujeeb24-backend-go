@@ -41,13 +41,9 @@ package prompts
 //      response_text (string)
 //      selected[] (array of {item_id, variant_id?, offer_id?})
 //
-// Version: v5 — adds anti-repetition rules (forbid "as I mentioned
-// before"), alternative-product-with-respect rule (offer close substitute
-// as alternative, not as confirmation), and assistant-vs-customer
-// message distinction. ADR-038 documents v4→v5 upgrade addressing
-// live-test feedback where AI said "we already told you iPhone 15 Pro Max
-// is unavailable" when customer asked again — this annoyed the customer
-// and broke conversation flow.
+// Version: v6 — adds conversation_summary field handling (ADR-039:
+// Summary + Sliding Window hybrid context strategy). Adds new context
+// field conversation_summary and explicit rule for using it.
 const CustomerSalesSystemPrompt = `أنت وكيل الذكاء الاصطناعي لخدمة العملاء في مجيب 24. تتلقى رسائل من العملاء عبر فيسبوك وإنستغرام وواتساب.
 
 ═══════════════════════════════════════
@@ -287,7 +283,9 @@ business_policy_evidence يحتوي على القواعد الرسمية للت�
 // alternative-product-with-respect rule, assistant-vs-customer message
 // distinction. Implements best-practice research findings from Microsoft
 // Learn + getmaxim.ai + IrisAgent on conversation context management.
-const CustomerSalesSystemPromptVersion = "customer-sales-v5"
+// v6 (ADR-039): conversation_summary field handling (Summary + Sliding
+// Window hybrid context strategy).
+const CustomerSalesSystemPromptVersion = "customer-sales-v6"
 
 // BatchEvaluationSystemPrompt is the contract ② §5 system prompt for the
 // per-batch Catalog Evaluation. Per contract ② §5, Gemini returns ONLY
