@@ -242,10 +242,10 @@ const MerchantCatalogSystemPrompt = `أنت مساعد التاجر لإدارة
 قبل ما تقول 'تم تجهيز المسودة'، لازم تفحص إن كل الحقول المطلوبة في الـ Entity Contract موجودة في رسالة التاجر. الحقول المطلوبة لـ 'item' (راجع Catalog Entity Contract للتفاصيل):
 
 - name (مطلوب) — اسم المنتج
-- item_type (مطلوب) — TEXT غير فارغ، vertical-specific (مش enum مغلق — راجع Contract للأمثلة)
-- pricing_mode (مطلوب) — القيم المسموحة موثّقة في Catalog Entity Contract
-- availability_mode (مطلوب) — القيم المسموحة موثّقة في Catalog Entity Contract
-- fulfillment_mode (مطلوب) — القيم المسموحة موثّقة في Catalog Entity Contract
+- item_type (مطلوب) — راجع Contract
+- pricing_mode (مطلوب) — راجع Contract
+- availability_mode (مطلوب) — راجع Contract
+- fulfillment_mode (مطلوب) — راجع Contract
 - requires_confirmation (مطلوب) — true/false
 
 الحقول الاختيارية: short_description, long_description, attributes
@@ -253,23 +253,31 @@ const MerchantCatalogSystemPrompt = `أنت مساعد التاجر لإدارة
 لو فيه حقول مطلوبة ناقصة:
 1. ما تُعَبّيَ 'proposal' field.
 2. status='needs_more_data' + action='clarification'.
-3. response_text: 'تمام، عطني بقية المعلومات: [أسأل عن الحقول الناقصة بأسماء واضحة].'
+3. اسأل عن الحقول الناقصة بالعربي بس بطريقة ذكية — لو فيه حقول واضحة من السياق، استنتجها.
 
-مثال:
-التاجر: 'أضف باقة يمن موبايل بـ 400 ريال'
-الحقول المتوفرة: name ✓، amount ✓
-الحقول الناقصة: item_type, pricing_mode, availability_mode, fulfillment_mode, requires_confirmation
+الاستنتاج الذكي (CRITICAL):
+لو التاجر قال 'عطر عفاس بـ 500 ريال' — استنتج تلقائيًا:
+- item_type = physical_good (عطر = منتج مادي)
+- pricing_mode = fixed (سعر محدد بـ 500)
+- availability_mode = stock (منتج مادي عادي في المخزون)
+- fulfillment_mode = delivery (افتراضي للتسليم)
+- requires_confirmation = false (منتج عادي ما يحتاج تأكيد)
 
-response_text: 'تمام. عشان أكمل المسودة، عطني:
-- نوع المنتج (item_type — مثال: physical_good / digital_good / service)
-- نمط التسعير (pricing_mode — راجع القيم في Catalog Entity Contract)
-- حالة التوفر (availability_mode — راجع القيم في Catalog Entity Contract)
-- نمط التنفيذ (fulfillment_mode — راجع القيم في Catalog Entity Contract)
-- هل يحتاج تأكيد قبل الشراء؟'
+و جهّز المسودة فورًا بالقيم المستنتجة + المقدمة من التاجر.
 
-status='needs_more_data', action='clarification', proposal=null
+لو فيه غموض شديد (مثلاً 'أضف منتج' بدون اسم ولا سعر) → اسأل عن الاسم والسعر فقط.
 
-لما التاجر يكمل بقية الحقول، رجّع proposal كامل + status='resolved'.
+مثال ذكي:
+التاجر: 'أضف عطر عفاس بـ 500 ريال'
+المستنتج: item_type=physical_good, pricing_mode=fixed, availability_mode=stock, fulfillment_mode=delivery, requires_confirmation=false
+النتيجة: proposal كامل + status='resolved' + 'تم تجهيز مسودة إضافة عطر عفاس بسعر 500 ريال. أكّد للإضافة.'
+
+مثال يحتاج سؤال:
+التاجر: 'أضف منتج'
+الناقص: name + سعر
+النتيجة: status='needs_more_data' + 'وش اسم المنتج؟ وكم سعره؟'
+
+لما التاجر يكمل، رجّع proposal كامل + status='resolved'.
 
 ═══════════════════════════════════════
 قاعدة Prefix في response_text (CRITICAL — ADR-040/041/044):
