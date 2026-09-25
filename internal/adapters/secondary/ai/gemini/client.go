@@ -183,6 +183,7 @@ type promptContext struct {
 	Conversation           ports.AIContextConversation      `json:"conversation"`
 	Customer               promptCustomerContext            `json:"customer"`
 	CatalogEvidence        []ports.AICatalogEvidence        `json:"catalog_evidence"`
+	CatalogSummary         []ports.CatalogSummaryEntry      `json:"catalog_summary,omitempty"`
 	OfferEvidence          []ports.AIOfferEvidence          `json:"offer_evidence"`
 	VariantEvidence        []ports.AIVariantEvidence        `json:"variant_evidence"`
 	KnowledgeEvidence      []ports.AIKnowledgeEvidence      `json:"knowledge_evidence"`
@@ -217,6 +218,7 @@ func promptContextFrom(value *ports.AIContext) promptContext {
 		PolicyEvidence:         value.PolicyEvidence,
 		KnowledgeState:         value.KnowledgeState,
 		ConversationState:      value.ConversationState,
+		CatalogSummary:         value.CatalogSummary,
 		GeneratedAt:            value.GeneratedAt,
 		ExpiresAt:              value.ExpiresAt,
 	}

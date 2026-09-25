@@ -231,6 +231,31 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.ContextB
 		}
 	}
 
+	// Build the catalog summary: fetch ALL active item names (lightweight)
+	// so Gemini knows the full catalog exists even though only MaxItems
+	// have detailed evidence. This prevents Gemini from saying "we don't
+	// have this product" for products that exist but weren't in the 5-item
+	// detailed sample.
+	for _, catalog := range catalogPage.Items {
+		summaryCursor := ""
+		for {
+			summaryItems, summaryErr := b.Catalogs.ListCatalogItems(ctx, input.BusinessID, catalog.ID, "", "active", 500, summaryCursor)
+			if summaryErr != nil {
+				break
+			}
+			for _, item := range summaryItems.Items {
+				context.CatalogSummary = append(context.CatalogSummary, ports.CatalogSummaryEntry{
+					ID:   item.ID,
+					Name: item.Name,
+				})
+			}
+			if !summaryItems.HasMore {
+				break
+			}
+			summaryCursor = summaryItems.NextCursor
+		}
+	}
+
 	if b.Knowledge != nil {
 		knowledgeRecords, listErr := b.Knowledge.ListPublished(ctx, input.BusinessID, "", now, b.maxKnowledge()*3)
 		if listErr != nil {

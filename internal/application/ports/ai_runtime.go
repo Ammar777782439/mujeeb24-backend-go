@@ -55,6 +55,20 @@ type AIContext struct {
 	ConversationState      *ConversationStateRecord
 	GeneratedAt            time.Time
 	ExpiresAt              time.Time
+	// CatalogSummary is a lightweight list of ALL active catalog items
+	// (just ID + name) so Gemini knows the full catalog exists, even
+	// though only MaxItems have full evidence. When a customer asks
+	// about a product that's in the summary but not in the detailed
+	// evidence, Gemini returns needs_more_data → triggers batch evaluation.
+	CatalogSummary []CatalogSummaryEntry
+}
+
+// CatalogSummaryEntry is a lightweight catalog item reference — just
+// enough for Gemini to know the product exists without loading full
+// evidence for every item (which would exceed token limits).
+type CatalogSummaryEntry struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type AIStateProposal struct {
