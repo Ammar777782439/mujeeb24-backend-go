@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -98,15 +99,45 @@ func (s *deliveryStatusStore) Apply(_ context.Context, draft ports.DeliveryStatu
 }
 
 type autoReplyHandler struct {
+	mu      sync.Mutex
 	command commands.AutoReplyCommand
 	calls   int
 	err     error
+	done    chan struct{}
+}
+
+func newAutoReplyHandler() *autoReplyHandler {
+	return &autoReplyHandler{done: make(chan struct{})}
 }
 
 func (s *autoReplyHandler) Handle(_ context.Context, command commands.AutoReplyCommand) (commands.AutoReplyResult, error) {
+	s.mu.Lock()
 	s.calls++
 	s.command = command
+	s.mu.Unlock()
+	if s.done != nil {
+		close(s.done)
+		s.done = nil
+	}
 	return commands.AutoReplyResult{Enqueued: true}, s.err
+}
+
+func (s *autoReplyHandler) wait() {
+	if s.done != nil {
+		<-s.done
+	}
+}
+
+func (s *autoReplyHandler) getCalls() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.calls
+}
+
+func (s *autoReplyHandler) getCommand() commands.AutoReplyCommand {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.command
 }
 
 func signedSocialCommand(t *testing.T, body []byte) commands.IngestWebhookCommand {
@@ -160,39 +191,41 @@ func TestSocialAPIWebhookServiceRecordsResolvedEventAndRawPayloadHash(t *testing
 
 func TestSocialAPIWebhookServiceRunsAutoReplyOnlyForNewInboundMessage(t *testing.T) {
 	body := []byte(`{"event":"dm.received","data":{"id":"event-1","type":"dm","platform":"instagram","account_id":"account-1","conversation_id":"conversation-1","author":{"id":"customer-1"},"content":{"text":"hello"}}}`)
-	autoReply := &autoReplyHandler{}
+	autoReply := newAutoReplyHandler()
 	service := resolvedSocialWebhookService(&providerInboundStore{result: ports.ProviderInboundResult{BusinessID: "business-1", ConversationID: "conversation-1", CommunicationMessageID: "message-1"}})
 	service.AutoReply = autoReply
 	if _, err := service.Handle(context.Background(), signedSocialCommand(t, body)); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
-	if autoReply.calls != 1 || autoReply.command.Meta.Actor.BusinessID != "business-1" || autoReply.command.ConversationID != "conversation-1" || autoReply.command.SourceMessageReference != "event-1" || autoReply.command.Text != "hello" || autoReply.command.ProviderRef != "socialapi" || autoReply.command.Channel != "instagram" {
-		t.Fatalf("unexpected auto reply command: %#v calls=%d", autoReply.command, autoReply.calls)
+	autoReply.wait()
+	cmd := autoReply.getCommand()
+	if autoReply.getCalls() != 1 || cmd.Meta.Actor.BusinessID != "business-1" || cmd.ConversationID != "conversation-1" || cmd.SourceMessageReference != "event-1" || cmd.Text != "hello" || cmd.ProviderRef != "socialapi" || cmd.Channel != "instagram" {
+		t.Fatalf("unexpected auto reply command: %#v calls=%d", cmd, autoReply.getCalls())
 	}
 }
 
 func TestSocialAPIWebhookServiceDoesNotRunAutoReplyForDuplicateOrDeliveryStatus(t *testing.T) {
 	t.Run("duplicate message", func(t *testing.T) {
 		body := []byte(`{"event":"dm.received","data":{"id":"event-1","type":"dm","platform":"instagram","account_id":"account-1","conversation_id":"conversation-1","author":{"id":"customer-1"},"content":{"text":"hello"}}}`)
-		autoReply := &autoReplyHandler{}
+		autoReply := newAutoReplyHandler()
 		service := resolvedSocialWebhookService(&providerInboundStore{result: ports.ProviderInboundResult{BusinessID: "business-1", ConversationID: "conversation-1", Duplicate: true}})
 		service.AutoReply = autoReply
 		result, err := service.Handle(context.Background(), signedSocialCommand(t, body))
-		if err != nil || !result.Duplicate || autoReply.calls != 0 {
-			t.Fatalf("unexpected duplicate result=%#v err=%v calls=%d", result, err, autoReply.calls)
+		if err != nil || !result.Duplicate || autoReply.getCalls() != 0 {
+			t.Fatalf("unexpected duplicate result=%#v err=%v calls=%d", result, err, autoReply.getCalls())
 		}
 	})
 	t.Run("delivery status", func(t *testing.T) {
 		body := []byte(`{"event":"dm.status.delivered","data":{"id":"status-event-1","type":"dm_status","platform":"whatsapp","account_id":"account-1","conversation_id":"conversation-1","mids":["provider-message-1"],"status":"delivered"}}`)
 		statuses := &deliveryStatusStore{result: ports.DeliveryStatusResult{Applied: true, OutboundMessageID: "outbound-1", Status: "delivered"}}
 		inbound := &providerInboundStore{}
-		autoReply := &autoReplyHandler{}
+		autoReply := newAutoReplyHandler()
 		service := resolvedSocialWebhookService(inbound)
 		service.DeliveryStatuses = statuses
 		service.AutoReply = autoReply
 		result, err := service.Handle(context.Background(), signedSocialCommand(t, body))
-		if err != nil || !result.Accepted || !result.Resolved || statuses.draft.InboundEventID == "" || statuses.draft.ProviderMessageID != "provider-message-1" || inbound.draft.InboundEventID != "" || autoReply.calls != 0 {
-			t.Fatalf("unexpected delivery status result=%#v draft=%#v inbound=%#v err=%v calls=%d", result, statuses.draft, inbound.draft, err, autoReply.calls)
+		if err != nil || !result.Accepted || !result.Resolved || statuses.draft.InboundEventID == "" || statuses.draft.ProviderMessageID != "provider-message-1" || inbound.draft.InboundEventID != "" || autoReply.getCalls() != 0 {
+			t.Fatalf("unexpected delivery status result=%#v draft=%#v inbound=%#v err=%v calls=%d", result, statuses.draft, inbound.draft, err, autoReply.getCalls())
 		}
 	})
 }

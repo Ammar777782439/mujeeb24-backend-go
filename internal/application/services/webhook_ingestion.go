@@ -184,17 +184,36 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 			}
 			if s.AutoReply != nil && event.EventType == "interaction_received" && event.Direction == channel.DirectionInbound && event.Origin == channel.OriginCustomer && strings.TrimSpace(event.ProviderMessageID) != "" && strings.TrimSpace(event.Text) != "" {
 				log.Printf("[Webhook] AUTO_REPLY_TRIGGER business=%s conversation=%s text=%q", connection.BusinessID, materialized.ConversationID, truncate(event.Text, 60))
-				if _, autoReplyErr := s.AutoReply.Handle(ctx, commands.AutoReplyCommand{
+				// Run AutoReply in a detached context with a generous timeout.
+				// The HTTP request context (ctx) gets cancelled when SocialAPI
+				// disconnects or when the HTTP server's WriteTimeout fires.
+				// If we pass ctx to AutoReply.Handle, the Gemini API call
+				// fails with "context canceled" mid-flight.
+				//
+				// Per contract ⑨ §11: every external operation (Gemini call)
+				// must have a Timeout — but that timeout should be generous
+				// enough for the full AutoReply flow (context build + Gemini
+				// call + validation + outbound message creation).
+				//
+				// Per ADR-014 (At-Least-Once + Idempotency): the webhook
+				// handler returns 202 Accepted immediately; AutoReply runs
+				// asynchronously. The outbox pattern ensures the reply is
+				// delivered even if the webhook handler has already returned.
+				autoReplyCmd := commands.AutoReplyCommand{
 					Meta:                   commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(connection.BusinessID)}},
 					ConversationID:         commands.ConversationID(materialized.ConversationID),
 					SourceMessageReference: event.ProviderMessageID,
 					Text:                   event.Text,
 					Channel:                string(event.Channel),
 					ProviderRef:            string(event.Provider),
-				}); autoReplyErr != nil {
-					log.Printf("[Webhook] AUTO_REPLY_ERROR business=%s conversation=%s err=%v", connection.BusinessID, materialized.ConversationID, autoReplyErr)
-					return commands.WebhookAcceptedResult{}, externalDependencyError("SocialAPI AutoReply could not be executed", autoReplyErr)
 				}
+				go func(cmd commands.AutoReplyCommand, businessID, conversationID string) {
+					autoReplyCtx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+					defer cancel()
+					if _, autoReplyErr := s.AutoReply.Handle(autoReplyCtx, cmd); autoReplyErr != nil {
+						log.Printf("[Webhook] AUTO_REPLY_ERROR business=%s conversation=%s err=%v", businessID, conversationID, autoReplyErr)
+					}
+				}(autoReplyCmd, connection.BusinessID, materialized.ConversationID)
 			}
 		}
 
