@@ -97,7 +97,7 @@ func NewClient(cfg Config) (*Client, error) {
         }
         requestTimeout := cfg.RequestTimeout
         if requestTimeout <= 0 {
-                requestTimeout = 30 * time.Second
+                requestTimeout = 60 * time.Second
         }
         maxOutputTokens := cfg.MaxOutputTokens
         if maxOutputTokens <= 0 {
@@ -204,10 +204,10 @@ type promptContext struct {
         // FORBIDDEN from populating TargetCatalogID itself — that's the
         // code's job.
         MerchantCatalogs       []ports.MerchantCatalogEntry     `json:"merchant_catalogs,omitempty"`
-	// CatalogNames per ADR-048 — category names only (no IDs, no counts).
-	// Gemini uses this for hierarchical navigation: when customer asks
-	// "what do you have?", Gemini lists these names as categories.
-	CatalogNames            []string                         `json:"catalog_names,omitempty"`
+        // CatalogNames per ADR-048 — category names only (no IDs, no counts).
+        // Gemini uses this for hierarchical navigation: when customer asks
+        // "what do you have?", Gemini lists these names as categories.
+        CatalogNames            []string                         `json:"catalog_names,omitempty"`
         GeneratedAt            time.Time                        `json:"generated_at"`
         ExpiresAt              time.Time                        `json:"expires_at"`
 }
@@ -235,7 +235,7 @@ func promptContextFrom(value *ports.AIContext) promptContext {
                 KnowledgeState:         value.KnowledgeState,
                 ConversationState:      value.ConversationState,
                 CatalogSummary:         value.CatalogSummary,
-		CatalogNames:            value.CatalogNames,
+                CatalogNames:            value.CatalogNames,
                 ConversationSummary:    value.ConversationSummary,
                 MerchantCatalogs:       value.MerchantCatalogs,
                 GeneratedAt:            value.GeneratedAt,
