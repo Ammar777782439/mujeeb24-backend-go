@@ -56,7 +56,7 @@ func NewAutoReplyContextBuilder(businesses ports.BusinessRepository, conversatio
                 MaxItems:      5,
                 MaxOffers:     5,
                 MaxVariants:   5,
-                MaxMessages:   6, // Per ADR-038: reduced from 8 to 6 per IrisAgent/Microsoft Learn best-practice research (sliding window threshold).
+                MaxMessages:   4, // Per ADR-038: reduced from 8 to 6 per IrisAgent/Microsoft Learn best-practice research (sliding window threshold).
                 MaxKnowledge:  10,
                 MaxPolicies:   10,
         }
@@ -258,8 +258,8 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.ContextB
                                 }
                                 offers, offerErr := b.Catalogs.ListOffers(ctx, input.BusinessID, item.ID, "active", 1, "")
                                 if offerErr == nil && len(offers.Items) > 0 {
-                                        entry.Price = stringValue(offers.Items[0].Amount)
-                                        entry.Currency = stringValue(offers.Items[0].Currency)
+                                        entry.Price = formatPrice(stringValue(offers.Items[0].Amount))
+                                        entry.Currency = formatCurrency(stringValue(offers.Items[0].Currency))
                                         entry.AvailabilityStatus = offers.Items[0].AvailabilityStatus
                                 }
                                 context.CatalogSummary = append(context.CatalogSummary, entry)
@@ -643,7 +643,7 @@ func (b AutoReplyContextBuilder) maxPolicies() int {
 
 func (b AutoReplyContextBuilder) maxMessages() int {
         if b.MaxMessages <= 0 {
-                return 6 // Per ADR-038: 6 turns sliding window per IrisAgent research.
+                return 4 // Per ADR-038: 6 turns sliding window per IrisAgent research.
         }
         return b.MaxMessages
 }
@@ -663,3 +663,42 @@ func nonEmpty(value, fallback string) string {
 }
 
 var _ ports.AIContextBuilder = AutoReplyContextBuilder{}
+
+// formatPrice trims trailing zeros from a numeric string.
+// "200.0000" → "200", "200.5000" → "200.5", "200" → "200"
+func formatPrice(amount string) string {
+	if !strings.Contains(amount, ".") {
+		return amount
+	}
+	amount = strings.TrimRight(amount, "0")
+	amount = strings.TrimRight(amount, ".")
+	if amount == "" {
+		return "0"
+	}
+	return amount
+}
+
+// formatCurrency translates ISO 4217 codes to Arabic.
+// "YER" → "ريال يمني", "SAR" → "ريال سعودي", etc.
+func formatCurrency(code string) string {
+	switch strings.ToUpper(strings.TrimSpace(code)) {
+	case "YER":
+		return "ريال يمني"
+	case "SAR":
+		return "ريال سعودي"
+	case "USD":
+		return "دولار"
+	case "AED":
+		return "درهم إماراتي"
+	case "KWD":
+		return "دينار كويتي"
+	case "QAR":
+		return "ريال قطري"
+	case "BHD":
+		return "دينار بحريني"
+	case "OMR":
+		return "ريال عماني"
+	default:
+		return code
+	}
+}

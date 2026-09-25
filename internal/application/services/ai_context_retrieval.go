@@ -588,8 +588,8 @@ func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports
 							// Per ADR-050: fetch first active offer for price + availability
 							offers, offerErr := b.Catalogs.ListOffers(ctx, input.BusinessID, item.ID, "active", 1, "")
 							if offerErr == nil && len(offers.Items) > 0 {
-								entry.Price = stringValue(offers.Items[0].Amount)
-								entry.Currency = stringValue(offers.Items[0].Currency)
+								entry.Price = formatPrice(stringValue(offers.Items[0].Amount))
+								entry.Currency = formatCurrency(stringValue(offers.Items[0].Currency))
 								entry.AvailabilityStatus = offers.Items[0].AvailabilityStatus
 							}
 							base.CatalogSummary = append(base.CatalogSummary, entry)
