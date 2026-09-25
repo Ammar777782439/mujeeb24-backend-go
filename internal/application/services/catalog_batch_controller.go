@@ -80,14 +80,12 @@ type CatalogBatchController struct {
 // previous_interaction_id chaining between batches.
 type BatchGeminiClient interface {
 	// EvaluateBatch sends one batch to Gemini and returns the candidate set.
-	// Per contract ② §5, Gemini returns ONLY candidates, not the items back.
 	EvaluateBatch(ctx context.Context, input BatchEvaluationInput) (ports.CatalogBatchResult, error)
 
-	// FinalEvaluate runs the contract ② §6 final evaluation over the
-	// aggregated candidate set + customer message + conversation context.
-	// This Gemini Interaction is also independent (no previous_interaction_id
-	// chaining to the per-batch Interactions).
-	FinalEvaluate(ctx context.Context, input FinalEvaluationInput) (ports.AIGeminiProposal, error)
+	// FinalEvaluate runs the contract ② §6 final evaluation with a custom
+	// user prompt that includes BOTH candidate IDs AND full product details.
+	// This allows Gemini to compose a response with names, prices, descriptions.
+	FinalEvaluateWithDetails(ctx context.Context, input FinalEvaluationInput, userPrompt string) (ports.AIGeminiProposal, error)
 }
 
 // BatchEvaluationInput is one batch's input to Gemini.
@@ -213,7 +211,12 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 	}
 
 	// Step 6: Final Gemini Evaluation per contract ② §6.
-	return c.runFinalEvaluation(ctx, input, candidateSet)
+	// Per contract ② §6: "يرى: Customer Message + Conversation Context +
+	// Candidate Results + الدليل التجاري المرتبط بالمرشحين"
+	// The "الدليل التجاري المرتبط بالمرشحين" = full product details for
+	// each candidate item. Without this, Gemini only sees IDs and can't
+	// compose a proper response with names, prices, descriptions.
+	return c.runFinalEvaluation(ctx, input, candidateSet, projection)
 }
 
 // buildProjection builds the contract ① Catalog AI Projection from the
@@ -584,21 +587,44 @@ func (c *CatalogBatchController) coverageComplete(records []ports.AICatalogBatch
 }
 
 // runFinalEvaluation calls the contract ② §6 final Gemini evaluation.
-func (c *CatalogBatchController) runFinalEvaluation(ctx context.Context, input CatalogEvaluationInput, candidates []ports.CatalogBatchCandidate) (ports.AIGeminiProposal, error) {
-	// Per contract ② §6, the Final Gemini does NOT see the entire catalog again.
-	// It sees: Customer Message + Conversation Context + Candidate Results +
-	// the commercial evidence linked to the candidates (retrieved fresh from
-	// PostgreSQL, not from what Gemini returned).
-	return c.Gemini.FinalEvaluate(ctx, FinalEvaluationInput{
-		AIRunID:             input.AIRunID,
-		AttemptID:           input.AttemptID,
-		BusinessID:          input.BusinessID,
-		ConversationID:      input.ConversationID,
-		CustomerMessage:     input.CustomerMessage,
-		ConversationContext: input.ConversationContext,
-		EntityContract:      input.EntityContract,
-		CandidateResults:    candidates,
-	})
+// Per contract ② §6, the Final Gemini sees:
+//   - Customer Message
+//   - Conversation Context
+//   - Candidate Results (IDs + reason)
+//   - الدليل التجاري المرتبط بالمرشحين (full product details for each candidate)
+//
+// Without the full product details, Gemini only sees IDs and cannot
+// compose a response with names, prices, descriptions.
+func (c *CatalogBatchController) runFinalEvaluation(ctx context.Context, input CatalogEvaluationInput, candidates []ports.CatalogBatchCandidate, projection CatalogAIProjection) (ports.AIGeminiProposal, error) {
+	// Build the candidate evidence: full item details for each candidate.
+	// Look up each candidate item_id in the projection.
+	var candidateItems []CatalogAIItem
+	for _, candidate := range candidates {
+		for _, item := range projection.Items {
+			if item.ID == candidate.ItemID {
+				candidateItems = append(candidateItems, item)
+				break
+			}
+		}
+	}
+	candidateItemsJSON, _ := json.Marshal(candidateItems)
+
+	// Build the user prompt with BOTH candidate IDs AND full product details.
+	userPrompt := fmt.Sprintf("Customer message: %s\n\nAggregated candidates from catalog evaluation:\n%s\n\nFull product details for each candidate:\n%s\n\nBased on the candidates and their full details above, compose a complete Arabic response to the customer. Include product names, prices, descriptions, and availability.",
+		input.CustomerMessage,
+		string(mustMarshal(candidates)),
+		string(candidateItemsJSON))
+
+	return c.Gemini.FinalEvaluateWithDetails(ctx, input, userPrompt)
+}
+
+// mustMarshal marshals v to JSON, panicking on error (should never fail).
+func mustMarshal(v any) []byte {
+	buf, err := json.Marshal(v)
+	if err != nil {
+		return []byte(`[]`)
+	}
+	return buf
 }
 
 // CatalogEvaluationInput is the controller's input.

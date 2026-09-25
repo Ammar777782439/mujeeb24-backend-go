@@ -162,20 +162,20 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
 //
 // Per contract ④ §4, the final output is an AIGeminiProposal (status +
 // action + response_text + selected[]).
-func (c *BatchClient) FinalEvaluate(ctx context.Context, input services.FinalEvaluationInput) (ports.AIGeminiProposal, error) {
+// FinalEvaluateWithDetails runs the contract ② §6 final evaluation with
+// a custom user prompt that includes BOTH candidate IDs AND full product
+// details (names, prices, descriptions, variants, offers).
+//
+// Per contract ② §6: "يرى: Customer Message + Conversation Context +
+// Candidate Results + الدليل التجاري المرتبط بالمرشحين"
+//
+// The "الدليل التجاري المرتبط بالمرشحين" = full product details for each
+// candidate item. Without this, Gemini only sees IDs and can't compose
+// a response with product names, prices, descriptions.
+func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input services.FinalEvaluationInput, userPrompt string) (ports.AIGeminiProposal, error) {
 	if c == nil {
 		return ports.AIGeminiProposal{}, errors.New("batch client is not configured")
 	}
-
-	// Serialize the candidate set to JSON.
-	candidatesJSON, err := json.Marshal(input.CandidateResults)
-	if err != nil {
-		return ports.AIGeminiProposal{}, fmt.Errorf("marshal candidate results: %w", err)
-	}
-
-	// Build the user prompt: customer message + candidate set.
-	userPrompt := fmt.Sprintf("Customer message: %s\n\nAggregated candidate set from catalog evaluation:\n%s\n\nBased on the candidates above, produce your final proposal.",
-		input.CustomerMessage, string(candidatesJSON))
 
 	// Build the Gemini request with Structured Output enforcement for
 	// AIGeminiProposal per contract ④ §4.
@@ -183,7 +183,7 @@ func (c *BatchClient) FinalEvaluate(ctx context.Context, input services.FinalEva
 		Model: c.model,
 		SystemInstruction: &batchContent{
 			Role:  "system",
-			Parts: []batchPart{{Text: c.systemPrompt + "\n\nYou are now in FINAL EVALUATION mode. Produce a single AIGeminiProposal per the responseSchema. Use the candidates as evidence; do NOT invent item_ids that were not in the candidate set."}},
+			Parts: []batchPart{{Text: c.systemPrompt + "\n\nYou are now in FINAL EVALUATION mode. You have received the full product details for each candidate. Compose a complete Arabic response with product names, prices, descriptions, and availability. Do NOT invent item_ids that were not in the candidate set."}},
 		},
 		Contents: []batchContent{
 			{Role: "user", Parts: []batchPart{{Text: userPrompt}}},
@@ -205,6 +205,15 @@ func (c *BatchClient) FinalEvaluate(ctx context.Context, input services.FinalEva
 	}
 
 	return proposal, nil
+}
+
+// FinalEvaluate is kept for backward compatibility but delegates to
+// FinalEvaluateWithDetails with a basic prompt.
+func (c *BatchClient) FinalEvaluate(ctx context.Context, input services.FinalEvaluationInput) (ports.AIGeminiProposal, error) {
+	candidatesJSON, _ := json.Marshal(input.CandidateResults)
+	userPrompt := fmt.Sprintf("Customer message: %s\n\nAggregated candidate set from catalog evaluation:\n%s\n\nBased on the candidates above, produce your final proposal.",
+		input.CustomerMessage, string(candidatesJSON))
+	return c.FinalEvaluateWithDetails(ctx, input, userPrompt)
 }
 
 // sendRequest is the HTTP call to the Gemini generateContent API.
