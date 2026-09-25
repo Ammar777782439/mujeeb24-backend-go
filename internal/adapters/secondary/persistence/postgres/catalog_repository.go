@@ -165,7 +165,7 @@ func (r *CatalogRepository) ListOffers(ctx context.Context, businessID, itemID, 
 	items := make([]ports.OfferRecord, 0, limit)
 	for rows.Next() {
 		var item ports.OfferRecord
-		if err := rows.Scan(&item.ID, &item.BusinessID, &item.CatalogItemID, &item.VariantID, &item.Name, &item.PricingMode, &item.Amount, &item.Currency, &item.AvailabilityStatus, &item.Status, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.BusinessID, &item.CatalogItemID, &item.VariantID, &item.Name, &item.PricingMode, &item.Amount, &item.Currency, &item.PricingUnit, &item.PriceSource, &item.PriceVerificationStatus, &item.AvailabilityMode, &item.FulfillmentMode, &item.ValidityFrom, &item.ValidityUntil, &item.AvailabilityStatus, &item.Status, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return ports.OfferPage{}, catalogRepositoryError("offer.list", err)
 		}
 		items = append(items, item)
