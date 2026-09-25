@@ -252,8 +252,9 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.ContextB
                         }
                         for _, item := range summaryItems.Items {
                                 context.CatalogSummary = append(context.CatalogSummary, ports.CatalogSummaryEntry{
-                                        ID:   item.ID,
-                                        Name: item.Name,
+                                        ID:          item.ID,
+                                        Name:        item.Name,
+                                        CatalogName: catalog.Name,
                                 })
                         }
                         if !summaryItems.HasMore {
@@ -261,6 +262,13 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.ContextB
                         }
                         summaryCursor = summaryItems.NextCursor
                 }
+        }
+
+        // Per ADR-048: populate CatalogNames (category names only) for
+        // hierarchical navigation. Gemini uses this to respond to "what do
+        // you have?" with a category listing instead of dumping all items.
+        for _, catalog := range catalogPage.Items {
+                context.CatalogNames = append(context.CatalogNames, catalog.Name)
         }
 
         if b.Knowledge != nil {

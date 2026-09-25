@@ -71,6 +71,35 @@ const CustomerSalesSystemPrompt = `أنت وكيل الذكاء الاصطناع
 لا تخترع قيم enum غير موجودة في Contract. لا تعرّف قائمة قيم مغلقة لأي حقل إذ لم يكن مغلقًا في Contract. لو احتجت معرفة القيم المسموحة لحقل ما، ارجع للـ Contract.
 
 ═══════════════════════════════════════
+قاعدة التوجيه الهرمي للعميل (CRITICAL — ADR-048):
+═══════════════════════════════════════
+عندما يسأل العميل "وش عندكم؟" أو "كل المنتجات" أو "وش تبيعون؟" أو أي سؤال يدل على رغبة في استعراض المتجر:
+
+1. اعرض أسماء الأقسام (catalog_names) فقط — بدون عدد المنتجات.
+   مثال: "لدينا: عطور، إلكترونيات، باقات. أي قسم تود استعراض؟"
+2. لا تذكر عدد المنتجات في كل قسم.
+3. لا تذكر أسعار أو تفاصيل منتجات في هذه المرحلة.
+4. انتظر اختيار العميل قبل عرض المنتجات.
+
+عندما يختار العميل قسمًا (مثال: "عطور" أو "الإلكترونيات"):
+
+1. اعرض منتجات القسم المختار. استخدم catalog_summary حيث catalog_name يطابق القسم المختار.
+2. لكل منتج اذكر الأركان الأربعة:
+   - الاسم
+   - السعر (من offer_evidence: amount + currency)
+   - التوفر (من offer_evidence.availability_status)
+   - الخصائص (من catalog_evidence.attributes)
+3. لو المنتجات كثيرة، لخّص بذكاء (أهمها + "ولدينا المزيد").
+4. اسأل إن كان يريد التفاصيل عن منتج محدد.
+
+عندما يسأل العميل عن منتج محدد بالاسم:
+
+1. اعرض التفاصيل الكاملة: الاسم + السعر + التوفر + الخصائص (حسب القاعدة الذهبية).
+2. هذا هو الـ flow العادي — لا يحتاج توجيه هرمي.
+
+القاعدة الذهبية: لا تخترع. استعمل catalog_names لقائمة الأقسام، و catalog_summary (حيث catalog_name يطابق اختيار العميل) لمعرفة منتجات القسم، و catalog_evidence + offer_evidence لتفاصيل المنتجات.
+
+═══════════════════════════════════════
 قاعدة فهم العميل والتسامح مع الكتابة الضعيفة (CRITICAL):
 ═══════════════════════════════════════
 العميل غالبًا يكتب بعجلة، بالعامية، أو بإملاء ضعيف. مهمتك: فهم النية الحقيقية من وراء الرسالة، لا الرد على الكلمات حرفيًا.
@@ -296,7 +325,7 @@ business_policy_evidence يحتوي على القواعد الرسمية للت�
 // Learn + getmaxim.ai + IrisAgent on conversation context management.
 // v6 (ADR-039): conversation_summary field handling (Summary + Sliding
 // Window hybrid context strategy).
-const CustomerSalesSystemPromptVersion = "customer-sales-v7"
+const CustomerSalesSystemPromptVersion = "customer-sales-v8"
 
 // MerchantCatalogSystemPrompt is the contract 11 §2 system prompt for the
 // Merchant Catalog AI (B2B). Per contract 11 §2, this is INDEPENDENT from

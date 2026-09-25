@@ -74,6 +74,12 @@ type AIContext struct {
         // have?". The AI is FORBIDDEN from selecting a catalog itself; the
         // deterministic CatalogResolutionService handles selection.
         MerchantCatalogs []MerchantCatalogEntry
+	// CatalogNames per ADR-048 — list of catalog (category) names only.
+	// Sent to Gemini in the B2C flow so it can respond to "what do you have?"
+	// with a hierarchical listing: "We have: Perfumes, Electronics, Packages"
+	// without loading all item details. Names only — no IDs, no counts,
+	// no merchant data. Gemini decides when to list categories vs. products.
+	CatalogNames []string
 }
 
 // MerchantCatalogEntry is a lightweight catalog reference for the B2B
@@ -94,8 +100,9 @@ type MerchantCatalogEntry struct {
 // enough for Gemini to know the product exists without loading full
 // evidence for every item (which would exceed token limits).
 type CatalogSummaryEntry struct {
-        ID   string `json:"id"`
-        Name string `json:"name"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	CatalogName string `json:"catalog_name,omitempty"`
 }
 
 type AIStateProposal struct {
