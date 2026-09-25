@@ -188,6 +188,14 @@ func (s *ConversationSummaryService) MaybeSummarize(
 
         // Build the transcript text
         transcript := buildTranscript(olderMessages)
+	// Per ADR-051: cap transcript to 4000 chars to avoid exceeding
+	// the 12000 char limit in Gemini client. Also ensure chronological
+	// order (oldest first) — ListByConversation returns ASC after
+	// reversal, but olderMessages[:cutoffIdx] takes the first (oldest)
+	// entries which is correct. The cap prevents overflow.
+	if len(transcript) > 4000 {
+		transcript = transcript[:4000]
+	}
 
         // Generate summary via Gemini
         summaryText, err := s.generateSummary(ctx, transcript, state.Summary)

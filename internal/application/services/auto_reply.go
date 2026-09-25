@@ -215,6 +215,14 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
                 if st, err := s.StateRepository.Get(ctx, businessID, conversationID); err == nil {
                         loadedState = &st
                 }
+			// Per ADR-051: clear stale focus to prevent scoped retrieval from
+			// loading frozen old product data. The focus was set on Sep 13 and
+			// never updated, causing Gemini to jump to "عطر عمار" when the
+			// customer said "نعم". Clearing it forces broader retrieval mode
+			// (all catalogs) and lets recent_messages provide context instead.
+			if loadedState != nil && loadedState.Focus != nil {
+				loadedState.Focus = nil
+			}
         }
         var builtContext *ports.AIContext
         if s.ContextBuilder != nil {
