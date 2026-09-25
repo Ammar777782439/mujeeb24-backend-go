@@ -407,6 +407,8 @@ type CreateCatalogItemRequest struct {
         AttributeSchemaID    *UUID          `json:"attribute_schema_id,omitempty"`
         ItemType             string         `json:"item_type"`
         Name                 string         `json:"name"`
+        ShortDescription     *string        `json:"short_description,omitempty"`
+        LongDescription      *string        `json:"long_description,omitempty"`
         PricingMode          string         `json:"pricing_mode"`
         AvailabilityMode     string         `json:"availability_mode"`
         FulfillmentMode      string         `json:"fulfillment_mode"`
