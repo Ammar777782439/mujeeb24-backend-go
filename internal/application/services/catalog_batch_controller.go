@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -195,17 +196,20 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 			_ = c.markBatchFailed(ctx, batchRecords[i].ID, err.Error())
 			return ports.AIGeminiProposal{}, fmt.Errorf("batch %d evaluation: %w", b.BatchNumber, err)
 		}
-		// Per contract ⑨ §22, mark batch COMPLETED.
+		// Per contract ⑨ §22, mark batch COMPLETED — update the in-memory record too.
 		if err := c.markBatchCompleted(ctx, batchRecords[i].ID, len(result.Candidates)); err != nil {
 			return ports.AIGeminiProposal{}, err
 		}
+		batchRecords[i].Status = "completed"
 		candidateSet = append(candidateSet, result.Candidates...)
+		log.Printf("[CatalogBatch] BATCH_DONE batch=%d items=%d candidates=%d", b.BatchNumber, len(b.Items), len(result.Candidates))
 	}
 
 	// Step 5: Coverage check per contract ② §3.
-	// Coverage is complete when Total == Sent == Completed.
+	// Coverage is complete when all batches are COMPLETED.
+	log.Printf("[CatalogBatch] COVERAGE total=%d completed=%d", len(batchRecords), countCompleted(batchRecords))
 	if !c.coverageComplete(batchRecords) {
-		return ports.AIGeminiProposal{}, errors.New("coverage incomplete per contract ② §3 — not all batches completed")
+		return ports.AIGeminiProposal{}, fmt.Errorf("coverage incomplete per contract ② §3 — %d/%d batches completed", countCompleted(batchRecords), len(batchRecords))
 	}
 
 	// Step 6: Final Gemini Evaluation per contract ② §6.
@@ -607,4 +611,15 @@ type CatalogEvaluationInput struct {
 	CustomerMessage     string
 	ConversationContext ports.AIContext
 	EntityContract      CatalogEntityContractPayload
+}
+
+// countCompleted returns the number of batches with status="completed".
+func countCompleted(records []ports.AICatalogBatchRecord) int {
+	count := 0
+	for _, r := range records {
+		if r.Status == "completed" {
+			count++
+		}
+	}
+	return count
 }
