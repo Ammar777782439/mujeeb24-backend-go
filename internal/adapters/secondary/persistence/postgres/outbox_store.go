@@ -29,7 +29,7 @@ func (s *PostgresOutboxStore) ListClaimable(ctx context.Context, limit int) ([]p
 	if limit <= 0 {
 		limit = 20
 	}
-	if limit > 100 {
+	if limit > 10000 {
 		limit = 100
 	}
 	rows, err := executor.Query(ctx, outboxSelect+` WHERE status IN ('pending', 'retryable_failed') AND available_at <= now() ORDER BY available_at ASC, created_at ASC, id ASC LIMIT $1`, limit)

@@ -257,7 +257,7 @@ func salesPageArgs(limit int, cursor, operation string) (int, *salesCursor, erro
 	if limit <= 0 {
 		limit = 25
 	}
-	if limit > 100 {
+	if limit > 10000 {
 		limit = 100
 	}
 	if cursor == "" {

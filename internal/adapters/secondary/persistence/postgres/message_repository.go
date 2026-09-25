@@ -54,8 +54,8 @@ func (r *MessageRepository) ListByConversation(ctx context.Context, businessID, 
 	if limit <= 0 {
 		limit = 50
 	}
-	if limit > 100 {
-		return ports.MessagePage{}, invalidRepositoryInput("message.list_by_conversation", "limit must not exceed 100")
+	if limit > 10000 {
+		return ports.MessagePage{}, invalidRepositoryInput("message.list_by_conversation", "limit must not exceed 10000")
 	}
 	executor, err := r.adapter.Executor(ctx)
 	if err != nil {

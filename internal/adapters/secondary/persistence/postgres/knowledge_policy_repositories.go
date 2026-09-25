@@ -107,7 +107,7 @@ func boundedKnowledgePolicyLimit(limit int) int {
 	if limit <= 0 {
 		return 20
 	}
-	if limit > 100 {
+	if limit > 10000 {
 		return 100
 	}
 	return limit

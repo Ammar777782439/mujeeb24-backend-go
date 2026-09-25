@@ -27,8 +27,8 @@ func (r *ConversationRepository) List(ctx context.Context, businessID, state, ow
 	if limit <= 0 {
 		limit = 50
 	}
-	if limit > 100 {
-		return ports.ConversationPage{}, invalidRepositoryInput("conversation.list", "limit must not exceed 100")
+	if limit > 10000 {
+		return ports.ConversationPage{}, invalidRepositoryInput("conversation.list", "limit must not exceed 10000")
 	}
 	decoded, err := decodeConversationCursor(cursor)
 	if err != nil {

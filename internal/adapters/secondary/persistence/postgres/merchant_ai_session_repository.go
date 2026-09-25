@@ -151,7 +151,7 @@ func (r *MerchantAISessionRepository) ListMessages(ctx context.Context, business
 	if limit <= 0 {
 		limit = 12
 	}
-	if limit > 100 {
+	if limit > 10000 {
 		limit = 100
 	}
 	executor, err := r.adapter.Executor(ctx)

@@ -26,8 +26,8 @@ func (r *ChannelConnectionRepository) List(ctx context.Context, businessID, stat
 	if limit <= 0 {
 		limit = 50
 	}
-	if limit > 100 {
-		return ports.ChannelConnectionPage{}, invalidRepositoryInput("channel_connection.list", "limit must not exceed 100")
+	if limit > 10000 {
+		return ports.ChannelConnectionPage{}, invalidRepositoryInput("channel_connection.list", "limit must not exceed 10000")
 	}
 	decoded, err := decodeChannelConnectionCursor(cursor)
 	if err != nil {

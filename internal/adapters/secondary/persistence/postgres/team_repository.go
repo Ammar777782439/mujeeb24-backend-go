@@ -19,7 +19,7 @@ func (r *TeamRepository) ListMembers(ctx context.Context, businessID string, lim
 	if r == nil || r.adapter == nil {
 		return ports.TeamMemberPage{}, ErrPoolClosed
 	}
-	if limit <= 0 || limit > 100 {
+	if limit <= 0 || limit > 10000 {
 		limit = 50
 	}
 	decoded, err := decodeTeamCursor(cursor)

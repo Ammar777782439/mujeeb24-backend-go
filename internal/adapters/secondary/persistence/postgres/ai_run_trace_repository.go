@@ -208,7 +208,7 @@ func (r *AIRunTraceRepository) ListRunsByConversation(ctx context.Context, busin
 	if err != nil {
 		return nil, err
 	}
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 || limit > 10000 {
 		limit = 50
 	}
 	const q = `SELECT id::text FROM ai_runs
