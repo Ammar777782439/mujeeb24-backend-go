@@ -564,10 +564,15 @@ func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports
 	if b.Catalogs != nil && len(base.CatalogNames) == 0 {
 		catalogPage, catalogErr := b.Catalogs.ListCatalogs(ctx, input.BusinessID, "active", b.maxCatalogs(), "")
 		if catalogErr == nil {
+			// Check ONCE before the loop — not inside it.
+			// Before this fix, the guard was inside the per-catalog loop,
+			// so after the first catalog populated catalog_summary, all
+			// subsequent catalogs were SKIPPED — losing items from other
+			// catalogs (e.g., iPhone in catalog 2 was invisible to Gemini).
+			populateSummary := len(base.CatalogSummary) == 0
 			for _, catalog := range catalogPage.Items {
 				base.CatalogNames = append(base.CatalogNames, catalog.Name)
-				// Also populate catalog_summary if empty (scoped mode skips it)
-				if len(base.CatalogSummary) == 0 {
+				if populateSummary {
 					summaryCursor := ""
 					for {
 						summaryItems, summaryErr := b.Catalogs.ListCatalogItems(ctx, input.BusinessID, catalog.ID, "", "active", 500, summaryCursor)
