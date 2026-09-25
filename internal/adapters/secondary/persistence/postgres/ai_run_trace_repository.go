@@ -53,7 +53,7 @@ func (r *AIRunTraceRepository) CreateRun(ctx context.Context, run ports.AIRunRec
 	}
 	const q = `INSERT INTO ai_runs
         (id, business_id, conversation_id, message_id, source_event_id, idempotency_key, agent_role, status, started_at, created_at, updated_at)
-        VALUES ($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),$6,$7,$8,$9,$10,$11)`
+        VALUES ($1::uuid,$2::uuid,NULLIF($3,'')::uuid,NULLIF($4,''),NULLIF($5,'')::uuid,$6,$7,$8,$9,$10,$11)`
 	_, err = executor.Exec(ctx, q,
 		run.ID, run.BusinessID, run.ConversationID, run.MessageID, run.SourceEventID,
 		run.IdempotencyKey, run.AgentRole, run.Status, run.StartedAt, run.CreatedAt, run.UpdatedAt,
@@ -252,7 +252,7 @@ func (r *AIRunTraceRepository) CreateAttempt(ctx context.Context, attempt ports.
 	}
 	const q = `INSERT INTO ai_run_attempts
         (id, ai_run_id, attempt_number, provider, model, status, request_payload_hash, started_at, created_at)
-        VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,NULLIF($7,''),$8,$9)`
+        VALUES ($1::uuid,$2::uuid,$3,$4,NULLIF($5,''),$6,NULLIF($7,''),$8,$9)`
 	_, err = executor.Exec(ctx, q,
 		attempt.ID, attempt.AIRunID, attempt.AttemptNumber, attempt.Provider,
 		attempt.Model, attempt.Status, attempt.RequestPayloadHash,
@@ -345,7 +345,7 @@ func (r *AIRunTraceRepository) CreateToolCall(ctx context.Context, call ports.AI
 	}
 	const q = `INSERT INTO ai_tool_calls
         (id, ai_run_id, attempt_id, tool_name, tool_call_id, status, request_params, started_at, created_at)
-        VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9)`
+        VALUES ($1::uuid,$2::uuid,$3::uuid,$4,NULLIF($5,''),$6,$7,$8,$9)`
 	_, err = executor.Exec(ctx, q,
 		call.ID, call.AIRunID, call.AttemptID, call.ToolName, call.ToolCallID,
 		call.Status, params, call.StartedAt, call.CreatedAt,
@@ -435,7 +435,7 @@ func (r *AIRunTraceRepository) CreateGeminiInteraction(ctx context.Context, inte
 	const q = `INSERT INTO ai_gemini_interactions
         (id, ai_run_id, attempt_id, gemini_interaction_id, previous_interaction_id, model,
          system_instruction_hash, tools_hash, generation_config_hash, started_at, created_at)
-        VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10,$11)`
+        VALUES ($1::uuid,$2::uuid,$3::uuid,$4,NULLIF($5,''),$6,NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10,$11)`
 	_, err = executor.Exec(ctx, q,
 		interaction.ID, interaction.AIRunID, interaction.AttemptID,
 		interaction.GeminiInteractionID, interaction.PreviousInteractionID,
@@ -499,7 +499,7 @@ func (r *AIRunTraceRepository) CreateCatalogBatch(ctx context.Context, batch por
 	}
 	const q = `INSERT INTO ai_catalog_batches
         (id, ai_run_id, batch_number, status, items_count, schemas_count, created_at, updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`
+        VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6,$7,$8)`
 	_, err = executor.Exec(ctx, q,
 		batch.ID, batch.AIRunID, batch.BatchNumber, batch.Status,
 		batch.ItemsCount, batch.SchemasCount, batch.CreatedAt, batch.UpdatedAt,
@@ -593,7 +593,7 @@ func (r *AIRunTraceRepository) RecordUsage(ctx context.Context, usage ports.AIUs
         (id, ai_run_id, attempt_id, provider, model, input_tokens, cached_tokens,
          output_tokens, tool_calls_count, catalog_projection_tokens,
          estimated_cost_micros, currency, measured_at, created_at)
-        VALUES ($1,$2,NULLIF($3,''),$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`
+        VALUES ($1::uuid,$2::uuid,NULLIF($3,'')::uuid,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`
 	_, err = executor.Exec(ctx, q,
 		usage.ID, usage.AIRunID, attemptID, usage.Provider, usage.Model,
 		usage.InputTokens, usage.CachedTokens, usage.OutputTokens,
@@ -617,7 +617,7 @@ func (r *AIRunTraceRepository) RecordStageLatency(ctx context.Context, latency p
 	}
 	const q = `INSERT INTO ai_stage_latencies
         (id, ai_run_id, stage, latency_ms, measured_at, created_at)
-        VALUES ($1,$2,$3,$4,$5,$6)`
+        VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6)`
 	_, err = executor.Exec(ctx, q,
 		latency.ID, latency.AIRunID, latency.Stage, latency.LatencyMs,
 		latency.MeasuredAt, latency.CreatedAt,
