@@ -100,9 +100,12 @@ type MerchantCatalogEntry struct {
 // enough for Gemini to know the product exists without loading full
 // evidence for every item (which would exceed token limits).
 type CatalogSummaryEntry struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	CatalogName string `json:"catalog_name,omitempty"`
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	CatalogName       string `json:"catalog_name,omitempty"`
+	Price             string `json:"price,omitempty"`
+	Currency          string `json:"currency,omitempty"`
+	AvailabilityStatus string `json:"availability_status,omitempty"`
 }
 
 type AIStateProposal struct {

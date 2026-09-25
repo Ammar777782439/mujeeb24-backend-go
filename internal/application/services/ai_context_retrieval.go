@@ -575,11 +575,19 @@ func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports
 							break
 						}
 						for _, item := range summaryItems.Items {
-							base.CatalogSummary = append(base.CatalogSummary, ports.CatalogSummaryEntry{
+							entry := ports.CatalogSummaryEntry{
 								ID:          item.ID,
 								Name:        item.Name,
 								CatalogName: catalog.Name,
-							})
+							}
+							// Per ADR-050: fetch first active offer for price + availability
+							offers, offerErr := b.Catalogs.ListOffers(ctx, input.BusinessID, item.ID, "active", 1, "")
+							if offerErr == nil && len(offers.Items) > 0 {
+								entry.Price = stringValue(offers.Items[0].Amount)
+								entry.Currency = stringValue(offers.Items[0].Currency)
+								entry.AvailabilityStatus = offers.Items[0].AvailabilityStatus
+							}
+							base.CatalogSummary = append(base.CatalogSummary, entry)
 						}
 						if !summaryItems.HasMore {
 							break

@@ -251,11 +251,18 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.ContextB
                                 break
                         }
                         for _, item := range summaryItems.Items {
-                                context.CatalogSummary = append(context.CatalogSummary, ports.CatalogSummaryEntry{
+                                entry := ports.CatalogSummaryEntry{
                                         ID:          item.ID,
                                         Name:        item.Name,
                                         CatalogName: catalog.Name,
-                                })
+                                }
+                                offers, offerErr := b.Catalogs.ListOffers(ctx, input.BusinessID, item.ID, "active", 1, "")
+                                if offerErr == nil && len(offers.Items) > 0 {
+                                        entry.Price = stringValue(offers.Items[0].Amount)
+                                        entry.Currency = stringValue(offers.Items[0].Currency)
+                                        entry.AvailabilityStatus = offers.Items[0].AvailabilityStatus
+                                }
+                                context.CatalogSummary = append(context.CatalogSummary, entry)
                         }
                         if !summaryItems.HasMore {
                                 break
