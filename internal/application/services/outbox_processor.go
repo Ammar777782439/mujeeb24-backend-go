@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"log"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ type OutboxProcessor struct {
 
 func (p OutboxProcessor) Process(ctx context.Context, entryID string) error {
 	if p.Outbox == nil || p.Resolver == nil || p.Provider == nil {
+		log.Printf("[Worker] NOT_CONFIGURED outbox=%s", entryID)
 		return errors.New("outbox processor dependencies are not configured")
 	}
 	if strings.TrimSpace(entryID) == "" {
@@ -40,30 +42,38 @@ func (p OutboxProcessor) Process(ctx context.Context, entryID string) error {
 	}
 	now := p.Now().UTC()
 	claim, err := p.Outbox.Claim(ctx, entryID, ports.OutboxLease{Owner: p.Owner, Token: uuid.NewString(), ExpiresAt: now.Add(p.LeaseFor)})
-	if err != nil || !claim.Claimed {
+	if err != nil {
+		log.Printf("[Worker] CLAIM_ERROR outbox=%s err=%v", entryID, err)
 		return err
 	}
+	if !claim.Claimed {
+		return nil
+	}
 	record := claim.Record
+	log.Printf("[Worker] CLAIMED outbox=%s business=%s type=%s", record.ID, record.BusinessID, record.CommandType)
 	if record.CommandType != OutboundSendCommandType {
+		log.Printf("[Worker] DEAD_LETTER outbox=%s code=unsupported_outbox_command", record.ID)
 		return p.deadLetter(ctx, record, "unsupported_outbox_command")
 	}
 	delivery, err := p.Resolver.Resolve(ctx, record.BusinessID, record.OutboundMessageID)
 	if err != nil {
+		log.Printf("[Worker] DEAD_LETTER outbox=%s code=outbound_mapping_missing err=%v", record.ID, err)
 		return p.deadLetter(ctx, record, "outbound_mapping_missing")
 	}
+	log.Printf("[Worker] SENDING outbox=%s to=%s", record.ID, delivery.ProviderConversationID)
 	result, err := p.Provider.SendMessage(ctx, ports.SendMessageCommand{ConnectionID: delivery.ConnectionID, ProviderAccountID: delivery.ProviderAccountID, ProviderConversationID: delivery.ProviderConversationID, Text: delivery.Text, IdempotencyKey: delivery.IdempotencyKey})
 	if err != nil {
-		// A transport failure does not prove that the provider did not accept
-		// the request. Quarantine it in dead-letter until reconciliation decides
-		// whether a retry is safe; never blindly duplicate a customer message.
+		log.Printf("[Worker] DEAD_LETTER outbox=%s code=provider_send_outcome_unknown err=%v", record.ID, err)
 		return p.deadLetter(ctx, record, "provider_send_outcome_unknown")
 	}
 	resultCode := "provider_accepted"
 	if p.Messages != nil {
 		if result.ProviderMessageID == "" {
+			log.Printf("[Worker] DEAD_LETTER outbox=%s code=provider_acceptance_missing_message_id", record.ID)
 			return p.deadLetter(ctx, record, "provider_acceptance_missing_message_id")
 		}
 		if _, err := p.Messages.MarkProviderAccepted(ctx, record.BusinessID, record.OutboundMessageID, result.ProviderMessageID); err != nil {
+			log.Printf("[Worker] DEAD_LETTER outbox=%s code=provider_acceptance_persistence_failed err=%v", record.ID, err)
 			return p.deadLetter(ctx, record, "provider_acceptance_persistence_failed")
 		}
 	}
@@ -71,7 +81,12 @@ func (p OutboxProcessor) Process(ctx context.Context, entryID string) error {
 		resultCode += ":" + result.ProviderMessageID
 	}
 	_, err = p.Outbox.MarkCompleted(ctx, record.ID, ports.OutboxCompletion{Owner: owner(record, p.Owner), Token: token(record), ResultCode: resultCode, CompletedAt: p.Now().UTC(), UpdatedAt: p.Now().UTC()})
-	return err
+	if err != nil {
+		log.Printf("[Worker] COMPLETE_ERROR outbox=%s err=%v", record.ID, err)
+		return err
+	}
+	log.Printf("[Worker] SENT outbox=%s provider_msg_id=%s", record.ID, result.ProviderMessageID)
+	return nil
 }
 
 func (p OutboxProcessor) deadLetter(ctx context.Context, record ports.OutboxEntryRecord, code string) error {

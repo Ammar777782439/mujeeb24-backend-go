@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
@@ -91,10 +92,15 @@ func (r *WorkerRuntime) RunOnce(ctx context.Context) (int, error) {
 	if r.Processor != nil {
 		entries, err := r.Outbox.ListClaimable(ctx, limit)
 		if err != nil {
+			log.Printf("[Worker] LIST_ERROR err=%v", err)
 			return processed, err
+		}
+		if len(entries) > 0 {
+			log.Printf("[Worker] POLL found=%d entries", len(entries))
 		}
 		for _, entry := range entries {
 			if err := r.Processor.Process(ctx, entry.ID); err != nil {
+				log.Printf("[Worker] PROCESS_ERROR outbox=%s err=%v", entry.ID, err)
 				return processed, err
 			}
 			processed++

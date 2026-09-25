@@ -192,6 +192,7 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 					Channel:                string(event.Channel),
 					ProviderRef:            string(event.Provider),
 				}); autoReplyErr != nil {
+					log.Printf("[Webhook] AUTO_REPLY_ERROR business=%s conversation=%s err=%v", connection.BusinessID, materialized.ConversationID, autoReplyErr)
 					return commands.WebhookAcceptedResult{}, externalDependencyError("SocialAPI AutoReply could not be executed", autoReplyErr)
 				}
 			}

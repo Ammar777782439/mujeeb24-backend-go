@@ -240,6 +240,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	// Per contract ⑨ §3, mark CONTEXT_BUILT → RUNNING.
 	s.markContextBuiltSafe(ctx, run)
 	s.markRunningSafe(ctx, run)
+	log.Printf("[AutoReply] STATE→RUNNING run=%s", run.ID)
 
 	// Per contract ④ §8, call Gemini via the ContractRuntime.
 	log.Printf("[AutoReply] GEMINI_CALL business=%s conversation=%s run=%s", businessID, conversationID, run.ID)
@@ -328,6 +329,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 
 	// Per contract ⑨ §3, mark VALIDATING.
 	s.markValidatingSafe(ctx, run)
+	log.Printf("[AutoReply] STATE→VALIDATING run=%s", run.ID)
 
 	// Per contract ⑥ §2, run the validation pipeline.
 	var effective ports.EffectiveDecision
@@ -343,6 +345,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			EvidenceOfferIDs:   extractOfferIDs(builtContext),
 		})
 		if failure != nil {
+			log.Printf("[AutoReply] VALIDATION_FAILED run=%s stage=%s category=%s reason=%s", run.ID, failure.Stage, failure.Category, failure.Reason)
 			s.markFailedSafe(ctx, run, failure.Stage, string(failure.Category), failure.Reason)
 			// Per contract ⑥ §21, no Execution when validation fails.
 			// Persist a "blocked" decision for audit trail.
@@ -450,11 +453,13 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 
 		// Per contract ⑥ §17, if Effective Decision is "denied", no execution.
 		if effective.PolicyDecision == "denied" {
+			log.Printf("[AutoReply] POLICY_DENIED run=%s decision_id=%s", run.ID, decision.ID)
 			return nil
 		}
 		// Per contract ⑥ §17, if Effective Decision is "requires_approval",
 		// persist and wait for human approval — no execution.
 		if effective.PolicyDecision == "requires_approval" && !farewellHandoff {
+			log.Printf("[AutoReply] POLICY_REQUIRES_APPROVAL run=%s decision_id=%s", run.ID, decision.ID)
 			// Transition conversation to waiting_human.
 			if s.Conversations != nil {
 				st := "waiting_human"
@@ -473,6 +478,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		// Per contract ⑥ §19, Execution only after Authorization.
 		// Mark EXECUTING per contract ⑨ §3.
 		s.markExecutingSafe(ctx, run)
+		log.Printf("[AutoReply] STATE→EXECUTING run=%s", run.ID)
 
 		// Per contract ③ §1, Mujeeb owns the conversation state. After a
 		// successful AI reply (answer or clarification), transition the
