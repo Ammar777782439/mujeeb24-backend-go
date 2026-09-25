@@ -378,8 +378,8 @@ func normalizeCatalogLimit(limit int, operation string) (int, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	if limit > 100 {
-		return 0, invalidRepositoryInput(operation, "limit must not exceed 100")
+	if limit > 500 {
+		return 0, invalidRepositoryInput(operation, "limit must not exceed 500")
 	}
 	return limit, nil
 }
