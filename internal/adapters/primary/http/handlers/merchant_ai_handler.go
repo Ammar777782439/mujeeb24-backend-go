@@ -127,7 +127,7 @@ func (h *MerchantAIHandler) HandleTurn(ctx context.Context, in *contract.Merchan
                 ResponseText: op.ResponseText,
                 // Per ADR-043 fix: also return the resolved session ID (not the
                 // input session_id which may be empty on first turn).
-                SessionID: in.Body.SessionID,
+                SessionID: op.SessionID, // Per ADR-052: return resolved session ID
         }
         if op.Create != nil {
                 resp.Create = mapCreateToHTTP(op.Create)

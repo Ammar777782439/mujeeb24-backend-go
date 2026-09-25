@@ -107,6 +107,13 @@ type CatalogOperationProposal struct {
         // before the proposal can be executed. Per contract 11 §4, the agent
         // asks the merchant for these — it does NOT invent them.
         MissingFields []CatalogMissingField `json:"missing_fields,omitempty"`
+
+        // SessionID is the resolved merchant_ai_session ID. On the first turn,
+        // the agent creates a new session (input.SessionID=""). The handler
+        // returns this resolved ID so the frontend can send it on subsequent
+        // turns for conversation continuity. Without this, every turn starts
+        // a new session and the AI has no memory.
+        SessionID string `json:"session_id,omitempty"`
 }
 
 // CatalogCreatePayload is contract 11 §5 — the proposed new product graph.
@@ -541,6 +548,7 @@ func (a *MerchantCatalogAIAgent) HandleTurn(ctx context.Context, input MerchantC
         }
         log.Printf("[MerchantAI] COMPLETED business=%s session=%s run=%s operation=%s",
                 input.BusinessID, sessionID, run.ID, op.Operation)
+        op.SessionID = sessionID
         return op, nil
 }
 
