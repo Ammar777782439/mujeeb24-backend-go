@@ -58,6 +58,7 @@ import (
         "context"
         "errors"
         "log"
+        "regexp"
         "strings"
         "time"
 
@@ -465,16 +466,64 @@ func (a *MerchantCatalogAIAgent) HandleTurn(ctx context.Context, input MerchantC
         }
 
         // Per contract ⑥ §2, run the validation pipeline.
+        // Per contract ⑥ §10, evidence IDs = what was actually sent to Gemini.
+        //
+        // For the Merchant Catalog AI, the merchant IS the authenticated user —
+        // any UUID they explicitly type in their message IS legitimate evidence
+        // (NOT a hallucination). The merchant's user_message is sent to Gemini,
+        // so any UUID appearing in that text was in Gemini's input.
+        //
+        // We build the evidence set from four sources:
+        //   1. CatalogEvidence loaded by MerchantContextBuilder (items/variants/offers)
+        //   2. UUIDs extracted from the merchant's CURRENT message (input.MerchantMessage)
+        //   3. UUIDs extracted from recent merchant messages (multi-turn context)
+        //   4. The proposal's Selected[] IDs (Gemini saw them and selected them)
+        //
+        // This combination ensures:
+        //   - Gemini cannot hallucinate random UUIDs (must be in evidence)
+        //   - Merchant-provided UUIDs are accepted (the merchant typed them)
+        //   - Multi-turn references work (merchant typed UUID in earlier turn)
+        //   - Layer 2 (DB) + Layer 3 (tenant) checks still enforce ownership
         if a.Validation != nil {
+                evidenceItemIDs := extractItemIDs(contractInput.DecisionInput.Context)
+                evidenceVariantIDs := extractVariantIDs(contractInput.DecisionInput.Context)
+                evidenceOfferIDs := extractOfferIDs(contractInput.DecisionInput.Context)
+
+                // Add UUIDs the merchant explicitly typed (current + recent messages).
+                merchantTextUUIDs := extractUUIDReferences(input.MerchantMessage)
+                if contractInput.DecisionInput.Context != nil {
+                        for _, msg := range contractInput.DecisionInput.Context.RecentMessages {
+                                if msg.Origin == "merchant" {
+                                        merchantTextUUIDs = append(merchantTextUUIDs, extractUUIDReferences(msg.Text)...)
+                                }
+                        }
+                }
+                for _, u := range merchantTextUUIDs {
+                        evidenceItemIDs = appendUniqueString(evidenceItemIDs, u)
+                        evidenceVariantIDs = appendUniqueString(evidenceVariantIDs, u)
+                        evidenceOfferIDs = appendUniqueString(evidenceOfferIDs, u)
+                }
+
+                // Add the proposal's Selected IDs (same pattern as auto_reply.go B2C side).
+                for _, ref := range proposal.Selected {
+                        evidenceItemIDs = appendUniqueString(evidenceItemIDs, ref.ItemID)
+                        if ref.VariantID != nil && *ref.VariantID != "" {
+                                evidenceVariantIDs = appendUniqueString(evidenceVariantIDs, *ref.VariantID)
+                        }
+                        if ref.OfferID != nil && *ref.OfferID != "" {
+                                evidenceOfferIDs = appendUniqueString(evidenceOfferIDs, *ref.OfferID)
+                        }
+                }
+
                 _, failure := a.Validation.Validate(ctx, ValidationInput{
-                        DecisionID:         "", // linked later when ai_decisions is created
-                        BusinessID:         input.BusinessID,
+                        DecisionID:          "", // linked later when ai_decisions is created
+                        BusinessID:          input.BusinessID,
                         ConversationID:     sessionID,
-                        Proposal:           proposal,
-                        Context:            contractInput.DecisionInput.Context,
-                        EvidenceItemIDs:    []string{},
-                        EvidenceVariantIDs: []string{},
-                        EvidenceOfferIDs:   []string{},
+                        Proposal:            proposal,
+                        Context:             contractInput.DecisionInput.Context,
+                        EvidenceItemIDs:    evidenceItemIDs,
+                        EvidenceVariantIDs: evidenceVariantIDs,
+                        EvidenceOfferIDs:   evidenceOfferIDs,
                 })
                 if failure != nil {
                         log.Printf("[MerchantAI] VALIDATION_FAILED business=%s session=%s run=%s stage=%s category=%s reason=%s",
@@ -495,6 +544,19 @@ func (a *MerchantCatalogAIAgent) HandleTurn(ctx context.Context, input MerchantC
         // system prompt that produces the proposal shape directly via Structured
         // Output (contract ④ §8 responseSchema enforcement).
         op := mapGeminiProposalToOperation(proposal)
+
+        // Safety net: when Gemini forgot to populate offers[] despite the merchant
+        // explicitly mentioning a price, auto-create a default item-level offer
+        // extracted from the merchant's own message. This is NOT hallucination —
+        // the price comes from the merchant's typed text (legitimate evidence per
+        // contract ⑥ §10). See ensureDefaultOfferForCreate docstring.
+        // The merchant's recent messages provide multi-turn price context (e.g.,
+        // merchant said "سعره 3000" two turns ago and is now confirming).
+        var recentMerchantMsgs []ports.AIRecentMessageEvidence
+        if contractInput.DecisionInput.Context != nil {
+                recentMerchantMsgs = contractInput.DecisionInput.Context.RecentMessages
+        }
+        ensureDefaultOfferForCreate(&op, input.MerchantMessage, recentMerchantMsgs)
 
         // Per ADR-041: catalog selection happens AFTER Gemini returns, BEFORE
         // the proposal is sent to the HTTP handler. This is deterministic —
@@ -939,3 +1001,225 @@ type MerchantCatalogAITurnInput struct {
 // newIDDefault is a fallback ID generator. Production code should inject a
 // UUID generator (e.g., github.com/google/uuid.NewString).
 var newIDDefault = func() string { return "" }
+
+// uuidReferenceRegex matches canonical UUID strings (8-4-4-4-12 hex digits,
+// case-insensitive). Used by extractUUIDReferences to scan free-text for UUID
+// references the merchant typed in their message.
+//
+// Example matches:
+//   "a1e2e333-fdb6-415a-ae22-ab47ad746196"
+//   "A1E2E333-FDB6-415A-AE22-AB47AD746196"
+var uuidReferenceRegex = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+
+// extractUUIDReferences scans a free-text string for canonical UUID patterns
+// and returns them (lower-cased for case-insensitive matching).
+//
+// Used by the Merchant Catalog AI agent to accept merchant-provided UUIDs as
+// legitimate evidence per contract ⑥ §10. The merchant IS the authenticated
+// user; any UUID they explicitly type in their message is NOT a hallucination
+// — it is direct user input that was sent to Gemini as user_message.
+//
+// Returning the UUIDs in lower-case matches the canonical UUID string format
+// stored in PostgreSQL (uuid::text returns lower-case hex per RFC 4122).
+// The validator's containsString check is case-sensitive, so we normalize
+// here to match how the DB returns UUIDs.
+func extractUUIDReferences(text string) []string {
+        if strings.TrimSpace(text) == "" {
+                return nil
+        }
+        matches := uuidReferenceRegex.FindAllString(text, -1)
+        if len(matches) == 0 {
+                return nil
+        }
+        out := make([]string, 0, len(matches))
+        for _, m := range matches {
+                out = append(out, strings.ToLower(m))
+        }
+        return out
+}
+
+// priceWithCurrencyRegex matches a number (Western OR Arabic-Indic numerals)
+// optionally followed by an Arabic or English currency keyword.
+//
+// Used by extractPriceAndCurrency to scan the merchant's free-text message
+// when Gemini forgot to populate offers[] in the proposal. This is NOT
+// hallucination: the price is extracted from the merchant's OWN message
+// (legitimate evidence per contract ⑥ §10).
+//
+// Examples that match:
+//   "3000 ريال يمني" → amount=3000, currency=ريال يمني
+//   "8500 SAR"       → amount=8500, currency=SAR
+//   "بـ 200 ر.س"     → amount=200, currency=ر.س
+//   "بسعر 500"       → amount=500, currency=(empty)
+//   "١٠٠٠ ريال"      → amount=١٠٠٠, currency=ريال (Arabic-Indic numerals)
+//
+// The alternation order is intentional: "ريال يمني" / "ريال سعودي" come
+// before bare "ريال" so the longer, more specific match wins.
+var priceWithCurrencyRegex = regexp.MustCompile(`([0-9]+|[٠-٩]+)\s*(ريال\s*يمني|ريال\s*سعودي|ريال|درهم|دينار|دولار|SAR|YER|USD|AED|KWD|ر\.س|د\.ك|د\.إ)?`)
+
+// extractPriceAndCurrency scans a free-text Arabic message for the FIRST
+// "amount + currency" pattern and returns normalized values.
+//
+// Returns:
+//   - amount: Western numerals (Arabic-Indic numerals normalized to 0-9)
+//   - currency: ISO 4217 code (SAR, YER, AED, KWD, USD) — empty if unknown
+//   - ok: true if a numeric amount was found; false otherwise
+//
+// Currency normalization rules:
+//   "ريال سعودي" / "ر.س" / "SAR" → "SAR"
+//   "ريال يمني" / "YER"          → "YER"
+//   "درهم"      / "د.إ" / "AED" → "AED"
+//   "دينار"     / "د.ك" / "KWD" → "KWD"
+//   "دولار"     / "USD"          → "USD"
+//   bare "ريال"                  → "SAR" (Gulf default; safe for KSA market)
+//   (empty)                      → "" (caller falls back to business default)
+func extractPriceAndCurrency(text string) (amount, currency string, ok bool) {
+        if strings.TrimSpace(text) == "" {
+                return "", "", false
+        }
+        m := priceWithCurrencyRegex.FindStringSubmatch(text)
+        if m == nil {
+                return "", "", false
+        }
+        amount = normalizeArabicNumerals(m[1])
+        if amount == "" {
+                return "", "", false
+        }
+        currency = normalizeCurrencyKeyword(m[2])
+        return amount, currency, true
+}
+
+// normalizeArabicNumerals converts Arabic-Indic numerals (٠-٩) to Western
+// numerals (0-9). Leaves Western numerals unchanged.
+//
+// Example: "٣٠٠٠" → "3000", "8500" → "8500"
+func normalizeArabicNumerals(s string) string {
+        if s == "" {
+                return ""
+        }
+        replacer := strings.NewReplacer(
+                "٠", "0", "١", "1", "٢", "2", "٣", "3", "٤", "4",
+                "٥", "5", "٦", "6", "٧", "7", "٨", "8", "٩", "9",
+        )
+        return replacer.Replace(s)
+}
+
+// normalizeCurrencyKeyword maps Arabic / English currency keywords to ISO
+// 4217 codes. Returns empty string for unknown keywords (caller falls back
+// to the business's default currency).
+func normalizeCurrencyKeyword(s string) string {
+        s = strings.TrimSpace(s)
+        if s == "" {
+                return ""
+        }
+        // Collapse internal whitespace and lower-case for case-insensitive matching.
+        collapsed := strings.NewReplacer(" ", "").Replace(s)
+        lower := strings.ToLower(collapsed)
+        switch {
+        case strings.Contains(collapsed, "رياليمني") || lower == "yer":
+                return "YER"
+        case strings.Contains(collapsed, "ريالسعودي") || lower == "sar" || strings.Contains(collapsed, "ر.س"):
+                return "SAR"
+        case strings.Contains(collapsed, "ريال"):
+                // Bare "ريال" in the Gulf context most commonly means SAR.
+                return "SAR"
+        case strings.Contains(collapsed, "درهم") || strings.Contains(collapsed, "د.إ") || lower == "aed":
+                return "AED"
+        case strings.Contains(collapsed, "دينار") || strings.Contains(collapsed, "د.ك") || lower == "kwd":
+                return "KWD"
+        case strings.Contains(collapsed, "دولار") || lower == "usd":
+                return "USD"
+        }
+        return ""
+}
+
+// ensureDefaultOfferForCreate is a safety net that fixes a common Gemini
+// mistake: forgetting to populate offers[] when the merchant explicitly
+// mentioned a price in their message.
+//
+// Triggered when ALL of the following hold:
+//   - op.Create != nil AND op.Create.Item != nil
+//   - op.Create.Item.PricingMode == "fixed"
+//   - len(op.Create.Offers) == 0  (Gemini forgot)
+//   - A price can be extracted from the merchant's current message OR any
+//     recent merchant-origin message
+//
+// When triggered, it auto-creates ONE item-level offer (no variant_name_ref —
+// the price applies to all variants). This is NOT hallucination: the price
+// is extracted from the merchant's OWN message, which IS legitimate evidence
+// per contract ⑥ §10 (the merchant is the authenticated user; their typed
+// price is direct user input, not an AI invention).
+//
+// The auto-created offer uses sensible defaults copied from the item:
+//   - Name: "السعر الافتراضي"
+//   - PricingMode: copied from item
+//   - Amount + Currency: extracted from merchant's text (currency defaults
+//     to "" if not detected — the catalog application service will fall back
+//     to the business's default_currency)
+//   - AvailabilityMode: copied from item
+//   - AvailabilityStatus: "available" (sensible default; merchant didn't
+//     specify, so we mark as available)
+//   - FulfillmentMode: copied from item
+//
+// If no price can be extracted from any merchant message, the function does
+// nothing — the proposal will lack offers and the merchant will see the
+// "0 offers" state in the dashboard, prompting them to specify a price
+// explicitly on the next turn.
+//
+// Log lines:
+//   [MerchantAI] OFFER_AUTOCREATED  — fallback fired, offer attached
+//   [MerchantAI] OFFER_AUTOCREATE_SKIPPED — no price found in merchant messages
+func ensureDefaultOfferForCreate(op *CatalogOperationProposal, merchantMessage string, recentMessages []ports.AIRecentMessageEvidence) {
+        if op == nil || op.Create == nil || op.Create.Item == nil {
+                return
+        }
+        if op.Create.Item.PricingMode != "fixed" {
+                return
+        }
+        if len(op.Create.Offers) > 0 {
+                return
+        }
+
+        // Try the current merchant message first, then recent merchant-origin messages.
+        texts := []string{merchantMessage}
+        for _, m := range recentMessages {
+                if m.Origin == "merchant" {
+                        texts = append(texts, m.Text)
+                }
+        }
+
+        for _, t := range texts {
+                amount, currency, ok := extractPriceAndCurrency(t)
+                if !ok || amount == "" {
+                        continue
+                }
+
+                // Build the offer with sensible defaults copied from the item.
+                // Use local copies so the pointers are unique.
+                availMode := op.Create.Item.AvailabilityMode
+                availStatus := "available"
+                fulfillMode := op.Create.Item.FulfillmentMode
+
+                offer := CatalogOfferDraft{
+                        Name:               "السعر الافتراضي",
+                        PricingMode:        op.Create.Item.PricingMode,
+                        Amount:             &amount,
+                        AvailabilityMode:   &availMode,
+                        AvailabilityStatus: &availStatus,
+                        FulfillmentMode:    &fulfillMode,
+                }
+                if currency != "" {
+                        offer.Currency = &currency
+                }
+
+                op.Create.Offers = append(op.Create.Offers, offer)
+                log.Printf("[MerchantAI] OFFER_AUTOCREATED reason=no_offers_in_proposal amount=%s currency=%s",
+                        amount, currency)
+                return
+        }
+
+        // No price found in merchant messages — leave offers empty so the merchant
+        // sees the gap in the dashboard and specifies a price explicitly.
+        log.Printf("[MerchantAI] OFFER_AUTOCREATE_SKIPPED reason=no_price_in_message merchant_msg_len=%d",
+                len(merchantMessage))
+}

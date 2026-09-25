@@ -279,23 +279,47 @@ const MerchantCatalogSystemPrompt = `أنت مساعد التاجر لإدارة
 
 لما التاجر يكمل، رجّع proposal كامل + status='resolved'.
 
-قاعدة المتغيرات (variants) — الألوان والمقاسات والسعات (CRITICAL):
+قاعدة المتغيرات والعروض (variants + offers) — الألوان والمقاسات والأسعار (CRITICAL):
+
+§(أ) المتغيرات (variants):
 لو ذكر التاجر ألوان أو مقاسات أو سعات (مثلاً: "ألوان: أسود، كحلي" أو "مقاسات: S, M, L") → ضيفها كـ variants في الـ proposal.
-
-مثال:
-التاجر: 'أضف تيشيرت بـ 200 ريال بألوان أسود وكحلي ومقاسات M و L'
-الـ proposal:
-  item: {name: "تيشيرت", item_type: "physical_good", pricing_mode: "fixed", ...}
-  variants: [
-    {name: "أسود - M", attributes: {color: "أسود", size: "M"}},
-    {name: "أسود - L", attributes: {color: "أسود", size: "L"}},
-    {name: "كحلي - M", attributes: {color: "كحلي", size: "M"}},
-    {name: "كحلي - L", attributes: {color: "كحلي", size: "L"}}
-  ]
-  offers: [{name: "سعر افتراضي", pricing_mode: "fixed", amount: "200", currency: "YER"}]
-
+مثال: "ألوان: أحمر، أصفر، أزرق" → variants: [{name:"أحمر",...},{name:"أصفر",...},{name:"أزرق",...}]
 لو التاجر ما ذكر ألوان/مقاسات → لا تسأل عنها، أضف المنتج بدون variants.
 لو التاجر طلب منتج له متغيرات طبيعية (ملابس، أحذية) → اسأله: "هل عندك ألوان أو مقاسات محددة لهذا المنتج؟"
+
+§(ب) العروض (offers) — الأسعار (CRITICAL — ما في بيع بدون سعر):
+لما التاجر يذكر سعر، لازم تُعَبّيَ مصفوفة 'offers' في الـ proposal. لو ما فيه offers في الـ proposal، المنتج بينشأ بدون سعر — وهذا خطأ كارثي.
+
+السيناريوهات الثلاثة (يجب تختار واحدًا):
+
+السيناريو 1: سعر واحد لكل المتغيرات (الأكثر شيوعًا)
+   التاجر: "غلاف هاتف بـ 3000 ريال يمني بألوان أحمر/أصفر/أزرق"
+   الـ proposal:
+     item: {name: "غلاف هاتف", item_type: "physical_good", pricing_mode: "fixed", ...}
+     variants: [{name:"أحمر",...},{name:"أصفر",...},{name:"أزرق",...}]
+     offers: [{name:"السعر الافتراضي", pricing_mode:"fixed", amount:"3000", currency:"YER"}]
+   ملاحظة CRITICAL: ONE offer بدون 'variant_name_ref' — السعر ينطبق على كل المتغيرات.
+
+السيناريو 2: سعر مختلف لكل variant
+   التاجر: "الأسود بـ 200، الكحلي بـ 250"
+   الـ proposal:
+     variants: [{name:"أسود",...},{name:"كحلي",...}]
+     offers: [
+       {variant_name_ref:"أسود", name:"سعر الأسود", pricing_mode:"fixed", amount:"200", currency:"YER"},
+       {variant_name_ref:"كحلي", name:"سعر الكحلي", pricing_mode:"fixed", amount:"250", currency:"YER"}
+     ]
+
+السيناريو 3: ما في سعر محدد
+   status="needs_more_data", action="clarification"
+   اسأل: "كم سعر المنتج؟"
+   ما تُعَبّيَ proposal.create حتى يتوفر السعر.
+
+القاعدة الذهبية (CRITICAL):
+- لو فيه variants + سعر واحد → ONE offer بدون variant_name_ref (سيناريو 1)
+- لو فيه variants + سعر لكل variant → ONE offer لكل variant بـ variant_name_ref (سيناريو 2)
+- لو ما فيه variants + سعر → ONE offer بدون variant_name_ref
+- لو ما فيه سعر → لا تُعَبّيَ proposal.create (سيناريو 3)
+- ممنوع إنشاء create proposal بـ pricing_mode=fixed بدون offers في المصفوفة.
 
 قاعدة اللغة العربية في الردود (CRITICAL):
 - كل أسماء الحقول في ردك للتاجر لازم تكون بالعربي.
@@ -363,6 +387,22 @@ const MerchantCatalogSystemPrompt = `أنت مساعد التاجر لإدارة
 عامل كل رسالة كأنها سؤال جديد.
 
 ═══════════════════════════════════════
+قاعدة الفحص المسبق (PRE-FLIGHT CHECKLIST — CRITICAL):
+═══════════════════════════════════════
+قبل ما تقول status=resolved لـ create/update، تحقق من كل نقطة:
+1. هل item.name موجود؟
+2. هل item.item_type موجود؟
+3. هل item.pricing_mode موجود؟
+4. هل item.availability_mode موجود؟
+5. هل item.fulfillment_mode موجود؟
+6. هل item.requires_confirmation موجود؟
+7. لو pricing_mode=fixed → هل offers[] فيه عرض على الأقل؟ (CRITICAL — المنتج بدون سعر مرفوض)
+8. لو فيه variants → هل فيه offer على الأقل (واحدة عامة بدون variant_name_ref أو واحدة لكل variant)؟
+
+لو أي نقطة ناقصة → status=needs_more_data + اسأل عن الناقص.
+ما تتجاوز الفحص بدون إكمال كل النقاط.
+
+═══════════════════════════════════════
 المخرجات (AIGeminiProposal):
 ═══════════════════════════════════════
 - status: resolved (مسودة كاملة) | needs_more_data (ناقصة) | ambiguous | not_found
@@ -389,6 +429,8 @@ const MerchantCatalogSystemPrompt = `أنت مساعد التاجر لإدارة
 // v2 (ADR-044): structured proposal field + multi-turn data gathering
 // (replace prefix-only detection with structured payload + missing-fields
 // protocol).
+// v3 (current): explicit offers rule with 3 scenarios + PRE-FLIGHT CHECKLIST
+// to prevent "create with variants but no offers" (item ends up with no price).
 const MerchantCatalogSystemPromptVersion = "merchant-catalog-v3"
 const BatchEvaluationSystemPrompt = `You are the Catalog Evaluation agent inside Mujeeb 24.
 
