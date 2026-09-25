@@ -21,6 +21,7 @@ import (
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
+        "github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/prompts"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
         "github.com/danielgtaylor/huma/v2"
         "github.com/google/uuid"
@@ -304,8 +305,35 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
         dashboardServer := handlers.NewServer(dependencies)
         if external.AutoReplyEnabled && external.AIRuntime != nil {
                 if geminiClient, ok := external.AIRuntime.(*gemini.Client); ok {
-                        // Per contract ④ §8, wrap the legacy Client with ContractClient.
-                        contractClient, err := gemini.NewContractClient(geminiClient)
+                        // Per ADR-042: build a SEPARATE B2B gemini.Client with
+                        // the MerchantCatalogSystemPrompt. This is required by
+                        // contract 11 §2 (B2B and B2C do NOT share System Prompt,
+                        // Agent Role, Tool Permissions, Conversation Purpose,
+                        // Proposal Contract, or Execution Workflow).
+                        //
+                        // Without this separation, the B2B agent was falling back
+                        // to the CustomerSalesSystemPrompt (B2C) and addressing the
+                        // merchant as if they were an end-customer. This is now
+                        // fixed by cloning the gemini.Client config with the B2B
+                        // system prompt.
+                        merchantGeminiClient, err := gemini.NewClient(gemini.Config{
+                                BaseURL:            geminiClient.BaseURL(),
+                                APIKey:             geminiClient.APIKey(),
+                                Model:              geminiClient.Model(),
+                                SystemPrompt:       prompts.MerchantCatalogSystemPrompt, // ← KEY DIFFERENCE
+                                RequestTimeout:     geminiClient.RequestTimeout(),
+                                MaxOutputTokens:    geminiClient.MaxOutputTokens(),
+                                MaxInputCharacters: geminiClient.MaxInputCharacters(),
+                                HTTPClient:          geminiClient.HTTPClient(),
+                                Capabilities:        geminiClient.Capabilities(),
+                        })
+                        if err != nil {
+                                database.Close()
+                                return nil, fmt.Errorf("build B2B gemini client: %w", err)
+                        }
+                        // Per contract ④ §8, wrap the B2B Client with a ContractClient
+                        // (separate instance from the B2C contract client).
+                        contractClient, err := gemini.NewContractClient(merchantGeminiClient)
                         if err != nil {
                                 database.Close()
                                 return nil, fmt.Errorf("build merchant AI contract client: %w", err)
