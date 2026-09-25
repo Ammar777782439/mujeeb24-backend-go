@@ -40,6 +40,7 @@
 | ADR-032 | Merchant Catalog AI Authoring v2 — وكيل محادثي مستقل يبني CatalogOperationProposal (create/update/delete)، يستبدل AIAuthoringProposal/GenerateCatalogDraft القديمة | العقد 11 يلغي v1 ويفرض فصل Customer Sales AI عن Merchant Catalog AI | مغلق |
 | ADR-033 | Breaking change على ai_decisions.requested_action — استبدال القيم القديمة بـ answer/clarification/human_request/lead_draft/order_draft وفقًا للعقد ④ | العقد ④ يفرض قيمًا محددة فقط؛ لا حاجة للتوافق التشغيلي القديم | مغلق |
 | ADR-034 | AI Run + Attempt + Tool Call + Gemini Interaction + Catalog Batch + Usage Telemetry — جداول تشغيلية منفصلة عن ai_decisions التجارية | العقود ⑧ ⑨ تفرض الفصل بين الـRun والقرار التجاري | مغلق |
+| ADR-035 | Customer Sales System Prompt v1→v2 — إضافة "القاعدة الذهبية" (التركيز الإجباري على الاسم + السعر + التوفر)، قاعدة احترام business_policy_evidence، وقاعدة مقاومة التشتيت (anti-jailbreak) | ملاحظات التاجر: الـ AI ما يركز على المنتج/السعر/التوفر، والعميل يقدر يشتت الـ AI؛ الـ context builder أصلاً يمرر offer_evidence و business_policy_evidence لكن الـ prompt v1 ما يأمر بتطبيقها | مغلق |
 
 ## قرارات لم تُحسم بعد
 
