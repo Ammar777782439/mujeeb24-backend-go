@@ -206,15 +206,21 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.ContextB
 				return ports.AIContext{}, errors.New("AI context catalog item scope mismatch")
 			}
 			context.CatalogEvidence = append(context.CatalogEvidence, ports.AICatalogEvidence{
-				Reference:        item.ID,
-				CatalogReference: item.CatalogID,
-				ItemType:         item.ItemType,
-				Name:             item.Name,
-				Status:           item.Status,
-				Attributes:       safeJSONObject(item.Attributes),
-				EvidenceState:    AIContextFresh,
-				RetrievedAt:      now,
-				SchemaVersion:    AIEvidenceSchemaVersion,
+				Reference:            item.ID,
+				CatalogReference:     item.CatalogID,
+				ItemType:             item.ItemType,
+				Name:                 item.Name,
+				Status:               item.Status,
+				Attributes:           safeJSONObject(item.Attributes),
+				EvidenceState:        AIContextFresh,
+				RetrievedAt:          now,
+				SchemaVersion:        AIEvidenceSchemaVersion,
+				ShortDescription:     item.ShortDescription,
+				LongDescription:      item.LongDescription,
+				PricingMode:          item.PricingMode,
+				AvailabilityMode:     item.AvailabilityMode,
+				FulfillmentMode:      item.FulfillmentMode,
+				RequiresConfirmation: item.RequiresConfirmation,
 			})
 			if len(context.CatalogEvidence) >= b.maxItems() {
 				break

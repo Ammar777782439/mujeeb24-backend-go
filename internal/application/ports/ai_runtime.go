@@ -101,6 +101,17 @@ type AICatalogEvidence struct {
 	EvidenceState    string
 	RetrievedAt      time.Time
 	SchemaVersion    int
+	// Per contract ① §1 + migration 000016 — the following fields are NOT NULL
+	// in the DB and MUST be included in the evidence sent to Gemini.
+	// Without them, Gemini can see the product exists but cannot answer
+	// price/availability/fulfillment questions — leading to hallucination
+	// or "we don't have this product" responses.
+	ShortDescription     *string
+	LongDescription      *string
+	PricingMode          string
+	AvailabilityMode     string
+	FulfillmentMode      string
+	RequiresConfirmation bool
 }
 
 type AIOfferEvidence struct {
