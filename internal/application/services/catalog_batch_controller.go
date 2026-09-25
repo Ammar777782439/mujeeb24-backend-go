@@ -157,7 +157,7 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 	}
 	if len(batches) == 0 {
 		// No items in scope — Final Evaluation with empty candidate set.
-		return c.runFinalEvaluation(ctx, input, nil)
+		return c.runFinalEvaluation(ctx, input, nil, CatalogAIProjection{})
 	}
 
 	// Step 3: Register each batch in ai_catalog_batches per contract ⑨ §22.
@@ -615,7 +615,16 @@ func (c *CatalogBatchController) runFinalEvaluation(ctx context.Context, input C
 		string(mustMarshal(candidates)),
 		string(candidateItemsJSON))
 
-	return c.Gemini.FinalEvaluateWithDetails(ctx, input, userPrompt)
+	return c.Gemini.FinalEvaluateWithDetails(ctx, FinalEvaluationInput{
+		AIRunID:             input.AIRunID,
+		AttemptID:           input.AttemptID,
+		BusinessID:          input.BusinessID,
+		ConversationID:      input.ConversationID,
+		CustomerMessage:     input.CustomerMessage,
+		ConversationContext: input.ConversationContext,
+		EntityContract:      input.EntityContract,
+		CandidateResults:    candidates,
+	}, userPrompt)
 }
 
 // mustMarshal marshals v to JSON, panicking on error (should never fail).
