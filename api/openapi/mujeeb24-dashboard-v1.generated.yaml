@@ -2927,7 +2927,21 @@ components:
         attributes:
           additionalProperties: {}
           type: object
+        availability_mode:
+          type: string
+        fulfillment_mode:
+          type: string
+        item_type:
+          type: string
+        long_description:
+          type: string
         name:
+          type: string
+        pricing_mode:
+          type: string
+        requires_confirmation:
+          type: boolean
+        short_description:
           type: string
         status:
           type: string

@@ -407,11 +407,8 @@ type CatalogEntityContract struct {
 	// delivery, pickup, digital, appointment, travel, manual.
 	FulfillmentModes map[string]string `json:"fulfillment_modes"`
 	// ItemStatuses maps each catalog_items.status enum value to its Arabic
-	// description. Per migration 000016 catalog_items_status_chk, the 5
-	// allowed values are: draft, active, inactive, archived, expired.
-	// (NOTE: this field is NOT in services.CatalogEntityContractDescriptor
-	// — the descriptor focuses on contract ⑤ §3-5 enum dimensions only.
-	// We expose it here for the frontend's item-status badges; the values
-	// are sourced from the same SQL migration.)
+	// description. Per migration 000016 catalog_items_status_chk + migration
+	// 000018 offers_status_chk, the 5 allowed values are: draft, active,
+	// inactive, archived, expired.
 	ItemStatuses map[string]string `json:"item_statuses"`
 }

@@ -166,6 +166,11 @@ type CatalogEntityContractDescriptor struct {
 	AvailabilityStatuses      map[string]string `json:"availability_statuses"`
 	PriceVerificationStatuses map[string]string `json:"price_verification_statuses"`
 	FulfillmentModes          map[string]string `json:"fulfillment_modes"`
+	// ItemStatuses per migration 000016 catalog_items_status_chk (5 values:
+	// draft, active, inactive, archived, expired) + migration 000018
+	// offers_status_chk. The values are identical across both tables; we
+	// expose a single map here.
+	ItemStatuses map[string]string `json:"item_statuses"`
 	// NOTE: ItemTypes is intentionally ABSENT. Per SQL migration 000016,
 	// item_type is TEXT (non-empty), NOT an enum. Per Catalog Contract
 	// §"Vertical Templates", item_type is vertical-specific and the merchant
@@ -255,6 +260,18 @@ func DefaultCatalogEntityContractDescriptor() CatalogEntityContractDescriptor {
 			"appointment": "موعد محدد (مثل عيادة أو خدمة)",
 			"travel":      "حجز سفر/رحلة (يحتاج origin/destination/date)",
 			"manual":      "تنفيذ يدوي/مخصص",
+		},
+		// Per SQL migration 000016 catalog_items_status_chk + migration
+		// 000018 offers_status_chk. Both CHECK constraints use the same 5
+		// values (draft, active, inactive, archived, expired). We expose
+		// them as a single ItemStatuses map for the frontend's item-status
+		// badges (and the archived-state restore flow).
+		ItemStatuses: map[string]string{
+			"draft":    "مسودة",
+			"active":   "نشط",
+			"inactive": "غير نشط",
+			"archived": "مؤرشف",
+			"expired":  "منتهي",
 		},
 		Relationships: []EntityRelationship{
 			{From: "Catalog", To: "CatalogItem", Cardinality: "one_to_many", Description: "Catalog يحتوي على عدة CatalogItems"},

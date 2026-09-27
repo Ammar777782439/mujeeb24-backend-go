@@ -517,7 +517,28 @@ func (r *CatalogRepository) UpdateCatalogItem(ctx context.Context, patch ports.C
 	if len(attributes) == 0 {
 		attributes = nil
 	}
-	err = executor.QueryRow(ctx, `UPDATE catalog_items SET name = COALESCE($3, name), status = COALESCE($4, status), attributes = COALESCE($5::jsonb, attributes), resource_version = resource_version + 1, updated_at = $6 WHERE business_id = $1::uuid AND id = $2::uuid AND resource_version = $7 RETURNING id::text, business_id::text, catalog_id::text, attribute_schema_id::text, attribute_schema_version, item_type, name, short_description, long_description, status, pricing_mode, availability_mode, fulfillment_mode, requires_confirmation, attributes, resource_version, created_at, updated_at`, patch.BusinessID, patch.ID, patch.Name, patch.Status, attributes, patch.UpdatedAt, patch.ExpectedVersion).Scan(&item.ID, &item.BusinessID, &item.CatalogID, &item.AttributeSchemaID, &item.AttributeSchemaVersion, &item.ItemType, &item.Name, &item.ShortDescription, &item.LongDescription, &item.Status, &item.PricingMode, &item.AvailabilityMode, &item.FulfillmentMode, &item.RequiresConfirmation, &item.Attributes, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt)
+	err = executor.QueryRow(ctx, `UPDATE catalog_items SET
+                name = COALESCE($3, name),
+                status = COALESCE($4, status),
+                item_type = COALESCE($5, item_type),
+                short_description = COALESCE($6, short_description),
+                long_description = COALESCE($7, long_description),
+                pricing_mode = COALESCE($8, pricing_mode),
+                availability_mode = COALESCE($9, availability_mode),
+                fulfillment_mode = COALESCE($10, fulfillment_mode),
+                requires_confirmation = COALESCE($11, requires_confirmation),
+                attributes = COALESCE($12::jsonb, attributes),
+                resource_version = resource_version + 1,
+                updated_at = $13
+        WHERE business_id = $1::uuid AND id = $2::uuid AND resource_version = $14
+        RETURNING id::text, business_id::text, catalog_id::text, attribute_schema_id::text, attribute_schema_version, item_type, name, short_description, long_description, status, pricing_mode, availability_mode, fulfillment_mode, requires_confirmation, attributes, resource_version, created_at, updated_at`,
+		patch.BusinessID, patch.ID,
+		patch.Name, patch.Status,
+		patch.ItemType, patch.ShortDescription, patch.LongDescription,
+		patch.PricingMode, patch.AvailabilityMode, patch.FulfillmentMode,
+		patch.RequiresConfirmation,
+		attributes, patch.UpdatedAt, patch.ExpectedVersion,
+	).Scan(&item.ID, &item.BusinessID, &item.CatalogID, &item.AttributeSchemaID, &item.AttributeSchemaVersion, &item.ItemType, &item.Name, &item.ShortDescription, &item.LongDescription, &item.Status, &item.PricingMode, &item.AvailabilityMode, &item.FulfillmentMode, &item.RequiresConfirmation, &item.Attributes, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt)
 	if err == nil {
 		return item, nil
 	}

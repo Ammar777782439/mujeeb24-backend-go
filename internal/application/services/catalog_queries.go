@@ -191,10 +191,10 @@ var _ queries.GetAttributeSchemaHandler = GetAttributeSchemaQueryService{}
 // to hardcode the translations in the client.
 type GetCatalogEntityContractQueryService struct{}
 
-// Handle returns the Catalog Entity Contract descriptor + item statuses
-// (the latter is sourced from migration 000016 catalog_items_status_chk
-// since the descriptor itself only carries item/offer/variant SCHEMA
-// dimensions per contract ⑤ §3-5).
+// Handle returns the Catalog Entity Contract descriptor. The descriptor
+// now carries all six enum dimensions (PricingModes, AvailabilityModes,
+// FulfillmentModes, AvailabilityStatuses, PriceVerificationStatuses,
+// ItemStatuses) per contract ⑤ §8 + migration 000016/000018.
 func (s GetCatalogEntityContractQueryService) Handle(ctx context.Context, query queries.GetCatalogEntityContractQuery) (commands.CatalogEntityContractView, error) {
 	d := DefaultCatalogEntityContractDescriptor()
 	return commands.CatalogEntityContractView{
@@ -203,18 +203,7 @@ func (s GetCatalogEntityContractQueryService) Handle(ctx context.Context, query 
 		AvailabilityStatuses:      d.AvailabilityStatuses,
 		PriceVerificationStatuses: d.PriceVerificationStatuses,
 		FulfillmentModes:          d.FulfillmentModes,
-		// ItemStatuses is sourced from migration 000016 catalog_items_status_chk
-		// (5 values: draft, active, inactive, archived, expired).
-		// Kept here instead of in the descriptor because contract ⑤ focuses on
-		// item/offer/variant SCHEMA dimensions; status lifecycle is a separate
-		// concern documented in migration 000016 directly.
-		ItemStatuses: map[string]string{
-			"draft":    "مسودة",
-			"active":   "نشط",
-			"inactive": "غير نشط",
-			"archived": "مؤرشف",
-			"expired":  "منتهي",
-		},
+		ItemStatuses:              d.ItemStatuses,
 	}, nil
 }
 

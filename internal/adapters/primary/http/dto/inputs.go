@@ -416,9 +416,16 @@ type CreateCatalogItemRequest struct {
 	Attributes           map[string]any `json:"attributes,omitempty"`
 }
 type UpdateCatalogItemRequest struct {
-	Name       string         `json:"name,omitempty"`
-	Status     string         `json:"status,omitempty"`
-	Attributes map[string]any `json:"attributes,omitempty"`
+	Name                 string         `json:"name,omitempty"`
+	Status               string         `json:"status,omitempty"`
+	ItemType             string         `json:"item_type,omitempty"`
+	ShortDescription     *string        `json:"short_description,omitempty"`
+	LongDescription      *string        `json:"long_description,omitempty"`
+	PricingMode          string         `json:"pricing_mode,omitempty"`
+	AvailabilityMode     string         `json:"availability_mode,omitempty"`
+	FulfillmentMode      string         `json:"fulfillment_mode,omitempty"`
+	RequiresConfirmation *bool          `json:"requires_confirmation,omitempty"`
+	Attributes           map[string]any `json:"attributes,omitempty"`
 }
 type CreateOfferRequest struct {
 	VariantID          *UUID    `json:"variant_id,omitempty"`

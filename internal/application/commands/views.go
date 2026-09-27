@@ -220,9 +220,9 @@ type CatalogEntityContractView struct {
 	AvailabilityStatuses      map[string]string
 	PriceVerificationStatuses map[string]string
 	FulfillmentModes          map[string]string
-	// ItemStatuses is sourced from migration 000016 catalog_items_status_chk
-	// (the descriptor doesn't carry this dimension since contract ⑤ focuses
-	// on item/offer/variant SCHEMA fields, but the frontend needs it to
-	// translate the catalog_items.status column values for badges).
+	// ItemStatuses per migration 000016 catalog_items_status_chk +
+	// migration 000018 offers_status_chk (5 values: draft, active,
+	// inactive, archived, expired). Sourced from the descriptor's
+	// ItemStatuses field (no inline hardcoding here).
 	ItemStatuses map[string]string
 }
