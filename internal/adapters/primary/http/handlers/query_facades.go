@@ -208,6 +208,33 @@ func (s *Server) dispatchAdditionalQuery(ctx context.Context, operationID string
 		out := &contract.Single[contract.Catalog]{}
 		out.Body.Data = catalogProjection(view)
 		return out, true
+	case "getCatalogEntityContract":
+		// Per contract ⑤ §17, the Catalog Entity Contract is global
+		// knowledge (same for every business). The BusinessID is used
+		// only for auth scope validation; the returned value is
+		// independent of which business asks.
+		in := input.(*contract.CatalogEntityContractPath)
+		if s.deps.GetCatalogEntityContract == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.GetCatalogEntityContract.Handle(ctx, queries.GetCatalogEntityContractQuery{Meta: queryMeta(actor, "", "")})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		out := &contract.Single[contract.CatalogEntityContract]{}
+		out.Body.Data = contract.CatalogEntityContract{
+			PricingModes:              view.PricingModes,
+			AvailabilityModes:         view.AvailabilityModes,
+			AvailabilityStatuses:      view.AvailabilityStatuses,
+			PriceVerificationStatuses: view.PriceVerificationStatuses,
+			FulfillmentModes:          view.FulfillmentModes,
+			ItemStatuses:              view.ItemStatuses,
+		}
+		return out, true
 	case "listCatalogItems":
 		in := input.(*contract.CatalogItemsInput)
 		if s.deps.ListCatalogItems == nil {

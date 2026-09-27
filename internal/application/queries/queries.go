@@ -169,12 +169,25 @@ type GetAttributeSchemaQuery struct {
 }
 type ListCatalogsHandler = commands.QueryHandler[ListCatalogsQuery, commands.ListResult[commands.CatalogView]]
 type GetCatalogHandler = commands.QueryHandler[GetCatalogQuery, commands.CatalogView]
+type GetCatalogEntityContractHandler = commands.QueryHandler[GetCatalogEntityContractQuery, commands.CatalogEntityContractView]
 type ListCatalogItemsHandler = commands.QueryHandler[ListCatalogItemsQuery, commands.ListResult[commands.CatalogItemView]]
 type GetCatalogItemHandler = commands.QueryHandler[GetCatalogItemQuery, commands.CatalogItemView]
 type ListOffersHandler = commands.QueryHandler[ListOffersQuery, commands.ListResult[commands.OfferView]]
 type ListVariantsHandler = commands.QueryHandler[ListVariantsQuery, commands.ListResult[commands.VariantView]]
 type ListAttributeSchemasHandler = commands.QueryHandler[ListAttributeSchemasQuery, commands.ListResult[commands.AttributeSchemaView]]
 type GetAttributeSchemaHandler = commands.QueryHandler[GetAttributeSchemaQuery, commands.AttributeSchemaView]
+
+// GetCatalogEntityContractQuery retrieves the Catalog Entity Contract
+// descriptor (contract ⑤ §8). Per contract ⑤ §17, this is global knowledge
+// (same for every business); the Meta.BusinessID is used only for auth
+// scope validation, NOT for selecting which contract to return.
+//
+// Per ADR-045, the descriptor is the authoritative source of truth for
+// enum value meanings — the frontend uses this to translate backend enum
+// values to Arabic labels WITHOUT hardcoding them in the client.
+type GetCatalogEntityContractQuery struct {
+	Meta QueryMeta
+}
 
 type ListLeadsQuery struct {
 	Meta       QueryMeta

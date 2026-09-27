@@ -365,3 +365,53 @@ type AuditEvent struct {
 	Metadata       map[string]any `json:"metadata"`
 	OccurredAt     time.Time      `json:"occurred_at"`
 }
+
+// CatalogEntityContract is the public projection of the Catalog Entity
+// Contract descriptor (contract ⑤ §8). Returned by GET
+// /businesses/{business_id}/catalogs/entity-contract.
+//
+// Per contract ⑤ §17, this contains ONLY type/meaning definitions — no
+// merchant-specific data. The same payload is sent to Gemini in
+// system_instruction; this endpoint exposes it to the dashboard frontend
+// so the UI can translate enum values to Arabic labels WITHOUT hardcoding
+// them in the client (per the "no hardcoded code in frontend" directive).
+//
+// Every map below mirrors services.CatalogEntityContractDescriptor verbatim
+// (sourced from the SQL migration CHECK constraints). If the SQL migrations
+// add a new enum value, services.DefaultCatalogEntityContractDescriptor()
+// is the source of truth and this DTO will carry the new value
+// automatically.
+type CatalogEntityContract struct {
+	// PricingModes maps each pricing_mode enum value to its Arabic
+	// description. Per migration 000016/000018 offers_pricing_mode_chk +
+	// catalog_items_pricing_mode_chk, the 7 allowed values are:
+	// fixed, starting_from, per_unit, per_person, per_day, quote_required, dynamic.
+	PricingModes map[string]string `json:"pricing_modes"`
+	// AvailabilityModes maps each availability_mode enum value to its Arabic
+	// description. Per migration 000016/000018 catalog_items_availability_mode_chk +
+	// offers_availability_mode_chk, the 5 allowed values are:
+	// stock, schedule, supplier_check, always_available, unknown.
+	AvailabilityModes map[string]string `json:"availability_modes"`
+	// AvailabilityStatuses maps each availability_status enum value to its
+	// Arabic description. Per migration 000018 offers_availability_status_chk,
+	// the 5 allowed values are: available, unavailable, unknown, requires_check, stale.
+	AvailabilityStatuses map[string]string `json:"availability_statuses"`
+	// PriceVerificationStatuses maps each price_verification_status enum
+	// value to its Arabic description. Per migration 000018
+	// offers_price_verification_chk, the 4 allowed values are:
+	// unverified, verified, stale, rejected.
+	PriceVerificationStatuses map[string]string `json:"price_verification_statuses"`
+	// FulfillmentModes maps each fulfillment_mode enum value to its Arabic
+	// description. Per migration 000016/000018 catalog_items_fulfillment_mode_chk +
+	// offers_fulfillment_mode_chk, the 6 allowed values are:
+	// delivery, pickup, digital, appointment, travel, manual.
+	FulfillmentModes map[string]string `json:"fulfillment_modes"`
+	// ItemStatuses maps each catalog_items.status enum value to its Arabic
+	// description. Per migration 000016 catalog_items_status_chk, the 5
+	// allowed values are: draft, active, inactive, archived, expired.
+	// (NOTE: this field is NOT in services.CatalogEntityContractDescriptor
+	// — the descriptor focuses on contract ⑤ §3-5 enum dimensions only.
+	// We expose it here for the frontend's item-status badges; the values
+	// are sourced from the same SQL migration.)
+	ItemStatuses map[string]string `json:"item_statuses"`
+}

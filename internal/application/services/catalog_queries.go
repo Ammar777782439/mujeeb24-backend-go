@@ -175,3 +175,47 @@ var _ queries.ListOffersHandler = ListOffersQueryService{}
 var _ queries.ListVariantsHandler = ListVariantsQueryService{}
 var _ queries.ListAttributeSchemasHandler = ListAttributeSchemasQueryService{}
 var _ queries.GetAttributeSchemaHandler = GetAttributeSchemaQueryService{}
+
+// GetCatalogEntityContractQueryService returns the canonical Catalog Entity
+// Contract descriptor. Per contract ⑤ §17, the descriptor is global
+// knowledge (same for every business); the BusinessID in the query is used
+// only for auth scope validation, NOT for selecting which contract to return.
+//
+// The service does NOT touch the database — it returns
+// services.DefaultCatalogEntityContractDescriptor() directly. This is by
+// design: the contract is canonical in-memory knowledge sourced from the
+// SQL migration CHECK constraints; it is NOT merchant-specific data.
+//
+// Per ADR-045, this endpoint is the authoritative source the frontend uses
+// to translate backend enum values to Arabic labels — eliminating the need
+// to hardcode the translations in the client.
+type GetCatalogEntityContractQueryService struct{}
+
+// Handle returns the Catalog Entity Contract descriptor + item statuses
+// (the latter is sourced from migration 000016 catalog_items_status_chk
+// since the descriptor itself only carries item/offer/variant SCHEMA
+// dimensions per contract ⑤ §3-5).
+func (s GetCatalogEntityContractQueryService) Handle(ctx context.Context, query queries.GetCatalogEntityContractQuery) (commands.CatalogEntityContractView, error) {
+	d := DefaultCatalogEntityContractDescriptor()
+	return commands.CatalogEntityContractView{
+		PricingModes:              d.PricingModes,
+		AvailabilityModes:         d.AvailabilityModes,
+		AvailabilityStatuses:      d.AvailabilityStatuses,
+		PriceVerificationStatuses: d.PriceVerificationStatuses,
+		FulfillmentModes:          d.FulfillmentModes,
+		// ItemStatuses is sourced from migration 000016 catalog_items_status_chk
+		// (5 values: draft, active, inactive, archived, expired).
+		// Kept here instead of in the descriptor because contract ⑤ focuses on
+		// item/offer/variant SCHEMA dimensions; status lifecycle is a separate
+		// concern documented in migration 000016 directly.
+		ItemStatuses: map[string]string{
+			"draft":    "مسودة",
+			"active":   "نشط",
+			"inactive": "غير نشط",
+			"archived": "مؤرشف",
+			"expired":  "منتهي",
+		},
+	}, nil
+}
+
+var _ queries.GetCatalogEntityContractHandler = GetCatalogEntityContractQueryService{}

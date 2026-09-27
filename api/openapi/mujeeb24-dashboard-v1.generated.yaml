@@ -508,6 +508,41 @@ components:
         - updated_at
         - resource_version
       type: object
+    CatalogEntityContract:
+      additionalProperties: false
+      properties:
+        availability_modes:
+          additionalProperties:
+            type: string
+          type: object
+        availability_statuses:
+          additionalProperties:
+            type: string
+          type: object
+        fulfillment_modes:
+          additionalProperties:
+            type: string
+          type: object
+        item_statuses:
+          additionalProperties:
+            type: string
+          type: object
+        price_verification_statuses:
+          additionalProperties:
+            type: string
+          type: object
+        pricing_modes:
+          additionalProperties:
+            type: string
+          type: object
+      required:
+        - pricing_modes
+        - availability_modes
+        - availability_statuses
+        - price_verification_statuses
+        - fulfillment_modes
+        - item_statuses
+      type: object
     CatalogItem:
       additionalProperties: false
       properties:
@@ -2352,6 +2387,23 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/Catalog"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleCatalogEntityContractBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleCatalogEntityContractBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/CatalogEntityContract"
         request_id:
           type: string
       required:
@@ -5091,6 +5143,70 @@ paths:
       security:
         - bearerAuth: []
       summary: Create catalog
+      tags:
+        - Catalog
+  /businesses/{business_id}/catalogs/entity-contract:
+    get:
+      operationId: getCatalogEntityContract
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleCatalogEntityContractBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Get catalog entity contract (enum Arabic labels)
       tags:
         - Catalog
   /businesses/{business_id}/catalogs/{catalog_id}:

@@ -89,6 +89,7 @@ type Dependencies struct {
 	ListCustomerTransactions  queries.ListCustomerTransactionsHandler
 	ListCatalogs              queries.ListCatalogsHandler
 	GetCatalog                queries.GetCatalogHandler
+	GetCatalogEntityContract  queries.GetCatalogEntityContractHandler
 	ListCatalogItems          queries.ListCatalogItemsHandler
 	GetCatalogItem            queries.GetCatalogItemHandler
 	ListOffers                queries.ListOffersHandler
