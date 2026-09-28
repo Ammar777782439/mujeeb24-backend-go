@@ -1,5 +1,72 @@
 components:
   schemas:
+    AIConfigurationView:
+      additionalProperties: false
+      properties:
+        activated_at:
+          type: string
+        credential_id:
+          type: string
+        credential_status:
+          type: string
+        effective_max_output:
+          format: int64
+          type: integer
+        model:
+          type: string
+        mujeeb_max_input_chars:
+          format: int64
+          type: integer
+        mujeeb_max_output_tokens:
+          format: int64
+          type: integer
+        pricing_version:
+          type: string
+        provider:
+          type: string
+        status:
+          type: string
+        version:
+          format: int64
+          type: integer
+      required:
+        - provider
+        - model
+        - credential_id
+        - credential_status
+        - mujeeb_max_input_chars
+        - mujeeb_max_output_tokens
+        - effective_max_output
+        - version
+        - status
+      type: object
+    AICredentialView:
+      additionalProperties: false
+      properties:
+        created_at:
+          type: string
+        display_name:
+          type: string
+        id:
+          type: string
+        key_hint:
+          type: string
+        provider:
+          type: string
+        status:
+          type: string
+        validated_at:
+          type: string
+        validation_error:
+          type: string
+      required:
+        - id
+        - provider
+        - display_name
+        - key_hint
+        - status
+        - created_at
+      type: object
     AIDecision:
       additionalProperties: false
       properties:
@@ -62,6 +129,60 @@ components:
       required:
         - reason
       type: object
+    AIModelView:
+      additionalProperties: false
+      properties:
+        base_model:
+          type: string
+        description:
+          type: string
+        display_name:
+          type: string
+        id:
+          type: string
+        input_token_limit:
+          format: int64
+          type: integer
+        model_name:
+          type: string
+        output_token_limit:
+          format: int64
+          type: integer
+        provider:
+          type: string
+        supported_methods:
+          items:
+            type: string
+          nullable: true
+          type: array
+        temperature_max:
+          format: double
+          type: number
+        temperature_min:
+          format: double
+          type: number
+        thinking_supported:
+          type: boolean
+        top_k_max:
+          format: int64
+          type: integer
+        top_k_min:
+          format: int64
+          type: integer
+        top_p_max:
+          format: double
+          type: number
+        top_p_min:
+          format: double
+          type: number
+        version:
+          type: string
+      required:
+        - id
+        - provider
+        - model_name
+        - thinking_supported
+      type: object
     AcceptTeamInvitationRequest:
       additionalProperties: false
       properties:
@@ -77,6 +198,30 @@ components:
           type: string
       required:
         - acceptance_token
+      type: object
+    AddCredentialRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/AddCredentialRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        api_key:
+          maxLength: 512
+          minLength: 1
+          type: string
+        display_name:
+          maxLength: 128
+          minLength: 1
+          type: string
+        provider:
+          type: string
+      required:
+        - provider
+        - display_name
+        - api_key
       type: object
     AssignConversationRequest:
       additionalProperties: false
@@ -426,6 +571,22 @@ components:
           type: string
         vertical_type:
           type: string
+      type: object
+    CancelSubscriptionRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/CancelSubscriptionRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        reason:
+          maxLength: 500
+          minLength: 1
+          type: string
+      required:
+        - reason
       type: object
     CannedReply:
       additionalProperties: false
@@ -903,6 +1064,54 @@ components:
         - action_kind
         - action_payload
       type: object
+    CreateBusinessRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/CreateBusinessRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        default_currency:
+          maxLength: 3
+          minLength: 3
+          type: string
+        locale:
+          maxLength: 10
+          minLength: 2
+          type: string
+        name:
+          maxLength: 256
+          minLength: 1
+          type: string
+        slug:
+          maxLength: 128
+          minLength: 1
+          type: string
+        timezone:
+          default: Asia/Aden
+          type: string
+        vertical_type:
+          enum:
+            - retail
+            - travel
+            - services
+            - restaurant
+            - clinic
+            - hospitality
+            - education
+            - real_estate
+            - other
+          type: string
+      required:
+        - name
+        - slug
+        - vertical_type
+        - timezone
+        - default_currency
+        - locale
+      type: object
     CreateCannedReplyRequest:
       additionalProperties: false
       properties:
@@ -1061,6 +1270,169 @@ components:
         - availability_mode
         - availability_status
         - fulfillment_mode
+      type: object
+    CreatePlanRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/CreatePlanRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        ai_catalog_limit:
+          format: int64
+          minimum: 0
+          type: integer
+        ai_reply_limit:
+          format: int64
+          minimum: 1
+          type: integer
+        billing_interval:
+          default: MONTH
+          type: string
+        channel_limit:
+          format: int64
+          minimum: 1
+          type: integer
+        code:
+          maxLength: 64
+          minLength: 1
+          type: string
+        display_name:
+          maxLength: 128
+          minLength: 1
+          type: string
+        internal_ai_cost_budget_yer:
+          format: int64
+          minimum: 1
+          type: integer
+        price_yer:
+          format: int64
+          minimum: 1
+          type: integer
+      required:
+        - code
+        - display_name
+        - price_yer
+        - billing_interval
+        - ai_reply_limit
+        - ai_catalog_limit
+        - channel_limit
+        - internal_ai_cost_budget_yer
+      type: object
+    CreatePlanVersionRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/CreatePlanVersionRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        ai_catalog_limit:
+          format: int64
+          minimum: 0
+          type: integer
+        ai_reply_limit:
+          format: int64
+          minimum: 1
+          type: integer
+        billing_interval:
+          default: MONTH
+          type: string
+        channel_limit:
+          format: int64
+          minimum: 1
+          type: integer
+        display_name:
+          maxLength: 128
+          minLength: 1
+          type: string
+        internal_ai_cost_budget_yer:
+          format: int64
+          minimum: 1
+          type: integer
+        price_yer:
+          format: int64
+          minimum: 1
+          type: integer
+        reason:
+          maxLength: 500
+          minLength: 1
+          type: string
+      required:
+        - display_name
+        - price_yer
+        - billing_interval
+        - ai_reply_limit
+        - ai_catalog_limit
+        - channel_limit
+        - internal_ai_cost_budget_yer
+        - reason
+      type: object
+    CreateSubscriptionRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/CreateSubscriptionRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        plan_id:
+          format: uuid
+          type: string
+      required:
+        - plan_id
+      type: object
+    CreateSupportMessageRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/CreateSupportMessageRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        body:
+          maxLength: 10000
+          minLength: 1
+          type: string
+      required:
+        - body
+      type: object
+    CreateSupportTicketRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/CreateSupportTicketRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        category:
+          enum:
+            - ACCOUNT
+            - CHANNEL
+            - AI
+            - CATALOG
+            - SALES
+            - BILLING
+            - OTHER
+          type: string
+        priority:
+          enum:
+            - NORMAL
+            - HIGH
+            - CRITICAL
+          type: string
+        subject:
+          maxLength: 256
+          minLength: 1
+          type: string
+      required:
+        - subject
       type: object
     CreateTeamInvitationRequest:
       additionalProperties: false
@@ -1385,6 +1757,29 @@ components:
         - factors
         - calculated_at
       type: object
+    ListAICredentialViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListAICredentialViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/AICredentialView"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
     ListAIDecisionBody:
       additionalProperties: false
       properties:
@@ -1397,6 +1792,29 @@ components:
         data:
           items:
             $ref: "#/components/schemas/AIDecision"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
+    ListAIModelViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListAIModelViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/AIModelView"
           nullable: true
           type: array
         pagination:
@@ -1788,6 +2206,213 @@ components:
         data:
           items:
             $ref: "#/components/schemas/Offer"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
+    ListPaymentViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListPaymentViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/PaymentView"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
+    ListPlanViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListPlanViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/PlanView"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
+    ListPlatformAuditEventViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListPlatformAuditEventViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/PlatformAuditEventView"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
+    ListPlatformBusinessViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListPlatformBusinessViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/PlatformBusinessView"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
+    ListPlatformChannelViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListPlatformChannelViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/PlatformChannelView"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
+    ListPlatformProviderViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListPlatformProviderViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/PlatformProviderView"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
+    ListSubscriptionAIUsageViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListSubscriptionAIUsageViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/SubscriptionAIUsageView"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
+    ListSubscriptionViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListSubscriptionViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/SubscriptionView"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
+    ListSupportTicketViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListSupportTicketViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/SupportTicketView"
           nullable: true
           type: array
         pagination:
@@ -2196,6 +2821,319 @@ components:
       required:
         - has_more
       type: object
+    PaymentView:
+      additionalProperties: false
+      properties:
+        amount_yer:
+          format: int64
+          type: integer
+        business_id:
+          type: string
+        created_at:
+          type: string
+        id:
+          type: string
+        method:
+          type: string
+        paid_at:
+          type: string
+        recorded_by:
+          type: string
+        reference:
+          type: string
+        subscription_id:
+          type: string
+      required:
+        - id
+        - subscription_id
+        - business_id
+        - amount_yer
+        - method
+        - reference
+        - paid_at
+        - recorded_by
+        - created_at
+      type: object
+    PlanView:
+      additionalProperties: false
+      properties:
+        ai_catalog_limit:
+          format: int64
+          type: integer
+        ai_reply_limit:
+          format: int64
+          type: integer
+        billing_interval:
+          type: string
+        channel_limit:
+          format: int64
+          type: integer
+        code:
+          type: string
+        created_at:
+          type: string
+        display_name:
+          type: string
+        id:
+          type: string
+        internal_ai_cost_budget_yer:
+          format: int64
+          type: integer
+        price_yer:
+          format: int64
+          type: integer
+        retired_at:
+          type: string
+        status:
+          type: string
+        updated_at:
+          type: string
+        version:
+          format: int64
+          type: integer
+      required:
+        - id
+        - code
+        - version
+        - display_name
+        - price_yer
+        - billing_interval
+        - ai_reply_limit
+        - ai_catalog_limit
+        - channel_limit
+        - internal_ai_cost_budget_yer
+        - status
+        - created_at
+        - updated_at
+      type: object
+    PlatformAIHealthCheckResult:
+      additionalProperties: false
+      properties:
+        checked_at:
+          type: string
+        failure_code:
+          type: string
+        latency_ms:
+          format: int64
+          type: integer
+        model:
+          type: string
+        provider:
+          type: string
+        result:
+          type: string
+      required:
+        - provider
+        - model
+        - result
+        - latency_ms
+        - checked_at
+      type: object
+    PlatformAIOverviewView:
+      additionalProperties: false
+      properties:
+        provider:
+          $ref: "#/components/schemas/PlatformAIOverviewViewProviderStruct"
+        runtime:
+          $ref: "#/components/schemas/PlatformAIOverviewViewRuntimeStruct"
+      required:
+        - runtime
+        - provider
+      type: object
+    PlatformAIOverviewViewProviderStruct:
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+        health:
+          type: string
+        model:
+          type: string
+        provider:
+          type: string
+      required:
+        - provider
+        - model
+        - enabled
+        - health
+      type: object
+    PlatformAIOverviewViewRuntimeStruct:
+      additionalProperties: false
+      properties:
+        health:
+          type: string
+        status:
+          type: string
+      required:
+        - status
+        - health
+      type: object
+    PlatformAIUsageOverviewView:
+      additionalProperties: false
+      properties:
+        average_cost_per_reply:
+          format: int64
+          type: integer
+        total_ai_replies:
+          format: int64
+          type: integer
+        total_cached_tokens:
+          format: int64
+          type: integer
+        total_input_tokens:
+          format: int64
+          type: integer
+        total_model_requests:
+          format: int64
+          type: integer
+        total_output_tokens:
+          format: int64
+          type: integer
+        total_provider_cost_yer:
+          format: int64
+          type: integer
+        total_tool_calls:
+          format: int64
+          type: integer
+      required:
+        - total_ai_replies
+        - total_input_tokens
+        - total_cached_tokens
+        - total_output_tokens
+        - total_model_requests
+        - total_tool_calls
+        - total_provider_cost_yer
+        - average_cost_per_reply
+      type: object
+    PlatformAuditEventView:
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+        actor_platform_admin_id:
+          type: string
+        business_id:
+          type: string
+        correlation_id:
+          type: string
+        failure_code:
+          type: string
+        id:
+          type: string
+        metadata:
+          additionalProperties: {}
+          type: object
+        occurred_at:
+          type: string
+        result:
+          type: string
+        target_id:
+          type: string
+        target_type:
+          type: string
+      required:
+        - id
+        - action
+        - target_type
+        - result
+        - occurred_at
+        - metadata
+      type: object
+    PlatformBusinessView:
+      additionalProperties: false
+      properties:
+        created_at:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        owner_identity_summary:
+          type: string
+        platform_status:
+          type: string
+        slug:
+          type: string
+        subscription_summary:
+          type: string
+        updated_at:
+          type: string
+      required:
+        - id
+        - name
+        - slug
+        - platform_status
+        - created_at
+        - updated_at
+      type: object
+    PlatformChannelView:
+      additionalProperties: false
+      properties:
+        business_id:
+          type: string
+        channel:
+          type: string
+        connection_id:
+          type: string
+        failure_code:
+          type: string
+        health:
+          type: string
+        last_failure:
+          type: string
+        last_health_check_at:
+          type: string
+        last_success:
+          type: string
+        provider:
+          type: string
+        provider_account_ref:
+          type: string
+        provider_connection_ref:
+          type: string
+        status:
+          type: string
+      required:
+        - business_id
+        - connection_id
+        - channel
+        - provider
+        - status
+        - health
+      type: object
+    PlatformProviderView:
+      additionalProperties: false
+      properties:
+        admin_state:
+          type: string
+        configured:
+          type: boolean
+        display_name:
+          type: string
+        health_state:
+          type: string
+        last_failure:
+          type: string
+        last_failure_code:
+          type: string
+        last_health_check:
+          type: string
+        last_success:
+          type: string
+        model:
+          type: string
+        provider_id:
+          type: string
+        provider_type:
+          type: string
+      required:
+        - provider_id
+        - provider_type
+        - display_name
+        - admin_state
+        - health_state
+        - configured
+      type: object
     Principal:
       additionalProperties: false
       properties:
@@ -2224,6 +3162,39 @@ components:
           type: string
       required:
         - text
+      type: object
+    RecordPaymentRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/RecordPaymentRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        amount_yer:
+          format: int64
+          minimum: 1
+          type: integer
+        method:
+          enum:
+            - CASH
+            - BANK_TRANSFER
+            - MOBILE_MONEY
+            - OTHER
+          type: string
+        paid_at:
+          format: date-time
+          type: string
+        reference:
+          maxLength: 256
+          minLength: 1
+          type: string
+      required:
+        - amount_yer
+        - method
+        - reference
+        - paid_at
       type: object
     ReviewDecisionRequest:
       additionalProperties: false
@@ -2256,6 +3227,40 @@ components:
           type: string
       required:
         - text
+      type: object
+    SingleAIConfigurationViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleAIConfigurationViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/AIConfigurationView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleAICredentialViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleAICredentialViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/AICredentialView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
       type: object
     SingleAIDecisionBody:
       additionalProperties: false
@@ -2631,6 +3636,159 @@ components:
         - data
         - request_id
       type: object
+    SinglePaymentViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SinglePaymentViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/PaymentView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SinglePlanViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SinglePlanViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/PlanView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SinglePlatformAIHealthCheckResultBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SinglePlatformAIHealthCheckResultBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/PlatformAIHealthCheckResult"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SinglePlatformAIOverviewViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SinglePlatformAIOverviewViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/PlatformAIOverviewView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SinglePlatformAIUsageOverviewViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SinglePlatformAIUsageOverviewViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/PlatformAIUsageOverviewView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SinglePlatformAuditEventViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SinglePlatformAuditEventViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/PlatformAuditEventView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SinglePlatformBusinessViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SinglePlatformBusinessViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/PlatformBusinessView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SinglePlatformChannelViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SinglePlatformChannelViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/PlatformChannelView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SinglePlatformProviderViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SinglePlatformProviderViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/PlatformProviderView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
     SinglePrincipalBody:
       additionalProperties: false
       properties:
@@ -2642,6 +3800,74 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/Principal"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleSubscriptionAIUsageViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleSubscriptionAIUsageViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/SubscriptionAIUsageView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleSubscriptionViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleSubscriptionViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/SubscriptionView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleSupportMessageViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleSupportMessageViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/SupportMessageView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleSupportTicketViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleSupportTicketViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/SupportTicketView"
         request_id:
           type: string
       required:
@@ -2699,6 +3925,23 @@ components:
         - data
         - request_id
       type: object
+    SingleTestConnectionResultBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleTestConnectionResultBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/TestConnectionResult"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
     SingleTransactionReviewBody:
       additionalProperties: false
       properties:
@@ -2749,6 +3992,226 @@ components:
           type: array
       required:
         - reason_codes
+      type: object
+    SubscriptionAICostBudgetOverrideRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SubscriptionAICostBudgetOverrideRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        budget_yer:
+          format: int64
+          minimum: 1
+          type: integer
+        reason:
+          maxLength: 500
+          minLength: 1
+          type: string
+      required:
+        - budget_yer
+        - reason
+      type: object
+    SubscriptionAIUsageView:
+      additionalProperties: false
+      properties:
+        actual_provider_cost_yer:
+          format: int64
+          type: integer
+        ai_replies_remaining:
+          format: int64
+          type: integer
+        ai_replies_used:
+          format: int64
+          type: integer
+        ai_reply_limit:
+          format: int64
+          type: integer
+        average_cost_per_reply_yer:
+          format: int64
+          type: integer
+        budget_status:
+          type: string
+        cached_input_tokens:
+          format: int64
+          type: integer
+        cost_remaining_yer:
+          format: int64
+          type: integer
+        input_tokens:
+          format: int64
+          type: integer
+        internal_cost_budget_yer:
+          format: int64
+          type: integer
+        model_requests:
+          format: int64
+          type: integer
+        output_tokens:
+          format: int64
+          type: integer
+        projected_remaining_cost_yer:
+          format: int64
+          type: integer
+        projected_total_cost_yer:
+          format: int64
+          type: integer
+        subscription_id:
+          type: string
+        tool_calls:
+          format: int64
+          type: integer
+      required:
+        - subscription_id
+        - ai_reply_limit
+        - ai_replies_used
+        - ai_replies_remaining
+        - input_tokens
+        - cached_input_tokens
+        - output_tokens
+        - model_requests
+        - tool_calls
+        - actual_provider_cost_yer
+        - internal_cost_budget_yer
+        - cost_remaining_yer
+        - average_cost_per_reply_yer
+        - projected_remaining_cost_yer
+        - projected_total_cost_yer
+        - budget_status
+      type: object
+    SubscriptionView:
+      additionalProperties: false
+      properties:
+        ai_catalog_limit:
+          format: int64
+          type: integer
+        ai_reply_limit:
+          format: int64
+          type: integer
+        business_id:
+          type: string
+        cancelled_at:
+          type: string
+        cancelled_reason:
+          type: string
+        channel_limit:
+          format: int64
+          type: integer
+        cost_budget_override_reason:
+          type: string
+        cost_budget_override_yer:
+          format: int64
+          type: integer
+        created_at:
+          type: string
+        id:
+          type: string
+        internal_ai_cost_budget_yer:
+          format: int64
+          type: integer
+        period_end:
+          type: string
+        period_start:
+          type: string
+        plan_code:
+          type: string
+        plan_id:
+          type: string
+        plan_version:
+          format: int64
+          type: integer
+        status:
+          type: string
+        updated_at:
+          type: string
+      required:
+        - id
+        - business_id
+        - plan_id
+        - plan_code
+        - plan_version
+        - period_start
+        - period_end
+        - status
+        - ai_reply_limit
+        - ai_catalog_limit
+        - channel_limit
+        - internal_ai_cost_budget_yer
+        - created_at
+        - updated_at
+      type: object
+    SupportMessageView:
+      additionalProperties: false
+      properties:
+        author_id:
+          type: string
+        author_type:
+          type: string
+        body:
+          type: string
+        business_id:
+          type: string
+        created_at:
+          type: string
+        id:
+          type: string
+        ticket_id:
+          type: string
+      required:
+        - id
+        - ticket_id
+        - business_id
+        - author_type
+        - author_id
+        - body
+        - created_at
+      type: object
+    SupportTicketView:
+      additionalProperties: false
+      properties:
+        business_id:
+          type: string
+        category:
+          type: string
+        closed_at:
+          type: string
+        closed_by:
+          type: string
+        created_at:
+          type: string
+        created_by:
+          type: string
+        created_by_type:
+          type: string
+        id:
+          type: string
+        last_message_at:
+          type: string
+        priority:
+          type: string
+        resolved_at:
+          type: string
+        resolved_by:
+          type: string
+        status:
+          type: string
+        subject:
+          type: string
+        updated_at:
+          type: string
+      required:
+        - id
+        - business_id
+        - subject
+        - status
+        - priority
+        - category
+        - created_by
+        - created_by_type
+        - created_at
+        - updated_at
       type: object
     TeamInvitation:
       additionalProperties: false
@@ -2803,6 +4266,26 @@ components:
         - display_name
         - role
         - status
+      type: object
+    TestConnectionResult:
+      additionalProperties: false
+      properties:
+        error_code:
+          type: string
+        latency_ms:
+          format: int64
+          type: integer
+        model:
+          type: string
+        provider:
+          type: string
+        success:
+          type: boolean
+      required:
+        - success
+        - provider
+        - model
+        - latency_ms
       type: object
     TransactionLineInput:
       additionalProperties: false
@@ -2962,6 +4445,35 @@ components:
           type: string
         status:
           type: string
+      type: object
+    UpdateConfigurationRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/UpdateConfigurationRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        credential_id:
+          format: uuid
+          type: string
+        model:
+          minLength: 1
+          type: string
+        mujeeb_max_input_chars:
+          format: int64
+          minimum: 1
+          type: integer
+        mujeeb_max_output_tokens:
+          format: int64
+          minimum: 1
+          type: integer
+      required:
+        - model
+        - credential_id
+        - mujeeb_max_input_chars
+        - mujeeb_max_output_tokens
       type: object
     UpdateConversationRequest:
       additionalProperties: false
@@ -3212,6 +4724,10 @@ paths:
       responses:
         "204":
           description: No Content
+          headers:
+            Set-Cookie,omitempty:
+              schema:
+                $ref: "#/components/schemas/Cookie"
         "401":
           content:
             application/json:
@@ -10364,6 +11880,3515 @@ paths:
       summary: Internal metrics
       tags:
         - Operational
+  /platform/ai:
+    get:
+      operationId: platformGetAIOverview
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlatformAIOverviewViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: AI runtime + provider overview.
+      tags:
+        - Platform.AI
+  /platform/ai/disable:
+    post:
+      operationId: platformAIDisable
+      parameters:
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlatformAIOverviewViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: AI Emergency Kill Switch.
+      tags:
+        - Platform.AI
+  /platform/ai/enable:
+    post:
+      operationId: platformAIEnable
+      parameters:
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlatformAIOverviewViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Re-enable AI Runtime.
+      tags:
+        - Platform.AI
+  /platform/ai/health-check:
+    post:
+      operationId: platformAIHealthCheck
+      parameters:
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlatformAIHealthCheckResultBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: AI health check.
+      tags:
+        - Platform.AI
+  /platform/ai/providers:
+    get:
+      operationId: platformListAIProviders
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPlatformProviderViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List AI providers.
+      tags:
+        - Platform.AI
+  /platform/ai/providers/{provider_id}:
+    get:
+      operationId: platformGetAIProvider
+      parameters:
+        - in: path
+          name: provider_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlatformProviderViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Get a single AI provider.
+      tags:
+        - Platform.AI
+  /platform/ai/usage:
+    get:
+      operationId: platformGetAIUsageOverview
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlatformAIUsageOverviewViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Platform-wide AI usage aggregate.
+      tags:
+        - Platform.AI
+  /platform/ai/usage/by-business:
+    get:
+      operationId: platformGetAIUsageByBusiness
+      parameters:
+        - explode: false
+          in: query
+          name: search
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: status
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: created_from
+          schema:
+            format: date-time
+            type: string
+        - explode: false
+          in: query
+          name: created_to
+          schema:
+            format: date-time
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            format: int64
+            maximum: 1000
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSubscriptionAIUsageViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: AI usage by business.
+      tags:
+        - Platform.AI
+  /platform/ai/usage/by-subscription:
+    get:
+      operationId: platformGetAIUsageBySubscription
+      parameters:
+        - explode: false
+          in: query
+          name: business_id
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: status
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            format: int64
+            maximum: 1000
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSubscriptionAIUsageViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: AI usage by subscription.
+      tags:
+        - Platform.AI
+  /platform/audit-events:
+    get:
+      operationId: platformListAuditEvents
+      parameters:
+        - explode: false
+          in: query
+          name: action
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: target_type
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: target_id
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: business_id
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: result
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: occurred_from
+          schema:
+            format: date-time
+            type: string
+        - explode: false
+          in: query
+          name: occurred_to
+          schema:
+            format: date-time
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            format: int64
+            maximum: 1000
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPlatformAuditEventViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List platform audit events.
+      tags:
+        - Platform.Audit
+  /platform/audit-events/{event_id}:
+    get:
+      operationId: platformGetAuditEvent
+      parameters:
+        - in: path
+          name: event_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlatformAuditEventViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Get a platform audit event.
+      tags:
+        - Platform.Audit
+  /platform/businesses:
+    get:
+      operationId: platformListBusinesses
+      parameters:
+        - explode: false
+          in: query
+          name: search
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: status
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: created_from
+          schema:
+            format: date-time
+            type: string
+        - explode: false
+          in: query
+          name: created_to
+          schema:
+            format: date-time
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            format: int64
+            maximum: 1000
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPlatformBusinessViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List businesses.
+      tags:
+        - Platform.Businesses
+    post:
+      operationId: platformCreateBusiness
+      parameters:
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBusinessRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlatformBusinessViewBody"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Create a new business (status=pending_setup). Per Contract §9, §13.
+      tags:
+        - Platform.Businesses
+  /platform/businesses/{business_id}:
+    get:
+      operationId: platformGetBusiness
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlatformBusinessViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Get a business.
+      tags:
+        - Platform.Businesses
+  /platform/businesses/{business_id}/archive:
+    post:
+      operationId: platformArchiveBusiness
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlatformBusinessViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Archive a business.
+      tags:
+        - Platform.Businesses
+  /platform/businesses/{business_id}/reactivate:
+    post:
+      operationId: platformReactivateBusiness
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlatformBusinessViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Reactivate a business.
+      tags:
+        - Platform.Businesses
+  /platform/businesses/{business_id}/subscriptions:
+    post:
+      operationId: platformCreateSubscription
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubscriptionRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSubscriptionViewBody"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Create a subscription.
+      tags:
+        - Platform.Subscriptions
+  /platform/businesses/{business_id}/support/tickets:
+    post:
+      operationId: platformCreateSupportTicket
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupportTicketRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSupportTicketViewBody"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Create a support ticket.
+      tags:
+        - Platform.Support
+  /platform/businesses/{business_id}/suspend:
+    post:
+      operationId: platformSuspendBusiness
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlatformBusinessViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Suspend a business.
+      tags:
+        - Platform.Businesses
+  /platform/channels:
+    get:
+      operationId: platformListChannels
+      parameters:
+        - explode: false
+          in: query
+          name: business_id
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: status
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: channel
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            format: int64
+            maximum: 1000
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPlatformChannelViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List all channel connections.
+      tags:
+        - Platform.Channels
+  /platform/channels/{connection_id}:
+    get:
+      operationId: platformGetChannel
+      parameters:
+        - in: path
+          name: connection_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlatformChannelViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Get a channel connection.
+      tags:
+        - Platform.Channels
+  /platform/channels/{connection_id}/health-check:
+    post:
+      operationId: platformChannelHealthCheck
+      parameters:
+        - in: path
+          name: connection_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlatformChannelViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Run channel health check.
+      tags:
+        - Platform.Channels
+  /platform/operations/ai/configuration:
+    get:
+      operationId: platformGetAIConfiguration
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleAIConfigurationViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Get current active AI configuration.
+      tags:
+        - Platform.AIConfig
+    put:
+      operationId: platformUpdateAIConfiguration
+      parameters:
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateConfigurationRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleAIConfigurationViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Update active AI configuration (model, limits).
+      tags:
+        - Platform.AIConfig
+  /platform/operations/ai/providers:
+    get:
+      operationId: platformListAIProvidersConfig
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListAICredentialViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List AI providers with credential status.
+      tags:
+        - Platform.AIConfig
+  /platform/operations/ai/providers/{provider}/credentials:
+    post:
+      operationId: platformAddAICredential
+      parameters:
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddCredentialRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleAICredentialViewBody"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Add/rotate AI provider credential.
+      tags:
+        - Platform.AIConfig
+  /platform/operations/ai/providers/{provider}/models:
+    post:
+      operationId: platformDiscoverAIModels
+      parameters:
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListAIModelViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Discover available models from provider.
+      tags:
+        - Platform.AIConfig
+  /platform/operations/ai/providers/{provider}/test:
+    post:
+      operationId: platformTestAIConnection
+      parameters:
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleTestConnectionResultBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Test AI provider connection.
+      tags:
+        - Platform.AIConfig
+  /platform/plans:
+    get:
+      operationId: platformListPlans
+      parameters:
+        - explode: false
+          in: query
+          name: status
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: code
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            format: int64
+            maximum: 1000
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPlanViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List plans.
+      tags:
+        - Platform.Plans
+    post:
+      operationId: platformCreatePlan
+      parameters:
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePlanRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlanViewBody"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Create a new plan (DRAFT).
+      tags:
+        - Platform.Plans
+  /platform/plans/{plan_id}:
+    get:
+      operationId: platformGetPlan
+      parameters:
+        - in: path
+          name: plan_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlanViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Get a plan.
+      tags:
+        - Platform.Plans
+  /platform/plans/{plan_id}/activate:
+    post:
+      operationId: platformActivatePlan
+      parameters:
+        - in: path
+          name: plan_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlanViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Activate a DRAFT plan.
+      tags:
+        - Platform.Plans
+  /platform/plans/{plan_id}/retire:
+    post:
+      operationId: platformRetirePlan
+      parameters:
+        - in: path
+          name: plan_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlanViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Retire an ACTIVE plan.
+      tags:
+        - Platform.Plans
+  /platform/plans/{plan_id}/versions:
+    post:
+      operationId: platformCreatePlanVersion
+      parameters:
+        - in: path
+          name: plan_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePlanVersionRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlanViewBody"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Create a new plan version.
+      tags:
+        - Platform.Plans
+  /platform/providers:
+    get:
+      operationId: platformListProviders
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPlatformProviderViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List all external providers.
+      tags:
+        - Platform.Providers
+  /platform/providers/{provider_id}:
+    get:
+      operationId: platformGetProvider
+      parameters:
+        - in: path
+          name: provider_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlatformProviderViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Get a single provider.
+      tags:
+        - Platform.Providers
+  /platform/providers/{provider_id}/health-check:
+    post:
+      operationId: platformProviderHealthCheck
+      parameters:
+        - in: path
+          name: provider_id
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePlatformProviderViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Run provider health check.
+      tags:
+        - Platform.Providers
+  /platform/subscriptions:
+    get:
+      operationId: platformListSubscriptions
+      parameters:
+        - explode: false
+          in: query
+          name: business_id
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: status
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            format: int64
+            maximum: 1000
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSubscriptionViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List subscriptions.
+      tags:
+        - Platform.Subscriptions
+  /platform/subscriptions/{subscription_id}:
+    get:
+      operationId: platformGetSubscription
+      parameters:
+        - in: path
+          name: subscription_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSubscriptionViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Get a subscription.
+      tags:
+        - Platform.Subscriptions
+  /platform/subscriptions/{subscription_id}/ai-cost-budget:
+    post:
+      operationId: platformOverrideSubscriptionAICostBudget
+      parameters:
+        - in: path
+          name: subscription_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubscriptionAICostBudgetOverrideRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSubscriptionAIUsageViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Override subscription cost budget.
+      tags:
+        - Platform.Subscriptions
+  /platform/subscriptions/{subscription_id}/ai-usage:
+    get:
+      operationId: platformGetSubscriptionAIUsage
+      parameters:
+        - in: path
+          name: subscription_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSubscriptionAIUsageViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Get subscription AI usage.
+      tags:
+        - Platform.Subscriptions
+  /platform/subscriptions/{subscription_id}/cancel:
+    post:
+      operationId: platformCancelSubscription
+      parameters:
+        - in: path
+          name: subscription_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelSubscriptionRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSubscriptionViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Cancel a subscription.
+      tags:
+        - Platform.Subscriptions
+  /platform/subscriptions/{subscription_id}/payments:
+    get:
+      operationId: platformListPayments
+      parameters:
+        - explode: false
+          in: query
+          name: subscription_id
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: business_id
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: method
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            format: int64
+            maximum: 1000
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPaymentViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List payments.
+      tags:
+        - Platform.Payments
+    post:
+      operationId: platformRecordPayment
+      parameters:
+        - in: path
+          name: subscription_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordPaymentRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SinglePaymentViewBody"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Record a manual payment.
+      tags:
+        - Platform.Payments
+  /platform/support/tickets:
+    get:
+      operationId: platformListSupportTickets
+      parameters:
+        - explode: false
+          in: query
+          name: business_id
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: status
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: priority
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: category
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: created_from
+          schema:
+            format: date-time
+            type: string
+        - explode: false
+          in: query
+          name: created_to
+          schema:
+            format: date-time
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            format: int64
+            maximum: 1000
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSupportTicketViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List support tickets.
+      tags:
+        - Platform.Support
+  /platform/support/tickets/{ticket_id}:
+    get:
+      operationId: platformGetSupportTicket
+      parameters:
+        - in: path
+          name: ticket_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSupportTicketViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Get a support ticket.
+      tags:
+        - Platform.Support
+  /platform/support/tickets/{ticket_id}/close:
+    post:
+      operationId: platformCloseSupportTicket
+      parameters:
+        - in: path
+          name: ticket_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSupportTicketViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Close a resolved ticket.
+      tags:
+        - Platform.Support
+  /platform/support/tickets/{ticket_id}/messages:
+    post:
+      operationId: platformCreateSupportMessage
+      parameters:
+        - in: path
+          name: ticket_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupportMessageRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSupportMessageViewBody"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Append a message to a ticket.
+      tags:
+        - Platform.Support
+  /platform/support/tickets/{ticket_id}/resolve:
+    post:
+      operationId: platformResolveSupportTicket
+      parameters:
+        - in: path
+          name: ticket_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSupportTicketViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Resolve a ticket.
+      tags:
+        - Platform.Support
+  /platform/support/tickets/{ticket_id}/start:
+    post:
+      operationId: platformStartSupportTicket
+      parameters:
+        - in: path
+          name: ticket_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key,omitempty
+          schema:
+            type: string
+        - in: header
+          name: If-Match,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID,omitempty
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID,omitempty
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSupportTicketViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Start working on a ticket.
+      tags:
+        - Platform.Support
   /team/invitations/accept:
     post:
       operationId: acceptTeamInvitation
