@@ -1,8 +1,8 @@
 package ports
 
 import (
-	"context"
-	"time"
+        "context"
+        "time"
 )
 
 // ----------------------------------------------------------------------------
@@ -21,16 +21,16 @@ import (
 // model output limit). The runtime must NOT send maxOutputTokens larger than
 // the model's capability.
 type AIActiveConfig struct {
-	Provider              string
-	Model                 string
-	APIKey                string // NEVER returned to frontend
-	BaseURL               string
-	MaxOutputTokens       int // effective = min(Mujeeb, Provider)
-	MaxInputCharacters    int // Mujeeb operational limit
-	PricingVersion        string
-	CredentialStatus      string // CONFIGURED / VALID / INVALID / UNKNOWN
-	CredentialID          string
-	ConfigurationVersion  int
+        Provider              string
+        Model                 string
+        APIKey                string // NEVER returned to frontend
+        BaseURL               string
+        MaxOutputTokens       int // effective = min(Mujeeb, Provider)
+        MaxInputCharacters    int // Mujeeb operational limit
+        PricingVersion        string
+        CredentialStatus      string // CONFIGURED / VALID / INVALID / UNKNOWN
+        CredentialID          string
+        ConfigurationVersion  int
 }
 
 // AIConfigurationProvider is the runtime-facing interface that the Gemini
@@ -40,8 +40,8 @@ type AIActiveConfig struct {
 // Per §2: absence of a valid credential must prevent AI execution with a
 // clear error message, not a panic.
 type AIConfigurationProvider interface {
-	GetActiveConfig(ctx context.Context) (AIActiveConfig, error)
-	Invalidate()
+        GetActiveConfig(ctx context.Context) (AIActiveConfig, error)
+        Invalidate()
 }
 
 // ----------------------------------------------------------------------------
@@ -49,36 +49,36 @@ type AIConfigurationProvider interface {
 // ----------------------------------------------------------------------------
 
 type AICredentialRecord struct {
-	ID              string
-	Provider        string
-	DisplayName    string
-	KeyHint        string // last 4 chars only — never the full key
-	Status         string // CONFIGURED / VALID / INVALID / REVOKED
-	ValidatedAt    *time.Time
-	ValidationError *string
-	CreatedBy      string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	RevokedAt      *time.Time
+        ID              string
+        Provider        string
+        DisplayName    string
+        KeyHint        string // last 4 chars only — never the full key
+        Status         string // CONFIGURED / VALID / INVALID / REVOKED
+        ValidatedAt    *time.Time
+        ValidationError *string
+        CreatedBy      string
+        CreatedAt      time.Time
+        UpdatedAt      time.Time
+        RevokedAt      *time.Time
 }
 
 type AICredentialCreate struct {
-	ID           string
-	Provider     string
-	DisplayName string
-	EncryptedKey string
-	KeyHint      string
-	CreatedBy    string
-	Now          time.Time
+        ID           string
+        Provider     string
+        DisplayName string
+        EncryptedKey string
+        KeyHint      string
+        CreatedBy    string
+        Now          time.Time
 }
 
 type AICredentialRepository interface {
-	StoreCredential(ctx context.Context, create AICredentialCreate) (AICredentialRecord, error)
-	GetActiveCredential(ctx context.Context, provider string) (AICredentialRecord, string, error) // returns (record, decryptedKey, error)
-	GetCredentialByID(ctx context.Context, id string) (AICredentialRecord, error)
-	UpdateCredentialStatus(ctx context.Context, id, status string, validationError *string, now time.Time) (AICredentialRecord, error)
-	RevokeCredential(ctx context.Context, id string, now time.Time) error
-	ListCredentials(ctx context.Context, provider string) ([]AICredentialRecord, error)
+        StoreCredential(ctx context.Context, create AICredentialCreate) (AICredentialRecord, error)
+        GetActiveCredential(ctx context.Context, provider string) (AICredentialRecord, string, error) // returns (record, decryptedKey, error)
+        GetCredentialByID(ctx context.Context, id string) (AICredentialRecord, error)
+        UpdateCredentialStatus(ctx context.Context, id, status string, validationError *string, now time.Time) (AICredentialRecord, error)
+        RevokeCredential(ctx context.Context, id string, now time.Time) error
+        ListCredentials(ctx context.Context, provider string) ([]AICredentialRecord, error)
 }
 
 // ----------------------------------------------------------------------------
@@ -86,34 +86,34 @@ type AICredentialRepository interface {
 // ----------------------------------------------------------------------------
 
 type AIProviderModel struct {
-	ID                 string
-	Provider           string
-	ModelName          string
-	DisplayName        *string
-	Description        *string
-	InputTokenLimit    *int
-	OutputTokenLimit   *int
-	SupportedMethods   []string
-	ThinkingSupported  bool
-	TemperatureMin     *float64
-	TemperatureMax     *float64
-	TopPMin            *float64
-	TopPMax            *float64
-	TopKMin            *int
-	TopKMax            *int
-	Version            *string
-	BaseModel          *string
-	DiscoveredAt       time.Time
+        ID                 string
+        Provider           string
+        ModelName          string
+        DisplayName        *string
+        Description        *string
+        InputTokenLimit    *int
+        OutputTokenLimit   *int
+        SupportedMethods   []string
+        ThinkingSupported  bool
+        TemperatureMin     *float64
+        TemperatureMax     *float64
+        TopPMin            *float64
+        TopPMax            *float64
+        TopKMin            *int
+        TopKMax            *int
+        Version            *string
+        BaseModel          *string
+        DiscoveredAt       time.Time
 }
 
 type ModelDiscoveryClient interface {
-	DiscoverModels(ctx context.Context, apiKey, baseURL string) ([]AIProviderModel, error)
+        DiscoverModels(ctx context.Context, apiKey, baseURL string) ([]AIProviderModel, error)
 }
 
 type AIModelRepository interface {
-	UpsertDiscoveredModels(ctx context.Context, models []AIProviderModel) error
-	ListModels(ctx context.Context, provider string) ([]AIProviderModel, error)
-	GetModel(ctx context.Context, provider, modelName string) (AIProviderModel, error)
+        UpsertDiscoveredModels(ctx context.Context, models []AIProviderModel) error
+        ListModels(ctx context.Context, provider string) ([]AIProviderModel, error)
+        GetModel(ctx context.Context, provider, modelName string) (AIProviderModel, error)
 }
 
 // ----------------------------------------------------------------------------
@@ -121,39 +121,49 @@ type AIModelRepository interface {
 // ----------------------------------------------------------------------------
 
 type AIConfigurationVersion struct {
-	ID                      string
-	Version                 int
-	Provider                string
-	Model                   string
-	CredentialID            string
-	MujeebMaxInputChars     int
-	MujeebMaxOutputTokens   int
-	EffectiveMaxOutputTokens int
-	PricingVersion          *string
-	Status                  string // DRAFT / ACTIVE / DEACTIVATED
-	CreatedBy               string
-	CreatedAt               time.Time
-	ActivatedAt             *time.Time
-	DeactivatedAt           *time.Time
-	Reason                  *string
+        ID                      string
+        Version                 int
+        Provider                string
+        Model                   string
+        CredentialID            string
+        MujeebMaxInputChars     int
+        MujeebMaxOutputTokens   int
+        EffectiveMaxOutputTokens int
+        PricingVersion          *string
+        Status                  string // DRAFT / ACTIVE / DEACTIVATED
+        CreatedBy               string
+        CreatedAt               time.Time
+        ActivatedAt             *time.Time
+        DeactivatedAt           *time.Time
+        Reason                  *string
 }
 
 type AIConfigurationCreate struct {
-	ID                    string
-	Provider              string
-	Model                 string
-	CredentialID          string
-	MujeebMaxInputChars   int
-	MujeebMaxOutputTokens int
-	PricingVersion        *string
-	CreatedBy             string
-	Now                   time.Time
+        ID                    string
+        Provider              string
+        Model                 string
+        CredentialID          string
+        MujeebMaxInputChars   int
+        MujeebMaxOutputTokens int
+        PricingVersion        *string
+        CreatedBy             string
+        Now                   time.Time
 }
 
 type AIConfigurationRepository interface {
-	CreateVersion(ctx context.Context, create AIConfigurationCreate) (AIConfigurationVersion, error)
-	ActivateVersion(ctx context.Context, id string, now time.Time) (AIConfigurationVersion, error)
-	GetActiveVersion(ctx context.Context, provider string) (AIConfigurationVersion, error)
-	GetVersionByID(ctx context.Context, id string) (AIConfigurationVersion, error)
-	ListVersions(ctx context.Context, provider string, limit int) ([]AIConfigurationVersion, error)
+        CreateVersion(ctx context.Context, create AIConfigurationCreate) (AIConfigurationVersion, error)
+        ActivateVersion(ctx context.Context, id string, now time.Time) (AIConfigurationVersion, error)
+        GetActiveVersion(ctx context.Context, provider string) (AIConfigurationVersion, error)
+        GetVersionByID(ctx context.Context, id string) (AIConfigurationVersion, error)
+        ListVersions(ctx context.Context, provider string, limit int) ([]AIConfigurationVersion, error)
+}
+
+// AIProviderConfigService is the combined interface that all three AI
+// provider config repositories implement. Used in PlatformDeps so the
+// handler facades can access credential, model, and configuration methods
+// through a single field.
+type AIProviderConfigService interface {
+        AICredentialRepository
+        AIModelRepository
+        AIConfigurationRepository
 }

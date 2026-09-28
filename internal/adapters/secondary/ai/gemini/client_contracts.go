@@ -49,6 +49,54 @@ type ContractClient struct {
         apiKey         string
         model          string
         requestTimeout time.Duration
+        // configProvider, when set, is called at the start of every DecideContract
+        // call to get the ACTIVE runtime configuration (API key, model, limits).
+        // Per §2: the runtime gets the active config from Configuration abstraction,
+        // not from static env vars. If nil, falls back to static fields (bootstrap/tests).
+        configProvider ports.AIConfigurationProvider
+}
+
+// resolvedAIConfig holds the effective values for one Gemini call.
+type resolvedAIConfig struct {
+        apiKey            string
+        model             string
+        baseURL           string
+        maxOutputTokens   int
+        maxInputCharacters int
+}
+
+// SetConfigurationProvider wires the dynamic AIConfigurationProvider.
+// After this call, every DecideContract resolves the active config from
+// the provider (cache/DB) instead of static struct fields. Per §9:
+// cache invalidation makes new config active without restart.
+func (c *ContractClient) SetConfigurationProvider(provider ports.AIConfigurationProvider) {
+        c.configProvider = provider
+}
+
+// resolveConfig returns the effective AI configuration for this call.
+// Per §1-2: if configProvider is wired, reads from cache/DB. Otherwise
+// falls back to static fields (env bootstrap, tests).
+func (c *ContractClient) resolveConfig(ctx context.Context) (*resolvedAIConfig, error) {
+        if c.configProvider != nil {
+                cfg, err := c.configProvider.GetActiveConfig(ctx)
+                if err != nil {
+                        return nil, fmt.Errorf("resolve AI config: %w", err)
+                }
+                return &resolvedAIConfig{
+                        apiKey:            cfg.APIKey,
+                        model:             cfg.Model,
+                        baseURL:           cfg.BaseURL,
+                        maxOutputTokens:   cfg.MaxOutputTokens,
+                        maxInputCharacters: cfg.MaxInputCharacters,
+                }, nil
+        }
+        return &resolvedAIConfig{
+                apiKey:            c.apiKey,
+                model:             c.model,
+                baseURL:           c.baseURL,
+                maxOutputTokens:   c.base.maxOutputTokens,
+                maxInputCharacters: c.base.maxInputCharacters,
+        }, nil
 }
 
 // NewContractClient wraps an existing Client with contract-aligned methods.
@@ -84,19 +132,23 @@ func (c *ContractClient) DecideContract(ctx context.Context, input ports.Contrac
         if strings.TrimSpace(input.DecisionInput.Text) == "" {
                 return ports.ContractRuntimeOutput{}, errors.New("AI input text is required")
         }
-        // Per contract ④ §6: enforce the LLMMaxInputCharacters limit on the
-        // contract-aligned path. The legacy client checks this (client.go:266),
-        // but the ContractClient was missing the check. Without it, a 1MB
-        // customer message would be sent to Gemini without any rejection.
-        if c.base.maxInputCharacters > 0 && len([]rune(input.DecisionInput.Text)) > c.base.maxInputCharacters {
-                return ports.ContractRuntimeOutput{}, fmt.Errorf("AI input text exceeds %d characters", c.base.maxInputCharacters)
+        // Per §1-2: resolve the ACTIVE runtime configuration from cache/DB.
+        // If configProvider is wired, this reads the dynamic config (model,
+        // API key, limits) that the Platform Admin set. If not wired, falls
+        // back to static env values (bootstrap/tests).
+        rc, err := c.resolveConfig(ctx)
+        if err != nil {
+                return ports.ContractRuntimeOutput{}, err
+        }
+        // Per contract ④ §6: enforce LLMMaxInputCharacters on the contract path.
+        if rc.maxInputCharacters > 0 && len([]rune(input.DecisionInput.Text)) > rc.maxInputCharacters {
+                return ports.ContractRuntimeOutput{}, fmt.Errorf("AI input text exceeds %d characters", rc.maxInputCharacters)
         }
 
         startedAt := time.Now().UTC()
 
-        // Build the Gemini Interactions API request body.
         reqBody := contractGeminiRequest{
-                Model:                 c.model,
+                Model:                 rc.model,
                 PreviousInteractionID: input.GeminiInteraction.PreviousInteractionID,
                 Store:                 input.GeminiInteraction.Store,
                 SystemInstruction:     c.buildContractSystemInstruction(input.EntityContractPayload),
@@ -104,11 +156,11 @@ func (c *ContractClient) DecideContract(ctx context.Context, input ports.Contrac
                 GenerationConfig: contractGenerationConfig{
                         ResponseMimeType:  "application/json",
                         ResponseSchema:    contractProposalResponseSchema(),
-                        MaxOutputTokens:   c.base.maxOutputTokens,
+                        MaxOutputTokens:   rc.maxOutputTokens,
                 },
         }
 
-        resp, err := c.sendContractRequest(ctx, reqBody)
+        resp, err := c.sendContractRequest(ctx, reqBody, rc)
         if err != nil {
                 return ports.ContractRuntimeOutput{}, err
         }
@@ -131,7 +183,7 @@ func (c *ContractClient) DecideContract(ctx context.Context, input ports.Contrac
                         InputTokens:         resp.UsageMetadata.PromptTokenCount,
                         CachedTokens:        resp.UsageMetadata.CachedContentTokenCount,
                         OutputTokens:        resp.UsageMetadata.CandidatesTokenCount,
-                        Model:               c.model,
+                        Model:               rc.model, // per §11: usage records the actual model that executed this request
                         EstimatedCostMicros: 0, // computed by caller using pricing table
                 },
                 LatencyMs: latencyMs,
@@ -178,13 +230,13 @@ func (c *ContractClient) buildContractContents(input ports.AIDecisionInput) []co
 //
 // Per contract ③ §9, Mujeeb uses store=true to enable previous_interaction_id.
 // Per contract ⑨ §11, every external operation has a Timeout.
-func (c *ContractClient) sendContractRequest(ctx context.Context, reqBody contractGeminiRequest) (contractGeminiResponse, error) {
+func (c *ContractClient) sendContractRequest(ctx context.Context, reqBody contractGeminiRequest, rc *resolvedAIConfig) (contractGeminiResponse, error) {
         buf, err := json.Marshal(reqBody)
         if err != nil {
                 return contractGeminiResponse{}, fmt.Errorf("marshal request: %w", err)
         }
 
-        url := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", c.baseURL, c.model, c.apiKey)
+        url := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", rc.baseURL, rc.model, rc.apiKey)
 
         reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
         defer cancel()

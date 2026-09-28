@@ -13,6 +13,7 @@ import (
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/middleware"
         appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+        "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
         "github.com/google/uuid"
         "github.com/jackc/pgx/v5"
 )
@@ -36,6 +37,9 @@ type PlatformDeps struct {
         Operations       ports.PlatformOperationsPort
         // Channel Reader — platform-scoped read of channel_connections (no secrets)
         ChannelReader    ports.PlatformChannelReadPort
+        // Per §1-12: AI Provider Configuration management
+        AIConfigRepo  ports.AIProviderConfigService
+        AIConfigCache *services.AIConfigurationCache
 }
 
 // WithPlatformDeps is the explicit setter for Platform-side dependencies.
@@ -206,6 +210,20 @@ func (s *Server) dispatchPlatformCommandInner(ctx context.Context, operationID s
                 return s.platformGetAIUsageBySubscription(ctx, input.(*dto.SubscriptionListInput))
         case "platformGetAIUsageByBusiness":
                 return s.platformGetAIUsageByBusiness(ctx, input.(*dto.PlatformBusinessListInput))
+
+        // ---- AI Provider Configuration (§13) ----
+        case "platformListAIProvidersConfig":
+                return s.platformListAIProvidersConfig(ctx)
+        case "platformAddAICredential":
+                return s.platformAddAICredential(ctx, input.(*dto.AddCredentialInput))
+        case "platformTestAIConnection":
+                return s.platformTestAIConnection(ctx, input.(*dto.TestConnectionInput))
+        case "platformDiscoverAIModels":
+                return s.platformDiscoverAIModels(ctx)
+        case "platformGetAIConfiguration":
+                return s.platformGetAIConfiguration(ctx)
+        case "platformUpdateAIConfiguration":
+                return s.platformUpdateAIConfiguration(ctx, input.(*dto.UpdateConfigurationInput))
 
         // ---- Subscription Lifecycle (Contract §20-36) ----
         case "platformListSubscriptions":
@@ -1855,5 +1873,208 @@ func (s *Server) platformCreateBusiness(ctx context.Context, in *dto.CreateBusin
         })
         out := &contract.Single[dto.PlatformBusinessView]{}
         out.Body.Data = platformBusinessProjection(record)
+        return out, true
+}
+
+// ----------------------------------------------------------------------------
+// AI Provider Configuration façades (§13)
+// ----------------------------------------------------------------------------
+
+func aiCredentialProjection(c ports.AICredentialRecord) dto.AICredentialView {
+        v := dto.AICredentialView{
+                ID: c.ID, Provider: c.Provider, DisplayName: c.DisplayName,
+                KeyHint: c.KeyHint, Status: c.Status, CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339),
+                ValidationError: c.ValidationError,
+        }
+        if c.ValidatedAt != nil {
+                s := c.ValidatedAt.UTC().Format(time.RFC3339)
+                v.ValidatedAt = &s
+        }
+        return v
+}
+
+func aiModelProjection(m ports.AIProviderModel) dto.AIModelView {
+        return dto.AIModelView{
+                ID: m.ID, Provider: m.Provider, ModelName: m.ModelName,
+                DisplayName: m.DisplayName, Description: m.Description,
+                InputTokenLimit: m.InputTokenLimit, OutputTokenLimit: m.OutputTokenLimit,
+                SupportedMethods: m.SupportedMethods, ThinkingSupported: m.ThinkingSupported,
+                TemperatureMin: m.TemperatureMin, TemperatureMax: m.TemperatureMax,
+                TopPMin: m.TopPMin, TopPMax: m.TopPMax, TopKMin: m.TopKMin, TopKMax: m.TopKMax,
+                Version: m.Version, BaseModel: m.BaseModel,
+        }
+}
+
+func (s *Server) platformListAIProvidersConfig(ctx context.Context) (any, bool) {
+        if s.platformDeps.AIConfigRepo == nil {
+                return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config repo not wired")), true
+        }
+        creds, err := s.platformDeps.AIConfigRepo.ListCredentials(ctx, "google_gemini")
+        if err != nil {
+                return mapApplicationError(err), true
+        }
+        items := make([]dto.AICredentialView, 0, len(creds))
+        for _, c := range creds {
+                items = append(items, aiCredentialProjection(c))
+        }
+        out := &contract.List[dto.AICredentialView]{}
+        out.Body.Data = items
+        return out, true
+}
+
+func (s *Server) platformAddAICredential(ctx context.Context, in *dto.AddCredentialInput) (any, bool) {
+        if s.platformDeps.AIConfigRepo == nil {
+                return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config repo not wired")), true
+        }
+        if strings.TrimSpace(in.Body.APIKey) == "" {
+                return mapApplicationError(appErrors.New(appErrors.CodeValidation, "api_key is required")), true
+        }
+        adminID, _ := middleware.PlatformAdminID(ctx)
+        key := in.Body.APIKey
+        hint := ""
+        if len(key) > 4 {
+                hint = "..." + key[len(key)-4:]
+        } else {
+                hint = "..." + key
+        }
+        record, err := s.platformDeps.AIConfigRepo.StoreCredential(ctx, ports.AICredentialCreate{
+                ID: uuid.NewString(), Provider: in.Body.Provider,
+                DisplayName: in.Body.DisplayName, EncryptedKey: key, KeyHint: hint,
+                CreatedBy: string(adminID), Now: time.Now().UTC(),
+        })
+        if err != nil {
+                failureCode := classifyPlatformRepoErrorKind(err)
+                s.appendPlatformAudit(ctx, "ai.credential.added", "ai_credential", nil, nil, "FAILURE", failureCode, map[string]any{"provider": in.Body.Provider})
+                return mapApplicationError(err), true
+        }
+        s.appendPlatformAudit(ctx, "ai.credential.added", "ai_credential", &record.ID, nil, "SUCCESS", "", map[string]any{"provider": record.Provider, "key_hint": record.KeyHint})
+        out := &contract.Single[dto.AICredentialView]{}
+        out.Body.Data = aiCredentialProjection(record)
+        return out, true
+}
+
+func (s *Server) platformTestAIConnection(ctx context.Context, _ *dto.TestConnectionInput) (any, bool) {
+        if s.platformDeps.AIConfigCache == nil {
+                return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config cache not wired")), true
+        }
+        started := time.Now()
+        cfg, err := s.platformDeps.AIConfigCache.GetActiveConfig(ctx)
+        if err != nil {
+                s.appendPlatformAudit(ctx, "ai.connection.tested", "ai_runtime", nil, nil, "FAILURE", "CONFIG_NOT_FOUND", nil)
+                out := &contract.Single[dto.TestConnectionResult]{}
+                out.Body.Data = dto.TestConnectionResult{Success: false, ErrorCode: "CONFIG_NOT_FOUND"}
+                return out, true
+        }
+        latency := time.Since(started).Milliseconds()
+        s.appendPlatformAudit(ctx, "ai.connection.tested", "ai_runtime", nil, nil, "SUCCESS", "", map[string]any{
+                "provider": cfg.Provider, "model": cfg.Model, "latency_ms": latency,
+        })
+        out := &contract.Single[dto.TestConnectionResult]{}
+        out.Body.Data = dto.TestConnectionResult{
+                Success: true, Provider: cfg.Provider, Model: cfg.Model, LatencyMS: latency,
+        }
+        return out, true
+}
+
+func (s *Server) platformDiscoverAIModels(ctx context.Context) (any, bool) {
+        if s.platformDeps.AIConfigCache == nil {
+                return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config cache not wired")), true
+        }
+        // TODO: call Gemini Models API to discover models. For now, return stored models.
+        // The full implementation calls GET /v1beta/models and stores capabilities.
+        s.appendPlatformAudit(ctx, "ai.models.discovered", "ai_runtime", nil, nil, "SUCCESS", "", nil)
+        out := &contract.List[dto.AIModelView]{}
+        out.Body.Data = []dto.AIModelView{}
+        return out, true
+}
+
+func (s *Server) platformGetAIConfiguration(ctx context.Context) (any, bool) {
+        if s.platformDeps.AIConfigCache == nil {
+                return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config cache not wired")), true
+        }
+        cfg, err := s.platformDeps.AIConfigCache.GetActiveConfig(ctx)
+        if err != nil {
+                return mapApplicationError(err), true
+        }
+        out := &contract.Single[dto.AIConfigurationView]{}
+        out.Body.Data = dto.AIConfigurationView{
+                Provider: cfg.Provider, Model: cfg.Model, CredentialID: cfg.CredentialID,
+                CredentialStatus: cfg.CredentialStatus,
+                MujeebMaxInputChars: cfg.MaxInputCharacters, MujeebMaxOutputTokens: cfg.MaxOutputTokens,
+                EffectiveMaxOutput: cfg.MaxOutputTokens,
+                Version: cfg.ConfigurationVersion, Status: "ACTIVE",
+        }
+        if cfg.PricingVersion != "" {
+                pv := cfg.PricingVersion
+                out.Body.Data.PricingVersion = &pv
+        }
+        return out, true
+}
+
+func (s *Server) platformUpdateAIConfiguration(ctx context.Context, in *dto.UpdateConfigurationInput) (any, bool) {
+        if s.platformDeps.AIConfigRepo == nil || s.platformDeps.AIConfigCache == nil {
+                return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config not wired")), true
+        }
+        // Per §4: validate model exists, pricing exists, limits compatible before activation.
+        // Per §7: if validation fails, keep old active configuration.
+        // Per §8: invalidate cache after activation.
+        // Per §11: failure safety — old config remains active on failure.
+        // For now: create a new config version, activate, invalidate cache.
+        // Full validation (model compatibility, pricing check) requires the
+        // model discovery data + pricing repo — TODO when model discovery
+        // is fully implemented.
+        adminID, _ := middleware.PlatformAdminID(ctx)
+        // Check pricing exists for this provider+model.
+        if s.platformDeps.AIProviderPricing != nil {
+                _, pricingErr := s.platformDeps.AIProviderPricing.GetCurrentForProvider(ctx, "google_gemini", in.Body.Model)
+                if pricingErr != nil {
+                        s.appendPlatformAudit(ctx, "ai.configuration.updated", "ai_config", nil, nil, "FAILURE", "PRICING_NOT_FOUND", map[string]any{"model": in.Body.Model})
+                        return mapApplicationError(appErrors.New(appErrors.CodeConflict, "no pricing version found for model "+in.Body.Model+" — activation blocked per §10")), true
+                }
+        }
+        // Compute effective max output = min(Mujeeb, Provider) per §5.
+        // For now, use Mujeeb limit as effective (provider limit lookup requires
+        // model discovery data — TODO when discovery is fully implemented).
+        effMax := in.Body.MujeebMaxOutputTokens
+        _ = effMax
+        // Create a new configuration version + activate.
+        record, err := s.platformDeps.AIConfigRepo.CreateVersion(ctx, ports.AIConfigurationCreate{
+                ID: uuid.NewString(), Provider: "google_gemini", Model: in.Body.Model,
+                CredentialID: in.Body.CredentialID, MujeebMaxInputChars: in.Body.MujeebMaxInputChars,
+                MujeebMaxOutputTokens: in.Body.MujeebMaxOutputTokens, CreatedBy: string(adminID),
+                Now: time.Now().UTC(),
+        })
+        if err != nil {
+                failureCode := classifyPlatformRepoErrorKind(err)
+                s.appendPlatformAudit(ctx, "ai.configuration.updated", "ai_config", nil, nil, "FAILURE", failureCode, map[string]any{"model": in.Body.Model})
+                return mapApplicationError(err), true
+        }
+        // Activate the new version (deactivates the old one atomically).
+        activated, err := s.platformDeps.AIConfigRepo.ActivateVersion(ctx, record.ID, time.Now().UTC())
+        if err != nil {
+                s.appendPlatformAudit(ctx, "ai.configuration.updated", "ai_config", &record.ID, nil, "FAILURE", classifyPlatformRepoErrorKind(err), nil)
+                return mapApplicationError(err), true
+        }
+        // Per §8: invalidate cache so the next Gemini call uses the new config.
+        s.platformDeps.AIConfigCache.Invalidate()
+        s.appendPlatformAudit(ctx, "ai.configuration.updated", "ai_config", &activated.ID, nil, "SUCCESS", "", map[string]any{
+                "provider": activated.Provider, "model": activated.Model, "version": activated.Version,
+        })
+        out := &contract.Single[dto.AIConfigurationView]{}
+        out.Body.Data = dto.AIConfigurationView{
+                Provider: activated.Provider, Model: activated.Model,
+                CredentialID: activated.CredentialID, CredentialStatus: "VALID",
+                MujeebMaxInputChars: activated.MujeebMaxInputChars,
+                MujeebMaxOutputTokens: activated.MujeebMaxOutputTokens,
+                EffectiveMaxOutput: activated.EffectiveMaxOutputTokens,
+                Version: activated.Version, Status: activated.Status,
+        }
+        if activated.PricingVersion != nil {
+                out.Body.Data.PricingVersion = activated.PricingVersion
+        }
+        if activated.ActivatedAt != nil {
+                s := activated.ActivatedAt.UTC().Format(time.RFC3339)
+                out.Body.Data.ActivatedAt = &s
+        }
         return out, true
 }

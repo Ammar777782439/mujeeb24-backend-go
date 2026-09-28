@@ -544,3 +544,95 @@ type CreateBusinessInput struct {
 	PlatformCommandHeaders
 	Body CreateBusinessRequest
 }
+
+// ----------------------------------------------------------------------------
+// AI Provider Configuration DTOs (§13)
+// ----------------------------------------------------------------------------
+
+type AICredentialView struct {
+	ID              string  `json:"id"`
+	Provider        string  `json:"provider"`
+	DisplayName    string  `json:"display_name"`
+	KeyHint        string  `json:"key_hint"`  // last 4 chars only — never the full key
+	Status         string  `json:"status"`     // CONFIGURED / VALID / INVALID / REVOKED
+	ValidatedAt    *string `json:"validated_at,omitempty"`
+	ValidationError *string `json:"validation_error,omitempty"`
+	CreatedAt      string  `json:"created_at"`
+}
+
+type AddCredentialRequest struct {
+	Provider     string `json:"provider"`
+	DisplayName string `json:"display_name" minLength:"1" maxLength:"128"`
+	APIKey       string `json:"api_key" minLength:"1" maxLength:"512"`
+}
+
+type AddCredentialInput struct {
+	PlatformCommandHeaders
+	Body AddCredentialRequest
+}
+
+type AIProviderPathInput struct {
+	Provider string `path:"provider"`
+}
+
+type TestConnectionInput struct {
+	PlatformCommandHeaders
+}
+
+type TestConnectionResult struct {
+	Success     bool   `json:"success"`
+	Provider    string `json:"provider"`
+	Model       string `json:"model"`
+	LatencyMS   int64  `json:"latency_ms"`
+	ErrorCode   string `json:"error_code,omitempty"`
+}
+
+type AIModelView struct {
+	ID                string   `json:"id"`
+	Provider          string   `json:"provider"`
+	ModelName         string   `json:"model_name"`
+	DisplayName       *string  `json:"display_name,omitempty"`
+	Description       *string  `json:"description,omitempty"`
+	InputTokenLimit   *int     `json:"input_token_limit,omitempty"`
+	OutputTokenLimit  *int     `json:"output_token_limit,omitempty"`
+	SupportedMethods  []string `json:"supported_methods,omitempty"`
+	ThinkingSupported bool     `json:"thinking_supported"`
+	TemperatureMin    *float64 `json:"temperature_min,omitempty"`
+	TemperatureMax    *float64 `json:"temperature_max,omitempty"`
+	TopPMin           *float64 `json:"top_p_min,omitempty"`
+	TopPMax           *float64 `json:"top_p_max,omitempty"`
+	TopKMin           *int     `json:"top_k_min,omitempty"`
+	TopKMax           *int     `json:"top_k_max,omitempty"`
+	Version           *string  `json:"version,omitempty"`
+	BaseModel         *string  `json:"base_model,omitempty"`
+}
+
+type DiscoverModelsInput struct {
+	PlatformCommandHeaders
+}
+
+type AIConfigurationView struct {
+	Provider              string  `json:"provider"`
+	Model                 string  `json:"model"`
+	CredentialID          string  `json:"credential_id"`
+	CredentialStatus      string  `json:"credential_status"`
+	MujeebMaxInputChars   int     `json:"mujeeb_max_input_chars"`
+	MujeebMaxOutputTokens int     `json:"mujeeb_max_output_tokens"`
+	EffectiveMaxOutput    int     `json:"effective_max_output"`
+	PricingVersion        *string `json:"pricing_version,omitempty"`
+	Version               int     `json:"version"`
+	Status                string  `json:"status"`
+	ActivatedAt           *string `json:"activated_at,omitempty"`
+}
+
+type UpdateConfigurationRequest struct {
+	Model                 string `json:"model" minLength:"1"`
+	CredentialID          string `json:"credential_id" format:"uuid"`
+	MujeebMaxInputChars   int    `json:"mujeeb_max_input_chars" minimum:"1"`
+	MujeebMaxOutputTokens int    `json:"mujeeb_max_output_tokens" minimum:"1"`
+}
+
+type UpdateConfigurationInput struct {
+	PlatformCommandHeaders
+	Body UpdateConfigurationRequest
+}

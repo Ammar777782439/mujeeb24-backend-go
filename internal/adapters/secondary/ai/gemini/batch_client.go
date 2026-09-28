@@ -52,6 +52,37 @@ type BatchClient struct {
         httpClient     *http.Client
         requestTimeout time.Duration
         systemPrompt   string
+        // configProvider, when set, is called at the start of every batch call
+        // to get the ACTIVE runtime configuration. Per §1-2: the runtime gets
+        // the active config from Configuration abstraction, not from static env.
+        configProvider ports.AIConfigurationProvider
+}
+
+// SetConfigurationProvider wires the dynamic AIConfigurationProvider.
+func (c *BatchClient) SetConfigurationProvider(provider ports.AIConfigurationProvider) {
+        c.configProvider = provider
+}
+
+// resolveConfig returns the effective AI config for this batch call.
+func (c *BatchClient) resolveConfig(ctx context.Context) (*resolvedAIConfig, error) {
+        if c.configProvider != nil {
+                cfg, err := c.configProvider.GetActiveConfig(ctx)
+                if err != nil {
+                        return nil, fmt.Errorf("resolve AI config: %w", err)
+                }
+                return &resolvedAIConfig{
+                        apiKey:            cfg.APIKey,
+                        model:             cfg.Model,
+                        baseURL:           cfg.BaseURL,
+                        maxOutputTokens:   cfg.MaxOutputTokens,
+                        maxInputCharacters: cfg.MaxInputCharacters,
+                }, nil
+        }
+        return &resolvedAIConfig{
+                apiKey:  c.apiKey,
+                model:   c.model,
+                baseURL: c.baseURL,
+        }, nil
 }
 
 // NewBatchClient wires the BatchClient with the Gemini API credentials.
@@ -142,20 +173,20 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
         if len(input.Batch.Items) == 0 {
                 return ports.CatalogBatchResult{BatchNumber: input.BatchNumber}, nil
         }
+        // Per §1-2: resolve the ACTIVE runtime configuration.
+        rc, err := c.resolveConfig(ctx)
+        if err != nil {
+                return ports.CatalogBatchResult{}, err
+        }
 
-        // Serialize the batch payload to JSON for the user prompt.
         batchJSON, err := json.Marshal(input.Batch)
         if err != nil {
                 return ports.CatalogBatchResult{}, fmt.Errorf("marshal batch payload: %w", err)
         }
-
-        // Build the user prompt: customer message + batch data.
         userPrompt := fmt.Sprintf("Customer message: %s\n\nCatalog batch %d data:\n%s",
                 input.CustomerMessage, input.BatchNumber, string(batchJSON))
-
-        // Build the Gemini request with Structured Output enforcement.
         reqBody := batchGeminiRequest{
-                Model: c.model,
+                Model:             rc.model,
                 SystemInstruction: c.buildBatchSystemInstruction(input.EntityContract),
                 Contents: []batchContent{
                         {Role: "user", Parts: []batchPart{{Text: userPrompt}}},
@@ -165,17 +196,14 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
                         ResponseSchema:   batchCandidateResponseSchema(),
                 },
         }
-
-        resp, err := c.sendRequest(ctx, reqBody)
+        resp, err := c.sendRequestWithConfig(ctx, reqBody, rc)
         if err != nil {
                 return ports.CatalogBatchResult{}, fmt.Errorf("evaluate batch %d: %w", input.BatchNumber, err)
         }
-
         candidates, err := parseBatchCandidates(resp)
         if err != nil {
                 return ports.CatalogBatchResult{}, fmt.Errorf("parse batch %d candidates: %w", input.BatchNumber, err)
         }
-
         return ports.CatalogBatchResult{
                 BatchNumber: input.BatchNumber,
                 Candidates:  candidates,
@@ -183,7 +211,7 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
                         InputTokens:  resp.UsageMetadata.PromptTokenCount,
                         CachedTokens: resp.UsageMetadata.CachedContentTokenCount,
                         OutputTokens: resp.UsageMetadata.CandidatesTokenCount,
-                        Model:        c.model,
+                        Model:        rc.model,
                 },
         }, nil
 }
@@ -212,11 +240,12 @@ func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input servic
         if c == nil {
                 return ports.AIGeminiProposal{}, ports.ContractUsageTelemetry{}, errors.New("batch client is not configured")
         }
-
-        // Build the Gemini request with Structured Output enforcement for
-        // AIGeminiProposal per contract ④ §4.
+        rc, err := c.resolveConfig(ctx)
+        if err != nil {
+                return ports.AIGeminiProposal{}, ports.ContractUsageTelemetry{}, err
+        }
         reqBody := batchGeminiRequest{
-                Model: c.model,
+                Model: rc.model,
                 SystemInstruction: c.buildBatchSystemInstructionWithSuffix(input.EntityContract,
                         "\n\nYou are now in FINAL EVALUATION mode. You have received the full product details for each candidate. Compose a complete Arabic response with product names, prices, descriptions, and availability. Do NOT invent item_ids that were not in the candidate set."),
                 Contents: []batchContent{
@@ -227,22 +256,19 @@ func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input servic
                         ResponseSchema:   finalProposalResponseSchema(),
                 },
         }
-
-        resp, err := c.sendRequest(ctx, reqBody)
+        resp, err := c.sendRequestWithConfig(ctx, reqBody, rc)
         if err != nil {
                 return ports.AIGeminiProposal{}, ports.ContractUsageTelemetry{}, fmt.Errorf("final evaluate: %w", err)
         }
-
         proposal, err := parseFinalProposal(resp)
         if err != nil {
                 return ports.AIGeminiProposal{}, ports.ContractUsageTelemetry{}, fmt.Errorf("parse final proposal: %w", err)
         }
-
         usage := ports.ContractUsageTelemetry{
                 InputTokens:  resp.UsageMetadata.PromptTokenCount,
                 CachedTokens: resp.UsageMetadata.CachedContentTokenCount,
                 OutputTokens: resp.UsageMetadata.CandidatesTokenCount,
-                Model:        c.model,
+                Model:        rc.model,
         }
         return proposal, usage, nil
 }
@@ -258,6 +284,43 @@ func (c *BatchClient) FinalEvaluate(ctx context.Context, input services.FinalEva
 }
 
 // sendRequest is the HTTP call to the Gemini generateContent API.
+// sendRequestWithConfig is the dynamic-config version of sendRequest.
+// Per §1-2: uses the resolved config (apiKey, model, baseURL) from the
+// AIConfigurationProvider instead of static struct fields.
+func (c *BatchClient) sendRequestWithConfig(ctx context.Context, reqBody batchGeminiRequest, rc *resolvedAIConfig) (batchGeminiResponse, error) {
+        buf, err := json.Marshal(reqBody)
+        if err != nil {
+                return batchGeminiResponse{}, fmt.Errorf("marshal request: %w", err)
+        }
+        url := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", rc.baseURL, rc.model, rc.apiKey)
+        reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
+        defer cancel()
+        httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(buf))
+        if err != nil {
+                return batchGeminiResponse{}, fmt.Errorf("build request: %w", err)
+        }
+        httpReq.Header.Set("Content-Type", "application/json")
+        resp, err := c.httpClient.Do(httpReq)
+        if err != nil {
+                return batchGeminiResponse{}, fmt.Errorf("send request: %w", err)
+        }
+        defer resp.Body.Close()
+        body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+        if err != nil {
+                return batchGeminiResponse{}, fmt.Errorf("read response: %w", err)
+        }
+        if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+                return batchGeminiResponse{}, fmt.Errorf("gemini api status %d: %s", resp.StatusCode, string(body))
+        }
+        var geminiResp batchGeminiResponse
+        if err := json.Unmarshal(body, &geminiResp); err != nil {
+                return batchGeminiResponse{}, fmt.Errorf("unmarshal response: %w", err)
+        }
+        return geminiResp, nil
+}
+
+// sendRequest is the legacy version that uses static struct fields.
+// Kept for backward compatibility with tests that don't wire a configProvider.
 func (c *BatchClient) sendRequest(ctx context.Context, reqBody batchGeminiRequest) (batchGeminiResponse, error) {
         buf, err := json.Marshal(reqBody)
         if err != nil {

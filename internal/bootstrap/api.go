@@ -7,6 +7,7 @@ import (
         "fmt"
         "net/http"
         "net/url"
+        "os"
         "strings"
         "sync"
         "time"
@@ -151,6 +152,28 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
         eventStore := postgres.NewInboundEventStore(database)
         outboxStore := postgres.NewPostgresOutboxStore(database)
         var autoReply commands.AutoReplyHandler
+        // Per §1-2: create the AIConfigurationCache + AIProviderConfigRepository
+        // unconditionally — the Platform Admin can manage credentials and models
+        // even when AutoReply is disabled. The cache seeds from env on first
+        // start, then switches to DB-backed dynamic config after the admin
+        // stores a configuration via the Platform Admin API.
+        encryptionKey := []byte(os.Getenv("AI_CONFIG_ENCRYPTION_KEY"))
+        if len(encryptionKey) < 32 && len(encryptionKey) > 0 {
+                padded := make([]byte, 32)
+                copy(padded, encryptionKey)
+                encryptionKey = padded
+        }
+        aiConfigRepo := postgres.NewAIProviderConfigRepository(database, encryptionKey)
+        aiConfigCache := services.NewAIConfigurationCache(aiConfigRepo, aiConfigRepo)
+        aiConfigCache.LoadFromEnv(
+                os.Getenv("GEMINI_API_KEY"),
+                func() string { m := strings.TrimSpace(os.Getenv("GEMINI_MODEL")); if m == "" { m = "gemini-3.5-flash-lite" }; return m }(),
+                "https://generativelanguage.googleapis.com",
+                700,   // LLMMaxOutputTokens default
+                12000, // LLMMaxInputCharacters default
+                "",
+        )
+
         if external.AutoReplyEnabled {
                 if external.AIRuntime == nil {
                         return nil, errors.New("AutoReply requires a configured LLM runtime")
@@ -166,6 +189,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                         if err != nil {
                                 return nil, fmt.Errorf("build contract client: %w", err)
                         }
+                        // Per §1: wire the dynamic config provider so every DecideContract
+                        // call reads the ACTIVE config from cache/DB.
+                        cc.SetConfigurationProvider(aiConfigCache)
                         contractRuntime = cc
                 } else {
                         // Fallback for openaicompatible.Client or other AIRuntime
@@ -276,12 +302,12 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                                 TokenBudget:       8000,
                                 Now:               func() time.Time { return time.Now().UTC() },
                                 NewID:             uuid.NewString,
-                                // Per AIUsageTokenTelemetry.md §6: wire telemetry pipeline
-                                // so every batch + final evaluation Gemini call is recorded.
                                 AIUsage:       postgres.NewAIUsageRepository(database),
                                 AIPricing:     postgres.NewAIProviderPricingRepository(database),
                                 Subscriptions: postgres.NewSubscriptionRepository(database),
                         }
+                        // Per §1: wire the dynamic config provider into BatchClient.
+                        batchClient.SetConfigurationProvider(aiConfigCache)
                 }
 
                 autoReply = service
@@ -381,6 +407,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 AIProviderPricing: postgres.NewAIProviderPricingRepository(database),
                 Operations:       services.NewInMemoryPlatformOperationsRepository(aiConfigured, channelConfigured),
                 ChannelReader:    postgres.NewPlatformChannelReadRepository(database),
+                // Per §1-12: wire AI Provider Configuration management.
+                AIConfigRepo:    aiConfigRepo,
+                AIConfigCache:   aiConfigCache,
         })
         if external.AutoReplyEnabled && external.AIRuntime != nil {
                 if geminiClient, ok := external.AIRuntime.(*gemini.Client); ok {
@@ -423,6 +452,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                                 database.Close()
                                 return nil, fmt.Errorf("build merchant AI contract client: %w", err)
                         }
+                        // Per §1: wire the dynamic config provider into B2B ContractClient.
+                        contractClient.SetConfigurationProvider(aiConfigCache)
                         // Per contract 11 §2, the dedicated MerchantContextBuilder
                         // is separate from the B2C AutoReplyContextBuilder.
                         merchantContextBuilder := services.NewMerchantContextBuilder(
