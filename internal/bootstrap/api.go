@@ -410,6 +410,11 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 // Per §1-12: wire AI Provider Configuration management.
                 AIConfigRepo:    aiConfigRepo,
                 AIConfigCache:   aiConfigCache,
+                // Per §3 + §6: wire the real Gemini ModelsClient for Model
+                // Discovery (real HTTP GET /v1beta/models) + Test Connection
+                // (real HTTP POST :generateContent). Both probe the actual
+                // Gemini API — no stubs, no config-only checks.
+                ModelDiscovery:  gemini.NewModelsClient(),
         })
         if external.AutoReplyEnabled && external.AIRuntime != nil {
                 if geminiClient, ok := external.AIRuntime.(*gemini.Client); ok {

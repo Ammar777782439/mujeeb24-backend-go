@@ -161,6 +161,29 @@ func (r *AIProviderConfigRepository) GetCredentialByID(ctx context.Context, id s
                 `SELECT `+aiCredSelectColumns+` FROM ai_provider_credentials WHERE id = $1::uuid`, id))
 }
 
+// GetDecryptedKeyByID returns the decrypted API key for a specific credential.
+// Per §10: the decrypted key is NEVER returned to the frontend — only used
+// for outbound probes (TestConnection, model activation probe) and discarded.
+func (r *AIProviderConfigRepository) GetDecryptedKeyByID(ctx context.Context, id string) (string, error) {
+        if r == nil || r.adapter == nil {
+                return "", ErrPoolClosed
+        }
+        executor, err := r.adapter.Executor(ctx)
+        if err != nil {
+                return "", err
+        }
+        var encryptedKey string
+        err = executor.QueryRow(ctx,
+                `SELECT encrypted_key FROM ai_provider_credentials WHERE id = $1::uuid`, id).Scan(&encryptedKey)
+        if err != nil {
+                if errors.Is(err, pgx.ErrNoRows) {
+                        return "", &RepositoryError{Operation: "ai_credential.get_decrypted_key", Kind: RepositoryNotFound, Err: err}
+                }
+                return "", &RepositoryError{Operation: "ai_credential.get_decrypted_key", Kind: RepositoryInvalid, Err: err}
+        }
+        return r.decryptKey(encryptedKey)
+}
+
 func (r *AIProviderConfigRepository) UpdateCredentialStatus(ctx context.Context, id, status string, validationError *string, now time.Time) (ports.AICredentialRecord, error) {
         if r == nil || r.adapter == nil {
                 return ports.AICredentialRecord{}, ErrPoolClosed
@@ -321,8 +344,15 @@ func (r *AIProviderConfigRepository) CreateVersion(ctx context.Context, create p
         var maxVersion int
         _ = executor.QueryRow(ctx, `SELECT COALESCE(MAX(version), 0) FROM ai_configuration_versions WHERE provider = $1`, create.Provider).Scan(&maxVersion)
         newVersion := maxVersion + 1
-        // For now, effective = mujeeb limit (will be clamped by model capability on activation).
-        effMax := create.MujeebMaxOutputTokens
+        // Per §6: effective = min(Mujeeb, Provider). The handler computes this
+        // before calling CreateVersion and passes it via EffectiveMaxOutputTokens.
+        // If the caller did NOT compute it (zero), fall back to the Mujeeb limit
+        // — this preserves backward compatibility with callers that don't yet
+        // enforce the provider clamp (e.g., tests, bootstrap).
+        effMax := create.EffectiveMaxOutputTokens
+        if effMax <= 0 {
+                effMax = create.MujeebMaxOutputTokens
+        }
         return scanAIConfig(executor.QueryRow(ctx,
                 `INSERT INTO ai_configuration_versions (id, version, provider, model, credential_id, mujeeb_max_input_chars, mujeeb_max_output_tokens, effective_max_output_tokens, pricing_version, status, created_by, created_at)
                  VALUES ($1::uuid, $2, $3, $4, $5::uuid, $6, $7, $8, $9, 'DRAFT', $10::uuid, $11)

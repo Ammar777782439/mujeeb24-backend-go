@@ -455,26 +455,26 @@ type CloseSupportTicketInput struct {
 // ----------------------------------------------------------------------------
 
 type PlatformProviderView struct {
-	ProviderID      string `json:"provider_id"`
-	ProviderType    string `json:"provider_type"`
-	DisplayName     string `json:"display_name"`
-	AdminState      string `json:"admin_state"`
-	HealthState     string `json:"health_state"`
-	Configured      bool   `json:"configured"`
-	Model           string `json:"model,omitempty"`
-	LastHealthCheck *string `json:"last_health_check,omitempty"`
-	LastSuccess     *string `json:"last_success,omitempty"`
-	LastFailure     *string `json:"last_failure,omitempty"`
-	LastFailureCode *string `json:"last_failure_code,omitempty"`
+        ProviderID      string `json:"provider_id"`
+        ProviderType    string `json:"provider_type"`
+        DisplayName     string `json:"display_name"`
+        AdminState      string `json:"admin_state"`
+        HealthState     string `json:"health_state"`
+        Configured      bool   `json:"configured"`
+        Model           string `json:"model,omitempty"`
+        LastHealthCheck *string `json:"last_health_check,omitempty"`
+        LastSuccess     *string `json:"last_success,omitempty"`
+        LastFailure     *string `json:"last_failure,omitempty"`
+        LastFailureCode *string `json:"last_failure_code,omitempty"`
 }
 
 type PlatformProviderPathInput struct {
-	ProviderID string `path:"provider_id"`
+        ProviderID string `path:"provider_id"`
 }
 
 type PlatformProviderHealthCheckInput struct {
-	PlatformProviderPathInput
-	PlatformCommandHeaders
+        PlatformProviderPathInput
+        PlatformCommandHeaders
 }
 
 // ----------------------------------------------------------------------------
@@ -482,34 +482,34 @@ type PlatformProviderHealthCheckInput struct {
 // ----------------------------------------------------------------------------
 
 type PlatformChannelView struct {
-	BusinessID           string  `json:"business_id"`
-	ConnectionID         string  `json:"connection_id"`
-	Channel              string  `json:"channel"`
-	Provider             string  `json:"provider"`
-	Status               string  `json:"status"`
-	Health               string  `json:"health"`
-	ProviderAccountRef   *string `json:"provider_account_ref,omitempty"`
-	ProviderConnectionRef *string `json:"provider_connection_ref,omitempty"`
-	LastHealthCheckAt    *string `json:"last_health_check_at,omitempty"`
-	LastSuccess          *string `json:"last_success,omitempty"`
-	LastFailure          *string `json:"last_failure,omitempty"`
-	FailureCode          *string `json:"failure_code,omitempty"`
+        BusinessID           string  `json:"business_id"`
+        ConnectionID         string  `json:"connection_id"`
+        Channel              string  `json:"channel"`
+        Provider             string  `json:"provider"`
+        Status               string  `json:"status"`
+        Health               string  `json:"health"`
+        ProviderAccountRef   *string `json:"provider_account_ref,omitempty"`
+        ProviderConnectionRef *string `json:"provider_connection_ref,omitempty"`
+        LastHealthCheckAt    *string `json:"last_health_check_at,omitempty"`
+        LastSuccess          *string `json:"last_success,omitempty"`
+        LastFailure          *string `json:"last_failure,omitempty"`
+        FailureCode          *string `json:"failure_code,omitempty"`
 }
 
 type PlatformChannelListInput struct {
-	BusinessID string `query:"business_id,omitempty"`
-	Status     string `query:"status,omitempty"`
-	Channel    string `query:"channel,omitempty"`
-	Limit      int    `query:"limit,omitempty" minimum:"1" maximum:"1000"`
+        BusinessID string `query:"business_id,omitempty"`
+        Status     string `query:"status,omitempty"`
+        Channel    string `query:"channel,omitempty"`
+        Limit      int    `query:"limit,omitempty" minimum:"1" maximum:"1000"`
 }
 
 type PlatformChannelPathInput struct {
-	ConnectionID UUID `path:"connection_id" format:"uuid"`
+        ConnectionID UUID `path:"connection_id" format:"uuid"`
 }
 
 type PlatformChannelHealthCheckInput struct {
-	PlatformChannelPathInput
-	PlatformCommandHeaders
+        PlatformChannelPathInput
+        PlatformCommandHeaders
 }
 
 // ----------------------------------------------------------------------------
@@ -517,14 +517,14 @@ type PlatformChannelHealthCheckInput struct {
 // ----------------------------------------------------------------------------
 
 type PlatformAIUsageOverviewView struct {
-	TotalAIReplies       int64 `json:"total_ai_replies"`
-	TotalInputTokens     int64 `json:"total_input_tokens"`
-	TotalCachedTokens    int64 `json:"total_cached_tokens"`
-	TotalOutputTokens    int64 `json:"total_output_tokens"`
-	TotalModelRequests   int   `json:"total_model_requests"`
-	TotalToolCalls       int   `json:"total_tool_calls"`
-	TotalProviderCostYER int   `json:"total_provider_cost_yer"`
-	AverageCostPerReply  int   `json:"average_cost_per_reply"`
+        TotalAIReplies       int64 `json:"total_ai_replies"`
+        TotalInputTokens     int64 `json:"total_input_tokens"`
+        TotalCachedTokens    int64 `json:"total_cached_tokens"`
+        TotalOutputTokens    int64 `json:"total_output_tokens"`
+        TotalModelRequests   int   `json:"total_model_requests"`
+        TotalToolCalls       int   `json:"total_tool_calls"`
+        TotalProviderCostYER int   `json:"total_provider_cost_yer"`
+        AverageCostPerReply  int   `json:"average_cost_per_reply"`
 }
 
 // ----------------------------------------------------------------------------
@@ -532,17 +532,17 @@ type PlatformAIUsageOverviewView struct {
 // ----------------------------------------------------------------------------
 
 type CreateBusinessRequest struct {
-	Name            string `json:"name" minLength:"1" maxLength:"256"`
-	Slug            string `json:"slug" minLength:"1" maxLength:"128"`
-	VerticalType    string `json:"vertical_type" enum:"retail,travel,services,restaurant,clinic,hospitality,education,real_estate,other"`
-	Timezone        string `json:"timezone" default:"Asia/Aden"`
-	DefaultCurrency string `json:"default_currency" minLength:"3" maxLength:"3"`
-	Locale          string `json:"locale" minLength:"2" maxLength:"10"`
+        Name            string `json:"name" minLength:"1" maxLength:"256"`
+        Slug            string `json:"slug" minLength:"1" maxLength:"128"`
+        VerticalType    string `json:"vertical_type" enum:"retail,travel,services,restaurant,clinic,hospitality,education,real_estate,other"`
+        Timezone        string `json:"timezone" default:"Asia/Aden"`
+        DefaultCurrency string `json:"default_currency" minLength:"3" maxLength:"3"`
+        Locale          string `json:"locale" minLength:"2" maxLength:"10"`
 }
 
 type CreateBusinessInput struct {
-	PlatformCommandHeaders
-	Body CreateBusinessRequest
+        PlatformCommandHeaders
+        Body CreateBusinessRequest
 }
 
 // ----------------------------------------------------------------------------
@@ -550,89 +550,91 @@ type CreateBusinessInput struct {
 // ----------------------------------------------------------------------------
 
 type AICredentialView struct {
-	ID              string  `json:"id"`
-	Provider        string  `json:"provider"`
-	DisplayName    string  `json:"display_name"`
-	KeyHint        string  `json:"key_hint"`  // last 4 chars only — never the full key
-	Status         string  `json:"status"`     // CONFIGURED / VALID / INVALID / REVOKED
-	ValidatedAt    *string `json:"validated_at,omitempty"`
-	ValidationError *string `json:"validation_error,omitempty"`
-	CreatedAt      string  `json:"created_at"`
+        ID              string  `json:"id"`
+        Provider        string  `json:"provider"`
+        DisplayName    string  `json:"display_name"`
+        KeyHint        string  `json:"key_hint"`  // last 4 chars only — never the full key
+        Status         string  `json:"status"`     // CONFIGURED / VALID / INVALID / REVOKED
+        ValidatedAt    *string `json:"validated_at,omitempty"`
+        ValidationError *string `json:"validation_error,omitempty"`
+        CreatedAt      string  `json:"created_at"`
 }
 
 type AddCredentialRequest struct {
-	Provider     string `json:"provider"`
-	DisplayName string `json:"display_name" minLength:"1" maxLength:"128"`
-	APIKey       string `json:"api_key" minLength:"1" maxLength:"512"`
+        Provider     string `json:"provider"`
+        DisplayName string `json:"display_name" minLength:"1" maxLength:"128"`
+        APIKey       string `json:"api_key" minLength:"1" maxLength:"512"`
 }
 
 type AddCredentialInput struct {
-	PlatformCommandHeaders
-	Body AddCredentialRequest
+        PlatformCommandHeaders
+        Body AddCredentialRequest
 }
 
 type AIProviderPathInput struct {
-	Provider string `path:"provider"`
+        Provider string `path:"provider"`
 }
 
 type TestConnectionInput struct {
-	PlatformCommandHeaders
+        PlatformCommandHeaders
+        Provider string `path:"provider"`
 }
 
 type TestConnectionResult struct {
-	Success     bool   `json:"success"`
-	Provider    string `json:"provider"`
-	Model       string `json:"model"`
-	LatencyMS   int64  `json:"latency_ms"`
-	ErrorCode   string `json:"error_code,omitempty"`
+        Success     bool   `json:"success"`
+        Provider    string `json:"provider"`
+        Model       string `json:"model"`
+        LatencyMS   int64  `json:"latency_ms"`
+        ErrorCode   string `json:"error_code,omitempty"`
 }
 
 type AIModelView struct {
-	ID                string   `json:"id"`
-	Provider          string   `json:"provider"`
-	ModelName         string   `json:"model_name"`
-	DisplayName       *string  `json:"display_name,omitempty"`
-	Description       *string  `json:"description,omitempty"`
-	InputTokenLimit   *int     `json:"input_token_limit,omitempty"`
-	OutputTokenLimit  *int     `json:"output_token_limit,omitempty"`
-	SupportedMethods  []string `json:"supported_methods,omitempty"`
-	ThinkingSupported bool     `json:"thinking_supported"`
-	TemperatureMin    *float64 `json:"temperature_min,omitempty"`
-	TemperatureMax    *float64 `json:"temperature_max,omitempty"`
-	TopPMin           *float64 `json:"top_p_min,omitempty"`
-	TopPMax           *float64 `json:"top_p_max,omitempty"`
-	TopKMin           *int     `json:"top_k_min,omitempty"`
-	TopKMax           *int     `json:"top_k_max,omitempty"`
-	Version           *string  `json:"version,omitempty"`
-	BaseModel         *string  `json:"base_model,omitempty"`
+        ID                string   `json:"id"`
+        Provider          string   `json:"provider"`
+        ModelName         string   `json:"model_name"`
+        DisplayName       *string  `json:"display_name,omitempty"`
+        Description       *string  `json:"description,omitempty"`
+        InputTokenLimit   *int     `json:"input_token_limit,omitempty"`
+        OutputTokenLimit  *int     `json:"output_token_limit,omitempty"`
+        SupportedMethods  []string `json:"supported_methods,omitempty"`
+        ThinkingSupported bool     `json:"thinking_supported"`
+        TemperatureMin    *float64 `json:"temperature_min,omitempty"`
+        TemperatureMax    *float64 `json:"temperature_max,omitempty"`
+        TopPMin           *float64 `json:"top_p_min,omitempty"`
+        TopPMax           *float64 `json:"top_p_max,omitempty"`
+        TopKMin           *int     `json:"top_k_min,omitempty"`
+        TopKMax           *int     `json:"top_k_max,omitempty"`
+        Version           *string  `json:"version,omitempty"`
+        BaseModel         *string  `json:"base_model,omitempty"`
 }
 
 type DiscoverModelsInput struct {
-	PlatformCommandHeaders
+        PlatformCommandHeaders
+        Provider string `path:"provider"`
 }
 
 type AIConfigurationView struct {
-	Provider              string  `json:"provider"`
-	Model                 string  `json:"model"`
-	CredentialID          string  `json:"credential_id"`
-	CredentialStatus      string  `json:"credential_status"`
-	MujeebMaxInputChars   int     `json:"mujeeb_max_input_chars"`
-	MujeebMaxOutputTokens int     `json:"mujeeb_max_output_tokens"`
-	EffectiveMaxOutput    int     `json:"effective_max_output"`
-	PricingVersion        *string `json:"pricing_version,omitempty"`
-	Version               int     `json:"version"`
-	Status                string  `json:"status"`
-	ActivatedAt           *string `json:"activated_at,omitempty"`
+        Provider              string  `json:"provider"`
+        Model                 string  `json:"model"`
+        CredentialID          string  `json:"credential_id"`
+        CredentialStatus      string  `json:"credential_status"`
+        MujeebMaxInputChars   int     `json:"mujeeb_max_input_chars"`
+        MujeebMaxOutputTokens int     `json:"mujeeb_max_output_tokens"`
+        EffectiveMaxOutput    int     `json:"effective_max_output"`
+        PricingVersion        *string `json:"pricing_version,omitempty"`
+        Version               int     `json:"version"`
+        Status                string  `json:"status"`
+        ActivatedAt           *string `json:"activated_at,omitempty"`
 }
 
 type UpdateConfigurationRequest struct {
-	Model                 string `json:"model" minLength:"1"`
-	CredentialID          string `json:"credential_id" format:"uuid"`
-	MujeebMaxInputChars   int    `json:"mujeeb_max_input_chars" minimum:"1"`
-	MujeebMaxOutputTokens int    `json:"mujeeb_max_output_tokens" minimum:"1"`
+        Model                 string `json:"model" minLength:"1"`
+        CredentialID          string `json:"credential_id" format:"uuid"`
+        MujeebMaxInputChars   int    `json:"mujeeb_max_input_chars" minimum:"1"`
+        MujeebMaxOutputTokens int    `json:"mujeeb_max_output_tokens" minimum:"1"`
 }
 
 type UpdateConfigurationInput struct {
-	PlatformCommandHeaders
-	Body UpdateConfigurationRequest
+        PlatformCommandHeaders
+        Body UpdateConfigurationRequest
 }

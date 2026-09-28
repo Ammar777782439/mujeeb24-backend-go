@@ -76,6 +76,12 @@ type AICredentialRepository interface {
         StoreCredential(ctx context.Context, create AICredentialCreate) (AICredentialRecord, error)
         GetActiveCredential(ctx context.Context, provider string) (AICredentialRecord, string, error) // returns (record, decryptedKey, error)
         GetCredentialByID(ctx context.Context, id string) (AICredentialRecord, error)
+        // GetDecryptedKeyByID returns the decrypted API key for a specific credential.
+        // Used by the model activation flow to probe a credential that is not yet
+        // the active one (e.g., a NEW credential during atomic rotation). The
+        // decrypted key MUST NOT be returned to the frontend — only used for the
+        // outbound probe, then discarded.
+        GetDecryptedKeyByID(ctx context.Context, id string) (string, error)
         UpdateCredentialStatus(ctx context.Context, id, status string, validationError *string, now time.Time) (AICredentialRecord, error)
         RevokeCredential(ctx context.Context, id string, now time.Time) error
         ListCredentials(ctx context.Context, provider string) ([]AICredentialRecord, error)
@@ -106,8 +112,22 @@ type AIProviderModel struct {
         DiscoveredAt       time.Time
 }
 
+// ModelDiscoveryClient is the runtime-facing interface used by the Platform
+// Admin handler facades to (1) discover available models from the provider
+// and (2) run a real HTTP probe to verify a credential + model pair.
+//
+// Per §3: DiscoverModels MUST call the actual Gemini Models API — no
+// hardcoded list. Per §6: TestConnection MUST be a real generateContent
+// call — not a config-only validity check.
 type ModelDiscoveryClient interface {
+        // DiscoverModels calls the provider's Models API (e.g.
+        // GET /v1beta/models for Gemini) and returns the discovered
+        // capabilities (input/output limits, supported methods, etc.).
         DiscoverModels(ctx context.Context, apiKey, baseURL string) ([]AIProviderModel, error)
+        // TestConnection runs a minimal generateContent call to verify
+        // the credential + model pair. Returns (success, latencyMs, errorCode).
+        // errorCode is empty on success.
+        TestConnection(ctx context.Context, apiKey, model, baseURL string) (bool, int64, string)
 }
 
 type AIModelRepository interface {
@@ -139,15 +159,20 @@ type AIConfigurationVersion struct {
 }
 
 type AIConfigurationCreate struct {
-        ID                    string
-        Provider              string
-        Model                 string
-        CredentialID          string
-        MujeebMaxInputChars   int
-        MujeebMaxOutputTokens int
-        PricingVersion        *string
-        CreatedBy             string
-        Now                   time.Time
+        ID                        string
+        Provider                  string
+        Model                     string
+        CredentialID              string
+        MujeebMaxInputChars       int
+        MujeebMaxOutputTokens     int
+        // EffectiveMaxOutputTokens is the runtime-enforced output limit. Per §6:
+        // effective = min(MujeebMaxOutputTokens, ProviderOutputTokenLimit).
+        // The handler computes this BEFORE creating the version and passes it
+        // explicitly. If zero, the repository falls back to MujeebMaxOutputTokens.
+        EffectiveMaxOutputTokens  int
+        PricingVersion            *string
+        CreatedBy                 string
+        Now                       time.Time
 }
 
 type AIConfigurationRepository interface {
