@@ -95,8 +95,9 @@ func (c *ContractClient) DecideContract(ctx context.Context, input ports.Contrac
                 SystemInstruction:     c.buildContractSystemInstruction(input.EntityContractPayload),
                 Contents:              c.buildContractContents(input.DecisionInput),
                 GenerationConfig: contractGenerationConfig{
-                        ResponseMimeType: "application/json",
-                        ResponseSchema:   contractProposalResponseSchema(),
+                        ResponseMimeType:  "application/json",
+                        ResponseSchema:    contractProposalResponseSchema(),
+                        MaxOutputTokens:   c.base.maxOutputTokens,
                 },
         }
 
@@ -412,6 +413,10 @@ type contractGeminiRequest struct {
 type contractGenerationConfig struct {
         ResponseMimeType string         `json:"responseMimeType,omitempty"`
         ResponseSchema   map[string]any `json:"responseSchema,omitempty"`
+        // MaxOutputTokens enforces the LLMMaxOutputTokens config limit.
+        // Per contract ④ §6: the output token limit MUST be sent to Gemini
+        // so the model respects the platform's operational boundary.
+        MaxOutputTokens  int            `json:"maxOutputTokens,omitempty"`
 }
 
 type contractContent struct {

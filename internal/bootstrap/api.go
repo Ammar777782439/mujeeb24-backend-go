@@ -186,6 +186,12 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 )
                 // Per contract ⑧ §5, wire the AI Run trace repository.
                 service.RunRepository = postgres.NewAIRunTraceRepository(database)
+        // Per AIUsageTokenTelemetry.md §6: wire the telemetry pipeline so
+        // every Gemini call's tokens + cost are recorded to ai_usage_records
+        // and flow through to the Platform Admin AI Usage view.
+        service.AIUsage = postgres.NewAIUsageRepository(database)
+        service.AIPricing = postgres.NewAIProviderPricingRepository(database)
+        service.Subscriptions = postgres.NewSubscriptionRepository(database)
                 // Per contract ⑤ §7, build the Catalog Entity Contract payload
                 // once and reuse for every call.
                 entityContract := services.BuildCatalogEntityContractPayload()
