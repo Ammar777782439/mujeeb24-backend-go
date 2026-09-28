@@ -84,6 +84,13 @@ func (c *ContractClient) DecideContract(ctx context.Context, input ports.Contrac
         if strings.TrimSpace(input.DecisionInput.Text) == "" {
                 return ports.ContractRuntimeOutput{}, errors.New("AI input text is required")
         }
+        // Per contract ④ §6: enforce the LLMMaxInputCharacters limit on the
+        // contract-aligned path. The legacy client checks this (client.go:266),
+        // but the ContractClient was missing the check. Without it, a 1MB
+        // customer message would be sent to Gemini without any rejection.
+        if c.base.maxInputCharacters > 0 && len([]rune(input.DecisionInput.Text)) > c.base.maxInputCharacters {
+                return ports.ContractRuntimeOutput{}, fmt.Errorf("AI input text exceeds %d characters", c.base.maxInputCharacters)
+        }
 
         startedAt := time.Now().UTC()
 

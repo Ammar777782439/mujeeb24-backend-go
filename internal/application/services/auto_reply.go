@@ -1041,22 +1041,40 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
                 return
         }
         // Compute provider_cost from the pricing table.
-        // Per AIUsageTokenTelemetry.md §10: provider_cost_yer = ceil(input_tokens
-        //   * input_per_million_yer / 1_000_000) + ceil(cached * cached_rate / 1M)
-        //   + ceil(output_tokens * output_per_million_yer / 1_000_000).
+        // Per AIUsageTokenTelemetry.md §10 + §31: cost is computed from actual
+        // token consumption + pricing version, NOT from (AI Replies × fixed cost).
+        //
+        // Gemini's UsageMetadata fields:
+        //   promptTokenCount        = TOTAL input tokens (INCLUDING cached)
+        //   cachedContentTokenCount = the subset served from cache
+        //   candidatesTokenCount    = output tokens
+        //
+        // Billing: the non-cached input is billed at InputPerMillionYER, the
+        // cached portion at CachedInputPerMillionYER (which is lower). We must
+        // NOT bill cached tokens at both rates — that would double-count.
+        // Therefore: non_cached_input = promptTokenCount - cachedContentTokenCount.
         providerCostYER := 0
         pricingVersion := "unknown"
+        // Also fix the stored token counts: input_tokens should be non-cached
+        // input (promptTokenCount - cachedContentTokenCount), and cached_input_tokens
+        // is the cached portion. This matches the contract's intent that the two
+        // fields are mutually exclusive.
+        totalInput := out.Usage.InputTokens
+        cachedInput := out.Usage.CachedTokens
+        nonCachedInput := totalInput - cachedInput
+        if nonCachedInput < 0 {
+                nonCachedInput = 0 // defensive — Gemini shouldn't return cached > total
+        }
         if s.AIPricing != nil {
                 pricing, err := s.AIPricing.GetCurrentForProvider(ctx, "google_gemini", out.Usage.Model)
                 if err == nil {
                         pricingVersion = pricing.PricingVersion
                         // Cost per 1M tokens → scale to actual token count.
-                        // e.g., input=1000 tokens, rate=300 YER/1M → cost = 1000 * 300 / 1_000_000 = 0.3 YER
-                        // Since we store as integer YER, we accumulate fractional costs
-                        // by scaling to micro-YER internally then rounding. For V1,
-                        // integer YER is sufficient — costs are small per request.
-                        inputCost := int64(out.Usage.InputTokens) * int64(pricing.InputPerMillionYER) / 1_000_000
-                        cachedCost := int64(out.Usage.CachedTokens) * int64(pricing.CachedInputPerMillionYER) / 1_000_000
+                        // inputCost = nonCachedInput * InputPerMillionYER / 1M
+                        // cachedCost = cachedInput * CachedInputPerMillionYER / 1M
+                        // outputCost = outputTokens * OutputPerMillionYER / 1M
+                        inputCost := int64(nonCachedInput) * int64(pricing.InputPerMillionYER) / 1_000_000
+                        cachedCost := int64(cachedInput) * int64(pricing.CachedInputPerMillionYER) / 1_000_000
                         outputCost := int64(out.Usage.OutputTokens) * int64(pricing.OutputPerMillionYER) / 1_000_000
                         providerCostYER = int(inputCost + cachedCost + outputCost)
                 } else {
@@ -1080,8 +1098,8 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
                 SubscriptionID:      subscriptionID,
                 Provider:            "google_gemini",
                 Model:               out.Usage.Model,
-                InputTokens:         int64(out.Usage.InputTokens),
-                CachedInputTokens:   int64(out.Usage.CachedTokens),
+                InputTokens:         int64(nonCachedInput),  // non-cached input only
+                CachedInputTokens:   int64(cachedInput),     // cached input separately
                 OutputTokens:        int64(out.Usage.OutputTokens),
                 ModelRequests:       1,
                 ToolCalls:           0, // TODO: track tool calls when the contract path supports them
