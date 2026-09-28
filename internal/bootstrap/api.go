@@ -42,9 +42,13 @@ type APIRuntime struct {
 }
 
 type authenticationRuntime struct {
-        Verifier   middleware.AccessTokenVerifier
-        Repository *postgres.AuthenticationRepository
-        Service    services.AuthenticationService
+        Verifier        middleware.AccessTokenVerifier
+        Repository      *postgres.AuthenticationRepository
+        Service         services.AuthenticationService
+        // PlatformChecker verifies whether a principal is an active platform super
+        // admin. Wired from the same authentication repository — the platform_super_admins
+        // table is checked on every /api/v1/platform/* request via RequirePlatformAdminHuma.
+        PlatformChecker middleware.PlatformSuperAdminChecker
 }
 
 func BuildAPI(ctx context.Context, cfg config.ProcessConfig) (*APIRuntime, error) {
@@ -311,11 +315,33 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                                 webhookService.Enricher = enricher
                         }
                 }
+                // Per AIUsageTokenTelemetry.md §19: wire the AI Cost Protection
+                // checker so AutoReply is blocked when the business's active
+                // subscription has budget_status == EXCEEDED.
+                // The checker uses the same SubscriptionRepository + AIUsageRepository
+                // already wired above — no new dependencies.
+                webhookService.AICostProtectionChecker = &services.AICostProtectionService{
+                        Subscriptions: postgres.NewSubscriptionRepository(database),
+                        AIUsage:       postgres.NewAIUsageRepository(database),
+                }
                 dependencies.IngestSocialAPIWebhook = webhookService
         }
         var apiMiddleware []func(ctx huma.Context, next func(huma.Context))
         if authentication != nil {
                 apiMiddleware = append(apiMiddleware, middleware.RequireAccessTokenHuma(authentication.Verifier))
+                // Per Platform Administration Contract §4, §55, §63-64: Platform
+                // scope is a SEPARATE authorization layer from merchant membership.
+                // RequirePlatformAdminHuma is intentionally a separate middleware
+                // (not part of RequireAccessTokenHuma) so the /api/v1/platform/*
+                // routes can be selectively protected while /api/v1/businesses/*
+                // routes remain on the merchant requireScope boundary.
+                //
+                // The check internally verifies the principal is an active
+                // platform_super_admin via the platform_access_repository. A
+                // merchant owner token used against /platform/* returns 403.
+                if authentication.PlatformChecker != nil {
+                        apiMiddleware = append(apiMiddleware, middleware.RequirePlatformAdminHuma(authentication.PlatformChecker))
+                }
         }
 
         // Per contract 11 §2, the Merchant Catalog AI is a SEPARATE B2B agent.
@@ -323,6 +349,28 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
         // is a *gemini.Client). Per contract ④ §8, ContractRuntime is the only
         // contract-aligned way to call Gemini.
         dashboardServer := handlers.NewServer(dependencies)
+        // Per Platform Administration Contract §70 (Implementation Order) step 1-3:
+        // Platform Authentication + Platform Admin Guard + Platform Audit Foundation
+        // must be wired BEFORE any platform command domain (Business Management,
+        // Plans, Subscriptions, Support, AI Operations). The ports are nullable —
+        // routes return 501 NotImplemented until each port is wired.
+        // Determine provider configuration state from the external adapters.
+        // Per Contract §104: the Dashboard sees `configured = true` boolean —
+        // NEVER the actual API key / secret.
+        aiConfigured := external.AIRuntime != nil && external.LLMConfigError == nil
+        channelConfigured := external.SocialAPI != nil
+        dashboardServer = dashboardServer.WithPlatformDeps(handlers.PlatformDeps{
+                Plans:            postgres.NewPlanRepository(database),
+                PlatformBusiness: postgres.NewPlatformBusinessRepository(database),
+                PlatformAudit:    postgres.NewPlatformAuditRepository(database),
+                Subscriptions:    postgres.NewSubscriptionRepository(database),
+                Payments:         postgres.NewPaymentRepository(database),
+                Support:          postgres.NewSupportRepository(database),
+                AIUsage:          postgres.NewAIUsageRepository(database),
+                AIProviderPricing: postgres.NewAIProviderPricingRepository(database),
+                Operations:       services.NewInMemoryPlatformOperationsRepository(aiConfigured, channelConfigured),
+                ChannelReader:    postgres.NewPlatformChannelReadRepository(database),
+        })
         if external.AutoReplyEnabled && external.AIRuntime != nil {
                 if geminiClient, ok := external.AIRuntime.(*gemini.Client); ok {
                         // Per ADR-042: build a SEPARATE B2B gemini.Client with
@@ -506,7 +554,18 @@ func buildAuthenticationRuntime(cfg config.ProcessConfig, database *postgres.Ada
         }
         repository := postgres.NewAuthenticationRepository(database)
         service := services.AuthenticationService{Principals: repository, Sessions: repository, Tokens: issuer, RefreshTTL: cfg.RefreshSessionTTL}
-        return &authenticationRuntime{Verifier: issuer, Repository: repository, Service: service}, nil
+        // Per Platform Administration Contract §4: Platform Scope is enforced
+        // separately from Merchant Scope. The PlatformAccessRepository (which
+        // implements both PlatformSuperAdminBootstrapRepository and the IsActiveSuperAdmin
+        // checker) is wired here so RequirePlatformAdminHuma can verify every
+        // /api/v1/platform/* request.
+        platformAccess := postgres.NewPlatformAccessRepository(database)
+        return &authenticationRuntime{
+                Verifier:        issuer,
+                Repository:      repository,
+                Service:         service,
+                PlatformChecker: platformAccess,
+        }, nil
 }
 
 func (r *APIRuntime) Serve() error {

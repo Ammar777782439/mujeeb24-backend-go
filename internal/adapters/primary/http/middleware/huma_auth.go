@@ -33,6 +33,41 @@ func RequireAccessTokenHuma(verifier AccessTokenVerifier) func(huma.Context, fun
         }
 }
 
+// RequirePlatformAdminHuma enforces Platform Scope on /api/v1/platform/*
+// routes. It must run AFTER RequireAccessTokenHuma so that the principal is
+// already authenticated.
+//
+// Per Platform Administration Contract §4, §55, §63-64:
+//   - Platform super admin is a SEPARATE identity from merchant owner/admin.
+//   - Platform token ≠ merchant token; platform super admin is NEVER a member
+//     of any business.
+//   - A merchant owner token used against /api/v1/platform/* returns 403.
+//   - A platform admin token used against /api/v1/businesses/{id}/... merchant
+//     routes is rejected at the merchant requireScope boundary (which checks
+//     business_memberships).
+//
+// On success, the context is tagged via WithPlatformAdmin so downstream
+// handler facades can retrieve the actor via middleware.PlatformAdminID().
+func RequirePlatformAdminHuma(checker PlatformSuperAdminChecker) func(huma.Context, func(huma.Context)) {
+        return func(ctx huma.Context, next func(huma.Context)) {
+                if checker == nil {
+                        writeHumaForbidden(ctx, "platform authorization is not configured")
+                        return
+                }
+                principalID, ok := PrincipalID(ctx.Context())
+                if !ok {
+                        writeHumaForbidden(ctx, "missing authenticated principal")
+                        return
+                }
+                isActive, err := checker.IsActiveSuperAdmin(ctx.Context(), string(principalID))
+                if err != nil || !isActive {
+                        writeHumaForbidden(ctx, "platform super admin role required")
+                        return
+                }
+                next(huma.WithContext(ctx, WithPlatformAdmin(ctx.Context(), principalID)))
+        }
+}
+
 func isPublicAPIPath(path string) bool {
         // SECURITY audit M-5: `/api/v1/metrics` was previously public. It exposes
         // Postgres pool utilization (acquired/idle/total connections) — useful to
@@ -47,4 +82,10 @@ func writeHumaUnauthorized(ctx huma.Context, message string) {
         ctx.SetHeader("Content-Type", "application/json")
         ctx.SetStatus(http.StatusUnauthorized)
         _ = json.NewEncoder(ctx.BodyWriter()).Encode(contract.ErrorEnvelope{Error: contract.ErrorBody{Code: "unauthorized", Message: message}})
+}
+
+func writeHumaForbidden(ctx huma.Context, message string) {
+        ctx.SetHeader("Content-Type", "application/json")
+        ctx.SetStatus(http.StatusForbidden)
+        _ = json.NewEncoder(ctx.BodyWriter()).Encode(contract.ErrorEnvelope{Error: contract.ErrorBody{Code: "forbidden", Message: message}})
 }

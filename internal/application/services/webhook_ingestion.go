@@ -34,6 +34,19 @@ type SocialAPIWebhookService struct {
         // Customers (optional) — required for Enricher to persist the fetched
         // display_name/picture into the customer.profile JSONB column.
         Customers ports.CustomerRuntimeRepository
+        // AICostProtectionChecker (optional) — per AIUsageTokenTelemetry.md §19:
+        // when budget_status == EXCEEDED, no new Auto AI Execution starts.
+        // Human replies, dashboard, customer data, leads, orders, and channel
+        // reception continue to work normally.
+        AICostProtectionChecker AICostProtectionChecker
+}
+
+// AICostProtectionChecker verifies whether the business's active subscription
+// allows a new AI execution. Returns (allowed=true) if the budget is within
+// limits (NORMAL or WARNING). Returns (allowed=false, reason) if EXCEEDED.
+// Per AIUsageTokenTelemetry.md §19-21.
+type AICostProtectionChecker interface {
+        IsAIExecutionAllowed(ctx context.Context, businessID string) (allowed bool, reason string)
 }
 
 func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.IngestWebhookCommand) (commands.WebhookAcceptedResult, error) {
@@ -227,6 +240,18 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
                                 }
                         }
                         if s.AutoReply != nil && event.EventType == "interaction_received" && event.Direction == channel.DirectionInbound && event.Origin == channel.OriginCustomer && strings.TrimSpace(event.ProviderMessageID) != "" && strings.TrimSpace(event.Text) != "" {
+                                // Per AIUsageTokenTelemetry.md §19: AI Cost Protection —
+                                // if the business's active subscription has budget_status ==
+                                // EXCEEDED, no new Auto AI Execution starts. Human replies,
+                                // dashboard, customer data, leads, orders, and channel
+                                // reception continue to work normally.
+                                if s.AICostProtectionChecker != nil {
+                                        allowed, reason := s.AICostProtectionChecker.IsAIExecutionAllowed(ctx, connection.BusinessID)
+                                        if !allowed {
+                                                log.Printf("[Webhook] AUTO_REPLY_BLOCKED business=%s conversation=%s reason=%s", connection.BusinessID, materialized.ConversationID, reason)
+                                                continue
+                                        }
+                                }
                                 log.Printf("[Webhook] AUTO_REPLY_TRIGGER business=%s conversation=%s text=%q", connection.BusinessID, materialized.ConversationID, truncate(event.Text, 60))
                                 // Run AutoReply in a detached context with a generous timeout.
                                 // The HTTP request context (ctx) gets cancelled when SocialAPI

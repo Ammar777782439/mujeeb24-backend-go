@@ -49,10 +49,20 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
         // team invitations accept, transaction lifecycle: create/confirm/cancel/
         // submit-review/reviews-get/approve/reject, customers merge+conversations
         //+transactions cross-refs, leads attributions+scores).
-        // The total is now 90.
+        // Per Platform Administration Contract V1: 18 platform endpoints added
+        // (5 plan, 5 business, 2 audit, 4 AI ops, 2 subscription AI usage).
+        // Stage 1 (Subscription Lifecycle + Manual Payments): 6 endpoints added
+        // (4 subscription + 2 payment). Total was 114.
+        // Stage 3 (Support Management): 7 endpoints added (1 create ticket +
+        // 2 ticket queries + 1 message + 3 lifecycle transitions). Total was 121.
+        // Stage 6 (Plan Version-on-Edit): 1 endpoint added (create new plan
+        // version). Total was 122.
+        // Audit correction: 11 missing contract routes added (2 AI provider +
+        // 3 channel + 3 provider + 3 AI usage). Total was 133.
+        // Gap fix: POST /platform/businesses (create business) added. Total = 134.
         operationIDs := regexp.MustCompile(`(?m)^\s+operationId: ([A-Za-z0-9_]+)$`).FindAllSubmatch(document, -1)
-        if len(operationIDs) != 90 {
-                t.Fatalf("generated %d operations, want 90", len(operationIDs))
+        if len(operationIDs) != 134 {
+                t.Fatalf("generated %d operations, want 134", len(operationIDs))
         }
         seen := make(map[string]struct{}, len(operationIDs))
         for _, match := range operationIDs {
