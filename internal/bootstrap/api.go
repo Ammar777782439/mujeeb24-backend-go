@@ -281,7 +281,15 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 Transactions:  database,
         }
         if external.SocialWebhook != nil {
-                dependencies.IngestSocialAPIWebhook = services.SocialAPIWebhookService{
+                // Per-merchant customer enrichment: SocialAPI's DM webhook payload
+                // delivers only `author.id` (WhatsApp wa_id / FB PSID / IG IGSID);
+                // the customer's display_name and picture must be fetched via the
+                // REST endpoint GET /v1/inbox/conversations/{id} AFTER Materialize.
+                // The Enricher interface is implemented by *socialapi.Client
+                // (verified at compile time via var _ ports.ConversationEnricher).
+                // The Customers repo is the SAME one used by the customer CRUD
+                // endpoints (ports.CustomerRuntimeRepository) — no duplicate repo.
+                webhookService := services.SocialAPIWebhookService{
                         Receiver:         external.SocialWebhook,
                         RawPayloads:      postgres.NewRawPayloadStore(database),
                         Connections:      postgres.NewChannelConnectionRepository(database),
@@ -291,7 +299,19 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                         Automation:       inboundAutomation,
                         AutoReply:        autoReply,
                         Realtime:         realtimeBroker,
+                        Customers:        postgres.NewCustomerRepository(database),
                 }
+                // Wire the enricher ONLY when the SocialAPI client is configured.
+                // The client implements both ports.ChannelProvider and
+                // ports.ConversationEnricher; we type-assert to expose the
+                // enrichment capability without breaking the existing webhook
+                // receiver contract.
+                if external.SocialAPI != nil {
+                        if enricher, ok := external.SocialAPI.(ports.ConversationEnricher); ok {
+                                webhookService.Enricher = enricher
+                        }
+                }
+                dependencies.IngestSocialAPIWebhook = webhookService
         }
         var apiMiddleware []func(ctx huma.Context, next func(huma.Context))
         if authentication != nil {
@@ -440,7 +460,28 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 writer.Header().Set("Content-Type", "application/json")
                 _, _ = writer.Write([]byte(`{"status":"ok","service":"mujeeb24-api"}`))
         })
-        server := &http.Server{Addr: address, Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
+        // SECURITY audit H2: enforce a hard body-size limit on the public
+        // webhook endpoint. Without this, an attacker could POST a multi-
+        // hundred-MB body that Huma buffers into memory AND that the raw
+        // payload store then persists as BYTEA — unbounded memory + DB
+        // growth. The OpenAPI already advertises 413 as a possible error
+        // response; this middleware makes it real.
+        //
+        // We wrap the mux in a small middleware that applies
+        // http.MaxBytesReader to the webhook route specifically. Other
+        // routes (auth, dashboard, SSE) are unaffected — their Huma
+        // bodies are small JSON envelopes.
+        wrappedMux := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+                if strings.HasPrefix(request.URL.Path, "/api/v1/webhooks/") {
+                        // 256 KB — SocialAPI webhook payloads are typically
+                        // 1-5 KB. 256 KB is generous headroom and still
+                        // blocks the multi-MB adversarial case.
+                        const maxWebhookBodyBytes = 256 * 1024
+                        request.Body = http.MaxBytesReader(writer, request.Body, maxWebhookBodyBytes)
+                }
+                mux.ServeHTTP(writer, request)
+        })
+        server := &http.Server{Addr: address, Handler: wrappedMux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
         return &APIRuntime{
                 HTTP:                server,
                 Database:            database,

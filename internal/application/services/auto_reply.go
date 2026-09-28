@@ -215,14 +215,14 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
                 if st, err := s.StateRepository.Get(ctx, businessID, conversationID); err == nil {
                         loadedState = &st
                 }
-			// Per ADR-051: clear stale focus to prevent scoped retrieval from
-			// loading frozen old product data. The focus was set on Sep 13 and
-			// never updated, causing Gemini to jump to "عطر عمار" when the
-			// customer said "نعم". Clearing it forces broader retrieval mode
-			// (all catalogs) and lets recent_messages provide context instead.
-			if loadedState != nil && loadedState.Focus != nil {
-				loadedState.Focus = nil
-			}
+                        // Per ADR-051: clear stale focus to prevent scoped retrieval from
+                        // loading frozen old product data. The focus was set on Sep 13 and
+                        // never updated, causing Gemini to jump to "عطر عمار" when the
+                        // customer said "نعم". Clearing it forces broader retrieval mode
+                        // (all catalogs) and lets recent_messages provide context instead.
+                        if loadedState != nil && loadedState.Focus != nil {
+                                loadedState.Focus = nil
+                        }
         }
         var builtContext *ports.AIContext
         if s.ContextBuilder != nil {
@@ -241,7 +241,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
                         return commands.AutoReplyResult{}, contextErr
                 }
                 log.Printf("[AutoReply] CONTEXT_BUILT business=%s ownership=%s state=%s", businessID, bc.Conversation.Ownership, bc.Conversation.State)
-		log.Printf("[AutoReply] CONTEXT_DEBUG catalog_names=%v catalog_summary_count=%d catalog_evidence_count=%d", bc.CatalogNames, len(bc.CatalogSummary), len(bc.CatalogEvidence))
+                log.Printf("[AutoReply] CONTEXT_DEBUG catalog_names=%v catalog_summary_count=%d catalog_evidence_count=%d", bc.CatalogNames, len(bc.CatalogSummary), len(bc.CatalogEvidence))
                 // Per contract ③ §1, if conversation is owned by human or waiting for human,
                 // AI does not respond.
                 if strings.EqualFold(bc.Conversation.Ownership, "human") || strings.EqualFold(bc.Conversation.State, "waiting_human") {
@@ -412,7 +412,13 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
                         if run.ID != "" {
                                 blockedDraft.AIRunID = &run.ID
                         }
-                        _ = s.persistDecision(ctx, blockedDraft)
+                        // Per audit B-LOW-2: previously `_ = s.persistDecision(...)`.
+                        // If the persist fails, the validation failure has no audit
+                        // trail. Log so operators can investigate.
+                        if persistErr := s.persistDecision(ctx, blockedDraft); persistErr != nil {
+                                log.Printf("[AutoReply] BLOCKED_DECISION_PERSIST_FAILED business=%s conversation=%s run=%s err=%v — validation-failure audit trail lost",
+                                        run.BusinessID, run.ConversationID, run.ID, persistErr)
+                        }
                         return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, nil
                 }
                 effective = ed
@@ -650,6 +656,13 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
         // background optimization, not a critical path.
         if s.SummaryService != nil {
                 go func(bizID, convID string) {
+                        // Per audit B-CRIT-1: detached summarization goroutine —
+                        // panics here would crash the API worker process.
+                        defer func() {
+                                if r := recover(); r != nil {
+                                        log.Printf("[SummaryService] PANIC business=%s conversation=%s recovered=%v", bizID, convID, r)
+                                }
+                        }()
                         sumCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
                         defer cancel()
                         summaryResult, sumErr := s.SummaryService.MaybeSummarize(sumCtx, bizID, convID)
@@ -749,12 +762,19 @@ func (s AutoReplyService) policyVersionOr() string {
 // markContextBuiltSafe, markRunningSafe, etc. are no-ops when RunRepository
 // is nil (e.g., unit tests that don't need the trace). They're safe to call
 // on a zero-value AIRunRecord.
+//
+// Per audit B-HIGH-2: previously every call silently dropped the transition
+// error with `_, _ = lc.MarkX(...)`. Now logged so a failed lifecycle
+// transition (DB outage, race condition) is visible in production logs.
 func (s AutoReplyService) markContextBuiltSafe(ctx context.Context, run ports.AIRunRecord) {
         if s.RunRepository == nil || run.ID == "" {
                 return
         }
         lc := NewAIRunLifecycle(s.RunRepository)
-        _, _ = lc.MarkContextBuilt(ctx, run.BusinessID, run.ID)
+        if _, err := lc.MarkContextBuilt(ctx, run.BusinessID, run.ID); err != nil {
+                log.Printf("[AutoReply] LIFECYCLE_TRANSITION_FAILED business=%s run=%s transition=context_built err=%v",
+                        run.BusinessID, run.ID, err)
+        }
 }
 
 func (s AutoReplyService) markRunningSafe(ctx context.Context, run ports.AIRunRecord) {
@@ -762,7 +782,10 @@ func (s AutoReplyService) markRunningSafe(ctx context.Context, run ports.AIRunRe
                 return
         }
         lc := NewAIRunLifecycle(s.RunRepository)
-        _, _ = lc.MarkRunning(ctx, run.BusinessID, run.ID)
+        if _, err := lc.MarkRunning(ctx, run.BusinessID, run.ID); err != nil {
+                log.Printf("[AutoReply] LIFECYCLE_TRANSITION_FAILED business=%s run=%s transition=running err=%v",
+                        run.BusinessID, run.ID, err)
+        }
 }
 
 func (s AutoReplyService) markValidatingSafe(ctx context.Context, run ports.AIRunRecord) {
@@ -770,7 +793,10 @@ func (s AutoReplyService) markValidatingSafe(ctx context.Context, run ports.AIRu
                 return
         }
         lc := NewAIRunLifecycle(s.RunRepository)
-        _, _ = lc.MarkValidating(ctx, run.BusinessID, run.ID)
+        if _, err := lc.MarkValidating(ctx, run.BusinessID, run.ID); err != nil {
+                log.Printf("[AutoReply] LIFECYCLE_TRANSITION_FAILED business=%s run=%s transition=validating err=%v",
+                        run.BusinessID, run.ID, err)
+        }
 }
 
 func (s AutoReplyService) markExecutingSafe(ctx context.Context, run ports.AIRunRecord) {
@@ -778,7 +804,10 @@ func (s AutoReplyService) markExecutingSafe(ctx context.Context, run ports.AIRun
                 return
         }
         lc := NewAIRunLifecycle(s.RunRepository)
-        _, _ = lc.MarkExecuting(ctx, run.BusinessID, run.ID)
+        if _, err := lc.MarkExecuting(ctx, run.BusinessID, run.ID); err != nil {
+                log.Printf("[AutoReply] LIFECYCLE_TRANSITION_FAILED business=%s run=%s transition=executing err=%v",
+                        run.BusinessID, run.ID, err)
+        }
 }
 
 func (s AutoReplyService) markCompletedSafe(ctx context.Context, run ports.AIRunRecord) {
@@ -786,7 +815,10 @@ func (s AutoReplyService) markCompletedSafe(ctx context.Context, run ports.AIRun
                 return
         }
         lc := NewAIRunLifecycle(s.RunRepository)
-        _, _ = lc.MarkCompleted(ctx, run.BusinessID, run.ID)
+        if _, err := lc.MarkCompleted(ctx, run.BusinessID, run.ID); err != nil {
+                log.Printf("[AutoReply] LIFECYCLE_TRANSITION_FAILED business=%s run=%s transition=completed err=%v",
+                        run.BusinessID, run.ID, err)
+        }
 }
 
 func (s AutoReplyService) markFailedSafe(ctx context.Context, run ports.AIRunRecord, stage, category, reason string) {
@@ -794,7 +826,14 @@ func (s AutoReplyService) markFailedSafe(ctx context.Context, run ports.AIRunRec
                 return
         }
         lc := NewAIRunLifecycle(s.RunRepository)
-        _, _ = lc.MarkFailed(ctx, run.BusinessID, run.ID, stage, category, reason)
+        if _, err := lc.MarkFailed(ctx, run.BusinessID, run.ID, stage, category, reason); err != nil {
+                // CRITICAL: if MarkFailed itself fails, the run stays in its prior
+                // state forever — the contract ⑧ §13-14 promise that every run has
+                // a terminal status is broken. Log loudly so operators can manually
+                // reconcile the run table.
+                log.Printf("[AutoReply] LIFECYCLE_MARK_FAILED_FAILED business=%s run=%s stage=%s category=%s reason=%q err=%v — RUN STUCK, manual reconciliation needed",
+                        run.BusinessID, run.ID, stage, category, reason, err)
+        }
 }
 
 // persistDecision is a non-transactional best-effort persist for the blocked
