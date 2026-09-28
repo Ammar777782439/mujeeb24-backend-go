@@ -276,6 +276,11 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                                 TokenBudget:       8000,
                                 Now:               func() time.Time { return time.Now().UTC() },
                                 NewID:             uuid.NewString,
+                                // Per AIUsageTokenTelemetry.md §6: wire telemetry pipeline
+                                // so every batch + final evaluation Gemini call is recorded.
+                                AIUsage:       postgres.NewAIUsageRepository(database),
+                                AIPricing:     postgres.NewAIProviderPricingRepository(database),
+                                Subscriptions: postgres.NewSubscriptionRepository(database),
                         }
                 }
 

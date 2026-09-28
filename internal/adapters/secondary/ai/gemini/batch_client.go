@@ -179,6 +179,12 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
         return ports.CatalogBatchResult{
                 BatchNumber: input.BatchNumber,
                 Candidates:  candidates,
+                Usage: ports.ContractUsageTelemetry{
+                        InputTokens:  resp.UsageMetadata.PromptTokenCount,
+                        CachedTokens: resp.UsageMetadata.CachedContentTokenCount,
+                        OutputTokens: resp.UsageMetadata.CandidatesTokenCount,
+                        Model:        c.model,
+                },
         }, nil
 }
 
@@ -202,9 +208,9 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
 // The "الدليل التجاري المرتبط بالمرشحين" = full product details for each
 // candidate item. Without this, Gemini only sees IDs and can't compose
 // a response with product names, prices, descriptions.
-func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input services.FinalEvaluationInput, userPrompt string) (ports.AIGeminiProposal, error) {
+func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input services.FinalEvaluationInput, userPrompt string) (ports.AIGeminiProposal, ports.ContractUsageTelemetry, error) {
         if c == nil {
-                return ports.AIGeminiProposal{}, errors.New("batch client is not configured")
+                return ports.AIGeminiProposal{}, ports.ContractUsageTelemetry{}, errors.New("batch client is not configured")
         }
 
         // Build the Gemini request with Structured Output enforcement for
@@ -224,15 +230,21 @@ func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input servic
 
         resp, err := c.sendRequest(ctx, reqBody)
         if err != nil {
-                return ports.AIGeminiProposal{}, fmt.Errorf("final evaluate: %w", err)
+                return ports.AIGeminiProposal{}, ports.ContractUsageTelemetry{}, fmt.Errorf("final evaluate: %w", err)
         }
 
         proposal, err := parseFinalProposal(resp)
         if err != nil {
-                return ports.AIGeminiProposal{}, fmt.Errorf("parse final proposal: %w", err)
+                return ports.AIGeminiProposal{}, ports.ContractUsageTelemetry{}, fmt.Errorf("parse final proposal: %w", err)
         }
 
-        return proposal, nil
+        usage := ports.ContractUsageTelemetry{
+                InputTokens:  resp.UsageMetadata.PromptTokenCount,
+                CachedTokens: resp.UsageMetadata.CachedContentTokenCount,
+                OutputTokens: resp.UsageMetadata.CandidatesTokenCount,
+                Model:        c.model,
+        }
+        return proposal, usage, nil
 }
 
 // FinalEvaluate is kept for backward compatibility but delegates to
@@ -241,7 +253,8 @@ func (c *BatchClient) FinalEvaluate(ctx context.Context, input services.FinalEva
         candidatesJSON, _ := json.Marshal(input.CandidateResults)
         userPrompt := fmt.Sprintf("Customer message: %s\n\nAggregated candidate set from catalog evaluation:\n%s\n\nBased on the candidates above, produce your final proposal.",
                 input.CustomerMessage, string(candidatesJSON))
-        return c.FinalEvaluateWithDetails(ctx, input, userPrompt)
+        proposal, _, err := c.FinalEvaluateWithDetails(ctx, input, userPrompt)
+        return proposal, err
 }
 
 // sendRequest is the HTTP call to the Gemini generateContent API.

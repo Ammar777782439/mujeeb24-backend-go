@@ -215,6 +215,11 @@ type CatalogProposalOffer struct {
 type CatalogBatchResult struct {
         BatchNumber int                     `json:"batch_number"`
         Candidates  []CatalogBatchCandidate `json:"candidates"`
+        // Usage telemetry from the Gemini response for this batch call.
+        // Per AIUsageTokenTelemetry.md §6: every Gemini call's tokens must be
+        // recorded. This field carries the usageMetadata from the batch's
+        // Gemini response so the CatalogBatchController can persist it.
+        Usage ContractUsageTelemetry `json:"-"`
 }
 
 // ════════════════════════════════════════════════════════════════════════════
