@@ -1203,9 +1203,9 @@ func TestPlatformAICredentialAPIViewNeverExposesFullKey(t *testing.T) {
         if !ok {
                 t.Fatalf("expected credential view, got %T", result)
         }
-        // KeyHint should be "...8tbW" — last 4 chars only.
-        if !strings.HasSuffix(out.Body.Data.KeyHint, "8tbW") {
-                t.Errorf("expected key_hint ending in 8tbW, got %s", out.Body.Data.KeyHint)
+        // KeyHint should be the last 4 chars of the fake test key.
+        if !strings.HasSuffix(out.Body.Data.KeyHint, "AAAA") {
+                t.Errorf("expected key_hint ending in last 4 chars of fake test key (AAAA), got %s", out.Body.Data.KeyHint)
         }
         // Verify there's no APIKey field anywhere in the response body.
         body, _ := json.Marshal(out.Body.Data)
