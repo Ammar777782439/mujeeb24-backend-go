@@ -48,8 +48,23 @@ func RequireAccessTokenHuma(verifier AccessTokenVerifier) func(huma.Context, fun
 //
 // On success, the context is tagged via WithPlatformAdmin so downstream
 // handler facades can retrieve the actor via middleware.PlatformAdminID().
+//
+// P0 FIX: this middleware is registered globally via api.UseMiddleware(...),
+// so it MUST short-circuit on non-platform paths. Without this guard, every
+// merchant route (e.g. /api/v1/businesses/*, /api/v1/me) would also be
+// subject to the platform-super-admin check and return 403 for merchant
+// principals. The path check is intentionally prefix-based so any future
+// /api/v1/platform/<new-sub-path> is automatically covered.
 func RequirePlatformAdminHuma(checker PlatformSuperAdminChecker) func(huma.Context, func(huma.Context)) {
         return func(ctx huma.Context, next func(huma.Context)) {
+                // P0-1: only enforce platform scope on /api/v1/platform/* paths.
+                // Merchant routes (/api/v1/businesses/*, /api/v1/me, etc.) bypass
+                // this middleware entirely — they are protected by the merchant
+                // requireScope boundary in the dispatcher.
+                if !isPlatformAPIPath(ctx.URL().Path) {
+                        next(ctx)
+                        return
+                }
                 if checker == nil {
                         writeHumaForbidden(ctx, "platform authorization is not configured")
                         return
@@ -66,6 +81,14 @@ func RequirePlatformAdminHuma(checker PlatformSuperAdminChecker) func(huma.Conte
                 }
                 next(huma.WithContext(ctx, WithPlatformAdmin(ctx.Context(), principalID)))
         }
+}
+
+// isPlatformAPIPath returns true for paths that require platform super admin
+// scope. Per Contract §56: every platform API lives under /api/v1/platform/*.
+// The OpenAPI prefix is /api/v1 (see contract.BuildAPIWithHandlersAndMiddleware
+// line 39), so the runtime URL always carries the full /api/v1/platform/ prefix.
+func isPlatformAPIPath(path string) bool {
+        return strings.HasPrefix(path, "/api/v1/platform/")
 }
 
 func isPublicAPIPath(path string) bool {

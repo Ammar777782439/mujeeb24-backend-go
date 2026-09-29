@@ -157,8 +157,24 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
         // even when AutoReply is disabled. The cache seeds from env on first
         // start, then switches to DB-backed dynamic config after the admin
         // stores a configuration via the Platform Admin API.
+        //
+        // Per P1-9: AI_CONFIG_ENCRYPTION_KEY is MANDATORY when AI Provider
+        // Configuration is in use (i.e., when AIConfigRepo will be wired into
+        // PlatformDeps below). Without it, the repository refuses to encrypt
+        // or decrypt API keys — see ErrEncryptionKeyNotConfigured. We fail
+        // fast at startup rather than silently falling back to base64.
+        //
+        // The check is enforced here (not in the repository constructor) so
+        // the error message is actionable: the operator knows exactly which
+        // env var to set. The repository remains a pure data layer.
         encryptionKey := []byte(os.Getenv("AI_CONFIG_ENCRYPTION_KEY"))
-        if len(encryptionKey) < 32 && len(encryptionKey) > 0 {
+        if len(encryptionKey) == 0 {
+                return nil, errors.New("AI_CONFIG_ENCRYPTION_KEY is not set — encrypted credential storage is mandatory. Set AI_CONFIG_ENCRYPTION_KEY to a 32-byte (or longer) random value before starting the API. Example: openssl rand -base64 32 | tr -d '\\n'")
+        }
+        if len(encryptionKey) < 32 {
+                // Pad short keys to 32 bytes (AES-256 minimum). This is a
+                // convenience for development; production SHOULD use a
+                // full-entropy 32-byte key.
                 padded := make([]byte, 32)
                 copy(padded, encryptionKey)
                 encryptionKey = padded
@@ -234,17 +250,27 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 contextBuilder.Knowledge = postgres.NewKnowledgeDocumentRepository(database)
                 contextBuilder.Policies = postgres.NewBusinessPolicyRepository(database)
                 service.ContextBuilder = contextBuilder
-                // Per ADR-039: wire the ConversationSummaryService for the
-                // Summary + Sliding Window hybrid context strategy.
-                // MaybeSummarize is called after each successful AutoReply to
-                // refresh the running summary if the turn threshold (4) has been
-                // reached. The LLM used is the same Gemini ContractClient.
+                // Per ADR-039 + P1-5: wire the ConversationSummaryService with
+                // the ContractClient (not the legacy gemini.Client) so the
+                // summary call uses the dynamic AI configuration via the
+                // AIConfigurationProvider wired at line 188. Also wire the
+                // AIUsageRepository + AIPricingRepository + SubscriptionRepository
+                // so the summary Gemini call is metered (per P1-5: summary calls
+                // MUST be recorded in ai_usage_records — they consume tokens).
                 service.SummaryService = services.NewConversationSummaryService(
                         postgres.NewConversationStateRepository(database),
                         postgres.NewMessageRepository(database),
-                        geminiClient, // underlying ports.AIRuntime for summary generation
+                        geminiClient, // legacy fallback when ContractRuntime is nil
                         geminiClient.Model(),
                 )
+                // Per P1-5: wire the ContractClient + telemetry deps. The
+                // ContractClient is the SAME instance used by AutoReply.Handle
+                // — both read the same dynamic config via the AIConfigurationCache.
+                service.SummaryService.ContractRuntime = contractRuntime
+                service.SummaryService.AIUsage = postgres.NewAIUsageRepository(database)
+                service.SummaryService.AIPricing = postgres.NewAIProviderPricingRepository(database)
+                service.SummaryService.Subscriptions = postgres.NewSubscriptionRepository(database)
+                service.SummaryService.NewID = uuid.NewString
                 // Per contract ⑥ §2, wire the validation pipeline with the
                 // concrete Postgres validators. Per contract ⑥ §6-7 the
                 // ReferenceValidator checks that every selected ID (item/variant/
@@ -308,6 +334,17 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                         }
                         // Per §1: wire the dynamic config provider into BatchClient.
                         batchClient.SetConfigurationProvider(aiConfigCache)
+                        // Per P1-4: wire the SAME dynamic config provider into
+                        // TokenCounter so the countTokens call uses the same
+                        // active model/apiKey/baseURL as the actual generateContent
+                        // call. Without this, a model switch via the Platform
+                        // Admin API would update BatchClient but leave
+                        // TokenCounter pinned to the old static model — causing
+                        // token counts to be computed against the wrong tokenizer
+                        // (different models have different tokenizers).
+                        if batchTokenCounter != nil {
+                                batchTokenCounter.SetConfigurationProvider(aiConfigCache)
+                        }
                 }
 
                 autoReply = service
@@ -321,6 +358,16 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 Assignees:     postgres.NewTeamRepository(database),
                 Transactions:  database,
         }
+        // Per P0-2: create the in-memory Platform Operations registry early
+        // so it can be shared between (a) the AI Cost Protection checker
+        // (which needs to query the runtime kill switch) and (b) the
+        // PlatformDeps wire-up below. Without sharing, the kill switch
+        // toggled via platformAIDisable would NOT be visible to the
+        // AutoReply gate — the whole point of Contract §81.
+        aiConfigured := external.AIRuntime != nil && external.LLMConfigError == nil
+        channelConfigured := external.SocialAPI != nil
+        platformOperations := services.NewInMemoryPlatformOperationsRepository(aiConfigured, channelConfigured)
+
         if external.SocialWebhook != nil {
                 // Per-merchant customer enrichment: SocialAPI's DM webhook payload
                 // delivers only `author.id` (WhatsApp wa_id / FB PSID / IG IGSID);
@@ -352,15 +399,23 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                                 webhookService.Enricher = enricher
                         }
                 }
-                // Per AIUsageTokenTelemetry.md §19: wire the AI Cost Protection
-                // checker so AutoReply is blocked when the business's active
-                // subscription has budget_status == EXCEEDED.
-                // The checker uses the same SubscriptionRepository + AIUsageRepository
-                // already wired above — no new dependencies.
+                // Per P0-2 + P0-3 + AIUsageTokenTelemetry.md §19: wire the
+                // AI Cost Protection checker with the shared Platform Operations
+                // registry. This connects the platformAIDisable/platformAIEnable
+                // kill switch (Contract §81) to the actual AutoReply execution
+                // path. It also enforces the merchant AI Reply entitlement
+                // (Contract §33) before Gemini is called.
                 webhookService.AICostProtectionChecker = &services.AICostProtectionService{
-                        Subscriptions: postgres.NewSubscriptionRepository(database),
-                        AIUsage:       postgres.NewAIUsageRepository(database),
+                        Subscriptions:      postgres.NewSubscriptionRepository(database),
+                        AIUsage:            postgres.NewAIUsageRepository(database),
+                        PlatformOperations: platformOperations,
                 }
+                // Per P1-10: wire the bounded AutoReplyWorkerPool so a viral
+                // DM burst doesn't spawn unbounded goroutines (each consuming
+                // Gemini quota + DB conns). 4 concurrent workers + 64-deep
+                // queue absorbs a burst; larger values can be tuned via env
+                // when the Gemini rate limit allows.
+                webhookService.AutoReplyWorkerPool = services.NewAutoReplyWorkerPool(4, 64)
                 dependencies.IngestSocialAPIWebhook = webhookService
         }
         var apiMiddleware []func(ctx huma.Context, next func(huma.Context))
@@ -391,11 +446,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
         // must be wired BEFORE any platform command domain (Business Management,
         // Plans, Subscriptions, Support, AI Operations). The ports are nullable —
         // routes return 501 NotImplemented until each port is wired.
-        // Determine provider configuration state from the external adapters.
-        // Per Contract §104: the Dashboard sees `configured = true` boolean —
-        // NEVER the actual API key / secret.
-        aiConfigured := external.AIRuntime != nil && external.LLMConfigError == nil
-        channelConfigured := external.SocialAPI != nil
+        // aiConfigured + channelConfigured are computed above (near
+        // platformOperations) so the same flags can be shared with the
+        // AI Cost Protection checker that needs the runtime kill switch.
         dashboardServer = dashboardServer.WithPlatformDeps(handlers.PlatformDeps{
                 Plans:            postgres.NewPlanRepository(database),
                 PlatformBusiness: postgres.NewPlatformBusinessRepository(database),
@@ -405,7 +458,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 Support:          postgres.NewSupportRepository(database),
                 AIUsage:          postgres.NewAIUsageRepository(database),
                 AIProviderPricing: postgres.NewAIProviderPricingRepository(database),
-                Operations:       services.NewInMemoryPlatformOperationsRepository(aiConfigured, channelConfigured),
+                Operations:       platformOperations,
                 ChannelReader:    postgres.NewPlatformChannelReadRepository(database),
                 // Per §1-12: wire AI Provider Configuration management.
                 AIConfigRepo:    aiConfigRepo,

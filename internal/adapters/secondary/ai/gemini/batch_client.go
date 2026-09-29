@@ -196,7 +196,12 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
                         ResponseSchema:   batchCandidateResponseSchema(),
                 },
         }
+        // Per P2-13: measure the wall-clock duration of the Gemini batch
+        // call so the usage record carries a real latency (instead of
+        // deriving it from EstimatedCostMicros which is always 0).
+        sendBatchStart := time.Now()
         resp, err := c.sendRequestWithConfig(ctx, reqBody, rc)
+        sendBatchEnd := time.Now()
         if err != nil {
                 return ports.CatalogBatchResult{}, fmt.Errorf("evaluate batch %d: %w", input.BatchNumber, err)
         }
@@ -204,6 +209,7 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
         if err != nil {
                 return ports.CatalogBatchResult{}, fmt.Errorf("parse batch %d candidates: %w", input.BatchNumber, err)
         }
+        latencyMs := int64(sendBatchEnd.Sub(sendBatchStart) / time.Millisecond)
         return ports.CatalogBatchResult{
                 BatchNumber: input.BatchNumber,
                 Candidates:  candidates,
@@ -212,7 +218,9 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
                         CachedTokens: resp.UsageMetadata.CachedContentTokenCount,
                         OutputTokens: resp.UsageMetadata.CandidatesTokenCount,
                         Model:        rc.model,
+                        LatencyMs:    latencyMs,
                 },
+                LatencyMs: latencyMs,
         }, nil
 }
 
@@ -256,7 +264,11 @@ func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input servic
                         ResponseSchema:   finalProposalResponseSchema(),
                 },
         }
+        // Per P2-13: measure the wall-clock duration of the final
+        // evaluation Gemini call so the usage record carries a real latency.
+        finalStart := time.Now()
         resp, err := c.sendRequestWithConfig(ctx, reqBody, rc)
+        finalEnd := time.Now()
         if err != nil {
                 return ports.AIGeminiProposal{}, ports.ContractUsageTelemetry{}, fmt.Errorf("final evaluate: %w", err)
         }
@@ -269,6 +281,7 @@ func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input servic
                 CachedTokens: resp.UsageMetadata.CachedContentTokenCount,
                 OutputTokens: resp.UsageMetadata.CandidatesTokenCount,
                 Model:        rc.model,
+                LatencyMs:    int64(finalEnd.Sub(finalStart) / time.Millisecond),
         }
         return proposal, usage, nil
 }
@@ -292,7 +305,8 @@ func (c *BatchClient) sendRequestWithConfig(ctx context.Context, reqBody batchGe
         if err != nil {
                 return batchGeminiResponse{}, fmt.Errorf("marshal request: %w", err)
         }
-        url := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", rc.baseURL, rc.model, rc.apiKey)
+        // P1-8: API key sent via x-goog-api-key header only — never in URL.
+        url := fmt.Sprintf("%s/v1beta/models/%s:generateContent", rc.baseURL, rc.model)
         reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
         defer cancel()
         httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(buf))
@@ -300,6 +314,7 @@ func (c *BatchClient) sendRequestWithConfig(ctx context.Context, reqBody batchGe
                 return batchGeminiResponse{}, fmt.Errorf("build request: %w", err)
         }
         httpReq.Header.Set("Content-Type", "application/json")
+        httpReq.Header.Set("x-goog-api-key", rc.apiKey)
         resp, err := c.httpClient.Do(httpReq)
         if err != nil {
                 return batchGeminiResponse{}, fmt.Errorf("send request: %w", err)
@@ -327,7 +342,8 @@ func (c *BatchClient) sendRequest(ctx context.Context, reqBody batchGeminiReques
                 return batchGeminiResponse{}, fmt.Errorf("marshal request: %w", err)
         }
 
-        url := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", c.baseURL, c.model, c.apiKey)
+        // P1-8: API key sent via x-goog-api-key header only — never in URL.
+        url := fmt.Sprintf("%s/v1beta/models/%s:generateContent", c.baseURL, c.model)
 
         reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
         defer cancel()
@@ -337,6 +353,7 @@ func (c *BatchClient) sendRequest(ctx context.Context, reqBody batchGeminiReques
                 return batchGeminiResponse{}, fmt.Errorf("build request: %w", err)
         }
         httpReq.Header.Set("Content-Type", "application/json")
+        httpReq.Header.Set("x-goog-api-key", c.apiKey)
 
         resp, err := c.httpClient.Do(httpReq)
         if err != nil {

@@ -288,7 +288,11 @@ func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports
         requestCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
         defer cancel()
 
-        u := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", c.baseURL, url.PathEscape(c.model), url.QueryEscape(c.apiKey))
+        // P1-8: API key sent via x-goog-api-key header only — never in URL.
+        // Previous implementation included ?key=<apiKey> in the URL query string,
+        // which leaks the credential via proxy/access logs. The header is the
+        // Google-recommended transport.
+        u := fmt.Sprintf("%s/v1beta/models/%s:generateContent", c.baseURL, url.PathEscape(c.model))
         req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, u, strings.NewReader(string(encoded)))
         if err != nil {
                 return ports.AIDecisionProposal{}, fmt.Errorf("create request: %w", err)

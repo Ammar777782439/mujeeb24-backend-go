@@ -3,11 +3,41 @@ package services
 import (
         "context"
         "errors"
+        "fmt"
+        "strings"
         "sync"
         "time"
 
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
+
+// isNoActiveVersionError returns true when err indicates the DB has no
+// active configuration version (the bootstrap state — admin hasn't yet
+// activated a DB-backed config). In this case, falling back to the
+// env-loaded config is safe (per P2-14).
+//
+// Other errors (DB connection refused, query syntax error, etc.) MUST
+// NOT trigger env fallback — they'd silently regress to stale env
+// config and mask real failures.
+func isNoActiveVersionError(err error) bool {
+        if err == nil {
+                return false
+        }
+        // The repository's GetActiveVersion returns RepositoryNotFound when
+        // no row matches. We check for that + a few common phrasings to be
+        // defensive against different repository implementations.
+        msg := strings.ToLower(err.Error())
+        if strings.Contains(msg, "no active version") {
+                return true
+        }
+        if strings.Contains(msg, "not found") {
+                return true
+        }
+        if strings.Contains(msg, "no rows") {
+                return true
+        }
+        return false
+}
 
 // AIConfigurationCache is an in-memory cache of the active AI configuration.
 // Per §9: the cache avoids querying the DB on every Gemini call. Invalidation
@@ -106,18 +136,49 @@ func (c *AIConfigurationCache) GetActiveConfig(ctx context.Context) (ports.AIAct
 
         // Try to reload from DB. Per §9: after activation, the runtime MUST
         // read the new config without restart.
+        //
+        // Per P2-14: this is the critical safety boundary. If the DB reload
+        // returns an error (not "no active version" — that's the bootstrap
+        // case — but a real DB error like connection refused), we MUST NOT
+        // silently fall back to the env config. Doing so would mean:
+        //   - The admin activates a NEW config (DB write succeeds).
+        //   - DB goes down briefly (network blip).
+        //   - Cache invalidates (correctly) on the next Invalidate() call.
+        //   - GetActiveConfig tries reloadFromDBLocked — fails with DB error.
+        //   - Falls back to env (which has the OLD key).
+        //   - Old key may be REVOKED or the wrong model — silent regression.
+        //
+        // The fix: distinguish "no active version" (legitimate bootstrap
+        // state, env fallback is OK) from "DB error" (real failure, must
+        // surface to caller, NOT silently use stale env config).
         if c.repo != nil {
-                if err := c.reloadFromDBLocked(ctx); err == nil {
+                err := c.reloadFromDBLocked(ctx)
+                if err == nil {
                         if c.config.APIKey != "" {
                                 return c.config, nil
                         }
+                        // reloadFromDBLocked succeeded but found no version —
+                        // this is the bootstrap state. Env fallback below is OK.
+                } else if isNoActiveVersionError(err) {
+                        // No active version in DB — env fallback is OK.
+                        // This is the only path where env fallback is safe.
+                } else {
+                        // Real DB error — DO NOT silently fall back to env.
+                        // Per P2-14: surface the error so the caller can decide
+                        // (typically: refuse to execute AI calls — better than
+                        // silently running with stale config).
+                        return ports.AIActiveConfig{}, fmt.Errorf("AI configuration DB reload failed (NOT falling back to stale env config per P2-14): %w", err)
                 }
-                // DB reload failed (e.g., no active version yet, or DB error).
-                // Fall through to env fallback below.
         }
 
         // Fall back to env config (set once at bootstrap). Per §11: if no
         // env config exists, AI execution is prevented with a clear error.
+        //
+        // Per P2-14: this fallback is ONLY safe BEFORE any DB active version
+        // has ever been created (the bootstrap state). Once an admin has
+        // activated a DB-backed config, env fallback is FORBIDDEN — the
+        // cache MUST surface the DB error so operators can fix the issue.
+        // The isNoActiveVersionError check above enforces this boundary.
         if c.envLoaded && c.envConfig.APIKey != "" {
                 // Restore env config as the active config so subsequent calls
                 // hit the fast path without retrying DB reload on every call.

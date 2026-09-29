@@ -34,6 +34,8 @@ import (
         "strings"
         "time"
 
+        "github.com/google/uuid"
+
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
@@ -82,9 +84,34 @@ const SlidingWindowSize = 4
 type ConversationSummaryService struct {
         StateRepository ports.ConversationStateRepository
         Messages        ports.MessageRepository
-        LLM             ports.AIRuntime // Gemini client for summary generation
-        GeminiModel     string
-        Now             func() time.Time
+        // LLM is the legacy AIRuntime (kept for backward compatibility with
+        // environments that don't wire ContractRuntime). When ContractRuntime
+        // is set, LLM is ignored — the contract-aligned path is preferred.
+        LLM ports.AIRuntime
+        // ContractRuntime is the contract ④ §8 path. Per P1-5: when wired
+        // (via SetContractRuntime or the constructor), this is used INSTEAD
+        // of LLM. It reads the dynamic AI configuration via the
+        // AIConfigurationProvider that's already wired into the ContractClient
+        // at bootstrap — so the summary call uses the SAME active model as
+        // the AutoReply path. Without this, summary generation would stay
+        // pinned to the static geminiClient.Model() even after a model
+        // switch via the Platform Admin API.
+        ContractRuntime ports.ContractRuntime
+        // AIUsageRepository records per-execution telemetry for the summary
+        // call. Per P1-5: summary Gemini calls MUST be metered — they are
+        // not free. If nil, telemetry is logged but not persisted.
+        AIUsage ports.AIUsageRepository
+        // AIPricingRepository looks up the current pricing version for
+        // computing provider_cost_yer on the summary call. If nil, the
+        // record is marked status="pricing_failed" per P1-6.
+        AIPricing ports.AIProviderPricingRepository
+        // Subscriptions looks up the business's active subscription ID so
+        // the summary usage record is associated with the correct
+        // subscription (same as AutoReply.recordAIUsage).
+        Subscriptions ports.SubscriptionRepository
+        GeminiModel   string
+        Now           func() time.Time
+        NewID         func() string
 }
 
 // NewConversationSummaryService constructs a ConversationSummaryService.
@@ -188,17 +215,18 @@ func (s *ConversationSummaryService) MaybeSummarize(
 
         // Build the transcript text
         transcript := buildTranscript(olderMessages)
-	// Per ADR-051: cap transcript to 4000 chars to avoid exceeding
-	// the 12000 char limit in Gemini client. Also ensure chronological
-	// order (oldest first) — ListByConversation returns ASC after
-	// reversal, but olderMessages[:cutoffIdx] takes the first (oldest)
-	// entries which is correct. The cap prevents overflow.
-	if len(transcript) > 4000 {
-		transcript = transcript[:4000]
-	}
+        // Per ADR-051: cap transcript to 4000 chars to avoid exceeding
+        // the 12000 char limit in Gemini client. Also ensure chronological
+        // order (oldest first) — ListByConversation returns ASC after
+        // reversal, but olderMessages[:cutoffIdx] takes the first (oldest)
+        // entries which is correct. The cap prevents overflow.
+        if len(transcript) > 4000 {
+                transcript = transcript[:4000]
+        }
 
-        // Generate summary via Gemini
-        summaryText, err := s.generateSummary(ctx, transcript, state.Summary)
+        // Generate summary via Gemini (per P1-5: use ContractRuntime when
+        // wired so the dynamic AI config applies).
+        summaryText, err := s.generateSummary(ctx, businessID, conversationID, transcript, state.Summary)
         if err != nil {
                 result.SkippedReason = fmt.Sprintf("summary_generation_failed: %v", err)
                 log.Printf("[SummaryService] GENERATION_FAILED business=%s conversation=%s err=%v", businessID, conversationID, err)
@@ -233,7 +261,7 @@ func (s *ConversationSummaryService) MaybeSummarize(
 // the result as TEXT in the database.
 func (s *ConversationSummaryService) generateSummary(
         ctx context.Context,
-        transcript, previousSummary string,
+        businessID, conversationID, transcript, previousSummary string,
 ) (string, error) {
         systemPrompt := `You are a conversation summarizer for the Mujeeb 24 customer service AI.
 
@@ -257,29 +285,71 @@ Rules:
 
         userPrompt := fmt.Sprintf("Previous summary:\n%s\n\nConversation transcript to summarize:\n%s", previousSummary, transcript)
 
-        // Use AIRuntime.Decide to generate the summary. The runtime wraps
-        // the ContractClient which calls Gemini.
-        // Note: the system prompt for the runtime is CustomerSalesSystemPrompt,
-        // not the summary-specific prompt above. We work around this by
-        // prepending our summary instructions to the user text. This is a
-        // pragmatic compromise; a future ADR should add a dedicated summary
-        // endpoint with system_prompt parameter.
+        // Per P1-5: prefer ContractRuntime (the contract ④ §8 path that
+        // reads the dynamic AI configuration via the AIConfigurationProvider
+        // wired at bootstrap). When ContractRuntime is NOT wired, fall back
+        // to the legacy LLM.Decide — the legacy path bypasses dynamic
+        // config, so a model switch via the Platform Admin API would NOT
+        // be picked up. Production MUST wire ContractRuntime.
         fullPrompt := systemPrompt + "\n\n" + userPrompt
-        input := ports.AIDecisionInput{
-                BusinessID:     "summary-service",
-                ConversationID: "summary-service",
-                Channel:        "internal",
-                Text:           fullPrompt,
-                PolicyVersion:  "summary-v1",
+        startedAt := s.now()
+        var (
+                summary       string
+                usageTelemetry ports.ContractUsageTelemetry
+                latencyMs      int64
+        )
+        if s.ContractRuntime != nil {
+                // Contract-aligned path — uses dynamic config + returns
+                // structured usage telemetry that we can record.
+                out, err := s.ContractRuntime.DecideContract(ctx, ports.ContractRuntimeInput{
+                        DecisionInput: ports.AIDecisionInput{
+                                BusinessID:     businessID,
+                                ConversationID: conversationID,
+                                Channel:        "internal",
+                                Text:           fullPrompt,
+                                PolicyVersion:  "summary-v1",
+                        },
+                })
+                if err != nil {
+                        return "", fmt.Errorf("contract runtime decide: %w", err)
+                }
+                // The summary text lives in out.Proposal.ResponseText (the
+                // structured-proposal field — the AIGeminiProposal shape).
+                summary = strings.TrimSpace(out.Proposal.ResponseText)
+                usageTelemetry = out.Usage
+                latencyMs = out.LatencyMs
+        } else if s.LLM != nil {
+                // Legacy fallback — no usage telemetry, no dynamic config.
+                // Deprecated per P1-5; production should wire ContractRuntime.
+                input := ports.AIDecisionInput{
+                        BusinessID:     businessID,
+                        ConversationID: conversationID,
+                        Channel:        "internal",
+                        Text:           fullPrompt,
+                        PolicyVersion:  "summary-v1",
+                }
+                proposal, err := s.LLM.Decide(ctx, input)
+                if err != nil {
+                        return "", fmt.Errorf("llm decide: %w", err)
+                }
+                summary = strings.TrimSpace(proposal.ResponseText)
+                // Legacy path has no usage telemetry — record zeros with
+                // status="legacy_no_telemetry" so operators see the gap.
+                usageTelemetry = ports.ContractUsageTelemetry{}
+                latencyMs = 0
+        } else {
+                return "", errors.New("no LLM runtime configured for summary generation")
         }
 
-        proposal, err := s.LLM.Decide(ctx, input)
-        if err != nil {
-                return "", fmt.Errorf("llm decide: %w", err)
-        }
+        // Per P1-5: record usage telemetry for the summary call. This is
+        // a real Gemini invocation that consumes tokens — it MUST be
+        // metered like any other AI execution. The same P1-6 logic
+        // applies: if pricing lookup fails, the record is marked
+        // status="pricing_failed" and does NOT count as a successful
+        // AI Reply (final_ai_replies=0).
+        s.recordSummaryUsage(ctx, businessID, usageTelemetry, latencyMs, startedAt)
 
         // The summary is the response text — strip any metadata
-        summary := strings.TrimSpace(proposal.ResponseText)
         if summary == "" {
                 return "", errors.New("empty summary from LLM")
         }
@@ -291,6 +361,120 @@ Rules:
 
         return summary, nil
 }
+
+// recordSummaryUsage persists per-execution telemetry for the summary
+// Gemini call. Mirrors AutoReply.recordAIUsage but inline (no shared
+// helper) to keep the change minimal. Per P1-6: when pricing lookup
+// fails, the record is marked status="pricing_failed" — never silently
+// stored as "success" with cost=0.
+func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, businessID string, usage ports.ContractUsageTelemetry, latencyMs int64, startedAt time.Time) {
+        if s.AIUsage == nil {
+                log.Printf("[SummaryService] AI_USAGE_SKIP business=%s reason=AIUsage_repository_not_wired", businessID)
+                return
+        }
+        if usage.Model == "" {
+                // No model reported by the runtime — nothing meaningful to record.
+                log.Printf("[SummaryService] AI_USAGE_SKIP business=%s reason=no_model_in_telemetry", businessID)
+                return
+        }
+        now := s.now()
+        // Find the business's active subscription ID for association.
+        var subscriptionID string
+        if s.Subscriptions != nil {
+                page, err := s.Subscriptions.List(ctx, ports.SubscriptionListFilter{
+                        BusinessID: businessID, Status: "ACTIVE", Limit: 1,
+                })
+                if err == nil && len(page.Items) > 0 {
+                        subscriptionID = page.Items[0].ID
+                }
+        }
+        if subscriptionID == "" {
+                log.Printf("[SummaryService] AI_USAGE_SKIP business=%s reason=no_active_subscription", businessID)
+                return
+        }
+        // Compute provider_cost from the pricing table (per P1-6: never
+        // silently store cost=0 as "success").
+        providerCostYER := 0
+        pricingVersion := "unknown"
+        pricingFailed := false
+        totalInput := usage.InputTokens
+        cachedInput := usage.CachedTokens
+        nonCachedInput := totalInput - cachedInput
+        if nonCachedInput < 0 {
+                nonCachedInput = 0
+        }
+        if s.AIPricing != nil {
+                pricing, err := s.AIPricing.GetCurrentForProvider(ctx, "google_gemini", usage.Model)
+                if err == nil {
+                        pricingVersion = pricing.PricingVersion
+                        inputCost := int64(nonCachedInput) * int64(pricing.InputPerMillionYER) / 1_000_000
+                        cachedCost := int64(cachedInput) * int64(pricing.CachedInputPerMillionYER) / 1_000_000
+                        outputCost := int64(usage.OutputTokens) * int64(pricing.OutputPerMillionYER) / 1_000_000
+                        providerCostYER = int(inputCost + cachedCost + outputCost)
+                } else {
+                        log.Printf("[SummaryService] AI_USAGE_PRICING_LOOKUP_FAILED business=%s model=%s err=%v", businessID, usage.Model, err)
+                        pricingFailed = true
+                }
+        } else {
+                log.Printf("[SummaryService] AI_USAGE_PRICING_REPO_NOT_WIRED business=%s model=%s", businessID, usage.Model)
+                pricingFailed = true
+        }
+        // Per §3: summary calls do NOT count as final AI Replies —
+        // they're internal background work, not customer-facing responses.
+        // The customer-facing entitlement is incremented only by the
+        // AutoReply.recordAIUsage path. The summary record is persisted
+        // with final_ai_replies=0 so the platform admin sees the tokens
+        // spent on summarization but the merchant's entitlement is not
+        // consumed by background work.
+        finalAIReplies := 0
+        recordStatus := "success"
+        if pricingFailed {
+                recordStatus = "pricing_failed"
+        }
+        recordID := s.newID()
+        _, err := s.AIUsage.AppendRecord(ctx, ports.AIUsageAppend{
+                ID:                  recordID,
+                BusinessID:          businessID,
+                SubscriptionID:      subscriptionID,
+                Provider:            "google_gemini",
+                Model:               usage.Model,
+                InputTokens:         int64(nonCachedInput),
+                CachedInputTokens:   int64(cachedInput),
+                OutputTokens:        int64(usage.OutputTokens),
+                ModelRequests:       1,
+                ToolCalls:           0,
+                FinalAIReplies:      finalAIReplies,
+                ProviderCostYER:     providerCostYER,
+                PricingVersion:      pricingVersion,
+                Status:              recordStatus,
+                CorrelationID:       summaryStrPtr("summary-" + businessID),
+                StartedAt:           startedAt,
+                CompletedAt:         now,
+                Now:                 now,
+        })
+        if err != nil {
+                log.Printf("[SummaryService] AI_USAGE_RECORD_FAILED business=%s subscription=%s err=%v", businessID, subscriptionID, err)
+                return
+        }
+        log.Printf("[SummaryService] AI_USAGE_RECORDED business=%s subscription=%s tokens_in=%d tokens_cached=%d tokens_out=%d cost_yer=%d pricing=%s status=%s",
+                businessID, subscriptionID, usage.InputTokens, usage.CachedTokens, usage.OutputTokens, providerCostYER, pricingVersion, recordStatus)
+}
+
+func (s *ConversationSummaryService) now() time.Time {
+        if s.Now != nil {
+                return s.Now()
+        }
+        return time.Now().UTC()
+}
+
+func (s *ConversationSummaryService) newID() string {
+        if s.NewID != nil {
+                return s.NewID()
+        }
+        return uuid.NewString()
+}
+
+func summaryStrPtr(s string) *string { return &s }
 
 // buildTranscript converts message records into a readable transcript for
 // the summarizer. It marks each line with who said it (customer vs agent)

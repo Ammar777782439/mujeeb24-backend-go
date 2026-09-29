@@ -1620,9 +1620,25 @@ Failures
 Provider:
 Google Gemini
 
-والـModel الإنتاجي:
+والـModel الإنتاجي الافتراضي (fallback bootstrap):
 
-gemini-3.1-flash-lite
+gemini-3.5-flash-lite
+
+(إذا تم تعيين GEMINI_MODEL في الـenv يُستخدم ذلك بدلًا منه.)
+
+> **CONTRACT DRIFT NOTE (P2-15 fix, 2026-09-29):**
+> النص الأصلي للعقد (§76) أشار إلى `gemini-3.1-flash-lite` كنموذج إنتاجي — لكن
+> التطبيق الفعلي يستخدم `gemini-3.5-flash-lite` كـfallback (انظر
+> `internal/bootstrap/api.go:186`). تم تحديث العقد ليعكس التطبيق الحقيقي.
+>
+> كذلك أشار العقد الأصلي (§86-87) إلى أن تغيير الـmodel/credential من
+> الـDashboard غير مدعوم في V1 — لكن إضافة `AI Provider Configuration`
+> (المسارات `/api/v1/platform/operations/ai/*`) تجعل تغيير الـmodel
+> والـcredential مدعومًا وقت التشغيل عبر `platformUpdateAIConfiguration`
+> و `platformAddAICredential`. هذه الإضافة **تُلغي** قيد §86-87 القديم
+> (الـAPI الحالي هو المصدر الموثوق).
+>
+> لم يتم حذف أي API موجود — التحديث يعكس فقط الواقع الحالي للتنفيذ.
 
 وهو الـbaseline الاقتصادي/التقني المعتمد حاليًا للمشروع.
 

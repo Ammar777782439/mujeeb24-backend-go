@@ -688,78 +688,99 @@ func countCompleted(records []ports.AICatalogBatchRecord) int {
 //
 // Best-effort: errors are logged but never fail the catalog evaluation.
 func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessID, runID string, usage ports.ContractUsageTelemetry, phase string) {
-	if c.AIUsage == nil {
-		return
-	}
-	// Find the business's active subscription ID.
-	var subscriptionID string
-	if c.Subscriptions != nil {
-		page, err := c.Subscriptions.List(ctx, ports.SubscriptionListFilter{
-			BusinessID: businessID,
-			Status:     "ACTIVE",
-			Limit:      1,
-		})
-		if err == nil && len(page.Items) > 0 {
-			subscriptionID = page.Items[0].ID
-		}
-	}
-	if subscriptionID == "" {
-		log.Printf("[CatalogBatch] AI_USAGE_SKIP business=%s reason=no_active_subscription phase=%s", businessID, phase)
-		return
-	}
-	// Compute provider_cost from the pricing table.
-	// Same anti-double-counting logic as auto_reply.go:
-	// promptTokenCount INCLUDES cachedContentTokenCount, so we subtract.
-	totalInput := usage.InputTokens
-	cachedInput := usage.CachedTokens
-	nonCachedInput := totalInput - cachedInput
-	if nonCachedInput < 0 {
-		nonCachedInput = 0
-	}
-	providerCostYER := 0
-	pricingVersion := "unknown"
-	if c.AIPricing != nil {
-		pricing, err := c.AIPricing.GetCurrentForProvider(ctx, "google_gemini", usage.Model)
-		if err == nil {
-			pricingVersion = pricing.PricingVersion
-			inputCost := int64(nonCachedInput) * int64(pricing.InputPerMillionYER) / 1_000_000
-			cachedCost := int64(cachedInput) * int64(pricing.CachedInputPerMillionYER) / 1_000_000
-			outputCost := int64(usage.OutputTokens) * int64(pricing.OutputPerMillionYER) / 1_000_000
-			providerCostYER = int(inputCost + cachedCost + outputCost)
-		}
-	}
-	// Use correlation_id = runID + "|" + phase for dedup.
-	// If the same phase is recorded twice for the same run, it's a retry —
-	// the AppendRecord generates a new UUID so we rely on the caller not
-	// calling recordBatchUsage twice for the same phase. The catalog batch
-	// controller calls it exactly once per batch + once for final evaluation.
-	correlationID := runID + "|" + phase
-	recordID := c.NewID()
-	now := c.Now()
-	_, err := c.AIUsage.AppendRecord(ctx, ports.AIUsageAppend{
-		ID:                recordID,
-		BusinessID:        businessID,
-		SubscriptionID:    subscriptionID,
-		Provider:          "google_gemini",
-		Model:             usage.Model,
-		InputTokens:       int64(nonCachedInput),
-		CachedInputTokens: int64(cachedInput),
-		OutputTokens:      int64(usage.OutputTokens),
-		ModelRequests:     1,
-		ToolCalls:         0,
-		FinalAIReplies:   0, // batch calls never count as final replies
-		ProviderCostYER:  providerCostYER,
-		PricingVersion:   pricingVersion,
-		Status:           "success",
-		CorrelationID:    &correlationID,
-		StartedAt:        now.Add(-time.Duration(usage.EstimatedCostMicros) * time.Microsecond),
-		CompletedAt:      now,
-		Now:              now,
-	})
-	if err != nil {
-		log.Printf("[CatalogBatch] AI_USAGE_RECORD_FAILED business=%s phase=%s err=%v", businessID, phase, err)
-		return
-	}
-	log.Printf("[CatalogBatch] AI_USAGE_RECORDED business=%s phase=%s tokens_in=%d cached=%d tokens_out=%d cost_yer=%d",
-		businessID, phase, nonCachedInput, cachedInput, usage.OutputTokens, providerCostYER)
+        if c.AIUsage == nil {
+                return
+        }
+        // Find the business's active subscription ID.
+        var subscriptionID string
+        if c.Subscriptions != nil {
+                page, err := c.Subscriptions.List(ctx, ports.SubscriptionListFilter{
+                        BusinessID: businessID,
+                        Status:     "ACTIVE",
+                        Limit:      1,
+                })
+                if err == nil && len(page.Items) > 0 {
+                        subscriptionID = page.Items[0].ID
+                }
+        }
+        if subscriptionID == "" {
+                log.Printf("[CatalogBatch] AI_USAGE_SKIP business=%s reason=no_active_subscription phase=%s", businessID, phase)
+                return
+        }
+        // Compute provider_cost from the pricing table.
+        // Same anti-double-counting logic as auto_reply.go:
+        // promptTokenCount INCLUDES cachedContentTokenCount, so we subtract.
+        totalInput := usage.InputTokens
+        cachedInput := usage.CachedTokens
+        nonCachedInput := totalInput - cachedInput
+        if nonCachedInput < 0 {
+                nonCachedInput = 0
+        }
+        providerCostYER := 0
+        pricingVersion := "unknown"
+        // Per P1-6: when pricing lookup fails, mark the record with
+        // status="pricing_failed" so the aggregate does NOT silently
+        // understate provider cost. Same fail-safe applied to AutoReply
+        // + ConversationSummary — the catalog batch path was the last
+        // holdout still writing cost=0 as "success".
+        pricingFailed := false
+        if c.AIPricing != nil {
+                pricing, err := c.AIPricing.GetCurrentForProvider(ctx, "google_gemini", usage.Model)
+                if err == nil {
+                        pricingVersion = pricing.PricingVersion
+                        inputCost := int64(nonCachedInput) * int64(pricing.InputPerMillionYER) / 1_000_000
+                        cachedCost := int64(cachedInput) * int64(pricing.CachedInputPerMillionYER) / 1_000_000
+                        outputCost := int64(usage.OutputTokens) * int64(pricing.OutputPerMillionYER) / 1_000_000
+                        providerCostYER = int(inputCost + cachedCost + outputCost)
+                } else {
+                        log.Printf("[CatalogBatch] AI_USAGE_PRICING_LOOKUP_FAILED business=%s model=%s phase=%s err=%v", businessID, usage.Model, phase, err)
+                        pricingFailed = true
+                }
+        } else {
+                log.Printf("[CatalogBatch] AI_USAGE_PRICING_REPO_NOT_WIRED business=%s model=%s phase=%s", businessID, usage.Model, phase)
+                pricingFailed = true
+        }
+        recordStatus := "success"
+        if pricingFailed {
+                recordStatus = "pricing_failed"
+        }
+        // Use correlation_id = runID + "|" + phase for dedup.
+        // If the same phase is recorded twice for the same run, it's a retry —
+        // the AppendRecord generates a new UUID so we rely on the caller not
+        // calling recordBatchUsage twice for the same phase. The catalog batch
+        // controller calls it exactly once per batch + once for final evaluation.
+        correlationID := runID + "|" + phase
+        recordID := c.NewID()
+        now := c.Now()
+        // Per P2-13: use the REAL latency from the Gemini call
+        // (usage.LatencyMs) to compute StartedAt — NOT EstimatedCostMicros
+        // (which was always 0, resulting in StartedAt == CompletedAt +
+        // latency=0 for every batch record).
+        startedAt := now.Add(-time.Duration(usage.LatencyMs) * time.Millisecond)
+        _, err := c.AIUsage.AppendRecord(ctx, ports.AIUsageAppend{
+                ID:                recordID,
+                BusinessID:        businessID,
+                SubscriptionID:    subscriptionID,
+                Provider:          "google_gemini",
+                Model:             usage.Model,
+                InputTokens:       int64(nonCachedInput),
+                CachedInputTokens: int64(cachedInput),
+                OutputTokens:      int64(usage.OutputTokens),
+                ModelRequests:     1,
+                ToolCalls:         0,
+                FinalAIReplies:   0, // batch calls never count as final replies
+                ProviderCostYER:  providerCostYER,
+                PricingVersion:   pricingVersion,
+                Status:           recordStatus,
+                CorrelationID:    &correlationID,
+                StartedAt:        startedAt,
+                CompletedAt:      now,
+                Now:              now,
+        })
+        if err != nil {
+                log.Printf("[CatalogBatch] AI_USAGE_RECORD_FAILED business=%s phase=%s err=%v", businessID, phase, err)
+                return
+        }
+        log.Printf("[CatalogBatch] AI_USAGE_RECORDED business=%s phase=%s tokens_in=%d cached=%d tokens_out=%d cost_yer=%d",
+                businessID, phase, nonCachedInput, cachedInput, usage.OutputTokens, providerCostYER)
 }

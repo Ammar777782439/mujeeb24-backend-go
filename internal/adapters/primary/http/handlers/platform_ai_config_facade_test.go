@@ -1196,7 +1196,7 @@ func TestPlatformAICredentialAPIViewNeverExposesFullKey(t *testing.T) {
         result, _ := server.dispatchPlatformCommand(ctx, "platformAddAICredential", &dto.AddCredentialInput{
                 Body: dto.AddCredentialRequest{
                         Provider: "google_gemini", DisplayName: "Test",
-                        APIKey: "AQ.Ab8RN6KaU9jCQ4NsIvrYP8tbW",
+                        APIKey: "FAKE_TEST_KEY_DO_NOT_USE_AAAAAAAA",
                 },
         })
         out, ok := result.(*contractSingleAICredentialView)
@@ -1209,7 +1209,7 @@ func TestPlatformAICredentialAPIViewNeverExposesFullKey(t *testing.T) {
         }
         // Verify there's no APIKey field anywhere in the response body.
         body, _ := json.Marshal(out.Body.Data)
-        if strings.Contains(string(body), "AQ.Ab8RN6KaU9jCQ4NsIvrYP8tbW") {
+        if strings.Contains(string(body), "FAKE_TEST_KEY_DO_NOT_USE_AAAAAAAA") {
                 t.Errorf("API response body contains the full API key — security violation: %s", string(body))
         }
 }

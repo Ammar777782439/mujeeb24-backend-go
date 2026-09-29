@@ -1764,6 +1764,11 @@ func (s *Server) platformGetAIUsageOverview(ctx context.Context) (any, bool) {
         if err != nil {
                 return mapApplicationError(err), true
         }
+        // Per P2-12: expose the platform-wide budget fields. The aggregate
+        // computed by GetPlatformAIUsageOverview carries InternalCostBudgetYER
+        // (sum across all businesses' active subscriptions' cost_budget_yer)
+        // + CostRemainingYER + ProviderCostYER (consumed). Average cost per
+        // reply is computed by the repository (handle div-by-zero when 0 replies).
         out := &contract.Single[dto.PlatformAIUsageOverviewView]{}
         out.Body.Data = dto.PlatformAIUsageOverviewView{
                 TotalAIReplies:        int64(agg.AIRepliesUsed),
@@ -1774,6 +1779,9 @@ func (s *Server) platformGetAIUsageOverview(ctx context.Context) (any, bool) {
                 TotalToolCalls:        agg.ToolCalls,
                 TotalProviderCostYER:  agg.ProviderCostYER,
                 AverageCostPerReply:   agg.AverageCostPerReplyYER,
+                ActiveBudgetYER:       agg.InternalCostBudgetYER,
+                ConsumedBudgetYER:     agg.ProviderCostYER,
+                RemainingBudgetYER:    agg.CostRemainingYER,
         }
         return out, true
 }
@@ -1813,11 +1821,28 @@ func (s *Server) platformGetAIUsageByBusiness(ctx context.Context, _ *dto.Platfo
         if err != nil {
                 return mapApplicationError(err), true
         }
-        items := make([]dto.SubscriptionAIUsageView, 0, len(aggs))
+        // Per P2-11: project to BusinessAIUsageView (NOT SubscriptionAIUsageView).
+        // The GetAIUsageByBusiness query groups by business_id and only
+        // populates BusinessID + token totals — it does NOT populate
+        // subscription-specific fields (subscription_id, ai_reply_limit,
+        // ai_replies_remaining, budget_status). Using SubscriptionAIUsageView
+        // previously filled those with zero/empty values, which looked like
+        // real "0 limit / 0 remaining" data to operators. The new DTO
+        // exposes ONLY the business-level fields actually returned.
+        items := make([]dto.BusinessAIUsageView, 0, len(aggs))
         for _, agg := range aggs {
-                items = append(items, subscriptionAIUsageProjection(agg))
+                items = append(items, dto.BusinessAIUsageView{
+                        BusinessID:            agg.BusinessID,
+                        TotalAIReplies:        agg.AIRepliesUsed,
+                        TotalInputTokens:      agg.InputTokens,
+                        TotalCachedTokens:     agg.CachedInputTokens,
+                        TotalOutputTokens:     agg.OutputTokens,
+                        TotalModelRequests:    agg.ModelRequests,
+                        TotalToolCalls:        agg.ToolCalls,
+                        TotalProviderCostYER:  agg.ProviderCostYER,
+                })
         }
-        out := &contract.List[dto.SubscriptionAIUsageView]{}
+        out := &contract.List[dto.BusinessAIUsageView]{}
         out.Body.Data = items
         return out, true
 }

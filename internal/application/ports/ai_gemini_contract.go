@@ -220,6 +220,12 @@ type CatalogBatchResult struct {
         // recorded. This field carries the usageMetadata from the batch's
         // Gemini response so the CatalogBatchController can persist it.
         Usage ContractUsageTelemetry `json:"-"`
+        // LatencyMs is the wall-clock duration of the Gemini batch call.
+        // Per P2-13: this is the REAL latency from start-of-request to
+        // end-of-response, NOT derived from EstimatedCostMicros (which is
+        // always 0 — see client_contracts.go). The controller uses this to
+        // compute StartedAt = CompletedAt - LatencyMs for the usage record.
+        LatencyMs int64 `json:"-"`
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -674,4 +680,10 @@ type ContractUsageTelemetry struct {
         OutputTokens        int
         Model               string
         EstimatedCostMicros int64
+        // LatencyMs is the wall-clock duration of the Gemini call.
+        // Per P2-13: the controller uses this to compute StartedAt =
+        // CompletedAt - LatencyMs for the usage record. Before this field,
+        // the controller derived latency from EstimatedCostMicros (always 0)
+        // — resulting in StartedAt == CompletedAt + latency=0.
+        LatencyMs int64
 }

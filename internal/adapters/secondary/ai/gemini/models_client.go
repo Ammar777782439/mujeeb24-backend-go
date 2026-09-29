@@ -16,7 +16,7 @@ import (
 // ModelsClient calls the Gemini Models API to discover available models.
 // Per §3: the discovery must call the actual Gemini API — no hardcoded list.
 //
-// Gemini API endpoint: GET /v1beta/models?key=API_KEY
+// Gemini API endpoint: GET /v1beta/models (key via x-goog-api-key header)
 // Returns: { models: [{ name, version, displayName, description,
 //   inputTokenLimit, outputTokenLimit, supportedGenerationMethods,
 //   temperature, topP, topK, ... }] }
@@ -63,7 +63,10 @@ func (c *ModelsClient) DiscoverModels(ctx context.Context, apiKey, baseURL strin
                 baseURL = defaultBaseURL
         }
 
-        url := fmt.Sprintf("%s/v1beta/models?key=%s&pageSize=100", baseURL, apiKey)
+        // P1-8: API key MUST be sent as x-goog-api-key header — never in
+        // the URL query string. The URL is logged in proxy/server access
+        // logs and would leak the credential.
+        url := fmt.Sprintf("%s/v1beta/models?pageSize=100", baseURL)
 
         reqCtx, cancel := context.WithTimeout(ctx, c.timeout)
         defer cancel()
@@ -73,6 +76,7 @@ func (c *ModelsClient) DiscoverModels(ctx context.Context, apiKey, baseURL strin
                 return nil, fmt.Errorf("build models request: %w", err)
         }
         httpReq.Header.Set("Accept", "application/json")
+        httpReq.Header.Set("x-goog-api-key", apiKey)
 
         resp, err := c.httpClient.Do(httpReq)
         if err != nil {
@@ -193,7 +197,8 @@ func (c *ModelsClient) TestConnection(ctx context.Context, apiKey, model, baseUR
         // Minimal probe: generateContent with "Hello" input.
         // Per §84: uses a standalone prompt — no merchant_id, business_id,
         // customer data, or merchant catalog.
-        url := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", baseURL, model, apiKey)
+        // P1-8: API key sent via x-goog-api-key header only — never in URL.
+        url := fmt.Sprintf("%s/v1beta/models/%s:generateContent", baseURL, model)
 
         reqBody := map[string]any{
                 "contents": []map[string]any{
@@ -210,6 +215,7 @@ func (c *ModelsClient) TestConnection(ctx context.Context, apiKey, model, baseUR
                 return false, time.Since(started).Milliseconds(), "BUILD_REQUEST_FAILED"
         }
         httpReq.Header.Set("Content-Type", "application/json")
+        httpReq.Header.Set("x-goog-api-key", apiKey)
 
         resp, err := c.httpClient.Do(httpReq)
         if err != nil {

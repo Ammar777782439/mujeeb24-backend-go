@@ -1053,8 +1053,26 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
         // cached portion at CachedInputPerMillionYER (which is lower). We must
         // NOT bill cached tokens at both rates — that would double-count.
         // Therefore: non_cached_input = promptTokenCount - cachedContentTokenCount.
+        //
+        // P1-6 fix: when pricing lookup fails, we MUST NOT record the usage as
+        // status="success" with cost=0 + pricing_version="unknown". That would
+        // (a) hide the pricing failure from operators, (b) understate the
+        // actual provider cost in the aggregate, (c) count the call as a
+        // successful AI Reply in the entitlement counter.
+        //
+        // Instead, the record is persisted with status="pricing_failed" so:
+        // - operators see the failure in the audit + usage logs
+        // - the aggregate's final_ai_replies counter does NOT increment
+        //   (only status="success" counts toward the commercial AI Reply
+        //   entitlement per Contract §33)
+        // - provider_cost_yer stays at 0 (honest — we couldn't compute it)
+        // - pricing_version stays at "unknown" (honest — we couldn't resolve it)
+        //
+        // The frontend Platform Admin AI Usage view shows the failed pricing
+        // records separately so operators can investigate pricing gaps.
         providerCostYER := 0
         pricingVersion := "unknown"
+        pricingFailed := false
         // Also fix the stored token counts: input_tokens should be non-cached
         // input (promptTokenCount - cachedContentTokenCount), and cached_input_tokens
         // is the cached portion. This matches the contract's intent that the two
@@ -1078,16 +1096,29 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
                         outputCost := int64(out.Usage.OutputTokens) * int64(pricing.OutputPerMillionYER) / 1_000_000
                         providerCostYER = int(inputCost + cachedCost + outputCost)
                 } else {
+                        // P1-6: pricing lookup failed — mark the record so the
+                        // aggregate does NOT count this as a successful AI Reply.
                         log.Printf("[AutoReply] AI_USAGE_PRICING_LOOKUP_FAILED business=%s model=%s err=%v", businessID, out.Usage.Model, err)
+                        pricingFailed = true
                 }
+        } else {
+                // P1-6: pricing repository not wired — same as lookup failure.
+                log.Printf("[AutoReply] AI_USAGE_PRICING_REPO_NOT_WIRED business=%s model=%s", businessID, out.Usage.Model)
+                pricingFailed = true
         }
         // Per §3: final_ai_replies = 1 only when a Final AI Response was
-        // produced and enqueued (sent to the customer). Tool calls, discovery
-        // calls, retries, validation, context construction, and provider
-        // requests do NOT count as independent AI Replies.
+        // produced and enqueued (sent to the customer) AND the pricing
+        // lookup succeeded. When pricing failed, the call is recorded as
+        // status="pricing_failed" and does NOT count toward the merchant's
+        // AI Reply entitlement — operators must fix pricing before replies
+        // are billed.
         finalAIReplies := 0
-        if replyEnqueued {
+        recordStatus := "success"
+        if replyEnqueued && !pricingFailed {
                 finalAIReplies = 1
+        }
+        if pricingFailed {
+                recordStatus = "pricing_failed"
         }
         // Per §6: record the per-execution row.
         recordID := s.NewID()
@@ -1106,7 +1137,7 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
                 FinalAIReplies:      finalAIReplies,
                 ProviderCostYER:     providerCostYER,
                 PricingVersion:      pricingVersion,
-                Status:              "success",
+                Status:              recordStatus,
                 CorrelationID:       &correlationID,
                 StartedAt:           now.Add(-time.Duration(out.LatencyMs) * time.Millisecond),
                 CompletedAt:         now,
@@ -1116,6 +1147,6 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
                 log.Printf("[AutoReply] AI_USAGE_RECORD_FAILED business=%s subscription=%s err=%v", businessID, subscriptionID, err)
                 return
         }
-        log.Printf("[AutoReply] AI_USAGE_RECORDED business=%s subscription=%s tokens_in=%d tokens_cached=%d tokens_out=%d cost_yer=%d final_replies=%d pricing=%s",
-                businessID, subscriptionID, out.Usage.InputTokens, out.Usage.CachedTokens, out.Usage.OutputTokens, providerCostYER, finalAIReplies, pricingVersion)
+        log.Printf("[AutoReply] AI_USAGE_RECORDED business=%s subscription=%s tokens_in=%d tokens_cached=%d tokens_out=%d cost_yer=%d final_replies=%d pricing=%s status=%s",
+                businessID, subscriptionID, out.Usage.InputTokens, out.Usage.CachedTokens, out.Usage.OutputTokens, providerCostYER, finalAIReplies, pricingVersion, recordStatus)
 }

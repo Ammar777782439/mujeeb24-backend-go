@@ -236,7 +236,8 @@ func (c *ContractClient) sendContractRequest(ctx context.Context, reqBody contra
                 return contractGeminiResponse{}, fmt.Errorf("marshal request: %w", err)
         }
 
-        url := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", rc.baseURL, rc.model, rc.apiKey)
+        // P1-8: API key sent via x-goog-api-key header only — never in URL.
+        url := fmt.Sprintf("%s/v1beta/models/%s:generateContent", rc.baseURL, rc.model)
 
         reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
         defer cancel()
@@ -246,6 +247,7 @@ func (c *ContractClient) sendContractRequest(ctx context.Context, reqBody contra
                 return contractGeminiResponse{}, fmt.Errorf("build request: %w", err)
         }
         httpReq.Header.Set("Content-Type", "application/json")
+        httpReq.Header.Set("x-goog-api-key", rc.apiKey)
 
         resp, err := c.httpClient.Do(httpReq)
         if err != nil {

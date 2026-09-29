@@ -33,12 +33,26 @@ func NewAIProviderConfigRepository(adapter *Adapter, encryptionKey []byte) *AIPr
         return &AIProviderConfigRepository{adapter: adapter, encryptionKey: encryptionKey}
 }
 
-// encryptKey encrypts the API key using AES-GCM.
+// ErrEncryptionKeyNotConfigured is returned when the AIProviderConfigRepository
+// is constructed without an encryption key. Per P1-9: storing API credentials
+// as plain base64 (reversible) is FORBIDDEN in production — the repository
+// refuses to encrypt or decrypt when the key is missing.
+//
+// The bootstrap (api.go) MUST fail-fast at startup when AI_CONFIG_ENCRYPTION_KEY
+// is unset. This error is the defense-in-depth guard at the repository boundary
+// in case the bootstrap check is bypassed (e.g., tests, ad-hoc scripts).
+var ErrEncryptionKeyNotConfigured = errors.New("AI_CONFIG_ENCRYPTION_KEY is not configured — encrypted credential storage is mandatory, refusing to encrypt/decrypt with base64 fallback")
+
+// encryptKey encrypts the API key using AES-GCM (32-byte key).
+// Per P1-9: the base64 fallback is REMOVED. Without a configured
+// AI_CONFIG_ENCRYPTION_KEY, the repository returns ErrEncryptionKeyNotConfigured
+// and the caller MUST fail-fast.
 func (r *AIProviderConfigRepository) encryptKey(plaintext string) (string, error) {
         if len(r.encryptionKey) == 0 {
-                // No encryption key configured — store as base64 (still better than plaintext).
-                // Production MUST set AI_CONFIG_ENCRYPTION_KEY.
-                return base64.StdEncoding.EncodeToString([]byte(plaintext)), nil
+                // P1-9: NO base64 fallback. Storing API credentials as reversible
+                // base64 strings would expose them to anyone with DB read access.
+                // Production MUST set AI_CONFIG_ENCRYPTION_KEY (32 bytes min).
+                return "", ErrEncryptionKeyNotConfigured
         }
         block, err := aes.NewCipher(r.encryptionKey)
         if err != nil {
@@ -57,13 +71,19 @@ func (r *AIProviderConfigRepository) encryptKey(plaintext string) (string, error
 }
 
 // decryptKey decrypts the API key.
+// Per P1-9: when AI_CONFIG_ENCRYPTION_KEY is not configured, the
+// repository refuses to decrypt — never silently fall back to
+// "base64-decode and return as plaintext" which would mean a previously
+// base64-stored credential could be silently readable.
 func (r *AIProviderConfigRepository) decryptKey(encrypted string) (string, error) {
         data, err := base64.StdEncoding.DecodeString(encrypted)
         if err != nil {
                 return "", fmt.Errorf("decode base64: %w", err)
         }
         if len(r.encryptionKey) == 0 {
-                return string(data), nil
+                // P1-9: NO plaintext fallback. The repository refuses to
+                // return a credential that wasn't encrypted.
+                return "", ErrEncryptionKeyNotConfigured
         }
         block, err := aes.NewCipher(r.encryptionKey)
         if err != nil {

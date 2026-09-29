@@ -35,10 +35,16 @@ type SocialAPIWebhookService struct {
         // display_name/picture into the customer.profile JSONB column.
         Customers ports.CustomerRuntimeRepository
         // AICostProtectionChecker (optional) — per AIUsageTokenTelemetry.md §19:
-        // when budget_status == EXCEEDED, no new Auto AI Execution starts.
-        // Human replies, dashboard, customer data, leads, orders, and channel
-        // reception continue to work normally.
+        // gates AutoReply execution when AI runtime is disabled (P0-2), when
+        // merchant AI Reply entitlement is exhausted (P0-3), or when the
+        // subscription's cost budget is EXCEEDED.
         AICostProtectionChecker AICostProtectionChecker
+        // AutoReplyWorkerPool (optional) — per P1-10: bounds the concurrency
+        // of AutoReply goroutines so a viral DM burst doesn't spawn an
+        // unbounded number of concurrent Gemini calls. When nil, falls back
+        // to the legacy per-DM goroutine (deprecated — production MUST wire
+        // a worker pool).
+        AutoReplyWorkerPool *AutoReplyWorkerPool
 }
 
 // AICostProtectionChecker verifies whether the business's active subscription
@@ -276,24 +282,45 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
                                         Channel:                string(event.Channel),
                                         ProviderRef:            string(event.Provider),
                                 }
-                                go func(cmd commands.AutoReplyCommand, businessID, conversationID string) {
-                                        // Per audit B-CRIT-1: a panic in this detached goroutine
-                                        // would crash the entire API process. AutoReply calls
-                                        // Gemini HTTP + Postgres writes + catalog batch logic —
-                                        // any of those can panic on adversarial input. Wrap the
-                                        // entire goroutine in recover so a single bad payload
-                                        // doesn't take down the webhook service.
-                                        defer func() {
-                                                if r := recover(); r != nil {
-                                                        log.Printf("[Webhook] AUTO_REPLY_PANIC business=%s conversation=%s recovered=%v", businessID, conversationID, r)
-                                                }
-                                        }()
-                                        autoReplyCtx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-                                        defer cancel()
-                                        if _, autoReplyErr := s.AutoReply.Handle(autoReplyCtx, cmd); autoReplyErr != nil {
-                                                log.Printf("[Webhook] AUTO_REPLY_ERROR business=%s conversation=%s err=%v", businessID, conversationID, autoReplyErr)
+                                // Per P1-10: prefer the bounded AutoReplyWorkerPool when
+                                // wired. The pool enforces a configurable concurrency
+                                // limit so a viral DM burst doesn't spawn unbounded
+                                // goroutines — each consuming Gemini quota + DB conns.
+                                // When nil (deprecated), falls back to the legacy
+                                // per-DM goroutine (no concurrency bound).
+                                if s.AutoReplyWorkerPool != nil {
+                                        task := autoReplyTask{
+                                                cmd:              autoReplyCmd,
+                                                businessID:       connection.BusinessID,
+                                                conversationID:   materialized.ConversationID,
+                                                handler:          s.AutoReply,
+                                                executionTimeout: 120 * time.Second,
                                         }
-                                }(autoReplyCmd, connection.BusinessID, materialized.ConversationID)
+                                        if !s.AutoReplyWorkerPool.Submit(task, 30*time.Second) {
+                                                log.Printf("[Webhook] AUTO_REPLY_QUEUE_FULL business=%s conversation=%s — worker pool queue saturated, dropping task (per P1-10)", connection.BusinessID, materialized.ConversationID)
+                                        }
+                                } else {
+                                        // Legacy unbounded path — kept for backward compat
+                                        // with tests that don't wire a worker pool.
+                                        go func(cmd commands.AutoReplyCommand, businessID, conversationID string) {
+                                                // Per audit B-CRIT-1: a panic in this detached goroutine
+                                                // would crash the entire API process. AutoReply calls
+                                                // Gemini HTTP + Postgres writes + catalog batch logic —
+                                                // any of those can panic on adversarial input. Wrap the
+                                                // entire goroutine in recover so a single bad payload
+                                                // doesn't take down the webhook service.
+                                                defer func() {
+                                                        if r := recover(); r != nil {
+                                                                log.Printf("[Webhook] AUTO_REPLY_PANIC business=%s conversation=%s recovered=%v", businessID, conversationID, r)
+                                                        }
+                                                }()
+                                                autoReplyCtx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+                                                defer cancel()
+                                                if _, autoReplyErr := s.AutoReply.Handle(autoReplyCtx, cmd); autoReplyErr != nil {
+                                                        log.Printf("[Webhook] AUTO_REPLY_ERROR business=%s conversation=%s err=%v", businessID, conversationID, autoReplyErr)
+                                                }
+                                        }(autoReplyCmd, connection.BusinessID, materialized.ConversationID)
+                                }
                         }
                 }
 

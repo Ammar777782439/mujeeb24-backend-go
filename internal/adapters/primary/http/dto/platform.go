@@ -516,15 +516,56 @@ type PlatformChannelHealthCheckInput struct {
 // Platform-wide AI Usage DTOs (AIUsageTokenTelemetry.md §27, §34)
 // ----------------------------------------------------------------------------
 
+// PlatformAIUsageOverviewView — per AIUsageTokenTelemetry.md §27 + §100.
+//
+// Per P2-12 fix: exposes the platform-wide budget fields actually
+// maintained by the backend. Previously the view only exposed token
+// totals + average_cost_per_reply; the active budget + consumed +
+// remaining were missing — operators had no visibility into the
+// platform's overall cost cap status. The new fields come from the
+// aggregate computed by GetPlatformAIUsageOverview (sum across all
+// businesses' subscription snapshots).
 type PlatformAIUsageOverviewView struct {
-        TotalAIReplies       int64 `json:"total_ai_replies"`
-        TotalInputTokens     int64 `json:"total_input_tokens"`
-        TotalCachedTokens    int64 `json:"total_cached_tokens"`
-        TotalOutputTokens    int64 `json:"total_output_tokens"`
-        TotalModelRequests   int   `json:"total_model_requests"`
-        TotalToolCalls       int   `json:"total_tool_calls"`
-        TotalProviderCostYER int   `json:"total_provider_cost_yer"`
-        AverageCostPerReply  int   `json:"average_cost_per_reply"`
+        TotalAIReplies        int64 `json:"total_ai_replies"`
+        TotalInputTokens      int64 `json:"total_input_tokens"`
+        TotalCachedTokens     int64 `json:"total_cached_tokens"`
+        TotalOutputTokens     int64 `json:"total_output_tokens"`
+        TotalModelRequests    int   `json:"total_model_requests"`
+        TotalToolCalls        int   `json:"total_tool_calls"`
+        TotalProviderCostYER  int   `json:"total_provider_cost_yer"`
+        AverageCostPerReply   int   `json:"average_cost_per_reply"`
+        // Per P2-12: platform-wide budget totals (sum across all
+        // businesses' active subscriptions' cost_budget_yer).
+        ActiveBudgetYER      int `json:"active_budget_yer"`
+        ConsumedBudgetYER    int `json:"consumed_budget_yer"`
+        RemainingBudgetYER  int `json:"remaining_budget_yer"`
+}
+
+// BusinessAIUsageView — per AIUsageTokenTelemetry.md §34.
+//
+// Per P2-11 fix: this is a business-level aggregate. The previous
+// implementation returned SubscriptionAIUsageView (which carries
+// subscription-specific fields like `subscription_id`,
+// `ai_reply_limit`, `ai_replies_remaining`, `budget_status`) but
+// filled them with zero/empty values for business-level aggregates
+// — the GetAIUsageByBusiness query groups by business_id and only
+// populates BusinessID + token totals. Reusing SubscriptionAIUsageView
+// produced misleading "0 limit / 0 remaining" rows that looked real
+// to operators.
+//
+// This DTO exposes ONLY the fields the backend actually populates at
+// business-level: business_id + the token totals + provider cost.
+// Subscription-specific entitlements remain on the
+// /platform/subscriptions/{id}/ai-usage endpoint.
+type BusinessAIUsageView struct {
+        BusinessID           string `json:"business_id"`
+        TotalAIReplies       int    `json:"total_ai_replies"`
+        TotalInputTokens     int64  `json:"total_input_tokens"`
+        TotalCachedTokens    int64  `json:"total_cached_tokens"`
+        TotalOutputTokens    int64  `json:"total_output_tokens"`
+        TotalModelRequests   int    `json:"total_model_requests"`
+        TotalToolCalls       int    `json:"total_tool_calls"`
+        TotalProviderCostYER int    `json:"total_provider_cost_yer"`
 }
 
 // ----------------------------------------------------------------------------
