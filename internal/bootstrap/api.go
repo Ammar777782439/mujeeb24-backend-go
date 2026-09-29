@@ -39,6 +39,12 @@ type APIRuntime struct {
         ChannelProvisioning *services.ChannelProvisioningService
         RealtimeBroker      *realtimePostgres.Broker
         RealtimeHub         *realtimePostgres.LocalHub
+        // AutoReplyWorkerPool (optional) — per Item 5: when wired, the
+        // webhook service uses it to bound AutoReply goroutine concurrency.
+        // Shutdown() calls pool.Stop() to drain queued + in-flight tasks
+        // before the HTTP server + database close. Without this, in-flight
+        // AutoReply work would be dropped silently on shutdown.
+        AutoReplyWorkerPool *services.AutoReplyWorkerPool
         closeOnce           sync.Once
 }
 
@@ -152,6 +158,23 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
         eventStore := postgres.NewInboundEventStore(database)
         outboxStore := postgres.NewPostgresOutboxStore(database)
         var autoReply commands.AutoReplyHandler
+        // Per Item 1 + 2: hoist platformOperations to the top of the
+        // function scope so it's available to ALL branches that need
+        // the shared kill switch state (AutoReply webhook branch +
+        // Summary service branch + Merchant AI agent branch). Before
+        // this hoist, the variable was declared at line ~380 (after the
+        // AutoReply-enabled branch) — so the Summary service wiring
+        // (line ~280) and the Merchant AI wiring (line ~575) couldn't
+        // reference it.
+        //
+        // The flags (aiConfigured/channelConfigured) are computed below
+        // at the point of use; the InMemoryPlatformOperationsRepository
+        // is stateless except for its runtime flag, so creating it early
+        // is safe.
+        platformOperations := services.NewInMemoryPlatformOperationsRepository(
+                external.AIRuntime != nil && external.LLMConfigError == nil,
+                external.SocialAPI != nil,
+        )
         // Per §1-2: create the AIConfigurationCache + AIProviderConfigRepository
         // unconditionally — the Platform Admin can manage credentials and models
         // even when AutoReply is disabled. The cache seeds from env on first
@@ -171,13 +194,18 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
         if len(encryptionKey) == 0 {
                 return nil, errors.New("AI_CONFIG_ENCRYPTION_KEY is not set — encrypted credential storage is mandatory. Set AI_CONFIG_ENCRYPTION_KEY to a 32-byte (or longer) random value before starting the API. Example: openssl rand -base64 32 | tr -d '\\n'")
         }
+        // Per Item 11: do NOT pad short keys. The previous implementation
+        // padded keys shorter than 32 bytes with zeros — that's a security
+        // anti-pattern (reduces effective key entropy). The key MUST be
+        // 32 bytes (AES-256) or longer. If the operator provides a short
+        // key, fail fast with a clear message.
         if len(encryptionKey) < 32 {
-                // Pad short keys to 32 bytes (AES-256 minimum). This is a
-                // convenience for development; production SHOULD use a
-                // full-entropy 32-byte key.
-                padded := make([]byte, 32)
-                copy(padded, encryptionKey)
-                encryptionKey = padded
+                return nil, fmt.Errorf("AI_CONFIG_ENCRYPTION_KEY must be at least 32 bytes (AES-256), got %d bytes. Generate a proper key: openssl rand -base64 32 | tr -d '\\n'", len(encryptionKey))
+        }
+        // If the key is longer than 32 bytes, truncate to 32 (AES-256 block size).
+        // This is safe — the key is still full-entropy.
+        if len(encryptionKey) > 32 {
+                encryptionKey = encryptionKey[:32]
         }
         aiConfigRepo := postgres.NewAIProviderConfigRepository(database, encryptionKey)
         aiConfigCache := services.NewAIConfigurationCache(aiConfigRepo, aiConfigRepo)
@@ -271,6 +299,17 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 service.SummaryService.AIPricing = postgres.NewAIProviderPricingRepository(database)
                 service.SummaryService.Subscriptions = postgres.NewSubscriptionRepository(database)
                 service.SummaryService.NewID = uuid.NewString
+                // Per Item 2 (Kill Switch applies to Summary): wire the
+                // shared AICostProtectionService so MaybeSummarize
+                // respects platformAIDisable. Same shared
+                // platformOperations instance — one kill switch state,
+                // three enforcement points (webhook AutoReply + Merchant
+                // AI + Summary).
+                service.SummaryService.CostProtection = &services.AICostProtectionService{
+                        Subscriptions:      postgres.NewSubscriptionRepository(database),
+                        AIUsage:            postgres.NewAIUsageRepository(database),
+                        PlatformOperations: platformOperations,
+                }
                 // Per contract ⑥ §2, wire the validation pipeline with the
                 // concrete Postgres validators. Per contract ⑥ §6-7 the
                 // ReferenceValidator checks that every selected ID (item/variant/
@@ -358,15 +397,22 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 Assignees:     postgres.NewTeamRepository(database),
                 Transactions:  database,
         }
-        // Per P0-2: create the in-memory Platform Operations registry early
-        // so it can be shared between (a) the AI Cost Protection checker
-        // (which needs to query the runtime kill switch) and (b) the
-        // PlatformDeps wire-up below. Without sharing, the kill switch
-        // toggled via platformAIDisable would NOT be visible to the
-        // AutoReply gate — the whole point of Contract §81.
+        // Per P0-2 + Item 1 + Item 2: platformOperations is declared at
+        // the top of this function (line 168) — hoisted so it's available
+        // to ALL branches (AutoReply webhook + Summary + Merchant AI +
+        // PlatformDeps wire-up). The previous local declaration here has
+        // been removed. The flags below remain here for the
+        // aiConfigured/channelConfigured dashboard view.
         aiConfigured := external.AIRuntime != nil && external.LLMConfigError == nil
         channelConfigured := external.SocialAPI != nil
-        platformOperations := services.NewInMemoryPlatformOperationsRepository(aiConfigured, channelConfigured)
+        _ = aiConfigured
+        _ = channelConfigured
+
+        // Per Item 5: capture the worker pool reference so APIRuntime.Shutdown
+        // can drain it gracefully. The variable is set inside the
+        // SocialWebhook branch below; remains nil when the webhook is
+        // not wired (the pool is only needed for the AutoReply webhook path).
+        var autoReplyPool *services.AutoReplyWorkerPool
 
         if external.SocialWebhook != nil {
                 // Per-merchant customer enrichment: SocialAPI's DM webhook payload
@@ -416,6 +462,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 // queue absorbs a burst; larger values can be tuned via env
                 // when the Gemini rate limit allows.
                 webhookService.AutoReplyWorkerPool = services.NewAutoReplyWorkerPool(4, 64)
+                autoReplyPool = webhookService.AutoReplyWorkerPool
                 dependencies.IngestSocialAPIWebhook = webhookService
         }
         var apiMiddleware []func(ctx huma.Context, next func(huma.Context))
@@ -552,6 +599,25 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                         // Per ADR-040 fix: inject a real UUID generator so AI Run IDs
                         // are not empty strings (would fail CreateRun validation).
                         merchantAgent.NewID = uuid.NewString
+                        // Per Item 1 (global Kill Switch): wire the SAME
+                        // AICostProtectionService used by the SocialAPI
+                        // AutoReply webhook into the Merchant AI agent.
+                        // When the Platform Admin sets AI Runtime = DISABLED
+                        // (Contract §81), this B2B path is blocked too —
+                        // the kill switch is global, not just for the B2C
+                        // webhook flow.
+                        //
+                        // The AICostProtectionService is stateless (it just
+                        // holds repository refs + the shared platformOperations
+                        // instance). Constructing a new instance here is
+                        // safe — the underlying kill switch state lives in
+                        // platformOperations (line 332 above), which is
+                        // SHARED between the webhook branch + this branch.
+                        merchantAgent.CostProtection = &services.AICostProtectionService{
+                                Subscriptions:      postgres.NewSubscriptionRepository(database),
+                                AIUsage:            postgres.NewAIUsageRepository(database),
+                                PlatformOperations: platformOperations,
+                        }
                         merchantHandler := handlers.NewMerchantAIHandler(merchantAgent)
                         dashboardServer = dashboardServer.WithMerchantAI(handlers.MerchantAIDeps{Handler: merchantHandler})
                 }
@@ -641,6 +707,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 ChannelProvisioning: provisioningService,
                 RealtimeBroker:      realtimeBroker,
                 RealtimeHub:         realtimeHub,
+                AutoReplyWorkerPool: autoReplyPool,
         }, nil
 }
 
@@ -685,6 +752,15 @@ func (r *APIRuntime) Shutdown(ctx context.Context) error {
         }
         var shutdownErr error
         r.closeOnce.Do(func() {
+                // Per Item 5: drain the AutoReply worker pool BEFORE closing
+                // the HTTP server + database. The pool's Stop() closes the
+                // tasks channel + waits for all workers to finish their
+                // in-flight + queued tasks. Without this, in-flight AutoReply
+                // work (which calls Gemini + writes to Postgres) would be
+                // dropped silently when the database closes.
+                if r.AutoReplyWorkerPool != nil {
+                        r.AutoReplyWorkerPool.Stop()
+                }
                 if r.RealtimeBroker != nil {
                         r.RealtimeBroker.Close()
                 }

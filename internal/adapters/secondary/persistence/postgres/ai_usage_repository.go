@@ -468,7 +468,16 @@ var _ ports.AIProviderPricingRepository = (*AIProviderPricingRepository)(nil)
 var _ = uuid.Validate
 
 // GetPlatformAIUsageOverview returns the platform-wide SUM across all
-// ai_usage_records. Per AIUsageTokenTelemetry.md §27.
+// ai_usage_records + the platform-wide budget totals (sum of all ACTIVE
+// subscriptions' cost budgets). Per AIUsageTokenTelemetry.md §27.
+//
+// Per Item 6: the previous implementation only summed token totals +
+// provider_cost_yer — it did NOT populate InternalCostBudgetYER or
+// CostRemainingYER. The handler filled those fields with zero values
+// just to satisfy the DTO schema, which was misleading (operators saw
+// "active_budget=0" even when there were active subscriptions with
+// non-zero budgets). The fix computes the real values from the
+// subscriptions table.
 func (r *AIUsageRepository) GetPlatformAIUsageOverview(ctx context.Context) (ports.SubscriptionAIUsageAggregate, error) {
         if r == nil || r.adapter == nil {
                 return ports.SubscriptionAIUsageAggregate{}, ErrPoolClosed
@@ -478,20 +487,27 @@ func (r *AIUsageRepository) GetPlatformAIUsageOverview(ctx context.Context) (por
                 return ports.SubscriptionAIUsageAggregate{}, err
         }
         var agg ports.SubscriptionAIUsageAggregate
+        // Per Item 6: the query now also computes the platform-wide budget
+        // totals from the subscriptions table. The active budget for each
+        // subscription is COALESCE(cost_budget_override_yer,
+        // internal_ai_cost_budget_yer) — the override takes precedence
+        // when set (per Contract §24). Remaining = MAX(budget - consumed, 0).
         err = executor.QueryRow(ctx,
                 `SELECT
-                   COALESCE(SUM(final_ai_replies), 0),
-                   COALESCE(SUM(input_tokens), 0),
-                   COALESCE(SUM(cached_input_tokens), 0),
-                   COALESCE(SUM(output_tokens), 0),
-                   COALESCE(SUM(model_requests), 0),
-                   COALESCE(SUM(tool_calls), 0),
-                   COALESCE(SUM(provider_cost_yer), 0)
-                 FROM ai_usage_records`,
+                   COALESCE(SUM(r.final_ai_replies), 0),
+                   COALESCE(SUM(r.input_tokens), 0),
+                   COALESCE(SUM(r.cached_input_tokens), 0),
+                   COALESCE(SUM(r.output_tokens), 0),
+                   COALESCE(SUM(r.model_requests), 0),
+                   COALESCE(SUM(r.tool_calls), 0),
+                   COALESCE(SUM(r.provider_cost_yer), 0),
+                   COALESCE((SELECT SUM(COALESCE(s.cost_budget_override_yer, s.internal_ai_cost_budget_yer))
+                             FROM subscriptions s WHERE s.status = 'ACTIVE'), 0)
+                 FROM ai_usage_records r`,
         ).Scan(
                 &agg.AIRepliesUsed, &agg.InputTokens, &agg.CachedInputTokens,
                 &agg.OutputTokens, &agg.ModelRequests, &agg.ToolCalls,
-                &agg.ProviderCostYER,
+                &agg.ProviderCostYER, &agg.InternalCostBudgetYER,
         )
         if err != nil {
                 return ports.SubscriptionAIUsageAggregate{}, &RepositoryError{Operation: "ai_usage.platform_overview", Kind: RepositoryInvalid, Err: err}
@@ -500,7 +516,10 @@ func (r *AIUsageRepository) GetPlatformAIUsageOverview(ctx context.Context) (por
         if agg.AIRepliesUsed > 0 {
                 agg.AverageCostPerReplyYER = agg.ProviderCostYER / int(agg.AIRepliesUsed)
         }
-        agg.BudgetStatus = "NORMAL"
+        // Per Item 6: Consumed = actual provider cost (SUM of all records).
+        // Remaining = MAX(Budget - Consumed, 0). Budget status per §17.
+        agg.CostRemainingYER = max0int(agg.InternalCostBudgetYER - agg.ProviderCostYER)
+        agg.BudgetStatus = computeBudgetStatus(agg.ProviderCostYER, agg.InternalCostBudgetYER)
         return agg, nil
 }
 

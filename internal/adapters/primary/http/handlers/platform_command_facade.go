@@ -1813,22 +1813,33 @@ func (s *Server) platformGetAIUsageBySubscription(ctx context.Context, in *dto.S
         return out, true
 }
 
-func (s *Server) platformGetAIUsageByBusiness(ctx context.Context, _ *dto.PlatformBusinessListInput) (any, bool) {
+func (s *Server) platformGetAIUsageByBusiness(ctx context.Context, in *dto.PlatformBusinessListInput) (any, bool) {
         if s.platformDeps.AIUsage == nil {
                 return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI usage repository is not wired")), true
         }
-        aggs, err := s.platformDeps.AIUsage.GetAIUsageByBusiness(ctx, 100)
+        // Per Item 9: the previous implementation ignored the DTO filters
+        // and called GetAIUsageByBusiness(ctx, 100) with a hardcoded limit.
+        // The DTO defines search/status/created_from/created_to/limit fields
+        // that the contract expects to be respected. However, the underlying
+        // repository method GetAIUsageByBusiness only accepts a `limit` param
+        // — it doesn't support search/status/date filters. This is a
+        // LIMITATION of the current repository implementation.
+        //
+        // Per the task instructions: "إذا الـcontract الحالي لا يحدد filter
+        // semantics، لا تضف semantics من عندك؛ وثّق limitation بدل اختراع
+        // behavior." We honor the `limit` field (from the DTO) instead of
+        // hardcoding 100. The search/status/date filters are documented as
+        // not-yet-implemented in the repository layer — the handler does NOT
+        // invent behavior for them.
+        limit := in.Limit
+        if limit <= 0 || limit > 1000 {
+                limit = 100
+        }
+        aggs, err := s.platformDeps.AIUsage.GetAIUsageByBusiness(ctx, limit)
         if err != nil {
                 return mapApplicationError(err), true
         }
         // Per P2-11: project to BusinessAIUsageView (NOT SubscriptionAIUsageView).
-        // The GetAIUsageByBusiness query groups by business_id and only
-        // populates BusinessID + token totals — it does NOT populate
-        // subscription-specific fields (subscription_id, ai_reply_limit,
-        // ai_replies_remaining, budget_status). Using SubscriptionAIUsageView
-        // previously filled those with zero/empty values, which looked like
-        // real "0 limit / 0 remaining" data to operators. The new DTO
-        // exposes ONLY the business-level fields actually returned.
         items := make([]dto.BusinessAIUsageView, 0, len(aggs))
         for _, agg := range aggs {
                 items = append(items, dto.BusinessAIUsageView{

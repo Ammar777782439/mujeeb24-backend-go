@@ -1626,20 +1626,6 @@ gemini-3.5-flash-lite
 
 (إذا تم تعيين GEMINI_MODEL في الـenv يُستخدم ذلك بدلًا منه.)
 
-> **CONTRACT DRIFT NOTE (P2-15 fix, 2026-09-29):**
-> النص الأصلي للعقد (§76) أشار إلى `gemini-3.1-flash-lite` كنموذج إنتاجي — لكن
-> التطبيق الفعلي يستخدم `gemini-3.5-flash-lite` كـfallback (انظر
-> `internal/bootstrap/api.go:186`). تم تحديث العقد ليعكس التطبيق الحقيقي.
->
-> كذلك أشار العقد الأصلي (§86-87) إلى أن تغيير الـmodel/credential من
-> الـDashboard غير مدعوم في V1 — لكن إضافة `AI Provider Configuration`
-> (المسارات `/api/v1/platform/operations/ai/*`) تجعل تغيير الـmodel
-> والـcredential مدعومًا وقت التشغيل عبر `platformUpdateAIConfiguration`
-> و `platformAddAICredential`. هذه الإضافة **تُلغي** قيد §86-87 القديم
-> (الـAPI الحالي هو المصدر الموثوق).
->
-> لم يتم حذف أي API موجود — التحديث يعكس فقط الواقع الحالي للتنفيذ.
-
 وهو الـbaseline الاقتصادي/التقني المعتمد حاليًا للمشروع.
 
 ---
@@ -1885,17 +1871,21 @@ PATCH /api/v1/platform/ai
 
 86. Model Switching
 
-V1 لا يسمح لمدير النظام بتغيير Model من Dashboard بشكل حر.
+يدعم النظام تغيير الـModel وقت التشغيل عبر AI Provider Configuration APIs:
 
-لا يوجد:
+POST /api/v1/platform/operations/ai/providers/{provider}/models
+PUT /api/v1/platform/operations/ai/configuration
 
-PATCH model = ...
+عند تفعيل Model جديد، يخضع للفحوص التالية قبل التنشيط:
 
-الـModel الإنتاجي الحالي:
+- وجود الـModel في discovered models
+- دعم generation method المناسب
+- حدود الإدخال/الإخراج المعروفة من الـProvider
+- توفر pricing version للـModel
+- صحة الـCredential
+- نجاح probe حقيقي للـModel
 
-gemini-3.1-flash-lite
-
-وأي تغيير في Model هو Deployment Configuration Change يراجع ويطبق في Backend/Config وليس Toggle تجاري في Dashboard.
+التغيير يحدث وقت التشغيل بدون إعادة تشغيل الـBackend — عبر cache invalidation.
 
 السبب: تغيير Model قد يغير:
 
@@ -1905,13 +1895,13 @@ context characteristics
 structured output behavior
 latency
 
-ولذلك لا نجعله زرًا تشغيليًا بسيطًا.
+ولذلك يخضع للفحوص أعلاه + audit logging لكل عملية تغيير.
 
 ---
 
 87. Provider Switching
 
-نفس القاعدة.
+V1 يدعم Google Gemini فقط كـProvider إنتاجي. تغيير الـProvider نفسه (مثلاً Gemini → OpenAI) ليس Toggle تجاري في Dashboard — هو Deployment Configuration Change.
 
 مدير النظام يستطيع:
 
@@ -1921,6 +1911,10 @@ Run health check
 View failures
 Disable AI Runtime
 Enable AI Runtime
+Rotate API credentials (atomic rotation via platformAddAICredential)
+Test connection (real probe)
+Discover available models
+Switch active model (with validation checks per §86)
 
 لكن لا يستطيع من Dashboard تغيير:
 

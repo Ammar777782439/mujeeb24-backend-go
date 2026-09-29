@@ -270,6 +270,15 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 
         // Per contract ④ §8, call Gemini via the ContractRuntime.
         log.Printf("[AutoReply] GEMINI_CALL business=%s conversation=%s run=%s", businessID, conversationID, run.ID)
+        // Per contract ③ §4 + Item 8: carry previous_interaction_id
+        // from the conversation's last Gemini call. Empty for the
+        // first turn (or after Gemini history expiry). The context
+        // builder loaded this from the conversations table
+        // (last_gemini_interaction_id column, migration 000057).
+        var previousInteractionID string
+        if builtContext != nil && builtContext.Conversation.LastGeminiInteractionID != nil {
+                previousInteractionID = *builtContext.Conversation.LastGeminiInteractionID
+        }
         out, err := s.Runtime.DecideContract(ctx, ports.ContractRuntimeInput{
                 DecisionInput: ports.AIDecisionInput{
                         BusinessID:             businessID,
@@ -280,10 +289,8 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
                         PolicyVersion:          policyVersion,
                         Context:                builtContext,
                 },
-                // Per contract ③ §4, carry previous_interaction_id (empty for first turn
-                // in tests; in production this comes from the conversation row).
                 GeminiInteraction: ports.GeminiInteractionContext{
-                        PreviousInteractionID: "",
+                        PreviousInteractionID: previousInteractionID,
                         Store:                 true,
                 },
                 // Per contract ⑤ §7, pass the Catalog Entity Contract payload (may be nil).
@@ -297,6 +304,22 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
         proposal := out.Proposal
         log.Printf("[AutoReply] GEMINI_OK business=%s status=%s action=%s tokens_in=%d tokens_out=%d latency=%dms response=%q",
                 businessID, proposal.Status, proposal.Action, out.Usage.InputTokens, out.Usage.OutputTokens, out.LatencyMs, truncate(proposal.ResponseText, 200))
+
+        // Per Item 8: persist the resulting Gemini interaction ID so the
+        // next turn can use it as PreviousInteractionID. Per contract ③ §4
+        // + migration 000057: the conversations table has a
+        // last_gemini_interaction_id column. We update it here (after
+        // Gemini success) — this is the canonical write path. The context
+        // builder reads it on the next turn.
+        //
+        // Best-effort: a failure to persist the interaction ID does NOT
+        // fail the AutoReply (the reply is already produced). The next
+        // turn will just not have the chaining (Gemini will start fresh).
+        if s.Conversations != nil && out.GeminiInteraction.ResultingInteractionID != "" {
+                if err := s.Conversations.UpdateLastGeminiInteractionID(ctx, businessID, conversationID, out.GeminiInteraction.ResultingInteractionID); err != nil {
+                        log.Printf("[AutoReply] GEMINI_INTERACTION_ID_PERSIST_FAILED business=%s conversation=%s err=%v (continuing — reply already produced)", businessID, conversationID, err)
+                }
+        }
 
         // Per contract ② §9 — Catalog Evaluation flow.
         //
@@ -1106,17 +1129,35 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
                 log.Printf("[AutoReply] AI_USAGE_PRICING_REPO_NOT_WIRED business=%s model=%s", businessID, out.Usage.Model)
                 pricingFailed = true
         }
-        // Per §3: final_ai_replies = 1 only when a Final AI Response was
-        // produced and enqueued (sent to the customer) AND the pricing
-        // lookup succeeded. When pricing failed, the call is recorded as
-        // status="pricing_failed" and does NOT count toward the merchant's
-        // AI Reply entitlement — operators must fix pricing before replies
-        // are billed.
+        // Per §3 + Item 3: final_ai_replies = 1 when a Final AI Response was
+        // produced and enqueued (sent to the customer). This is the
+        // COMMERCIAL metric — it counts toward the merchant's AI Reply
+        // entitlement. Pricing failure is a COST-CALCULATION failure, NOT
+        // a reply-failure: the customer received the response, so the
+        // entitlement MUST be consumed.
+        //
+        // The previous logic conflated the two: when pricing failed, it set
+        // final_ai_replies=0 — which silently erased the reply from the
+        // entitlement counter. That let merchants send unlimited replies
+        // when pricing was broken.
+        //
+        // Now: final_ai_replies=1 IF replyEnqueued (regardless of pricing
+        // success). The record's `status` field carries the pricing
+        // failure flag separately so operators can see "this reply's cost
+        // is uncomputed" without erasing the entitlement consumption.
+        //
+        // The aggregate's `provider_cost_yer` will understate the real cost
+        // (pricing_failed records contribute 0). That's honest — we don't
+        // invent a cost. Operators see the gap via the status field.
         finalAIReplies := 0
-        recordStatus := "success"
-        if replyEnqueued && !pricingFailed {
+        if replyEnqueued {
                 finalAIReplies = 1
         }
+        // recordStatus tracks COST calculation status, NOT reply delivery.
+        // "success" = cost computed; "pricing_failed" = cost uncomputed
+        // (provider_cost_yer=0 is honest — we don't know the real cost).
+        // final_ai_replies is independent — it tracks reply delivery.
+        recordStatus := "success"
         if pricingFailed {
                 recordStatus = "pricing_failed"
         }

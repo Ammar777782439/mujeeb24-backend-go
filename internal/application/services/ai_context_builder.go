@@ -114,6 +114,11 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.ContextB
                         Priority:            conversation.Priority,
                         AIModeOverride:      stringValue(conversation.AIModeOverride),
                         AssignmentReference: stringValue(conversation.AssignmentReference),
+                        // Per Item 8: carry the conversation's last Gemini
+                        // interaction ID so AutoReply can pass it as
+                        // PreviousInteractionID to the next DecideContract
+                        // call (Gemini Interactions API chaining per §9).
+                        LastGeminiInteractionID: conversation.LastGeminiInteractionID,
                 },
                 Customer: ports.AIContextCustomer{
                         Reference:        customer.ID,
@@ -428,14 +433,14 @@ func buildRecentMessageEvidence(records []ports.CommunicationMessageRecord, sour
                         SchemaVersion: AIEvidenceSchemaVersion,
                 })
         }
-	sort.SliceStable(items, func(i, j int) bool {
-		if !items[i].OccurredAt.Equal(items[j].OccurredAt) {
-			return items[i].OccurredAt.Before(items[j].OccurredAt)
-		}
-		// Per ADR-051: tiebreaker — Reference (message ID), to fix time inversion
-		return items[i].Reference < items[j].Reference
-	})
-	return items
+        sort.SliceStable(items, func(i, j int) bool {
+                if !items[i].OccurredAt.Equal(items[j].OccurredAt) {
+                        return items[i].OccurredAt.Before(items[j].OccurredAt)
+                }
+                // Per ADR-051: tiebreaker — Reference (message ID), to fix time inversion
+                return items[i].Reference < items[j].Reference
+        })
+        return items
 }
 
 func rankCatalogItems(items []ports.CatalogItemRecord, text string) []ports.CatalogItemRecord {
@@ -673,38 +678,38 @@ var _ ports.AIContextBuilder = AutoReplyContextBuilder{}
 // formatPrice trims trailing zeros from a numeric string.
 // "200.0000" → "200", "200.5000" → "200.5", "200" → "200"
 func formatPrice(amount string) string {
-	if !strings.Contains(amount, ".") {
-		return amount
-	}
-	amount = strings.TrimRight(amount, "0")
-	amount = strings.TrimRight(amount, ".")
-	if amount == "" {
-		return "0"
-	}
-	return amount
+        if !strings.Contains(amount, ".") {
+                return amount
+        }
+        amount = strings.TrimRight(amount, "0")
+        amount = strings.TrimRight(amount, ".")
+        if amount == "" {
+                return "0"
+        }
+        return amount
 }
 
 // formatCurrency translates ISO 4217 codes to Arabic.
 // "YER" → "ريال يمني", "SAR" → "ريال سعودي", etc.
 func formatCurrency(code string) string {
-	switch strings.ToUpper(strings.TrimSpace(code)) {
-	case "YER":
-		return "ريال يمني"
-	case "SAR":
-		return "ريال سعودي"
-	case "USD":
-		return "دولار"
-	case "AED":
-		return "درهم إماراتي"
-	case "KWD":
-		return "دينار كويتي"
-	case "QAR":
-		return "ريال قطري"
-	case "BHD":
-		return "دينار بحريني"
-	case "OMR":
-		return "ريال عماني"
-	default:
-		return code
-	}
+        switch strings.ToUpper(strings.TrimSpace(code)) {
+        case "YER":
+                return "ريال يمني"
+        case "SAR":
+                return "ريال سعودي"
+        case "USD":
+                return "دولار"
+        case "AED":
+                return "درهم إماراتي"
+        case "KWD":
+                return "دينار كويتي"
+        case "QAR":
+                return "ريال قطري"
+        case "BHD":
+                return "دينار بحريني"
+        case "OMR":
+                return "ريال عماني"
+        default:
+                return code
+        }
 }

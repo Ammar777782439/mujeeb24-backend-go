@@ -57,6 +57,7 @@ package services
 import (
         "context"
         "errors"
+        "fmt"
         "log"
         "regexp"
         "strings"
@@ -250,6 +251,19 @@ type MerchantCatalogAIAgent struct {
 
         // AgentRole is always merchant_catalog_authoring per contract 11 §2.
         AgentRole string
+
+        // CostProtection (optional) is the SHARED AI Runtime / Entitlement /
+        // Cost-Budget boundary. Per Item 1 (global Kill Switch): when wired,
+        // HandleTurn checks it BEFORE calling Gemini — so the Platform Admin's
+        // platformAIDisable call (Contract §81) blocks this B2B path too.
+        //
+        // This is the SAME boundary the SocialAPI AutoReply webhook uses
+        // (see webhook_ingestion.go's AICostProtectionChecker field). One
+        // implementation of the kill switch, one source of truth.
+        //
+        // When nil (legacy / tests), the check is skipped — fail-open for
+        // operability. Production MUST wire it (see bootstrap/api.go).
+        CostProtection AICostProtectionChecker
 }
 
 // MerchantAISessionWriter is the write-side port for merchant_ai_sessions/
@@ -344,6 +358,21 @@ func (a *MerchantCatalogAIAgent) HandleTurn(ctx context.Context, input MerchantC
         if a.Runtime == nil {
                 log.Printf("[MerchantAI] REJECTED business=%s reason=runtime_not_configured", businessID)
                 return CatalogOperationProposal{}, errors.New("merchant AI runtime is not configured")
+        }
+        // Per Item 1 (global Kill Switch): check the SHARED boundary before
+        // calling Gemini. This is the SAME AICostProtectionChecker used by
+        // the SocialAPI AutoReply webhook (webhook_ingestion.go) — one
+        // implementation, one source of truth. When the Platform Admin
+        // sets AI Runtime = DISABLED (Contract §81), this B2B path is
+        // blocked too. The check fires AFTER the cheap input validation
+        // + BEFORE any persistence (so we don't create a session row
+        // for a turn that's blocked at the gate).
+        if a.CostProtection != nil {
+                allowed, reason := a.CostProtection.IsAIExecutionAllowed(ctx, businessID)
+                if !allowed {
+                        log.Printf("[MerchantAI] BLOCKED business=%s reason=%s", businessID, reason)
+                        return CatalogOperationProposal{}, fmt.Errorf("merchant AI execution blocked: %s", reason)
+                }
         }
         if a.ContextBuilder == nil {
                 log.Printf("[MerchantAI] REJECTED business=%s reason=context_builder_not_configured", businessID)

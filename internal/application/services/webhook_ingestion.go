@@ -296,8 +296,15 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
                                                 handler:          s.AutoReply,
                                                 executionTimeout: 120 * time.Second,
                                         }
-                                        if !s.AutoReplyWorkerPool.Submit(task, 30*time.Second) {
-                                                log.Printf("[Webhook] AUTO_REPLY_QUEUE_FULL business=%s conversation=%s — worker pool queue saturated, dropping task (per P1-10)", connection.BusinessID, materialized.ConversationID)
+                                        // Per Item 5: Submit is NON-BLOCKING. If the queue is
+                                        // full, the task is dropped immediately + the webhook
+                                        // returns 202 to the caller. The previous implementation
+                                        // blocked for up to 30s — that made the webhook synchronous
+                                        // + caused upstream timeouts. Dropping is the correct
+                                        // backpressure signal (the merchant's customer sees no AI
+                                        // reply, but the webhook stays responsive).
+                                        if !s.AutoReplyWorkerPool.Submit(task) {
+                                                log.Printf("[Webhook] AUTO_REPLY_QUEUE_FULL business=%s conversation=%s — worker pool queue saturated, dropping task (per Item 5 non-blocking submit)", connection.BusinessID, materialized.ConversationID)
                                         }
                                 } else {
                                         // Legacy unbounded path — kept for backward compat

@@ -112,6 +112,14 @@ type ConversationSummaryService struct {
         GeminiModel   string
         Now           func() time.Time
         NewID         func() string
+        // CostProtection (optional) is the SHARED AI Runtime / Entitlement /
+        // Cost-Budget boundary. Per Item 2: when wired, MaybeSummarize
+        // checks it BEFORE calling Gemini — so the Platform Admin's
+        // platformAIDisable call (Contract §81) blocks this background
+        // summarization path too. The summary is best-effort async work;
+        // when the runtime is disabled, it MUST NOT silently consume
+        // Gemini quota via the summary goroutine.
+        CostProtection AICostProtectionChecker
 }
 
 // NewConversationSummaryService constructs a ConversationSummaryService.
@@ -159,9 +167,27 @@ func (s *ConversationSummaryService) MaybeSummarize(
                 result.SkippedReason = "service_not_configured"
                 return result, nil
         }
-        if s.LLM == nil {
+        if s.LLM == nil && s.ContractRuntime == nil {
                 result.SkippedReason = "llm_not_configured"
                 return result, nil
+        }
+        // Per Item 2 (Kill Switch applies to Summary): check the SHARED
+        // AICostProtectionChecker before doing any Gemini work. This
+        // prevents the background summarization goroutine from
+        // consuming Gemini quota when the Platform Admin has set
+        // AI Runtime = DISABLED (Contract §81) — the same kill switch
+        // that blocks AutoReply + Merchant AI also blocks Summary.
+        //
+        // Skipped (not error) when blocked — summary is best-effort
+        // background work, NOT a customer-facing response. The caller
+        // logs the skip reason.
+        if s.CostProtection != nil {
+                allowed, reason := s.CostProtection.IsAIExecutionAllowed(ctx, businessID)
+                if !allowed {
+                        result.SkippedReason = "ai_runtime_disabled: " + reason
+                        log.Printf("[SummaryService] SKIPPED business=%s conversation=%s reason=%s", businessID, conversationID, reason)
+                        return result, nil
+                }
         }
 
         // Load current state

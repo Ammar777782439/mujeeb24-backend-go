@@ -4,37 +4,71 @@ import (
         "context"
         "errors"
         "fmt"
-        "strings"
         "sync"
         "time"
 
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
+// kindedErrorCache is a minimal interface to check repository error kinds
+// without importing the postgres package (which would create an import
+// cycle: services → postgres → services).
+//
+// The postgres.RepositoryError type implements this interface via its
+// ErrorKind() method (returns the kind as a string like "not_found").
+//
+// This is a SEPARATE declaration from conversation_summary_service.go's
+// kindedError — they're structurally identical but in different files.
+// Go doesn't allow redeclaration in the same package, so we use a
+// distinct name here.
+type kindedErrorCache interface {
+        ErrorKind() string
+}
+
 // isNoActiveVersionError returns true when err indicates the DB has no
 // active configuration version (the bootstrap state — admin hasn't yet
 // activated a DB-backed config). In this case, falling back to the
 // env-loaded config is safe (per P2-14).
 //
-// Other errors (DB connection refused, query syntax error, etc.) MUST
-// NOT trigger env fallback — they'd silently regress to stale env
-// config and mask real failures.
+// Per Item 7: the previous implementation used STRING MATCHING on the
+// error message ("no active version", "not found", "no rows"). That
+// was fragile — different repository implementations could produce
+// different message phrasings, + a real DB error containing "no rows"
+// in its diagnostic text would be misclassified as "bootstrap state".
+//
+// The fix uses TYPED error discrimination via the kindedError interface
+// (errors.As + ErrorKind() == "not_found"). This is the same pattern
+// used by isRepositoryNotFound in conversation_summary_service.go.
+// String matching is NOT used as a primary check — only as a last-
+// resort fallback for non-RepositoryError errors (which shouldn't
+// happen in production, but is defensive against future repository
+// implementations that don't use RepositoryError).
 func isNoActiveVersionError(err error) bool {
         if err == nil {
                 return false
         }
-        // The repository's GetActiveVersion returns RepositoryNotFound when
-        // no row matches. We check for that + a few common phrasings to be
-        // defensive against different repository implementations.
-        msg := strings.ToLower(err.Error())
-        if strings.Contains(msg, "no active version") {
-                return true
+        // Primary: typed check via kindedError interface.
+        var ke kindedErrorCache
+        if errors.As(err, &ke) {
+                return ke.ErrorKind() == "not_found"
         }
-        if strings.Contains(msg, "not found") {
-                return true
+        // Fallback: if the error doesn't implement ErrorKind, we can't
+        // trust string matching — treat it as a real error (NOT bootstrap
+        // state). This is the safe default per Item 7: "أي DB failure حقيقي
+        // يجب أن يصل للـcaller ولا يتحول إلى stale env config."
+        return false
+}
+
+// isNoActiveCredentialError returns true when err indicates the DB has
+// no active credential (the admin hasn't stored a credential yet —
+// bootstrap state). Same typed-error pattern as isNoActiveVersionError.
+func isNoActiveCredentialError(err error) bool {
+        if err == nil {
+                return false
         }
-        if strings.Contains(msg, "no rows") {
-                return true
+        var ke kindedErrorCache
+        if errors.As(err, &ke) {
+                return ke.ErrorKind() == "not_found"
         }
         return false
 }
