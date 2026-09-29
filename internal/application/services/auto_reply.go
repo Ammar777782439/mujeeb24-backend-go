@@ -1049,29 +1049,57 @@ func appendUniqueString(slice []string, s string) []string {
 //
 // Per Item 4: returns an error when AppendRecord fails — the caller
 // (Handle) MUST propagate this so entitlement drift is NOT silent.
+//
+// Per Item 4 (revised): ALL silent-success paths are closed:
+//   - AIUsage == nil + replyEnqueued → ERROR (cannot account without repo)
+//   - Subscriptions == nil + replyEnqueued → ERROR (cannot resolve subscription)
+//   - Subscriptions.List() error + replyEnqueued → ERROR (subscription lookup failure)
+//   - subscriptionID == "" + replyEnqueued → ERROR (no active subscription)
+//   - AppendRecord() error → ERROR (persistence failure)
+// When replyEnqueued is false, telemetry is best-effort (the reply
+// wasn't sent, so no entitlement was consumed — nil return is OK).
 func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, out ports.ContractRuntimeOutput, run ports.AIRunRecord, replyEnqueued bool) error {
         if s.AIUsage == nil {
-                // Telemetry repository not wired — log and return.
-                log.Printf("[AutoReply] AI_USAGE_SKIP business=%s reason=AIUsage_repository_not_wired", businessID)
+                if replyEnqueued {
+                        log.Printf("[AutoReply] AI_USAGE_ENTITLEMENT_DRIFT business=%s reason=AIUsage_repository_not_wired replyEnqueued=true (entitlement cannot be accounted — propagating error per Item 4)", businessID)
+                        return fmt.Errorf("ai usage repository not wired but reply was enqueued (entitlement drift — per Item 4)")
+                }
+                log.Printf("[AutoReply] AI_USAGE_SKIP business=%s reason=AIUsage_repository_not_wired replyEnqueued=false", businessID)
                 return nil
         }
         now := s.now()
         // Find the business's active subscription ID for association.
         var subscriptionID string
-        if s.Subscriptions != nil {
-                page, err := s.Subscriptions.List(ctx, ports.SubscriptionListFilter{
-                        BusinessID: businessID,
-                        Status:     "ACTIVE",
-                        Limit:      1,
-                })
-                if err == nil && len(page.Items) > 0 {
-                        subscriptionID = page.Items[0].ID
+        if s.Subscriptions == nil {
+                if replyEnqueued {
+                        log.Printf("[AutoReply] AI_USAGE_ENTITLEMENT_DRIFT business=%s reason=Subscriptions_repository_not_wired replyEnqueued=true (cannot resolve subscription — propagating error per Item 4)", businessID)
+                        return fmt.Errorf("subscription repository not wired but reply was enqueued (entitlement drift — per Item 4)")
                 }
-        }
-        if subscriptionID == "" {
-                log.Printf("[AutoReply] AI_USAGE_SKIP business=%s reason=no_active_subscription", businessID)
+                log.Printf("[AutoReply] AI_USAGE_SKIP business=%s reason=Subscriptions_repository_not_wired replyEnqueued=false", businessID)
                 return nil
         }
+        page, subErr := s.Subscriptions.List(ctx, ports.SubscriptionListFilter{
+                BusinessID: businessID,
+                Status:     "ACTIVE",
+                Limit:      1,
+        })
+        if subErr != nil {
+                if replyEnqueued {
+                        log.Printf("[AutoReply] AI_USAGE_ENTITLEMENT_DRIFT business=%s reason=subscription_list_failed replyEnqueued=true err=%v (propagating error per Item 4)", businessID, subErr)
+                        return fmt.Errorf("subscription lookup failed but reply was enqueued (entitlement drift — per Item 4): %w", subErr)
+                }
+                log.Printf("[AutoReply] AI_USAGE_SKIP business=%s reason=subscription_list_failed replyEnqueued=false err=%v", businessID, subErr)
+                return nil
+        }
+        if len(page.Items) == 0 {
+                if replyEnqueued {
+                        log.Printf("[AutoReply] AI_USAGE_ENTITLEMENT_DRIFT business=%s reason=no_active_subscription replyEnqueued=true (reply was sent but subscription is missing — propagating error per Item 4)", businessID)
+                        return fmt.Errorf("no active subscription found but reply was enqueued (entitlement drift — per Item 4)")
+                }
+                log.Printf("[AutoReply] AI_USAGE_SKIP business=%s reason=no_active_subscription replyEnqueued=false", businessID)
+                return nil
+        }
+        subscriptionID = page.Items[0].ID
         // Compute provider_cost from the pricing table.
         // Per AIUsageTokenTelemetry.md §10 + §31: cost is computed from actual
         // token consumption + pricing version, NOT from (AI Replies × fixed cost).
