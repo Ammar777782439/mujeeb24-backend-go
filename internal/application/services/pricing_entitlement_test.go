@@ -90,7 +90,10 @@ func TestPricingFailureDoesNotEraseReplyFromEntitlement(t *testing.T) {
                 LatencyMs: 100,
         }
         run := ports.AIRunRecord{ID: "run-1"}
-        svc.recordAIUsage(context.Background(), "b-1", out, run, true)
+        err := svc.recordAIUsage(context.Background(), "b-1", out, run, true)
+        if err != nil {
+                t.Fatalf("recordAIUsage should not fail when pricing repo returns error + reply was enqueued: %v", err)
+        }
         // Assert: final_ai_replies = 1 (reply was enqueued) even though
         // pricing failed.
         if usageRepo.lastAppend.FinalAIReplies != 1 {

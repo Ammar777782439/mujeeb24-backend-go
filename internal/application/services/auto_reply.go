@@ -683,14 +683,22 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
         log.Printf("[AutoReply] COMPLETED business=%s action=%s enqueued=%v outbound=%s outbox=%s",
                 businessID, result.Action, result.Enqueued, result.OutboundMessageID, result.OutboxEntryID)
 
-        // Per AIUsageTokenTelemetry.md §6: record per-execution telemetry to
-        // ai_usage_records. This is the END-TO-END wiring that connects the
-        // Gemini usageMetadata response to the Platform Admin AI Usage view.
-        //
-        // The recording is best-effort: if it fails, the AutoReply still
-        // succeeds — the customer received their reply. The telemetry gap
-        // is logged for operators to investigate.
-        s.recordAIUsage(ctx, businessID, out, run, result.Enqueued)
+        // Per Item 4: recordAIUsage now returns an error when AppendRecord
+        // fails. The reply is already enqueued (customer received it), but
+        // we MUST NOT silently swallow the telemetry failure — the
+        // entitlement would drift (ai_replies_used not incremented even
+        // though the reply was sent). The error is logged + returned to
+        // the caller (worker pool / webhook) so the failure is visible
+        // + the platform admin can investigate entitlement drift.
+        if usageErr := s.recordAIUsage(ctx, businessID, out, run, result.Enqueued); usageErr != nil {
+                log.Printf("[AutoReply] AI_USAGE_PERSISTENCE_ERROR business=%s conversation=%s err=%v (reply was enqueued but entitlement may have drifted — propagating per Item 4)", businessID, conversationID, usageErr)
+                // The reply is already sent — we don't fail the Handle
+                // (the customer received the response). But we return
+                // the error so the caller can log + alert on the drift.
+                // The run is already marked COMPLETED — the reply
+                // succeeded, not the telemetry.
+                return result, usageErr
+        }
 
         // Per ADR-039: refresh the conversation summary if the turn
         // threshold has been reached. This runs in a separate goroutine with
@@ -1039,12 +1047,13 @@ func appendUniqueString(slice []string, s string) []string {
 //   §31 — cost is computed from actual token consumption + pricing version,
 //          NOT from (AI Replies × fixed cost).
 //
-// Best-effort: errors are logged but never fail the AutoReply.
-func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, out ports.ContractRuntimeOutput, run ports.AIRunRecord, replyEnqueued bool) {
+// Per Item 4: returns an error when AppendRecord fails — the caller
+// (Handle) MUST propagate this so entitlement drift is NOT silent.
+func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, out ports.ContractRuntimeOutput, run ports.AIRunRecord, replyEnqueued bool) error {
         if s.AIUsage == nil {
                 // Telemetry repository not wired — log and return.
                 log.Printf("[AutoReply] AI_USAGE_SKIP business=%s reason=AIUsage_repository_not_wired", businessID)
-                return
+                return nil
         }
         now := s.now()
         // Find the business's active subscription ID for association.
@@ -1061,7 +1070,7 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
         }
         if subscriptionID == "" {
                 log.Printf("[AutoReply] AI_USAGE_SKIP business=%s reason=no_active_subscription", businessID)
-                return
+                return nil
         }
         // Compute provider_cost from the pricing table.
         // Per AIUsageTokenTelemetry.md §10 + §31: cost is computed from actual
@@ -1185,9 +1194,16 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
                 Now:                 now,
         })
         if err != nil {
-                log.Printf("[AutoReply] AI_USAGE_RECORD_FAILED business=%s subscription=%s err=%v", businessID, subscriptionID, err)
-                return
+                // Per Item 4: do NOT silently swallow this error. Return it
+                // so the caller (Handle) propagates it — the reply was
+                // already enqueued (customer received it), but the
+                // entitlement MUST NOT drift silently. The error surfaces
+                // to the worker pool / webhook caller as a signal that
+                // entitlement accounting may be inconsistent.
+                log.Printf("[AutoReply] AI_USAGE_RECORD_FAILED business=%s subscription=%s err=%v (entitlement may drift — propagating per Item 4)", businessID, subscriptionID, err)
+                return fmt.Errorf("ai usage record failed (entitlement may drift): %w", err)
         }
         log.Printf("[AutoReply] AI_USAGE_RECORDED business=%s subscription=%s tokens_in=%d tokens_cached=%d tokens_out=%d cost_yer=%d final_replies=%d pricing=%s status=%s",
                 businessID, subscriptionID, out.Usage.InputTokens, out.Usage.CachedTokens, out.Usage.OutputTokens, providerCostYER, finalAIReplies, pricingVersion, recordStatus)
+        return nil
 }

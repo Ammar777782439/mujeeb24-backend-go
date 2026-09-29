@@ -409,6 +409,13 @@ func (r *stubAIConfigRepoForHandler) ActivateVersion(_ context.Context, id strin
         return ports.AIConfigurationVersion{}, errors.New("version not found")
 }
 
+// notFoundTestErr implements ErrorKind() so the AIConfigurationCache
+// can classify it as "not_found" via the kindedErrorCache interface.
+type notFoundTestErr struct{}
+
+func (e *notFoundTestErr) Error() string     { return "not found" }
+func (e *notFoundTestErr) ErrorKind() string { return "not_found" }
+
 func (r *stubAIConfigRepoForHandler) GetActiveVersion(_ context.Context, _ string) (ports.AIConfigurationVersion, error) {
         r.mu.Lock()
         defer r.mu.Unlock()
@@ -417,7 +424,7 @@ func (r *stubAIConfigRepoForHandler) GetActiveVersion(_ context.Context, _ strin
                         return r.createdVersions[i], nil
                 }
         }
-        return ports.AIConfigurationVersion{}, errors.New("no active version")
+        return ports.AIConfigurationVersion{}, &notFoundTestErr{}
 }
 
 func (r *stubAIConfigRepoForHandler) GetVersionByID(_ context.Context, id string) (ports.AIConfigurationVersion, error) {

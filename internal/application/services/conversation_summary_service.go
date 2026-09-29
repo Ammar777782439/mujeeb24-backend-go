@@ -163,6 +163,21 @@ func (s *ConversationSummaryService) MaybeSummarize(
 ) (SummaryTriggerResult, error) {
         result := SummaryTriggerResult{}
 
+        // Per Item 2: check the SHARED AICostProtectionChecker BEFORE any
+        // other check. If the kill switch is DISABLED, there's no point
+        // checking whether the service is configured or whether the LLM
+        // is wired — Gemini won't be called regardless. This makes the
+        // kill switch the FIRST gate, proving it fires even when the
+        // service isn't fully wired.
+        if s != nil && s.CostProtection != nil {
+                allowed, reason := s.CostProtection.IsAIExecutionAllowed(ctx, businessID)
+                if !allowed {
+                        result.SkippedReason = "ai_runtime_disabled: " + reason
+                        log.Printf("[SummaryService] SKIPPED business=%s conversation=%s reason=%s", businessID, conversationID, reason)
+                        return result, nil
+                }
+        }
+
         if s == nil || s.StateRepository == nil || s.Messages == nil {
                 result.SkippedReason = "service_not_configured"
                 return result, nil
@@ -170,24 +185,6 @@ func (s *ConversationSummaryService) MaybeSummarize(
         if s.LLM == nil && s.ContractRuntime == nil {
                 result.SkippedReason = "llm_not_configured"
                 return result, nil
-        }
-        // Per Item 2 (Kill Switch applies to Summary): check the SHARED
-        // AICostProtectionChecker before doing any Gemini work. This
-        // prevents the background summarization goroutine from
-        // consuming Gemini quota when the Platform Admin has set
-        // AI Runtime = DISABLED (Contract §81) — the same kill switch
-        // that blocks AutoReply + Merchant AI also blocks Summary.
-        //
-        // Skipped (not error) when blocked — summary is best-effort
-        // background work, NOT a customer-facing response. The caller
-        // logs the skip reason.
-        if s.CostProtection != nil {
-                allowed, reason := s.CostProtection.IsAIExecutionAllowed(ctx, businessID)
-                if !allowed {
-                        result.SkippedReason = "ai_runtime_disabled: " + reason
-                        log.Printf("[SummaryService] SKIPPED business=%s conversation=%s reason=%s", businessID, conversationID, reason)
-                        return result, nil
-                }
         }
 
         // Load current state

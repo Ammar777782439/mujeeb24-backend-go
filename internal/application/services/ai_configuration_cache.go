@@ -13,56 +13,33 @@ import (
 // kindedErrorCache is a minimal interface to check repository error kinds
 // without importing the postgres package (which would create an import
 // cycle: services → postgres → services).
-//
-// The postgres.RepositoryError type implements this interface via its
-// ErrorKind() method (returns the kind as a string like "not_found").
-//
-// This is a SEPARATE declaration from conversation_summary_service.go's
-// kindedError — they're structurally identical but in different files.
-// Go doesn't allow redeclaration in the same package, so we use a
-// distinct name here.
 type kindedErrorCache interface {
         ErrorKind() string
 }
 
-// isNoActiveVersionError returns true when err indicates the DB has no
-// active configuration version (the bootstrap state — admin hasn't yet
-// activated a DB-backed config). In this case, falling back to the
-// env-loaded config is safe (per P2-14).
-//
-// Per Item 7: the previous implementation used STRING MATCHING on the
-// error message ("no active version", "not found", "no rows"). That
-// was fragile — different repository implementations could produce
-// different message phrasings, + a real DB error containing "no rows"
-// in its diagnostic text would be misclassified as "bootstrap state".
-//
-// The fix uses TYPED error discrimination via the kindedError interface
-// (errors.As + ErrorKind() == "not_found"). This is the same pattern
-// used by isRepositoryNotFound in conversation_summary_service.go.
-// String matching is NOT used as a primary check — only as a last-
-// resort fallback for non-RepositoryError errors (which shouldn't
-// happen in production, but is defensive against future repository
-// implementations that don't use RepositoryError).
-func isNoActiveVersionError(err error) bool {
-        if err == nil {
-                return false
-        }
-        // Primary: typed check via kindedError interface.
-        var ke kindedErrorCache
-        if errors.As(err, &ke) {
-                return ke.ErrorKind() == "not_found"
-        }
-        // Fallback: if the error doesn't implement ErrorKind, we can't
-        // trust string matching — treat it as a real error (NOT bootstrap
-        // state). This is the safe default per Item 7: "أي DB failure حقيقي
-        // يجب أن يصل للـcaller ولا يتحول إلى stale env config."
-        return false
-}
+// Per Item 7: these typed sentinel errors classify the specific failure
+// mode of reloadFromDBLocked. GetActiveConfig uses them to decide
+// whether env fallback is safe (only ErrNoActiveVersion triggers it)
+// or whether the error must surface to the caller (ErrNoActiveCredential
+// + ErrDBFailure).
+var (
+        // ErrNoActiveVersion: the DB has no active configuration version.
+        // This is the legitimate bootstrap state — env fallback is safe.
+        ErrNoActiveVersion = errors.New("no active AI configuration version in DB (bootstrap state)")
+        // ErrNoActiveCredential: the DB has no active credential. This is
+        // NOT the same as ErrNoActiveVersion — the credential is required
+        // even when using env fallback model/limits. Without a credential,
+        // AI execution cannot proceed (no API key).
+        ErrNoActiveCredential = errors.New("no active AI credential in DB (credential is required)")
+        // ErrDBFailure: a real DB error (connection refused, query syntax,
+        // etc.). The error must surface to the caller — no silent env
+        // fallback (per P2-14 + Item 7).
+        ErrDBFailure = errors.New("AI configuration DB failure (not falling back to stale env config)")
+)
 
-// isNoActiveCredentialError returns true when err indicates the DB has
-// no active credential (the admin hasn't stored a credential yet —
-// bootstrap state). Same typed-error pattern as isNoActiveVersionError.
-func isNoActiveCredentialError(err error) bool {
+// isKindedNotFound checks if err implements kindedErrorCache and has
+// Kind == "not_found". Used to classify RepositoryError(RepositoryNotFound).
+func isKindedNotFound(err error) bool {
         if err == nil {
                 return false
         }
@@ -191,17 +168,13 @@ func (c *AIConfigurationCache) GetActiveConfig(ctx context.Context) (ports.AIAct
                         if c.config.APIKey != "" {
                                 return c.config, nil
                         }
-                        // reloadFromDBLocked succeeded but found no version —
-                        // this is the bootstrap state. Env fallback below is OK.
-                } else if isNoActiveVersionError(err) {
-                        // No active version in DB — env fallback is OK.
-                        // This is the only path where env fallback is safe.
+                } else if errors.Is(err, ErrNoActiveVersion) {
+                        // No active version in DB — env fallback is OK per Item 7.
+                        // This is the ONLY path where env fallback is safe.
                 } else {
-                        // Real DB error — DO NOT silently fall back to env.
-                        // Per P2-14: surface the error so the caller can decide
-                        // (typically: refuse to execute AI calls — better than
-                        // silently running with stale config).
-                        return ports.AIActiveConfig{}, fmt.Errorf("AI configuration DB reload failed (NOT falling back to stale env config per P2-14): %w", err)
+                        // ErrNoActiveCredential or ErrDBFailure — surface to caller.
+                        // Per Item 7: "أي DB failure حقيقي يجب أن يصل للـcaller."
+                        return ports.AIActiveConfig{}, err
                 }
         }
 
@@ -253,25 +226,29 @@ func (c *AIConfigurationCache) ReloadFromDB(ctx context.Context) error {
 
 func (c *AIConfigurationCache) reloadFromDBLocked(ctx context.Context) error {
         if c.repo == nil {
-                return errors.New("AI configuration repository is not wired")
+                return fmt.Errorf("%w: repository not wired", ErrDBFailure)
         }
         if c.creds == nil {
-                return errors.New("AI credential repository is not wired")
+                return fmt.Errorf("%w: credential repository not wired", ErrDBFailure)
         }
-        // Always read the active credential's decrypted key. This MUST
-        // succeed — if it doesn't, there's no working credential and the
-        // runtime can't execute AI calls.
+        // Per Item 7: always read the active credential FIRST. The
+        // credential is required for AI execution — without it, there's
+        // no API key. Classify the error as ErrNoActiveCredential (NOT
+        // ErrNoActiveVersion) so GetActiveConfig does NOT fall back to env
+        // when the credential is missing.
         cred, decryptedKey, err := c.creds.GetActiveCredential(ctx, "google_gemini")
         if err != nil {
-                return err
+                if isKindedNotFound(err) {
+                        // Per Item 7: "عدم وجود credential لا يجب أن يتحول تلقائيًا
+                        // إلى no active version." This is a distinct failure mode.
+                        return fmt.Errorf("%w: %v", ErrNoActiveCredential, err)
+                }
+                // Real DB error (connection refused, etc.).
+                return fmt.Errorf("%w: %v", ErrDBFailure, err)
         }
-        // Try to read the active DB version. If it exists, use it for
-        // model + limits + pricing version.
+        // Try to read the active DB version.
         version, versionErr := c.repo.GetActiveVersion(ctx, "google_gemini")
         if versionErr == nil {
-                // DB-backed version: use it for everything except the API key
-                // (which comes from the active credential, since the admin may
-                // have rotated the credential without creating a new version).
                 c.config = ports.AIActiveConfig{
                         Provider:              version.Provider,
                         Model:                 version.Model,
@@ -287,25 +264,23 @@ func (c *AIConfigurationCache) reloadFromDBLocked(ctx context.Context) error {
                 c.loaded = true
                 return nil
         }
-        // No DB version. The admin has rotated the credential (via
-        // platformAddAICredential) but has not yet called
-        // platformUpdateAIConfiguration. Fall back to the env-loaded model
-        // + limits but with the NEW credential's decrypted key.
-        //
-        // This is the "credential rotation without model switch" path. The
-        // runtime uses the new API key with the env/default model + limits
-        // until the admin activates a DB-backed configuration.
-        if !c.envLoaded {
-                // No env fallback either — return the error so the caller can
-                // fall back to env (if any) or surface an error.
-                return versionErr
+        if isKindedNotFound(versionErr) {
+                // No active version — this is the bootstrap state where env
+                // fallback is safe. But we still need the credential (which we
+                // already have above). Fall back to env model/limits + the new
+                // credential's decrypted key.
+                if !c.envLoaded {
+                        return fmt.Errorf("%w: %v", ErrNoActiveVersion, versionErr)
+                }
+                c.config = c.envConfig
+                c.config.APIKey = decryptedKey
+                c.config.CredentialID = cred.ID
+                c.config.CredentialStatus = cred.Status
+                c.loaded = true
+                return nil
         }
-        c.config = c.envConfig
-        c.config.APIKey = decryptedKey
-        c.config.CredentialID = cred.ID
-        c.config.CredentialStatus = cred.Status
-        c.loaded = true
-        return nil
+        // Real DB error from GetActiveVersion.
+        return fmt.Errorf("%w: %v", ErrDBFailure, versionErr)
 }
 
 func derefString(s *string) string {
