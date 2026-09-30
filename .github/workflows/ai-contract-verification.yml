@@ -3,9 +3,11 @@ name: AI Contract Verification
 on:
   push:
     branches:
+      - main
       - feat/ai-contracts-cleanup
   pull_request:
     branches:
+      - main
       - feat/ai-contracts-cleanup
   workflow_dispatch:
 
