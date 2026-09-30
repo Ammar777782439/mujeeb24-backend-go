@@ -131,7 +131,7 @@ func TestAutoReplyContextBuilderBuildsBoundedGroundedContext(t *testing.T) {
 	if len(contextValue.CatalogEvidence) != 1 || contextValue.CatalogEvidence[0].Reference != "item-iphone" || len(contextValue.OfferEvidence) != 1 || len(contextValue.VariantEvidence) != 1 {
 		t.Fatalf("unexpected grounded evidence: %#v", contextValue)
 	}
-	if contextValue.OfferEvidence[0].AvailabilityState != "available" || contextValue.OfferEvidence[0].Amount != "250000" || contextValue.OfferEvidence[0].Currency != "YER" {
+	if contextValue.OfferEvidence[0].AvailabilityStatus != "available" || contextValue.OfferEvidence[0].Amount != "250000" || contextValue.OfferEvidence[0].Currency != "YER" {
 		t.Fatalf("offer evidence lost commercial fields: %#v", contextValue.OfferEvidence[0])
 	}
 	if len(contextValue.RecentMessages) != 2 || contextValue.RecentMessages[0].Reference != "message-older" || contextValue.RecentMessages[1].Reference != "message-newer" {

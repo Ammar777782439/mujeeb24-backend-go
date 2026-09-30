@@ -42,6 +42,17 @@ type AIDecisionDraft struct {
 	DecidedAt              *time.Time
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
+	// AIRunID links this business decision to the operational AI Run trace
+	// (ai_runs.id) per contract ⑧ §5. Per contract ⑨ §1, an AI Run is the
+	// operational trace; an ai_decisions row is the business decision. They
+	// are distinct concepts; this column bridges them for traceability.
+	AIRunID *string
+	// EffectiveAction per contract ⑥ §17 — the final action after Policy +
+	// Authorization. May differ from RequestedAction when policy overrides.
+	EffectiveAction         *string
+	EffectiveDecisionReason *string
+	AuthorizedAt            *time.Time
+	ExecutedAt              *time.Time
 }
 
 type AIDecisionFilter struct {
@@ -93,6 +104,28 @@ type AIDecisionRecord struct {
 	ResourceVersion        int64
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
+	// Per migration 000056 (contract ⑧ §5 + ⑥ §17):
+	// AIRunID links this business decision to the operational AI Run trace
+	// (ai_runs.id). Per contract ⑨ §1, an AI Run is the operational trace;
+	// an ai_decisions row is the business decision. They are distinct
+	// concepts; this column bridges them for traceability.
+	AIRunID *string
+	// EffectiveAction per contract ⑥ §17 — the final action after Policy +
+	// Authorization. May differ from RequestedAction when policy overrides.
+	// Per migration 000056 ai_decisions_effective_action_chk, allowed values:
+	//   answer, clarification, human_request, lead_draft, order_draft,
+	//   no_action, blocked.
+	EffectiveAction *string
+	// EffectiveDecisionReason per contract ⑥ §17 — the policy key or
+	// authorization reason that produced this Effective Decision.
+	EffectiveDecisionReason *string
+	// AuthorizedAt per contract ⑥ §17 — when the Authorization step completed
+	// successfully. Empty when PolicyDecision == "denied".
+	AuthorizedAt *time.Time
+	// ExecutedAt per contract ⑥ §19 — when the Executor completed the
+	// authorized action. Per contract ⑨ §31, the Run-level execution result
+	// is tracked separately in ai_runs.status (EXECUTING → COMPLETED/FAILED).
+	ExecutedAt *time.Time
 }
 
 type HumanReviewPatch struct {

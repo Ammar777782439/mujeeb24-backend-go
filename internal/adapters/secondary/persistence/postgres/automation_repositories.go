@@ -36,8 +36,8 @@ func (r *AutomationRuleRepository) List(ctx context.Context, businessID, status 
 	if limit <= 0 {
 		limit = 50
 	}
-	if limit > 100 {
-		return ports.AutomationRulePage{}, invalidRepositoryInput("automation_rule.list", "limit must not exceed 100")
+	if limit > 10000 {
+		return ports.AutomationRulePage{}, invalidRepositoryInput("automation_rule.list", "limit must not exceed 10000")
 	}
 	decoded, err := decodeAutomationRuleCursor(cursor)
 	if err != nil {

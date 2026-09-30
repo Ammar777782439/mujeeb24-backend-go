@@ -34,7 +34,6 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 	messageRepository := postgres.NewMessageRepository(adapter)
 	readCursorRepository := postgres.NewConversationReadCursorRepository(adapter)
 	cannedReplyRepository := postgres.NewCannedReplyRepository(adapter)
-	merchantAISessionRepository := postgres.NewMerchantAISessionRepository(adapter)
 	conversationRuntime := services.ConversationRuntimeService{Repository: conversationRepository, Reader: conversationRepository, Assignees: teamRepository, Labels: conversationLabelRepository, References: conversationReferenceRepository, Messages: messageRepository, Transactions: adapter, Realtime: realtime}
 	manualOutbound := services.ManualOutboundMessageService{References: conversationReferenceRepository, Connections: postgres.NewChannelConnectionRepository(adapter), Outbound: postgres.NewOutboundMessageRepository(adapter), Outbox: postgres.NewPostgresOutboxStore(adapter), Messages: messageRepository, Conversations: conversationRepository, Transactions: adapter, Realtime: realtime}
 	cannedReplies := services.CannedReplyService{Repository: cannedReplyRepository, Transactions: adapter}
@@ -98,14 +97,15 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 		CreateVariant:                services.CreateVariantCommandService{CatalogCommandServices: catalogCommands},
 		UpdateVariant:                services.UpdateVariantCommandService{CatalogCommandServices: catalogCommands},
 
-		ListCatalogs:         services.ListCatalogsQueryService{Repository: catalogRepository},
-		GetCatalog:           services.GetCatalogQueryService{Repository: catalogRepository},
-		ListCatalogItems:     services.ListCatalogItemsQueryService{Repository: catalogRepository},
-		GetCatalogItem:       services.GetCatalogItemQueryService{Repository: catalogRepository},
-		ListOffers:           services.ListOffersQueryService{Repository: catalogRepository},
-		ListVariants:         services.ListVariantsQueryService{Repository: catalogRepository},
-		ListAttributeSchemas: services.ListAttributeSchemasQueryService{Repository: catalogRepository},
-		GetAttributeSchema:   services.GetAttributeSchemaQueryService{Repository: catalogRepository},
+		ListCatalogs:             services.ListCatalogsQueryService{Repository: catalogRepository},
+		GetCatalog:               services.GetCatalogQueryService{Repository: catalogRepository},
+		GetCatalogEntityContract: services.GetCatalogEntityContractQueryService{},
+		ListCatalogItems:         services.ListCatalogItemsQueryService{Repository: catalogRepository},
+		GetCatalogItem:           services.GetCatalogItemQueryService{Repository: catalogRepository},
+		ListOffers:               services.ListOffersQueryService{Repository: catalogRepository},
+		ListVariants:             services.ListVariantsQueryService{Repository: catalogRepository},
+		ListAttributeSchemas:     services.ListAttributeSchemasQueryService{Repository: catalogRepository},
+		GetAttributeSchema:       services.GetAttributeSchemaQueryService{Repository: catalogRepository},
 
 		CreateLead:               services.CreateLeadCommandService{SalesCommandServices: salesCommands},
 		UpdateLead:               services.UpdateLeadCommandService{SalesCommandServices: salesCommands},
@@ -129,7 +129,6 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 		GetTransactionReview:     services.GetTransactionReviewQueryService{Repository: transactionRepository},
 
 		RequestHumanReview: services.NewRequestHumanReviewCommandService(decisionRepository, auditRepository, adapter),
-		ChatWithMerchantAI: services.NewMerchantAIChatService(merchantAISessionRepository, nil, decisionRepository, adapter),
 		ListAIDecisions:    services.ListAIDecisionsQueryService{Repository: decisionRepository},
 		GetAIDecision:      services.GetAIDecisionQueryService{Repository: decisionRepository},
 		ListAuditEvents:    services.ListAuditEventsQueryService{Repository: auditRepository},

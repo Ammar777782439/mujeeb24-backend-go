@@ -57,7 +57,7 @@ func (r *AuthenticationRepository) ListActiveMemberships(ctx context.Context, pr
 	if principalID == "" {
 		return nil, "", false, &RepositoryError{Operation: "auth.list_memberships", Kind: RepositoryInvalid, Err: errors.New("principal id is required")}
 	}
-	if limit <= 0 || limit > 100 {
+	if limit <= 0 || limit > 10000 {
 		limit = 50
 	}
 	decodedCursor, err := decodeMembershipCursor(cursor)

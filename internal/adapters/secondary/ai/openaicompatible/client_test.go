@@ -139,7 +139,7 @@ func TestBuildUserPromptIncludesEvidenceButExcludesSensitiveCustomerDocuments(t 
 			ContactPoints: []byte(`{"phone":"contact-secret"}`),
 		},
 		CatalogEvidence: []ports.AICatalogEvidence{{Reference: "item-1", Name: "iPhone 15", Status: "active", Attributes: []byte(`{"color":"black"}`), EvidenceState: "fresh"}},
-		OfferEvidence:   []ports.AIOfferEvidence{{Reference: "offer-1", Name: "iPhone offer", AvailabilityState: "available", Amount: "250000", Currency: "YER", EvidenceState: "fresh"}},
+		OfferEvidence:   []ports.AIOfferEvidence{{Reference: "offer-1", Name: "iPhone offer", AvailabilityStatus: "available", Amount: "250000", Currency: "YER", EvidenceState: "fresh"}},
 		RecentMessages:  []ports.AIRecentMessageEvidence{{Reference: "message-1", Direction: "inbound", Text: "هل هو متوفر؟", EvidenceState: "fresh"}},
 		PolicyEvidence:  ports.AIPolicyEvidence{Version: "auto-reply-v1", State: "application_policy_only"},
 	}

@@ -165,7 +165,7 @@ func (s CreateCatalogItemCommandService) Handle(ctx context.Context, command com
 	var record ports.CatalogItemRecord
 	err = s.within(ctx, func(txCtx context.Context) error {
 		var err error
-		record, err = s.Repository.CreateCatalogItem(txCtx, ports.CatalogItemDraft{ID: s.id(), BusinessID: string(command.Meta.Actor.BusinessID), CatalogID: string(command.CatalogID), AttributeSchemaID: optionalID(command.AttributeSchemaID), AttributeSchemaVersion: schemaVersion, ItemType: command.ItemType, Name: command.Name, PricingMode: command.PricingMode, AvailabilityMode: command.AvailabilityMode, FulfillmentMode: command.FulfillmentMode, RequiresConfirmation: command.RequiresConfirmation, Attributes: attributes, CreatedAt: now, UpdatedAt: now})
+		record, err = s.Repository.CreateCatalogItem(txCtx, ports.CatalogItemDraft{ID: s.id(), BusinessID: string(command.Meta.Actor.BusinessID), CatalogID: string(command.CatalogID), AttributeSchemaID: optionalID(command.AttributeSchemaID), AttributeSchemaVersion: schemaVersion, ItemType: command.ItemType, Name: command.Name, ShortDescription: command.ShortDescription, LongDescription: command.LongDescription, PricingMode: command.PricingMode, AvailabilityMode: command.AvailabilityMode, FulfillmentMode: command.FulfillmentMode, RequiresConfirmation: command.RequiresConfirmation, Attributes: attributes, CreatedAt: now, UpdatedAt: now})
 		return mapCatalogRepositoryError(err)
 	})
 	if err != nil {
@@ -193,7 +193,22 @@ func (s UpdateCatalogItemCommandService) Handle(ctx context.Context, command com
 	var record ports.CatalogItemRecord
 	err = s.within(ctx, func(txCtx context.Context) error {
 		var err error
-		record, err = s.Repository.UpdateCatalogItem(txCtx, ports.CatalogItemPatch{ID: string(command.CatalogItemID), BusinessID: string(command.Meta.Actor.BusinessID), Name: command.Name, Status: command.Status, Attributes: attributes, ExpectedVersion: version, UpdatedAt: s.now()})
+		record, err = s.Repository.UpdateCatalogItem(txCtx, ports.CatalogItemPatch{
+			ID:                   string(command.CatalogItemID),
+			BusinessID:           string(command.Meta.Actor.BusinessID),
+			Name:                 command.Name,
+			Status:               command.Status,
+			ItemType:             command.ItemType,
+			ShortDescription:     command.ShortDescription,
+			LongDescription:      command.LongDescription,
+			PricingMode:          command.PricingMode,
+			AvailabilityMode:     command.AvailabilityMode,
+			FulfillmentMode:      command.FulfillmentMode,
+			RequiresConfirmation: command.RequiresConfirmation,
+			Attributes:           attributes,
+			ExpectedVersion:      version,
+			UpdatedAt:            s.now(),
+		})
 		return mapCatalogRepositoryError(err)
 	})
 	if err != nil {
@@ -408,7 +423,7 @@ func (s AuthorCatalogItemCommandService) Handle(ctx context.Context, command com
 	}
 	availabilityMode := strings.TrimSpace(command.AvailabilityMode)
 	if availabilityMode == "" {
-		availabilityMode = "in_stock"
+		availabilityMode = "stock"
 	}
 	fulfillmentMode := strings.TrimSpace(command.FulfillmentMode)
 	if fulfillmentMode == "" {

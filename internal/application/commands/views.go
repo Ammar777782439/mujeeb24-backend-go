@@ -206,3 +206,23 @@ type ListResult[T any] struct {
 	NextCursor string
 	HasMore    bool
 }
+
+// CatalogEntityContractView is the application-layer view of the Catalog
+// Entity Contract descriptor (contract ⑤ §8). It mirrors the DTO shape
+// (dto.CatalogEntityContract) minus the dto-specific concerns.
+//
+// The view is constructed from services.DefaultCatalogEntityContractDescriptor()
+// — the canonical, in-memory source of truth that is also sent to Gemini
+// as part of system_instruction per contract ⑤ §7.
+type CatalogEntityContractView struct {
+	PricingModes              map[string]string
+	AvailabilityModes         map[string]string
+	AvailabilityStatuses      map[string]string
+	PriceVerificationStatuses map[string]string
+	FulfillmentModes          map[string]string
+	// ItemStatuses per migration 000016 catalog_items_status_chk +
+	// migration 000018 offers_status_chk (5 values: draft, active,
+	// inactive, archived, expired). Sourced from the descriptor's
+	// ItemStatuses field (no inline hardcoding here).
+	ItemStatuses map[string]string
+}

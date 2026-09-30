@@ -62,6 +62,8 @@ type CreateCatalogItemCommand struct {
 	AttributeSchemaID    *AttributeSchemaID
 	ItemType             string
 	Name                 string
+	ShortDescription     *string
+	LongDescription      *string
 	PricingMode          string
 	AvailabilityMode     string
 	FulfillmentMode      string
@@ -69,11 +71,18 @@ type CreateCatalogItemCommand struct {
 	Attributes           map[string]any
 }
 type UpdateCatalogItemCommand struct {
-	Meta          CommandMeta
-	CatalogItemID CatalogItemID
-	Name          *string
-	Status        *string
-	Attributes    map[string]any
+	Meta                 CommandMeta
+	CatalogItemID        CatalogItemID
+	Name                 *string
+	Status               *string
+	ItemType             *string
+	ShortDescription     *string
+	LongDescription      *string
+	PricingMode          *string
+	AvailabilityMode     *string
+	FulfillmentMode      *string
+	RequiresConfirmation *bool
+	Attributes           map[string]any
 }
 type CreateOfferCommand struct {
 	Meta               CommandMeta

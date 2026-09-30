@@ -196,7 +196,7 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 		if s.deps.CreateCatalogItem == nil {
 			return mapApplicationError(appErrors.NotImplemented()), true
 		}
-		result, err := s.deps.CreateCatalogItem.Handle(ctx, commands.CreateCatalogItemCommand{Meta: commandMeta(ctx, actor, in.CommandHeaders), CatalogID: commands.CatalogID(in.CatalogID), AttributeSchemaID: optionalAttributeSchemaID(in.Body.AttributeSchemaID), ItemType: in.Body.ItemType, Name: in.Body.Name, PricingMode: in.Body.PricingMode, AvailabilityMode: in.Body.AvailabilityMode, FulfillmentMode: in.Body.FulfillmentMode, RequiresConfirmation: in.Body.RequiresConfirmation, Attributes: in.Body.Attributes})
+		result, err := s.deps.CreateCatalogItem.Handle(ctx, commands.CreateCatalogItemCommand{Meta: commandMeta(ctx, actor, in.CommandHeaders), CatalogID: commands.CatalogID(in.CatalogID), AttributeSchemaID: optionalAttributeSchemaID(in.Body.AttributeSchemaID), ItemType: in.Body.ItemType, Name: in.Body.Name, ShortDescription: in.Body.ShortDescription, LongDescription: in.Body.LongDescription, PricingMode: in.Body.PricingMode, AvailabilityMode: in.Body.AvailabilityMode, FulfillmentMode: in.Body.FulfillmentMode, RequiresConfirmation: in.Body.RequiresConfirmation, Attributes: in.Body.Attributes})
 		if err != nil {
 			return mapApplicationError(err), true
 		}
@@ -210,7 +210,20 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 		if s.deps.UpdateCatalogItem == nil {
 			return mapApplicationError(appErrors.NotImplemented()), true
 		}
-		result, err := s.deps.UpdateCatalogItem.Handle(ctx, commands.UpdateCatalogItemCommand{Meta: commandMeta(ctx, actor, in.CommandHeaders), CatalogItemID: commands.CatalogItemID(in.ItemID), Name: optionalStringPtr(in.Body.Name), Status: optionalStringPtr(in.Body.Status), Attributes: in.Body.Attributes})
+		result, err := s.deps.UpdateCatalogItem.Handle(ctx, commands.UpdateCatalogItemCommand{
+			Meta:                 commandMeta(ctx, actor, in.CommandHeaders),
+			CatalogItemID:        commands.CatalogItemID(in.ItemID),
+			Name:                 optionalStringPtr(in.Body.Name),
+			Status:               optionalStringPtr(in.Body.Status),
+			ItemType:             optionalStringPtr(in.Body.ItemType),
+			ShortDescription:     in.Body.ShortDescription,
+			LongDescription:      in.Body.LongDescription,
+			PricingMode:          optionalStringPtr(in.Body.PricingMode),
+			AvailabilityMode:     optionalStringPtr(in.Body.AvailabilityMode),
+			FulfillmentMode:      optionalStringPtr(in.Body.FulfillmentMode),
+			RequiresConfirmation: in.Body.RequiresConfirmation,
+			Attributes:           in.Body.Attributes,
+		})
 		if err != nil {
 			return mapApplicationError(err), true
 		}

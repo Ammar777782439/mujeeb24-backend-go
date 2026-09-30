@@ -53,9 +53,10 @@ func (r *ConversationRepository) GetByID(ctx context.Context, businessID, conver
 	if err != nil {
 		return ports.ConversationRecord{}, err
 	}
-	const query = `SELECT c.id::text, c.business_id::text, c.customer_id::text, cu.profile->>'display_name', c.state, c.ownership, c.ai_mode_override, c.priority, c.assignment_reference, c.resource_version, c.last_activity_at FROM conversations c LEFT JOIN customers cu ON cu.business_id = c.business_id AND cu.id = c.customer_id WHERE c.business_id = $1::uuid AND c.id = $2::uuid`
+	// Per migration 000057: include last_gemini_interaction_id per contract ③ §4.
+	const query = `SELECT c.id::text, c.business_id::text, c.customer_id::text, cu.profile->>'display_name', c.state, c.ownership, c.ai_mode_override, c.priority, c.assignment_reference, c.resource_version, c.last_activity_at, c.last_gemini_interaction_id FROM conversations c LEFT JOIN customers cu ON cu.business_id = c.business_id AND cu.id = c.customer_id WHERE c.business_id = $1::uuid AND c.id = $2::uuid`
 	var record ports.ConversationRecord
-	if err := executor.QueryRow(ctx, query, businessID, conversationID).Scan(&record.ID, &record.BusinessID, &record.CustomerID, &record.CustomerDisplayName, &record.State, &record.Ownership, &record.AIModeOverride, &record.Priority, &record.AssignmentReference, &record.ResourceVersion, &record.LastActivityAt); err != nil {
+	if err := executor.QueryRow(ctx, query, businessID, conversationID).Scan(&record.ID, &record.BusinessID, &record.CustomerID, &record.CustomerDisplayName, &record.State, &record.Ownership, &record.AIModeOverride, &record.Priority, &record.AssignmentReference, &record.ResourceVersion, &record.LastActivityAt, &record.LastGeminiInteractionID); err != nil {
 		return record, classifyRepositoryGetError("conversation.get_by_id", err)
 	}
 	return record, nil

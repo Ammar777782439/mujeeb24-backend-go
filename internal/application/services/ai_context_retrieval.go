@@ -99,7 +99,7 @@ func (b AutoReplyContextBuilder) retrieveScopedOffer(ctx context.Context, busine
 	offerEvidence := []ports.AIOfferEvidence{{
 		Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 		Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-		AvailabilityState: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
+		AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
 		RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 	}}
 	var variantEvidence []ports.AIVariantEvidence
@@ -142,7 +142,7 @@ func (b AutoReplyContextBuilder) retrieveScopedItem(ctx context.Context, busines
 		offerEvidence = append(offerEvidence, ports.AIOfferEvidence{
 			Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 			Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-			AvailabilityState: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
+			AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
 			RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 		})
 	}
@@ -212,7 +212,7 @@ func (b AutoReplyContextBuilder) retrieveScopedCatalog(ctx context.Context, busi
 			offerEvidence = append(offerEvidence, ports.AIOfferEvidence{
 				Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 				Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-				AvailabilityState: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
+				AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
 				RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 			})
 		}
@@ -261,7 +261,7 @@ func (b AutoReplyContextBuilder) retrieveScopedVariant(ctx context.Context, busi
 			offerEvidence = append(offerEvidence, ports.AIOfferEvidence{
 				Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 				Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-				AvailabilityState: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
+				AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
 				RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 			})
 		}
@@ -332,7 +332,7 @@ func toOfferEvidence(offer ports.OfferRecord, now time.Time) ports.AIOfferEviden
 	return ports.AIOfferEvidence{
 		Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 		Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-		AvailabilityState: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
+		AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
 		RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 	}
 }
@@ -524,7 +524,7 @@ func (b AutoReplyContextBuilder) augmentScopedWithCandidates(ctx context.Context
 			addOffers = append(addOffers, ports.AIOfferEvidence{
 				Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 				Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-				AvailabilityState: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
+				AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
 				RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 			})
 		}
@@ -556,6 +556,53 @@ func rankPositive(items []ports.CatalogItemRecord, text string) []ports.CatalogI
 }
 
 func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports.AIContext, input ports.ContextBuildInput, now time.Time) (ports.AIContext, error) {
+	// Per ADR-048: Always populate catalog_names + catalog_summary
+	// regardless of retrieval mode. In scoped mode, the catalog loop
+	// in Build() is skipped (early return), so catalog_names and
+	// catalog_summary were empty. This ensures Gemini always sees
+	// category names for hierarchical navigation ("what do you have?").
+	if b.Catalogs != nil && len(base.CatalogNames) == 0 {
+		catalogPage, catalogErr := b.Catalogs.ListCatalogs(ctx, input.BusinessID, "active", b.maxCatalogs(), "")
+		if catalogErr == nil {
+			// Check ONCE before the loop — not inside it.
+			// Before this fix, the guard was inside the per-catalog loop,
+			// so after the first catalog populated catalog_summary, all
+			// subsequent catalogs were SKIPPED — losing items from other
+			// catalogs (e.g., iPhone in catalog 2 was invisible to Gemini).
+			populateSummary := len(base.CatalogSummary) == 0
+			for _, catalog := range catalogPage.Items {
+				base.CatalogNames = append(base.CatalogNames, catalog.Name)
+				if populateSummary {
+					summaryCursor := ""
+					for {
+						summaryItems, summaryErr := b.Catalogs.ListCatalogItems(ctx, input.BusinessID, catalog.ID, "", "active", 500, summaryCursor)
+						if summaryErr != nil {
+							break
+						}
+						for _, item := range summaryItems.Items {
+							entry := ports.CatalogSummaryEntry{
+								ID:          item.ID,
+								Name:        item.Name,
+								CatalogName: catalog.Name,
+							}
+							// Per ADR-050: fetch first active offer for price + availability
+							offers, offerErr := b.Catalogs.ListOffers(ctx, input.BusinessID, item.ID, "active", 1, "")
+							if offerErr == nil && len(offers.Items) > 0 {
+								entry.Price = formatPrice(stringValue(offers.Items[0].Amount))
+								entry.Currency = formatCurrency(stringValue(offers.Items[0].Currency))
+								entry.AvailabilityStatus = offers.Items[0].AvailabilityStatus
+							}
+							base.CatalogSummary = append(base.CatalogSummary, entry)
+						}
+						if !summaryItems.HasMore {
+							break
+						}
+						summaryCursor = summaryItems.NextCursor
+					}
+				}
+			}
+		}
+	}
 	if b.Knowledge != nil {
 		knowledgeRecords, listErr := b.Knowledge.ListPublished(ctx, input.BusinessID, "", now, b.maxKnowledge()*3)
 		if listErr != nil {

@@ -101,15 +101,24 @@ func IncorporateCapabilityEvidence(target *AIContext, result AICapabilityResult)
 	}
 }
 
-// IncorporateProposalEvidence merges discovered capability evidence from the proposal
-// into the AIContext. This is owned by the application layer, not the AI provider.
+// IncorporateProposalEvidence is DEPRECATED per contract ④ §5 + ⑥ §20.
+//
+// The legacy AIDecisionProposal carried Mujeeb-side discovered evidence
+// (DiscoveredCatalogEvidence, etc.) which mixed Gemini's output with Mujeeb's
+// tracking — explicitly forbidden by contract ④ §5.
+//
+// Per contract ⑥ §20, validation is now deterministic via ValidationPipeline
+// (in services/ai_validation_pipeline.go). Per contract ⑧ §5, the operational
+// trace lives in ai_runs/ai_tool_calls/ai_catalog_batches tables, NOT in
+// the AI Proposal.
+//
+// This function is kept as a no-op for migration safety; it will be removed
+// once all callers are migrated to the contract-aligned flow.
 func IncorporateProposalEvidence(target *AIContext, proposal AIDecisionProposal) {
 	if target == nil {
 		return
 	}
-	IncorporateCapabilityEvidence(target, AICapabilityResult{
-		CatalogEvidence: proposal.DiscoveredCatalogEvidence,
-		OfferEvidence:   proposal.DiscoveredOfferEvidence,
-		VariantEvidence: proposal.DiscoveredVariantEvidence,
-	})
+	// No-op: deprecated. The contract-aligned flow does NOT carry discovered
+	// evidence in the AI Proposal; it lives in ai_runs + ai_tool_calls rows.
+	_ = proposal
 }

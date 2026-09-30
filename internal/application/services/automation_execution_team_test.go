@@ -142,6 +142,13 @@ func (r *automationConversationFixture) TransitionLifecycle(context.Context, por
 	return r.record, nil
 }
 
+// UpdateLastGeminiInteractionID satisfies the contract ③ §4 method added to
+// ports.ConversationRuntimeRepository. Tests don't exercise Gemini chaining
+// end-to-end; this no-op allows the fake to satisfy the interface.
+func (r *automationConversationFixture) UpdateLastGeminiInteractionID(_ context.Context, _, _, _ string) error {
+	return nil
+}
+
 type automationLabelsFixture struct{}
 
 func (automationLabelsFixture) List(context.Context, string, string) ([]string, error) {
