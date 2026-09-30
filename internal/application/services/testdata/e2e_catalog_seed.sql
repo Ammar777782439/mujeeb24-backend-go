@@ -448,3 +448,106 @@ ON CONFLICT (id) DO UPDATE SET
     availability_status = EXCLUDED.availability_status,
     status = EXCLUDED.status,
     updated_at = now();
+
+
+-- ===== Subscriptions (required by recordAIUsage) =====
+-- Per Item 4 in spec + auto_reply.go:1076-1104: recordAIUsage requires an
+-- ACTIVE subscription for the business, otherwise it returns entitlement-drift
+-- error (propagated per Item 4) even though the reply was enqueued. We seed
+-- one ACTIVE subscription per business, pointing at the 'basic' plan seeded
+-- by migration 000061 (plan_id 00000000-...-a001).
+
+INSERT INTO subscriptions (
+    id, business_id, plan_id, period_start, period_end, status,
+    ai_reply_limit, ai_catalog_limit, channel_limit, internal_ai_cost_budget_yer,
+    created_at, updated_at
+)
+VALUES (
+    '11111111-1111-1111-1111-111111111120',
+    '11111111-1111-1111-1111-111111111111',
+    '00000000-0000-0000-0000-00000000a001', -- 'basic' plan from migration 000061
+    date_trunc('month', now()),
+    date_trunc('month', now()) + interval '1 month',
+    'ACTIVE',
+    500,
+    200,
+    1,
+    1000,
+    now(),
+    now()
+)
+ON CONFLICT (id) DO UPDATE SET
+    status = EXCLUDED.status,
+    period_start = EXCLUDED.period_start,
+    period_end = EXCLUDED.period_end,
+    ai_reply_limit = EXCLUDED.ai_reply_limit,
+    ai_catalog_limit = EXCLUDED.ai_catalog_limit,
+    channel_limit = EXCLUDED.channel_limit,
+    internal_ai_cost_budget_yer = EXCLUDED.internal_ai_cost_budget_yer,
+    updated_at = now();
+
+INSERT INTO subscriptions (
+    id, business_id, plan_id, period_start, period_end, status,
+    ai_reply_limit, ai_catalog_limit, channel_limit, internal_ai_cost_budget_yer,
+    created_at, updated_at
+)
+VALUES (
+    '22222222-2222-2222-2222-222222222230',
+    '22222222-2222-2222-2222-222222222222',
+    '00000000-0000-0000-0000-00000000a001',
+    date_trunc('month', now()),
+    date_trunc('month', now()) + interval '1 month',
+    'ACTIVE',
+    500,
+    200,
+    1,
+    1000,
+    now(),
+    now()
+)
+ON CONFLICT (id) DO UPDATE SET
+    status = EXCLUDED.status,
+    period_start = EXCLUDED.period_start,
+    period_end = EXCLUDED.period_end,
+    ai_reply_limit = EXCLUDED.ai_reply_limit,
+    ai_catalog_limit = EXCLUDED.ai_catalog_limit,
+    channel_limit = EXCLUDED.channel_limit,
+    internal_ai_cost_budget_yer = EXCLUDED.internal_ai_cost_budget_yer,
+    updated_at = now();
+
+-- subscription_ai_usage aggregate row (referenced by recordAIUsage when
+-- computing ai_replies_used + tokens + cost). Per migration 000062 schema,
+-- the row is keyed by subscription_id and stores the running usage totals.
+INSERT INTO subscription_ai_usage (
+    subscription_id, business_id, ai_reply_limit,
+    ai_replies_used, input_tokens, cached_input_tokens, output_tokens,
+    model_requests, tool_calls, provider_cost_yer, last_recorded_at, updated_at
+)
+VALUES (
+    '11111111-1111-1111-1111-111111111120',
+    '11111111-1111-1111-1111-111111111111',
+    500,
+    0, 0, 0, 0, 0, 0, 0,
+    NULL,
+    now()
+)
+ON CONFLICT (subscription_id) DO UPDATE SET
+    ai_reply_limit = EXCLUDED.ai_reply_limit,
+    updated_at = now();
+
+INSERT INTO subscription_ai_usage (
+    subscription_id, business_id, ai_reply_limit,
+    ai_replies_used, input_tokens, cached_input_tokens, output_tokens,
+    model_requests, tool_calls, provider_cost_yer, last_recorded_at, updated_at
+)
+VALUES (
+    '22222222-2222-2222-2222-222222222230',
+    '22222222-2222-2222-2222-222222222222',
+    500,
+    0, 0, 0, 0, 0, 0, 0,
+    NULL,
+    now()
+)
+ON CONFLICT (subscription_id) DO UPDATE SET
+    ai_reply_limit = EXCLUDED.ai_reply_limit,
+    updated_at = now();

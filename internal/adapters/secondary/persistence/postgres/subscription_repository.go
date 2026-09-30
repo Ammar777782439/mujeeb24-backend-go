@@ -35,7 +35,7 @@ func NewSubscriptionRepository(adapter *Adapter) *SubscriptionRepository {
         return &SubscriptionRepository{adapter: adapter}
 }
 
-const subscriptionSelectColumns = `id::text, business_id::text, plan_id::text, plan_code, plan_version, period_start, period_end, status, ai_reply_limit, ai_catalog_limit, channel_limit, internal_ai_cost_budget_yer, cost_budget_override_yer, cost_budget_override_reason, cost_budget_override_by::text, cost_budget_override_at, cancelled_at, cancelled_reason, cancelled_by::text, created_at, updated_at`
+const subscriptionSelectColumns = `s.id::text, s.business_id::text, s.plan_id::text, p.code AS plan_code, p.version AS plan_version, s.period_start, s.period_end, s.status, s.ai_reply_limit, s.ai_catalog_limit, s.channel_limit, s.internal_ai_cost_budget_yer, s.cost_budget_override_yer, s.cost_budget_override_reason, s.cost_budget_override_by::text, s.cost_budget_override_at, s.cancelled_at, s.cancelled_reason, s.cancelled_by::text, s.created_at, s.updated_at`
 
 func scanSubscription(scanner interface {
         Scan(dest ...any) error
@@ -108,7 +108,7 @@ func (r *SubscriptionRepository) GetByID(ctx context.Context, subscriptionID str
         }
         var record ports.SubscriptionRecord
         err = executor.QueryRow(ctx,
-                `SELECT `+subscriptionSelectColumns+` FROM subscriptions WHERE id = $1::uuid`,
+                `SELECT `+subscriptionSelectColumns+` FROM subscriptions s LEFT JOIN plans p ON p.id = s.plan_id WHERE s.id = $1::uuid`,
                 subscriptionID,
         ).Scan(
                 &record.ID, &record.BusinessID, &record.PlanID, &record.PlanCode, &record.PlanVersion,
@@ -149,11 +149,12 @@ func (r *SubscriptionRepository) List(ctx context.Context, filter ports.Subscrip
         }
         rows, err := executor.Query(ctx,
                 `SELECT `+subscriptionSelectColumns+`
-                 FROM subscriptions
-                 WHERE ($1 = '' OR business_id::text = $1)
-                   AND ($2 = '' OR status = $2)
-                   AND ($3::timestamptz IS NULL OR (created_at, id) < ($3, $4::uuid))
-                 ORDER BY created_at DESC, id DESC
+                 FROM subscriptions s
+                 LEFT JOIN plans p ON p.id = s.plan_id
+                 WHERE ($1 = '' OR s.business_id::text = $1)
+                   AND ($2 = '' OR s.status = $2)
+                   AND ($3::timestamptz IS NULL OR (s.created_at, s.id) < ($3, $4::uuid))
+                 ORDER BY s.created_at DESC, s.id DESC
                  LIMIT $5`,
                 strings.TrimSpace(filter.BusinessID), strings.TrimSpace(filter.Status), cursorAt, cursorID, filter.Limit+1,
         )
@@ -443,55 +444,55 @@ var _ ports.SubscriptionRepository = (*SubscriptionRepository)(nil)
 // Per Contract §35: "لا يسمح بوجود أكثر من قناة نشطة ضمن entitlement"
 // Per Contract §34-35: "لا يوجد Silent Data Deletion" — we block, we don't delete.
 func (r *SubscriptionRepository) CheckEntitlements(ctx context.Context, businessID string, catalogLimit, channelLimit int) error {
-	if r == nil || r.adapter == nil {
-		return ErrPoolClosed
-	}
-	if strings.TrimSpace(businessID) == "" {
-		return invalidRepositoryInput("subscription.check_entitlements", "business_id is required")
-	}
-	executor, err := r.adapter.Executor(ctx)
-	if err != nil {
-		return err
-	}
-	// Count catalog items for this business.
-	// Per Contract §33: "AI Catalog Limit" limits the records in AI-active
-	// scope, not the DB storage. For V1 without an AI-active flag, we count
-	// all catalog_items as a proxy — the contract explicitly says the limit
-	// is about AI-active scope, but without the flag, total count is the
-	// closest available metric.
-	var catalogCount int
-	err = executor.QueryRow(ctx,
-		`SELECT COUNT(*)::int FROM catalog_items WHERE business_id = $1::uuid`,
-		businessID,
-	).Scan(&catalogCount)
-	if err != nil {
-		return &RepositoryError{Operation: "subscription.check_entitlements.catalog", Kind: RepositoryInvalid, Err: err}
-	}
-	if catalogCount > catalogLimit {
-		return &RepositoryError{
-			Operation: "subscription.check_entitlements.catalog",
-			Kind:      RepositoryConflict,
-			Err:       fmt.Errorf("catalog item count %d exceeds plan limit %d — resolve the overrun before activation (Contract §34)", catalogCount, catalogLimit),
-		}
-	}
-	// Count active channel connections for this business.
-	// Per Contract §91: channel_connections uses existing statuses: pending,
-	// active, disconnected, failed, reconnect_required, archived.
-	// We count only status='active' per Contract §35.
-	var channelCount int
-	err = executor.QueryRow(ctx,
-		`SELECT COUNT(*)::int FROM channel_connections WHERE business_id = $1::uuid AND status = 'active'`,
-		businessID,
-	).Scan(&channelCount)
-	if err != nil {
-		return &RepositoryError{Operation: "subscription.check_entitlements.channels", Kind: RepositoryInvalid, Err: err}
-	}
-	if channelCount > channelLimit {
-		return &RepositoryError{
-			Operation: "subscription.check_entitlements.channels",
-			Kind:      RepositoryConflict,
-			Err:       fmt.Errorf("active channel count %d exceeds plan limit %d — resolve the overrun before activation (Contract §35)", channelCount, channelLimit),
-		}
-	}
-	return nil
+        if r == nil || r.adapter == nil {
+                return ErrPoolClosed
+        }
+        if strings.TrimSpace(businessID) == "" {
+                return invalidRepositoryInput("subscription.check_entitlements", "business_id is required")
+        }
+        executor, err := r.adapter.Executor(ctx)
+        if err != nil {
+                return err
+        }
+        // Count catalog items for this business.
+        // Per Contract §33: "AI Catalog Limit" limits the records in AI-active
+        // scope, not the DB storage. For V1 without an AI-active flag, we count
+        // all catalog_items as a proxy — the contract explicitly says the limit
+        // is about AI-active scope, but without the flag, total count is the
+        // closest available metric.
+        var catalogCount int
+        err = executor.QueryRow(ctx,
+                `SELECT COUNT(*)::int FROM catalog_items WHERE business_id = $1::uuid`,
+                businessID,
+        ).Scan(&catalogCount)
+        if err != nil {
+                return &RepositoryError{Operation: "subscription.check_entitlements.catalog", Kind: RepositoryInvalid, Err: err}
+        }
+        if catalogCount > catalogLimit {
+                return &RepositoryError{
+                        Operation: "subscription.check_entitlements.catalog",
+                        Kind:      RepositoryConflict,
+                        Err:       fmt.Errorf("catalog item count %d exceeds plan limit %d — resolve the overrun before activation (Contract §34)", catalogCount, catalogLimit),
+                }
+        }
+        // Count active channel connections for this business.
+        // Per Contract §91: channel_connections uses existing statuses: pending,
+        // active, disconnected, failed, reconnect_required, archived.
+        // We count only status='active' per Contract §35.
+        var channelCount int
+        err = executor.QueryRow(ctx,
+                `SELECT COUNT(*)::int FROM channel_connections WHERE business_id = $1::uuid AND status = 'active'`,
+                businessID,
+        ).Scan(&channelCount)
+        if err != nil {
+                return &RepositoryError{Operation: "subscription.check_entitlements.channels", Kind: RepositoryInvalid, Err: err}
+        }
+        if channelCount > channelLimit {
+                return &RepositoryError{
+                        Operation: "subscription.check_entitlements.channels",
+                        Kind:      RepositoryConflict,
+                        Err:       fmt.Errorf("active channel count %d exceeds plan limit %d — resolve the overrun before activation (Contract §35)", channelCount, channelLimit),
+                }
+        }
+        return nil
 }

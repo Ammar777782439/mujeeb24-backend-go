@@ -26,11 +26,17 @@ DELETE FROM ai_runs                WHERE business_id IN ('11111111-1111-1111-111
 -- AI decisions (business ai_decisions table) + per-business usage records.
 DELETE FROM ai_decisions           WHERE business_id IN ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222');
 DELETE FROM ai_usage_records       WHERE business_id IN ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222');
+-- Per-business subscription_ai_usage aggregate (keys by subscription_id, scoped to business_id).
+DELETE FROM subscription_ai_usage  WHERE business_id IN ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222');
 
 -- Outbox entries + outbound messages + communication messages.
+-- FK order: communication_messages → outbound_messages (FK on outbound_message_id).
+--           outbox_entries → outbound_messages (FK on outbound_message_id).
+-- So delete communication_messages FIRST (its FK points to outbound_messages),
+-- then outbox_entries (also points to outbound_messages), then outbound_messages.
+DELETE FROM communication_messages WHERE business_id IN ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222');
 DELETE FROM outbox_entries        WHERE business_id IN ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222');
 DELETE FROM outbound_messages     WHERE business_id IN ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222');
-DELETE FROM communication_messages WHERE business_id IN ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222');
 
 -- Conversation state (per contract ③ §1, ADR-039). The summary field lives
 -- inside conversation_state.focus JSONB — deleting the row ensures the next
