@@ -438,6 +438,9 @@ func (a *MerchantCatalogAIAgent) HandleTurn(ctx context.Context, input MerchantC
                 SourceMessageReference: input.SourceMessageReference,
                 MerchantMessage:        input.MerchantMessage,
                 PolicyVersion:          input.PolicyVersion,
+                // Per fix #3: pass the AI Run ID so tool call records are
+                // linked to the correct run during the Tool Loop.
+                AIRunID: run.ID,
         })
         if err != nil {
                 log.Printf("[MerchantAI] CONTEXT_BUILD_FAILED business=%s session=%s err=%v",

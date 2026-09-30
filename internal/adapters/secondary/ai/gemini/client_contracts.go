@@ -60,6 +60,10 @@ type ContractClient struct {
         runRepo ports.AIRunRepository
         // newID generates UUIDs for tool call records.
         newID func() string
+        // lifecycle (optional) transitions RUNNING → WAITING_TOOL → RUNNING
+        // during the Tool Loop. Per fix #2: uses the existing AIRunLifecycle
+        // via the AIRunLifecyclePort abstraction (no services import).
+        lifecycle ports.AIRunLifecyclePort
 }
 
 // resolvedAIConfig holds the effective values for one Gemini call.
@@ -223,6 +227,8 @@ func (c *ContractClient) DecideContract(ctx context.Context, input ports.Contrac
                         Model:               rc.model,
                         EstimatedCostMicros: 0,
                         LatencyMs:           latencyMs,
+                        // Per fix #1: non-tool path = exactly 1 model request.
+                        ModelRequests:       1,
                 },
                 LatencyMs: latencyMs,
         }, nil

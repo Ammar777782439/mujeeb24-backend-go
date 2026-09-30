@@ -298,6 +298,9 @@ func (b *MerchantContextBuilder) BuildForTurn(ctx context.Context, input Merchan
                 DecisionInput:         decisionInput,
                 GeminiInteraction:     geminiInteraction,
                 EntityContractPayload: b.EntityContractPayload,
+                // Per fix #3: pass AIRunID from the caller so tool call
+                // records are linked to the correct run.
+                AIRunID: input.AIRunID,
         }, nil
 }
 
@@ -308,4 +311,8 @@ type MerchantContextBuildInput struct {
         SourceMessageReference string
         MerchantMessage        string
         PolicyVersion          string
+        // Per fix #3: AIRunID for tool call trace persistence.
+        // Passed through to ContractRuntimeInput.AIRunID so the Tool Loop
+        // can persist AIToolCallRecord rows linked to the correct run.
+        AIRunID string
 }

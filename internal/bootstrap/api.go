@@ -245,6 +245,12 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                         runRepo = postgres.NewAIRunTraceRepository(database)
                         cc.SetRunRepository(runRepo)
                         cc.SetNewID(uuid.NewString)
+                        // Per fix #2: wire the existing AIRunLifecycle
+                        // into ContractClient via the ports.AIRunLifecyclePort
+                        // abstraction. The lifecycle instance is created
+                        // here (same pattern as AutoReplyService which
+                        // creates its own via NewAIRunLifecycle(repo)).
+                        cc.SetLifecycle(services.NewAIRunLifecycle(runRepo))
                         contractRuntime = cc
                 } else {
                         // Fallback for openaicompatible.Client or other AIRuntime
@@ -578,6 +584,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                         merchantRunRepo := postgres.NewAIRunTraceRepository(database)
                         contractClient.SetRunRepository(merchantRunRepo)
                         contractClient.SetNewID(uuid.NewString)
+                        // Per fix #2: wire lifecycle into B2B ContractClient too.
+                        contractClient.SetLifecycle(services.NewAIRunLifecycle(merchantRunRepo))
                         // Per contract 11 §2, the dedicated MerchantContextBuilder
                         // is separate from the B2C AutoReplyContextBuilder.
                         merchantContextBuilder := services.NewMerchantContextBuilder(

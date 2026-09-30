@@ -638,6 +638,19 @@ type ContractRuntime interface {
         DecideContract(ctx context.Context, input ContractRuntimeInput) (ContractRuntimeOutput, error)
 }
 
+// AIRunLifecyclePort is the minimal interface ContractClient needs to
+// transition the AI Run lifecycle during the Tool Loop. Per fix #2:
+// ContractClient (in gemini package) can't import services.AIRunLifecycle
+// (would create a cycle). This abstraction lets the caller wire the
+// existing AIRunLifecycle into ContractClient without a cycle.
+//
+// Per the spec: "استخدم الموجود: services.AIRunLifecycle"
+// AIRunLifecycle already implements MarkWaitingTool + MarkRunning.
+type AIRunLifecyclePort interface {
+        MarkWaitingTool(ctx context.Context, businessID, runID string) (AIRunRecord, error)
+        MarkRunning(ctx context.Context, businessID, runID string) (AIRunRecord, error)
+}
+
 // ContractRuntimeInput is the input to ContractRuntime.DecideContract.
 type ContractRuntimeInput struct {
         // DecisionInput carries business_id, conversation_id, message text, channel,
@@ -692,4 +705,9 @@ type ContractUsageTelemetry struct {
         // the controller derived latency from EstimatedCostMicros (always 0)
         // — resulting in StartedAt == CompletedAt + latency=0.
         LatencyMs int64
+        // ModelRequests is the actual count of Gemini API calls made during
+        // this DecideContract invocation. Per fix #1: 1 for non-tool path,
+        // N for tool loop (one per sendContractRequest call).
+        // The caller (recordAIUsage) uses this instead of hardcoding 1.
+        ModelRequests int
 }

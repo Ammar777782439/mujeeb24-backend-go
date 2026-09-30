@@ -44,6 +44,15 @@ func (c *ContractClient) SetNewID(fn func() string) {
         c.newID = fn
 }
 
+// SetLifecycle wires the AIRunLifecyclePort for RUNNING → WAITING_TOOL →
+// RUNNING transitions during the Tool Loop. Per fix #2: the caller
+// passes the existing services.AIRunLifecycle (which implements
+// AIRunLifecyclePort). No cycle — ContractClient uses the ports
+// abstraction, not the concrete type.
+func (c *ContractClient) SetLifecycle(lc ports.AIRunLifecyclePort) {
+        c.lifecycle = lc
+}
+
 // buildToolDeclarations extracts tool definitions from the configured
 // capability dispatcher and converts them to Gemini Function Declaration
 // format.
@@ -279,6 +288,8 @@ func (c *ContractClient) runToolLoop(
         totalUsage.Model = rc.model
 
         var lastInteractionID string
+        // Per fix #1: count actual Gemini requests.
+        modelRequestCount := 0
 
         // The loop — no fixed max rounds.
         for {
@@ -292,6 +303,8 @@ func (c *ContractClient) runToolLoop(
                 if err != nil {
                         return ports.ContractRuntimeOutput{}, fmt.Errorf("gemini request in tool loop: %w", err)
                 }
+                // Per fix #1: each sendContractRequest = 1 model request.
+                modelRequestCount++
 
                 // Accumulate usage from this request.
                 accumulateUsage(&totalUsage, resp)
@@ -308,6 +321,7 @@ func (c *ContractClient) runToolLoop(
                         }
 
                         totalUsage.LatencyMs = time.Since(startedAt).Milliseconds()
+                        totalUsage.ModelRequests = modelRequestCount
 
                         return ports.ContractRuntimeOutput{
                                 Proposal: proposal,
@@ -321,41 +335,30 @@ func (c *ContractClient) runToolLoop(
                         }, nil
                 }
 
-                // Function calls detected — mark WAITING_TOOL (if lifecycle wired).
-                // Per the spec: "استخدم الـ lifecycle الموجود. RUNNING → WAITING_TOOL."
-                // The lifecycle is managed by the CALLER (AutoReplyService), not
-                // by ContractClient. ContractClient only persists tool call
-                // records. The caller transitions WAITING_TOOL → RUNNING.
-                //
-                // However, the spec says "استخدم AIRunLifecycle الموجود" — so
-                // ContractClient should transition if the run repo is wired.
-                // But the caller (AutoReplyService.Handle) already owns the
-                // lifecycle + the RunRepository. If ContractClient also transitions,
-                // there's a double-write. To avoid this, ContractClient does NOT
-                // call MarkWaitingTool/MarkRunning — it only persists tool call
-                // records. The caller can observe the tool calls via
-                // ListToolCalls and transition the lifecycle if needed.
-                //
-                // Per the spec's exact wording: "عند انتظار Tool: RUNNING → WAITING_TOOL"
-                // — this is the caller's responsibility (AutoReplyService). ContractClient
-                // signals this by returning tool call results in the output.
+                // Per fix #2: mark WAITING_TOOL before executing tools.
+                if c.lifecycle != nil && runID != "" && businessID != "" {
+                        if _, err := c.lifecycle.MarkWaitingTool(ctx, businessID, runID); err != nil {
+                                log.Printf("[ContractClient] LIFECYCLE_MARK_WAITING_TOOL_FAILED run=%s err=%v", runID, err)
+                        }
+                }
 
                 // Execute all function calls from the response.
                 toolContents, execErr := c.executeToolCalls(ctx, resp, input, businessID, conversationID, runID)
                 if execErr != nil {
-                        // Tool execution failed non-retryably.
                         return ports.ContractRuntimeOutput{}, execErr
                 }
 
+                // Per fix #2: mark RUNNING before sending the next Gemini request.
+                if c.lifecycle != nil && runID != "" && businessID != "" {
+                        if _, err := c.lifecycle.MarkRunning(ctx, businessID, runID); err != nil {
+                                log.Printf("[ContractClient] LIFECYCLE_MARK_RUNNING_FAILED run=%s err=%v", runID, err)
+                        }
+                }
+
                 // Append the tool call response to the contents for the next request.
-                // Per the spec: "يجب الحفاظ على sequence الصحيح:
-                //   assistant/model tool call + tool response → next Gemini request"
                 reqBody.Contents = append(reqBody.Contents, toolContents...)
 
-                // Clear previous_interaction_id for follow-up requests — we're
-                // in the same :generateContent call, not chaining separate
-                // interactions. The InteractionID from the first response is
-                // captured above for the caller to persist.
+                // Clear previous_interaction_id for follow-up requests.
                 reqBody.PreviousInteractionID = ""
                 reqBody.Store = false
         }
