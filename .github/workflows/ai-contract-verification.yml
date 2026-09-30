@@ -1,0 +1,93 @@
+name: AI Contract Verification
+
+on:
+  push:
+    branches:
+      - feat/ai-contracts-cleanup
+  pull_request:
+    branches:
+      - feat/ai-contracts-cleanup
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+  AI_CONFIG_ENCRYPTION_KEY: ci-test-encryption-key-32-bytes-long!!
+
+jobs:
+  build-and-test:
+    name: Build + Vet + Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test (no cache)
+        run: go test ./... -count=1
+
+  race-test:
+    name: Race detector
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOTOOLCHAIN: local
+      AI_CONFIG_ENCRYPTION_KEY: ci-test-encryption-key-32-bytes-long!!
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Test with -race (no cache)
+        run: go test ./... -race -count=1
+
+  gemini-live-smoke:
+    name: Gemini Live Smoke Test (manual only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'workflow_dispatch'
+    env:
+      GOTOOLCHAIN: local
+      AI_CONFIG_ENCRYPTION_KEY: ci-test-encryption-key-32-bytes-long!!
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run Gemini live smoke test
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: go test -v -run TestGeminiLiveSmoke ./internal/adapters/secondary/ai/gemini/

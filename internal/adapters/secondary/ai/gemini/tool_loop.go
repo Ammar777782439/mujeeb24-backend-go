@@ -336,9 +336,14 @@ func (c *ContractClient) runToolLoop(
                 }
 
                 // Per fix #2: mark WAITING_TOOL before executing tools.
+                // Per the spec: "لا تجعل lifecycle failure مجرد log ويتم تجاهله."
+                // If the lifecycle transition fails, the loop MUST stop —
+                // continuing would mean the run is in an inconsistent state
+                // (RUNNING on the server but tools are executing without the
+                // WAITING_TOOL marker).
                 if c.lifecycle != nil && runID != "" && businessID != "" {
                         if _, err := c.lifecycle.MarkWaitingTool(ctx, businessID, runID); err != nil {
-                                log.Printf("[ContractClient] LIFECYCLE_MARK_WAITING_TOOL_FAILED run=%s err=%v", runID, err)
+                                return ports.ContractRuntimeOutput{}, fmt.Errorf("lifecycle MarkWaitingTool failed (cannot continue tool loop in inconsistent state): %w", err)
                         }
                 }
 
@@ -349,9 +354,11 @@ func (c *ContractClient) runToolLoop(
                 }
 
                 // Per fix #2: mark RUNNING before sending the next Gemini request.
+                // Same rule: failure here stops the loop — the run can't stay
+                // in WAITING_TOOL when tools are already executed.
                 if c.lifecycle != nil && runID != "" && businessID != "" {
                         if _, err := c.lifecycle.MarkRunning(ctx, businessID, runID); err != nil {
-                                log.Printf("[ContractClient] LIFECYCLE_MARK_RUNNING_FAILED run=%s err=%v", runID, err)
+                                return ports.ContractRuntimeOutput{}, fmt.Errorf("lifecycle MarkRunning failed (cannot continue tool loop in inconsistent state): %w", err)
                         }
                 }
 
