@@ -233,8 +233,11 @@ func (c *ContractClient) executeToolCalls(
                 }
         }
 
+        // Per fix #2: the FunctionResponse content must use role="user"
+        // (not "function") per the Gemini generateContent API. The
+        // sequence is: model FunctionCall → user FunctionResponse → Gemini.
         toolResponseContent := contractContent{
-                Role:  "function",
+                Role:  "user",
                 Parts: toolResponseParts,
         }
 

@@ -180,8 +180,8 @@ func (c *ContractClient) DecideContract(ctx context.Context, input ports.Contrac
         // function calling.
         toolDecls := c.buildToolDeclarations()
         if len(toolDecls) > 0 {
-                reqBody.Tools = &contractTools{
-                        FunctionDeclarations: toolDecls,
+                reqBody.Tools = []contractTools{
+                        {FunctionDeclarations: toolDecls},
                 }
         }
 
@@ -507,16 +507,18 @@ type contractGeminiRequest struct {
         SystemInstruction     *contractContent         `json:"systemInstruction,omitempty"`
         Contents              []contractContent        `json:"contents"`
         GenerationConfig      contractGenerationConfig `json:"generationConfig"`
-        // Tools carries the function declarations extracted from the
-        // configured AICapabilityDispatcher. Per the spec: "استخرجها من
-        // c.base.Capabilities().Definitions()". When nil, Gemini operates
-        // in structured-output-only mode (no function calling).
-        Tools *contractTools `json:"tools,omitempty"`
+        // Tools is an array of tool objects per Gemini generateContent API.
+        // Each element has a "functionDeclarations" key (camelCase per
+        // Gemini REST API spec). Per fix #1: must be a slice, not a
+        // pointer to a single object.
+        Tools []contractTools `json:"tools,omitempty"`
 }
 
-// contractTools wraps function declarations for the Gemini API.
+// contractTools wraps function declarations for one tools entry.
+// Per fix #1: JSON field is "functionDeclarations" (camelCase) to
+// match the Gemini generateContent REST API.
 type contractTools struct {
-        FunctionDeclarations []contractFunctionDeclaration `json:"function_declarations"`
+        FunctionDeclarations []contractFunctionDeclaration `json:"functionDeclarations"`
 }
 
 type contractGenerationConfig struct {
@@ -537,9 +539,14 @@ type contractContent struct {
 // can include Text (structured output), FunctionCall (tool invocation),
 // or FunctionResponse (tool result sent back).
 type contractPart struct {
-        Text             string                  `json:"text,omitempty"`
+        Text             string                   `json:"text,omitempty"`
         FunctionCall     *contractFunctionCall     `json:"functionCall,omitempty"`
         FunctionResponse *contractFunctionResponse `json:"functionResponse,omitempty"`
+        // Per fix #3: preserve thoughtSignature from Gemini's model
+        // response so it can be sent back unchanged in follow-up requests.
+        // Gemini uses this for internal reasoning continuity — if we drop
+        // it, the model may produce different/worse results on follow-up.
+        ThoughtSignature string `json:"thoughtSignature,omitempty"`
 }
 
 type contractGeminiResponse struct {

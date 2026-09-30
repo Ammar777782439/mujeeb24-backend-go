@@ -295,6 +295,9 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
                 },
                 // Per contract ⑤ §7, pass the Catalog Entity Contract payload (may be nil).
                 EntityContractPayload: s.EntityContractPayload,
+                // Per fix #4: pass the AI Run ID so tool call records are
+                // persisted with the correct run reference during the Tool Loop.
+                AIRunID: run.ID,
         })
         if err != nil {
                 log.Printf("[AutoReply] GEMINI_FAILED business=%s err=%v", businessID, err)
@@ -1201,17 +1204,26 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
         // Per §6: record the per-execution row.
         recordID := s.NewID()
         correlationID := run.ID
+        // Per fix #5: count actual tool calls from the run repository
+        // instead of hardcoding 0. Uses the existing AIRunRepository +
+        // ListToolCalls (no new repository or trace system).
+        toolCallCount := 0
+        if s.RunRepository != nil && run.ID != "" {
+                if toolCalls, tcErr := s.RunRepository.ListToolCalls(ctx, run.ID); tcErr == nil {
+                        toolCallCount = len(toolCalls)
+                }
+        }
         _, err := s.AIUsage.AppendRecord(ctx, ports.AIUsageAppend{
                 ID:                  recordID,
                 BusinessID:          businessID,
                 SubscriptionID:      subscriptionID,
                 Provider:            "google_gemini",
                 Model:               out.Usage.Model,
-                InputTokens:         int64(nonCachedInput),  // non-cached input only
-                CachedInputTokens:   int64(cachedInput),     // cached input separately
+                InputTokens:         int64(nonCachedInput),
+                CachedInputTokens:   int64(cachedInput),
                 OutputTokens:        int64(out.Usage.OutputTokens),
                 ModelRequests:       1,
-                ToolCalls:           0, // TODO: track tool calls when the contract path supports them
+                ToolCalls:           toolCallCount,
                 FinalAIReplies:      finalAIReplies,
                 ProviderCostYER:     providerCostYER,
                 PricingVersion:      pricingVersion,
