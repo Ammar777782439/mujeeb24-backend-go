@@ -35,6 +35,30 @@ ON CONFLICT (id) DO UPDATE SET
     locale = EXCLUDED.locale,
     updated_at = now();
 
+-- Business A runtime policy (resource_version=1 expected by the test's
+-- UpdateRuntimePolicy call). ai_mode='restricted_auto' + allow_auto_reply=true
+-- is the minimum needed so AutoReplyService.Handle does not short-circuit.
+INSERT INTO business_policies (business_id, ai_mode, default_human_review, allow_auto_reply, allow_auto_lead_creation, allow_auto_transaction_draft, allow_auto_confirmation, created_at, updated_at)
+VALUES (
+    '11111111-1111-1111-1111-111111111111',
+    'restricted_auto',
+    false,
+    true,
+    true,
+    true,
+    true,
+    now(),
+    now()
+)
+ON CONFLICT (business_id) DO UPDATE SET
+    ai_mode = EXCLUDED.ai_mode,
+    default_human_review = EXCLUDED.default_human_review,
+    allow_auto_reply = EXCLUDED.allow_auto_reply,
+    allow_auto_lead_creation = EXCLUDED.allow_auto_lead_creation,
+    allow_auto_transaction_draft = EXCLUDED.allow_auto_transaction_draft,
+    allow_auto_confirmation = EXCLUDED.allow_auto_confirmation,
+    updated_at = now();
+
 -- Customer A
 INSERT INTO customers (id, business_id, profile, contact_points, locale_preference, status, created_at, updated_at)
 VALUES (
@@ -228,6 +252,29 @@ ON CONFLICT (id) DO UPDATE SET
     timezone = EXCLUDED.timezone,
     default_currency = EXCLUDED.default_currency,
     locale = EXCLUDED.locale,
+    updated_at = now();
+
+-- Business B runtime policy (same shape as Business A so the scenario
+-- can be run on either business).
+INSERT INTO business_policies (business_id, ai_mode, default_human_review, allow_auto_reply, allow_auto_lead_creation, allow_auto_transaction_draft, allow_auto_confirmation, created_at, updated_at)
+VALUES (
+    '22222222-2222-2222-2222-222222222222',
+    'restricted_auto',
+    false,
+    true,
+    true,
+    true,
+    true,
+    now(),
+    now()
+)
+ON CONFLICT (business_id) DO UPDATE SET
+    ai_mode = EXCLUDED.ai_mode,
+    default_human_review = EXCLUDED.default_human_review,
+    allow_auto_reply = EXCLUDED.allow_auto_reply,
+    allow_auto_lead_creation = EXCLUDED.allow_auto_lead_creation,
+    allow_auto_transaction_draft = EXCLUDED.allow_auto_transaction_draft,
+    allow_auto_confirmation = EXCLUDED.allow_auto_confirmation,
     updated_at = now();
 
 -- Customer B

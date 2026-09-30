@@ -76,7 +76,6 @@ import (
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gemini"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
-        "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/database"
 )
@@ -220,18 +219,18 @@ func runCatalogGroundingScenario(
         // ===== Build the full AutoReplyService wiring (matches bootstrap.api.go) =====
         businessRepo := postgres.NewBusinessRepository(adapter)
 
-        // Ensure the business has an active auto-reply policy (idempotent).
-        if _, err := businessRepo.UpdateRuntimePolicy(ctx, ports.BusinessRuntimePolicyUpdate{
-                BusinessID:                businessID,
-                AIMode:                    strPtr("restricted_auto"),
-                AllowAutoReply:            boolPtr(true),
-                DefaultHumanReview:        boolPtr(false),
-                AllowAutoLeadCreation:     boolPtr(true),
-                AllowAutoTransactionDraft: boolPtr(true),
-                AllowAutoConfirmation:     boolPtr(true),
-        }); err != nil {
-                t.Fatalf("UpdateRuntimePolicy business=%s: %v", businessID, err)
+        // Verify the runtime policy was seeded by the fixture SQL (ai_mode=
+        // 'restricted_auto' + allow_auto_reply=true). The seed upserts the row
+        // with default resource_version=1 per migration 000042.
+        policy, err := businessRepo.GetRuntimePolicy(ctx, businessID)
+        if err != nil {
+                t.Fatalf("GetRuntimePolicy business=%s (seeded fixture missing?): %v", businessID, err)
         }
+        if policy.AIMode == "disabled" || !policy.AllowAutoReply {
+                t.Fatalf("seeded policy misconfigured for business=%s: ai_mode=%s allow_auto_reply=%v",
+                        businessID, policy.AIMode, policy.AllowAutoReply)
+        }
+        t.Logf("policy OK: business=%s ai_mode=%s allow_auto_reply=%v", businessID, policy.AIMode, policy.AllowAutoReply)
 
         // Gemini client + ContractClient (real).
         geminiClient, err := gemini.NewClient(gemini.Config{
@@ -719,10 +718,6 @@ func currencyArabicForms(iso string) []string {
                 return []string{iso}
         }
 }
-
-// strPtr and boolPtr help construct *string / *bool policy fields.
-func strPtr(s string) *string { return &s }
-func boolPtr(b bool) *bool    { return &b }
 
 // execMultiStatement splits a multi-statement SQL string on the ';'
 // terminator and executes each non-empty trimmed statement on its own
