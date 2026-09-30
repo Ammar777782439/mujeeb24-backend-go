@@ -93,3 +93,87 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: go test -tags=gemini_live -v -run TestGeminiLiveSmoke ./internal/adapters/secondary/ai/gemini/
+
+  # Gemini Catalog E2E — REAL Gemini + REAL PostgreSQL + REAL Catalog data.
+  # Per spec §18: this job is workflow_dispatch-only to avoid burning Gemini
+  # quota on every push. It exercises the full production path:
+  # Customer → AutoReplyService.Handle → Gemini → Validation → Outbox → AI Run COMPLETED
+  # and asserts the Final AI Reply is grounded on real PostgreSQL catalog data.
+  gemini-catalog-e2e:
+    name: Gemini Catalog E2E (manual only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    if: github.event_name == 'workflow_dispatch'
+    env:
+      GOTOOLCHAIN: local
+      AI_CONFIG_ENCRYPTION_KEY: ci-test-encryption-key-32-bytes-long!!
+      DATABASE_URL: postgres://mujeeb:mujeeb_e2e_pw@127.0.0.1:5432/mujeeb24_e2e?sslmode=disable
+      GEMINI_MODEL: gemini-3.5-flash-lite
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mujeeb
+          POSTGRES_PASSWORD: mujeeb_e2e_pw
+          POSTGRES_DB: mujeeb24_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mujeeb -d mujeeb24_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if pg_isready -h 127.0.0.1 -p 5432 -U mujeeb -d mujeeb24_e2e; then
+              echo "PostgreSQL is ready."
+              break
+            fi
+            echo "Waiting for PostgreSQL ($i/30)..."
+            sleep 2
+          done
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run migrations
+        run: go run ./cmd/migrate
+
+      - name: Run Gemini Catalog E2E
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          go test \
+            -tags=gemini_e2e \
+            -v \
+            -count=1 \
+            -timeout 10m \
+            -run TestE2E_GeminiCatalogB2CSuccess \
+            ./internal/application/services/
+
+      - name: Dump PostgreSQL state on failure (no secrets)
+        if: failure()
+        env:
+          PGPASSWORD: mujeeb_e2e_pw
+        run: |
+          echo "==== ai_runs ===="
+          psql -h 127.0.0.1 -p 5432 -U mujeeb -d mujeeb24_e2e -c "SELECT id, business_id, status, failure_stage, failure_reason, started_at, completed_at FROM ai_runs WHERE business_id IN ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222') ORDER BY started_at DESC LIMIT 10;" || true
+          echo "==== outbound_messages ===="
+          psql -h 127.0.0.1 -p 5432 -U mujeeb -d mujeeb24_e2e -c "SELECT id, business_id, conversation_id, origin, direction, channel, content_reference FROM outbound_messages WHERE business_id IN ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222') ORDER BY created_at DESC LIMIT 10;" || true
+          echo "==== communication_messages (final AI reply text) ===="
+          psql -h 127.0.0.1 -p 5432 -U mujeeb -d mujeeb24_e2e -c "SELECT id, business_id, outbound_message_id, origin, direction, text_content FROM communication_messages WHERE business_id IN ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222') ORDER BY created_at DESC LIMIT 10;" || true
+          echo "==== ai_gemini_interactions ===="
+          psql -h 127.0.0.1 -p 5432 -U mujeeb -d mujeeb24_e2e -c "SELECT id, ai_run_id, model, started_at, finished_at FROM ai_gemini_interactions WHERE ai_run_id IN (SELECT id FROM ai_runs WHERE business_id IN ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222')) ORDER BY started_at DESC LIMIT 10;" || true
+          echo "==== ai_tool_calls ===="
+          psql -h 127.0.0.1 -p 5432 -U mujeeb -d mujeeb24_e2e -c "SELECT id, ai_run_id, tool_name, latency_ms, created_at FROM ai_tool_calls WHERE ai_run_id IN (SELECT id FROM ai_runs WHERE business_id IN ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222')) ORDER BY created_at DESC LIMIT 10;" || true
