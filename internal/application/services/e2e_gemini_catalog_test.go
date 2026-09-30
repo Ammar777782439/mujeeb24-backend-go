@@ -272,6 +272,15 @@ func runCatalogGroundingScenario(
 	if err != nil {
 		t.Fatalf("gemini.NewContractClient: %v", err)
 	}
+	// Per spec §3 + §4: wire runRepo + newID on the ContractClient so the
+	// centralized telemetry boundary in sendContractRequest records
+	// ai_gemini_interactions + ai_usage_telemetry for EVERY Gemini call.
+	// Without this wiring, the trace.RunID check in sendContractRequest
+	// skips telemetry recording (c.runRepo == nil) and zero rows are written.
+	// This mirrors the production wiring at bootstrap/api.go:246-247.
+	runRepoForTrace := postgres.NewAIRunTraceRepository(adapter)
+	contractClient.SetRunRepository(runRepoForTrace)
+	contractClient.SetNewID(uuid.NewString)
 
 	// Context builder — fetches Catalog data from PostgreSQL BEFORE Gemini.
 	contextBuilder := services.NewAutoReplyContextBuilder(
