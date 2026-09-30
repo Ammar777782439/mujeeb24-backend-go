@@ -41,7 +41,7 @@ jobs:
         run: go vet ./...
 
       - name: Test (no cache)
-        run: go test ./... -count=1
+        run: go test ./... -count=1 -v
 
   race-test:
     name: Race detector
@@ -90,4 +90,4 @@ jobs:
       - name: Run Gemini live smoke test
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: go test -v -run TestGeminiLiveSmoke ./internal/adapters/secondary/ai/gemini/
+        run: go test -tags=gemini_live -v -run TestGeminiLiveSmoke ./internal/adapters/secondary/ai/gemini/
