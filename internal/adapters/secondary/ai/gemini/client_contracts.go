@@ -54,6 +54,12 @@ type ContractClient struct {
         // Per §2: the runtime gets the active config from Configuration abstraction,
         // not from static env vars. If nil, falls back to static fields (bootstrap/tests).
         configProvider ports.AIConfigurationProvider
+        // runRepo (optional) persists tool call records during the Function
+        // Calling Tool Loop. Reuses the SAME AIRunRepository instance wired
+        // into AutoReplyService — no second repository.
+        runRepo ports.AIRunRepository
+        // newID generates UUIDs for tool call records.
+        newID func() string
 }
 
 // resolvedAIConfig holds the effective values for one Gemini call.
@@ -124,6 +130,16 @@ func NewContractClient(base *Client) (*ContractClient, error) {
 // Per contract ④ §4, Structured Output enforces the AIGeminiProposal shape.
 // Per contract ⑧ §8, usage telemetry is captured for AI Trace.
 //
+// Per the Tool Loop spec: when the base Client has a configured
+// AICapabilityDispatcher, tool declarations are extracted from
+// Definitions() and attached to the Gemini request. If Gemini
+// responds with functionCall parts, the loop executes the capability
+// through the dispatcher (with tenant isolation — BusinessID comes
+// from the trusted caller, NOT from Gemini's args), appends the
+// functionResponse, and sends a follow-up request. The loop
+// continues until Gemini returns a final structured proposal, a
+// tool fails non-retryably, or the context deadline expires.
+//
 // This method supersedes the legacy ports.AIRuntime.Decide.
 func (c *ContractClient) DecideContract(ctx context.Context, input ports.ContractRuntimeInput) (ports.ContractRuntimeOutput, error) {
         if err := ctx.Err(); err != nil {
@@ -133,9 +149,6 @@ func (c *ContractClient) DecideContract(ctx context.Context, input ports.Contrac
                 return ports.ContractRuntimeOutput{}, errors.New("AI input text is required")
         }
         // Per §1-2: resolve the ACTIVE runtime configuration from cache/DB.
-        // If configProvider is wired, this reads the dynamic config (model,
-        // API key, limits) that the Platform Admin set. If not wired, falls
-        // back to static env values (bootstrap/tests).
         rc, err := c.resolveConfig(ctx)
         if err != nil {
                 return ports.ContractRuntimeOutput{}, err
@@ -147,6 +160,7 @@ func (c *ContractClient) DecideContract(ctx context.Context, input ports.Contrac
 
         startedAt := time.Now().UTC()
 
+        // Build the initial request.
         reqBody := contractGeminiRequest{
                 Model:                 rc.model,
                 PreviousInteractionID: input.GeminiInteraction.PreviousInteractionID,
@@ -160,6 +174,29 @@ func (c *ContractClient) DecideContract(ctx context.Context, input ports.Contrac
                 },
         }
 
+        // Per the Tool Loop spec: extract tool declarations from the
+        // configured AICapabilityDispatcher. If the dispatcher has
+        // capabilities, attach them to the request so Gemini can invoke
+        // function calling.
+        toolDecls := c.buildToolDeclarations()
+        if len(toolDecls) > 0 {
+                reqBody.Tools = &contractTools{
+                        FunctionDeclarations: toolDecls,
+                }
+        }
+
+        // If tools are configured, run the tool loop. Otherwise, send a
+        // single request (backward-compatible with the pre-tool-loop path).
+        businessID := input.DecisionInput.BusinessID
+        conversationID := input.DecisionInput.ConversationID
+        runID := input.AIRunID
+
+        if len(toolDecls) > 0 {
+                // Tool Loop path.
+                return c.runToolLoop(ctx, reqBody, rc, input, businessID, conversationID, runID, startedAt)
+        }
+
+        // Non-tool path (backward compatible — same as before).
         resp, err := c.sendContractRequest(ctx, reqBody, rc)
         if err != nil {
                 return ports.ContractRuntimeOutput{}, err
@@ -183,8 +220,9 @@ func (c *ContractClient) DecideContract(ctx context.Context, input ports.Contrac
                         InputTokens:         resp.UsageMetadata.PromptTokenCount,
                         CachedTokens:        resp.UsageMetadata.CachedContentTokenCount,
                         OutputTokens:        resp.UsageMetadata.CandidatesTokenCount,
-                        Model:               rc.model, // per §11: usage records the actual model that executed this request
-                        EstimatedCostMicros: 0, // computed by caller using pricing table
+                        Model:               rc.model,
+                        EstimatedCostMicros: 0,
+                        LatencyMs:           latencyMs,
                 },
                 LatencyMs: latencyMs,
         }, nil
@@ -469,6 +507,16 @@ type contractGeminiRequest struct {
         SystemInstruction     *contractContent         `json:"systemInstruction,omitempty"`
         Contents              []contractContent        `json:"contents"`
         GenerationConfig      contractGenerationConfig `json:"generationConfig"`
+        // Tools carries the function declarations extracted from the
+        // configured AICapabilityDispatcher. Per the spec: "استخرجها من
+        // c.base.Capabilities().Definitions()". When nil, Gemini operates
+        // in structured-output-only mode (no function calling).
+        Tools *contractTools `json:"tools,omitempty"`
+}
+
+// contractTools wraps function declarations for the Gemini API.
+type contractTools struct {
+        FunctionDeclarations []contractFunctionDeclaration `json:"function_declarations"`
 }
 
 type contractGenerationConfig struct {
@@ -485,8 +533,13 @@ type contractContent struct {
         Parts []contractPart `json:"parts"`
 }
 
+// contractPart carries one part of a content block. Gemini responses
+// can include Text (structured output), FunctionCall (tool invocation),
+// or FunctionResponse (tool result sent back).
 type contractPart struct {
-        Text string `json:"text,omitempty"`
+        Text             string                  `json:"text,omitempty"`
+        FunctionCall     *contractFunctionCall     `json:"functionCall,omitempty"`
+        FunctionResponse *contractFunctionResponse `json:"functionResponse,omitempty"`
 }
 
 type contractGeminiResponse struct {

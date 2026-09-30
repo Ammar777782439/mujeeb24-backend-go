@@ -654,6 +654,12 @@ type ContractRuntimeInput struct {
         // dependency between ports and services (where CatalogEntityContractPayload
         // is defined). The runtime passes it through to Gemini as system_instruction.
         EntityContractPayload []byte
+
+        // AIRunID carries the current AI Run ID for tool call trace persistence.
+        // Per the Tool Loop spec: enables ContractClient to persist
+        // AIToolCallRecord rows linked to the correct run. Empty when
+        // the caller doesn't have a run (tests).
+        AIRunID string
 }
 
 // ContractRuntimeOutput is the output of ContractRuntime.DecideContract.

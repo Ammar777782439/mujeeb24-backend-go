@@ -227,6 +227,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 // The legacy Client.Decide method is no longer used for AutoReply.
                 var contractRuntime ports.ContractRuntime
                 var geminiClient *gemini.Client
+                var runRepo ports.AIRunRepository
                 if gc, ok := external.AIRuntime.(*gemini.Client); ok {
                         geminiClient = gc
                         cc, err := gemini.NewContractClient(geminiClient)
@@ -236,6 +237,14 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                         // Per §1: wire the dynamic config provider so every DecideContract
                         // call reads the ACTIVE config from cache/DB.
                         cc.SetConfigurationProvider(aiConfigCache)
+                        // Per the Tool Loop spec: wire the SAME runRepo
+                        // instance into the ContractClient so tool call
+                        // records are persisted during function calling.
+                        // Reuses the existing postgres.NewAIRunTraceRepository —
+                        // no second repository.
+                        runRepo = postgres.NewAIRunTraceRepository(database)
+                        cc.SetRunRepository(runRepo)
+                        cc.SetNewID(uuid.NewString)
                         contractRuntime = cc
                 } else {
                         // Fallback for openaicompatible.Client or other AIRuntime
@@ -254,8 +263,13 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                         outboxStore,
                         database,
                 )
-                // Per contract ⑧ §5, wire the AI Run trace repository.
-                service.RunRepository = postgres.NewAIRunTraceRepository(database)
+                // Per contract ⑧ §5, wire the AI Run trace repository
+                // (reuse the one created above for the ContractClient).
+                if runRepo != nil {
+                        service.RunRepository = runRepo
+                } else {
+                        service.RunRepository = postgres.NewAIRunTraceRepository(database)
+                }
         // Per AIUsageTokenTelemetry.md §6: wire the telemetry pipeline so
         // every Gemini call's tokens + cost are recorded to ai_usage_records
         // and flow through to the Platform Admin AI Usage view.
@@ -559,6 +573,11 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                         }
                         // Per §1: wire the dynamic config provider into B2B ContractClient.
                         contractClient.SetConfigurationProvider(aiConfigCache)
+                        // Per the Tool Loop spec: wire runRepo + newID
+                        // into the B2B ContractClient too (same as B2C).
+                        merchantRunRepo := postgres.NewAIRunTraceRepository(database)
+                        contractClient.SetRunRepository(merchantRunRepo)
+                        contractClient.SetNewID(uuid.NewString)
                         // Per contract 11 §2, the dedicated MerchantContextBuilder
                         // is separate from the B2C AutoReplyContextBuilder.
                         merchantContextBuilder := services.NewMerchantContextBuilder(
