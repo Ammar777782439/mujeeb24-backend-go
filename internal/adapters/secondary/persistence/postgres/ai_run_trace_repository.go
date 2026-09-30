@@ -424,6 +424,18 @@ func (r *AIRunTraceRepository) ListToolCalls(ctx context.Context, runID string) 
 }
 
 // CreateGeminiInteraction persists an interaction trace per contract ⑧ §6.
+//
+// Per migration 000066, attempt_id is nullable (CreateAttempt is not always
+// called before a Gemini interaction is recorded — e.g., the B2C non-tool
+// path in ContractClient.sendContractRequest). The SQL uses
+// NULLIF($3::text,”)::uuid so an empty AttemptID string is stored as NULL
+// rather than failing the UUID cast.
+//
+// finished_at is now populated on INSERT (previously only started_at was
+// written, leaving finished_at NULL forever). The centralized telemetry
+// boundary in ContractClient.sendContractRequest records the Gemini call
+// after the HTTP response is received, so finished_at is known at INSERT
+// time.
 func (r *AIRunTraceRepository) CreateGeminiInteraction(ctx context.Context, interaction ports.AIGeminiInteractionRecord) (ports.AIGeminiInteractionRecord, error) {
 	if r.adapter == nil {
 		return ports.AIGeminiInteractionRecord{}, errors.New("postgres adapter is not configured")
@@ -434,14 +446,14 @@ func (r *AIRunTraceRepository) CreateGeminiInteraction(ctx context.Context, inte
 	}
 	const q = `INSERT INTO ai_gemini_interactions
         (id, ai_run_id, attempt_id, gemini_interaction_id, previous_interaction_id, model,
-         system_instruction_hash, tools_hash, generation_config_hash, started_at, created_at)
-        VALUES ($1::uuid,$2::uuid,$3::uuid,$4,NULLIF($5,''),$6,NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10,$11)`
+         system_instruction_hash, tools_hash, generation_config_hash, started_at, finished_at, created_at)
+        VALUES ($1::uuid,$2::uuid,NULLIF($3::text,'')::uuid,$4,NULLIF($5,''),$6,NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10,$11,$12)`
 	_, err = executor.Exec(ctx, q,
 		interaction.ID, interaction.AIRunID, interaction.AttemptID,
 		interaction.GeminiInteractionID, interaction.PreviousInteractionID,
 		interaction.Model, interaction.SystemInstructionHash,
 		interaction.ToolsHash, interaction.GenerationConfigHash,
-		interaction.StartedAt, interaction.CreatedAt,
+		interaction.StartedAt, interaction.FinishedAt, interaction.CreatedAt,
 	)
 	if err != nil {
 		return ports.AIGeminiInteractionRecord{}, fmt.Errorf("insert ai_gemini_interaction: %w", err)
