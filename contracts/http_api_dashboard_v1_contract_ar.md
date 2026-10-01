@@ -487,7 +487,7 @@ Customer قد يأتي من Channel، لكن Dashboard يستطيع عرضه و�
 | `GET` | `/businesses/{business_id}/catalog-items/{item_id}/variants` | all members | status, cursor, limit | `ListVariants` | `200` |
 | `PATCH` | `/businesses/{business_id}/variants/{variant_id}` | admin/owner | fields + `If-Match` | `UpdateVariant` | `200` |
 
-لا يوجد حذف تدميري لـCatalog أو Item أو Offer أو Variant بعد دخولها في Transaction؛ نستخدم `archived` أو status transition. `attributes` لا تعتبر صحيحة لمجرد أنها JSON؛ Application يتحقق منها مقابل `attribute_schema_id` و`attribute_schema_version`.
+لا يوجد حذف تدميري لـCatalog أو Item أو Offer أو Variant بعد دخولها في Transaction؛ نستخدم `archived` أو status transition. `attributes` هي JSONB object ديناميكي؛ المفتاح English `snake_case` والقيمة أي JSON value صالحة. لا يشترط وجود key كسجل في `attribute_definitions`. `attribute_schema_id` و`attribute_schema_version` اختياريان ويستخدمان عند توفر Schema مُدار.
 
 ## 11. Leads API
 
