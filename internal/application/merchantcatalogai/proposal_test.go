@@ -55,3 +55,54 @@ func TestProposalNormalizeResolvedEmptyUpdate(t *testing.T) {
 		t.Fatalf("normalized proposal must validate: %v", err)
 	}
 }
+
+
+func TestReadOnlyCapabilityRegistryRejectsUnknownMutationReference(t *testing.T) {
+	registry := &ReadOnlyCapabilityRegistry{
+		evidenceReferences: map[string]struct{}{
+			"item-1":  {},
+			"offer-1": {},
+		},
+	}
+
+	proposal := Proposal{
+		SchemaVersion: 1,
+		Status:        StatusResolved,
+		Operation:     OperationUpdate,
+		ResponseText:  "أعددت اقتراح التعديل.",
+		EvidenceReferences: []string{"item-1"},
+		Update: &UpdateOperation{
+			ItemID: "item-1",
+			ExistingOffers: []OfferUpdate{{ID: "offer-unknown"}},
+		},
+	}
+
+	if err := registry.ValidateProposalReferences(proposal); err == nil {
+		t.Fatal("expected unknown offer reference to be rejected")
+	}
+}
+
+func TestReadOnlyCapabilityRegistryAcceptsEvidenceBackedUpdate(t *testing.T) {
+	registry := &ReadOnlyCapabilityRegistry{
+		evidenceReferences: map[string]struct{}{
+			"item-1":  {},
+			"offer-1": {},
+		},
+	}
+
+	proposal := Proposal{
+		SchemaVersion:      1,
+		Status:             StatusResolved,
+		Operation:          OperationUpdate,
+		ResponseText:       "أعددت اقتراح تعديل السعر.",
+		EvidenceReferences: []string{"item-1", "offer-1"},
+		Update: &UpdateOperation{
+			ItemID:          "item-1",
+			ExistingOffers:  []OfferUpdate{{ID: "offer-1"}},
+		},
+	}
+
+	if err := registry.ValidateProposalReferences(proposal); err != nil {
+		t.Fatalf("expected evidence-backed update to validate: %v", err)
+	}
+}
