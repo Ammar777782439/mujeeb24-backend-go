@@ -194,7 +194,8 @@ type GetCatalogEntityContractQueryService struct{}
 // Handle returns the Catalog Entity Contract descriptor. The descriptor
 // now carries all six enum dimensions (PricingModes, AvailabilityModes,
 // FulfillmentModes, AvailabilityStatuses, PriceVerificationStatuses,
-// ItemStatuses) per contract ⑤ §8 + migration 000016/000018.
+// ItemStatuses) per contract ⑤ §8 + migration 000016. Offer status is a separate
+// CatalogEntityContract field at the entity level.
 func (s GetCatalogEntityContractQueryService) Handle(ctx context.Context, query queries.GetCatalogEntityContractQuery) (commands.CatalogEntityContractView, error) {
 	d := DefaultCatalogEntityContractDescriptor()
 	return commands.CatalogEntityContractView{
