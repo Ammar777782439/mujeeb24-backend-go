@@ -358,16 +358,17 @@ func (r *MerchantCatalogRuntime) sendInteraction(ctx context.Context, reqBody me
 	defer cancel()
 
 	url := fmt.Sprintf("%s/v1beta/interactions", strings.TrimRight(baseURL, "/"))
-	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, url, bytes.NewReader(payload))
-	if err != nil {
-		return merchantCatalogInteractionResponse{}, fmt.Errorf("build Gemini interaction request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-goog-api-key", apiKey)
 
 	const maxAttempts = 4
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, url, bytes.NewReader(payload))
+		if err != nil {
+			return merchantCatalogInteractionResponse{}, fmt.Errorf("build Gemini interaction request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("x-goog-api-key", apiKey)
+
 		resp, err := r.httpClient.Do(req)
 		if err != nil {
 			return merchantCatalogInteractionResponse{}, fmt.Errorf("merchant catalog Gemini interaction: %w", err)
