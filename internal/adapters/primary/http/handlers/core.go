@@ -252,6 +252,21 @@ func mapApplicationError(err error) error {
         }
         var typed *appErrors.Error
         if !errors.As(err, &typed) {
+                var kinded interface{ ErrorKind() string }
+                if errors.As(err, &kinded) {
+                        switch kinded.ErrorKind() {
+                        case "not_found":
+                                typed = appErrors.New(appErrors.CodeNotFound, err.Error())
+                        case "conflict":
+                                typed = appErrors.New(appErrors.CodeConflict, err.Error())
+                        case "invalid":
+                                typed = appErrors.New(appErrors.CodeValidation, err.Error())
+                        case "stale":
+                                typed = appErrors.New(appErrors.CodeStaleResource, err.Error())
+                        }
+                }
+        }
+        if typed == nil {
                 return &dashboardHTTPError{ErrorEnvelope: contract.ErrorEnvelope{Error: contract.ErrorBody{Code: "internal_error", Message: "internal error"}}, status: 500}
         }
         status := 500

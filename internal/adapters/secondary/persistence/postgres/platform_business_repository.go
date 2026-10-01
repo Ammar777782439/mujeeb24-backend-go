@@ -32,7 +32,20 @@ func NewPlatformBusinessRepository(adapter *Adapter) *PlatformBusinessRepository
         return &PlatformBusinessRepository{adapter: adapter}
 }
 
-const platformBusinessSelectColumns = `b.id::text, b.name, b.slug, b.status, b.created_at, b.updated_at`
+const platformBusinessSelectColumns = `b.id::text, b.name, b.slug, b.status,
+       (SELECT COALESCE(NULLIF(p.email, ''), p.display_name)
+        FROM business_memberships bm
+        JOIN principals p ON bm.principal_id = p.id
+        WHERE bm.business_id = b.id AND bm.role = 'owner' AND bm.status = 'active'
+        ORDER BY bm.created_at ASC
+        LIMIT 1) AS owner_identity_summary,
+       (SELECT p.code || ' (v' || p.version || ') - ' || s.status
+        FROM subscriptions s
+        JOIN plans p ON s.plan_id = p.id
+        WHERE s.business_id = b.id
+        ORDER BY s.created_at DESC
+        LIMIT 1) AS subscription_summary,
+       b.created_at, b.updated_at`
 
 // Create inserts a new business row with status='pending_setup'.
 // Per Contract §9: the Platform Admin creates the business; the owner
@@ -67,17 +80,17 @@ func (r *PlatformBusinessRepository) Create(ctx context.Context, create ports.Pl
         if err != nil {
                 return ports.PlatformBusinessRecord{}, err
         }
-        var record ports.PlatformBusinessRecord
+        var insertedID string
         err = executor.QueryRow(ctx,
                 `INSERT INTO businesses (id, name, slug, status, vertical_type, timezone, default_currency, locale, created_at, updated_at)
                  VALUES ($1::uuid, $2, $3, 'pending_setup', $4, $5, $6, $7, $8, $8)
-                 RETURNING `+platformBusinessSelectColumns,
+                 RETURNING id::text`,
                 create.ID, create.Name, create.Slug, create.VerticalType, create.Timezone, create.DefaultCurrency, create.Locale, create.Now,
-        ).Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.CreatedAt, &record.UpdatedAt)
+        ).Scan(&insertedID)
         if err != nil {
                 return ports.PlatformBusinessRecord{}, classifyRepositoryWriteError("platform_business.create", err)
         }
-        return record, nil
+        return r.GetByID(ctx, insertedID)
 }
 
 func (r *PlatformBusinessRepository) List(ctx context.Context, filter ports.PlatformBusinessListFilter) (ports.PlatformBusinessPage, error) {
@@ -109,7 +122,7 @@ func (r *PlatformBusinessRepository) List(ctx context.Context, filter ports.Plat
         items := make([]ports.PlatformBusinessRecord, 0, filter.Limit)
         for rows.Next() {
                 var record ports.PlatformBusinessRecord
-                if err := rows.Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.CreatedAt, &record.UpdatedAt); err != nil {
+                if err := rows.Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.OwnerIdentitySummary, &record.SubscriptionSummary, &record.CreatedAt, &record.UpdatedAt); err != nil {
                         return ports.PlatformBusinessPage{}, &RepositoryError{Operation: "platform_business.list", Kind: RepositoryInvalid, Err: err}
                 }
                 items = append(items, record)
@@ -135,7 +148,7 @@ func (r *PlatformBusinessRepository) GetByID(ctx context.Context, businessID str
         err = executor.QueryRow(ctx,
                 `SELECT `+platformBusinessSelectColumns+` FROM businesses b WHERE b.id = $1::uuid`,
                 businessID,
-        ).Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.CreatedAt, &record.UpdatedAt)
+        ).Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.OwnerIdentitySummary, &record.SubscriptionSummary, &record.CreatedAt, &record.UpdatedAt)
         if err != nil {
                 if errors.Is(err, pgx.ErrNoRows) {
                         return ports.PlatformBusinessRecord{}, &RepositoryError{Operation: "platform_business.get", Kind: RepositoryNotFound, Err: err}
@@ -198,13 +211,13 @@ func (r *PlatformBusinessRepository) transition(ctx context.Context, op, busines
                 return ports.PlatformBusinessRecord{}, err
         }
         // Build the IN list using the ANY($3::text[]) idiom for parameterized safety.
-        var record ports.PlatformBusinessRecord
+        var updatedID string
         err = executor.QueryRow(ctx,
                 `UPDATE businesses SET status = $2, updated_at = $3
                  WHERE id = $1::uuid AND status = ANY($4::text[])
-                 RETURNING `+platformBusinessSelectColumns,
+                 RETURNING id::text`,
                 businessID, target, now, expectedFrom,
-        ).Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.CreatedAt, &record.UpdatedAt)
+        ).Scan(&updatedID)
         if err != nil {
                 if errors.Is(err, pgx.ErrNoRows) {
                         // Distinguish not-found vs invalid transition with a follow-up probe.
@@ -223,7 +236,7 @@ func (r *PlatformBusinessRepository) transition(ctx context.Context, op, busines
                 }
                 return ports.PlatformBusinessRecord{}, &RepositoryError{Operation: op, Kind: RepositoryInvalid, Err: err}
         }
-        return record, nil
+        return r.GetByID(ctx, updatedID)
 }
 
 var _ ports.PlatformBusinessLifecyclePort = (*PlatformBusinessRepository)(nil)
