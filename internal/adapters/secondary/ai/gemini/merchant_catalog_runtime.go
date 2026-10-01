@@ -2,9 +2,11 @@ package gemini
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 	"time"
 
@@ -59,68 +61,6 @@ func (r *MerchantCatalogRuntime) SetNewID(newID func() string) {
 	if newID != nil {
 		r.newID = newID
 	}
-}
-
-type merchantCatalogInteractionRequest struct {
-	Model                 string                              `json:"model"`
-	Store                 bool                                `json:"store"`
-	Input                 any                                 `json:"input"`
-	SystemInstruction     string                              `json:"system_instruction,omitempty"`
-	Tools                 []merchantCatalogInteractionTool    `json:"tools,omitempty"`
-	ResponseFormat        *merchantCatalogInteractionFormat  `json:"response_format,omitempty"`
-	GenerationConfig      *merchantCatalogGenerationConfig   `json:"generation_config,omitempty"`
-	PreviousInteractionID string                              `json:"previous_interaction_id,omitempty"`
-}
-
-type merchantCatalogInteractionTool struct {
-	Type        string         `json:"type"`
-	Name        string         `json:"name,omitempty"`
-	Description string         `json:"description,omitempty"`
-	Parameters  map[string]any `json:"parameters,omitempty"`
-}
-
-type merchantCatalogInteractionFormat struct {
-	Type     string         `json:"type"`
-	MimeType string         `json:"mime_type"`
-	Schema   map[string]any `json:"schema"`
-}
-
-type merchantCatalogGenerationConfig struct {
-	MaxOutputTokens int    `json:"max_output_tokens,omitempty"`
-	ThinkingLevel   string `json:"thinking_level,omitempty"`
-}
-
-type merchantCatalogInteractionResponse struct {
-	ID             string                         `json:"id"`
-	Status         string                         `json:"status"`
-	OutputText     string                         `json:"output_text,omitempty"`
-	Steps          []merchantCatalogInteractionStep `json:"steps,omitempty"`
-	Usage          merchantCatalogUsage            `json:"usage,omitempty"`
-}
-
-type merchantCatalogInteractionStep struct {
-	Type       string          `json:"type"`
-	ID         string          `json:"id,omitempty"`
-	Name       string          `json:"name,omitempty"`
-	Arguments  json.RawMessage `json:"arguments,omitempty"`
-	Result     json.RawMessage `json:"result,omitempty"`
-	Content    []merchantCatalogOutputPart `json:"content,omitempty"`
-}
-
-type merchantCatalogOutputPart struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
-}
-
-type merchantCatalogUsage struct {
-	InputTokens  int `json:"total_input_tokens,omitempty"`
-	OutputTokens int `json:"total_output_tokens,omitempty"`
-}
-
-type merchantCatalogFunctionCall struct {
-	ID        string
-	Name      string
-	Arguments json.RawMessage
 }
 
 func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatalogai.RuntimeInput) (merchantcatalogai.Proposal, error) {
