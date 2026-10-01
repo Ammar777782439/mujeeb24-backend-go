@@ -274,3 +274,73 @@ func TestProposalValidateCreateOfferProvenance(t *testing.T) {
 		})
 	}
 }
+
+
+func TestProposalValidateAllowsDynamicAttributesWithoutSchema(t *testing.T) {
+	proposal := Proposal{
+		SchemaVersion: ProposalSchemaVersion,
+		Status:        StatusResolved,
+		Operation:     OperationCreate,
+		ResponseText:  "أعددت اقتراح إضافة المنتج.",
+		Create: &ItemCreate{
+			Name:                  "ساعة",
+			ItemType:              "physical_good",
+			PricingMode:            "fixed",
+			AvailabilityMode:      "always_available",
+			FulfillmentMode:       "delivery",
+			RequiresConfirmation: false,
+			Attributes: map[string]any{
+				"water_resistant": true,
+				"warranty_period": map[string]any{"value": 1, "unit": "year"},
+				"custom_value":    []any{"A", 12, false},
+			},
+			Offers: []OfferCreate{{
+				Name:               DefaultOfferName,
+				NameSource:         OfferNameSourceSystemDefault,
+				PricingMode:        "fixed",
+				Amount:             stringPtr("20000"),
+				PriceSource:        OfferPriceSourceMerchantStated,
+				Currency:            stringPtr("YER"),
+				AvailabilityMode:   "always_available",
+				AvailabilityStatus: "available",
+				FulfillmentMode:    "delivery",
+				Status:             "active",
+			}},
+		},
+	}
+	if err := proposal.Validate(); err != nil {
+		t.Fatalf("dynamic attributes without schema must validate: %v", err)
+	}
+}
+
+func TestProposalValidateRejectsNonEnglishAttributeKey(t *testing.T) {
+	proposal := Proposal{
+		SchemaVersion: ProposalSchemaVersion,
+		Status:        StatusResolved,
+		Operation:     OperationCreate,
+		ResponseText:  "أعددت الاقتراح.",
+		Create: &ItemCreate{
+			Name:                  "ساعة",
+			ItemType:              "physical_good",
+			PricingMode:            "fixed",
+			AvailabilityMode:      "always_available",
+			FulfillmentMode:       "delivery",
+			Attributes:             map[string]any{"مقاوم_للماء": true},
+			Offers: []OfferCreate{{
+				Name:               DefaultOfferName,
+				NameSource:         OfferNameSourceSystemDefault,
+				PricingMode:        "fixed",
+				Amount:             stringPtr("20000"),
+				PriceSource:        OfferPriceSourceMerchantStated,
+				Currency:            stringPtr("YER"),
+				AvailabilityMode:   "always_available",
+				AvailabilityStatus: "available",
+				FulfillmentMode:    "delivery",
+				Status:             "active",
+			}},
+		},
+	}
+	if err := proposal.Validate(); err == nil {
+		t.Fatal("expected non-English attribute key to be rejected")
+	}
+}
