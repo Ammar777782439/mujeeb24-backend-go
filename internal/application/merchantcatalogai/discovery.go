@@ -13,14 +13,16 @@ import (
 type ReadOnlyCapabilityRegistry struct {
 	capabilities       map[string]ports.AICapability
 	selectedCatalogID  string
-	evidenceReferences map[string]struct{}
+	evidenceReferences       map[string]struct{}
+	attributeSchemaReferences map[string]struct{}
 }
 
 func NewReadOnlyCapabilityRegistry(repository ports.CatalogRepository, selectedCatalogID string) *ReadOnlyCapabilityRegistry {
 	r := &ReadOnlyCapabilityRegistry{
 		capabilities:       make(map[string]ports.AICapability),
 		selectedCatalogID:  strings.TrimSpace(selectedCatalogID),
-		evidenceReferences: make(map[string]struct{}),
+		evidenceReferences:        make(map[string]struct{}),
+		attributeSchemaReferences: make(map[string]struct{}),
 	}
 	if repository == nil {
 		return r
@@ -29,6 +31,7 @@ func NewReadOnlyCapabilityRegistry(repository ports.CatalogRepository, selectedC
 	r.capabilities["merchant_catalog_get_item"] = getItemCapability{repository: repository, selectedCatalogID: r.selectedCatalogID}
 	r.capabilities["merchant_catalog_list_variants"] = listVariantsCapability{repository: repository, selectedCatalogID: r.selectedCatalogID}
 	r.capabilities["merchant_catalog_list_offers"] = listOffersCapability{repository: repository, selectedCatalogID: r.selectedCatalogID}
+	r.capabilities["merchant_catalog_list_attribute_schemas"] = listAttributeSchemasCapability{repository: repository}
 	return r
 }
 
@@ -62,6 +65,17 @@ func (r *ReadOnlyCapabilityRegistry) Execute(ctx context.Context, execCtx ports.
 	for _, evidence := range result.OfferEvidence {
 		if strings.TrimSpace(evidence.Reference) != "" {
 			r.evidenceReferences[evidence.Reference] = struct{}{}
+		}
+	}
+	if schemas, ok := result.Data.(map[string]any); ok {
+		if raw, ok := schemas["attribute_schemas"].([]any); ok {
+			for _, entry := range raw {
+				if schema, ok := entry.(map[string]any); ok {
+					if id, ok := schema["id"].(string); ok && strings.TrimSpace(id) != "" {
+						r.attributeSchemaReferences[id] = struct{}{}
+					}
+				}
+			}
 		}
 	}
 	return result, nil
@@ -121,6 +135,76 @@ func (r *ReadOnlyCapabilityRegistry) ValidateProposalReferences(p Proposal) erro
 	}
 	return nil
 }
+
+// listAttributeSchemasCapability exposes tenant-scoped AttributeSchema definitions
+// to the B2B authoring agent. It is read-only; schema creation remains outside
+// the Merchant Catalog AI runtime.
+type listAttributeSchemasCapability struct {
+	repository ports.CatalogRepository
+}
+
+func (c listAttributeSchemasCapability) Definition() ports.AICapabilityDefinition {
+	return ports.AICapabilityDefinition{
+		Name: "merchant_catalog_list_attribute_schemas",
+		Description: "List AttributeSchema versions and their definitions for the current business. Use this before mapping merchant-supplied specifications into CatalogItem.attributes or Variant.attributes. This is read-only and tenant-scoped.",
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"name": map[string]any{"type": "string", "description": "Optional schema name filter."},
+				"version": map[string]any{"type": "integer", "description": "Optional exact schema version."},
+			},
+		},
+	}
+}
+
+func (c listAttributeSchemasCapability) Execute(ctx context.Context, execCtx ports.AICapabilityExecutionContext, rawParams []byte) (ports.AICapabilityResult, error) {
+	var params struct {
+		Name string ` + "`json:\"name\"`" + `
+		Version *int ` + "`json:\"version\"`" + `
+	}
+	if len(rawParams) > 0 {
+		if err := json.Unmarshal(rawParams, &params); err != nil {
+			return ports.AICapabilityResult{}, err
+		}
+	}
+	page, err := c.repository.ListAttributeSchemas(ctx, execCtx.BusinessID, strings.TrimSpace(params.Name), params.Version, 100, "")
+	if err != nil {
+		return ports.AICapabilityResult{}, err
+	}
+	schemas := make([]map[string]any, 0, len(page.Items))
+	for _, schema := range page.Items {
+		definitions := make([]map[string]any, 0, len(schema.Definitions))
+		for _, definition := range schema.Definitions {
+			var rules any
+			if len(definition.ValidationRules) > 0 {
+				_ = json.Unmarshal(definition.ValidationRules, &rules)
+			}
+			definitions = append(definitions, map[string]any{
+				"id": definition.ID,
+				"key": definition.Key,
+				"label": definition.Label,
+				"data_type": definition.DataType,
+				"required": definition.Required,
+				"searchable": definition.Searchable,
+				"validation_rules": rules,
+				"display_order": definition.DisplayOrder,
+			})
+		}
+		schemas = append(schemas, map[string]any{
+			"id": schema.ID,
+			"name": schema.Name,
+			"version": schema.Version,
+			"definitions": definitions,
+		})
+	}
+	return ports.AICapabilityResult{
+		Data: map[string]any{"attribute_schemas": schemas, "has_more": page.HasMore, "next_cursor": page.NextCursor},
+		HasMore: page.HasMore,
+		NextCursor: page.NextCursor,
+		Operation: "list_attribute_schemas",
+	}, nil
+}
+
 
 func (r *ReadOnlyCapabilityRegistry) Get(name string) (ports.AICapability, bool) {
 	capability, ok := r.capabilities[name]
