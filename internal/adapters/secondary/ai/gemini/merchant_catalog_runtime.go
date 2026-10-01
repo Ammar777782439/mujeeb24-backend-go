@@ -442,7 +442,7 @@ func merchantCatalogProposalSchema() map[string]any {
 						"variant_ref": optionalString(),
 						"name": map[string]any{
 							"type": "string",
-							"description": "Commercial offer name, independent from the variant name. If the merchant did not provide a separate commercial label, use the contract default: سعر البيع. Never derive the offer name from a variant name.",
+							"description": fmt.Sprintf("Commercial offer name, independent from the variant name. If the merchant did not provide a separate commercial label, use the contract default: %s. Never derive the offer name from a variant name.", merchantcatalogai.DefaultOfferName),
 						},
 						"pricing_mode": stringField(),
 						"amount": map[string]any{
@@ -508,7 +508,7 @@ func merchantCatalogProposalSchema() map[string]any {
 						},
 						"name": map[string]any{
 							"type": "string",
-							"description": "Commercial offer name, independent from the variant name. If the merchant did not provide a separate commercial label, use the contract default: سعر البيع. Never derive the offer name from a variant name.",
+							"description": fmt.Sprintf("Commercial offer name, independent from the variant name. If the merchant did not provide a separate commercial label, use the contract default: %s. Never derive the offer name from a variant name.", merchantcatalogai.DefaultOfferName),
 						},
 						"pricing_mode": stringField(),
 						"amount": map[string]any{
