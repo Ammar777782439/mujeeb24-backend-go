@@ -201,3 +201,76 @@ func TestProposalValidateRejectsUnknownVariantRef(t *testing.T) {
 }
 
 func stringPtr(value string) *string { return &value }
+
+
+func TestProposalValidateCreateOfferProvenance(t *testing.T) {
+	base := func(offer OfferCreate) Proposal {
+		return Proposal{
+			SchemaVersion: ProposalSchemaVersion,
+			Status: StatusResolved,
+			Operation: OperationCreate,
+			ResponseText: "أعددت الاقتراح.",
+			Create: &ItemCreate{
+				Name: "ساعة",
+				ItemType: "physical_good",
+				PricingMode: "fixed",
+				AvailabilityMode: "always_available",
+				FulfillmentMode: "delivery",
+				Offers: []OfferCreate{offer},
+			},
+		}
+	}
+
+	tests := []struct {
+		name string
+		offer OfferCreate
+		wantErr bool
+	}{
+		{
+			name: "merchant stated concrete price",
+			offer: OfferCreate{
+				Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault,
+				PricingMode: "fixed", Amount: stringPtr("22000"), PriceSource: OfferPriceSourceMerchantStated,
+				AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
+			},
+		},
+		{
+			name: "merchant stated price cannot be quote required",
+			offer: OfferCreate{
+				Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault,
+				PricingMode: "quote_required", Amount: nil, PriceSource: OfferPriceSourceMerchantStated,
+				AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
+			},
+			wantErr: true,
+		},
+		{
+			name: "default offer name cannot contain variant",
+			offer: OfferCreate{
+				Name: "سعر البيع - أحمر", NameSource: OfferNameSourceSystemDefault,
+				PricingMode: "fixed", Amount: stringPtr("25000"), PriceSource: OfferPriceSourceMerchantStated,
+				AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
+			},
+			wantErr: true,
+		},
+		{
+			name: "not stated price stays empty",
+			offer: OfferCreate{
+				Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault,
+				PricingMode: "quote_required", Amount: nil, PriceSource: OfferPriceSourceNotStated,
+				AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := base(tt.offer).Validate()
+			if tt.wantErr && err == nil {
+				t.Fatal("expected validation error")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("unexpected validation error: %v", err)
+			}
+		})
+	}
+}
