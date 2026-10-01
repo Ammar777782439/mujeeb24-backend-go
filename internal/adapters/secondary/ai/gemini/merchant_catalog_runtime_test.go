@@ -52,3 +52,16 @@ func TestMerchantCatalogThinkingLevel(t *testing.T) {
 		t.Fatalf("gemini-3.8-flash thinking level = %q, want empty because its supported levels differ", got)
 	}
 }
+
+func TestIsRetryableGeminiStatus(t *testing.T) {
+	for _, status := range []int{408, 429, 500, 502, 503, 504} {
+		if !isRetryableGeminiStatus(status) {
+			t.Fatalf("status %d should be retryable", status)
+		}
+	}
+	for _, status := range []int{400, 401, 402, 403, 404} {
+		if isRetryableGeminiStatus(status) {
+			t.Fatalf("status %d should not be retryable", status)
+		}
+	}
+}
