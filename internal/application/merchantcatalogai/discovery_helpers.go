@@ -35,22 +35,3 @@ func readLimit(params map[string]any) int {
 	}
 	return limit
 }
-
-func catalogEvidenceBase(item portsCatalogItemProjection) map[string]any {
-	return map[string]any{
-		"id":                        item.ID,
-		"catalog_id":                item.CatalogID,
-		"attribute_schema_id":       item.AttributeSchemaID,
-		"attribute_schema_version":  item.AttributeSchemaVersion,
-		"item_type":                 item.ItemType,
-		"name":                      item.Name,
-		"short_description":         item.ShortDescription,
-		"long_description":          item.LongDescription,
-		"status":                    item.Status,
-		"pricing_mode":              item.PricingMode,
-		"availability_mode":         item.AvailabilityMode,
-		"fulfillment_mode":          item.FulfillmentMode,
-		"requires_confirmation":     item.RequiresConfirmation,
-		"attributes":                json.RawMessage(item.Attributes),
-	}
-}
