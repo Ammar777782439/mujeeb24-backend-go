@@ -112,18 +112,37 @@ func normalizeAttributeSchemaReferences(data any) ([]string, error) {
 		return nil, errors.New("attribute schema discovery payload is missing attribute_schemas")
 	}
 
-	schemas, ok := raw.([]map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("attribute_schemas must be []map[string]any, got %T", raw)
-	}
-
-	ids := make([]string, 0, len(schemas))
-	for index, schema := range schemas {
+	ids := make([]string, 0)
+	appendSchema := func(index int, schema map[string]any) error {
 		id, ok := schema["id"].(string)
 		if !ok || strings.TrimSpace(id) == "" {
-			return nil, fmt.Errorf("attribute_schemas[%d].id is required", index)
+			return fmt.Errorf("attribute_schemas[%d].id is required", index)
 		}
 		ids = append(ids, strings.TrimSpace(id))
+		return nil
+	}
+
+	switch schemas := raw.(type) {
+	case []map[string]any:
+		ids = make([]string, 0, len(schemas))
+		for index, schema := range schemas {
+			if err := appendSchema(index, schema); err != nil {
+				return nil, err
+			}
+		}
+	case []any:
+		ids = make([]string, 0, len(schemas))
+		for index, rawSchema := range schemas {
+			schema, ok := rawSchema.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("attribute_schemas[%d] must be object, got %T", index, rawSchema)
+			}
+			if err := appendSchema(index, schema); err != nil {
+				return nil, err
+			}
+		}
+	default:
+		return nil, fmt.Errorf("attribute_schemas must be an array, got %T", raw)
 	}
 	return ids, nil
 }
