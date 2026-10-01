@@ -419,29 +419,46 @@ func merchantCatalogProposalSchema() map[string]any {
 			"availability_mode": stringField(), "fulfillment_mode": stringField(),
 			"requires_confirmation": map[string]any{"type": "boolean"},
 			"attributes": objectField(),
-			"variants": map[string]any{"type": "array", "items": map[string]any{
-				"type": "object", "properties": map[string]any{"name": stringField(), "attributes": objectField()},
-				"required": []string{"name"},
-			}},
-			"offers": map[string]any{
-			"type": "array",
-			"minItems": 1,
-			"description": "A resolved create proposal must include offer data. Preserve any concrete merchant-supplied price in the offer amount.",
-			"items": map[string]any{
-				"type": "object", "properties": map[string]any{
-					"variant_id": optionalString(), "variant_name": optionalString(), "name": stringField(),
-					"pricing_mode": stringField(),
-					"amount": map[string]any{
-						"type": []string{"string", "null"},
-						"description": "The exact merchant-supplied amount when a concrete price was stated. Use null only when the contract allows an offer without an amount.",
+			"variants": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"ref": stringField(),
+						"name": stringField(),
+						"attributes": objectField(),
 					},
-					"currency": optionalString(),
-					"pricing_unit": optionalString(), "availability_mode": stringField(),
-					"availability_status": stringField(), "fulfillment_mode": stringField(), "status": stringField(),
+					"required": []string{"ref", "name"},
 				},
-				"required": []string{"name", "pricing_mode", "amount", "availability_mode", "availability_status", "fulfillment_mode", "status"},
-			}, 
-		},
+				"description": "New variants are not persisted yet. Each variant requires a unique proposal-local ref used by offers to establish relationships before database IDs exist.",
+			},
+			"offers": map[string]any{
+				"type": "array",
+				"minItems": 1,
+				"description": "A resolved create proposal must include offer data. Preserve any concrete merchant-supplied price in the offer amount.",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"variant_ref": optionalString(),
+						"name": map[string]any{
+							"type": "string",
+							"description": "Commercial offer name, independent from the variant name. If the merchant did not provide a separate commercial label, use the contract default: سعر البيع. Never derive the offer name from a variant name.",
+						},
+						"pricing_mode": stringField(),
+						"amount": map[string]any{
+							"type": []string{"string", "null"},
+							"description": "The exact merchant-supplied amount when a concrete price was stated. Use null only when the contract allows an offer without an amount.",
+						},
+						"currency": optionalString(),
+						"pricing_unit": optionalString(),
+						"availability_mode": stringField(),
+						"availability_status": stringField(),
+						"fulfillment_mode": stringField(),
+						"status": stringField(),
+					},
+					"required": []string{"name", "pricing_mode", "amount", "availability_mode", "availability_status", "fulfillment_mode", "status"},
+				},
+			},
 		},
 		"required": []string{"name", "item_type", "pricing_mode", "availability_mode", "fulfillment_mode", "requires_confirmation", "offers"},
 	}
@@ -458,17 +475,56 @@ func merchantCatalogProposalSchema() map[string]any {
 					"id": stringField(), "name": optionalString(), "attributes": objectField(), "status": optionalString(),
 				}, "required": []string{"id"},
 			}},
-			"new_variants": map[string]any{"type": "array", "items": map[string]any{
-				"type": "object", "properties": map[string]any{"name": stringField(), "attributes": objectField()},
-				"required": []string{"name"},
-			}},
+			"new_variants": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"ref": stringField(),
+						"name": stringField(),
+						"attributes": objectField(),
+					},
+					"required": []string{"ref", "name"},
+				},
+			},
 			"existing_offers": map[string]any{"type": "array", "items": map[string]any{
 				"type": "object", "properties": map[string]any{
 					"id": stringField(), "name": optionalString(), "amount": optionalString(),
 					"availability_status": optionalString(), "status": optionalString(),
 				}, "required": []string{"id"},
 			}},
-			"new_offers": map[string]any{"type": "array", "items": itemCreate["properties"].(map[string]any)["offers"].(map[string]any)["items"]},
+			"new_offers": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"variant_id": map[string]any{
+							"type": "string",
+							"description": "Existing Variant database ID returned by a catalog read tool. Use this only when the new offer targets an already-existing variant.",
+						},
+						"variant_ref": map[string]any{
+							"type": "string",
+							"description": "Proposal-local ref of a new variant in update.new_variants. Use this before the new variant has a database ID.",
+						},
+						"name": map[string]any{
+							"type": "string",
+							"description": "Commercial offer name, independent from the variant name. If the merchant did not provide a separate commercial label, use the contract default: سعر البيع. Never derive the offer name from a variant name.",
+						},
+						"pricing_mode": stringField(),
+						"amount": map[string]any{
+							"type": []string{"string", "null"},
+							"description": "The exact merchant-supplied amount when a concrete price was stated. Use null only when the contract allows an offer without an amount.",
+						},
+						"currency": optionalString(),
+						"pricing_unit": optionalString(),
+						"availability_mode": stringField(),
+						"availability_status": stringField(),
+						"fulfillment_mode": stringField(),
+						"status": stringField(),
+					},
+					"required": []string{"name", "pricing_mode", "amount", "availability_mode", "availability_status", "fulfillment_mode", "status"},
+				},
+			},
 		},
 		"required": []string{"item_id", "changes"},
 	}
@@ -481,7 +537,7 @@ func merchantCatalogProposalSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"schema_version": map[string]any{"type": "integer", "minimum": 1},
+			"schema_version": map[string]any{"type": "integer", "enum": []int{merchantcatalogai.ProposalSchemaVersion}, "description": "Merchant Catalog AI Proposal Contract version."},
 			"status": map[string]any{"type": "string", "enum": []string{"resolved", "ambiguous", "not_found", "needs_more_data"}},
 			"operation": map[string]any{"type": "string", "enum": []string{"create", "update", "delete", "ask_merchant"}},
 			"response_text": stringField(),
