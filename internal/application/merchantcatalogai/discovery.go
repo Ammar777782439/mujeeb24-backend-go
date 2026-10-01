@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -11,9 +13,9 @@ import (
 )
 
 type ReadOnlyCapabilityRegistry struct {
-	capabilities       map[string]ports.AICapability
-	selectedCatalogID  string
-	evidenceReferences       map[string]struct{}
+	capabilities              map[string]ports.AICapability
+	selectedCatalogID         string
+	evidenceReferences        map[string]struct{}
 	attributeSchemaReferences map[string]struct{}
 }
 
@@ -32,6 +34,8 @@ func NewReadOnlyCapabilityRegistry(repository ports.CatalogRepository, selectedC
 	r.capabilities["merchant_catalog_list_variants"] = listVariantsCapability{repository: repository, selectedCatalogID: r.selectedCatalogID}
 	r.capabilities["merchant_catalog_list_offers"] = listOffersCapability{repository: repository, selectedCatalogID: r.selectedCatalogID}
 	r.capabilities["merchant_catalog_list_attribute_schemas"] = listAttributeSchemasCapability{repository: repository}
+	log.Printf("[MerchantCatalogAI][DISCOVERY] registry_initialized selected_catalog=%s tools=%d",
+		r.selectedCatalogID, len(r.capabilities))
 	return r
 }
 
@@ -40,6 +44,8 @@ func (r *ReadOnlyCapabilityRegistry) Definitions() []ports.AICapabilityDefinitio
 	for _, capability := range r.capabilities {
 		out = append(out, capability.Definition())
 	}
+	log.Printf("[MerchantCatalogAI][DISCOVERY] definitions_ready selected_catalog=%s count=%d",
+		r.selectedCatalogID, len(out))
 	return out
 }
 
@@ -48,37 +54,78 @@ func (r *ReadOnlyCapabilityRegistry) Execute(ctx context.Context, execCtx ports.
 	if !ok {
 		return ports.AICapabilityResult{}, errors.New("merchant catalog capability is not available: " + name)
 	}
+	started := time.Now()
+	log.Printf("[MerchantCatalogAI][DISCOVERY] START business=%s session=%s tool=%s params_bytes=%d",
+		execCtx.BusinessID, execCtx.ConversationID, name, len(rawParams))
+
 	result, err := capability.Execute(ctx, execCtx, rawParams)
 	if err != nil {
+		log.Printf("[MerchantCatalogAI][DISCOVERY] ERROR business=%s session=%s tool=%s latency_ms=%d err=%v",
+			execCtx.BusinessID, execCtx.ConversationID, name, time.Since(started).Milliseconds(), err)
 		return ports.AICapabilityResult{}, err
 	}
+
 	for _, evidence := range result.CatalogEvidence {
-		if strings.TrimSpace(evidence.Reference) != "" {
-			r.evidenceReferences[evidence.Reference] = struct{}{}
+		if ref := strings.TrimSpace(evidence.Reference); ref != "" {
+			r.evidenceReferences[ref] = struct{}{}
 		}
 	}
 	for _, evidence := range result.VariantEvidence {
-		if strings.TrimSpace(evidence.Reference) != "" {
-			r.evidenceReferences[evidence.Reference] = struct{}{}
+		if ref := strings.TrimSpace(evidence.Reference); ref != "" {
+			r.evidenceReferences[ref] = struct{}{}
 		}
 	}
 	for _, evidence := range result.OfferEvidence {
-		if strings.TrimSpace(evidence.Reference) != "" {
-			r.evidenceReferences[evidence.Reference] = struct{}{}
+		if ref := strings.TrimSpace(evidence.Reference); ref != "" {
+			r.evidenceReferences[ref] = struct{}{}
 		}
 	}
-	if schemas, ok := result.Data.(map[string]any); ok {
-		if raw, ok := schemas["attribute_schemas"].([]map[string]any); ok {
-			for _, entry := range raw {
-				if schema, ok := entry.(map[string]any); ok {
-					if id, ok := schema["id"].(string); ok && strings.TrimSpace(id) != "" {
-						r.attributeSchemaReferences[id] = struct{}{}
-					}
-				}
-			}
+
+	if name == "merchant_catalog_list_attribute_schemas" {
+		schemaIDs, normalizeErr := normalizeAttributeSchemaReferences(result.Data)
+		if normalizeErr != nil {
+			log.Printf("[MerchantCatalogAI][DISCOVERY] NORMALIZE_ERROR business=%s session=%s tool=%s latency_ms=%d err=%v",
+				execCtx.BusinessID, execCtx.ConversationID, name, time.Since(started).Milliseconds(), normalizeErr)
+			return ports.AICapabilityResult{}, normalizeErr
 		}
+		for _, id := range schemaIDs {
+			r.attributeSchemaReferences[id] = struct{}{}
+		}
+		log.Printf("[MerchantCatalogAI][DISCOVERY] SCHEMAS business=%s session=%s count=%d ids=%v",
+			execCtx.BusinessID, execCtx.ConversationID, len(schemaIDs), schemaIDs)
 	}
+
+	log.Printf("[MerchantCatalogAI][DISCOVERY] OK business=%s session=%s tool=%s operation=%s latency_ms=%d catalog_refs=%d variant_refs=%d offer_refs=%d",
+		execCtx.BusinessID, execCtx.ConversationID, name, result.Operation, time.Since(started).Milliseconds(),
+		len(result.CatalogEvidence), len(result.VariantEvidence), len(result.OfferEvidence))
 	return result, nil
+}
+
+func normalizeAttributeSchemaReferences(data any) ([]string, error) {
+	payload, ok := data.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("attribute schema discovery payload must be object, got %T", data)
+	}
+
+	raw, ok := payload["attribute_schemas"]
+	if !ok {
+		return nil, errors.New("attribute schema discovery payload is missing attribute_schemas")
+	}
+
+	schemas, ok := raw.([]map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("attribute_schemas must be []map[string]any, got %T", raw)
+	}
+
+	ids := make([]string, 0, len(schemas))
+	for index, schema := range schemas {
+		id, ok := schema["id"].(string)
+		if !ok || strings.TrimSpace(id) == "" {
+			return nil, fmt.Errorf("attribute_schemas[%d].id is required", index)
+		}
+		ids = append(ids, strings.TrimSpace(id))
+	}
+	return ids, nil
 }
 
 // ValidateProposalReferences enforces the closed B2B reference boundary.
@@ -103,6 +150,16 @@ func (r *ReadOnlyCapabilityRegistry) ValidateProposalReferences(p Proposal) erro
 		return nil
 	}
 	switch p.Operation {
+	case OperationCreate:
+		if p.Create != nil && p.Create.AttributeSchemaID != nil {
+			schemaID := strings.TrimSpace(*p.Create.AttributeSchemaID)
+			if schemaID == "" {
+				return errors.New("create attribute_schema_id cannot be empty")
+			}
+			if _, ok := r.attributeSchemaReferences[schemaID]; !ok {
+				return errors.New("create proposal references an attribute schema that was not returned by attribute schema discovery: " + schemaID)
+			}
+		}
 	case OperationUpdate:
 		if p.Update == nil {
 			return errors.New("update proposal is missing update payload")
@@ -137,8 +194,8 @@ func (r *ReadOnlyCapabilityRegistry) ValidateProposalReferences(p Proposal) erro
 }
 
 // listAttributeSchemasCapability exposes tenant-scoped AttributeSchema definitions
-// to the B2B authoring agent. It is read-only; schema creation remains outside
-// the Merchant Catalog AI runtime.
+// as optional existing evidence. Dynamic attributes do not require a schema. It
+// is read-only; this capability never creates or mutates schemas.
 type listAttributeSchemasCapability struct {
 	repository ports.CatalogRepository
 }
@@ -146,7 +203,7 @@ type listAttributeSchemasCapability struct {
 func (c listAttributeSchemasCapability) Definition() ports.AICapabilityDefinition {
 	return ports.AICapabilityDefinition{
 		Name: "merchant_catalog_list_attribute_schemas",
-		Description: "List AttributeSchema versions and their definitions for the current business. Use this before mapping merchant-supplied specifications into CatalogItem.attributes or Variant.attributes. This is read-only and tenant-scoped.",
+		Description: "List existing AttributeSchema versions and definitions for the current business when existing schema evidence is relevant. Dynamic attributes do not require a schema. This is read-only and tenant-scoped.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -158,22 +215,32 @@ func (c listAttributeSchemasCapability) Definition() ports.AICapabilityDefinitio
 }
 
 func (c listAttributeSchemasCapability) Execute(ctx context.Context, execCtx ports.AICapabilityExecutionContext, rawParams []byte) (ports.AICapabilityResult, error) {
+	started := time.Now()
 	var params struct {
 		Name string `json:"name"`
 		Version *int `json:"version"`
 	}
 	if len(rawParams) > 0 {
 		if err := json.Unmarshal(rawParams, &params); err != nil {
+			log.Printf("[MerchantCatalogAI][DISCOVERY][SCHEMA] ERROR business=%s session=%s stage=parse_params err=%v",
+				execCtx.BusinessID, execCtx.ConversationID, err)
 			return ports.AICapabilityResult{}, err
 		}
 	}
+	log.Printf("[MerchantCatalogAI][DISCOVERY][SCHEMA] START business=%s session=%s name_filter=%q version_filter=%v",
+		execCtx.BusinessID, execCtx.ConversationID, strings.TrimSpace(params.Name), params.Version)
+
 	page, err := c.repository.ListAttributeSchemas(ctx, execCtx.BusinessID, strings.TrimSpace(params.Name), params.Version, 100, "")
 	if err != nil {
+		log.Printf("[MerchantCatalogAI][DISCOVERY][SCHEMA] ERROR business=%s session=%s stage=repository latency_ms=%d err=%v",
+			execCtx.BusinessID, execCtx.ConversationID, time.Since(started).Milliseconds(), err)
 		return ports.AICapabilityResult{}, err
 	}
 	schemas := make([]map[string]any, 0, len(page.Items))
+	definitionCount := 0
 	for _, schema := range page.Items {
 		definitions := make([]map[string]any, 0, len(schema.Definitions))
+		definitionCount += len(schema.Definitions)
 		for _, definition := range schema.Definitions {
 			var rules any
 			if len(definition.ValidationRules) > 0 {
@@ -197,6 +264,9 @@ func (c listAttributeSchemasCapability) Execute(ctx context.Context, execCtx por
 			"definitions": definitions,
 		})
 	}
+	log.Printf("[MerchantCatalogAI][DISCOVERY][SCHEMA] OK business=%s session=%s schemas=%d definitions=%d has_more=%t next_cursor_present=%t latency_ms=%d",
+		execCtx.BusinessID, execCtx.ConversationID, len(schemas), definitionCount, page.HasMore, strings.TrimSpace(page.NextCursor) != "",
+		time.Since(started).Milliseconds())
 	return ports.AICapabilityResult{
 		Data: map[string]any{"attribute_schemas": schemas, "has_more": page.HasMore, "next_cursor": page.NextCursor},
 		HasMore: page.HasMore,
