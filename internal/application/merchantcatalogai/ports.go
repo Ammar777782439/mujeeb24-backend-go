@@ -31,6 +31,7 @@ type RuntimeInput struct {
 	PrincipalID string
 	SessionID string
 	Message string
+	DefaultCurrency string
 	SelectedCatalog ports.CatalogRecord
 	History []SessionMessage
 	EntityContract []byte
