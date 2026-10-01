@@ -201,48 +201,41 @@ func (r *SubscriptionRepository) List(ctx context.Context, filter ports.Subscrip
 //
 // Returns RepositoryConflict if the current status is not PENDING.
 func (r *SubscriptionRepository) Activate(ctx context.Context, subscriptionID string, now time.Time) (ports.SubscriptionRecord, error) {
-        if r == nil || r.adapter == nil {
-                return ports.SubscriptionRecord{}, ErrPoolClosed
-        }
-        if strings.TrimSpace(subscriptionID) == "" {
-                return ports.SubscriptionRecord{}, invalidRepositoryInput("subscription.activate", "subscription id is required")
-        }
-        if now.IsZero() {
-                now = time.Now().UTC()
-        }
-        executor, err := r.adapter.Executor(ctx)
-        if err != nil {
-                return ports.SubscriptionRecord{}, err
-        }
-        var record ports.SubscriptionRecord
-        err = executor.QueryRow(ctx,
-                `UPDATE subscriptions SET status = 'ACTIVE', updated_at = $2
-                 WHERE id = $1::uuid AND status = 'PENDING'
-                 RETURNING `+subscriptionSelectColumns,
-                subscriptionID, now,
-        ).Scan(
-                &record.ID, &record.BusinessID, &record.PlanID, &record.PlanCode, &record.PlanVersion,
-                &record.PeriodStart, &record.PeriodEnd, &record.Status,
-                &record.AIReplyLimit, &record.AICatalogLimit, &record.ChannelLimit, &record.InternalAICostBudgetYER,
-                &record.CostBudgetOverrideYER, &record.CostBudgetOverrideReason, &record.CostBudgetOverrideBy, &record.CostBudgetOverrideAt,
-                &record.CancelledAt, &record.CancelledReason, &record.CancelledBy,
-                &record.CreatedAt, &record.UpdatedAt,
-        )
-        if err != nil {
-                if errors.Is(err, pgx.ErrNoRows) {
-                        current, getErr := r.GetByID(ctx, subscriptionID)
-                        if getErr != nil {
-                                return ports.SubscriptionRecord{}, &RepositoryError{Operation: "subscription.activate", Kind: RepositoryNotFound, Err: getErr}
-                        }
-                        return ports.SubscriptionRecord{}, &RepositoryError{
-                                Operation: "subscription.activate",
-                                Kind:      RepositoryConflict,
-                                Err:       fmt.Errorf("subscription %s is in status %s (cannot transition to ACTIVE)", subscriptionID, current.Status),
-                        }
-                }
-                return ports.SubscriptionRecord{}, &RepositoryError{Operation: "subscription.activate", Kind: RepositoryInvalid, Err: err}
-        }
-        return record, nil
+	if r == nil || r.adapter == nil {
+		return ports.SubscriptionRecord{}, ErrPoolClosed
+	}
+	if strings.TrimSpace(subscriptionID) == "" {
+		return ports.SubscriptionRecord{}, invalidRepositoryInput("subscription.activate", "subscription id is required")
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.SubscriptionRecord{}, err
+	}
+	var updatedID string
+	err = executor.QueryRow(ctx,
+		`UPDATE subscriptions SET status = 'ACTIVE', updated_at = $2
+		 WHERE id = $1::uuid AND status = 'PENDING'
+		 RETURNING id::text`,
+		subscriptionID, now,
+	).Scan(&updatedID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			current, getErr := r.GetByID(ctx, subscriptionID)
+			if getErr != nil {
+				return ports.SubscriptionRecord{}, &RepositoryError{Operation: "subscription.activate", Kind: RepositoryNotFound, Err: getErr}
+			}
+			return ports.SubscriptionRecord{}, &RepositoryError{
+				Operation: "subscription.activate",
+				Kind:      RepositoryConflict,
+				Err:       fmt.Errorf("subscription %s is in status %s (cannot transition to ACTIVE)", subscriptionID, current.Status),
+			}
+		}
+		return ports.SubscriptionRecord{}, &RepositoryError{Operation: "subscription.activate", Kind: RepositoryInvalid, Err: err}
+	}
+	return r.GetByID(ctx, updatedID)
 }
 
 // Cancel transitions PENDING|ACTIVE → CANCELLED. Per Contract §21: this is
@@ -251,56 +244,49 @@ func (r *SubscriptionRepository) Activate(ctx context.Context, subscriptionID st
 //
 // Returns RepositoryConflict if already terminal (EXPIRED or CANCELLED).
 func (r *SubscriptionRepository) Cancel(ctx context.Context, subscriptionID, reason, cancelledBy string, now time.Time) (ports.SubscriptionRecord, error) {
-        if r == nil || r.adapter == nil {
-                return ports.SubscriptionRecord{}, ErrPoolClosed
-        }
-        if strings.TrimSpace(subscriptionID) == "" {
-                return ports.SubscriptionRecord{}, invalidRepositoryInput("subscription.cancel", "subscription id is required")
-        }
-        if strings.TrimSpace(reason) == "" {
-                return ports.SubscriptionRecord{}, invalidRepositoryInput("subscription.cancel", "cancellation reason is required")
-        }
-        if strings.TrimSpace(cancelledBy) == "" {
-                return ports.SubscriptionRecord{}, invalidRepositoryInput("subscription.cancel", "cancelled_by is required")
-        }
-        if now.IsZero() {
-                now = time.Now().UTC()
-        }
-        executor, err := r.adapter.Executor(ctx)
-        if err != nil {
-                return ports.SubscriptionRecord{}, err
-        }
-        var record ports.SubscriptionRecord
-        err = executor.QueryRow(ctx,
-                `UPDATE subscriptions
-                 SET status = 'CANCELLED', updated_at = $2,
-                     cancelled_at = $2, cancelled_reason = $3, cancelled_by = $4::uuid
-                 WHERE id = $1::uuid AND status IN ('PENDING', 'ACTIVE')
-                 RETURNING `+subscriptionSelectColumns,
-                subscriptionID, now, reason, cancelledBy,
-        ).Scan(
-                &record.ID, &record.BusinessID, &record.PlanID, &record.PlanCode, &record.PlanVersion,
-                &record.PeriodStart, &record.PeriodEnd, &record.Status,
-                &record.AIReplyLimit, &record.AICatalogLimit, &record.ChannelLimit, &record.InternalAICostBudgetYER,
-                &record.CostBudgetOverrideYER, &record.CostBudgetOverrideReason, &record.CostBudgetOverrideBy, &record.CostBudgetOverrideAt,
-                &record.CancelledAt, &record.CancelledReason, &record.CancelledBy,
-                &record.CreatedAt, &record.UpdatedAt,
-        )
-        if err != nil {
-                if errors.Is(err, pgx.ErrNoRows) {
-                        current, getErr := r.GetByID(ctx, subscriptionID)
-                        if getErr != nil {
-                                return ports.SubscriptionRecord{}, &RepositoryError{Operation: "subscription.cancel", Kind: RepositoryNotFound, Err: getErr}
-                        }
-                        return ports.SubscriptionRecord{}, &RepositoryError{
-                                Operation: "subscription.cancel",
-                                Kind:      RepositoryConflict,
-                                Err:       fmt.Errorf("subscription %s is in status %s (cannot transition to CANCELLED)", subscriptionID, current.Status),
-                        }
-                }
-                return ports.SubscriptionRecord{}, &RepositoryError{Operation: "subscription.cancel", Kind: RepositoryInvalid, Err: err}
-        }
-        return record, nil
+	if r == nil || r.adapter == nil {
+		return ports.SubscriptionRecord{}, ErrPoolClosed
+	}
+	if strings.TrimSpace(subscriptionID) == "" {
+		return ports.SubscriptionRecord{}, invalidRepositoryInput("subscription.cancel", "subscription id is required")
+	}
+	if strings.TrimSpace(reason) == "" {
+		return ports.SubscriptionRecord{}, invalidRepositoryInput("subscription.cancel", "cancellation reason is required")
+	}
+	if strings.TrimSpace(cancelledBy) == "" {
+		return ports.SubscriptionRecord{}, invalidRepositoryInput("subscription.cancel", "cancelled_by is required")
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.SubscriptionRecord{}, err
+	}
+	var updatedID string
+	err = executor.QueryRow(ctx,
+		`UPDATE subscriptions
+		 SET status = 'CANCELLED', updated_at = $2,
+		     cancelled_at = $2, cancelled_reason = $3, cancelled_by = $4::uuid
+		 WHERE id = $1::uuid AND status IN ('PENDING', 'ACTIVE')
+		 RETURNING id::text`,
+		subscriptionID, now, reason, cancelledBy,
+	).Scan(&updatedID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			current, getErr := r.GetByID(ctx, subscriptionID)
+			if getErr != nil {
+				return ports.SubscriptionRecord{}, &RepositoryError{Operation: "subscription.cancel", Kind: RepositoryNotFound, Err: getErr}
+			}
+			return ports.SubscriptionRecord{}, &RepositoryError{
+				Operation: "subscription.cancel",
+				Kind:      RepositoryConflict,
+				Err:       fmt.Errorf("subscription %s is in status %s (cannot transition to CANCELLED)", subscriptionID, current.Status),
+			}
+		}
+		return ports.SubscriptionRecord{}, &RepositoryError{Operation: "subscription.cancel", Kind: RepositoryInvalid, Err: err}
+	}
+	return r.GetByID(ctx, updatedID)
 }
 
 // MarkExpired transitions ACTIVE → EXPIRED. Used by the expiry worker.
@@ -310,44 +296,37 @@ func (r *SubscriptionRepository) Cancel(ctx context.Context, subscriptionID, rea
 // a worker, we treat EXPIRED as idempotent (the worker can re-attempt
 // without error). Other statuses (PENDING/CANCELLED) are a hard conflict.
 func (r *SubscriptionRepository) MarkExpired(ctx context.Context, subscriptionID string, now time.Time) (ports.SubscriptionRecord, error) {
-        executor, err := r.adapter.Executor(ctx)
-        if err != nil {
-                return ports.SubscriptionRecord{}, err
-        }
-        var record ports.SubscriptionRecord
-        err = executor.QueryRow(ctx,
-                `UPDATE subscriptions SET status = 'EXPIRED', updated_at = $2
-                 WHERE id = $1::uuid AND status = 'ACTIVE'
-                 RETURNING `+subscriptionSelectColumns,
-                subscriptionID, now,
-        ).Scan(
-                &record.ID, &record.BusinessID, &record.PlanID, &record.PlanCode, &record.PlanVersion,
-                &record.PeriodStart, &record.PeriodEnd, &record.Status,
-                &record.AIReplyLimit, &record.AICatalogLimit, &record.ChannelLimit, &record.InternalAICostBudgetYER,
-                &record.CostBudgetOverrideYER, &record.CostBudgetOverrideReason, &record.CostBudgetOverrideBy, &record.CostBudgetOverrideAt,
-                &record.CancelledAt, &record.CancelledReason, &record.CancelledBy,
-                &record.CreatedAt, &record.UpdatedAt,
-        )
-        if err != nil {
-                if errors.Is(err, pgx.ErrNoRows) {
-                        // Idempotent: subscription is no longer ACTIVE (could already be EXPIRED).
-                        // Fetch current state to verify it's terminal — return NotFound if missing.
-                        current, getErr := r.GetByID(ctx, subscriptionID)
-                        if getErr != nil {
-                                return ports.SubscriptionRecord{}, getErr
-                        }
-                        if current.Status == "EXPIRED" {
-                                return current, nil
-                        }
-                        return ports.SubscriptionRecord{}, &RepositoryError{
-                                Operation: "subscription.mark_expired",
-                                Kind:      RepositoryConflict,
-                                Err:       fmt.Errorf("subscription %s is in status %s (cannot transition to EXPIRED)", subscriptionID, current.Status),
-                        }
-                }
-                return ports.SubscriptionRecord{}, &RepositoryError{Operation: "subscription.mark_expired", Kind: RepositoryInvalid, Err: err}
-        }
-        return record, nil
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.SubscriptionRecord{}, err
+	}
+	var updatedID string
+	err = executor.QueryRow(ctx,
+		`UPDATE subscriptions SET status = 'EXPIRED', updated_at = $2
+		 WHERE id = $1::uuid AND status = 'ACTIVE'
+		 RETURNING id::text`,
+		subscriptionID, now,
+	).Scan(&updatedID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Idempotent: subscription is no longer ACTIVE (could already be EXPIRED).
+			// Fetch current state to verify it's terminal — return NotFound if missing.
+			current, getErr := r.GetByID(ctx, subscriptionID)
+			if getErr != nil {
+				return ports.SubscriptionRecord{}, getErr
+			}
+			if current.Status == "EXPIRED" {
+				return current, nil
+			}
+			return ports.SubscriptionRecord{}, &RepositoryError{
+				Operation: "subscription.mark_expired",
+				Kind:      RepositoryConflict,
+				Err:       fmt.Errorf("subscription %s is in status %s (cannot transition to EXPIRED)", subscriptionID, current.Status),
+			}
+		}
+		return ports.SubscriptionRecord{}, &RepositoryError{Operation: "subscription.mark_expired", Kind: RepositoryInvalid, Err: err}
+	}
+	return r.GetByID(ctx, updatedID)
 }
 
 // ApplyCostBudgetOverride updates the per-subscription cost budget override.
@@ -359,54 +338,47 @@ func (r *SubscriptionRepository) MarkExpired(ctx context.Context, subscriptionID
 // The audit is the responsibility of the service layer (handler facade) —
 // the repository just persists the override fields.
 func (r *SubscriptionRepository) ApplyCostBudgetOverride(ctx context.Context, subscriptionID string, newBudgetYER int, reason, overrideBy string, now time.Time) (ports.SubscriptionRecord, error) {
-        if r == nil || r.adapter == nil {
-                return ports.SubscriptionRecord{}, ErrPoolClosed
-        }
-        if strings.TrimSpace(subscriptionID) == "" {
-                return ports.SubscriptionRecord{}, invalidRepositoryInput("subscription.cost_budget_override", "subscription id is required")
-        }
-        if newBudgetYER <= 0 {
-                return ports.SubscriptionRecord{}, invalidRepositoryInput("subscription.cost_budget_override", "new_budget_yer must be positive")
-        }
-        if strings.TrimSpace(reason) == "" {
-                return ports.SubscriptionRecord{}, invalidRepositoryInput("subscription.cost_budget_override", "reason is required")
-        }
-        if strings.TrimSpace(overrideBy) == "" {
-                return ports.SubscriptionRecord{}, invalidRepositoryInput("subscription.cost_budget_override", "override_by is required")
-        }
-        if now.IsZero() {
-                now = time.Now().UTC()
-        }
-        executor, err := r.adapter.Executor(ctx)
-        if err != nil {
-                return ports.SubscriptionRecord{}, err
-        }
-        var record ports.SubscriptionRecord
-        err = executor.QueryRow(ctx,
-                `UPDATE subscriptions
-                 SET cost_budget_override_yer = $2,
-                     cost_budget_override_reason = $3,
-                     cost_budget_override_by = $4::uuid,
-                     cost_budget_override_at = $5,
-                     updated_at = $5
-                 WHERE id = $1::uuid
-                 RETURNING `+subscriptionSelectColumns,
-                subscriptionID, newBudgetYER, reason, overrideBy, now,
-        ).Scan(
-                &record.ID, &record.BusinessID, &record.PlanID, &record.PlanCode, &record.PlanVersion,
-                &record.PeriodStart, &record.PeriodEnd, &record.Status,
-                &record.AIReplyLimit, &record.AICatalogLimit, &record.ChannelLimit, &record.InternalAICostBudgetYER,
-                &record.CostBudgetOverrideYER, &record.CostBudgetOverrideReason, &record.CostBudgetOverrideBy, &record.CostBudgetOverrideAt,
-                &record.CancelledAt, &record.CancelledReason, &record.CancelledBy,
-                &record.CreatedAt, &record.UpdatedAt,
-        )
-        if err != nil {
-                if errors.Is(err, pgx.ErrNoRows) {
-                        return ports.SubscriptionRecord{}, &RepositoryError{Operation: "subscription.cost_budget_override", Kind: RepositoryNotFound, Err: err}
-                }
-                return ports.SubscriptionRecord{}, &RepositoryError{Operation: "subscription.cost_budget_override", Kind: RepositoryInvalid, Err: err}
-        }
-        return record, nil
+	if r == nil || r.adapter == nil {
+		return ports.SubscriptionRecord{}, ErrPoolClosed
+	}
+	if strings.TrimSpace(subscriptionID) == "" {
+		return ports.SubscriptionRecord{}, invalidRepositoryInput("subscription.cost_budget_override", "subscription id is required")
+	}
+	if newBudgetYER <= 0 {
+		return ports.SubscriptionRecord{}, invalidRepositoryInput("subscription.cost_budget_override", "new_budget_yer must be positive")
+	}
+	if strings.TrimSpace(reason) == "" {
+		return ports.SubscriptionRecord{}, invalidRepositoryInput("subscription.cost_budget_override", "reason is required")
+	}
+	if strings.TrimSpace(overrideBy) == "" {
+		return ports.SubscriptionRecord{}, invalidRepositoryInput("subscription.cost_budget_override", "override_by is required")
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.SubscriptionRecord{}, err
+	}
+	var updatedID string
+	err = executor.QueryRow(ctx,
+		`UPDATE subscriptions
+		 SET cost_budget_override_yer = $2,
+		     cost_budget_override_reason = $3,
+		     cost_budget_override_by = $4::uuid,
+		     cost_budget_override_at = $5,
+		     updated_at = $5
+		 WHERE id = $1::uuid
+		 RETURNING id::text`,
+		subscriptionID, newBudgetYER, reason, overrideBy, now,
+	).Scan(&updatedID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ports.SubscriptionRecord{}, &RepositoryError{Operation: "subscription.cost_budget_override", Kind: RepositoryNotFound, Err: err}
+		}
+		return ports.SubscriptionRecord{}, &RepositoryError{Operation: "subscription.cost_budget_override", Kind: RepositoryInvalid, Err: err}
+	}
+	return r.GetByID(ctx, updatedID)
 }
 
 type subscriptionCursor struct {

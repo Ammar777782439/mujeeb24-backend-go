@@ -160,5 +160,77 @@ func TestSubscriptionRepositoryCreateAgainstPostgres(t *testing.T) {
         if dbPlanVersion != 1 {
                 t.Errorf("DB plan_version = %d, want 1", dbPlanVersion)
         }
-        t.Logf("DB verification OK: row exists in PostgreSQL — status=%s plan_code=%s plan_version=%d", dbStatus, dbPlanCode, dbPlanVersion)
+		t.Logf("DB verification OK: row exists in PostgreSQL — status=%s plan_code=%s plan_version=%d", dbStatus, dbPlanCode, dbPlanVersion)
+
+		// Test ApplyCostBudgetOverride
+		overrideRecord, err := repo.ApplyCostBudgetOverride(ctx, subscriptionID, 5000, "testing override", "00000000-0000-0000-0000-000000000001", now.Add(time.Minute))
+		if err != nil {
+			t.Fatalf("repo.ApplyCostBudgetOverride: %v", err)
+		}
+		if overrideRecord.CostBudgetOverrideYER == nil || *overrideRecord.CostBudgetOverrideYER != 5000 {
+			t.Errorf("overrideRecord.CostBudgetOverrideYER = %v, want 5000", overrideRecord.CostBudgetOverrideYER)
+		}
+		if overrideRecord.PlanCode != "basic" {
+			t.Errorf("overrideRecord.PlanCode = %s, want basic", overrideRecord.PlanCode)
+		}
+		t.Logf("ApplyCostBudgetOverride OK: budget=%v plan_code=%s", *overrideRecord.CostBudgetOverrideYER, overrideRecord.PlanCode)
+
+		// Test Activate (PENDING -> ACTIVE)
+		activatedRecord, err := repo.Activate(ctx, subscriptionID, now.Add(2*time.Minute))
+		if err != nil {
+			t.Fatalf("repo.Activate: %v", err)
+		}
+		if activatedRecord.Status != "ACTIVE" {
+			t.Errorf("activatedRecord.Status = %s, want ACTIVE", activatedRecord.Status)
+		}
+		if activatedRecord.PlanCode != "basic" {
+			t.Errorf("activatedRecord.PlanCode = %s, want basic", activatedRecord.PlanCode)
+		}
+		t.Logf("Activate OK: status=%s plan_code=%s", activatedRecord.Status, activatedRecord.PlanCode)
+
+		// Test Cancel (ACTIVE -> CANCELLED)
+		cancelledRecord, err := repo.Cancel(ctx, subscriptionID, "cancelled by admin in test", "00000000-0000-0000-0000-000000000001", now.Add(3*time.Minute))
+		if err != nil {
+			t.Fatalf("repo.Cancel: %v", err)
+		}
+		if cancelledRecord.Status != "CANCELLED" {
+			t.Errorf("cancelledRecord.Status = %s, want CANCELLED", cancelledRecord.Status)
+		}
+		if cancelledRecord.CancelledReason == nil || *cancelledRecord.CancelledReason != "cancelled by admin in test" {
+			t.Errorf("cancelledRecord.CancelledReason = %v, want 'cancelled by admin in test'", cancelledRecord.CancelledReason)
+		}
+		t.Logf("Cancel OK: status=%s reason=%v", cancelledRecord.Status, *cancelledRecord.CancelledReason)
+
+		// Test MarkExpired with a 2nd subscription created and activated
+		const sub2ID = "00000000-0000-0000-0000-0000000000bb"
+		_, _ = pool.Exec(ctx, `DELETE FROM subscriptions WHERE id = $1::uuid`, sub2ID)
+		sub2, err := repo.Create(ctx, ports.SubscriptionCreate{
+			ID:                     sub2ID,
+			BusinessID:             businessID,
+			PlanID:                 planID,
+			PeriodStart:            periodStart,
+			PeriodEnd:              periodEnd,
+			AIReplyLimit:           100,
+			AICatalogLimit:         50,
+			ChannelLimit:           1,
+			InternalAICostBudgetYER: 500,
+			Now:                    now,
+		})
+		if err != nil {
+			t.Fatalf("repo.Create (sub2): %v", err)
+		}
+		if _, err := repo.Activate(ctx, sub2.ID, now.Add(time.Minute)); err != nil {
+			t.Fatalf("repo.Activate (sub2): %v", err)
+		}
+		expiredRecord, err := repo.MarkExpired(ctx, sub2.ID, now.Add(time.Hour))
+		if err != nil {
+			t.Fatalf("repo.MarkExpired: %v", err)
+		}
+		if expiredRecord.Status != "EXPIRED" {
+			t.Errorf("expiredRecord.Status = %s, want EXPIRED", expiredRecord.Status)
+		}
+		if expiredRecord.PlanCode != "basic" {
+			t.Errorf("expiredRecord.PlanCode = %s, want basic", expiredRecord.PlanCode)
+		}
+		t.Logf("MarkExpired OK: status=%s plan_code=%s", expiredRecord.Status, expiredRecord.PlanCode)
 }
