@@ -118,6 +118,32 @@ func (p Proposal) IsMutation() bool {
 // is actually complete. A resolved empty update is therefore converted to a
 // clarification instead of being presented as processed.
 func (p Proposal) Normalize() Proposal {
+	// Gemini can occasionally return a mutation operation together with a
+	// non-resolved status (for example: status=needs_more_data, operation=update).
+	// That shape is semantically invalid for the closed B2B contract. Normalize it
+	// into a pure clarification proposal before Validate(), rather than leaking a
+	// provider formatting mistake as a 500 response.
+	if p.Status != StatusResolved && p.IsMutation() {
+		p.Operation = OperationAskMerchant
+		p.Create = nil
+		p.Update = nil
+		p.Delete = nil
+		if strings.TrimSpace(p.ResponseText) == "" {
+			p.ResponseText = "حدّد البيانات الناقصة المطلوبة لإتمام العملية."
+		}
+		if len(p.MissingInformation) == 0 {
+			p.MissingInformation = []MissingField{
+				{
+					Path:        "proposal",
+					DisplayName: "بيانات العملية",
+					DataType:    "object",
+					Reason:      "لا يمكن اعتماد عملية تعديل أو إنشاء قبل اكتمال البيانات المطلوبة.",
+				},
+			}
+		}
+		return p
+	}
+
 	if p.Status == StatusResolved && p.Operation == OperationUpdate && p.Update != nil {
 		u := p.Update
 		emptyItemChanges := u.Changes.Name == nil &&
