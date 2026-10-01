@@ -134,3 +134,5 @@ type Proposal struct {
 func (p Proposal) IsMutation() bool {
 	return p.Operation == OperationCreate || p.Operation == OperationUpdate || p.Operation == OperationDelete
 }
+
+var attributeKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`)
