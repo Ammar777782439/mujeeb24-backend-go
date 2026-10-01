@@ -13,11 +13,9 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/prompts"
-	"github.com/google/uuid"
 )
 
 type MerchantCatalogRuntime struct {
-	client         *Client
 	httpClient     *http.Client
 	apiKey         string
 	model          string
@@ -25,9 +23,6 @@ type MerchantCatalogRuntime struct {
 	timeout        time.Duration
 	maxOutput      int
 	maxInput       int
-	runRepo        ports.AIRunRepository
-	lifecycle      ports.AIRunLifecyclePort
-	newID          func() string
 	configProvider ports.AIConfigurationProvider
 }
 
@@ -40,7 +35,6 @@ func NewMerchantCatalogRuntime(client *Client) (*MerchantCatalogRuntime, error) 
 		httpClient = &http.Client{}
 	}
 	return &MerchantCatalogRuntime{
-		client:     client,
 		httpClient: httpClient,
 		apiKey:     client.APIKey(),
 		model:      client.Model(),
@@ -48,7 +42,6 @@ func NewMerchantCatalogRuntime(client *Client) (*MerchantCatalogRuntime, error) 
 		timeout:    client.RequestTimeout(),
 		maxOutput:  client.MaxOutputTokens(),
 		maxInput:   client.MaxInputCharacters(),
-		newID:      uuid.NewString,
 	}, nil
 }
 
