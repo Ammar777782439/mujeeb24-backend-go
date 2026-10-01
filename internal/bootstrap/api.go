@@ -499,6 +499,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 b2bAgent := &merchantcatalogai.Agent{
                         Sessions:       postgres.NewMerchantCatalogAISessionStore(database),
                         Selector:       merchantcatalogai.DeterministicCatalogSelector{Repository: catalogRepo},
+                        Business:       postgres.NewBusinessRepository(database),
                         EntityContract: merchantcatalogai.CanonicalEntityContractProvider{},
                         Runtime:        b2bRuntime,
                         CapabilitiesFactory: func(selectedCatalogID string) ports.AICapabilityDispatcher {
