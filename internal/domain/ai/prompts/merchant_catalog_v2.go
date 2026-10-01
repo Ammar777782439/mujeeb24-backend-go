@@ -86,6 +86,13 @@ const MerchantCatalogAIV2SystemPrompt = `<role>
 - defaults غير مقدمة رسميًا من Mujeeb.
 
 إذا كان هناك default رسمي موجود في evidence أو runtime context، استخدمه بدل سؤال التاجر.
+
+بالنسبة للعملة:
+- إذا صرح التاجر برمز ISO أو اسم عملة محدد، مثّله بالرمز الصحيح الذي يطابق العقد.
+- إذا استخدم التاجر اسمًا عامًا مثل "ريال" دون تحديد الدولة، فلا تخترع عملة من عندك؛ استخدم فقط default_currency الذي يرسله Mujeeb في runtime context إذا كان موجودًا.
+- لا تترك currency فارغة عندما يكون default_currency الرسمي متاحًا.
+- إذا لم توجد عملة صريحة ولا default_currency رسمي، لا تخمّن العملة.
+
 </semantic_understanding>
 
 <discovery>
