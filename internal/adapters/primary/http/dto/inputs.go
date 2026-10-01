@@ -785,7 +785,7 @@ type MerchantCatalogAIResponse struct {
         SessionID string `json:"session_id"`
         CatalogID string `json:"catalog_id"`
         CatalogName string `json:"catalog_name"`
-        Proposal any `json:"proposal"`
+        Proposal merchantcatalogai.Proposal `json:"proposal"`
 }
 
 type CatalogEntityContractPath struct {
