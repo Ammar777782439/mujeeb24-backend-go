@@ -245,6 +245,9 @@ func (p Proposal) Validate() error {
 		}
 
 		for _, offer := range p.Create.Offers {
+			if offer.Currency == nil || strings.TrimSpace(*offer.Currency) == "" {
+				return errors.New("create offer requires currency from merchant statement or business default_currency")
+			}
 			if strings.TrimSpace(offer.Name) == "" {
 				return errors.New("create offer requires name")
 			}
@@ -327,6 +330,9 @@ func (p Proposal) Validate() error {
 			newVariantRefs[ref] = struct{}{}
 		}
 		for _, offer := range p.Update.NewOffers {
+			if offer.Currency == nil || strings.TrimSpace(*offer.Currency) == "" {
+				return errors.New("new offer requires currency from merchant statement or business default_currency")
+			}
 			if strings.TrimSpace(offer.Name) == "" {
 				return errors.New("new offer requires name")
 			}
