@@ -219,6 +219,13 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 				return merchantcatalogai.Proposal{}, err
 			}
 			proposal = proposal.Normalize()
+			if validator, ok := input.Capabilities.(interface {
+				ValidateProposalReferences(merchantcatalogai.Proposal) error
+			}); ok {
+				if err := validator.ValidateProposalReferences(proposal); err != nil {
+					return merchantcatalogai.Proposal{}, fmt.Errorf("validate merchant catalog proposal references: %w", err)
+				}
+			}
 			if err := proposal.Validate(); err != nil {
 				return merchantcatalogai.Proposal{}, fmt.Errorf("validate merchant catalog proposal: %w", err)
 			}
