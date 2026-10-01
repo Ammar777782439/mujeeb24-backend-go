@@ -493,7 +493,16 @@ func parseMerchantCatalogProposal(resp merchantCatalogInteractionResponse) (merc
 func merchantCatalogProposalSchema() map[string]any {
 	stringField := func() map[string]any { return map[string]any{"type": "string"} }
 	optionalString := func() map[string]any { return map[string]any{"type": "string"} }
-	objectField := func() map[string]any { return map[string]any{"type": "object"} }
+	attributeObjectField := func() map[string]any {
+		return map[string]any{
+			"type": "object",
+			"propertyNames": map[string]any{
+				"pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+			},
+			"additionalProperties": true,
+			"description": "Dynamic attribute object. Keys are English snake_case; values may be any valid JSON value. Keys do not need to exist in the database.",
+		}
+	}
 
 	offerNameSource := map[string]any{
 		"type": "string",
@@ -548,7 +557,7 @@ func merchantCatalogProposalSchema() map[string]any {
 			"short_description": optionalString(), "long_description": optionalString(), "pricing_mode": stringField(),
 			"availability_mode": stringField(), "fulfillment_mode": stringField(),
 			"requires_confirmation": map[string]any{"type": "boolean"},
-			"attributes": objectField(),
+			"attributes": attributeObjectField(),
 			"variants": map[string]any{
 				"type": "array",
 				"items": map[string]any{
