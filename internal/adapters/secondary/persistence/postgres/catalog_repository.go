@@ -272,7 +272,7 @@ func (r *CatalogRepository) ListAttributeSchemas(ctx context.Context, businessID
 			schemaIDs[i] = s.ID
 			schemaIndexMap[s.ID] = i
 		}
-		defRows, err := executor.Query(ctx, `SELECT d.id::text, d.schema_id::text, d.attribute_key, d.label, d.data_type, d.is_required, d.is_searchable, d.display_order FROM attribute_definitions d JOIN attribute_schemas s ON s.id = d.schema_id WHERE d.schema_id = ANY($1::uuid[]) AND s.business_id = $2::uuid ORDER BY d.display_order ASC, d.id ASC`, schemaIDs, businessID)
+		defRows, err := executor.Query(ctx, `SELECT d.id::text, d.schema_id::text, d.attribute_key, d.label, d.data_type, d.is_required, d.is_searchable, d.validation_rules, d.display_order FROM attribute_definitions d JOIN attribute_schemas s ON s.id = d.schema_id WHERE d.schema_id = ANY($1::uuid[]) AND s.business_id = $2::uuid ORDER BY d.display_order ASC, d.id ASC`, schemaIDs, businessID)
 		if err != nil {
 			return ports.AttributeSchemaPage{}, catalogRepositoryError("attribute_schema.list", err)
 		}
@@ -280,7 +280,7 @@ func (r *CatalogRepository) ListAttributeSchemas(ctx context.Context, businessID
 		for defRows.Next() {
 			var def ports.AttributeDefinitionRecord
 			var schemaID string
-			if err := defRows.Scan(&def.ID, &schemaID, &def.Key, &def.Label, &def.DataType, &def.Required, &def.Searchable, &def.DisplayOrder); err != nil {
+			if err := defRows.Scan(&def.ID, &schemaID, &def.Key, &def.Label, &def.DataType, &def.Required, &def.Searchable, &def.ValidationRules, &def.DisplayOrder); err != nil {
 				return ports.AttributeSchemaPage{}, catalogRepositoryError("attribute_schema.list", err)
 			}
 			if idx, ok := schemaIndexMap[schemaID]; ok {
@@ -306,7 +306,7 @@ func (r *CatalogRepository) GetAttributeSchema(ctx context.Context, businessID, 
 	if err := executor.QueryRow(ctx, `SELECT id::text, business_id::text, name, version FROM attribute_schemas WHERE business_id = $1::uuid AND id = $2::uuid`, businessID, schemaID).Scan(&item.ID, &item.BusinessID, &item.Name, &item.Version); err != nil {
 		return item, classifyRepositoryGetError("attribute_schema.get", err)
 	}
-	rows, err := executor.Query(ctx, `SELECT d.id::text, d.attribute_key, d.label, d.data_type, d.is_required, d.is_searchable, d.display_order FROM attribute_definitions d JOIN attribute_schemas s ON s.id = d.schema_id WHERE d.schema_id = $1::uuid AND s.business_id = $2::uuid ORDER BY d.display_order ASC, d.id ASC`, schemaID, businessID)
+	rows, err := executor.Query(ctx, `SELECT d.id::text, d.attribute_key, d.label, d.data_type, d.is_required, d.is_searchable, d.validation_rules, d.display_order FROM attribute_definitions d JOIN attribute_schemas s ON s.id = d.schema_id WHERE d.schema_id = $1::uuid AND s.business_id = $2::uuid ORDER BY d.display_order ASC, d.id ASC`, schemaID, businessID)
 	if err != nil {
 		return ports.AttributeSchemaRecord{}, catalogRepositoryError("attribute_schema.get", err)
 	}
@@ -314,7 +314,7 @@ func (r *CatalogRepository) GetAttributeSchema(ctx context.Context, businessID, 
 	item.Definitions = make([]ports.AttributeDefinitionRecord, 0)
 	for rows.Next() {
 		var definition ports.AttributeDefinitionRecord
-		if err := rows.Scan(&definition.ID, &definition.Key, &definition.Label, &definition.DataType, &definition.Required, &definition.Searchable, &definition.DisplayOrder); err != nil {
+		if err := rows.Scan(&definition.ID, &definition.Key, &definition.Label, &definition.DataType, &definition.Required, &definition.Searchable, &definition.ValidationRules, &definition.DisplayOrder); err != nil {
 			return ports.AttributeSchemaRecord{}, catalogRepositoryError("attribute_schema.get", err)
 		}
 		item.Definitions = append(item.Definitions, definition)
