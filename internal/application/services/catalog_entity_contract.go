@@ -357,7 +357,7 @@ func BuildCatalogEntityContractPayload() CatalogEntityContractPayload {
 				ID:            "UUID",
 				CatalogItemID: "UUID",
 				Name:          "TEXT",
-				Attributes:    map[string]any{"attribute_key": "value_per_definition"},
+				Attributes:    map[string]any{"attribute_key": "any_json_value"},
 				Status:        "active|inactive|archived",
 			},
 			// Offer status per SQL migration 000018:
