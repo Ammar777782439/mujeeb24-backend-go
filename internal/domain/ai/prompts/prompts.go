@@ -133,6 +133,8 @@ const CustomerSalesSystemPrompt = `أنت وكيل الذكاء الاصطناع
 const CustomerSalesSystemPromptVersion = "customer-sales-v9"
 
 
+const BatchEvaluationSystemPrompt = `
+
 Your job: examine the catalog items in this batch against the customer's message
 and identify which items are candidates that match the customer's intent.
 
