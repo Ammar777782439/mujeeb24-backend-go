@@ -175,14 +175,32 @@ func main() {
                 log.Fatalf("Failed to upsert business policy: %v", err)
         }
 
+        // Per Platform Administration Contract §9: the Platform Super Admin
+        // (admin@mujeeb.ai) is a PLATFORM-LEVEL identity — NOT a merchant
+        // owner. The admin has a row in platform_super_admins (created above)
+        // which gives access to /admin/* routes. The admin must NOT have a
+        // business_memberships row — otherwise:
+        //   1. The admin appears in the merchant team page as an "owner"
+        //      (tenant isolation leak — admin is visible to merchants)
+        //   2. The admin's getMeApi returns business memberships, making
+        //      isPlatformAdmin=false (because the auth context fetches
+        //      businesses for non-platform-admin principals)
+        //   3. The admin can access merchant routes (/dashboard, /team, etc.)
+        //      which violates the Platform/Merchant boundary
+        //
+        // The main business (00000000-...001) needs a DIFFERENT owner
+        // principal. For the seed demo, we use a separate merchant principal
+        // (merchant@mujeeb.ai already exists for business 002 — but we need
+        // one for business 001 too). The simplest fix: DELETE the admin's
+        // membership for this business, so the business exists without an
+        // owner. The Platform Admin can assign an owner via the API
+        // (POST /platform/businesses/{id}/owner) — this is the correct flow.
         _, err = pool.Exec(ctx, `
-                INSERT INTO business_memberships (business_id, principal_id, role, permissions, status, created_at, updated_at)
-                VALUES ($1::uuid, $2::uuid, 'owner', '["*"]'::jsonb, 'active', $3, $3)
-                ON CONFLICT (business_id, principal_id) DO UPDATE
-                SET role = 'owner', permissions = '["*"]'::jsonb, status = 'active', updated_at = EXCLUDED.updated_at;
+                DELETE FROM business_memberships
+                WHERE business_id = $1::uuid AND principal_id = $2::uuid;
         `, businessID, principalID, now)
         if err != nil {
-                log.Fatalf("Failed to upsert membership: %v", err)
+                log.Fatalf("Failed to remove admin business membership: %v", err)
         }
 
         log.Println("3. Ensuring Channel Connections...")
@@ -1115,8 +1133,8 @@ func main() {
 
         log.Println("==========================================================")
         log.Println("🎉 Database Demo Seeder Complete Successfully!")
-        log.Printf("👤 Admin User:    %s (Password: %s) -> Business: %s (With 3 Channels & Full Demo Data)", defaultAdminEmail, defaultAdminPass, defaultBusinessID)
-        log.Printf("👤 Clean User:    %s (Password: %s) -> Business: %s (Zero Channels & Fresh State)", cleanMerchantEmail, defaultAdminPass, cleanBusinessID)
+        log.Printf("👤 Platform Admin: %s (Password: %s) -> Platform Super Admin (no business membership)", defaultAdminEmail, defaultAdminPass)
+        log.Printf("👤 Clean Merchant: %s (Password: %s) -> Business: %s (Owner, Zero Channels & Fresh State)", cleanMerchantEmail, defaultAdminPass, cleanBusinessID)
         log.Printf("🏢 Main Business: %s (%s)", "متجر مجيب 24 الذكي للإلكترونيات", defaultBusinessID)
         log.Println("📦 Products:      15+ Core Smart Gadgets, Laptops, Audio, Gaming & Accessories")
         log.Printf("💬 Chats:         %d Realistic Multiturn Conversations across WhatsApp, IG & Facebook", len(convs))
