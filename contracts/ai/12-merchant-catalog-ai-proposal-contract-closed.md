@@ -1,4 +1,4 @@
-12. Merchant Catalog AI Proposal Contract — CLOSED v1
+12. Merchant Catalog AI Proposal Contract — CLOSED v2
 
 ## 12.1 الغرض
 
@@ -82,6 +82,39 @@ VariantCreate.ref → OfferCreate.variant_ref → Deterministic validation → C
 
 هذه العملية لا تعتمد على Variant name matching أو fuzzy matching أو semantic matching أو Gemini-generated UUID أو database lookup بعد كل Variant بالاسم.
 
+## 12.7 Offer Provenance
+
+كل OfferCreate يحمل مصدرًا صريحًا للقيم التي لا يجوز للـAI اختراعها:
+
+- name_source = system_default أو merchant_stated.
+- price_source = merchant_stated أو not_stated.
+
+### Offer Name
+
+إذا لم يذكر التاجر اسمًا تجاريًا مستقلًا:
+- name_source = system_default.
+- name = سعر البيع بالضبط.
+- لا يجوز إضافة اسم Variant أو اللون أو الخيار إلى الاسم.
+
+إذا ذكر التاجر اسمًا تجاريًا مستقلًا:
+- name_source = merchant_stated.
+- يحفظ الاسم الذي ذكره التاجر.
+
+### Offer Price
+
+إذا ذكر التاجر سعرًا محددًا:
+- price_source = merchant_stated.
+- amount مطلوب ويحفظ بنفس القيمة.
+- pricing_mode لا يجوز أن يكون quote_required.
+- لا يجوز إسقاط السعر أو تحويله إلى null.
+
+إذا لم يذكر التاجر سعرًا:
+- price_source = not_stated.
+- amount لا يُخترع.
+- quote_required يمكن استخدامه عندما يكون السعر غير محدد.
+
+هذه provenance fields جزء من Proposal Contract وليست تعليمات Prompt فقط.
+
 ## 12.7 قواعد التحقق
 
 Proposal Validator يجب أن يرفض:
@@ -106,9 +139,9 @@ Application/Execution layer هي التي:
 
 ## 12.9 الإصدار
 
-Proposal schema_version = 2.
+Proposal schema_version = 3.
 
-وأي Proposal بإصدار غير 2 لا يدخل مسار Merchant Catalog AI v2.
+وأي Proposal بإصدار غير 3 لا يدخل مسار Merchant Catalog AI v2.
 
 ## 12.10 قاعدة المصدر
 
