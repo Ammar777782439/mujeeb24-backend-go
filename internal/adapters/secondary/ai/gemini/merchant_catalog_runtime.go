@@ -75,6 +75,11 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 	if strings.TrimSpace(input.Message) == "" {
 		return merchantcatalogai.Proposal{}, errors.New("merchant message is required")
 	}
+
+	apiKey := r.apiKey
+	model := r.model
+	baseURL := r.baseURL
+	maxOutput := r.maxOutput
 	maxInput := r.maxInput
 	if r.configProvider != nil {
 		cfg, err := r.configProvider.GetActiveConfig(ctx)
@@ -84,11 +89,14 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 		if strings.TrimSpace(cfg.APIKey) == "" {
 			return merchantcatalogai.Proposal{}, errors.New("active AI configuration has no valid API key")
 		}
-		r.apiKey = cfg.APIKey
-		r.model = cfg.Model
-		r.baseURL = cfg.BaseURL
-		r.maxOutput = cfg.MaxOutputTokens
+		apiKey = cfg.APIKey
+		model = cfg.Model
+		baseURL = cfg.BaseURL
+		maxOutput = cfg.MaxOutputTokens
 		maxInput = cfg.MaxInputCharacters
+	}
+	if strings.TrimSpace(apiKey) == "" || strings.TrimSpace(model) == "" || strings.TrimSpace(baseURL) == "" {
+		return merchantcatalogai.Proposal{}, errors.New("merchant catalog AI Gemini configuration is incomplete")
 	}
 	if maxInput > 0 && len([]rune(input.Message)) > maxInput {
 		return merchantcatalogai.Proposal{}, fmt.Errorf("merchant message exceeds %d characters", maxInput)
@@ -113,14 +121,11 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 
 	systemText := prompts.MerchantCatalogAIV2SystemPrompt
 	if len(input.EntityContract) > 0 {
-		systemText += "
-
-# Catalog Entity Contract
-" + string(input.EntityContract)
+		systemText += "\n\n# Catalog Entity Contract\n" + string(input.EntityContract)
 	}
 
 	reqBody := contractGeminiRequest{
-		Model: input.SelectedCatalog.ID,
+		Model: model,
 		Store: false,
 		SystemInstruction: &contractContent{
 			Role: "system",
@@ -133,11 +138,9 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 		GenerationConfig: contractGenerationConfig{
 			ResponseMimeType: "application/json",
 			ResponseSchema: merchantCatalogProposalSchema(),
-			MaxOutputTokens: r.maxOutput,
+			MaxOutputTokens: maxOutput,
 		},
 	}
-
-	reqBody.Model = r.model
 	declarations := merchantCatalogToolDeclarations(input.Capabilities)
 	if len(declarations) > 0 {
 		reqBody.Tools = []contractTools{{FunctionDeclarations: declarations}}
@@ -147,7 +150,7 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 		if err := ctx.Err(); err != nil {
 			return merchantcatalogai.Proposal{}, fmt.Errorf("merchant catalog AI tool loop cancelled: %w", err)
 		}
-		resp, err := r.send(ctx, reqBody)
+		resp, err := r.send(ctx, reqBody, apiKey, model, baseURL)
 		if err != nil {
 			return merchantcatalogai.Proposal{}, err
 		}
@@ -164,11 +167,6 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 			return merchantcatalogai.Proposal{}, errors.New("Gemini requested a tool but B2B read capabilities are not configured")
 		}
 
-		if r.lifecycle != nil && strings.TrimSpace(input.SessionID) != "" {
-			// Lifecycle is optional until the B2B AI Run is created by the application layer.
-			// No state transition is attempted without an actual AIRun identifier.
-		}
-
 		toolContents, err := r.executeTools(ctx, resp, input)
 		if err != nil {
 			return merchantcatalogai.Proposal{}, err
@@ -179,7 +177,7 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 	}
 }
 
-func (r *MerchantCatalogRuntime) send(ctx context.Context, reqBody contractGeminiRequest) (contractGeminiResponse, error) {
+func (r *MerchantCatalogRuntime) send(ctx context.Context, reqBody contractGeminiRequest, apiKey, model, baseURL string) (contractGeminiResponse, error) {
 	payload, err := json.Marshal(reqBody)
 	if err != nil {
 		return contractGeminiResponse{}, fmt.Errorf("encode merchant catalog Gemini request: %w", err)
@@ -188,13 +186,13 @@ func (r *MerchantCatalogRuntime) send(ctx context.Context, reqBody contractGemin
 	requestCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent", strings.TrimRight(r.baseURL, "/"), r.model)
+	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent", strings.TrimRight(baseURL, "/"), model)
 	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		return contractGeminiResponse{}, fmt.Errorf("build merchant catalog Gemini request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-goog-api-key", r.apiKey)
+	req.Header.Set("x-goog-api-key", apiKey)
 
 	resp, err := r.httpClient.Do(req)
 	if err != nil {
