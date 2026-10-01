@@ -98,7 +98,8 @@ type merchantCatalogInteractionFormat struct {
 }
 
 type merchantCatalogGenerationConfig struct {
-	MaxOutputTokens int `json:"max_output_tokens,omitempty"`
+	MaxOutputTokens int    `json:"max_output_tokens,omitempty"`
+	ThinkingLevel   string `json:"thinking_level,omitempty"`
 }
 
 type merchantCatalogInteractionResponse struct {
@@ -124,8 +125,8 @@ type merchantCatalogOutputPart struct {
 }
 
 type merchantCatalogUsage struct {
-	InputTokens  int `json:"input_tokens,omitempty"`
-	OutputTokens int `json:"output_tokens,omitempty"`
+	InputTokens  int `json:"total_input_tokens,omitempty"`
+	OutputTokens int `json:"total_output_tokens,omitempty"`
 }
 
 type merchantCatalogFunctionCall struct {
@@ -191,7 +192,10 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 			MimeType: "application/json",
 			Schema:   merchantCatalogProposalSchema(),
 		},
-		GenerationConfig: &merchantCatalogGenerationConfig{MaxOutputTokens: maxOutput},
+		GenerationConfig: &merchantCatalogGenerationConfig{
+			MaxOutputTokens: maxOutput,
+			ThinkingLevel:   merchantCatalogThinkingLevel(model),
+		},
 	}
 
 	log.Printf("[MerchantCatalogAI] START business=%s session=%s catalog=%s model=%s",
@@ -221,6 +225,9 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 				input.BusinessID, input.SessionID, len(calls), merchantCatalogCallNames(calls))
 		}
 		if len(calls) == 0 {
+			if strings.EqualFold(strings.TrimSpace(resp.Status), "incomplete") {
+				return merchantcatalogai.Proposal{}, incompleteMerchantCatalogInteractionError(resp, maxOutput)
+			}
 			proposal, err := parseMerchantCatalogProposal(resp)
 			if err != nil {
 				return merchantcatalogai.Proposal{}, err
@@ -459,6 +466,29 @@ func (r *MerchantCatalogRuntime) executeInteractionTools(
 		})
 	}
 	return toolResults, nil
+}
+
+func merchantCatalogThinkingLevel(model string) string {
+	name := strings.ToLower(strings.TrimSpace(model))
+	switch {
+	case strings.HasPrefix(name, "gemini-3.5-flash-lite"),
+		strings.HasPrefix(name, "gemini-3.5-flash"),
+		strings.HasPrefix(name, "gemini-3.6-flash"),
+		strings.HasPrefix(name, "gemini-3-flash-preview"):
+		return "minimal"
+	default:
+		return ""
+	}
+}
+
+func incompleteMerchantCatalogInteractionError(resp merchantCatalogInteractionResponse, maxOutput int) error {
+	return fmt.Errorf(
+		"Gemini merchant catalog interaction incomplete before structured proposal: status=%s steps=%d output_chars=%d max_output_tokens=%d; increase the active AI output-token limit",
+		resp.Status,
+		len(resp.Steps),
+		len([]rune(strings.TrimSpace(resp.OutputText))),
+		maxOutput,
+	)
 }
 
 func parseMerchantCatalogProposal(resp merchantCatalogInteractionResponse) (merchantcatalogai.Proposal, error) {
