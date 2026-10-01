@@ -11,12 +11,17 @@ import (
 )
 
 type ReadOnlyCapabilityRegistry struct {
-	capabilities      map[string]ports.AICapability
-	selectedCatalogID string
+	capabilities       map[string]ports.AICapability
+	selectedCatalogID  string
+	evidenceReferences map[string]struct{}
 }
 
 func NewReadOnlyCapabilityRegistry(repository ports.CatalogRepository, selectedCatalogID string) *ReadOnlyCapabilityRegistry {
-	r := &ReadOnlyCapabilityRegistry{capabilities: make(map[string]ports.AICapability), selectedCatalogID: strings.TrimSpace(selectedCatalogID)}
+	r := &ReadOnlyCapabilityRegistry{
+		capabilities:       make(map[string]ports.AICapability),
+		selectedCatalogID:  strings.TrimSpace(selectedCatalogID),
+		evidenceReferences: make(map[string]struct{}),
+	}
 	if repository == nil {
 		return r
 	}
@@ -40,7 +45,74 @@ func (r *ReadOnlyCapabilityRegistry) Execute(ctx context.Context, execCtx ports.
 	if !ok {
 		return ports.AICapabilityResult{}, errors.New("merchant catalog capability is not available: " + name)
 	}
-	return capability.Execute(ctx, execCtx, rawParams)
+	result, err := capability.Execute(ctx, execCtx, rawParams)
+	if err != nil {
+		return ports.AICapabilityResult{}, err
+	}
+	for _, evidence := range result.CatalogEvidence {
+		if strings.TrimSpace(evidence.Reference) != "" {
+			r.evidenceReferences[evidence.Reference] = struct{}{}
+		}
+	}
+	for _, evidence := range result.VariantEvidence {
+		if strings.TrimSpace(evidence.Reference) != "" {
+			r.evidenceReferences[evidence.Reference] = struct{}{}
+		}
+	}
+	for _, evidence := range result.OfferEvidence {
+		if strings.TrimSpace(evidence.Reference) != "" {
+			r.evidenceReferences[evidence.Reference] = struct{}{}
+		}
+	}
+	return result, nil
+}
+
+// ValidateProposalReferences enforces the closed B2B reference boundary.
+// Every existing resource referenced by a mutation must have been returned by
+// a tenant-scoped read capability during this turn.
+func (r *ReadOnlyCapabilityRegistry) ValidateProposalReferences(p Proposal) error {
+	if p.Status != StatusResolved || !p.IsMutation() {
+		return nil
+	}
+	known := make(map[string]struct{}, len(r.evidenceReferences))
+	for ref := range r.evidenceReferences {
+		known[ref] = struct{}{}
+	}
+	require := func(id string, kind string) error {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return errors.New(kind + " reference is required")
+		}
+		if _, ok := known[id]; !ok {
+			return errors.New("proposal references a " + kind + " that was not returned by a catalog read tool: " + id)
+		}
+		return nil
+	}
+	switch p.Operation {
+	case OperationUpdate:
+		if p.Update == nil {
+			return errors.New("update proposal is missing update payload")
+		}
+		if err := require(p.Update.ItemID, "catalog item"); err != nil {
+			return err
+		}
+		for _, v := range p.Update.ExistingVariants {
+			if err := require(v.ID, "variant"); err != nil {
+				return err
+			}
+		}
+		for _, o := range p.Update.ExistingOffers {
+			if err := require(o.ID, "offer"); err != nil {
+				return err
+			}
+		}
+	case OperationDelete:
+		if p.Delete == nil {
+			return errors.New("delete proposal is missing delete payload")
+		}
+		return require(p.Delete.ItemID, "catalog item")
+	}
+	return nil
 }
 
 func (r *ReadOnlyCapabilityRegistry) Get(name string) (ports.AICapability, bool) {
