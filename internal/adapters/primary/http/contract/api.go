@@ -218,7 +218,6 @@ func registerRemainingDashboardOperations(api huma.API, dispatcher DashboardOper
         // Per contract ⑥ §19, this handler does NOT execute mutations; it
         // returns a CatalogOperationProposal which the merchant confirms
         // via the existing catalog command routes (createCatalogItem, etc.).
-        register(api, dispatcher, huma.Operation{OperationID: "merchantAIChat", Method: http.MethodPost, Path: "/businesses/{business_id}/merchant-ai/turns", Tags: []string{"MerchantAI"}, Summary: "Process one Merchant Catalog AI turn (contract 11)", Security: dashboardSecurity, DefaultStatus: http.StatusOK}, MerchantAIChatInput{}, Single[MerchantAIChatResponse]{})
 }
 
 func init() { _ = registerRemainingDashboardOperations }
