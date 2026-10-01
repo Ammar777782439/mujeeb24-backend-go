@@ -86,16 +86,15 @@ type listItemsCapability struct {
 func (c listItemsCapability) Definition() ports.AICapabilityDefinition {
 	return ports.AICapabilityDefinition{
 		Name: "merchant_catalog_list_items",
-		Description: "Read items from the already selected merchant catalog. This is bounded factual retrieval, not semantic search.",
+		Description: "Read items from the already selected merchant catalog. This is bounded factual retrieval, not semantic search. The catalog is selected by Mujeeb; the model must not choose it.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"catalog_id": map[string]any{"type": "string"},
 				"status": map[string]any{"type": "string"},
 				"limit": map[string]any{"type": "integer"},
 				"cursor": map[string]any{"type": "string"},
 			},
-			"required": []string{"catalog_id"},
+			"required": []string{},
 		},
 	}
 }
@@ -105,12 +104,9 @@ func (c listItemsCapability) Execute(ctx context.Context, execCtx ports.AICapabi
 	if err != nil {
 		return ports.AICapabilityResult{}, err
 	}
-	catalogID, err := requiredString(params, "catalog_id")
-	if err != nil {
-		return ports.AICapabilityResult{}, err
-	}
-	if c.selectedCatalogID != "" && catalogID != c.selectedCatalogID {
-		return ports.AICapabilityResult{}, errors.New("catalog_id does not match the selected merchant catalog")
+	catalogID := c.selectedCatalogID
+	if catalogID == "" {
+		return ports.AICapabilityResult{}, errors.New("selected merchant catalog is required")
 	}
 	status, _ := params["status"].(string)
 	cursor, _ := params["cursor"].(string)
@@ -158,14 +154,13 @@ type getItemCapability struct {
 func (c getItemCapability) Definition() ports.AICapabilityDefinition {
 	return ports.AICapabilityDefinition{
 		Name: "merchant_catalog_get_item",
-		Description: "Read one item by exact catalog_id and item_id using tenant-scoped repository access.",
+		Description: "Read one item by exact item_id in the already selected merchant catalog using tenant-scoped repository access.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"catalog_id": map[string]any{"type": "string"},
 				"item_id": map[string]any{"type": "string"},
 			},
-			"required": []string{"catalog_id", "item_id"},
+			"required": []string{"item_id"},
 		},
 	}
 }
@@ -175,16 +170,13 @@ func (c getItemCapability) Execute(ctx context.Context, execCtx ports.AICapabili
 	if err != nil {
 		return ports.AICapabilityResult{}, err
 	}
-	catalogID, err := requiredString(params, "catalog_id")
-	if err != nil {
-		return ports.AICapabilityResult{}, err
+	catalogID := c.selectedCatalogID
+	if catalogID == "" {
+		return ports.AICapabilityResult{}, errors.New("selected merchant catalog is required")
 	}
 	itemID, err := requiredString(params, "item_id")
 	if err != nil {
 		return ports.AICapabilityResult{}, err
-	}
-	if c.selectedCatalogID != "" && catalogID != c.selectedCatalogID {
-		return ports.AICapabilityResult{}, errors.New("catalog_id does not match the selected merchant catalog")
 	}
 	item, err := c.repository.GetCatalogItem(ctx, execCtx.BusinessID, catalogID, itemID)
 	if err != nil {
