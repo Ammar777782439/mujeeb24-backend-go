@@ -50,6 +50,10 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 		}
 	}
 
+	if _, err := a.Sessions.AppendMessage(ctx, in.BusinessID, sessionID, "merchant", in.Message); err != nil {
+		return TurnResult{}, err
+	}
+
 	stickyCatalogID, err := a.Sessions.GetStickyCatalogID(ctx, in.BusinessID, sessionID)
 	if err != nil {
 		return TurnResult{}, err
@@ -61,12 +65,21 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 		StickyCatalogID: stickyCatalogID,
 	})
 	if err != nil {
-		return TurnResult{SessionID: sessionID, Proposal: Proposal{
-			SchemaVersion: 1,
-			Status: StatusNeedsMoreData,
-			Operation: OperationAskMerchant,
-			ResponseText: "حدّد الكتالوج الذي تريد إدارة بياناته أولًا.",
-		}}, err
+		if errors.Is(err, ErrCatalogSelectionRequired) {
+			return TurnResult{SessionID: sessionID, Proposal: Proposal{
+				SchemaVersion: 1,
+				Status: StatusNeedsMoreData,
+				Operation: OperationAskMerchant,
+				ResponseText: "حدّد الكتالوج الذي تريد إدارة بياناته أولًا.",
+				MissingInformation: []MissingField{{
+					Path: "target_catalog_id",
+					DisplayName: "الكتالوج",
+					DataType: "uuid",
+					Reason: "يوجد أكثر من كتالوج صالح ولم يتم تحديد الكتالوج المستهدف.",
+				}},
+			}}, nil
+		}
+		return TurnResult{}, err
 	}
 
 	if in.ExplicitCatalogID != "" || stickyCatalogID == "" {
@@ -86,10 +99,6 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 	var capabilities ports.AICapabilityDispatcher
 	if a.CapabilitiesFactory != nil {
 		capabilities = a.CapabilitiesFactory(selected.Catalog.ID)
-	}
-
-	if _, err := a.Sessions.AppendMessage(ctx, in.BusinessID, sessionID, "merchant", in.Message); err != nil {
-		return TurnResult{}, err
 	}
 
 	proposal, err := a.Runtime.Decide(ctx, RuntimeInput{
