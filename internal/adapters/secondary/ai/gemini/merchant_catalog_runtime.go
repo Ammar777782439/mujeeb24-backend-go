@@ -407,7 +407,8 @@ func merchantCatalogProposalSchema() map[string]any {
 	itemCreate := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"name": stringField(), "item_type": stringField(), "pricing_mode": stringField(),
+			"name": stringField(), "attribute_schema_id": optionalString(), "item_type": stringField(),
+			"short_description": optionalString(), "long_description": optionalString(), "pricing_mode": stringField(),
 			"availability_mode": stringField(), "fulfillment_mode": stringField(),
 			"requires_confirmation": map[string]any{"type": "boolean"},
 			"attributes": objectField(),
