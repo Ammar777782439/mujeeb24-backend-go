@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const ProposalSchemaVersion = 2
+const ProposalSchemaVersion = 3
 
 // DefaultOfferName is the canonical contract-level name used when a merchant
 // gives a price/offer but does not provide a separate commercial label.
