@@ -2,7 +2,7 @@ package gemini
 
 import (
 	"log"
-	"strings"
+	
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
