@@ -344,3 +344,68 @@ func TestProposalValidateRejectsNonEnglishAttributeKey(t *testing.T) {
 		t.Fatal("expected non-English attribute key to be rejected")
 	}
 }
+
+
+func TestProposalValidateUpdateOfferUsesCreateOfferRules(t *testing.T) {
+	base := func(offer OfferCreate) Proposal {
+		return Proposal{
+			SchemaVersion: ProposalSchemaVersion,
+			Status:        StatusResolved,
+			Operation:     OperationUpdate,
+			ResponseText:  "أعددت اقتراح التعديل.",
+			Update: &UpdateOperation{
+				ItemID: "00000000-0000-0000-0000-000000000001",
+				NewOffers: []OfferCreate{offer},
+			},
+		}
+	}
+
+	tests := []struct {
+		name    string
+		offer   OfferCreate
+		wantErr bool
+	}{
+		{
+			name: "invalid name source",
+			offer: OfferCreate{
+			Name: DefaultOfferName, NameSource: "invented",
+			PricingMode: "fixed", Amount: stringPtr("25000"), PriceSource: OfferPriceSourceMerchantStated,
+			Currency: stringPtr("YER"), AvailabilityMode: "always_available",
+			AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
+			},
+			wantErr: true,
+		},
+		{
+			name: "merchant stated quote required is invalid",
+			offer: OfferCreate{
+			Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault,
+			PricingMode: "quote_required", Amount: nil, PriceSource: OfferPriceSourceMerchantStated,
+			Currency: stringPtr("YER"), AvailabilityMode: "always_available",
+			AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
+			},
+			wantErr: true,
+		},
+		{
+			name: "existing variant id is allowed on update",
+			offer: OfferCreate{
+			VariantID: stringPtr("00000000-0000-0000-0000-000000000002"),
+			Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault,
+			PricingMode: "fixed", Amount: stringPtr("25000"), PriceSource: OfferPriceSourceMerchantStated,
+			Currency: stringPtr("YER"), AvailabilityMode: "always_available",
+			AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := base(tt.offer).Validate()
+			if tt.wantErr && err == nil {
+				t.Fatal("expected validation error")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("unexpected validation error: %v", err)
+			}
+		})
+	}
+}
