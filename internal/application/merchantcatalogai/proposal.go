@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-type ProposalStatus string
+type ProposalStatus string `json:"status"`
 const (
 	StatusResolved ProposalStatus = "resolved"
 	StatusAmbiguous ProposalStatus = "ambiguous"
@@ -23,7 +23,7 @@ const (
 
 type MissingField struct {
 	Path string `json:"path"`
-	DisplayName string `json:"name"` `json:"display_name"`
+	DisplayName string `json:"display_name"`
 	DataType string `json:"data_type"`
 	Reason string `json:"reason"`
 }
@@ -60,8 +60,8 @@ type VariantUpdate struct {
 }
 
 type OfferCreate struct {
-	VariantID *string
-	VariantName *string `json:"name,omitempty"`
+	VariantID *string `json:"variant_id,omitempty"`
+	VariantName *string `json:"variant_name,omitempty"`
 	Name string `json:"name"`
 	PricingMode string `json:"pricing_mode"`
 	Amount *string `json:"amount,omitempty"`
@@ -77,22 +77,22 @@ type OfferUpdate struct {
 	ID string `json:"id"`
 	Name *string `json:"name,omitempty"`
 	Amount *string `json:"amount,omitempty"`
-	AvailabilityStatus *string `json:"status,omitempty"`
+	AvailabilityStatus *string `json:"availability_status,omitempty"`
 	Status *string `json:"status,omitempty"`
 }
 
 type UpdateOperation struct {
-	ItemID string `json:"id"`
-	Changes ItemChanges
+	ItemID string `json:"item_id"`
+	Changes ItemChanges `json:"changes"`
 	ExistingVariants []VariantUpdate `json:"existing_variants,omitempty"`
-	NewVariants []VariantCreate `json:"new_variants,omitempty"` `json:"variants,omitempty"`
+	NewVariants []VariantCreate `json:"new_variants,omitempty"`
 	ExistingOffers []OfferUpdate `json:"existing_offers,omitempty"`
-	NewOffers []OfferCreate `json:"new_offers,omitempty"` `json:"offers,omitempty"`
+	NewOffers []OfferCreate `json:"new_offers,omitempty"`
 }
 
 type DeleteOperation struct {
 	ItemID string `json:"id"`
-	ReasonGiven string
+	ReasonGiven string `json:"reason_given,omitempty"`
 }
 
 type Proposal struct {
