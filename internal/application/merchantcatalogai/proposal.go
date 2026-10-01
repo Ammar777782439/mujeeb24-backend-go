@@ -231,10 +231,6 @@ func (p Proposal) Validate() error {
 		if p.Update != nil || p.Delete != nil {
 			return errors.New("create proposal cannot contain update/delete data")
 		}
-		if len(p.Create.Attributes) > 0 && (p.Create.AttributeSchemaID == nil || strings.TrimSpace(*p.Create.AttributeSchemaID) == "") {
-			return errors.New("create proposal with attributes requires attribute_schema_id")
-		}
-
 		variantRefs := make(map[string]struct{}, len(p.Create.Variants))
 		for _, variant := range p.Create.Variants {
 			ref := strings.TrimSpace(variant.Ref)
