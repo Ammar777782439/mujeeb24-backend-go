@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-type ProposalStatus string `json:"status"`
+type ProposalStatus string
 const (
 	StatusResolved ProposalStatus = "resolved"
 	StatusAmbiguous ProposalStatus = "ambiguous"
@@ -70,7 +70,7 @@ type OfferCreate struct {
 	AvailabilityMode string `json:"availability_mode"`
 	AvailabilityStatus string `json:"availability_status"`
 	FulfillmentMode string `json:"fulfillment_mode"`
-	Status string
+	Status string `json:"status"`
 }
 
 type OfferUpdate struct {
