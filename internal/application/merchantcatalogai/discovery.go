@@ -106,6 +106,13 @@ func (r *ReadOnlyCapabilityRegistry) ValidateProposalReferences(p Proposal) erro
 				return err
 			}
 		}
+		for _, o := range p.Update.NewOffers {
+			if o.VariantID != nil {
+				if err := require(*o.VariantID, "variant"); err != nil {
+					return err
+				}
+			}
+		}
 	case OperationDelete:
 		if p.Delete == nil {
 			return errors.New("delete proposal is missing delete payload")
