@@ -4,7 +4,7 @@ import "testing"
 
 func TestProposalNormalizeNonResolvedMutation(t *testing.T) {
 	proposal := Proposal{
-		SchemaVersion: 1,
+		SchemaVersion: ProposalSchemaVersion,
 		Status:        StatusNeedsMoreData,
 		Operation:     OperationUpdate,
 		ResponseText:  "أكمل بيانات المنتج.",
@@ -106,3 +106,98 @@ func TestReadOnlyCapabilityRegistryAcceptsEvidenceBackedUpdate(t *testing.T) {
 		t.Fatalf("expected evidence-backed update to validate: %v", err)
 	}
 }
+
+
+func TestProposalValidateCreateResolvesNewVariantOffersByRef(t *testing.T) {
+	proposal := Proposal{
+		SchemaVersion: ProposalSchemaVersion,
+		Status:        StatusResolved,
+		Operation:     OperationCreate,
+		ResponseText:  "أعددت اقتراح إضافة المنتج.",
+		Create: &ItemCreate{
+			Name:                  "ساعة",
+			ItemType:              "physical_good",
+			PricingMode:            "fixed",
+			AvailabilityMode:      "always_available",
+			FulfillmentMode:       "delivery",
+			RequiresConfirmation: false,
+			Variants: []VariantCreate{
+				{Ref: "variant-black", Name: "أسود"},
+				{Ref: "variant-yellow", Name: "أصفر"},
+				{Ref: "variant-red", Name: "أحمر"},
+			},
+			Offers: []OfferCreate{
+				{Name: DefaultOfferName, VariantRef: stringPtr("variant-black"), PricingMode: "fixed", Amount: stringPtr("20000"), AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"},
+				{Name: DefaultOfferName, VariantRef: stringPtr("variant-yellow"), PricingMode: "fixed", Amount: stringPtr("22000"), AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"},
+				{Name: DefaultOfferName, VariantRef: stringPtr("variant-red"), PricingMode: "fixed", Amount: stringPtr("25000"), AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"},
+			},
+		},
+	}
+	if err := proposal.Validate(); err != nil {
+		t.Fatalf("expected proposal to validate: %v", err)
+	}
+}
+
+func TestProposalValidateCreateRejectsDatabaseVariantID(t *testing.T) {
+	proposal := Proposal{
+		SchemaVersion: ProposalSchemaVersion,
+		Status:        StatusResolved,
+		Operation:     OperationCreate,
+		ResponseText:  "أعددت اقتراح إضافة المنتج.",
+		Create: &ItemCreate{
+			Name:                  "ساعة",
+			ItemType:              "physical_good",
+			PricingMode:            "fixed",
+			AvailabilityMode:      "always_available",
+			FulfillmentMode:       "delivery",
+			RequiresConfirmation: false,
+			Variants:               []VariantCreate{{Ref: "variant-red", Name: "أحمر"}},
+			Offers: []OfferCreate{{
+				VariantID:          stringPtr("00000000-0000-0000-0000-000000000001"),
+				Name:               DefaultOfferName,
+				PricingMode:        "fixed",
+				Amount:             stringPtr("25000"),
+				AvailabilityMode:   "always_available",
+				AvailabilityStatus: "available",
+				FulfillmentMode:    "delivery",
+				Status:             "active",
+			}},
+		},
+	}
+	if err := proposal.Validate(); err == nil {
+		t.Fatal("expected create offer with database variant_id to be rejected")
+	}
+}
+
+func TestProposalValidateRejectsUnknownVariantRef(t *testing.T) {
+	proposal := Proposal{
+		SchemaVersion: ProposalSchemaVersion,
+		Status:        StatusResolved,
+		Operation:     OperationCreate,
+		ResponseText:  "أعددت اقتراح إضافة المنتج.",
+		Create: &ItemCreate{
+			Name:                  "ساعة",
+			ItemType:              "physical_good",
+			PricingMode:            "fixed",
+			AvailabilityMode:      "always_available",
+			FulfillmentMode:       "delivery",
+			RequiresConfirmation: false,
+			Variants:               []VariantCreate{{Ref: "variant-red", Name: "أحمر"}},
+			Offers: []OfferCreate{{
+				Name:               DefaultOfferName,
+				VariantRef:         stringPtr("variant-blue"),
+				PricingMode:        "fixed",
+				Amount:             stringPtr("25000"),
+				AvailabilityMode:   "always_available",
+				AvailabilityStatus: "available",
+				FulfillmentMode:    "delivery",
+				Status:             "active",
+			}},
+		},
+	}
+	if err := proposal.Validate(); err == nil {
+		t.Fatal("expected unknown variant_ref to be rejected")
+	}
+}
+
+func stringPtr(value string) *string { return &value }
