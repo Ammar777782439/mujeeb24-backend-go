@@ -198,7 +198,7 @@ func main() {
         _, err = pool.Exec(ctx, `
                 DELETE FROM business_memberships
                 WHERE business_id = $1::uuid AND principal_id = $2::uuid;
-        `, businessID, principalID, now)
+        `, businessID, principalID)
         if err != nil {
                 log.Fatalf("Failed to remove admin business membership: %v", err)
         }
