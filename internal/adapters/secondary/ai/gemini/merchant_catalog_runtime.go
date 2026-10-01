@@ -29,6 +29,7 @@ type MerchantCatalogRuntime struct {
 	runRepo     ports.AIRunRepository
 	lifecycle   ports.AIRunLifecyclePort
 	newID       func() string
+	configProvider ports.AIConfigurationProvider
 }
 
 func NewMerchantCatalogRuntime(client *Client) (*MerchantCatalogRuntime, error) {
@@ -60,6 +61,10 @@ func (r *MerchantCatalogRuntime) SetLifecycle(lifecycle ports.AIRunLifecyclePort
 	r.lifecycle = lifecycle
 }
 
+func (r *MerchantCatalogRuntime) SetConfigurationProvider(provider ports.AIConfigurationProvider) {
+	r.configProvider = provider
+}
+
 func (r *MerchantCatalogRuntime) SetNewID(newID func() string) {
 	if newID != nil {
 		r.newID = newID
@@ -70,8 +75,23 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 	if strings.TrimSpace(input.Message) == "" {
 		return merchantcatalogai.Proposal{}, errors.New("merchant message is required")
 	}
-	if r.maxInput > 0 && len([]rune(input.Message)) > r.maxInput {
-		return merchantcatalogai.Proposal{}, fmt.Errorf("merchant message exceeds %d characters", r.maxInput)
+	maxInput := r.maxInput
+	if r.configProvider != nil {
+		cfg, err := r.configProvider.GetActiveConfig(ctx)
+		if err != nil {
+			return merchantcatalogai.Proposal{}, fmt.Errorf("resolve active AI configuration: %w", err)
+		}
+		if strings.TrimSpace(cfg.APIKey) == "" {
+			return merchantcatalogai.Proposal{}, errors.New("active AI configuration has no valid API key")
+		}
+		r.apiKey = cfg.APIKey
+		r.model = cfg.Model
+		r.baseURL = cfg.BaseURL
+		r.maxOutput = cfg.MaxOutputTokens
+		maxInput = cfg.MaxInputCharacters
+	}
+	if maxInput > 0 && len([]rune(input.Message)) > maxInput {
+		return merchantcatalogai.Proposal{}, fmt.Errorf("merchant message exceeds %d characters", maxInput)
 	}
 
 	contextPayload := map[string]any{
