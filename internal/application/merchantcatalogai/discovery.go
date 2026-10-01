@@ -11,11 +11,12 @@ import (
 )
 
 type ReadOnlyCapabilityRegistry struct {
-	capabilities map[string]ports.AICapability
+	capabilities      map[string]ports.AICapability
+	selectedCatalogID string
 }
 
-func NewReadOnlyCapabilityRegistry(repository ports.CatalogRepository) *ReadOnlyCapabilityRegistry {
-	r := &ReadOnlyCapabilityRegistry{capabilities: make(map[string]ports.AICapability)}
+func NewReadOnlyCapabilityRegistry(repository ports.CatalogRepository, selectedCatalogID string) *ReadOnlyCapabilityRegistry {
+	r := &ReadOnlyCapabilityRegistry{capabilities: make(map[string]ports.AICapability), selectedCatalogID: strings.TrimSpace(selectedCatalogID)}
 	if repository == nil {
 		return r
 	}
@@ -104,6 +105,9 @@ func (c listItemsCapability) Execute(ctx context.Context, execCtx ports.AICapabi
 	catalogID, err := requiredString(params, "catalog_id")
 	if err != nil {
 		return ports.AICapabilityResult{}, err
+	}
+	if r.selectedCatalogID != "" && catalogID != r.selectedCatalogID {
+		return ports.AICapabilityResult{}, errors.New("catalog_id does not match the selected merchant catalog")
 	}
 	status, _ := params["status"].(string)
 	cursor, _ := params["cursor"].(string)
