@@ -1,5 +1,7 @@
 package merchantcatalogai
 
+import "regexp"
+
 const ProposalSchemaVersion = 3
 
 // DefaultOfferName is the canonical contract-level name used when a merchant
