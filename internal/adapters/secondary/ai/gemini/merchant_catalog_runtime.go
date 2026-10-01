@@ -157,9 +157,10 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 	}
 
 	contextPayload := map[string]any{
-		"business_id":  input.BusinessID,
-		"principal_id": input.PrincipalID,
-		"session_id":   input.SessionID,
+		"business_id":      input.BusinessID,
+		"principal_id":     input.PrincipalID,
+		"session_id":       input.SessionID,
+		"default_currency": input.DefaultCurrency,
 		"catalog": map[string]any{
 			"id":     input.SelectedCatalog.ID,
 			"name":   input.SelectedCatalog.Name,
@@ -574,7 +575,7 @@ func merchantCatalogProposalSchema() map[string]any {
 						"pricing_mode": offerPricingMode,
 						"amount": offerAmount,
 						"price_source": offerPriceSource,
-						"currency": optionalString(),
+						"currency": stringField(),
 						"pricing_unit": optionalString(),
 						"availability_mode": stringField(),
 						"availability_status": stringField(),
@@ -666,11 +667,26 @@ func merchantCatalogProposalSchema() map[string]any {
 			"response_text": stringField(),
 			"evidence_references": map[string]any{"type": "array", "items": stringField()},
 			"missing_information": map[string]any{"type": "array", "items": missingField},
-			"create": itemCreate,
-			"update": update,
-			"delete": deletePayload,
+			"create": map[string]any{
+				"anyOf": []map[string]any{
+					itemCreate,
+					{"type": "null"},
+				},
+			},
+			"update": map[string]any{
+				"anyOf": []map[string]any{
+					update,
+					{"type": "null"},
+				},
+			},
+			"delete": map[string]any{
+				"anyOf": []map[string]any{
+					deletePayload,
+					{"type": "null"},
+				},
+			},
 		},
-		"required": []string{"schema_version", "status", "operation", "response_text"},
+		"required": []string{"schema_version", "status", "operation", "response_text", "create", "update", "delete"},
 	}
 }
 
