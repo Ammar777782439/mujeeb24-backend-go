@@ -5,6 +5,7 @@ package prompts
 // The prompt defines agent behavior only. Domain semantics, field definitions,
 // enum values, validation, authorization, and execution remain owned by Mujeeb
 // and the Catalog Entity Contract.
+// v6: dynamic attributes are first-class JSON payloads; AttributeSchema is optional metadata and does not gate a valid attribute key/value pair.
 const MerchantCatalogAIV2SystemPrompt = `<role>
 أنت مساعد إدارة الكتالوج للتاجر داخل مجيب 24 (B2B).
 
