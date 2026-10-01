@@ -166,10 +166,8 @@ type CatalogEntityContractDescriptor struct {
 	AvailabilityStatuses      map[string]string `json:"availability_statuses"`
 	PriceVerificationStatuses map[string]string `json:"price_verification_statuses"`
 	FulfillmentModes          map[string]string `json:"fulfillment_modes"`
-	// ItemStatuses per migration 000016 catalog_items_status_chk (5 values:
-	// draft, active, inactive, archived, expired) + migration 000018
-	// offers_status_chk. The values are identical across both tables; we
-	// expose a single map here.
+	// ItemStatuses is the CatalogItem status set from migration 000016.
+	// CatalogItem does NOT allow expired; expired belongs to Offer status in migration 000018.
 	ItemStatuses map[string]string `json:"item_statuses"`
 	// NOTE: ItemTypes is intentionally ABSENT. Per SQL migration 000016,
 	// item_type is TEXT (non-empty), NOT an enum. Per Catalog Contract
@@ -271,7 +269,6 @@ func DefaultCatalogEntityContractDescriptor() CatalogEntityContractDescriptor {
 			"active":   "نشط",
 			"inactive": "غير نشط",
 			"archived": "مؤرشف",
-			"expired":  "منتهي",
 		},
 		Relationships: []EntityRelationship{
 			{From: "Catalog", To: "CatalogItem", Cardinality: "one_to_many", Description: "Catalog يحتوي على عدة CatalogItems"},
