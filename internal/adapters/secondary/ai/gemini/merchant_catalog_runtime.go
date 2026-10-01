@@ -209,10 +209,16 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 			return merchantcatalogai.Proposal{}, err
 		}
 
-		log.Printf("[MerchantCatalogAI] INTERACTION business=%s session=%s id=%s status=%s steps=%d",
-			input.BusinessID, input.SessionID, resp.ID, resp.Status, len(resp.Steps))
+		log.Printf("[MerchantCatalogAI] INTERACTION business=%s session=%s id=%s status=%s steps=%d input_tokens=%d output_tokens=%d",
+			input.BusinessID, input.SessionID, resp.ID, resp.Status, len(resp.Steps), resp.Usage.InputTokens, resp.Usage.OutputTokens)
+		log.Printf("[MerchantCatalogAI][INTERACTION_DETAIL] business=%s session=%s step_types=%v output_chars=%d",
+			input.BusinessID, input.SessionID, merchantCatalogStepTypes(resp), len([]rune(strings.TrimSpace(resp.OutputText))))
 
 		calls := extractMerchantCatalogFunctionCalls(resp)
+		if len(calls) > 0 {
+			log.Printf("[MerchantCatalogAI][TOOL_BATCH] business=%s session=%s count=%d tools=%v",
+				input.BusinessID, input.SessionID, len(calls), merchantCatalogCallNames(calls))
+		}
 		if len(calls) == 0 {
 			proposal, err := parseMerchantCatalogProposal(resp)
 			if err != nil {
@@ -231,6 +237,7 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 			}
 			log.Printf("[MerchantCatalogAI] PROPOSAL business=%s session=%s status=%s operation=%s evidence=%d",
 				input.BusinessID, input.SessionID, proposal.Status, proposal.Operation, len(proposal.EvidenceReferences))
+			logMerchantCatalogProposalDetail(input, proposal)
 			return proposal, nil
 		}
 
@@ -248,6 +255,80 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 		previousInteractionID = resp.ID
 		req.Input = resultInput
 	}
+}
+
+func merchantCatalogStepTypes(resp merchantCatalogInteractionResponse) []string {
+	types := make([]string, 0, len(resp.Steps))
+	for _, step := range resp.Steps {
+		types = append(types, step.Type)
+	}
+	return types
+}
+
+func merchantCatalogCallNames(calls []merchantCatalogFunctionCall) []string {
+	names := make([]string, 0, len(calls))
+	for _, call := range calls {
+		names = append(names, call.Name)
+	}
+	return names
+}
+
+func logMerchantCatalogProposalDetail(input merchantcatalogai.RuntimeInput, proposal merchantcatalogai.Proposal) {
+	detail := map[string]any{
+		"business": input.BusinessID,
+		"session": input.SessionID,
+		"status": proposal.Status,
+		"operation": proposal.Operation,
+		"schema_version": proposal.SchemaVersion,
+		"evidence_count": len(proposal.EvidenceReferences),
+		"missing_count": len(proposal.MissingInformation),
+	}
+
+	if proposal.Create != nil {
+		detail["create"] = map[string]any{
+			"name": proposal.Create.Name,
+			"item_type": proposal.Create.ItemType,
+			"pricing_mode": proposal.Create.PricingMode,
+			"availability": proposal.Create.AvailabilityMode,
+			"fulfillment": proposal.Create.FulfillmentMode,
+			"variant_count": len(proposal.Create.Variants),
+			"offer_count": len(proposal.Create.Offers),
+			"variants": func() []map[string]string {
+				out := make([]map[string]string, 0, len(proposal.Create.Variants))
+				for _, v := range proposal.Create.Variants {
+					out = append(out, map[string]string{"ref": v.Ref, "name": v.Name})
+				}
+				return out
+			}(),
+			"offers": func() []map[string]any {
+				out := make([]map[string]any, 0, len(proposal.Create.Offers))
+				for _, o := range proposal.Create.Offers {
+					out = append(out, map[string]any{
+						"variant_ref": o.VariantRef,
+						"name": o.Name,
+						"pricing_mode": o.PricingMode,
+						"amount": o.Amount,
+						"currency": o.Currency,
+						"availability_status": o.AvailabilityStatus,
+						"fulfillment_mode": o.FulfillmentMode,
+					})
+				}
+				return out
+			}(),
+		}
+	}
+
+	if proposal.Update != nil {
+		detail["update"] = map[string]any{
+			"item_id": proposal.Update.ItemID,
+			"existing_variants": len(proposal.Update.ExistingVariants),
+			"new_variants": len(proposal.Update.NewVariants),
+			"existing_offers": len(proposal.Update.ExistingOffers),
+			"new_offers": len(proposal.Update.NewOffers),
+		}
+	}
+
+	log.Printf("[MerchantCatalogAI][PROPOSAL_DETAIL] %+v", detail)
 }
 
 func (r *MerchantCatalogRuntime) sendInteraction(ctx context.Context, reqBody merchantCatalogInteractionRequest, apiKey, baseURL string) (merchantCatalogInteractionResponse, error) {
