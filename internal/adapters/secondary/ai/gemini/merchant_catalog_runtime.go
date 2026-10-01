@@ -214,6 +214,10 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 			if err != nil {
 				return merchantcatalogai.Proposal{}, err
 			}
+			proposal = proposal.Normalize()
+			if err := proposal.Validate(); err != nil {
+				return merchantcatalogai.Proposal{}, fmt.Errorf("validate merchant catalog proposal: %w", err)
+			}
 			log.Printf("[MerchantCatalogAI] PROPOSAL business=%s session=%s status=%s operation=%s evidence=%d",
 				input.BusinessID, input.SessionID, proposal.Status, proposal.Operation, len(proposal.EvidenceReferences))
 			return proposal, nil
