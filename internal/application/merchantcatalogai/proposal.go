@@ -3,8 +3,8 @@ package merchantcatalogai
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"regexp"
+	"strings"
 )
 
 const ProposalSchemaVersion = 3
@@ -124,133 +124,7 @@ type DeleteOperation struct {
 	ReasonGiven string `json:"reason_given,omitempty"`
 }
 
-var attributeKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:_[a-z0-9]+)*package merchantcatalogai
-
-import (
-	"errors"
-	"fmt"
-	"strings"
-	"regexp"
-)
-
-const ProposalSchemaVersion = 3
-
-// DefaultOfferName is the canonical contract-level name used when a merchant
-// gives a price/offer but does not provide a separate commercial label.
-const DefaultOfferName = "سعر البيع"
-
-type ProposalStatus string
-
-const (
-	StatusResolved     ProposalStatus = "resolved"
-	StatusAmbiguous    ProposalStatus = "ambiguous"
-	StatusNotFound     ProposalStatus = "not_found"
-	StatusNeedsMoreData ProposalStatus = "needs_more_data"
-)
-
-type Operation string
-
-const (
-	OperationCreate     Operation = "create"
-	OperationUpdate     Operation = "update"
-	OperationDelete     Operation = "delete"
-	OperationAskMerchant Operation = "ask_merchant"
-)
-
-type MissingField struct {
-	Path string `json:"path"`
-	DisplayName string `json:"display_name"`
-	DataType string `json:"data_type"`
-	Reason string `json:"reason"`
-}
-
-type ItemCreate struct {
-	Name string `json:"name"`
-	AttributeSchemaID *string `json:"attribute_schema_id,omitempty"`
-	ItemType string `json:"item_type"`
-	ShortDescription *string `json:"short_description,omitempty"`
-	LongDescription *string `json:"long_description,omitempty"`
-	PricingMode string `json:"pricing_mode"`
-	AvailabilityMode string `json:"availability_mode"`
-	FulfillmentMode string `json:"fulfillment_mode"`
-	RequiresConfirmation bool `json:"requires_confirmation"`
-	Attributes map[string]any `json:"attributes,omitempty"`
-	Variants []VariantCreate `json:"variants,omitempty"`
-	Offers []OfferCreate `json:"offers,omitempty"`
-}
-
-type ItemChanges struct {
-	Name *string `json:"name,omitempty"`
-	ItemType *string `json:"item_type,omitempty"`
-	ShortDescription *string `json:"short_description,omitempty"`
-	LongDescription *string `json:"long_description,omitempty"`
-	Status *string `json:"status,omitempty"`
-	PricingMode *string `json:"pricing_mode,omitempty"`
-	AvailabilityMode *string `json:"availability_mode,omitempty"`
-	FulfillmentMode *string `json:"fulfillment_mode,omitempty"`
-	Attributes map[string]any `json:"attributes,omitempty"`
-	RequiresConfirmation *bool `json:"requires_confirmation,omitempty"`
-}
-
-type VariantCreate struct {
-	Ref        string         `json:"ref"`
-	Name       string         `json:"name"`
-	Attributes map[string]any `json:"attributes,omitempty"`
-}
-
-type VariantUpdate struct {
-	ID string `json:"id"`
-	Name *string `json:"name,omitempty"`
-	Attributes map[string]any `json:"attributes,omitempty"`
-	Status *string `json:"status,omitempty"`
-}
-
-const (
-	OfferNameSourceSystemDefault = "system_default"
-	OfferNameSourceMerchantStated = "merchant_stated"
-	OfferPriceSourceMerchantStated = "merchant_stated"
-	OfferPriceSourceNotStated = "not_stated"
-)
-
-type OfferCreate struct {
-	VariantID  *string `json:"variant_id,omitempty"`
-	VariantRef *string `json:"variant_ref,omitempty"`
-	Name string `json:"name"`
-	NameSource string `json:"name_source"`
-	PricingMode string `json:"pricing_mode"`
-	Amount *string `json:"amount,omitempty"`
-	PriceSource string `json:"price_source"`
-	Currency *string `json:"currency,omitempty"`
-	PricingUnit *string `json:"pricing_unit,omitempty"`
-	AvailabilityMode string `json:"availability_mode"`
-	AvailabilityStatus string `json:"availability_status"`
-	FulfillmentMode string `json:"fulfillment_mode"`
-	Status string `json:"status"`
-}
-
-type OfferUpdate struct {
-	ID string `json:"id"`
-	Name *string `json:"name,omitempty"`
-	Amount *string `json:"amount,omitempty"`
-	AvailabilityStatus *string `json:"availability_status,omitempty"`
-	Status *string `json:"status,omitempty"`
-}
-
-type UpdateOperation struct {
-	ItemID string `json:"item_id"`
-	Changes ItemChanges `json:"changes"`
-	ExistingVariants []VariantUpdate `json:"existing_variants,omitempty"`
-	NewVariants []VariantCreate `json:"new_variants,omitempty"`
-	ExistingOffers []OfferUpdate `json:"existing_offers,omitempty"`
-	NewOffers []OfferCreate `json:"new_offers,omitempty"`
-}
-
-type DeleteOperation struct {
-	ItemID string `json:"id"`
-	ReasonGiven string `json:"reason_given,omitempty"`
-}
-
-)
+var attributeKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`)
 
 func validateAttributeObject(attributes map[string]any, path string) error {
 	for key := range attributes {
@@ -261,6 +135,77 @@ func validateAttributeObject(attributes map[string]any, path string) error {
 	return nil
 }
 
+func validateOfferCreate(offer OfferCreate, path string, variantRefs map[string]struct{}, allowVariantID bool) error {
+	if offer.Currency == nil || strings.TrimSpace(*offer.Currency) == "" {
+		return fmt.Errorf("%s requires currency from merchant statement or business default_currency", path)
+	}
+	if strings.TrimSpace(offer.Name) == "" {
+		return fmt.Errorf("%s requires name", path)
+	}
+	switch offer.NameSource {
+	case OfferNameSourceSystemDefault:
+		if offer.Name != DefaultOfferName {
+			return fmt.Errorf("system-default %s name must be %q", path, DefaultOfferName)
+		}
+	case OfferNameSourceMerchantStated:
+	default:
+		return fmt.Errorf("%s requires a valid name_source", path)
+	}
+
+	switch offer.PriceSource {
+	case OfferPriceSourceMerchantStated:
+		if offer.Amount == nil || strings.TrimSpace(*offer.Amount) == "" {
+			return fmt.Errorf("merchant-stated %s price requires amount", path)
+		}
+		if offer.PricingMode == "quote_required" {
+			return fmt.Errorf("merchant-stated %s price cannot use quote_required pricing_mode", path)
+		}
+	case OfferPriceSourceNotStated:
+		if offer.Amount != nil && strings.TrimSpace(*offer.Amount) != "" {
+			return fmt.Errorf("not-stated %s price cannot contain amount", path)
+		}
+	default:
+		return fmt.Errorf("%s requires a valid price_source", path)
+	}
+
+	switch offer.PricingMode {
+	case "fixed", "starting_from":
+		if offer.Amount == nil || strings.TrimSpace(*offer.Amount) == "" {
+			return fmt.Errorf("%s pricing_mode %s requires amount", path, offer.PricingMode)
+		}
+	case "per_unit", "per_person", "per_day":
+		if offer.Amount == nil || strings.TrimSpace(*offer.Amount) == "" {
+			return fmt.Errorf("%s pricing_mode %s requires amount", path, offer.PricingMode)
+		}
+		if offer.PricingUnit == nil || strings.TrimSpace(*offer.PricingUnit) == "" {
+			return fmt.Errorf("%s pricing_mode %s requires pricing_unit", path, offer.PricingMode)
+		}
+	case "quote_required":
+		if offer.Amount != nil && strings.TrimSpace(*offer.Amount) != "" {
+			return fmt.Errorf("%s quote_required pricing cannot contain amount", path)
+		}
+	case "dynamic":
+	default:
+		return fmt.Errorf("%s pricing_mode is invalid: %s", path, offer.PricingMode)
+	}
+
+	if !allowVariantID && offer.VariantID != nil {
+		return fmt.Errorf("%s cannot contain variant_id; use variant_ref for a new variant", path)
+	}
+	if offer.VariantID != nil && offer.VariantRef != nil {
+		return fmt.Errorf("%s cannot contain both variant_id and variant_ref", path)
+	}
+	if offer.VariantRef != nil {
+		ref := strings.TrimSpace(*offer.VariantRef)
+		if ref == "" {
+			return fmt.Errorf("%s variant_ref cannot be empty", path)
+		}
+		if _, exists := variantRefs[ref]; !exists {
+			return fmt.Errorf("%s references unknown variant_ref: %s", path, ref)
+		}
+	}
+	return nil
+}
 type Proposal struct {
 	SchemaVersion int `json:"schema_version"`
 	Status ProposalStatus `json:"status"`
@@ -390,69 +335,8 @@ func (p Proposal) Validate() error {
 		}
 
 		for _, offer := range p.Create.Offers {
-			if offer.Currency == nil || strings.TrimSpace(*offer.Currency) == "" {
-				return errors.New("create offer requires currency from merchant statement or business default_currency")
-			}
-			if strings.TrimSpace(offer.Name) == "" {
-				return errors.New("create offer requires name")
-			}
-			switch offer.NameSource {
-			case OfferNameSourceSystemDefault:
-				if offer.Name != DefaultOfferName {
-					return fmt.Errorf("system-default create offer name must be %q", DefaultOfferName)
-				}
-			case OfferNameSourceMerchantStated:
-				// Merchant-provided commercial labels are preserved verbatim.
-			default:
-				return errors.New("create offer requires a valid name_source")
-			}
-			switch offer.PriceSource {
-			case OfferPriceSourceMerchantStated:
-				if offer.Amount == nil || strings.TrimSpace(*offer.Amount) == "" {
-					return errors.New("merchant-stated create offer price requires amount")
-				}
-				if offer.PricingMode == "quote_required" {
-					return errors.New("merchant-stated create offer price cannot use quote_required pricing_mode")
-				}
-			case OfferPriceSourceNotStated:
-				if offer.Amount != nil && strings.TrimSpace(*offer.Amount) != "" {
-					return errors.New("not-stated create offer price cannot contain amount")
-				}
-			default:
-				return errors.New("create offer requires a valid price_source")
-			}
-			switch offer.PricingMode {
-			case "fixed", "starting_from":
-				if offer.Amount == nil || strings.TrimSpace(*offer.Amount) == "" {
-					return fmt.Errorf("create offer pricing_mode %s requires amount", offer.PricingMode)
-				}
-			case "per_unit", "per_person", "per_day":
-				if offer.Amount == nil || strings.TrimSpace(*offer.Amount) == "" {
-					return fmt.Errorf("create offer pricing_mode %s requires amount", offer.PricingMode)
-				}
-				if offer.PricingUnit == nil || strings.TrimSpace(*offer.PricingUnit) == "" {
-					return fmt.Errorf("create offer pricing_mode %s requires pricing_unit", offer.PricingMode)
-				}
-			case "quote_required":
-				if offer.Amount != nil && strings.TrimSpace(*offer.Amount) != "" {
-					return errors.New("quote_required create offer cannot contain amount")
-				}
-			case "dynamic":
-				// Amount may be present or absent; the contract allows both.
-			default:
-				return fmt.Errorf("create offer pricing_mode is invalid: %s", offer.PricingMode)
-			}
-			if offer.VariantID != nil {
-				return errors.New("create offer cannot contain variant_id; use variant_ref for a new variant")
-			}
-			if offer.VariantRef != nil {
-				ref := strings.TrimSpace(*offer.VariantRef)
-				if ref == "" {
-					return errors.New("create offer variant_ref cannot be empty")
-				}
-				if _, exists := variantRefs[ref]; !exists {
-					return fmt.Errorf("create offer references unknown variant_ref: %s", ref)
-				}
+			if err := validateOfferCreate(offer, "create.offer", variantRefs, false); err != nil {
+				return err
 			}
 		}
 	case OperationUpdate:
@@ -488,23 +372,8 @@ func (p Proposal) Validate() error {
 			newVariantRefs[ref] = struct{}{}
 		}
 		for _, offer := range p.Update.NewOffers {
-			if offer.Currency == nil || strings.TrimSpace(*offer.Currency) == "" {
-				return errors.New("new offer requires currency from merchant statement or business default_currency")
-			}
-			if strings.TrimSpace(offer.Name) == "" {
-				return errors.New("new offer requires name")
-			}
-			if offer.VariantID != nil && offer.VariantRef != nil {
-				return errors.New("new offer cannot contain both variant_id and variant_ref")
-			}
-			if offer.VariantRef != nil {
-				ref := strings.TrimSpace(*offer.VariantRef)
-				if ref == "" {
-					return errors.New("new offer variant_ref cannot be empty")
-				}
-				if _, exists := newVariantRefs[ref]; !exists {
-					return fmt.Errorf("new offer references unknown variant_ref: %s", ref)
-				}
+			if err := validateOfferCreate(offer, "update.new_offers.offer", newVariantRefs, true); err != nil {
+				return err
 			}
 		}
 	case OperationDelete:
