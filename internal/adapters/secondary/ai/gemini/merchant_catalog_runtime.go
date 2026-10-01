@@ -22,6 +22,10 @@ import (
 // It uses Google's current Interactions API, not the legacy generateContent
 // request/response shape. Mujeeb remains responsible for tool execution,
 // validation, authorization, and persistence.
+//
+// The B2B runtime uses client-side function calling. Gemini requires the
+// interaction to be stored so the tool result can be submitted through
+// previous_interaction_id. Therefore Store must remain true for this loop.
 type MerchantCatalogRuntime struct {
 	client         *Client
 	httpClient     *http.Client
@@ -177,7 +181,7 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 	tools := merchantCatalogInteractionTools(input.Capabilities)
 	req := merchantCatalogInteractionRequest{
 		Model:             model,
-		Store:             false,
+		Store:             true,
 		Input:             string(encodedContext),
 		SystemInstruction: systemText,
 		Tools:             tools,
