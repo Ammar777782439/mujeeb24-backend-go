@@ -159,8 +159,8 @@ func (c listAttributeSchemasCapability) Definition() ports.AICapabilityDefinitio
 
 func (c listAttributeSchemasCapability) Execute(ctx context.Context, execCtx ports.AICapabilityExecutionContext, rawParams []byte) (ports.AICapabilityResult, error) {
 	var params struct {
-		Name string ` + "`json:\"name\"`" + `
-		Version *int ` + "`json:\"version\"`" + `
+		Name string `json:"name"`
+		Version *int `json:"version"`
 	}
 	if len(rawParams) > 0 {
 		if err := json.Unmarshal(rawParams, &params); err != nil {
