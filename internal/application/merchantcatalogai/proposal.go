@@ -2,8 +2,15 @@ package merchantcatalogai
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 )
+
+const ProposalSchemaVersion = 2
+
+// DefaultOfferName is the canonical contract-level name used when a merchant
+// gives a price/offer but does not provide a separate commercial label.
+const DefaultOfferName = "سعر البيع"
 
 type ProposalStatus string
 
@@ -59,7 +66,8 @@ type ItemChanges struct {
 }
 
 type VariantCreate struct {
-	Name string `json:"name"`
+	Ref        string         `json:"ref"`
+	Name       string         `json:"name"`
 	Attributes map[string]any `json:"attributes,omitempty"`
 }
 
@@ -71,8 +79,8 @@ type VariantUpdate struct {
 }
 
 type OfferCreate struct {
-	VariantID *string `json:"variant_id,omitempty"`
-	VariantName *string `json:"variant_name,omitempty"`
+	VariantID  *string `json:"variant_id,omitempty"`
+	VariantRef *string `json:"variant_ref,omitempty"`
 	Name string `json:"name"`
 	PricingMode string `json:"pricing_mode"`
 	Amount *string `json:"amount,omitempty"`
@@ -184,6 +192,9 @@ func (p Proposal) Normalize() Proposal {
 }
 
 func (p Proposal) Validate() error {
+	if p.SchemaVersion != ProposalSchemaVersion {
+		return fmt.Errorf("merchant catalog proposal schema_version must be %d", ProposalSchemaVersion)
+	}
 	if strings.TrimSpace(p.ResponseText) == "" {
 		return errors.New("merchant catalog proposal response_text is required")
 	}
@@ -211,12 +222,71 @@ func (p Proposal) Validate() error {
 		if p.Update != nil || p.Delete != nil {
 			return errors.New("create proposal cannot contain update/delete data")
 		}
+
+		variantRefs := make(map[string]struct{}, len(p.Create.Variants))
+		for _, variant := range p.Create.Variants {
+			ref := strings.TrimSpace(variant.Ref)
+			if ref == "" {
+				return errors.New("create variant requires ref")
+			}
+			if _, exists := variantRefs[ref]; exists {
+				return fmt.Errorf("duplicate create variant ref: %s", ref)
+			}
+			variantRefs[ref] = struct{}{}
+		}
+
+		for _, offer := range p.Create.Offers {
+			if strings.TrimSpace(offer.Name) == "" {
+				return errors.New("create offer requires name")
+			}
+			if offer.VariantID != nil {
+				return errors.New("create offer cannot contain variant_id; use variant_ref for a new variant")
+			}
+			if offer.VariantRef != nil {
+				ref := strings.TrimSpace(*offer.VariantRef)
+				if ref == "" {
+					return errors.New("create offer variant_ref cannot be empty")
+				}
+				if _, exists := variantRefs[ref]; !exists {
+					return fmt.Errorf("create offer references unknown variant_ref: %s", ref)
+				}
+			}
+		}
 	case OperationUpdate:
 		if p.Update == nil || strings.TrimSpace(p.Update.ItemID) == "" {
 			return errors.New("update proposal requires item_id")
 		}
 		if p.Create != nil || p.Delete != nil {
 			return errors.New("update proposal cannot contain create/delete data")
+		}
+
+		newVariantRefs := make(map[string]struct{}, len(p.Update.NewVariants))
+		for _, variant := range p.Update.NewVariants {
+			ref := strings.TrimSpace(variant.Ref)
+			if ref == "" {
+				return errors.New("new variant requires ref")
+			}
+			if _, exists := newVariantRefs[ref]; exists {
+				return fmt.Errorf("duplicate new variant ref: %s", ref)
+			}
+			newVariantRefs[ref] = struct{}{}
+		}
+		for _, offer := range p.Update.NewOffers {
+			if strings.TrimSpace(offer.Name) == "" {
+				return errors.New("new offer requires name")
+			}
+			if offer.VariantID != nil && offer.VariantRef != nil {
+				return errors.New("new offer cannot contain both variant_id and variant_ref")
+			}
+			if offer.VariantRef != nil {
+				ref := strings.TrimSpace(*offer.VariantRef)
+				if ref == "" {
+					return errors.New("new offer variant_ref cannot be empty")
+				}
+				if _, exists := newVariantRefs[ref]; !exists {
+					return fmt.Errorf("new offer references unknown variant_ref: %s", ref)
+				}
+			}
 		}
 	case OperationDelete:
 		if p.Delete == nil || strings.TrimSpace(p.Delete.ItemID) == "" {
