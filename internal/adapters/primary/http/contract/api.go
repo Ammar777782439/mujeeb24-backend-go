@@ -212,13 +212,9 @@ func registerRemainingDashboardOperations(api huma.API, dispatcher DashboardOper
         register(api, dispatcher, huma.Operation{OperationID: "listCustomerTransactions", Method: http.MethodGet, Path: "/businesses/{business_id}/customers/{customer_id}/transactions", Tags: []string{"Customers"}, Summary: "List customer transactions", Security: dashboardSecurity}, CustomerTransactionsInput{}, List[CommercialTransaction]{})
         register(api, dispatcher, huma.Operation{OperationID: "mergeCustomer", Method: http.MethodPost, Path: "/businesses/{business_id}/customers/{customer_id}/merge", Tags: []string{"Customers"}, Summary: "Merge customer", Security: dashboardSecurity, DefaultStatus: http.StatusAccepted}, CustomerMergeInput{}, Single[Customer]{})
 
-        // Per contract 11 §2 — B2B Merchant Catalog AI is strictly separated
-        // from B2C AutoReply. This is the merchant-facing entrypoint for the
-        // conversational catalog authoring agent per contract 11 §6.
-        // Per contract ⑥ §19, this handler does NOT execute mutations; it
-        // returns a CatalogOperationProposal which the merchant confirms
-        // via the existing catalog command routes (createCatalogItem, etc.).
-        register(api, dispatcher, huma.Operation{OperationID: "merchantAIChat", Method: http.MethodPost, Path: "/businesses/{business_id}/merchant-ai/turns", Tags: []string{"MerchantAI"}, Summary: "Process one Merchant Catalog AI turn (contract 11)", Security: dashboardSecurity, DefaultStatus: http.StatusOK}, MerchantAIChatInput{}, Single[MerchantAIChatResponse]{})
+        // B2B Merchant Catalog AI v2 keeps the external route stable while
+        // using an independent handler, DTOs, Proposal Contract, and execution path.
+        register(api, dispatcher, huma.Operation{OperationID: "merchantAIChat", Method: http.MethodPost, Path: "/businesses/{business_id}/merchant-ai/turns", Tags: []string{"MerchantCatalogAI"}, Summary: "Process one Merchant Catalog AI turn", Security: dashboardSecurity, DefaultStatus: http.StatusOK}, MerchantCatalogAIV2Input{}, Single[MerchantCatalogAIResponse]{})
 }
 
 func init() { _ = registerRemainingDashboardOperations }
