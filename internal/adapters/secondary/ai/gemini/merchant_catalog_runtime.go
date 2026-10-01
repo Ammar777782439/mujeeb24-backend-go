@@ -273,6 +273,13 @@ func merchantCatalogCallNames(calls []merchantCatalogFunctionCall) []string {
 	return names
 }
 
+func derefString(value *string) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
 func logMerchantCatalogProposalDetail(input merchantcatalogai.RuntimeInput, proposal merchantcatalogai.Proposal) {
 	detail := map[string]any{
 		"business": input.BusinessID,
@@ -304,11 +311,13 @@ func logMerchantCatalogProposalDetail(input merchantcatalogai.RuntimeInput, prop
 				out := make([]map[string]any, 0, len(proposal.Create.Offers))
 				for _, o := range proposal.Create.Offers {
 					out = append(out, map[string]any{
-						"variant_ref": o.VariantRef,
+						"variant_ref": derefString(o.VariantRef),
 						"name": o.Name,
+						"name_source": o.NameSource,
 						"pricing_mode": o.PricingMode,
-						"amount": o.Amount,
-						"currency": o.Currency,
+						"amount": derefString(o.Amount),
+						"price_source": o.PriceSource,
+						"currency": derefString(o.Currency),
 						"availability_status": o.AvailabilityStatus,
 						"fulfillment_mode": o.FulfillmentMode,
 					})
