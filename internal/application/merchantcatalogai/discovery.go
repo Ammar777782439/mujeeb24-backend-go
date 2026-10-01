@@ -20,10 +20,10 @@ func NewReadOnlyCapabilityRegistry(repository ports.CatalogRepository, selectedC
 	if repository == nil {
 		return r
 	}
-	r.capabilities["merchant_catalog_list_items"] = listItemsCapability{repository: repository}
-	r.capabilities["merchant_catalog_get_item"] = getItemCapability{repository: repository}
-	r.capabilities["merchant_catalog_list_variants"] = listVariantsCapability{repository: repository}
-	r.capabilities["merchant_catalog_list_offers"] = listOffersCapability{repository: repository}
+	r.capabilities["merchant_catalog_list_items"] = listItemsCapability{repository: repository, selectedCatalogID: r.selectedCatalogID}
+	r.capabilities["merchant_catalog_get_item"] = getItemCapability{repository: repository, selectedCatalogID: r.selectedCatalogID}
+	r.capabilities["merchant_catalog_list_variants"] = listVariantsCapability{repository: repository, selectedCatalogID: r.selectedCatalogID}
+	r.capabilities["merchant_catalog_list_offers"] = listOffersCapability{repository: repository, selectedCatalogID: r.selectedCatalogID}
 	return r
 }
 
@@ -78,7 +78,10 @@ func readLimit(params map[string]any) int {
 	return limit
 }
 
-type listItemsCapability struct{ repository ports.CatalogRepository }
+type listItemsCapability struct {
+	repository ports.CatalogRepository
+	selectedCatalogID string
+}
 
 func (c listItemsCapability) Definition() ports.AICapabilityDefinition {
 	return ports.AICapabilityDefinition{
@@ -147,7 +150,10 @@ func (c listItemsCapability) Execute(ctx context.Context, execCtx ports.AICapabi
 	}, nil
 }
 
-type getItemCapability struct{ repository ports.CatalogRepository }
+type getItemCapability struct {
+	repository ports.CatalogRepository
+	selectedCatalogID string
+}
 
 func (c getItemCapability) Definition() ports.AICapabilityDefinition {
 	return ports.AICapabilityDefinition{
@@ -205,7 +211,10 @@ func (c getItemCapability) Execute(ctx context.Context, execCtx ports.AICapabili
 	}, nil
 }
 
-type listVariantsCapability struct{ repository ports.CatalogRepository }
+type listVariantsCapability struct {
+	repository ports.CatalogRepository
+	selectedCatalogID string
+}
 
 func (c listVariantsCapability) Definition() ports.AICapabilityDefinition {
 	return ports.AICapabilityDefinition{
@@ -233,6 +242,11 @@ func (c listVariantsCapability) Execute(ctx context.Context, execCtx ports.AICap
 	if err != nil {
 		return ports.AICapabilityResult{}, err
 	}
+	item, err := c.repository.GetCatalogItem(ctx, execCtx.BusinessID, c.selectedCatalogID, itemID)
+	if err != nil {
+		return ports.AICapabilityResult{}, err
+	}
+	_ = item
 	status, _ := params["status"].(string)
 	cursor, _ := params["cursor"].(string)
 	page, err := c.repository.ListVariants(ctx, execCtx.BusinessID, itemID, status, readLimit(params), cursor)
@@ -263,7 +277,10 @@ func (c listVariantsCapability) Execute(ctx context.Context, execCtx ports.AICap
 	return ports.AICapabilityResult{Data: data, VariantEvidence: evidence, HasMore: page.HasMore, NextCursor: page.NextCursor, Operation: "merchant_catalog_list_variants"}, nil
 }
 
-type listOffersCapability struct{ repository ports.CatalogRepository }
+type listOffersCapability struct {
+	repository ports.CatalogRepository
+	selectedCatalogID string
+}
 
 func (c listOffersCapability) Definition() ports.AICapabilityDefinition {
 	return ports.AICapabilityDefinition{
@@ -291,6 +308,11 @@ func (c listOffersCapability) Execute(ctx context.Context, execCtx ports.AICapab
 	if err != nil {
 		return ports.AICapabilityResult{}, err
 	}
+	item, err := c.repository.GetCatalogItem(ctx, execCtx.BusinessID, c.selectedCatalogID, itemID)
+	if err != nil {
+		return ports.AICapabilityResult{}, err
+	}
+	_ = item
 	status, _ := params["status"].(string)
 	cursor, _ := params["cursor"].(string)
 	page, err := c.repository.ListOffers(ctx, execCtx.BusinessID, itemID, status, readLimit(params), cursor)
