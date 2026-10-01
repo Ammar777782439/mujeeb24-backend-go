@@ -22,89 +22,89 @@ const (
 )
 
 type MissingField struct {
-	Path string
-	DisplayName string
-	DataType string
-	Reason string
+	Path string `json:"path"`
+	DisplayName string `json:"name"` `json:"display_name"`
+	DataType string `json:"data_type"`
+	Reason string `json:"reason"`
 }
 
 type ItemCreate struct {
-	Name string
-	ItemType string
-	PricingMode string
-	AvailabilityMode string
-	FulfillmentMode string
-	RequiresConfirmation bool
-	Attributes map[string]any
-	Variants []VariantCreate
-	Offers []OfferCreate
+	Name string `json:"name"`
+	ItemType string `json:"item_type"`
+	PricingMode string `json:"pricing_mode"`
+	AvailabilityMode string `json:"availability_mode"`
+	FulfillmentMode string `json:"fulfillment_mode"`
+	RequiresConfirmation bool `json:"requires_confirmation"`
+	Attributes map[string]any `json:"attributes,omitempty"`
+	Variants []VariantCreate `json:"variants,omitempty"`
+	Offers []OfferCreate `json:"offers,omitempty"`
 }
 
 type ItemChanges struct {
-	Name *string
-	Status *string
-	Attributes map[string]any
-	RequiresConfirmation *bool
+	Name *string `json:"name,omitempty"`
+	Status *string `json:"status,omitempty"`
+	Attributes map[string]any `json:"attributes,omitempty"`
+	RequiresConfirmation *bool `json:"requires_confirmation,omitempty"`
 }
 
 type VariantCreate struct {
-	Name string
-	Attributes map[string]any
+	Name string `json:"name"`
+	Attributes map[string]any `json:"attributes,omitempty"`
 }
 
 type VariantUpdate struct {
-	ID string
-	Name *string
-	Attributes map[string]any
-	Status *string
+	ID string `json:"id"`
+	Name *string `json:"name,omitempty"`
+	Attributes map[string]any `json:"attributes,omitempty"`
+	Status *string `json:"status,omitempty"`
 }
 
 type OfferCreate struct {
 	VariantID *string
-	VariantName *string
-	Name string
-	PricingMode string
-	Amount *string
-	Currency *string
-	PricingUnit *string
-	AvailabilityMode string
-	AvailabilityStatus string
-	FulfillmentMode string
+	VariantName *string `json:"name,omitempty"`
+	Name string `json:"name"`
+	PricingMode string `json:"pricing_mode"`
+	Amount *string `json:"amount,omitempty"`
+	Currency *string `json:"currency,omitempty"`
+	PricingUnit *string `json:"pricing_unit,omitempty"`
+	AvailabilityMode string `json:"availability_mode"`
+	AvailabilityStatus string `json:"availability_status"`
+	FulfillmentMode string `json:"fulfillment_mode"`
 	Status string
 }
 
 type OfferUpdate struct {
-	ID string
-	Name *string
-	Amount *string
-	AvailabilityStatus *string
-	Status *string
+	ID string `json:"id"`
+	Name *string `json:"name,omitempty"`
+	Amount *string `json:"amount,omitempty"`
+	AvailabilityStatus *string `json:"status,omitempty"`
+	Status *string `json:"status,omitempty"`
 }
 
 type UpdateOperation struct {
-	ItemID string
+	ItemID string `json:"id"`
 	Changes ItemChanges
-	ExistingVariants []VariantUpdate
-	NewVariants []VariantCreate
-	ExistingOffers []OfferUpdate
-	NewOffers []OfferCreate
+	ExistingVariants []VariantUpdate `json:"existing_variants,omitempty"`
+	NewVariants []VariantCreate `json:"new_variants,omitempty"` `json:"variants,omitempty"`
+	ExistingOffers []OfferUpdate `json:"existing_offers,omitempty"`
+	NewOffers []OfferCreate `json:"new_offers,omitempty"` `json:"offers,omitempty"`
 }
 
 type DeleteOperation struct {
-	ItemID string
+	ItemID string `json:"id"`
 	ReasonGiven string
 }
 
 type Proposal struct {
-	SchemaVersion int
-	Status ProposalStatus
-	Operation Operation
-	ResponseText string
-	EvidenceReferences []string
-	MissingInformation []MissingField
-	Create *ItemCreate
-	Update *UpdateOperation
-	Delete *DeleteOperation
+	SchemaVersion int `json:"schema_version"`
+	Status ProposalStatus `json:"status"`
+	Operation Operation `json:"operation"`
+	ResponseText string `json:"response_text"`
+	EvidenceReferences []string `json:"evidence_references,omitempty"`
+	MissingInformation []MissingField `json:"missing_information,omitempty"`
+	Create *ItemCreate `json:"create,omitempty"`
+	Update *UpdateOperation `json:"update,omitempty"`
+	Delete *DeleteOperation `json:"delete,omitempty"`
 }
 
 func (p Proposal) IsMutation() bool {
