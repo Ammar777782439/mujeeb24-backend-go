@@ -68,6 +68,24 @@ func NewClient(cfg Config) *Client {
         return &Client{baseURL: baseURL, apiKey: strings.TrimSpace(cfg.APIKey), webhookSecret: cfg.WebhookSecret, httpClient: client, tolerance: tolerance}
 }
 
+// BaseURL returns the SocialAPI base URL. Used by the health-check probe
+// (services.SocialAPIHealthProbe) to construct the probe request URL.
+func (c *Client) BaseURL() string {
+        if c == nil {
+                return ""
+        }
+        return c.baseURL
+}
+
+// APIKey returns the SocialAPI API key. Used by the health-check probe
+// (services.SocialAPIHealthProbe) to authenticate the probe request.
+func (c *Client) APIKey() string {
+        if c == nil {
+                return ""
+        }
+        return c.apiKey
+}
+
 type ConnectedAccount struct {
         ID       string         `json:"id"`
         BrandID  string         `json:"brand_id"`

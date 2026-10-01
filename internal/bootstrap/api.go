@@ -19,6 +19,7 @@ import (
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/auth/ed25519jwt"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
         realtimePostgres "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/realtime/postgres"
+        "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/providers/socialapi"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
@@ -175,6 +176,39 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 external.AIRuntime != nil && external.LLMConfigError == nil,
                 external.SocialAPI != nil,
         )
+        // Register health-check probes for the baseline providers. Without these
+        // probes, RunHealthCheck returns NO_PROBE_REGISTERED for every health
+        // check — the Platform Admin /admin/operations/providers page shows
+        // "بروب الفشل: NO_PROBE_REGISTERED" for both Google Gemini + SocialAPI.
+        //
+        // Per Contract §84: the probes use standalone requests — no merchant
+        // data, no business_id, no customer data. The Gemini probe calls
+        // GET /v1beta/models (no token consumption). The SocialAPI probe calls
+        // GET /v1/accounts (lightweight list).
+        //
+        // The probes read API keys from the same config the Gemini/SocialAPI
+        // clients use — so a health check reflects the SAME credentials the
+        // production path uses.
+        if geminiClient, gok := external.AIRuntime.(*gemini.Client); gok && geminiClient != nil {
+                platformOperations.RegisterProbe("google_gemini", &services.GeminiHealthProbe{
+                        BaseURL: geminiClient.BaseURL(),
+                        APIKey:  geminiClient.APIKey(),
+                        Model:   geminiClient.Model(),
+                })
+        }
+        if external.SocialAPI != nil {
+                // SocialAPI is a ports.ChannelProvider interface — we need the
+                // concrete *socialapi.Client to access BaseURL + APIKey. Cast via
+                // type assertion; if the cast fails (e.g., a mock adapter), skip
+                // the probe registration (the health check will show
+                // NO_PROBE_REGISTERED, which is honest — no real probe available).
+                if socialapiClient, sok := external.SocialAPI.(*socialapi.Client); sok && socialapiClient != nil {
+                        platformOperations.RegisterProbe("socialapi", &services.SocialAPIHealthProbe{
+                                BaseURL: socialapiClient.BaseURL(),
+                                APIKey:  socialapiClient.APIKey(),
+                        })
+                }
+        }
         // Per §1-2: create the AIConfigurationCache + AIProviderConfigRepository
         // unconditionally — the Platform Admin can manage credentials and models
         // even when AutoReply is disabled. The cache seeds from env on first

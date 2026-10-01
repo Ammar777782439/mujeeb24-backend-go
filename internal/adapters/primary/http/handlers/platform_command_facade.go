@@ -5,6 +5,7 @@ import (
         "encoding/json"
         "errors"
         "fmt"
+        "log"
         "strings"
         "time"
 
@@ -1268,21 +1269,49 @@ func (s *Server) platformAIEnable(ctx context.Context, _ *dto.PlatformAIRuntimeE
 // Per Contract §102: every health check is audited as provider.health_checked.
 func (s *Server) platformAIHealthCheck(ctx context.Context, _ *dto.PlatformAIHealthCheckInput) (any, bool) {
         if s.platformDeps.Operations == nil {
+                log.Printf("[PlatformAdmin] AI_HEALTH_CHECK provider=google_gemini result=NOT_WIRED (platform operations registry is not wired)")
                 return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "platform operations registry is not wired")), true
         }
         now := time.Now().UTC()
         // Hard-coded to google_gemini per Contract §76 — the only AI provider.
+        log.Printf("[PlatformAdmin] AI_HEALTH_CHECK provider=google_gemini started")
         provider, err := s.platformDeps.Operations.RunHealthCheck(ctx, "google_gemini", now)
         if err != nil {
                 failureCode := classifyPlatformRepoErrorKind(err)
                 s.appendPlatformAudit(ctx, "provider.health_checked", "ai_provider", nil, nil, "FAILURE", failureCode, map[string]any{"provider": "google_gemini"})
+                log.Printf("[PlatformAdmin] AI_HEALTH_CHECK provider=google_gemini result=ERROR failure_code=%s err=%v", failureCode, err)
                 return mapApplicationError(err), true
+        }
+        // Per agreement: "ANY log should be recorded no matter what" — log the
+        // result even when RunHealthCheck returns nil error. The provider may
+        // still be in an unhealthy state (NO_PROBE_REGISTERED, PROBE_AUTH_FAILED,
+        // PROBE_NETWORK_ERROR, etc.) — those are health-check failures even
+        // though no Go error was returned.
+        if provider.LastFailureCode != nil && *provider.LastFailureCode != "" {
+                // The health check ran but the probe returned a failure code —
+                // audit as FAILURE (not SUCCESS) so the audit log reflects the
+                // actual health state. Previously this was audited as SUCCESS,
+                // which was misleading.
+                s.appendPlatformAudit(ctx, "provider.health_checked", "ai_provider", &provider.ProviderID, nil, "FAILURE", *provider.LastFailureCode, map[string]any{
+                        "provider": provider.ProviderID,
+                        "model":    provider.Model,
+                        "health":   string(provider.HealthState),
+                })
+                log.Printf("[PlatformAdmin] AI_HEALTH_CHECK provider=google_gemini result=UNHEALTHY health=%s failure_code=%s", provider.HealthState, *provider.LastFailureCode)
+                out := &contract.Single[dto.PlatformAIHealthCheckResult]{}
+                out.Body.Data.Provider = provider.ProviderID
+                out.Body.Data.Model = provider.Model
+                out.Body.Data.Result = string(provider.HealthState)
+                out.Body.Data.CheckedAt = now.UTC().Format(time.RFC3339)
+                out.Body.Data.FailureCode = *provider.LastFailureCode
+                return out, true
         }
         s.appendPlatformAudit(ctx, "provider.health_checked", "ai_provider", &provider.ProviderID, nil, "SUCCESS", "", map[string]any{
                 "provider": provider.ProviderID,
                 "model":    provider.Model,
                 "health":   string(provider.HealthState),
         })
+        log.Printf("[PlatformAdmin] AI_HEALTH_CHECK provider=google_gemini result=HEALTHY health=%s", provider.HealthState)
         out := &contract.Single[dto.PlatformAIHealthCheckResult]{}
         out.Body.Data.Provider = provider.ProviderID
         out.Body.Data.Model = provider.Model
