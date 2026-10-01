@@ -585,6 +585,7 @@ func merchantCatalogProposalSchema() map[string]any {
 					"anyOf": offerPricingSemantics,
 				},
 			},
+		},
 		"required": []string{"name", "item_type", "pricing_mode", "availability_mode", "fulfillment_mode", "requires_confirmation", "offers"},
 	}
 	update := map[string]any{
@@ -647,6 +648,7 @@ func merchantCatalogProposalSchema() map[string]any {
 					"anyOf": offerPricingSemantics,
 				},
 			},
+		},
 		"required": []string{"item_id", "changes"},
 	}
 	deletePayload := map[string]any{
