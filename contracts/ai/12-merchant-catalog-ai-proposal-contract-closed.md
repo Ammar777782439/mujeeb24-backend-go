@@ -37,7 +37,7 @@ ref مطلوب.
 
 ## 12.4 Create Offer
 
-OfferCreate يدعم: variant_ref, variant_id, name, pricing fields, availability fields, fulfillment fields, status.
+OfferCreate يدعم: variant_ref, variant_id, name, name_source, pricing fields, price_source, availability fields, fulfillment fields, status.
 
 لكن الاستخدام يعتمد على العملية.
 
@@ -150,3 +150,8 @@ Proposal schema_version = 3.
 أما تعريف Domain entities وحقول PostgreSQL والعلاقات الدائمة فيبقى في Catalog Entity Contract.
 
 والـPrompt لا يعيد تعريف هذه القواعد؛ بل يعمل فوق هذا العقد.
+
+
+## 12.11 Currency Context
+
+العملة الافتراضية للتاجر ليست افتراضًا عالميًا. إذا كان التاجر يستخدم اسمًا عامًا مثل «ريال» دون تحديد الدولة، فإن Merchant Catalog AI يستخدم فقط `business.default_currency` الذي يمرره Mujeeb في runtime context. إذا لم يوجد default_currency رسمي فلا يخترع AI العملة.
