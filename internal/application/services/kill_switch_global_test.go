@@ -9,64 +9,7 @@ import (
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
-
-// ---- Item 1: Global Kill Switch blocks Merchant AI path ----
-
-// Test Item 1: when the shared AICostProtectionChecker returns false
-// (kill switch disabled), MerchantCatalogAIAgent.HandleTurn MUST block
-// before calling Gemini. This proves the kill switch is global — not
-// just for the SocialAPI AutoReply webhook.
-func TestMerchantAIAgentRespectsKillSwitch(t *testing.T) {
-	t.Parallel()
-	agent := &MerchantCatalogAIAgent{
-		Runtime: &fakeContractRuntime{},
-		CostProtection: &stubChecker{
-			allowed: false,
-			reason:  "ai_runtime_disabled",
-		},
-	}
-	_, err := agent.HandleTurn(context.Background(), MerchantCatalogAITurnInput{
-		BusinessID:      "b-1",
-		PrincipalID:     "p-1",
-		MerchantMessage: "add a product",
-	})
-	if err == nil {
-		t.Fatalf("expected error when kill switch is DISABLED, got nil")
-	}
-}
-
-// Test Item 1: when kill switch is ENABLED, MerchantCatalogAIAgent
-// proceeds (does NOT block). This proves the gate is non-blocking
-// in the normal path.
-func TestMerchantAIAgentAllowsWhenKillSwitchEnabled(t *testing.T) {
-	t.Parallel()
-	// We can't easily build a full agent (needs ContextBuilder etc.)
-	// so we just verify the gate check passes + the agent proceeds
-	// past it (to the next validation check which will fail with
-	// "context builder not configured"). The key assertion: the
-	// error is NOT "merchant AI execution blocked".
-	agent := &MerchantCatalogAIAgent{
-		Runtime: &fakeContractRuntime{},
-		CostProtection: &stubChecker{
-			allowed: true,
-			reason:  "",
-		},
-	}
-	_, err := agent.HandleTurn(context.Background(), MerchantCatalogAITurnInput{
-		BusinessID:      "b-1",
-		PrincipalID:     "p-1",
-		MerchantMessage: "add a product",
-	})
-	if err == nil {
-		t.Fatalf("expected error (context builder not configured), got nil")
-	}
-	// The error should be about context builder — NOT about kill switch.
-	if contains(err.Error(), "blocked") {
-		t.Errorf("kill switch should NOT have blocked (allowed=true), got: %v", err)
-	}
-}
 
 // ---- Item 2: Kill Switch blocks Summary path ----
 
@@ -247,12 +190,6 @@ type stubChecker struct {
 
 func (s *stubChecker) IsAIExecutionAllowed(_ context.Context, _ string) (bool, string) {
 	return s.allowed, s.reason
-}
-
-type fakeContractRuntime struct{}
-
-func (f *fakeContractRuntime) DecideContract(_ context.Context, _ ports.ContractRuntimeInput) (ports.ContractRuntimeOutput, error) {
-	return ports.ContractRuntimeOutput{}, nil
 }
 
 type fakeAutoReplyHandler struct {

@@ -42,7 +42,13 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
                         t.Fatalf("team operation is missing: %s", expected)
                 }
         }
-        // Merchant Catalog AI is archived on this branch while the replacement contract is rebuilt independently.
+        // Per Day 3: merchantAIChat operation added per contract 11 §6
+        // (POST /businesses/{business_id}/merchant-ai/turns).
+        // Per session transactions work: 12 missing endpoints added
+        // (conversation labels/notes/assignment/read, business profile update,
+        // team invitations accept, transaction lifecycle: create/confirm/cancel/
+        // submit-review/reviews-get/approve/reject, customers merge+conversations
+        //+transactions cross-refs, leads attributions+scores).
         // Per Platform Administration Contract V1: 18 platform endpoints added
         // (5 plan, 5 business, 2 audit, 4 AI ops, 2 subscription AI usage).
         // Stage 1 (Subscription Lifecycle + Manual Payments): 6 endpoints added
@@ -56,8 +62,8 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
         // Gap fix: POST /platform/businesses (create business) added. Total = 134.
         // AI Provider Configuration: 6 endpoints added. Total = 140.
         operationIDs := regexp.MustCompile(`(?m)^\s+operationId: ([A-Za-z0-9_]+)$`).FindAllSubmatch(document, -1)
-        if len(operationIDs) != 139 {
-                t.Fatalf("generated %d operations, want 139", len(operationIDs))
+        if len(operationIDs) != 140 {
+                t.Fatalf("generated %d operations, want 140", len(operationIDs))
         }
         seen := make(map[string]struct{}, len(operationIDs))
         for _, match := range operationIDs {
