@@ -57,7 +57,12 @@ type OfferRecord struct {
 	PricingUnit             *string
 	PriceSource             *string
 	PriceVerificationStatus string
+	PriceCheckedAt         *time.Time
 	AvailabilityMode        string
+	AvailabilitySource      *string
+	AvailabilityCheckedAt   *time.Time
+	AvailabilityValidUntil  *time.Time
+	AvailabilityEvidenceRef *string
 	FulfillmentMode         string
 	ValidityFrom            *time.Time
 	ValidityUntil           *time.Time
