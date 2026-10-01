@@ -45,15 +45,8 @@ func NewMerchantCatalogRuntime(client *Client) (*MerchantCatalogRuntime, error) 
 	}, nil
 }
 
-func (r *MerchantCatalogRuntime) SetRunRepository(repo ports.AIRunRepository) { r.runRepo = repo }
-func (r *MerchantCatalogRuntime) SetLifecycle(lifecycle ports.AIRunLifecyclePort) { r.lifecycle = lifecycle }
 func (r *MerchantCatalogRuntime) SetConfigurationProvider(provider ports.AIConfigurationProvider) {
 	r.configProvider = provider
-}
-func (r *MerchantCatalogRuntime) SetNewID(newID func() string) {
-	if newID != nil {
-		r.newID = newID
-	}
 }
 
 func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatalogai.RuntimeInput) (merchantcatalogai.Proposal, error) {
