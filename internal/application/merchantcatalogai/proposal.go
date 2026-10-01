@@ -1,12 +1,5 @@
 package merchantcatalogai
 
-import (
-	"errors"
-	"fmt"
-	"regexp"
-	"strings"
-)
-
 const ProposalSchemaVersion = 3
 
 // DefaultOfferName is the canonical contract-level name used when a merchant
@@ -124,3 +117,20 @@ type DeleteOperation struct {
 	ReasonGiven string `json:"reason_given,omitempty"`
 }
 
+
+
+type Proposal struct {
+	SchemaVersion      int              `json:"schema_version"`
+	Status             ProposalStatus   `json:"status"`
+	Operation          Operation        `json:"operation"`
+	ResponseText       string           `json:"response_text"`
+	EvidenceReferences []string         `json:"evidence_references,omitempty"`
+	MissingInformation []MissingField   `json:"missing_information,omitempty"`
+	Create             *ItemCreate      `json:"create,omitempty"`
+	Update             *UpdateOperation `json:"update,omitempty"`
+	Delete             *DeleteOperation `json:"delete,omitempty"`
+}
+
+func (p Proposal) IsMutation() bool {
+	return p.Operation == OperationCreate || p.Operation == OperationUpdate || p.Operation == OperationDelete
+}
