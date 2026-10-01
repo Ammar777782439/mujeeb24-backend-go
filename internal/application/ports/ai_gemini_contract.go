@@ -106,21 +106,6 @@ type AIGeminiProposal struct {
         Action       AIProposalAction    `json:"action"`
         ResponseText string              `json:"response_text"`
         Selected     []SelectedReference `json:"selected,omitempty"`
-        // Proposal per ADR-044 layer 2 — structured catalog operation payload.
-        // Populated by Gemini ONLY for B2B MerchantCatalogAI mutations
-        // (create/update/delete) when status=resolved. The agent uses this
-        // to populate CatalogCreatePayload / CatalogUpdatePayload / CatalogDeletePayload
-        // directly instead of parsing the response_text.
-        //
-        // The response_text still contains a human-readable summary for the
-        // merchant, but the structured Proposal field carries the actual
-        // data the merchant is approving. The frontend renders this as a
-        // card with approve/reject buttons.
-        //
-        // For B2C CustomerSalesAI, this field is unused (B2C's proposal
-        // is just selected[] references to existing catalog items, not a
-        // mutation payload).
-        Proposal *CatalogProposalPayload `json:"proposal,omitempty"`
 }
 
 // CatalogBatchResult is the contract ② §5 per-batch evaluation output.
