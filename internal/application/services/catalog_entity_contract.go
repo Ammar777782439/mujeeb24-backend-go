@@ -51,7 +51,7 @@ type CatalogEntityDefinition struct {
 //     'always_available', 'unknown')
 //   - fulfillment_mode IN ('delivery', 'pickup', 'digital', 'appointment',
 //     'travel', 'manual')
-//   - attributes is JSONB object (map[string]any) per Catalog Contract §6.
+//   - attributes is a dynamic JSONB object. Keys are English snake_case; values may be any valid JSON value.
 type CatalogItemEntityDefinition struct {
 	ID                     string         `json:"id"`
 	CatalogID              string         `json:"catalog_id"`
@@ -102,7 +102,7 @@ type AttributeDefinitionEntityDefinition struct {
 // Per SQL migration 000017:
 //   - status IN ('active', 'inactive', 'archived') — NO "draft" (variants
 //     are not draftable; only CatalogItem and Offer have draft state).
-//   - attributes is JSONB object (map[string]any).
+//   - attributes is a dynamic JSONB object. Keys are English snake_case; values may be any valid JSON value.
 type VariantEntityDefinition struct {
 	ID            string         `json:"id"`
 	CatalogItemID string         `json:"catalog_item_id"`
@@ -321,7 +321,7 @@ func BuildCatalogEntityContractPayload() CatalogEntityContractPayload {
 				AvailabilityMode:       "stock|schedule|supplier_check|always_available|unknown",
 				FulfillmentMode:        "delivery|pickup|digital|appointment|travel|manual",
 				RequiresConfirmation:   false,
-				Attributes:             map[string]any{"attribute_key": "value_per_definition"},
+				Attributes:             map[string]any{"attribute_key": "any_json_value"},
 			},
 			AttributeSchema: AttributeSchemaEntityDefinition{
 				ID:      "UUID",
