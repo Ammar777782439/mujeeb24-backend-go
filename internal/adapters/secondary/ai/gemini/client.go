@@ -197,13 +197,6 @@ type promptContext struct {
         // recent_messages). Per ADR-039. Empty when the conversation is
         // short (less than SummaryInterval turns).
         ConversationSummary    string                           `json:"conversation_summary,omitempty"`
-        // MerchantCatalogs is the list of the merchant's catalogs. Per
-        // ADR-041, this is sent in the B2B flow only. The AI reads these
-        // to answer informational queries and to formulate questions when
-        // the CatalogResolutionService asks the merchant. The AI is
-        // FORBIDDEN from populating TargetCatalogID itself — that's the
-        // code's job.
-        MerchantCatalogs       []ports.MerchantCatalogEntry     `json:"merchant_catalogs,omitempty"`
         // CatalogNames per ADR-048 — category names only (no IDs, no counts).
         // Gemini uses this for hierarchical navigation: when customer asks
         // "what do you have?", Gemini lists these names as categories.
@@ -237,7 +230,6 @@ func promptContextFrom(value *ports.AIContext) promptContext {
                 CatalogSummary:         value.CatalogSummary,
                 CatalogNames:            value.CatalogNames,
                 ConversationSummary:    value.ConversationSummary,
-                MerchantCatalogs:       value.MerchantCatalogs,
                 GeneratedAt:            value.GeneratedAt,
                 ExpiresAt:              value.ExpiresAt,
         }
