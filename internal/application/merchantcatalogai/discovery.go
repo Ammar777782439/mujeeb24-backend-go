@@ -68,7 +68,7 @@ func (r *ReadOnlyCapabilityRegistry) Execute(ctx context.Context, execCtx ports.
 		}
 	}
 	if schemas, ok := result.Data.(map[string]any); ok {
-		if raw, ok := schemas["attribute_schemas"].([]any); ok {
+		if raw, ok := schemas["attribute_schemas"].([]map[string]any); ok {
 			for _, entry := range raw {
 				if schema, ok := entry.(map[string]any); ok {
 					if id, ok := schema["id"].(string); ok && strings.TrimSpace(id) != "" {
