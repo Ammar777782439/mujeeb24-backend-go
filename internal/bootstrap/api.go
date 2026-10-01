@@ -568,6 +568,11 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 Support:          postgres.NewSupportRepository(database),
                 AIUsage:          postgres.NewAIUsageRepository(database),
                 AIProviderPricing: postgres.NewAIProviderPricingRepository(database),
+                // Per Contract §9: wire the PrincipalBootstrap repository so the
+                // Platform Admin can assign an owner to a business via the API
+                // (POST /platform/businesses/{id}/owner). Uses the SAME
+                // EnsurePrincipalAndMembership method as cmd/bootstrap-principal CLI.
+                PrincipalBootstrap: postgres.NewAuthenticationRepository(database),
                 Operations:       platformOperations,
                 ChannelReader:    postgres.NewPlatformChannelReadRepository(database),
                 // Per §1-12: wire AI Provider Configuration management.

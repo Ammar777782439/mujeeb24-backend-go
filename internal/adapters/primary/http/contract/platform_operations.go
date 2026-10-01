@@ -30,6 +30,12 @@ func registerPlatformOperations(api huma.API, dispatcher DashboardOperationHandl
         // ---- Business Management (Contract §13-14) ----
         register(api, dispatcher, huma.Operation{OperationID: "platformCreateBusiness", Method: http.MethodPost, Path: "/platform/businesses", Tags: []string{"Platform.Businesses"}, Summary: "Create a new business (status=pending_setup). Per Contract §9, §13.", Security: platformSecurity, DefaultStatus: http.StatusCreated, Errors: platformErrors}, dto.CreateBusinessInput{}, Single[dto.PlatformBusinessView]{})
 
+        // Per Contract §9: after creating a business (pending_setup), the
+        // Platform Admin assigns an initial owner. This endpoint creates/links
+        // a Principal + creates a business_memberships row with role='owner'
+        // + transitions the business from pending_setup → active.
+        register(api, dispatcher, huma.Operation{OperationID: "platformAssignBusinessOwner", Method: http.MethodPost, Path: "/platform/businesses/{business_id}/owner", Tags: []string{"Platform.Businesses"}, Summary: "Assign an owner to a business (creates/links Principal + activates business). Per Contract §9.", Security: platformSecurity, DefaultStatus: http.StatusCreated, Errors: platformErrors}, dto.AssignOwnerInput{}, Single[dto.AssignOwnerView]{})
+
         register(api, dispatcher, huma.Operation{OperationID: "platformListBusinesses", Method: http.MethodGet, Path: "/platform/businesses", Tags: []string{"Platform.Businesses"}, Summary: "List businesses.", Security: platformSecurity, Errors: platformErrors}, dto.PlatformBusinessListInput{}, List[dto.PlatformBusinessView]{})
         register(api, dispatcher, huma.Operation{OperationID: "platformGetBusiness", Method: http.MethodGet, Path: "/platform/businesses/{business_id}", Tags: []string{"Platform.Businesses"}, Summary: "Get a business.", Security: platformSecurity, Errors: platformErrors}, dto.PlatformBusinessPath{}, Single[dto.PlatformBusinessView]{})
         register(api, dispatcher, huma.Operation{OperationID: "platformSuspendBusiness", Method: http.MethodPost, Path: "/platform/businesses/{business_id}/suspend", Tags: []string{"Platform.Businesses"}, Summary: "Suspend a business.", Security: platformSecurity, DefaultStatus: http.StatusOK, Errors: platformErrors}, dto.PlatformBusinessSuspendInput{}, Single[dto.PlatformBusinessView]{})

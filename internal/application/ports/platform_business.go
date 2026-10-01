@@ -73,6 +73,11 @@ type PlatformBusinessLifecyclePort interface {
         Suspend(ctx context.Context, businessID string, now time.Time) (PlatformBusinessRecord, error)
         Reactivate(ctx context.Context, businessID string, now time.Time) (PlatformBusinessRecord, error)
         Archive(ctx context.Context, businessID string, now time.Time) (PlatformBusinessRecord, error)
+        // Activate transitions pending_setup → active. Per Contract §9: the
+        // Platform Admin assigns an owner (via platformAssignBusinessOwner),
+        // which activates the business — making it operational + ready for
+        // merchant login + AI auto-reply.
+        Activate(ctx context.Context, businessID string, now time.Time) (PlatformBusinessRecord, error)
 }
 
 // PlatformBusinessCreate is the input for creating a new business from the

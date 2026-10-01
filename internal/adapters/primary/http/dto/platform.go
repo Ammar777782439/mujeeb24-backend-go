@@ -586,6 +586,36 @@ type CreateBusinessInput struct {
         Body CreateBusinessRequest
 }
 
+// AssignOwnerRequest is the request body for POST /platform/businesses/{business_id}/owner.
+// Per Contract §9: the Platform Admin assigns an initial owner to a business.
+// The owner is a Principal linked to the Business via business_memberships
+// with role='owner'. The password is bcrypt-hashed server-side — the admin
+// enters a temporary password that the owner will change on first login.
+type AssignOwnerRequest struct {
+        Email       string `json:"email" minLength:"3" maxLength:"256" format:"email"`
+        DisplayName string `json:"display_name" minLength:"1" maxLength:"256"`
+        Password    string `json:"password" minLength:"12" maxLength:"128" doc:"Temporary password (>= 12 chars). The owner should change it on first login."`
+}
+
+// AssignOwnerInput combines the path param (business_id) + the request body
+// + the Idempotency-Key header.
+type AssignOwnerInput struct {
+        PlatformBusinessPath
+        PlatformCommandHeaders
+        Body AssignOwnerRequest
+}
+
+// AssignOwnerView is the response for the assign-owner endpoint. It returns
+// the principal identity (without the password hash) + the role + the
+// activated business status.
+type AssignOwnerView struct {
+        PrincipalID    string `json:"principal_id"`
+        Email          string `json:"email"`
+        DisplayName    string `json:"display_name"`
+        Role           string `json:"role"`
+        BusinessStatus string `json:"business_status"`
+}
+
 // ----------------------------------------------------------------------------
 // AI Provider Configuration DTOs (§13)
 // ----------------------------------------------------------------------------

@@ -70,7 +70,7 @@ func (r *PlatformBusinessRepository) Create(ctx context.Context, create ports.Pl
         var record ports.PlatformBusinessRecord
         err = executor.QueryRow(ctx,
                 `INSERT INTO businesses (id, name, slug, status, vertical_type, timezone, default_currency, locale, created_at, updated_at)
-                 VALUES ($1::uuid, $2, $3, 'active', $4, $5, $6, $7, $8, $8)
+                 VALUES ($1::uuid, $2, $3, 'pending_setup', $4, $5, $6, $7, $8, $8)
                  RETURNING `+platformBusinessSelectColumns,
                 create.ID, create.Name, create.Slug, create.VerticalType, create.Timezone, create.DefaultCurrency, create.Locale, create.Now,
         ).Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.CreatedAt, &record.UpdatedAt)
@@ -151,6 +151,15 @@ func (r *PlatformBusinessRepository) Suspend(ctx context.Context, businessID str
 
 func (r *PlatformBusinessRepository) Reactivate(ctx context.Context, businessID string, now time.Time) (ports.PlatformBusinessRecord, error) {
         return r.transition(ctx, "platform_business.reactivate", businessID, now, []string{"suspended"}, "active")
+}
+
+// Activate transitions a business from pending_setup → active.
+// Per Contract §9: a business starts in pending_setup (no owner). When
+// the Platform Admin assigns an owner (via platformAssignBusinessOwner),
+// the business transitions to active — meaning it's operational + ready
+// for merchant login + AI auto-reply.
+func (r *PlatformBusinessRepository) Activate(ctx context.Context, businessID string, now time.Time) (ports.PlatformBusinessRecord, error) {
+        return r.transition(ctx, "platform_business.activate", businessID, now, []string{"pending_setup"}, "active")
 }
 
 func (r *PlatformBusinessRepository) Archive(ctx context.Context, businessID string, now time.Time) (ports.PlatformBusinessRecord, error) {

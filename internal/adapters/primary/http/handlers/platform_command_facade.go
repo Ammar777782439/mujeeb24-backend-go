@@ -15,8 +15,10 @@ import (
         appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
+        "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
         "github.com/google/uuid"
         "github.com/jackc/pgx/v5"
+        "golang.org/x/crypto/bcrypt"
 )
 
 // PlatformDeps holds the optional Platform-side dependencies. When nil, the
@@ -34,6 +36,11 @@ type PlatformDeps struct {
         Support          ports.SupportRepository
         AIUsage          ports.AIUsageRepository
         AIProviderPricing ports.AIProviderPricingRepository
+        // PrincipalBootstrap creates/links a Principal to a Business as the
+        // initial owner. Per Contract §9: the Platform Admin assigns an owner
+        // after creating the business. Uses the EXISTING
+        // EnsurePrincipalAndMembership method (same as cmd/bootstrap-principal CLI).
+        PrincipalBootstrap ports.PrincipalBootstrapRepository
         // Platform Operations (AI kill switch + provider/channel health) — in-memory
         Operations       ports.PlatformOperationsPort
         // Channel Reader — platform-scoped read of channel_connections (no secrets)
@@ -119,6 +126,10 @@ func extractIdempotencyKey(operationID string, input any) string {
                 if in, ok := input.(*dto.CreateBusinessInput); ok {
                         return in.IdempotencyKey
                 }
+        case "platformAssignBusinessOwner":
+                if in, ok := input.(*dto.AssignOwnerInput); ok {
+                        return in.IdempotencyKey
+                }
         case "platformCreateSubscription":
                 if in, ok := input.(*dto.CreateSubscriptionInput); ok {
                         return in.IdempotencyKey
@@ -156,6 +167,8 @@ func (s *Server) dispatchPlatformCommandInner(ctx context.Context, operationID s
         // ---- Business Management (Contract §13-14) ----
         case "platformCreateBusiness":
                 return s.platformCreateBusiness(ctx, input.(*dto.CreateBusinessInput))
+        case "platformAssignBusinessOwner":
+                return s.platformAssignBusinessOwner(ctx, input.(*dto.AssignOwnerInput))
         case "platformListBusinesses":
                 return s.platformListBusinesses(ctx, input.(*dto.PlatformBusinessListInput))
         case "platformGetBusiness":
@@ -1939,6 +1952,103 @@ func (s *Server) platformCreateBusiness(ctx context.Context, in *dto.CreateBusin
         })
         out := &contract.Single[dto.PlatformBusinessView]{}
         out.Body.Data = platformBusinessProjection(record)
+        return out, true
+}
+
+// platformAssignBusinessOwner assigns an initial owner to a business.
+// Per Contract §9: the Platform Admin creates a business (pending_setup)
+// then assigns an owner. This endpoint:
+//  1. Creates/links a Principal (via EnsurePrincipalAndMembership — same
+//     method used by cmd/bootstrap-principal CLI).
+//  2. Creates a business_memberships row with role='owner'.
+//  3. Transitions the business from pending_setup → active.
+//
+// The password is bcrypt-hashed server-side. The admin enters a temporary
+// password that the owner should change on first login.
+//
+// Per Contract §46: audits `business.owner_assigned`.
+// Per Contract §9: the owner can now log in + the business is operational.
+func (s *Server) platformAssignBusinessOwner(ctx context.Context, in *dto.AssignOwnerInput) (any, bool) {
+        if s.platformDeps.PrincipalBootstrap == nil {
+                return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "principal bootstrap repository is not wired")), true
+        }
+        if s.platformDeps.PlatformBusiness == nil {
+                return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "platform business repository is not wired")), true
+        }
+        businessID := strings.TrimSpace(string(in.BusinessID))
+        if businessID == "" {
+                return mapApplicationError(appErrors.New(appErrors.CodeValidation, "business_id is required")), true
+        }
+        email := strings.TrimSpace(in.Body.Email)
+        displayName := strings.TrimSpace(in.Body.DisplayName)
+        password := in.Body.Password
+        if email == "" {
+                return mapApplicationError(appErrors.New(appErrors.CodeValidation, "email is required")), true
+        }
+        if displayName == "" {
+                return mapApplicationError(appErrors.New(appErrors.CodeValidation, "display_name is required")), true
+        }
+        if len(password) < 12 {
+                return mapApplicationError(appErrors.New(appErrors.CodeValidation, "password must contain at least 12 characters")), true
+        }
+        // Per security: hash the password with bcrypt before passing to the
+        // repository. The repository stores the hash — never the plaintext.
+        hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+        if err != nil {
+                return mapApplicationError(appErrors.New(appErrors.CodeExternalDependency, "failed to hash password")), true
+        }
+        now := time.Now().UTC()
+        // Step 1: Create/link the Principal + business_membership (role=owner).
+        // EnsurePrincipalAndMembership uses adapter.Within — it's transactional.
+        principal, err := s.platformDeps.PrincipalBootstrap.EnsurePrincipalAndMembership(ctx,
+                ports.PrincipalRecord{
+                        Email:        email,
+                        DisplayName:  displayName,
+                        PasswordHash: string(hash),
+                        Status:       "active",
+                },
+                commands.BusinessID(businessID),
+                "owner",
+                []string{"*"}, // owner has all permissions
+                now,
+        )
+        if err != nil {
+                failureCode := classifyPlatformRepoErrorKind(err)
+                s.appendPlatformAudit(ctx, "business.owner_assigned", "business", &businessID, nil, "FAILURE", failureCode, map[string]any{
+                        "business_id": businessID, "email": email,
+                })
+                return mapApplicationError(err), true
+        }
+        // Step 2: Transition the business from pending_setup → active.
+        // Per Contract §9: assigning an owner activates the business.
+        activatedBusiness, err := s.platformDeps.PlatformBusiness.Activate(ctx, businessID, now)
+        if err != nil {
+                // The principal + membership were created, but the business
+                // activation failed. The membership exists but the business stays
+                // in pending_setup. This is a partial-failure state — log it
+                // so operators can reconcile.
+                failureCode := classifyPlatformRepoErrorKind(err)
+                s.appendPlatformAudit(ctx, "business.owner_assigned", "business", &businessID, &businessID, "FAILURE", failureCode, map[string]any{
+                        "business_id": businessID, "principal_id": string(principal.ID), "email": email,
+                        "note":        "principal+membership created but business activation failed — manual reconciliation needed",
+                })
+                return mapApplicationError(err), true
+        }
+        s.appendPlatformAudit(ctx, "business.owner_assigned", "business", &businessID, &businessID, "SUCCESS", "", map[string]any{
+                "business_id":      businessID,
+                "principal_id":     string(principal.ID),
+                "email":            principal.Email,
+                "display_name":     principal.DisplayName,
+                "business_status":  activatedBusiness.PlatformStatus,
+        })
+        out := &contract.Single[dto.AssignOwnerView]{}
+        out.Body.Data = dto.AssignOwnerView{
+                PrincipalID:    string(principal.ID),
+                Email:          principal.Email,
+                DisplayName:    principal.DisplayName,
+                Role:           "owner",
+                BusinessStatus: activatedBusiness.PlatformStatus,
+        }
         return out, true
 }
 

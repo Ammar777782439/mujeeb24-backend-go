@@ -103,6 +103,9 @@ func (s *stubPlatformBusinessRepository) Reactivate(_ context.Context, _ string,
         }
         return s.reactivated, nil
 }
+func (s *stubPlatformBusinessRepository) Activate(_ context.Context, _ string, _ time.Time) (ports.PlatformBusinessRecord, error) {
+        return ports.PlatformBusinessRecord{ID: "biz-1", PlatformStatus: "active"}, nil
+}
 func (s *stubPlatformBusinessRepository) Archive(_ context.Context, _ string, _ time.Time) (ports.PlatformBusinessRecord, error) {
         if s.archiveErr != nil {
                 return ports.PlatformBusinessRecord{}, s.archiveErr
