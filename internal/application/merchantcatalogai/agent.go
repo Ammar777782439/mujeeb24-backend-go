@@ -22,16 +22,21 @@ type TurnResult struct {
 	Proposal Proposal
 }
 
+type BusinessContextProvider interface {
+	GetBusiness(ctx context.Context, businessID string) (ports.BusinessRecord, error)
+}
+
 type Agent struct {
 	Sessions SessionStore
 	Selector CatalogSelector
+	Business BusinessContextProvider
 	EntityContract EntityContractProvider
 	Runtime Runtime
 	CapabilitiesFactory func(selectedCatalogID string) ports.AICapabilityDispatcher
 }
 
 func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error) {
-	if a == nil || a.Sessions == nil || a.Selector == nil || a.EntityContract == nil || a.Runtime == nil {
+	if a == nil || a.Sessions == nil || a.Selector == nil || a.EntityContract == nil || a.Runtime == nil || a.Business == nil {
 		return TurnResult{}, errors.New("merchant catalog AI is not fully configured")
 	}
 	if strings.TrimSpace(in.BusinessID) == "" || strings.TrimSpace(in.PrincipalID) == "" {
@@ -96,6 +101,11 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 		return TurnResult{}, err
 	}
 
+	business, err := a.Business.GetBusiness(ctx, in.BusinessID)
+	if err != nil {
+		return TurnResult{}, err
+	}
+
 	var capabilities ports.AICapabilityDispatcher
 	if a.CapabilitiesFactory != nil {
 		capabilities = a.CapabilitiesFactory(selected.Catalog.ID)
@@ -106,6 +116,7 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 		PrincipalID: in.PrincipalID,
 		SessionID: sessionID,
 		Message: in.Message,
+		DefaultCurrency: business.DefaultCurrency,
 		SelectedCatalog: selected.Catalog,
 		History: history,
 		EntityContract: entityContract,
