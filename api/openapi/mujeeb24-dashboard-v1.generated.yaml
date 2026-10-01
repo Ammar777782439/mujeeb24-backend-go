@@ -1741,6 +1741,7 @@ components:
         - availability_mode
         - fulfillment_mode
         - requires_confirmation
+        - offers
       type: object
     LabelsRequest:
       additionalProperties: false
@@ -2795,7 +2796,7 @@ components:
           type: string
         variant_id:
           type: string
-        variant_name:
+        variant_ref:
           type: string
       required:
         - name
@@ -3234,6 +3235,8 @@ components:
         response_text:
           type: string
         schema_version:
+          enum:
+            - 2
           format: int64
           type: integer
         status:
@@ -4748,7 +4751,10 @@ components:
           type: object
         name:
           type: string
+        ref:
+          type: string
       required:
+        - ref
         - name
       type: object
     VariantUpdate:
