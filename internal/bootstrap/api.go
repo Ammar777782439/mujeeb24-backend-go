@@ -186,16 +186,15 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
         // GET /v1beta/models (no token consumption). The SocialAPI probe calls
         // GET /v1/accounts (lightweight list).
         //
-        // The probes read API keys from the same config the Gemini/SocialAPI
-        // clients use — so a health check reflects the SAME credentials the
-        // production path uses.
-        if geminiClient, gok := external.AIRuntime.(*gemini.Client); gok && geminiClient != nil {
-                platformOperations.RegisterProbe("google_gemini", &services.GeminiHealthProbe{
-                        BaseURL: geminiClient.BaseURL(),
-                        APIKey:  geminiClient.APIKey(),
-                        Model:   geminiClient.Model(),
-                })
-        }
+        // DYNAMIC CONFIG (per spec §1-5): the GeminiHealthProbe holds a
+        // ConfigProvider (the SAME AIConfigurationProvider the ContractClient
+        // uses). At probe time, it reads the active config — so after
+        // credential rotation or model switching, the probe reflects the NEW
+        // active config. The probe does NOT store a static API key.
+        //
+        // NOTE: the GeminiHealthProbe registration is done AFTER aiConfigCache
+        // is created (line 245) because the probe needs a reference to it.
+        // See the registration block below the aiConfigCache.LoadFromEnv call.
         if external.SocialAPI != nil {
                 // SocialAPI is a ports.ChannelProvider interface — we need the
                 // concrete *socialapi.Client to access BaseURL + APIKey. Cast via
@@ -251,6 +250,16 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 12000, // LLMMaxInputCharacters default
                 "",
         )
+        // Register the GeminiHealthProbe AFTER aiConfigCache is created so the
+        // probe can hold a reference to the SAME AIConfigurationProvider that
+        // the ContractClient uses. Per spec §1-5: the probe reads the active
+        // config at probe time — so after credential rotation or model
+        // switching, the probe reflects the NEW active config.
+        if external.AIRuntime != nil {
+                platformOperations.RegisterProbe("google_gemini", &services.GeminiHealthProbe{
+                        ConfigProvider: aiConfigCache,
+                })
+        }
 
         if external.AutoReplyEnabled {
                 if external.AIRuntime == nil {
