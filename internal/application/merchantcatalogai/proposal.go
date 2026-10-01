@@ -135,6 +135,77 @@ func validateAttributeObject(attributes map[string]any, path string) error {
 	return nil
 }
 
+func validateOfferCreate(offer OfferCreate, path string, variantRefs map[string]struct{}, allowVariantID bool) error {
+	if offer.Currency == nil || strings.TrimSpace(*offer.Currency) == "" {
+		return fmt.Errorf("%s requires currency from merchant statement or business default_currency", path)
+	}
+	if strings.TrimSpace(offer.Name) == "" {
+		return fmt.Errorf("%s requires name", path)
+	}
+	switch offer.NameSource {
+	case OfferNameSourceSystemDefault:
+		if offer.Name != DefaultOfferName {
+			return fmt.Errorf("system-default %s name must be %q", path, DefaultOfferName)
+		}
+	case OfferNameSourceMerchantStated:
+	default:
+		return fmt.Errorf("%s requires a valid name_source", path)
+	}
+
+	switch offer.PriceSource {
+	case OfferPriceSourceMerchantStated:
+		if offer.Amount == nil || strings.TrimSpace(*offer.Amount) == "" {
+			return fmt.Errorf("merchant-stated %s price requires amount", path)
+		}
+		if offer.PricingMode == "quote_required" {
+			return fmt.Errorf("merchant-stated %s price cannot use quote_required pricing_mode", path)
+		}
+	case OfferPriceSourceNotStated:
+		if offer.Amount != nil && strings.TrimSpace(*offer.Amount) != "" {
+			return fmt.Errorf("not-stated %s price cannot contain amount", path)
+		}
+	default:
+		return fmt.Errorf("%s requires a valid price_source", path)
+	}
+
+	switch offer.PricingMode {
+	case "fixed", "starting_from":
+		if offer.Amount == nil || strings.TrimSpace(*offer.Amount) == "" {
+			return fmt.Errorf("%s pricing_mode %s requires amount", path, offer.PricingMode)
+		}
+	case "per_unit", "per_person", "per_day":
+		if offer.Amount == nil || strings.TrimSpace(*offer.Amount) == "" {
+			return fmt.Errorf("%s pricing_mode %s requires amount", path, offer.PricingMode)
+		}
+		if offer.PricingUnit == nil || strings.TrimSpace(*offer.PricingUnit) == "" {
+			return fmt.Errorf("%s pricing_mode %s requires pricing_unit", path, offer.PricingMode)
+		}
+	case "quote_required":
+		if offer.Amount != nil && strings.TrimSpace(*offer.Amount) != "" {
+			return fmt.Errorf("%s quote_required pricing cannot contain amount", path)
+		}
+	case "dynamic":
+	default:
+		return fmt.Errorf("%s pricing_mode is invalid: %s", path, offer.PricingMode)
+	}
+
+	if !allowVariantID && offer.VariantID != nil {
+		return fmt.Errorf("%s cannot contain variant_id; use variant_ref for a new variant", path)
+	}
+	if offer.VariantID != nil && offer.VariantRef != nil {
+		return fmt.Errorf("%s cannot contain both variant_id and variant_ref", path)
+	}
+	if offer.VariantRef != nil {
+		ref := strings.TrimSpace(*offer.VariantRef)
+		if ref == "" {
+			return fmt.Errorf("%s variant_ref cannot be empty", path)
+		}
+		if _, exists := variantRefs[ref]; !exists {
+			return fmt.Errorf("%s references unknown variant_ref: %s", path, ref)
+		}
+	}
+	return nil
+}
 type Proposal struct {
 	SchemaVersion int `json:"schema_version"`
 	Status ProposalStatus `json:"status"`
@@ -264,69 +335,8 @@ func (p Proposal) Validate() error {
 		}
 
 		for _, offer := range p.Create.Offers {
-			if offer.Currency == nil || strings.TrimSpace(*offer.Currency) == "" {
-				return errors.New("create offer requires currency from merchant statement or business default_currency")
-			}
-			if strings.TrimSpace(offer.Name) == "" {
-				return errors.New("create offer requires name")
-			}
-			switch offer.NameSource {
-			case OfferNameSourceSystemDefault:
-				if offer.Name != DefaultOfferName {
-					return fmt.Errorf("system-default create offer name must be %q", DefaultOfferName)
-				}
-			case OfferNameSourceMerchantStated:
-				// Merchant-provided commercial labels are preserved verbatim.
-			default:
-				return errors.New("create offer requires a valid name_source")
-			}
-			switch offer.PriceSource {
-			case OfferPriceSourceMerchantStated:
-				if offer.Amount == nil || strings.TrimSpace(*offer.Amount) == "" {
-					return errors.New("merchant-stated create offer price requires amount")
-				}
-				if offer.PricingMode == "quote_required" {
-					return errors.New("merchant-stated create offer price cannot use quote_required pricing_mode")
-				}
-			case OfferPriceSourceNotStated:
-				if offer.Amount != nil && strings.TrimSpace(*offer.Amount) != "" {
-					return errors.New("not-stated create offer price cannot contain amount")
-				}
-			default:
-				return errors.New("create offer requires a valid price_source")
-			}
-			switch offer.PricingMode {
-			case "fixed", "starting_from":
-				if offer.Amount == nil || strings.TrimSpace(*offer.Amount) == "" {
-					return fmt.Errorf("create offer pricing_mode %s requires amount", offer.PricingMode)
-				}
-			case "per_unit", "per_person", "per_day":
-				if offer.Amount == nil || strings.TrimSpace(*offer.Amount) == "" {
-					return fmt.Errorf("create offer pricing_mode %s requires amount", offer.PricingMode)
-				}
-				if offer.PricingUnit == nil || strings.TrimSpace(*offer.PricingUnit) == "" {
-					return fmt.Errorf("create offer pricing_mode %s requires pricing_unit", offer.PricingMode)
-				}
-			case "quote_required":
-				if offer.Amount != nil && strings.TrimSpace(*offer.Amount) != "" {
-					return errors.New("quote_required create offer cannot contain amount")
-				}
-			case "dynamic":
-				// Amount may be present or absent; the contract allows both.
-			default:
-				return fmt.Errorf("create offer pricing_mode is invalid: %s", offer.PricingMode)
-			}
-			if offer.VariantID != nil {
-				return errors.New("create offer cannot contain variant_id; use variant_ref for a new variant")
-			}
-			if offer.VariantRef != nil {
-				ref := strings.TrimSpace(*offer.VariantRef)
-				if ref == "" {
-					return errors.New("create offer variant_ref cannot be empty")
-				}
-				if _, exists := variantRefs[ref]; !exists {
-					return fmt.Errorf("create offer references unknown variant_ref: %s", ref)
-				}
+			if err := validateOfferCreate(offer, "create.offer", variantRefs, false); err != nil {
+				return err
 			}
 		}
 	case OperationUpdate:
@@ -362,23 +372,8 @@ func (p Proposal) Validate() error {
 			newVariantRefs[ref] = struct{}{}
 		}
 		for _, offer := range p.Update.NewOffers {
-			if offer.Currency == nil || strings.TrimSpace(*offer.Currency) == "" {
-				return errors.New("new offer requires currency from merchant statement or business default_currency")
-			}
-			if strings.TrimSpace(offer.Name) == "" {
-				return errors.New("new offer requires name")
-			}
-			if offer.VariantID != nil && offer.VariantRef != nil {
-				return errors.New("new offer cannot contain both variant_id and variant_ref")
-			}
-			if offer.VariantRef != nil {
-				ref := strings.TrimSpace(*offer.VariantRef)
-				if ref == "" {
-					return errors.New("new offer variant_ref cannot be empty")
-				}
-				if _, exists := newVariantRefs[ref]; !exists {
-					return fmt.Errorf("new offer references unknown variant_ref: %s", ref)
-				}
+			if err := validateOfferCreate(offer, "update.new_offers.offer", newVariantRefs, true); err != nil {
+				return err
 			}
 		}
 	case OperationDelete:
