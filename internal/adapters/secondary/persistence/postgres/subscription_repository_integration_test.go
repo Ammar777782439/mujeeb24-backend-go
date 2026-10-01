@@ -55,12 +55,13 @@ func TestSubscriptionRepositoryCreateAgainstPostgres(t *testing.T) {
         // Seed the business (00000000-...002) — required because subscriptions
         // has FK to businesses. The plan (00000000-...a001 = basic) is already
         // seeded by migration 000061.
-        const businessID = "00000000-0000-0000-0000-000000000002"
+	const businessID = "00000000-0000-0000-0000-000000000099"
         const planID = "00000000-0000-0000-0000-00000000a001"
         const subscriptionID = "00000000-0000-0000-0000-0000000000aa"
 
         pool := adapter.Pool()
         // Cleanup any prior test rows.
+        _, _ = pool.Exec(ctx, `DELETE FROM subscriptions WHERE id = $1::uuid`, subscriptionID)
         _, _ = pool.Exec(ctx, `DELETE FROM subscription_ai_usage WHERE business_id = $1::uuid`, businessID)
         _, _ = pool.Exec(ctx, `DELETE FROM subscriptions WHERE business_id = $1::uuid`, businessID)
         _, _ = pool.Exec(ctx, `DELETE FROM business_policies WHERE business_id = $1::uuid`, businessID)
