@@ -433,7 +433,7 @@ func merchantCatalogProposalSchema() map[string]any {
 				"required": []string{"name", "pricing_mode", "availability_mode", "availability_status", "fulfillment_mode", "status"},
 			}},
 		},
-		"required": []string{"name", "item_type", "pricing_mode", "availability_mode", "fulfillment_mode", "requires_confirmation"},
+		"required": []string{"name", "item_type", "pricing_mode", "availability_mode", "fulfillment_mode", "requires_confirmation", "offers"},
 	}
 	update := map[string]any{
 		"type": "object",
