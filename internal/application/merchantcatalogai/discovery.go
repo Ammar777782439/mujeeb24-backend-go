@@ -91,6 +91,7 @@ func (c listItemsCapability) Definition() ports.AICapabilityDefinition {
 			"type": "object",
 			"properties": map[string]any{
 				"status": map[string]any{"type": "string"},
+				"search": map[string]any{"type": "string", "description": "Deterministic name/text filter; not semantic search."},
 				"limit": map[string]any{"type": "integer"},
 				"cursor": map[string]any{"type": "string"},
 			},
@@ -109,8 +110,9 @@ func (c listItemsCapability) Execute(ctx context.Context, execCtx ports.AICapabi
 		return ports.AICapabilityResult{}, errors.New("selected merchant catalog is required")
 	}
 	status, _ := params["status"].(string)
+	search, _ := params["search"].(string)
 	cursor, _ := params["cursor"].(string)
-	page, err := c.repository.ListCatalogItems(ctx, execCtx.BusinessID, catalogID, "", status, readLimit(params), cursor)
+	page, err := c.repository.ListCatalogItems(ctx, execCtx.BusinessID, catalogID, strings.TrimSpace(search), status, readLimit(params), cursor)
 	if err != nil {
 		return ports.AICapabilityResult{}, err
 	}
@@ -121,9 +123,17 @@ func (c listItemsCapability) Execute(ctx context.Context, execCtx ports.AICapabi
 		items = append(items, map[string]any{
 			"id": item.ID,
 			"catalog_id": item.CatalogID,
+			"attribute_schema_id": item.AttributeSchemaID,
+			"attribute_schema_version": item.AttributeSchemaVersion,
 			"item_type": item.ItemType,
 			"name": item.Name,
+			"short_description": item.ShortDescription,
+			"long_description": item.LongDescription,
 			"status": item.Status,
+			"pricing_mode": item.PricingMode,
+			"availability_mode": item.AvailabilityMode,
+			"fulfillment_mode": item.FulfillmentMode,
+			"requires_confirmation": item.RequiresConfirmation,
 			"attributes": json.RawMessage(item.Attributes),
 		})
 		evidence = append(evidence, ports.AICatalogEvidence{
@@ -133,6 +143,12 @@ func (c listItemsCapability) Execute(ctx context.Context, execCtx ports.AICapabi
 			Name: item.Name,
 			Status: item.Status,
 			Attributes: append([]byte(nil), item.Attributes...),
+			ShortDescription: item.ShortDescription,
+			LongDescription: item.LongDescription,
+			PricingMode: item.PricingMode,
+			AvailabilityMode: item.AvailabilityMode,
+			FulfillmentMode: item.FulfillmentMode,
+			RequiresConfirmation: item.RequiresConfirmation,
 			EvidenceState: "verified",
 			RetrievedAt: now,
 		})
@@ -187,9 +203,17 @@ func (c getItemCapability) Execute(ctx context.Context, execCtx ports.AICapabili
 		Data: map[string]any{
 			"id": item.ID,
 			"catalog_id": item.CatalogID,
+			"attribute_schema_id": item.AttributeSchemaID,
+			"attribute_schema_version": item.AttributeSchemaVersion,
 			"item_type": item.ItemType,
 			"name": item.Name,
+			"short_description": item.ShortDescription,
+			"long_description": item.LongDescription,
 			"status": item.Status,
+			"pricing_mode": item.PricingMode,
+			"availability_mode": item.AvailabilityMode,
+			"fulfillment_mode": item.FulfillmentMode,
+			"requires_confirmation": item.RequiresConfirmation,
 			"attributes": json.RawMessage(item.Attributes),
 		},
 		CatalogEvidence: []ports.AICatalogEvidence{{
@@ -330,7 +354,19 @@ func (c listOffersCapability) Execute(ctx context.Context, execCtx ports.AICapab
 			"pricing_mode": offer.PricingMode,
 			"amount": offer.Amount,
 			"currency": offer.Currency,
+			"pricing_unit": offer.PricingUnit,
+			"price_source": offer.PriceSource,
+			"price_verification_status": offer.PriceVerificationStatus,
+			"price_checked_at": offer.PriceCheckedAt,
+			"availability_mode": offer.AvailabilityMode,
 			"availability_status": offer.AvailabilityStatus,
+			"availability_source": offer.AvailabilitySource,
+			"availability_checked_at": offer.AvailabilityCheckedAt,
+			"availability_valid_until": offer.AvailabilityValidUntil,
+			"availability_evidence_ref": offer.AvailabilityEvidenceRef,
+			"fulfillment_mode": offer.FulfillmentMode,
+			"validity_from": offer.ValidityFrom,
+			"validity_until": offer.ValidityUntil,
 			"status": offer.Status,
 		})
 		evidence = append(evidence, ports.AIOfferEvidence{
