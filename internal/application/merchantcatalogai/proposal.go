@@ -32,7 +32,10 @@ type MissingField struct {
 
 type ItemCreate struct {
 	Name string `json:"name"`
+	AttributeSchemaID *string `json:"attribute_schema_id,omitempty"`
 	ItemType string `json:"item_type"`
+	ShortDescription *string `json:"short_description,omitempty"`
+	LongDescription *string `json:"long_description,omitempty"`
 	PricingMode string `json:"pricing_mode"`
 	AvailabilityMode string `json:"availability_mode"`
 	FulfillmentMode string `json:"fulfillment_mode"`
@@ -44,7 +47,13 @@ type ItemCreate struct {
 
 type ItemChanges struct {
 	Name *string `json:"name,omitempty"`
+	ItemType *string `json:"item_type,omitempty"`
+	ShortDescription *string `json:"short_description,omitempty"`
+	LongDescription *string `json:"long_description,omitempty"`
 	Status *string `json:"status,omitempty"`
+	PricingMode *string `json:"pricing_mode,omitempty"`
+	AvailabilityMode *string `json:"availability_mode,omitempty"`
+	FulfillmentMode *string `json:"fulfillment_mode,omitempty"`
 	Attributes map[string]any `json:"attributes,omitempty"`
 	RequiresConfirmation *bool `json:"requires_confirmation,omitempty"`
 }
@@ -147,7 +156,13 @@ func (p Proposal) Normalize() Proposal {
 	if p.Status == StatusResolved && p.Operation == OperationUpdate && p.Update != nil {
 		u := p.Update
 		emptyItemChanges := u.Changes.Name == nil &&
+			u.Changes.ItemType == nil &&
+			u.Changes.ShortDescription == nil &&
+			u.Changes.LongDescription == nil &&
 			u.Changes.Status == nil &&
+			u.Changes.PricingMode == nil &&
+			u.Changes.AvailabilityMode == nil &&
+			u.Changes.FulfillmentMode == nil &&
 			u.Changes.Attributes == nil &&
 			u.Changes.RequiresConfirmation == nil
 		if strings.TrimSpace(u.ItemID) == "" ||
