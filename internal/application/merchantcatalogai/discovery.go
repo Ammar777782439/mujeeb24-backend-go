@@ -109,7 +109,7 @@ func (c listItemsCapability) Execute(ctx context.Context, execCtx ports.AICapabi
 	if err != nil {
 		return ports.AICapabilityResult{}, err
 	}
-	if r.selectedCatalogID != "" && catalogID != r.selectedCatalogID {
+	if c.selectedCatalogID != "" && catalogID != c.selectedCatalogID {
 		return ports.AICapabilityResult{}, errors.New("catalog_id does not match the selected merchant catalog")
 	}
 	status, _ := params["status"].(string)
@@ -182,6 +182,9 @@ func (c getItemCapability) Execute(ctx context.Context, execCtx ports.AICapabili
 	itemID, err := requiredString(params, "item_id")
 	if err != nil {
 		return ports.AICapabilityResult{}, err
+	}
+	if c.selectedCatalogID != "" && catalogID != c.selectedCatalogID {
+		return ports.AICapabilityResult{}, errors.New("catalog_id does not match the selected merchant catalog")
 	}
 	item, err := c.repository.GetCatalogItem(ctx, execCtx.BusinessID, catalogID, itemID)
 	if err != nil {
