@@ -22,14 +22,10 @@ type TurnResult struct {
 	Proposal Proposal
 }
 
-type BusinessContextProvider interface {
-	GetBusiness(ctx context.Context, businessID string) (ports.BusinessRecord, error)
-}
-
 type Agent struct {
 	Sessions SessionStore
 	Selector CatalogSelector
-	Business BusinessContextProvider
+	Business ports.BusinessRepository
 	EntityContract EntityContractProvider
 	Runtime Runtime
 	CapabilitiesFactory func(selectedCatalogID string) ports.AICapabilityDispatcher
@@ -101,7 +97,7 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 		return TurnResult{}, err
 	}
 
-	business, err := a.Business.GetBusiness(ctx, in.BusinessID)
+	business, err := a.Business.GetByID(ctx, in.BusinessID)
 	if err != nil {
 		return TurnResult{}, err
 	}
