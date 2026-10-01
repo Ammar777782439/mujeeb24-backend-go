@@ -18,6 +18,7 @@
 | ⑧ | [Observability + Audit + AI Trace](./08-observability-audit-ai-trace-closed.md) | كيف نتتبع كل خطوة | مغلق |
 | ⑨ | [AI Runtime Lifecycle + Failure/Retry/Timeout](./09-ai-runtime-lifecycle-failure-retry-timeout-closed.md) | دورة تشغيل AI Run واحدة | مغلق |
 | 11 | [Merchant Catalog AI Authoring v2](./11-merchant-catalog-ai-authoring-closed.md) | وكيل محادثي للتاجر لإضافة منتج | مغلق — يحل محل v1 |
+| 12 | [Merchant Catalog AI Proposal Contract](./12-merchant-catalog-ai-proposal-contract-closed.md) | العقد الوسيط لـ Proposal وعلاقات Variant/Offer قبل الحفظ | مغلق |
 
 > **ملاحظة:** العقود ⑦ و ⑩ و ⒛ خارج نطاق هذه المجموعة أو غير معتمدة بعد.
 
@@ -51,7 +52,7 @@ Mujeeb يثبت ويأذن وينفذ.
 | `internal/application/services/ai_context_builder.go` | ③ |
 | `internal/application/services/auto_reply.go` | ④ ⑥ |
 | `internal/application/services/policy_engine.go` | ⑥ |
-| `internal/application/services/merchant_catalog_ai_agent.go` | 11 |
+| `internal/application/merchantcatalogai/agent.go` | 11 12 |
 | `internal/application/services/catalog_batch_controller.go` | ② ⑨ |
 | `internal/application/services/catalog_entity_contract.go` | ⑤ |
 | `internal/adapters/secondary/ai/gemini/client.go` | ③ ④ ⑧ |
@@ -68,3 +69,8 @@ Mujeeb يثبت ويأذن وينفذ.
 5. تكلفة/مخاطر مثبتة.
 
 أي تغيير يجب أن يُسجل كقرار ADR جديد في `docs/decision-log-ar.md`.
+
+
+### قاعدة عقد Proposal الوسيط
+
+العقد 12 يملك العلاقات المؤقتة داخل Proposal (`variant_ref`) ولا يغيّر Domain Catalog Contract. أي تغيير في هذه العلاقة يجب أن يمر عبر ADR جديد.
