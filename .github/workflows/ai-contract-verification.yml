@@ -162,6 +162,24 @@ jobs:
             -run TestE2E_GeminiCatalogB2CSuccess \
             ./internal/application/services/
 
+      - name: Run Subscription Repository integration test (real PostgreSQL)
+        # Per spec §5: uses REAL PostgreSQL (not a fake repository).
+        # The gemini-catalog-e2e job already has a PostgreSQL service
+        # container + migrations applied. POSTGRES_TEST_DSN is set to the
+        # same DATABASE_URL so the integration test can connect.
+        # This step proves the SubscriptionRepository.Create() fix works
+        # against real PostgreSQL (INSERT + SELECT with JOIN).
+        env:
+          POSTGRES_TEST_DSN: ${{ env.DATABASE_URL }}
+        run: |
+          go test \
+            -tags=integration \
+            -v \
+            -count=1 \
+            -timeout 2m \
+            -run TestSubscriptionRepositoryCreateAgainstPostgres \
+            ./internal/adapters/secondary/persistence/postgres/
+
       - name: Dump PostgreSQL state on failure (no secrets)
         if: failure()
         env:
