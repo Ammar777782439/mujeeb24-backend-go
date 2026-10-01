@@ -365,25 +365,59 @@ func (r *MerchantCatalogRuntime) sendInteraction(ctx context.Context, reqBody me
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-goog-api-key", apiKey)
 
-	resp, err := r.httpClient.Do(req)
-	if err != nil {
-		return merchantCatalogInteractionResponse{}, fmt.Errorf("merchant catalog Gemini interaction: %w", err)
-	}
-	defer resp.Body.Close()
+	const maxAttempts = 4
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		resp, err := r.httpClient.Do(req)
+		if err != nil {
+			return merchantCatalogInteractionResponse{}, fmt.Errorf("merchant catalog Gemini interaction: %w", err)
+		}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return merchantCatalogInteractionResponse{}, fmt.Errorf("read Gemini interaction response: %w", err)
-	}
-	if resp.StatusCode >= 400 {
-		return merchantCatalogInteractionResponse{}, fmt.Errorf("merchant catalog Gemini HTTP %d: %s", resp.StatusCode, string(body))
-	}
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		resp.Body.Close()
+		if readErr != nil {
+			return merchantCatalogInteractionResponse{}, fmt.Errorf("read Gemini interaction response: %w", readErr)
+		}
 
-	var out merchantCatalogInteractionResponse
-	if err := json.Unmarshal(body, &out); err != nil {
-		return merchantCatalogInteractionResponse{}, fmt.Errorf("decode Gemini interaction response: %w", err)
+		if resp.StatusCode >= 400 {
+			lastErr = fmt.Errorf("merchant catalog Gemini HTTP %d: %s", resp.StatusCode, string(body))
+			if !isRetryableGeminiStatus(resp.StatusCode) || attempt == maxAttempts {
+				return merchantCatalogInteractionResponse{}, lastErr
+			}
+
+			delay := time.Duration(1<<(attempt-1)) * time.Second
+			log.Printf("[MerchantCatalogAI] GEMINI_RETRY status=%d attempt=%d/%d delay=%s", resp.StatusCode, attempt, maxAttempts, delay)
+			timer := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return merchantCatalogInteractionResponse{}, fmt.Errorf("merchant catalog Gemini retry cancelled: %w", ctx.Err())
+			case <-timer.C:
+			}
+			continue
+		}
+
+		var out merchantCatalogInteractionResponse
+		if err := json.Unmarshal(body, &out); err != nil {
+			return merchantCatalogInteractionResponse{}, fmt.Errorf("decode Gemini interaction response: %w", err)
+		}
+		return out, nil
 	}
-	return out, nil
+	return merchantCatalogInteractionResponse{}, lastErr
+}
+
+func isRetryableGeminiStatus(status int) bool {
+	switch status {
+	case http.StatusRequestTimeout,
+		http.StatusTooManyRequests,
+		http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
+	}
 }
 
 func merchantCatalogInteractionTools(caps ports.AICapabilityDispatcher) []merchantCatalogInteractionTool {
