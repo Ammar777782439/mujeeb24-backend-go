@@ -8,6 +8,7 @@ import (
         "net/http"
         "net/url"
         "os"
+        "strconv"
         "strings"
         "sync"
         "time"
@@ -209,12 +210,24 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
         }
         aiConfigRepo := postgres.NewAIProviderConfigRepository(database, encryptionKey)
         aiConfigCache := services.NewAIConfigurationCache(aiConfigRepo, aiConfigRepo)
+        maxOutputTokens := 4096
+        if envVal := os.Getenv("LLM_MAX_OUTPUT_TOKENS"); envVal != "" {
+                if parsed, err := strconv.Atoi(envVal); err == nil && parsed > 0 {
+                        maxOutputTokens = parsed
+                }
+        }
+        maxInputChars := 12000
+        if envVal := os.Getenv("LLM_MAX_INPUT_CHARACTERS"); envVal != "" {
+                if parsed, err := strconv.Atoi(envVal); err == nil && parsed > 0 {
+                        maxInputChars = parsed
+                }
+        }
         aiConfigCache.LoadFromEnv(
                 os.Getenv("GEMINI_API_KEY"),
                 func() string { m := strings.TrimSpace(os.Getenv("GEMINI_MODEL")); if m == "" { m = "gemini-3.5-flash-lite" }; return m }(),
                 "https://generativelanguage.googleapis.com",
-                700,   // LLMMaxOutputTokens default
-                12000, // LLMMaxInputCharacters default
+                maxOutputTokens,
+                maxInputChars,
                 "",
         )
 
