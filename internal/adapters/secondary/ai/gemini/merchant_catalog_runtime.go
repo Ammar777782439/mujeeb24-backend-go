@@ -423,15 +423,25 @@ func merchantCatalogProposalSchema() map[string]any {
 				"type": "object", "properties": map[string]any{"name": stringField(), "attributes": objectField()},
 				"required": []string{"name"},
 			}},
-			"offers": map[string]any{"type": "array", "items": map[string]any{
+			"offers": map[string]any{
+			"type": "array",
+			"minItems": 1,
+			"description": "A resolved create proposal must include offer data. Preserve any concrete merchant-supplied price in the offer amount.",
+			"items": map[string]any{
 				"type": "object", "properties": map[string]any{
 					"variant_id": optionalString(), "variant_name": optionalString(), "name": stringField(),
-					"pricing_mode": stringField(), "amount": optionalString(), "currency": optionalString(),
+					"pricing_mode": stringField(),
+					"amount": map[string]any{
+						"type": []string{"string", "null"},
+						"description": "The exact merchant-supplied amount when a concrete price was stated. Use null only when the contract allows an offer without an amount.",
+					},
+					"currency": optionalString(),
 					"pricing_unit": optionalString(), "availability_mode": stringField(),
 					"availability_status": stringField(), "fulfillment_mode": stringField(), "status": stringField(),
 				},
-				"required": []string{"name", "pricing_mode", "availability_mode", "availability_status", "fulfillment_mode", "status"},
-			}},
+				"required": []string{"name", "pricing_mode", "amount", "availability_mode", "availability_status", "fulfillment_mode", "status"},
+			}, 
+		},
 		},
 		"required": []string{"name", "item_type", "pricing_mode", "availability_mode", "fulfillment_mode", "requires_confirmation", "offers"},
 	}
