@@ -6,18 +6,20 @@ import (
 )
 
 type ProposalStatus string
+
 const (
-	StatusResolved ProposalStatus = "resolved"
-	StatusAmbiguous ProposalStatus = "ambiguous"
-	StatusNotFound ProposalStatus = "not_found"
+	StatusResolved     ProposalStatus = "resolved"
+	StatusAmbiguous    ProposalStatus = "ambiguous"
+	StatusNotFound     ProposalStatus = "not_found"
 	StatusNeedsMoreData ProposalStatus = "needs_more_data"
 )
 
 type Operation string
+
 const (
-	OperationCreate Operation = "create"
-	OperationUpdate Operation = "update"
-	OperationDelete Operation = "delete"
+	OperationCreate     Operation = "create"
+	OperationUpdate     Operation = "update"
+	OperationDelete     Operation = "delete"
 	OperationAskMerchant Operation = "ask_merchant"
 )
 
@@ -109,6 +111,35 @@ type Proposal struct {
 
 func (p Proposal) IsMutation() bool {
 	return p.Operation == OperationCreate || p.Operation == OperationUpdate || p.Operation == OperationDelete
+}
+
+// Normalize enforces the B2B semantic boundary after Gemini's structured output.
+// Structured output guarantees shape, not that the requested business operation
+// is actually complete. A resolved empty update is therefore converted to a
+// clarification instead of being presented as processed.
+func (p Proposal) Normalize() Proposal {
+	if p.Status == StatusResolved && p.Operation == OperationUpdate && p.Update != nil {
+		u := p.Update
+		emptyItemChanges := u.Changes.Name == nil &&
+			u.Changes.Status == nil &&
+			u.Changes.Attributes == nil &&
+			u.Changes.RequiresConfirmation == nil
+		if strings.TrimSpace(u.ItemID) == "" ||
+			(emptyItemChanges && len(u.ExistingVariants) == 0 && len(u.NewVariants) == 0 &&
+				len(u.ExistingOffers) == 0 && len(u.NewOffers) == 0) {
+			p.Status = StatusNeedsMoreData
+			p.Operation = OperationAskMerchant
+			p.Update = nil
+			p.Create = nil
+			p.Delete = nil
+			p.MissingInformation = []MissingField{
+				{Path: "update.item_id", DisplayName: "المنتج", DataType: "catalog_item", Reason: "يجب تحديد المنتج المراد تعديله."},
+				{Path: "update.changes", DisplayName: "بيانات التعديل", DataType: "object", Reason: "يجب تحديد القيمة أو البيانات الجديدة المطلوب اعتمادها."},
+			}
+			p.ResponseText = "حدّد المنتج والبيانات الجديدة التي تريد تعديلها."
+		}
+	}
+	return p
 }
 
 func (p Proposal) Validate() error {
