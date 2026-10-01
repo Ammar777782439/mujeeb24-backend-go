@@ -565,7 +565,7 @@ func merchantCatalogProposalSchema() map[string]any {
 					"properties": map[string]any{
 						"ref": stringField(),
 						"name": stringField(),
-						"attributes": objectField(),
+						"attributes": attributeObjectField(),
 					},
 					"required": []string{"ref", "name"},
 				},
@@ -603,12 +603,12 @@ func merchantCatalogProposalSchema() map[string]any {
 		"properties": map[string]any{
 			"item_id": stringField(),
 			"changes": map[string]any{"type": "object", "properties": map[string]any{
-				"name": optionalString(), "status": optionalString(), "attributes": objectField(),
+				"name": optionalString(), "status": optionalString(), "attributes": attributeObjectField(),
 				"requires_confirmation": map[string]any{"type": "boolean"},
 			}},
 			"existing_variants": map[string]any{"type": "array", "items": map[string]any{
 				"type": "object", "properties": map[string]any{
-					"id": stringField(), "name": optionalString(), "attributes": objectField(), "status": optionalString(),
+					"id": stringField(), "name": optionalString(), "attributes": attributeObjectField(), "status": optionalString(),
 				}, "required": []string{"id"},
 			}},
 			"new_variants": map[string]any{
@@ -618,7 +618,7 @@ func merchantCatalogProposalSchema() map[string]any {
 					"properties": map[string]any{
 						"ref": stringField(),
 						"name": stringField(),
-						"attributes": objectField(),
+						"attributes": attributeObjectField(),
 					},
 					"required": []string{"ref", "name"},
 				},
