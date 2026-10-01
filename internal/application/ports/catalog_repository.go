@@ -86,13 +86,14 @@ type VariantRecord struct {
 }
 
 type AttributeDefinitionRecord struct {
-	ID           string
-	Key          string
-	Label        string
-	DataType     string
-	Required     bool
-	Searchable   bool
-	DisplayOrder int
+	ID              string
+	Key             string
+	Label           string
+	DataType        string
+	Required        bool
+	Searchable      bool
+	ValidationRules []byte
+	DisplayOrder    int
 }
 
 type AttributeSchemaRecord struct {
