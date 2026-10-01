@@ -485,6 +485,45 @@ func merchantCatalogProposalSchema() map[string]any {
 	optionalString := func() map[string]any { return map[string]any{"type": "string"} }
 	objectField := func() map[string]any { return map[string]any{"type": "object"} }
 
+	offerNameSource := map[string]any{
+		"type": "string",
+		"enum": []string{merchantcatalogai.OfferNameSourceSystemDefault, merchantcatalogai.OfferNameSourceMerchantStated},
+	}
+	offerPriceSource := map[string]any{
+		"type": "string",
+		"enum": []string{merchantcatalogai.OfferPriceSourceMerchantStated, merchantcatalogai.OfferPriceSourceNotStated},
+	}
+	offerPricingMode := map[string]any{
+		"type": "string",
+		"enum": []string{"fixed", "starting_from", "per_unit", "per_person", "per_day", "quote_required", "dynamic"},
+	}
+	offerName := map[string]any{
+		"type": "string",
+		"description": fmt.Sprintf("Commercial offer name. If the merchant did not explicitly provide a distinct commercial label, name_source must be system_default and name must be exactly %q. Never append or derive the variant name, color, option, or attribute to the default offer name.", merchantcatalogai.DefaultOfferName),
+	}
+	offerAmount := map[string]any{
+		"type": []string{"string", "null"},
+		"description": "Exact merchant-supplied amount when price_source is merchant_stated. Null is allowed only when price_source is not_stated or pricing_mode is dynamic/quote_required according to the contract.",
+	}
+	offerPricingSemantics := []map[string]any{
+		{"properties": map[string]any{
+			"name_source": map[string]any{"enum": []string{merchantcatalogai.OfferNameSourceSystemDefault}},
+			"name": map[string]any{"enum": []string{merchantcatalogai.DefaultOfferName}},
+		}},
+		{"properties": map[string]any{
+			"name_source": map[string]any{"enum": []string{merchantcatalogai.OfferNameSourceMerchantStated}},
+		}},
+		{"properties": map[string]any{
+			"price_source": map[string]any{"enum": []string{merchantcatalogai.OfferPriceSourceMerchantStated}},
+			"amount": map[string]any{"type": "string"},
+			"pricing_mode": map[string]any{"enum": []string{"fixed", "starting_from", "per_unit", "per_person", "per_day", "dynamic"}},
+		}},
+		{"properties": map[string]any{
+			"price_source": map[string]any{"enum": []string{merchantcatalogai.OfferPriceSourceNotStated}},
+			"amount": map[string]any{"type": "null"},
+		}},
+	}
+
 	missingField := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -516,20 +555,16 @@ func merchantCatalogProposalSchema() map[string]any {
 			"offers": map[string]any{
 				"type": "array",
 				"minItems": 1,
-				"description": "A resolved create proposal must include offer data. Preserve any concrete merchant-supplied price in the offer amount.",
+				"description": "A resolved create proposal must include offer data. Provenance is contractual: merchant_stated means the merchant explicitly supplied the price; system_default means Mujeeb supplied the canonical offer name. Never derive a commercial offer name from a variant.",
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
 						"variant_ref": optionalString(),
-						"name": map[string]any{
-							"type": "string",
-							"description": fmt.Sprintf("Commercial offer name, independent from the variant name. If the merchant did not provide a separate commercial label, use the contract default: %s. Never derive the offer name from a variant name.", merchantcatalogai.DefaultOfferName),
-						},
-						"pricing_mode": stringField(),
-						"amount": map[string]any{
-							"type": []string{"string", "null"},
-							"description": "The exact merchant-supplied amount when a concrete price was stated. Use null only when the contract allows an offer without an amount.",
-						},
+						"name": offerName,
+						"name_source": offerNameSource,
+						"pricing_mode": offerPricingMode,
+						"amount": offerAmount,
+						"price_source": offerPriceSource,
 						"currency": optionalString(),
 						"pricing_unit": optionalString(),
 						"availability_mode": stringField(),
@@ -537,10 +572,10 @@ func merchantCatalogProposalSchema() map[string]any {
 						"fulfillment_mode": stringField(),
 						"status": stringField(),
 					},
-					"required": []string{"name", "pricing_mode", "amount", "availability_mode", "availability_status", "fulfillment_mode", "status"},
+					"required": []string{"name", "name_source", "pricing_mode", "amount", "price_source", "availability_mode", "availability_status", "fulfillment_mode", "status"},
+					"anyOf": offerPricingSemantics,
 				},
 			},
-		},
 		"required": []string{"name", "item_type", "pricing_mode", "availability_mode", "fulfillment_mode", "requires_confirmation", "offers"},
 	}
 	update := map[string]any{
@@ -587,15 +622,11 @@ func merchantCatalogProposalSchema() map[string]any {
 							"type": "string",
 							"description": "Proposal-local ref of a new variant in update.new_variants. Use this before the new variant has a database ID.",
 						},
-						"name": map[string]any{
-							"type": "string",
-							"description": fmt.Sprintf("Commercial offer name, independent from the variant name. If the merchant did not provide a separate commercial label, use the contract default: %s. Never derive the offer name from a variant name.", merchantcatalogai.DefaultOfferName),
-						},
-						"pricing_mode": stringField(),
-						"amount": map[string]any{
-							"type": []string{"string", "null"},
-							"description": "The exact merchant-supplied amount when a concrete price was stated. Use null only when the contract allows an offer without an amount.",
-						},
+						"name": offerName,
+						"name_source": offerNameSource,
+						"pricing_mode": offerPricingMode,
+						"amount": offerAmount,
+						"price_source": offerPriceSource,
 						"currency": optionalString(),
 						"pricing_unit": optionalString(),
 						"availability_mode": stringField(),
@@ -603,10 +634,10 @@ func merchantCatalogProposalSchema() map[string]any {
 						"fulfillment_mode": stringField(),
 						"status": stringField(),
 					},
-					"required": []string{"name", "pricing_mode", "amount", "availability_mode", "availability_status", "fulfillment_mode", "status"},
+					"required": []string{"name", "name_source", "pricing_mode", "amount", "price_source", "availability_mode", "availability_status", "fulfillment_mode", "status"},
+					"anyOf": offerPricingSemantics,
 				},
 			},
-		},
 		"required": []string{"item_id", "changes"},
 	}
 	deletePayload := map[string]any{
