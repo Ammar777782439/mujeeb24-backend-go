@@ -23,7 +23,6 @@ import (
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
-        "github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/prompts"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
         "github.com/danielgtaylor/huma/v2"
         "github.com/google/uuid"
