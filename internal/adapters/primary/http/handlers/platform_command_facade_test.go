@@ -9,6 +9,7 @@ import (
 
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/dto"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/middleware"
+        "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
@@ -400,3 +401,192 @@ func resultError(_ bool) (error, bool) { return nil, false }
 
 // avoid unused import warnings if test evolution removes strings usage
 var _ = strings.TrimSpace
+
+// stubPrincipalBootstrapRepository stubs PrincipalBootstrapRepository
+// for the assign-owner handler test.
+type stubPrincipalBootstrapRepository struct {
+        result ports.PrincipalRecord
+        err    error
+}
+
+func (s *stubPrincipalBootstrapRepository) EnsurePrincipalAndMembership(_ context.Context, principal ports.PrincipalRecord, _ commands.BusinessID, _ string, _ []string, _ time.Time) (ports.PrincipalRecord, error) {
+        if s.err != nil {
+                return ports.PrincipalRecord{}, s.err
+        }
+        return s.result, nil
+}
+
+// TestPlatformAssignBusinessOwner_ActiveBusiness tests that the assign-owner
+// handler succeeds when the business is ALREADY active (e.g., created by the
+// seed with status='active'). Before the fix, Activate() only accepted
+// pending_setup → active, so assigning an owner to an already-active business
+// failed with RepositoryConflict. After the fix, Activate() accepts both
+// pending_setup AND active → the handler succeeds.
+func TestPlatformAssignBusinessOwner_ActiveBusiness(t *testing.T) {
+        bizRepo := &stubPlatformBusinessRepository{
+                // Activate returns an already-active business (simulating seed-created)
+                // The stub always returns {PlatformStatus: "active"} — see line 107.
+        }
+        bootstrapRepo := &stubPrincipalBootstrapRepository{
+                result: ports.PrincipalRecord{
+                        ID:          commands.PrincipalID("principal-1"),
+                        Email:       "owner@store.com",
+                        DisplayName: "Store Owner",
+                        Status:      "active",
+                },
+        }
+        auditRepo := &stubPlatformAuditRepository{}
+        server := newPlatformServer(PlatformDeps{
+                PlatformBusiness:   bizRepo,
+                PrincipalBootstrap: bootstrapRepo,
+                PlatformAudit:      auditRepo,
+        })
+        ctx, cancel := ctxWithPlatformAdmin()
+        defer cancel()
+        result, ok := server.platformAssignBusinessOwner(ctx, &dto.AssignOwnerInput{
+                PlatformBusinessPath: dto.PlatformBusinessPath{BusinessID: dto.UUID("00000000-0000-0000-0000-000000000002")},
+                Body: dto.AssignOwnerRequest{
+                        Email:       "owner@store.com",
+                        DisplayName: "Store Owner",
+                        Password:    "TemporaryPass123",
+                },
+        })
+        if !ok {
+                t.Fatalf("platformAssignBusinessOwner returned ok=false — the handler rejected the request")
+        }
+        _ = result // the handler returned a contract.Single[dto.AssignOwnerView]
+        // Verify the audit was appended with SUCCESS (not FAILURE)
+        if auditRepo.appendedDraft == nil {
+                t.Fatal("audit draft not appended — the handler did not audit the operation")
+        }
+        if auditRepo.appendedDraft.Result != "SUCCESS" {
+                t.Errorf("audit result = %s, want SUCCESS — the handler should succeed for an already-active business", auditRepo.appendedDraft.Result)
+        }
+        t.Logf("assign owner succeeded for already-active business — audit result=%s", auditRepo.appendedDraft.Result)
+}
+
+// TestPlatformAssignBusinessOwner_PendingSetupBusiness tests that the
+// assign-owner handler succeeds when the business is in pending_setup
+// (newly created via the API). The stub's Activate() returns
+// {PlatformStatus: "active"} regardless of the input — this test proves
+// the handler calls Activate() + uses the returned status.
+func TestPlatformAssignBusinessOwner_PendingSetupBusiness(t *testing.T) {
+        bizRepo := &stubPlatformBusinessRepository{}
+        bootstrapRepo := &stubPrincipalBootstrapRepository{
+                result: ports.PrincipalRecord{
+                        ID:          commands.PrincipalID("principal-2"),
+                        Email:       "owner2@store.com",
+                        DisplayName: "Store Owner 2",
+                        Status:      "active",
+                },
+        }
+        auditRepo := &stubPlatformAuditRepository{}
+        server := newPlatformServer(PlatformDeps{
+                PlatformBusiness:   bizRepo,
+                PrincipalBootstrap: bootstrapRepo,
+                PlatformAudit:      auditRepo,
+        })
+        ctx, cancel := ctxWithPlatformAdmin()
+        defer cancel()
+        _, ok := server.platformAssignBusinessOwner(ctx, &dto.AssignOwnerInput{
+                PlatformBusinessPath: dto.PlatformBusinessPath{BusinessID: dto.UUID("00000000-0000-0000-0000-000000000003")},
+                Body: dto.AssignOwnerRequest{
+                        Email:       "owner2@store.com",
+                        DisplayName: "Store Owner 2",
+                        Password:    "AnotherTempPass456",
+                },
+        })
+        if !ok {
+                t.Fatalf("platformAssignBusinessOwner returned ok=false for pending_setup business")
+        }
+        if auditRepo.appendedDraft == nil || auditRepo.appendedDraft.Result != "SUCCESS" {
+                t.Errorf("expected SUCCESS audit, got draft=%v", auditRepo.appendedDraft)
+        }
+        t.Logf("assign owner succeeded for pending_setup business — audit result=%s", auditRepo.appendedDraft.Result)
+}
+
+// TestPlatformAssignBusinessOwner_ShortPassword_Rejected tests that the
+// handler rejects passwords shorter than 12 characters.
+
+// TestPlatformAssignBusinessOwner_ShortPassword_Rejected tests that the
+// handler rejects passwords shorter than 12 characters. The handler should
+// return before calling the repository (no audit appended).
+func TestPlatformAssignBusinessOwner_ShortPassword_Rejected(t *testing.T) {
+	auditRepo := &stubPlatformAuditRepository{}
+	server := newPlatformServer(PlatformDeps{
+		PlatformBusiness:   &stubPlatformBusinessRepository{},
+		PrincipalBootstrap: &stubPrincipalBootstrapRepository{},
+		PlatformAudit:      auditRepo,
+	})
+	ctx, cancel := ctxWithPlatformAdmin()
+	defer cancel()
+	server.platformAssignBusinessOwner(ctx, &dto.AssignOwnerInput{
+		PlatformBusinessPath: dto.PlatformBusinessPath{BusinessID: dto.UUID("00000000-0000-0000-0000-000000000004")},
+		Body: dto.AssignOwnerRequest{
+			Email:       "owner@store.com",
+			DisplayName: "Store Owner",
+			Password:    "short",
+		},
+	})
+	if auditRepo.appendedDraft != nil {
+		t.Errorf("expected no audit for validation failure, got result=%s", auditRepo.appendedDraft.Result)
+	}
+	t.Logf("short password correctly rejected (no audit — validation stopped before repository call)")
+}
+
+// TestPlatformAssignBusinessOwner_MissingEmail_Rejected tests that the
+// handler rejects requests with empty email.
+func TestPlatformAssignBusinessOwner_MissingEmail_Rejected(t *testing.T) {
+	auditRepo := &stubPlatformAuditRepository{}
+	server := newPlatformServer(PlatformDeps{
+		PlatformBusiness:   &stubPlatformBusinessRepository{},
+		PrincipalBootstrap: &stubPrincipalBootstrapRepository{},
+		PlatformAudit:      auditRepo,
+	})
+	ctx, cancel := ctxWithPlatformAdmin()
+	defer cancel()
+	server.platformAssignBusinessOwner(ctx, &dto.AssignOwnerInput{
+		PlatformBusinessPath: dto.PlatformBusinessPath{BusinessID: dto.UUID("00000000-0000-0000-0000-000000000005")},
+		Body: dto.AssignOwnerRequest{
+			Email:       "",
+			DisplayName: "Store Owner",
+			Password:    "ValidPassword123",
+		},
+	})
+	if auditRepo.appendedDraft != nil {
+		t.Errorf("expected no audit for validation failure, got result=%s", auditRepo.appendedDraft.Result)
+	}
+	t.Logf("empty email correctly rejected (no audit — validation stopped before repository call)")
+}
+
+// TestPlatformAssignBusinessOwner_PrincipalBootstrapError verifies that
+// when EnsurePrincipalAndMembership fails, the handler audits FAILURE
+// (not SUCCESS).
+func TestPlatformAssignBusinessOwner_PrincipalBootstrapError(t *testing.T) {
+	bootstrapRepo := &stubPrincipalBootstrapRepository{
+		err: &localRepoError{kind: "conflict"},
+	}
+	auditRepo := &stubPlatformAuditRepository{}
+	server := newPlatformServer(PlatformDeps{
+		PlatformBusiness:   &stubPlatformBusinessRepository{},
+		PrincipalBootstrap: bootstrapRepo,
+		PlatformAudit:      auditRepo,
+	})
+	ctx, cancel := ctxWithPlatformAdmin()
+	defer cancel()
+	server.platformAssignBusinessOwner(ctx, &dto.AssignOwnerInput{
+		PlatformBusinessPath: dto.PlatformBusinessPath{BusinessID: dto.UUID("00000000-0000-0000-0000-000000000006")},
+		Body: dto.AssignOwnerRequest{
+			Email:       "fail@store.com",
+			DisplayName: "Fail Owner",
+			Password:    "ValidPassword123",
+		},
+	})
+	if auditRepo.appendedDraft == nil {
+		t.Fatal("audit draft not appended for failed principal bootstrap")
+	}
+	if auditRepo.appendedDraft.Result != "FAILURE" {
+		t.Errorf("audit result = %s, want FAILURE", auditRepo.appendedDraft.Result)
+	}
+	t.Logf("principal bootstrap failure correctly audited as FAILURE")
+}

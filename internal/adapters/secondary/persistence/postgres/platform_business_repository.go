@@ -158,8 +158,14 @@ func (r *PlatformBusinessRepository) Reactivate(ctx context.Context, businessID 
 // the Platform Admin assigns an owner (via platformAssignBusinessOwner),
 // the business transitions to active — meaning it's operational + ready
 // for merchant login + AI auto-reply.
+//
+// Idempotent: if the business is ALREADY active (e.g., created by the
+// seed with status='active', or re-assigned a new owner), the transition
+// is a no-op success — the UPDATE matches the current status and returns
+// the record. This prevents the assign-owner handler from failing when
+// the business is already active.
 func (r *PlatformBusinessRepository) Activate(ctx context.Context, businessID string, now time.Time) (ports.PlatformBusinessRecord, error) {
-        return r.transition(ctx, "platform_business.activate", businessID, now, []string{"pending_setup"}, "active")
+        return r.transition(ctx, "platform_business.activate", businessID, now, []string{"pending_setup", "active"}, "active")
 }
 
 func (r *PlatformBusinessRepository) Archive(ctx context.Context, businessID string, now time.Time) (ports.PlatformBusinessRecord, error) {
