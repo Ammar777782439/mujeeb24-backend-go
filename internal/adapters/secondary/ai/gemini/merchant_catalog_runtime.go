@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -17,18 +18,22 @@ import (
 	"github.com/google/uuid"
 )
 
+// MerchantCatalogRuntime is the isolated B2B Gemini runtime.
+// It uses Google's current Interactions API, not the legacy generateContent
+// request/response shape. Mujeeb remains responsible for tool execution,
+// validation, authorization, and persistence.
 type MerchantCatalogRuntime struct {
-	client      *Client
-	httpClient  *http.Client
-	apiKey      string
-	model       string
-	baseURL     string
-	timeout     time.Duration
-	maxOutput   int
-	maxInput    int
-	runRepo     ports.AIRunRepository
-	lifecycle   ports.AIRunLifecyclePort
-	newID       func() string
+	client         *Client
+	httpClient     *http.Client
+	apiKey         string
+	model          string
+	baseURL        string
+	timeout        time.Duration
+	maxOutput      int
+	maxInput       int
+	runRepo        ports.AIRunRepository
+	lifecycle      ports.AIRunLifecyclePort
+	newID          func() string
 	configProvider ports.AIConfigurationProvider
 }
 
@@ -41,34 +46,88 @@ func NewMerchantCatalogRuntime(client *Client) (*MerchantCatalogRuntime, error) 
 		httpClient = &http.Client{}
 	}
 	return &MerchantCatalogRuntime{
-		client: client,
+		client:     client,
 		httpClient: httpClient,
-		apiKey: client.APIKey(),
-		model: client.Model(),
-		baseURL: client.BaseURL(),
-		timeout: client.RequestTimeout(),
-		maxOutput: client.MaxOutputTokens(),
-		maxInput: client.MaxInputCharacters(),
-		newID: uuid.NewString,
+		apiKey:     client.APIKey(),
+		model:      client.Model(),
+		baseURL:    client.BaseURL(),
+		timeout:    client.RequestTimeout(),
+		maxOutput:  client.MaxOutputTokens(),
+		maxInput:   client.MaxInputCharacters(),
+		newID:      uuid.NewString,
 	}, nil
 }
 
-func (r *MerchantCatalogRuntime) SetRunRepository(repo ports.AIRunRepository) {
-	r.runRepo = repo
-}
-
-func (r *MerchantCatalogRuntime) SetLifecycle(lifecycle ports.AIRunLifecyclePort) {
-	r.lifecycle = lifecycle
-}
-
+func (r *MerchantCatalogRuntime) SetRunRepository(repo ports.AIRunRepository) { r.runRepo = repo }
+func (r *MerchantCatalogRuntime) SetLifecycle(lifecycle ports.AIRunLifecyclePort) { r.lifecycle = lifecycle }
 func (r *MerchantCatalogRuntime) SetConfigurationProvider(provider ports.AIConfigurationProvider) {
 	r.configProvider = provider
 }
-
 func (r *MerchantCatalogRuntime) SetNewID(newID func() string) {
 	if newID != nil {
 		r.newID = newID
 	}
+}
+
+type merchantCatalogInteractionRequest struct {
+	Model                 string                              `json:"model"`
+	Store                 bool                                `json:"store"`
+	Input                 any                                 `json:"input"`
+	SystemInstruction     string                              `json:"system_instruction,omitempty"`
+	Tools                 []merchantCatalogInteractionTool    `json:"tools,omitempty"`
+	ResponseFormat        *merchantCatalogInteractionFormat  `json:"response_format,omitempty"`
+	GenerationConfig      *merchantCatalogGenerationConfig   `json:"generation_config,omitempty"`
+	PreviousInteractionID string                              `json:"previous_interaction_id,omitempty"`
+}
+
+type merchantCatalogInteractionTool struct {
+	Type        string         `json:"type"`
+	Name        string         `json:"name,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Parameters  map[string]any `json:"parameters,omitempty"`
+}
+
+type merchantCatalogInteractionFormat struct {
+	Type     string         `json:"type"`
+	MimeType string         `json:"mime_type"`
+	Schema   map[string]any `json:"schema"`
+}
+
+type merchantCatalogGenerationConfig struct {
+	MaxOutputTokens int `json:"max_output_tokens,omitempty"`
+}
+
+type merchantCatalogInteractionResponse struct {
+	ID             string                         `json:"id"`
+	Status         string                         `json:"status"`
+	OutputText     string                         `json:"output_text,omitempty"`
+	Steps          []merchantCatalogInteractionStep `json:"steps,omitempty"`
+	Usage          merchantCatalogUsage            `json:"usage,omitempty"`
+}
+
+type merchantCatalogInteractionStep struct {
+	Type       string          `json:"type"`
+	ID         string          `json:"id,omitempty"`
+	Name       string          `json:"name,omitempty"`
+	Arguments  json.RawMessage `json:"arguments,omitempty"`
+	Result     json.RawMessage `json:"result,omitempty"`
+	Content    []merchantCatalogOutputPart `json:"content,omitempty"`
+}
+
+type merchantCatalogOutputPart struct {
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
+}
+
+type merchantCatalogUsage struct {
+	InputTokens  int `json:"input_tokens,omitempty"`
+	OutputTokens int `json:"output_tokens,omitempty"`
+}
+
+type merchantCatalogFunctionCall struct {
+	ID        string
+	Name      string
+	Arguments json.RawMessage
 }
 
 func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatalogai.RuntimeInput) (merchantcatalogai.Proposal, error) {
@@ -76,24 +135,15 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 		return merchantcatalogai.Proposal{}, errors.New("merchant message is required")
 	}
 
-	apiKey := r.apiKey
-	model := r.model
-	baseURL := r.baseURL
-	maxOutput := r.maxOutput
-	maxInput := r.maxInput
+	apiKey, model, baseURL := r.apiKey, r.model, r.baseURL
+	maxOutput, maxInput := r.maxOutput, r.maxInput
 	if r.configProvider != nil {
 		cfg, err := r.configProvider.GetActiveConfig(ctx)
 		if err != nil {
 			return merchantcatalogai.Proposal{}, fmt.Errorf("resolve active AI configuration: %w", err)
 		}
-		if strings.TrimSpace(cfg.APIKey) == "" {
-			return merchantcatalogai.Proposal{}, errors.New("active AI configuration has no valid API key")
-		}
-		apiKey = cfg.APIKey
-		model = cfg.Model
-		baseURL = cfg.BaseURL
-		maxOutput = cfg.MaxOutputTokens
-		maxInput = cfg.MaxInputCharacters
+		apiKey, model, baseURL = cfg.APIKey, cfg.Model, cfg.BaseURL
+		maxOutput, maxInput = cfg.MaxOutputTokens, cfg.MaxInputCharacters
 	}
 	if strings.TrimSpace(apiKey) == "" || strings.TrimSpace(model) == "" || strings.TrimSpace(baseURL) == "" {
 		return merchantcatalogai.Proposal{}, errors.New("merchant catalog AI Gemini configuration is incomplete")
@@ -103,16 +153,16 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 	}
 
 	contextPayload := map[string]any{
-		"business_id": input.BusinessID,
+		"business_id":  input.BusinessID,
 		"principal_id": input.PrincipalID,
-		"session_id": input.SessionID,
+		"session_id":   input.SessionID,
 		"catalog": map[string]any{
-			"id": input.SelectedCatalog.ID,
-			"name": input.SelectedCatalog.Name,
+			"id":     input.SelectedCatalog.ID,
+			"name":   input.SelectedCatalog.Name,
 			"status": input.SelectedCatalog.Status,
 		},
 		"conversation_history": input.History,
-		"merchant_message": input.Message,
+		"merchant_message":     input.Message,
 	}
 	encodedContext, err := json.Marshal(contextPayload)
 	if err != nil {
@@ -124,169 +174,209 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 		systemText += "\n\n# Catalog Entity Contract\n" + string(input.EntityContract)
 	}
 
-	reqBody := contractGeminiRequest{
-		Model: model,
-		Store: false,
-		SystemInstruction: &contractContent{
-			Role: "system",
-			Parts: []contractPart{{Text: systemText}},
+	tools := merchantCatalogInteractionTools(input.Capabilities)
+	req := merchantCatalogInteractionRequest{
+		Model:             model,
+		Store:             false,
+		Input:             string(encodedContext),
+		SystemInstruction: systemText,
+		Tools:             tools,
+		ResponseFormat: &merchantCatalogInteractionFormat{
+			Type:     "text",
+			MimeType: "application/json",
+			Schema:   merchantCatalogProposalSchema(),
 		},
-		Contents: []contractContent{{
-			Role: "user",
-			Parts: []contractPart{{Text: string(encodedContext)}},
-		}},
-		GenerationConfig: contractGenerationConfig{
-			ResponseMimeType: "application/json",
-			ResponseSchema: merchantCatalogProposalSchema(),
-			MaxOutputTokens: maxOutput,
-		},
-	}
-	declarations := merchantCatalogToolDeclarations(input.Capabilities)
-	if len(declarations) > 0 {
-		reqBody.Tools = []contractTools{{FunctionDeclarations: declarations}}
+		GenerationConfig: &merchantCatalogGenerationConfig{MaxOutputTokens: maxOutput},
 	}
 
+	log.Printf("[MerchantCatalogAI] START business=%s session=%s catalog=%s model=%s",
+		input.BusinessID, input.SessionID, input.SelectedCatalog.ID, model)
+
+	var previousInteractionID string
 	for {
 		if err := ctx.Err(); err != nil {
-			return merchantcatalogai.Proposal{}, fmt.Errorf("merchant catalog AI tool loop cancelled: %w", err)
+			return merchantcatalogai.Proposal{}, fmt.Errorf("merchant catalog AI cancelled: %w", err)
 		}
-		resp, err := r.send(ctx, reqBody, apiKey, model, baseURL)
+		req.PreviousInteractionID = previousInteractionID
+
+		resp, err := r.sendInteraction(ctx, req, apiKey, baseURL)
 		if err != nil {
+			log.Printf("[MerchantCatalogAI] GEMINI_ERROR business=%s session=%s err=%v", input.BusinessID, input.SessionID, err)
 			return merchantcatalogai.Proposal{}, err
 		}
 
-		if !hasFunctionCall(resp) {
+		log.Printf("[MerchantCatalogAI] INTERACTION business=%s session=%s id=%s status=%s steps=%d",
+			input.BusinessID, input.SessionID, resp.ID, resp.Status, len(resp.Steps))
+
+		calls := extractMerchantCatalogFunctionCalls(resp)
+		if len(calls) == 0 {
 			proposal, err := parseMerchantCatalogProposal(resp)
 			if err != nil {
 				return merchantcatalogai.Proposal{}, err
 			}
+			log.Printf("[MerchantCatalogAI] PROPOSAL business=%s session=%s status=%s operation=%s evidence=%d",
+				input.BusinessID, input.SessionID, proposal.Status, proposal.Operation, len(proposal.EvidenceReferences))
 			return proposal, nil
 		}
 
 		if input.Capabilities == nil {
 			return merchantcatalogai.Proposal{}, errors.New("Gemini requested a tool but B2B read capabilities are not configured")
 		}
+		if strings.TrimSpace(resp.ID) == "" {
+			return merchantcatalogai.Proposal{}, errors.New("Gemini returned function calls without an interaction id")
+		}
 
-		toolContents, err := r.executeTools(ctx, resp, input)
+		resultInput, err := r.executeInteractionTools(ctx, resp, calls, input)
 		if err != nil {
 			return merchantcatalogai.Proposal{}, err
 		}
-		reqBody.Contents = append(reqBody.Contents, toolContents...)
-		reqBody.PreviousInteractionID = ""
-		reqBody.Store = false
+		previousInteractionID = resp.ID
+		req.Input = resultInput
 	}
 }
 
-func (r *MerchantCatalogRuntime) send(ctx context.Context, reqBody contractGeminiRequest, apiKey, model, baseURL string) (contractGeminiResponse, error) {
+func (r *MerchantCatalogRuntime) sendInteraction(ctx context.Context, reqBody merchantCatalogInteractionRequest, apiKey, baseURL string) (merchantCatalogInteractionResponse, error) {
 	payload, err := json.Marshal(reqBody)
 	if err != nil {
-		return contractGeminiResponse{}, fmt.Errorf("encode merchant catalog Gemini request: %w", err)
+		return merchantCatalogInteractionResponse{}, fmt.Errorf("encode Gemini interaction request: %w", err)
 	}
 
 	requestCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent", strings.TrimRight(baseURL, "/"), model)
+	url := fmt.Sprintf("%s/v1beta/interactions", strings.TrimRight(baseURL, "/"))
 	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
-		return contractGeminiResponse{}, fmt.Errorf("build merchant catalog Gemini request: %w", err)
+		return merchantCatalogInteractionResponse{}, fmt.Errorf("build Gemini interaction request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-goog-api-key", apiKey)
 
 	resp, err := r.httpClient.Do(req)
 	if err != nil {
-		return contractGeminiResponse{}, fmt.Errorf("merchant catalog Gemini request: %w", err)
+		return merchantCatalogInteractionResponse{}, fmt.Errorf("merchant catalog Gemini interaction: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return contractGeminiResponse{}, fmt.Errorf("read merchant catalog Gemini response: %w", err)
+		return merchantCatalogInteractionResponse{}, fmt.Errorf("read Gemini interaction response: %w", err)
 	}
 	if resp.StatusCode >= 400 {
-		return contractGeminiResponse{}, fmt.Errorf("merchant catalog Gemini HTTP %d: %s", resp.StatusCode, string(body))
+		return merchantCatalogInteractionResponse{}, fmt.Errorf("merchant catalog Gemini HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
-	var out contractGeminiResponse
+	var out merchantCatalogInteractionResponse
 	if err := json.Unmarshal(body, &out); err != nil {
-		return contractGeminiResponse{}, fmt.Errorf("decode merchant catalog Gemini response: %w", err)
+		return merchantCatalogInteractionResponse{}, fmt.Errorf("decode Gemini interaction response: %w", err)
 	}
 	return out, nil
 }
 
-func merchantCatalogToolDeclarations(caps ports.AICapabilityDispatcher) []contractFunctionDeclaration {
+func merchantCatalogInteractionTools(caps ports.AICapabilityDispatcher) []merchantCatalogInteractionTool {
 	if caps == nil {
 		return nil
 	}
 	defs := caps.Definitions()
-	out := make([]contractFunctionDeclaration, 0, len(defs))
+	out := make([]merchantCatalogInteractionTool, 0, len(defs))
 	for _, definition := range defs {
-		out = append(out, contractFunctionDeclaration{
-			Name: definition.Name,
+		out = append(out, merchantCatalogInteractionTool{
+			Type:        "function",
+			Name:        definition.Name,
 			Description: definition.Description,
-			Parameters: definition.Parameters,
+			Parameters:  definition.Parameters,
 		})
 	}
 	return out
 }
 
-func (r *MerchantCatalogRuntime) executeTools(ctx context.Context, resp contractGeminiResponse, input merchantcatalogai.RuntimeInput) ([]contractContent, error) {
-	modelContent := contractContent{}
-	if len(resp.Candidates) > 0 {
-		modelContent = resp.Candidates[0].Content
-		modelContent.Role = "model"
-	}
-
-	toolParts := make([]contractPart, 0)
-	for _, call := range extractFunctionCalls(resp) {
-		args, err := json.Marshal(call.Args)
-		if err != nil {
-			return nil, fmt.Errorf("encode tool arguments for %s: %w", call.Name, err)
+func extractMerchantCatalogFunctionCalls(resp merchantCatalogInteractionResponse) []merchantCatalogFunctionCall {
+	var calls []merchantCatalogFunctionCall
+	for _, step := range resp.Steps {
+		if step.Type != "function_call" {
+			continue
 		}
+		calls = append(calls, merchantCatalogFunctionCall{
+			ID:        step.ID,
+			Name:      step.Name,
+			Arguments: append(json.RawMessage(nil), step.Arguments...),
+		})
+	}
+	return calls
+}
+
+func (r *MerchantCatalogRuntime) executeInteractionTools(
+	ctx context.Context,
+	resp merchantCatalogInteractionResponse,
+	calls []merchantCatalogFunctionCall,
+	input merchantcatalogai.RuntimeInput,
+) ([]map[string]any, error) {
+	toolResults := make([]map[string]any, 0, len(calls))
+	for _, call := range calls {
+		if strings.TrimSpace(call.Name) == "" || strings.TrimSpace(call.ID) == "" {
+			return nil, errors.New("Gemini returned an invalid function call")
+		}
+		if len(call.Arguments) == 0 {
+			call.Arguments = []byte("{}")
+		}
+
+		started := time.Now()
+		log.Printf("[MerchantCatalogAI][TOOL] START business=%s session=%s tool=%s call_id=%s",
+			input.BusinessID, input.SessionID, call.Name, call.ID)
 
 		execCtx := ports.AICapabilityExecutionContext{
-			BusinessID: input.BusinessID,
+			BusinessID:     input.BusinessID,
 			ConversationID: input.SessionID,
-			PrincipalID: input.PrincipalID,
+			PrincipalID:    input.PrincipalID,
 		}
-		result, err := input.Capabilities.Execute(ctx, execCtx, call.Name, args)
+		result, err := input.Capabilities.Execute(ctx, execCtx, call.Name, call.Arguments)
 		if err != nil {
+			log.Printf("[MerchantCatalogAI][TOOL] ERROR business=%s session=%s tool=%s latency_ms=%d err=%v",
+				input.BusinessID, input.SessionID, call.Name, time.Since(started).Milliseconds(), err)
 			return nil, fmt.Errorf("B2B catalog read tool %s failed: %w", call.Name, err)
 		}
 
-		responseBytes, err := json.Marshal(result)
+		resultJSON, err := json.Marshal(result.Data)
 		if err != nil {
 			return nil, fmt.Errorf("encode result from tool %s: %w", call.Name, err)
 		}
-		var response map[string]any
-		if err := json.Unmarshal(responseBytes, &response); err != nil {
-			return nil, fmt.Errorf("decode result from tool %s: %w", call.Name, err)
-		}
+		log.Printf("[MerchantCatalogAI][TOOL] OK business=%s session=%s tool=%s latency_ms=%d",
+			input.BusinessID, input.SessionID, call.Name, time.Since(started).Milliseconds())
 
-		toolParts = append(toolParts, contractPart{
-			FunctionResponse: &contractFunctionResponse{
-				Name: call.Name,
-				ID: call.ID,
-				Response: response,
+		toolResults = append(toolResults, map[string]any{
+			"type":    "function_result",
+			"name":    call.Name,
+			"call_id": call.ID,
+			"result": []map[string]any{
+				{"type": "text", "text": string(resultJSON)},
 			},
 		})
 	}
-
-	return []contractContent{
-		modelContent,
-		{Role: "user", Parts: toolParts},
-	}, nil
+	return toolResults, nil
 }
 
-func parseMerchantCatalogProposal(resp contractGeminiResponse) (merchantcatalogai.Proposal, error) {
-	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+func parseMerchantCatalogProposal(resp merchantCatalogInteractionResponse) (merchantcatalogai.Proposal, error) {
+	raw := strings.TrimSpace(resp.OutputText)
+	if raw == "" {
+		for i := len(resp.Steps) - 1; i >= 0; i-- {
+			if resp.Steps[i].Type != "model_output" {
+				continue
+			}
+			for _, part := range resp.Steps[i].Content {
+				if strings.TrimSpace(part.Text) != "" {
+					raw = strings.TrimSpace(part.Text)
+					break
+				}
+			}
+			if raw != "" {
+				break
+			}
+		}
+	}
+	if raw == "" {
 		return merchantcatalogai.Proposal{}, errors.New("Gemini returned no merchant catalog proposal")
 	}
-	raw := strings.TrimSpace(resp.Candidates[0].Content.Parts[0].Text)
-	if raw == "" {
-		return merchantcatalogai.Proposal{}, errors.New("Gemini returned an empty merchant catalog proposal")
-	}
+
 	var proposal merchantcatalogai.Proposal
 	if err := json.Unmarshal([]byte(raw), &proposal); err != nil {
 		return merchantcatalogai.Proposal{}, fmt.Errorf("decode merchant catalog proposal: %w", err)
@@ -302,83 +392,80 @@ func merchantCatalogProposalSchema() map[string]any {
 	missingField := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"path": stringField(),
-			"display_name": stringField(),
-			"data_type": stringField(),
-			"reason": stringField(),
+			"path": stringField(), "display_name": stringField(), "data_type": stringField(), "reason": stringField(),
 		},
 		"required": []string{"path", "display_name", "data_type", "reason"},
 	}
 	itemCreate := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"name": stringField(), "item_type": stringField(),
-			"pricing_mode": stringField(), "availability_mode": stringField(),
-			"fulfillment_mode": stringField(), "requires_confirmation": map[string]any{"type":"boolean"},
+			"name": stringField(), "item_type": stringField(), "pricing_mode": stringField(),
+			"availability_mode": stringField(), "fulfillment_mode": stringField(),
+			"requires_confirmation": map[string]any{"type": "boolean"},
 			"attributes": objectField(),
-			"variants": map[string]any{"type":"array","items":map[string]any{
-				"type":"object","properties":map[string]any{"name":stringField(),"attributes":objectField()},
-				"required":[]string{"name"},
+			"variants": map[string]any{"type": "array", "items": map[string]any{
+				"type": "object", "properties": map[string]any{"name": stringField(), "attributes": objectField()},
+				"required": []string{"name"},
 			}},
-			"offers": map[string]any{"type":"array","items":map[string]any{
-				"type":"object","properties":map[string]any{
-					"variant_id": optionalString(), "variant_name": optionalString(), "name":stringField(),
-					"pricing_mode":stringField(), "amount":optionalString(), "currency":optionalString(),
-					"pricing_unit":optionalString(), "availability_mode":stringField(),
-					"availability_status":stringField(), "fulfillment_mode":stringField(), "status":stringField(),
+			"offers": map[string]any{"type": "array", "items": map[string]any{
+				"type": "object", "properties": map[string]any{
+					"variant_id": optionalString(), "variant_name": optionalString(), "name": stringField(),
+					"pricing_mode": stringField(), "amount": optionalString(), "currency": optionalString(),
+					"pricing_unit": optionalString(), "availability_mode": stringField(),
+					"availability_status": stringField(), "fulfillment_mode": stringField(), "status": stringField(),
 				},
-				"required":[]string{"name","pricing_mode","availability_mode","availability_status","fulfillment_mode","status"},
+				"required": []string{"name", "pricing_mode", "availability_mode", "availability_status", "fulfillment_mode", "status"},
 			}},
 		},
-		"required":[]string{"name","item_type","pricing_mode","availability_mode","fulfillment_mode","requires_confirmation"},
+		"required": []string{"name", "item_type", "pricing_mode", "availability_mode", "fulfillment_mode", "requires_confirmation"},
 	}
 	update := map[string]any{
-		"type":"object",
-		"properties":map[string]any{
-			"item_id":stringField(),
-			"changes":map[string]any{"type":"object","properties":map[string]any{
-				"name":optionalString(),"status":optionalString(),"attributes":objectField(),
-				"requires_confirmation":map[string]any{"type":"boolean"},
+		"type": "object",
+		"properties": map[string]any{
+			"item_id": stringField(),
+			"changes": map[string]any{"type": "object", "properties": map[string]any{
+				"name": optionalString(), "status": optionalString(), "attributes": objectField(),
+				"requires_confirmation": map[string]any{"type": "boolean"},
 			}},
-			"existing_variants":map[string]any{"type":"array","items":map[string]any{
-				"type":"object","properties":map[string]any{
-					"id":stringField(),"name":optionalString(),"attributes":objectField(),"status":optionalString(),
-				},"required":[]string{"id"},
+			"existing_variants": map[string]any{"type": "array", "items": map[string]any{
+				"type": "object", "properties": map[string]any{
+					"id": stringField(), "name": optionalString(), "attributes": objectField(), "status": optionalString(),
+				}, "required": []string{"id"},
 			}},
-			"new_variants":map[string]any{"type":"array","items":map[string]any{
-				"type":"object","properties":map[string]any{"name":stringField(),"attributes":objectField()},
-				"required":[]string{"name"},
+			"new_variants": map[string]any{"type": "array", "items": map[string]any{
+				"type": "object", "properties": map[string]any{"name": stringField(), "attributes": objectField()},
+				"required": []string{"name"},
 			}},
-			"existing_offers":map[string]any{"type":"array","items":map[string]any{
-				"type":"object","properties":map[string]any{
-					"id":stringField(),"name":optionalString(),"amount":optionalString(),
-					"availability_status":optionalString(),"status":optionalString(),
-				},"required":[]string{"id"},
+			"existing_offers": map[string]any{"type": "array", "items": map[string]any{
+				"type": "object", "properties": map[string]any{
+					"id": stringField(), "name": optionalString(), "amount": optionalString(),
+					"availability_status": optionalString(), "status": optionalString(),
+				}, "required": []string{"id"},
 			}},
-			"new_offers":map[string]any{"type":"array","items":itemCreate["properties"].(map[string]any)["offers"].(map[string]any)["items"]},
+			"new_offers": map[string]any{"type": "array", "items": itemCreate["properties"].(map[string]any)["offers"].(map[string]any)["items"]},
 		},
-		"required":[]string{"item_id","changes"},
+		"required": []string{"item_id", "changes"},
 	}
 	deletePayload := map[string]any{
-		"type":"object",
-		"properties":map[string]any{"item_id":stringField(),"reason_given":optionalString()},
-		"required":[]string{"item_id"},
+		"type": "object",
+		"properties": map[string]any{"item_id": stringField(), "reason_given": optionalString()},
+		"required": []string{"item_id"},
 	}
 
 	return map[string]any{
-		"type":"object",
-		"properties":map[string]any{
-			"schema_version":map[string]any{"type":"integer","minimum":1},
-			"status":map[string]any{"type":"string","enum":[]string{"resolved","ambiguous","not_found","needs_more_data"}},
-			"operation":map[string]any{"type":"string","enum":[]string{"create","update","delete","ask_merchant"}},
-			"response_text":stringField(),
-			"evidence_references":map[string]any{"type":"array","items":stringField()},
-			"missing_information":map[string]any{"type":"array","items":missingField},
-			"create":itemCreate,
-			"update":update,
-			"delete":deletePayload,
+		"type": "object",
+		"properties": map[string]any{
+			"schema_version": map[string]any{"type": "integer", "minimum": 1},
+			"status": map[string]any{"type": "string", "enum": []string{"resolved", "ambiguous", "not_found", "needs_more_data"}},
+			"operation": map[string]any{"type": "string", "enum": []string{"create", "update", "delete", "ask_merchant"}},
+			"response_text": stringField(),
+			"evidence_references": map[string]any{"type": "array", "items": stringField()},
+			"missing_information": map[string]any{"type": "array", "items": missingField},
+			"create": itemCreate,
+			"update": update,
+			"delete": deletePayload,
 		},
-		"required":[]string{"schema_version","status","operation","response_text"},
+		"required": []string{"schema_version", "status", "operation", "response_text"},
 	}
 }
 
