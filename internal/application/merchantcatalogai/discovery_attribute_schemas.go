@@ -17,8 +17,8 @@ type listAttributeSchemasCapability struct {
 // listAttributeSchemasCapability exposes tenant-scoped AttributeSchema definitions
 // as optional existing evidence. Dynamic attributes do not require a schema. It
 // is read-only; this capability never creates or mutates schemas.
-func (c listAttributeSchemasCapability) Definition() ports.AICapabilityDefinition {
-	return ports.AICapabilityDefinition{
+func (c listAttributeSchemasCapability) Definition() MerchantCatalogDiscoveryToolDefinition {
+	return MerchantCatalogDiscoveryToolDefinition{
 		Name:        "merchant_catalog_list_attribute_schemas",
 		Description: "List existing AttributeSchema versions and definitions for the current business when existing schema evidence is relevant. Dynamic attributes do not require a schema. This is read-only and tenant-scoped.",
 		Parameters: map[string]any{
@@ -31,7 +31,7 @@ func (c listAttributeSchemasCapability) Definition() ports.AICapabilityDefinitio
 	}
 }
 
-func (c listAttributeSchemasCapability) Execute(ctx context.Context, execCtx ports.AICapabilityExecutionContext, rawParams []byte) (ports.AICapabilityResult, error) {
+func (c listAttributeSchemasCapability) Execute(ctx context.Context, execCtx MerchantCatalogDiscoveryExecutionContext, rawParams []byte) (MerchantCatalogDiscoveryResult, error) {
 	started := time.Now()
 	var params struct {
 		Name    string `json:"name"`
@@ -42,7 +42,7 @@ func (c listAttributeSchemasCapability) Execute(ctx context.Context, execCtx por
 		if err := json.Unmarshal(rawParams, &params); err != nil {
 			log.Printf("[MerchantCatalogAI][DISCOVERY][SCHEMA] ERROR business=%s session=%s stage=parse_params err=%v",
 				execCtx.BusinessID, execCtx.ConversationID, err)
-			return ports.AICapabilityResult{}, err
+			return MerchantCatalogDiscoveryResult{}, err
 		}
 	}
 
@@ -54,7 +54,7 @@ func (c listAttributeSchemasCapability) Execute(ctx context.Context, execCtx por
 	if err != nil {
 		log.Printf("[MerchantCatalogAI][DISCOVERY][SCHEMA] ERROR business=%s session=%s stage=repository latency_ms=%d err=%v",
 			execCtx.BusinessID, execCtx.ConversationID, time.Since(started).Milliseconds(), err)
-		return ports.AICapabilityResult{}, err
+		return MerchantCatalogDiscoveryResult{}, err
 	}
 
 	schemas := make([]map[string]any, 0, len(page.Items))
@@ -90,7 +90,7 @@ func (c listAttributeSchemasCapability) Execute(ctx context.Context, execCtx por
 		execCtx.BusinessID, execCtx.ConversationID, len(schemas), definitionCount, page.HasMore, strings.TrimSpace(page.NextCursor) != "",
 		time.Since(started).Milliseconds())
 
-	return ports.AICapabilityResult{
+	return MerchantCatalogDiscoveryResult{
 		Data: map[string]any{
 			"attribute_schemas": schemas,
 			"has_more":          page.HasMore,
