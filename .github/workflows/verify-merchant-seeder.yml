@@ -1,0 +1,24 @@
+name: Verify merchant seeder
+
+on:
+  push:
+    branches:
+      - refactor/merchant-catalog-ai-v2-structure
+    paths:
+      - "cmd/seed-merchant/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+          cache: true
+      - run: go test ./cmd/seed-merchant
