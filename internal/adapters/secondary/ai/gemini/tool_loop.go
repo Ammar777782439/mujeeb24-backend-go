@@ -1,4 +1,4 @@
-// Package gemini — Tool Loop implementation for ContractClient.
+// Package gemini — Tool Loop implementation for GeminiCustomerSalesAdapter.
 //
 // This file implements the Gemini Function Calling Tool Loop per the
 // user's specification. It does NOT create new architecture — it
@@ -35,21 +35,21 @@ import (
 // Per the spec: reuse the existing repository instance — do NOT create
 // a second one. Bootstrap calls this with the same postgres.NewAIRunTraceRepository
 // already wired into AutoReplyService.RunRepository.
-func (c *ContractClient) SetRunRepository(repo ports.AIRunRepository) {
+func (c *GeminiCustomerSalesAdapter) SetRunRepository(repo ports.AIRunRepository) {
 	c.runRepo = repo
 }
 
 // SetNewID wires a UUID generator for tool call record IDs.
-func (c *ContractClient) SetNewID(fn func() string) {
+func (c *GeminiCustomerSalesAdapter) SetNewID(fn func() string) {
 	c.newID = fn
 }
 
 // SetLifecycle wires the AIRunLifecyclePort for RUNNING → WAITING_TOOL →
 // RUNNING transitions during the Tool Loop. Per fix #2: the caller
 // passes the existing services.AIRunLifecycle (which implements
-// AIRunLifecyclePort). No cycle — ContractClient uses the ports
+// AIRunLifecyclePort). No cycle — GeminiCustomerSalesAdapter uses the ports
 // abstraction, not the concrete type.
-func (c *ContractClient) SetLifecycle(lc ports.AIRunLifecyclePort) {
+func (c *GeminiCustomerSalesAdapter) SetLifecycle(lc ports.AIRunLifecyclePort) {
 	c.lifecycle = lc
 }
 
@@ -59,7 +59,7 @@ func (c *ContractClient) SetLifecycle(lc ports.AIRunLifecyclePort) {
 //
 // Per the spec: "لا تكتب Tool definitions يدوياً داخل Gemini client.
 // استخرجها من c.base.Capabilities().Definitions()"
-func (c *ContractClient) buildToolDeclarations() []contractFunctionDeclaration {
+func (c *GeminiCustomerSalesAdapter) buildToolDeclarations() []contractFunctionDeclaration {
 	caps := c.base.Capabilities()
 	if caps == nil {
 		return nil
@@ -115,7 +115,7 @@ func extractFunctionCalls(resp contractGeminiResponse) []*contractFunctionCall {
 //   - UpdateToolCall.
 //   - The WAITING_TOOL → RUNNING lifecycle transition is handled by
 //     the caller (DecideContract).
-func (c *ContractClient) executeToolCalls(
+func (c *GeminiCustomerSalesAdapter) executeToolCalls(
 	ctx context.Context,
 	resp contractGeminiResponse,
 	input ports.CustomerSalesDecisionInput,
@@ -173,7 +173,7 @@ func (c *ContractClient) executeToolCalls(
 				CreatedAt:     now,
 			})
 			if tcErr != nil {
-				log.Printf("[ContractClient] TOOL_CALL_CREATE_FAILED run=%s tool=%s err=%v", runID, call.Name, tcErr)
+				log.Printf("[GeminiCustomerSalesAdapter] TOOL_CALL_CREATE_FAILED run=%s tool=%s err=%v", runID, call.Name, tcErr)
 				// Continue — the tool still executes, just untraced.
 			}
 			_ = tcRec
@@ -199,7 +199,7 @@ func (c *ContractClient) executeToolCalls(
 			resultPayload, _ = json.Marshal(responseData)
 			tcStatus = "failed"
 			tcFailureReason = &errMsg
-			log.Printf("[ContractClient] TOOL_EXECUTION_FAILED run=%s tool=%s err=%v", runID, call.Name, execErr)
+			log.Printf("[GeminiCustomerSalesAdapter] TOOL_EXECUTION_FAILED run=%s tool=%s err=%v", runID, call.Name, execErr)
 		} else {
 			// Tool execution succeeded.
 			resultPayload, _ = json.Marshal(result.Data)
@@ -210,7 +210,7 @@ func (c *ContractClient) executeToolCalls(
 				responseData = map[string]any{"data": result.Data}
 			}
 			tcStatus = "completed"
-			log.Printf("[ContractClient] TOOL_EXECUTED run=%s tool=%s latency_ms=%d", runID, call.Name, toolLatencyMs)
+			log.Printf("[GeminiCustomerSalesAdapter] TOOL_EXECUTED run=%s tool=%s latency_ms=%d", runID, call.Name, toolLatencyMs)
 		}
 
 		toolResponseParts = append(toolResponseParts, contractPart{
@@ -232,7 +232,7 @@ func (c *ContractClient) executeToolCalls(
 				LatencyMs:     &toolLatencyMs,
 			})
 			if updateErr != nil {
-				log.Printf("[ContractClient] TOOL_CALL_UPDATE_FAILED run=%s tool=%s err=%v", runID, call.Name, updateErr)
+				log.Printf("[GeminiCustomerSalesAdapter] TOOL_CALL_UPDATE_FAILED run=%s tool=%s err=%v", runID, call.Name, updateErr)
 			}
 		}
 
@@ -274,7 +274,7 @@ func accumulateUsage(total *ports.ContractUsageTelemetry, resp contractGeminiRes
 //   - Tool execution fails non-retryably
 //   - Context deadline expires
 //   - Provider/resource/economic/security boundary fires
-func (c *ContractClient) runToolLoop(
+func (c *GeminiCustomerSalesAdapter) runToolLoop(
 	ctx context.Context,
 	reqBody contractGeminiRequest,
 	rc *resolvedAIConfig,
