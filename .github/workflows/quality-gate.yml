@@ -33,6 +33,7 @@ jobs:
       GOTOOLCHAIN: local
       VERIFY_GOFMT_SCOPE: changed
       VERIFY_OPENAPI_SCOPE: changed
+      AI_CONFIG_ENCRYPTION_KEY: ci-only-test-key-32-bytes-long!!
       RUN_INTEGRATION: "1"
       POSTGRES_TEST_DSN: postgresql://mujeeb_test:local-ci-only-password@localhost:5432/mujeeb24_test?sslmode=disable
     steps:
