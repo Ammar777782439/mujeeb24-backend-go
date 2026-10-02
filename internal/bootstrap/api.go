@@ -258,11 +258,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			cc.SetLifecycle(services.NewAIRunLifecycle(runRepo))
 			contractRuntime = cc
 		} else {
-			// Fallback for openaicompatible.Client or other AIRuntime
-			// implementations: they do NOT yet implement CustomerSalesDecisionPort.
-			// Production should use gemini.NewGeminiCustomerSalesAdapter. Until the
-			// OpenAI-compatible adapter implements CustomerSalesDecisionPort, AutoReply
-			// is unavailable for that provider.
+			// OpenAI-compatible providers do not implement the Customer Sales decision port yet.
+			// There is no generic AI fallback path; AutoReply requires the Gemini customer-sales adapter.
 			return nil, errors.New("AutoReply requires a gemini.Client (contract-aligned); OpenAI-compatible provider not yet supported")
 		}
 		referenceRepository := postgres.NewConversationReferenceRepository(database)
