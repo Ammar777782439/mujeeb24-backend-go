@@ -86,10 +86,7 @@ func (r *PlatformAccessRepository) upsertBootstrapPrincipal(ctx context.Context,
 		)
 		VALUES ($1::uuid, lower($2), $3, $4, 'active', $5, $5)
 		ON CONFLICT (lower(email)) DO UPDATE
-		SET display_name = EXCLUDED.display_name,
-			password_hash = EXCLUDED.password_hash,
-			status = 'active',
-			updated_at = EXCLUDED.updated_at
+		SET id = principals.id
 		RETURNING id::text
 	`, input.Principal, input.Email, input.Name, input.Hash, input.Now).Scan(&principalID)
 	if err != nil {
