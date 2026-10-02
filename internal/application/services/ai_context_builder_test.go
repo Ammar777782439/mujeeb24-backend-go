@@ -121,7 +121,7 @@ func TestAutoReplyContextBuilderBuildsBoundedGroundedContext(t *testing.T) {
 	builder.Now = func() time.Time { return now }
 	builder.MaxItems = 1
 	builder.MaxMessages = 2
-	contextValue, err := builder.Build(context.Background(), ports.ContextBuildInput{BusinessID: "business-1", ConversationID: "conversation-1", SourceMessageReference: "source-message", Text: "هل الآيفون 15 الأسود 256 متوفر؟", PolicyVersion: "auto-reply-v1"})
+	contextValue, err := builder.Build(context.Background(), ports.CustomerSalesContextInput{BusinessID: "business-1", ConversationID: "conversation-1", SourceMessageReference: "source-message", Text: "هل الآيفون 15 الأسود 256 متوفر؟", PolicyVersion: "auto-reply-v1"})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestAutoReplyContextBuilderRejectsTenantMismatch(t *testing.T) {
 		contextBusinessRepository{record: ports.BusinessRecord{ID: "other-business"}},
 		contextConversationRepository{}, contextCustomerRepository{}, contextCatalogRepository{}, contextMessageRepository{},
 	)
-	_, err := builder.Build(context.Background(), ports.ContextBuildInput{BusinessID: "business-1", ConversationID: "conversation-1", Text: "hello"})
+	_, err := builder.Build(context.Background(), ports.CustomerSalesContextInput{BusinessID: "business-1", ConversationID: "conversation-1", Text: "hello"})
 	if err == nil {
 		t.Fatal("Build accepted business tenant mismatch")
 	}
@@ -171,7 +171,7 @@ func TestAutoReplyContextBuilderMarksUnknownAvailabilityStale(t *testing.T) {
 		},
 		contextMessageRepository{},
 	)
-	contextValue, err := builder.Build(context.Background(), ports.ContextBuildInput{BusinessID: "business-1", ConversationID: "conversation-1", Text: "خدمة متوفرة؟"})
+	contextValue, err := builder.Build(context.Background(), ports.CustomerSalesContextInput{BusinessID: "business-1", ConversationID: "conversation-1", Text: "خدمة متوفرة؟"})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestAutoReplyContextBuilderAddsKnowledgeAndMerchantPolicyEvidence(t *testin
 	)
 	builder.Knowledge = contextKnowledgeRepository{records: []ports.KnowledgeDocumentRecord{{ID: "knowledge-1", BusinessID: "business-1", KnowledgeKey: "opening-hours", Title: "دوام المتجر", Content: "نفتح يوم الجمعة من التاسعة", ContentType: "hours", SourceReference: "merchant-doc-1", Authority: "merchant", Status: "published", Version: 2}}}
 	builder.Policies = contextPolicyRepository{records: []ports.BusinessPolicyRecord{{ID: "policy-1", BusinessID: "business-1", PolicyKey: "opening-hours", Category: "hours", Title: "سياسة الدوام", Summary: "الدوام المنشور هو المصدر المعتمد", Rules: []byte(`{"friday":"09:00-17:00"}`), Authority: "merchant", Status: "published", Version: 3}}}
-	contextValue, err := builder.Build(context.Background(), ports.ContextBuildInput{BusinessID: "business-1", ConversationID: "conversation-1", Text: "ما هو دوام الجمعة؟"})
+	contextValue, err := builder.Build(context.Background(), ports.CustomerSalesContextInput{BusinessID: "business-1", ConversationID: "conversation-1", Text: "ما هو دوام الجمعة؟"})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
