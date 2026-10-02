@@ -165,9 +165,9 @@ func (s *stubRunRepoForTools) RecordStageLatency(_ context.Context, _ ports.AISt
 
 var _ ports.AIRunRepository = (*stubRunRepoForTools)(nil)
 
-// buildContractClientWithTools builds a ContractClient wired with
+// buildGeminiCustomerSalesAdapterWithTools builds a GeminiCustomerSalesAdapter wired with
 // a mock Gemini server + stub capability dispatcher + stub run repo.
-func buildContractClientWithTools(t *testing.T, mock *mockGeminiToolServer, dispatcher ports.AICapabilityDispatcher) (*ContractClient, *stubRunRepoForTools) {
+func buildGeminiCustomerSalesAdapterWithTools(t *testing.T, mock *mockGeminiToolServer, dispatcher ports.AICapabilityDispatcher) (*GeminiCustomerSalesAdapter, *stubRunRepoForTools) {
 	client, err := NewClient(Config{
 		BaseURL:        mock.URL(),
 		APIKey:         "test-key",
@@ -179,7 +179,7 @@ func buildContractClientWithTools(t *testing.T, mock *mockGeminiToolServer, disp
 	if err != nil {
 		t.Fatalf("build client: %v", err)
 	}
-	cc, err := NewContractClient(client)
+	cc, err := NewGeminiCustomerSalesAdapter(client)
 	if err != nil {
 		t.Fatalf("build contract client: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestToolLoop_GeminiRequestsCapability_MujeebExecutes_FinalProposalReturned(
 		},
 	}
 
-	cc, runRepo := buildContractClientWithTools(t, mock, dispatcher)
+	cc, runRepo := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{
@@ -320,7 +320,7 @@ func TestToolLoop_MultipleToolCallsInOneDecision(t *testing.T) {
 		},
 	}
 
-	cc, runRepo := buildContractClientWithTools(t, mock, dispatcher)
+	cc, runRepo := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{
@@ -382,7 +382,7 @@ func TestToolLoop_ToolCallRecordSavedAndUpdated(t *testing.T) {
 		},
 	}
 
-	cc, runRepo := buildContractClientWithTools(t, mock, dispatcher)
+	cc, runRepo := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
@@ -444,7 +444,7 @@ func TestToolLoop_ToolFailureReturnsError(t *testing.T) {
 		},
 	}
 
-	cc, _ := buildContractClientWithTools(t, mock, dispatcher)
+	cc, _ := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
@@ -486,7 +486,7 @@ func TestToolLoop_TenantIsolation_GeminiBusinessIDIgnored(t *testing.T) {
 		},
 	}
 
-	cc, _ := buildContractClientWithTools(t, mock, dispatcher)
+	cc, _ := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "trusted-biz", ConversationID: "c-1", Text: "hello"},
@@ -522,7 +522,7 @@ func TestToolLoop_NoTools_BackwardCompatible(t *testing.T) {
 		definitions: nil,
 	}
 
-	cc, _ := buildContractClientWithTools(t, mock, dispatcher)
+	cc, _ := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
@@ -556,7 +556,7 @@ func TestToolLoop_ContextDeadlineStopsLoop(t *testing.T) {
 		},
 	}
 
-	cc, _ := buildContractClientWithTools(t, mock, dispatcher)
+	cc, _ := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	// Short deadline — should stop the loop.
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
@@ -589,7 +589,7 @@ func TestToolLoop_ToolsExtractedFromCapabilitiesDefinitions(t *testing.T) {
 		},
 	}
 
-	cc, _ := buildContractClientWithTools(t, mock, dispatcher)
+	cc, _ := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
@@ -658,7 +658,7 @@ func TestToolLoop_FunctionResponseRoleIsUser(t *testing.T) {
 		},
 	}
 
-	cc, _ := buildContractClientWithTools(t, mock, dispatcher)
+	cc, _ := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
@@ -726,7 +726,7 @@ func TestToolLoop_ThoughtSignaturePreservedInFollowUp(t *testing.T) {
 		},
 	}
 
-	cc, _ := buildContractClientWithTools(t, mock, dispatcher)
+	cc, _ := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
@@ -784,7 +784,7 @@ func TestToolLoop_AIRunIDSavedInToolCallRecord(t *testing.T) {
 		},
 	}
 
-	cc, runRepo := buildContractClientWithTools(t, mock, dispatcher)
+	cc, runRepo := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
