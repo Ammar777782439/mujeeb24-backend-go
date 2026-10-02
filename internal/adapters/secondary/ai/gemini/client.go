@@ -234,6 +234,3 @@ func promptContextFrom(value *ports.AIContext) promptContext {
         }
 }
 
-var _ = context.Background
-
-var _ ports.AIRuntime = (*Client)(nil)
