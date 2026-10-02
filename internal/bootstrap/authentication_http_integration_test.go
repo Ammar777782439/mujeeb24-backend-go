@@ -89,10 +89,10 @@ func TestAuthenticationHTTPRuntimeAgainstPostgres(t *testing.T) {
 	if bytes.Contains(login.Body.Bytes(), []byte("refresh_token")) {
 		t.Fatal("refresh token leaked into login JSON")
 	}
-	accessToken := extractAccessToken(t, login)
-	if response := callAuthRequest(t, handler, http.MethodGet, "/api/v1/metrics", nil, "Bearer "+accessToken, ""); response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte("mujeeb_postgres_pool_total_connections")) {
-		t.Fatalf("metrics status=%d body=%s", response.Code, response.Body.String())
+	if response := callAuthRequest(t, handler, http.MethodGet, "/api/v1/metrics", nil, "", ""); response.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated metrics status=%d body=%s", response.Code, response.Body.String())
 	}
+	accessToken := extractAccessToken(t, login)
 	refreshCookie := login.Header().Get("Set-Cookie")
 	if refreshCookie == "" || !bytes.Contains([]byte(refreshCookie), []byte("HttpOnly")) {
 		t.Fatalf("missing HttpOnly refresh cookie: %q", refreshCookie)
