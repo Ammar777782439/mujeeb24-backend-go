@@ -118,9 +118,6 @@ func (c *GeminiHTTPClient) APIKey() string { return c.apiKey }
 // Model returns the configured Gemini model name.
 func (c *GeminiHTTPClient) Model() string { return c.model }
 
-// SystemPrompt returns the configured system prompt.
-func (c *GeminiHTTPClient) SystemPrompt() string { return c.systemPrompt }
-
 // MaxInputCharacters returns the max input character limit.
 func (c *GeminiHTTPClient) MaxInputCharacters() int { return c.maxInputCharacters }
 
