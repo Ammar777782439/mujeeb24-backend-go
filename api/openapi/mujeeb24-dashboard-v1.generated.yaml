@@ -1013,12 +1013,8 @@ components:
           type: integer
         Name:
           type: string
-        Partitioned:
-          type: boolean
         Path:
           type: string
-        Quoted:
-          type: boolean
         Raw:
           type: string
         RawExpires:
@@ -1038,7 +1034,6 @@ components:
       required:
         - Name
         - Value
-        - Quoted
         - Path
         - Domain
         - Expires
@@ -1047,7 +1042,6 @@ components:
         - Secure
         - HttpOnly
         - SameSite
-        - Partitioned
         - Raw
         - Unparsed
       type: object
@@ -1699,16 +1693,30 @@ components:
         attributes:
           additionalProperties: {}
           type: object
+        availability_mode:
+          type: string
+        fulfillment_mode:
+          type: string
+        item_type:
+          type: string
+        long_description:
+          type: string
         name:
+          type: string
+        pricing_mode:
           type: string
         requires_confirmation:
           type: boolean
+        short_description:
+          type: string
         status:
           type: string
       type: object
     ItemCreate:
       additionalProperties: false
       properties:
+        attribute_schema_id:
+          type: string
         attributes:
           additionalProperties: {}
           type: object
@@ -1717,6 +1725,8 @@ components:
         fulfillment_mode:
           type: string
         item_type:
+          type: string
+        long_description:
           type: string
         name:
           type: string
@@ -1729,6 +1739,8 @@ components:
           type: string
         requires_confirmation:
           type: boolean
+        short_description:
+          type: string
         variants:
           items:
             $ref: "#/components/schemas/VariantCreate"
@@ -1741,7 +1753,6 @@ components:
         - availability_mode
         - fulfillment_mode
         - requires_confirmation
-        - offers
       type: object
     LabelsRequest:
       additionalProperties: false
@@ -2788,6 +2799,10 @@ components:
           type: string
         name:
           type: string
+        name_source:
+          type: string
+        price_source:
+          type: string
         pricing_mode:
           type: string
         pricing_unit:
@@ -2800,7 +2815,9 @@ components:
           type: string
       required:
         - name
+        - name_source
         - pricing_mode
+        - price_source
         - availability_mode
         - availability_status
         - fulfillment_mode
@@ -3235,8 +3252,6 @@ components:
         response_text:
           type: string
         schema_version:
-          enum:
-            - 2
           format: int64
           type: integer
         status:
