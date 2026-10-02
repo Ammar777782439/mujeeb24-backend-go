@@ -172,7 +172,6 @@ func buildGeminiCustomerSalesAdapterWithTools(t *testing.T, mock *mockGeminiTool
 		BaseURL:        mock.URL(),
 		APIKey:         "test-key",
 		Model:          "gemini-3.5-flash",
-		SystemPrompt:   "test",
 		RequestTimeout: 5 * time.Second,
 	})
 	if err != nil {
