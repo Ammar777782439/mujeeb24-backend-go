@@ -1,8 +1,8 @@
 package ports
 
 import (
-        "context"
-        "time"
+	"context"
+	"time"
 )
 
 // ----------------------------------------------------------------------------
@@ -93,47 +93,47 @@ import (
 // no Update / Delete method exists on the repository (per §30, historical
 // records must remain accurate even after pricing changes).
 type AIUsageRecord struct {
-        ID                  string
-        BusinessID          string
-        SubscriptionID      string
-        Provider            string
-        Model               string
-        InputTokens         int64
-        CachedInputTokens   int64
-        OutputTokens        int64
-        ModelRequests       int
-        ToolCalls           int
-        FinalAIReplies      int
-        ProviderCostYER     int
-        PricingVersion      string
-        Status              string
-        FailureCode         *string
-        CorrelationID       *string
-        StartedAt           time.Time
-        CompletedAt         time.Time
+	ID                string
+	BusinessID        string
+	SubscriptionID    string
+	Provider          string
+	Model             string
+	InputTokens       int64
+	CachedInputTokens int64
+	OutputTokens      int64
+	ModelRequests     int
+	ToolCalls         int
+	FinalAIReplies    int
+	ProviderCostYER   int
+	PricingVersion    string
+	Status            string
+	FailureCode       *string
+	CorrelationID     *string
+	StartedAt         time.Time
+	CompletedAt       time.Time
 }
 
 // AIUsageAppend is the input to AppendRecord.
 type AIUsageAppend struct {
-        ID                  string
-        BusinessID          string
-        SubscriptionID      string
-        Provider            string
-        Model               string
-        InputTokens         int64
-        CachedInputTokens   int64
-        OutputTokens        int64
-        ModelRequests       int
-        ToolCalls           int
-        FinalAIReplies      int
-        ProviderCostYER     int
-        PricingVersion      string
-        Status              string
-        FailureCode         *string
-        CorrelationID       *string
-        StartedAt           time.Time
-        CompletedAt         time.Time
-        Now                 time.Time
+	ID                string
+	BusinessID        string
+	SubscriptionID    string
+	Provider          string
+	Model             string
+	InputTokens       int64
+	CachedInputTokens int64
+	OutputTokens      int64
+	ModelRequests     int
+	ToolCalls         int
+	FinalAIReplies    int
+	ProviderCostYER   int
+	PricingVersion    string
+	Status            string
+	FailureCode       *string
+	CorrelationID     *string
+	StartedAt         time.Time
+	CompletedAt       time.Time
+	Now               time.Time
 }
 
 // SubscriptionAIUsageAggregate is the per-subscription snapshot (Contract §8).
@@ -147,25 +147,25 @@ type AIUsageAppend struct {
 //   - projected_remaining_cost_yer / projected_total_cost_yer
 //   - budget_status: NORMAL | WARNING | EXCEEDED
 type SubscriptionAIUsageAggregate struct {
-        SubscriptionID              string
-        BusinessID                  string
-        AIReplyLimit                int
-        AIRepliesUsed               int
-        AIRepliesRemaining          int
-        InputTokens                 int64
-        CachedInputTokens           int64
-        OutputTokens                int64
-        ModelRequests               int
-        ToolCalls                   int
-        ProviderCostYER             int
-        InternalCostBudgetYER       int
-        CostBudgetOverrideYER      *int
-        CostRemainingYER            int
-        AverageCostPerReplyYER      int
-        ProjectedRemainingCostYER  int
-        ProjectedTotalCostYER      int
-        BudgetStatus                string
-        LastRecordedAt              *time.Time
+	SubscriptionID            string
+	BusinessID                string
+	AIReplyLimit              int
+	AIRepliesUsed             int
+	AIRepliesRemaining        int
+	InputTokens               int64
+	CachedInputTokens         int64
+	OutputTokens              int64
+	ModelRequests             int
+	ToolCalls                 int
+	ProviderCostYER           int
+	InternalCostBudgetYER     int
+	CostBudgetOverrideYER     *int
+	CostRemainingYER          int
+	AverageCostPerReplyYER    int
+	ProjectedRemainingCostYER int
+	ProjectedTotalCostYER     int
+	BudgetStatus              string
+	LastRecordedAt            *time.Time
 }
 
 // AIUsageRepository is the Platform-side AI usage telemetry port.
@@ -176,16 +176,16 @@ type SubscriptionAIUsageAggregate struct {
 // the worker that records an AI execution also refreshes the aggregate so
 // the platform admin sees up-to-date numbers.
 type AIUsageRepository interface {
-        AppendRecord(ctx context.Context, append AIUsageAppend) (AIUsageRecord, error)
-        GetSubscriptionAIUsage(ctx context.Context, subscriptionID string) (SubscriptionAIUsageAggregate, error)
-        RefreshAggregate(ctx context.Context, subscriptionID string, now time.Time) (SubscriptionAIUsageAggregate, error)
-        // GetPlatformAIUsageOverview returns the platform-wide aggregate across
-        // ALL ai_usage_records. Per AIUsageTokenTelemetry.md §27: Total AI Replies,
-        // Total Input/Cached/Output Tokens, Total Model Requests, Total Tool
-        // Calls, Total Provider Cost, Average Cost / Reply.
-        GetPlatformAIUsageOverview(ctx context.Context) (SubscriptionAIUsageAggregate, error)
-        // GetAIUsageByBusiness returns per-business aggregates. Per §34.
-        GetAIUsageByBusiness(ctx context.Context, limit int) ([]SubscriptionAIUsageAggregate, error)
+	AppendRecord(ctx context.Context, append AIUsageAppend) (AIUsageRecord, error)
+	GetSubscriptionAIUsage(ctx context.Context, subscriptionID string) (SubscriptionAIUsageAggregate, error)
+	RefreshAggregate(ctx context.Context, subscriptionID string, now time.Time) (SubscriptionAIUsageAggregate, error)
+	// GetPlatformAIUsageOverview returns the platform-wide aggregate across
+	// ALL ai_usage_records. Per AIUsageTokenTelemetry.md §27: Total AI Replies,
+	// Total Input/Cached/Output Tokens, Total Model Requests, Total Tool
+	// Calls, Total Provider Cost, Average Cost / Reply.
+	GetPlatformAIUsageOverview(ctx context.Context) (SubscriptionAIUsageAggregate, error)
+	// GetAIUsageByBusiness returns per-business aggregates. Per §34.
+	GetAIUsageByBusiness(ctx context.Context, limit int) ([]SubscriptionAIUsageAggregate, error)
 }
 
 // ----------------------------------------------------------------------------
@@ -196,29 +196,29 @@ type AIUsageRepository interface {
 // The pricing_version field is what AIUsageRecord.pricing_version references
 // so historical records stay accurate when provider prices change.
 type AIProviderPricingVersion struct {
-        ID                          string
-        Provider                    string
-        Model                       string
-        PricingVersion              string
-        InputPerMillionYER         int
-        CachedInputPerMillionYER   int
-        OutputPerMillionYER        int
-        EffectiveFrom              time.Time
-        EffectiveTo                *time.Time
-        CreatedAt                  time.Time
+	ID                       string
+	Provider                 string
+	Model                    string
+	PricingVersion           string
+	InputPerMillionYER       int
+	CachedInputPerMillionYER int
+	OutputPerMillionYER      int
+	EffectiveFrom            time.Time
+	EffectiveTo              *time.Time
+	CreatedAt                time.Time
 }
 
 // AIProviderPricingCreate is the input to CreatePricingVersion.
 type AIProviderPricingCreate struct {
-        ID                          string
-        Provider                    string
-        Model                       string
-        PricingVersion              string
-        InputPerMillionYER         int
-        CachedInputPerMillionYER   int
-        OutputPerMillionYER        int
-        EffectiveFrom              time.Time
-        Now                         time.Time
+	ID                       string
+	Provider                 string
+	Model                    string
+	PricingVersion           string
+	InputPerMillionYER       int
+	CachedInputPerMillionYER int
+	OutputPerMillionYER      int
+	EffectiveFrom            time.Time
+	Now                      time.Time
 }
 
 // AIProviderPricingRepository is the port for managing immutable provider
@@ -226,8 +226,8 @@ type AIProviderPricingCreate struct {
 // created, a version is never edited. A new version with effective_from =
 // now supersedes the previous one (whose effective_to is set).
 type AIProviderPricingRepository interface {
-        CreatePricingVersion(ctx context.Context, create AIProviderPricingCreate) (AIProviderPricingVersion, error)
-        GetCurrentForProvider(ctx context.Context, provider, model string) (AIProviderPricingVersion, error)
-        GetByID(ctx context.Context, pricingID string) (AIProviderPricingVersion, error)
-        ListByProvider(ctx context.Context, provider string) ([]AIProviderPricingVersion, error)
+	CreatePricingVersion(ctx context.Context, create AIProviderPricingCreate) (AIProviderPricingVersion, error)
+	GetCurrentForProvider(ctx context.Context, provider, model string) (AIProviderPricingVersion, error)
+	GetByID(ctx context.Context, pricingID string) (AIProviderPricingVersion, error)
+	ListByProvider(ctx context.Context, provider string) ([]AIProviderPricingVersion, error)
 }

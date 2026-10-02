@@ -1013,8 +1013,12 @@ components:
           type: integer
         Name:
           type: string
+        Partitioned:
+          type: boolean
         Path:
           type: string
+        Quoted:
+          type: boolean
         Raw:
           type: string
         RawExpires:
@@ -1034,6 +1038,7 @@ components:
       required:
         - Name
         - Value
+        - Quoted
         - Path
         - Domain
         - Expires
@@ -1042,6 +1047,7 @@ components:
         - Secure
         - HttpOnly
         - SameSite
+        - Partitioned
         - Raw
         - Unparsed
       type: object
@@ -1621,6 +1627,16 @@ components:
         - new_leads
         - transactions_needing_review
       type: object
+    DeleteOperation:
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        reason_given:
+          type: string
+      required:
+        - id
+      type: object
     ErrorBody:
       additionalProperties: false
       properties:
@@ -1676,6 +1692,56 @@ components:
           type: string
       required:
         - status
+      type: object
+    ItemChanges:
+      additionalProperties: false
+      properties:
+        attributes:
+          additionalProperties: {}
+          type: object
+        name:
+          type: string
+        requires_confirmation:
+          type: boolean
+        status:
+          type: string
+      type: object
+    ItemCreate:
+      additionalProperties: false
+      properties:
+        attributes:
+          additionalProperties: {}
+          type: object
+        availability_mode:
+          type: string
+        fulfillment_mode:
+          type: string
+        item_type:
+          type: string
+        name:
+          type: string
+        offers:
+          items:
+            $ref: "#/components/schemas/OfferCreate"
+          nullable: true
+          type: array
+        pricing_mode:
+          type: string
+        requires_confirmation:
+          type: boolean
+        variants:
+          items:
+            $ref: "#/components/schemas/VariantCreate"
+          nullable: true
+          type: array
+      required:
+        - name
+        - item_type
+        - pricing_mode
+        - availability_mode
+        - fulfillment_mode
+        - requires_confirmation
+        - offers
       type: object
     LabelsRequest:
       additionalProperties: false
@@ -2560,12 +2626,29 @@ components:
       required:
         - lost_reason
       type: object
-    MerchantAIChatRequest:
+    MerchantCatalogAIResponse:
+      additionalProperties: false
+      properties:
+        catalog_id:
+          type: string
+        catalog_name:
+          type: string
+        proposal:
+          $ref: "#/components/schemas/Proposal"
+        session_id:
+          type: string
+      required:
+        - session_id
+        - catalog_id
+        - catalog_name
+        - proposal
+      type: object
+    MerchantCatalogAITurnRequest:
       additionalProperties: false
       properties:
         $schema:
           description: A URL to the JSON Schema for this object.
-          example: /api/v1/schemas/MerchantAIChatRequest.json
+          example: /api/v1/schemas/MerchantCatalogAITurnRequest.json
           format: uri
           readOnly: true
           type: string
@@ -2580,176 +2663,6 @@ components:
           type: string
       required:
         - message
-      type: object
-    MerchantAIChatResponse:
-      additionalProperties: false
-      properties:
-        create:
-          $ref: "#/components/schemas/MerchantAIProposalCreate"
-        delete:
-          $ref: "#/components/schemas/MerchantAIProposalDelete"
-        missing_fields:
-          items:
-            $ref: "#/components/schemas/MerchantAIMissingField"
-          nullable: true
-          type: array
-        operation:
-          type: string
-        response_text:
-          type: string
-        session_id:
-          type: string
-        status:
-          type: string
-        target_catalog_id:
-          type: string
-        update:
-          $ref: "#/components/schemas/MerchantAIProposalUpdate"
-      required:
-        - operation
-        - status
-        - session_id
-      type: object
-    MerchantAIMissingField:
-      additionalProperties: false
-      properties:
-        data_type:
-          type: string
-        display_name:
-          type: string
-        path:
-          type: string
-        reason:
-          type: string
-      required:
-        - path
-        - display_name
-        - data_type
-        - reason
-      type: object
-    MerchantAIProposalCreate:
-      additionalProperties: false
-      properties:
-        item:
-          $ref: "#/components/schemas/MerchantAIProposalItem"
-        offers:
-          items:
-            $ref: "#/components/schemas/MerchantAIProposalOffer"
-          nullable: true
-          type: array
-        target_catalog_id:
-          type: string
-        variants:
-          items:
-            $ref: "#/components/schemas/MerchantAIProposalVariant"
-          nullable: true
-          type: array
-      type: object
-    MerchantAIProposalDelete:
-      additionalProperties: false
-      properties:
-        confirmed:
-          type: boolean
-        item_id:
-          type: string
-        reason_given:
-          type: string
-      required:
-        - item_id
-        - confirmed
-      type: object
-    MerchantAIProposalItem:
-      additionalProperties: false
-      properties:
-        attributes:
-          additionalProperties: {}
-          type: object
-        availability_mode:
-          type: string
-        fulfillment_mode:
-          type: string
-        item_type:
-          type: string
-        long_description:
-          type: string
-        name:
-          type: string
-        pricing_mode:
-          type: string
-        requires_confirmation:
-          type: boolean
-        short_description:
-          type: string
-      required:
-        - name
-        - item_type
-        - pricing_mode
-        - availability_mode
-        - fulfillment_mode
-        - requires_confirmation
-      type: object
-    MerchantAIProposalOffer:
-      additionalProperties: false
-      properties:
-        amount:
-          type: string
-        availability_mode:
-          type: string
-        availability_status:
-          type: string
-        currency:
-          type: string
-        fulfillment_mode:
-          type: string
-        name:
-          type: string
-        price_source:
-          type: string
-        pricing_mode:
-          type: string
-        pricing_unit:
-          type: string
-        validity_from:
-          type: string
-        validity_until:
-          type: string
-        variant_name_ref:
-          type: string
-      required:
-        - name
-        - pricing_mode
-      type: object
-    MerchantAIProposalUpdate:
-      additionalProperties: false
-      properties:
-        changes:
-          $ref: "#/components/schemas/MerchantAIProposalItem"
-        item_id:
-          type: string
-        new_offers:
-          items:
-            $ref: "#/components/schemas/MerchantAIProposalOffer"
-          nullable: true
-          type: array
-        new_variants:
-          items:
-            $ref: "#/components/schemas/MerchantAIProposalVariant"
-          nullable: true
-          type: array
-      required:
-        - item_id
-        - changes
-      type: object
-    MerchantAIProposalVariant:
-      additionalProperties: false
-      properties:
-        attributes:
-          additionalProperties: {}
-          type: object
-        name:
-          type: string
-      required:
-        - name
       type: object
     MergeCustomerRequest:
       additionalProperties: false
@@ -2807,6 +2720,23 @@ components:
         - created_at
         - private
       type: object
+    MissingField:
+      additionalProperties: false
+      properties:
+        data_type:
+          type: string
+        display_name:
+          type: string
+        path:
+          type: string
+        reason:
+          type: string
+      required:
+        - path
+        - display_name
+        - data_type
+        - reason
+      type: object
     Offer:
       additionalProperties: false
       properties:
@@ -2842,6 +2772,55 @@ components:
         - availability_status
         - status
         - resource_version
+      type: object
+    OfferCreate:
+      additionalProperties: false
+      properties:
+        amount:
+          type: string
+        availability_mode:
+          type: string
+        availability_status:
+          type: string
+        currency:
+          type: string
+        fulfillment_mode:
+          type: string
+        name:
+          type: string
+        pricing_mode:
+          type: string
+        pricing_unit:
+          type: string
+        status:
+          type: string
+        variant_id:
+          type: string
+        variant_ref:
+          type: string
+      required:
+        - name
+        - pricing_mode
+        - availability_mode
+        - availability_status
+        - fulfillment_mode
+        - status
+      type: object
+    OfferUpdate:
+      additionalProperties: false
+      properties:
+        amount:
+          type: string
+        availability_status:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+      required:
+        - id
       type: object
     OrderLineSnapshot:
       additionalProperties: false
@@ -3233,6 +3212,42 @@ components:
           type: string
       required:
         - text
+      type: object
+    Proposal:
+      additionalProperties: false
+      properties:
+        create:
+          $ref: "#/components/schemas/ItemCreate"
+        delete:
+          $ref: "#/components/schemas/DeleteOperation"
+        evidence_references:
+          items:
+            type: string
+          nullable: true
+          type: array
+        missing_information:
+          items:
+            $ref: "#/components/schemas/MissingField"
+          nullable: true
+          type: array
+        operation:
+          type: string
+        response_text:
+          type: string
+        schema_version:
+          enum:
+            - 2
+          format: int64
+          type: integer
+        status:
+          type: string
+        update:
+          $ref: "#/components/schemas/UpdateOperation"
+      required:
+        - schema_version
+        - status
+        - operation
+        - response_text
       type: object
     RecordPaymentRequest:
       additionalProperties: false
@@ -3656,17 +3671,17 @@ components:
         - data
         - request_id
       type: object
-    SingleMerchantAIChatResponseBody:
+    SingleMerchantCatalogAIResponseBody:
       additionalProperties: false
       properties:
         $schema:
           description: A URL to the JSON Schema for this object.
-          example: /api/v1/schemas/SingleMerchantAIChatResponseBody.json
+          example: /api/v1/schemas/SingleMerchantCatalogAIResponseBody.json
           format: uri
           readOnly: true
           type: string
         data:
-          $ref: "#/components/schemas/MerchantAIChatResponse"
+          $ref: "#/components/schemas/MerchantCatalogAIResponse"
         request_id:
           type: string
       required:
@@ -4617,6 +4632,37 @@ components:
         status:
           type: string
       type: object
+    UpdateOperation:
+      additionalProperties: false
+      properties:
+        changes:
+          $ref: "#/components/schemas/ItemChanges"
+        existing_offers:
+          items:
+            $ref: "#/components/schemas/OfferUpdate"
+          nullable: true
+          type: array
+        existing_variants:
+          items:
+            $ref: "#/components/schemas/VariantUpdate"
+          nullable: true
+          type: array
+        item_id:
+          type: string
+        new_offers:
+          items:
+            $ref: "#/components/schemas/OfferCreate"
+          nullable: true
+          type: array
+        new_variants:
+          items:
+            $ref: "#/components/schemas/VariantCreate"
+          nullable: true
+          type: array
+      required:
+        - item_id
+        - changes
+      type: object
     UpdateTeamMemberRoleRequest:
       additionalProperties: false
       properties:
@@ -4696,6 +4742,35 @@ components:
         - name
         - status
         - resource_version
+      type: object
+    VariantCreate:
+      additionalProperties: false
+      properties:
+        attributes:
+          additionalProperties: {}
+          type: object
+        name:
+          type: string
+        ref:
+          type: string
+      required:
+        - ref
+        - name
+      type: object
+    VariantUpdate:
+      additionalProperties: false
+      properties:
+        attributes:
+          additionalProperties: {}
+          type: object
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+      required:
+        - id
       type: object
     WebhookAccepted:
       additionalProperties: false
@@ -10113,14 +10188,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/MerchantAIChatRequest"
+              $ref: "#/components/schemas/MerchantCatalogAITurnRequest"
         required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SingleMerchantAIChatResponseBody"
+                $ref: "#/components/schemas/SingleMerchantCatalogAIResponseBody"
           description: OK
         "400":
           content:
@@ -10166,9 +10241,9 @@ paths:
           description: Internal Server Error
       security:
         - bearerAuth: []
-      summary: Process one Merchant Catalog AI turn (contract 11)
+      summary: Process one Merchant Catalog AI turn
       tags:
-        - MerchantAI
+        - MerchantCatalogAI
   /businesses/{business_id}/offers/{offer_id}:
     patch:
       operationId: updateOffer

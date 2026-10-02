@@ -2,6 +2,7 @@ package gemini
 
 import (
 	"context"
+	"io"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -35,9 +36,9 @@ var _ ports.AIRunLifecyclePort = (*stubLifecyclePort)(nil)
 // mockServerConfigurable is a mock that returns configurable responses
 // per request count. Used by tests #1-3.
 type mockServerConfigurable struct {
-	t           *testing.T
-	server      *httptest.Server
-	responses   []string
+	t            *testing.T
+	server       *httptest.Server
+	responses    []string
 	requestCount int64
 }
 
@@ -47,7 +48,7 @@ func newMockServerConfigurable(t *testing.T, responses []string) *mockServerConf
 	return m
 }
 
-func (m *mockServerConfigurable) Close() { m.server.Close() }
+func (m *mockServerConfigurable) Close()      { m.server.Close() }
 func (m *mockServerConfigurable) URL() string { return m.server.URL }
 
 func (m *mockServerConfigurable) handle(w http.ResponseWriter, r *http.Request) {
@@ -63,21 +64,19 @@ func (m *mockServerConfigurable) handle(w http.ResponseWriter, r *http.Request) 
 	w.Write([]byte(response))
 }
 
-// buildContractClientForFixTests builds a ContractClient with tools
+// buildGeminiCustomerSalesAdapterForFixTests builds a GeminiCustomerSalesAdapter with tools
 // + lifecycle stub wired.
-func buildContractClientForFixTests(t *testing.T, mockURL string, dispatcher ports.AICapabilityDispatcher, lc ports.AIRunLifecyclePort) (*ContractClient, *stubRunRepoForTools) {
-	client, err := NewClient(Config{
+func buildGeminiCustomerSalesAdapterForFixTests(t *testing.T, mockURL string, dispatcher ports.CustomerSalesToolPort, lc ports.AIRunLifecyclePort) (*GeminiCustomerSalesAdapter, *stubRunRepoForTools) {
+	client, err := NewGeminiHTTPClient(GeminiHTTPClientConfig{
 		BaseURL:        mockURL,
 		APIKey:         "test-key",
 		Model:          "gemini-3.5-flash",
-		SystemPrompt:   "test",
 		RequestTimeout: 5 * time.Second,
-		Capabilities:   dispatcher,
 	})
 	if err != nil {
 		t.Fatalf("build client: %v", err)
 	}
-	cc, err := NewContractClient(client)
+	cc, err := NewGeminiCustomerSalesAdapter(client, dispatcher)
 	if err != nil {
 		t.Fatalf("build contract client: %v", err)
 	}
@@ -92,7 +91,7 @@ func buildContractClientForFixTests(t *testing.T, mockURL string, dispatcher por
 
 func makeDispatcher() *stubCapabilityDispatcher {
 	return &stubCapabilityDispatcher{
-		definitions: []ports.AICapabilityDefinition{
+		definitions: []ports.CustomerSalesToolDefinition{
 			{Name: "catalog_data", Description: "Catalog", Parameters: map[string]any{"type": "object"}},
 		},
 	}
@@ -121,13 +120,13 @@ func TestFix1_NonToolPath_ModelRequestsIs1(t *testing.T) {
 	defer mock.Close()
 
 	dispatcher := makeDispatcher()
-	cc, _ := buildContractClientForFixTests(t, mock.URL(), dispatcher, nil)
+	cc, _ := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, nil)
 
-	out, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
+	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
+		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 	if out.Usage.ModelRequests != 1 {
 		t.Errorf("expected ModelRequests=1 (non-tool path), got %d", out.Usage.ModelRequests)
@@ -144,14 +143,14 @@ func TestFix1_ToolLoop_ModelRequestsIs2_ToolCallsIs1(t *testing.T) {
 	defer mock.Close()
 
 	dispatcher := makeDispatcher()
-	cc, runRepo := buildContractClientForFixTests(t, mock.URL(), dispatcher, nil)
+	cc, runRepo := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, nil)
 
-	out, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "what products?"},
-		AIRunID:      "run-1",
+	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
+		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "what products?"},
+		AIRunID:       "run-1",
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 	// ModelRequests should be 2 (initial + follow-up after tool).
 	if out.Usage.ModelRequests != 2 {
@@ -174,14 +173,14 @@ func TestFix1_ToolLoop_TwoTools_ModelRequestsIs3_ToolCallsIs2(t *testing.T) {
 	defer mock.Close()
 
 	dispatcher := makeDispatcher()
-	cc, runRepo := buildContractClientForFixTests(t, mock.URL(), dispatcher, nil)
+	cc, runRepo := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, nil)
 
-	out, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "show me"},
-		AIRunID:      "run-2",
+	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
+		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "show me"},
+		AIRunID:       "run-2",
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 	if out.Usage.ModelRequests != 3 {
 		t.Errorf("expected ModelRequests=3 (two tools), got %d", out.Usage.ModelRequests)
@@ -202,14 +201,14 @@ func TestFix2_Lifecycle_RunningToWaitingToolToRunning(t *testing.T) {
 
 	dispatcher := makeDispatcher()
 	lc := &stubLifecyclePort{}
-	cc, _ := buildContractClientForFixTests(t, mock.URL(), dispatcher, lc)
+	cc, _ := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, lc)
 
-	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
-		AIRunID:      "run-lc",
+	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
+		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
+		AIRunID:       "run-lc",
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 	// Should have 1 WAITING_TOOL call + 1 RUNNING call.
 	if atomic.LoadInt64(&lc.waitingToolCalls) != 1 {
@@ -221,9 +220,9 @@ func TestFix2_Lifecycle_RunningToWaitingToolToRunning(t *testing.T) {
 }
 
 // Test 5: B2B — AIRunID is saved in AIToolCallRecord.
-// This test uses the same ContractClient + tool loop path as B2B
-// (the B2B agent calls the same ContractClient.DecideContract).
-// The key assertion: when AIRunID is passed in ContractRuntimeInput,
+// This test uses the same GeminiCustomerSalesAdapter + tool loop path as B2B
+// (the B2B agent calls the same GeminiCustomerSalesAdapter.Decide).
+// The key assertion: when AIRunID is passed in CustomerSalesDecisionInput,
 // it appears in the AIToolCallRecord.
 func TestFix3_B2B_AIRunIDSavedInToolCallRecord(t *testing.T) {
 	t.Parallel()
@@ -234,17 +233,17 @@ func TestFix3_B2B_AIRunIDSavedInToolCallRecord(t *testing.T) {
 	defer mock.Close()
 
 	dispatcher := makeDispatcher()
-	cc, runRepo := buildContractClientForFixTests(t, mock.URL(), dispatcher, nil)
+	cc, runRepo := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, nil)
 
 	// Simulate what the MerchantCatalogAIAgent does: it creates a run
 	// (with ID "run-b2b-1") and passes it through BuildForTurn →
-	// ContractRuntimeInput.AIRunID.
-	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "b2b-biz", ConversationID: "session-1", Text: "add product"},
-		AIRunID:      "run-b2b-1",
+	// CustomerSalesDecisionInput.AIRunID.
+	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
+		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b2b-biz", ConversationID: "session-1", Text: "add product"},
+		AIRunID:       "run-b2b-1",
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 	if len(runRepo.createdToolCalls) != 1 {
 		t.Fatalf("expected 1 tool call record, got %d", len(runRepo.createdToolCalls))
@@ -260,8 +259,10 @@ func TestFix6_ToolsShapeArrayAndCamelCase(t *testing.T) {
 	t.Parallel()
 	var capturedBody []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body := make([]byte, r.ContentLength)
-		r.Body.Read(body)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
 		capturedBody = body
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -270,13 +271,13 @@ func TestFix6_ToolsShapeArrayAndCamelCase(t *testing.T) {
 	defer server.Close()
 
 	dispatcher := makeDispatcher()
-	cc, _ := buildContractClientForFixTests(t, server.URL, dispatcher, nil)
+	cc, _ := buildGeminiCustomerSalesAdapterForFixTests(t, server.URL, dispatcher, nil)
 
-	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
+	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
+		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 
 	var reqBody map[string]any

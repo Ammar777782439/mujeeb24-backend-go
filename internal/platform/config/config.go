@@ -85,7 +85,7 @@ func LoadFromEnv() (ProcessConfig, error) {
 		LLMAPIKey:                      strings.TrimSpace(os.Getenv("LLM_API_KEY")),
 		LLMModel:                       strings.TrimSpace(os.Getenv("LLM_MODEL")),
 		LLMHTTPTimeout:                 30 * time.Second,
-		LLMMaxOutputTokens:             700,
+		LLMMaxOutputTokens:             4096,
 		LLMMaxInputCharacters:          12000,
 		LLMOutputTokensField:           envOr("LLM_OUTPUT_TOKENS_FIELD", "max_completion_tokens"),
 		GeminiAPIKey:                   strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),

@@ -20,9 +20,10 @@ import (
 
 // TestBatchClientEvaluateBatchSystemInstruction verifies that EvaluateBatch
 // injects the Catalog Entity Contract into system_instruction.Parts[1],
-// following the same authoritative ordering as ContractClient:
-//   part 0 = Batch Evaluation System Prompt
-//   part 1 = Catalog Entity Contract JSON
+// following the same authoritative ordering as GeminiCustomerSalesAdapter:
+//
+//	part 0 = Batch Evaluation System Prompt
+//	part 1 = Catalog Entity Contract JSON
 func TestBatchClientEvaluateBatchSystemInstruction(t *testing.T) {
 	client, err := NewBatchClient(BatchClientConfig{
 		BaseURL: "https://test.example.com",
@@ -51,7 +52,7 @@ func TestBatchClientEvaluateBatchSystemInstruction(t *testing.T) {
 
 	// Part 0 = system prompt.
 	part0 := sysInstr.Parts[0].Text
-	if !strings.Contains(part0, "Catalog Evaluation agent") {
+	if !strings.Contains(part0, "Your job: examine the catalog items") {
 		t.Fatalf("part 0 should contain the Batch Evaluation system prompt, got: %s", part0[:min(100, len(part0))])
 	}
 
@@ -129,7 +130,7 @@ func TestBatchClientFinalEvaluateSystemInstruction(t *testing.T) {
 	if !strings.Contains(part0, "FINAL EVALUATION mode") {
 		t.Fatalf("part 0 should contain the FINAL EVALUATION suffix, got: %s", part0[:min(100, len(part0))])
 	}
-	if !strings.Contains(part0, "Catalog Evaluation agent") {
+	if !strings.Contains(part0, "Your job: examine the catalog items") {
 		t.Fatalf("part 0 should still contain the base system prompt, got: %s", part0[:min(100, len(part0))])
 	}
 

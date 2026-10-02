@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gemini"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/openaicompatible"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/providers/socialapi"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
@@ -13,7 +12,7 @@ import (
 type ExternalAdapters struct {
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
-	AIRuntime                      ports.AIRuntime
+	GeminiHTTPClient              *gemini.GeminiHTTPClient
 	LLMConfigError                 error
 	AutoReplyEnabled               bool
 	ChannelProvisioningSocial      ports.SocialChannelProvisioner
@@ -43,21 +42,13 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 			checks["channel_provisioning"] = "configured"
 		}
 	}
-	if a.AIRuntime != nil {
+	if a.GeminiHTTPClient != nil {
 		checks["llm_runtime"] = "configured"
 	}
 	return checks
 }
 
-func BuildExternalAdapters(cfg config.ProcessConfig, capabilities ...ports.AICapabilityDispatcher) ExternalAdapters {
-	var caps ports.AICapabilityDispatcher
-	if len(capabilities) > 0 {
-		caps = capabilities[0]
-	}
-	return BuildExternalAdaptersWithCapabilities(cfg, caps)
-}
-
-func BuildExternalAdaptersWithCapabilities(cfg config.ProcessConfig, capabilities ports.AICapabilityDispatcher) ExternalAdapters {
+func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 	adapters := ExternalAdapters{}
 	if cfg.SocialAPIAPIKey != "" || cfg.SocialAPIWebhookSecret != "" {
 		client := socialapi.NewClient(socialapi.Config{BaseURL: cfg.SocialAPIBaseURL, APIKey: cfg.SocialAPIAPIKey, WebhookSecret: cfg.SocialAPIWebhookSecret, HTTPTimeout: cfg.SocialAPIHTTPTimeout})
@@ -72,35 +63,22 @@ func BuildExternalAdaptersWithCapabilities(cfg config.ProcessConfig, capabilitie
 		}
 	}
 	if cfg.GeminiAPIKey != "" {
-		client, err := gemini.NewClient(gemini.Config{
+		client, err := gemini.NewGeminiHTTPClient(gemini.GeminiHTTPClientConfig{
 			BaseURL:            cfg.GeminiBaseURL,
 			APIKey:             cfg.GeminiAPIKey,
 			Model:              cfg.GeminiModel,
 			RequestTimeout:     cfg.GeminiHTTPTimeout,
 			MaxOutputTokens:    cfg.LLMMaxOutputTokens,
 			MaxInputCharacters: cfg.LLMMaxInputCharacters,
-			Capabilities:       capabilities,
 		})
 		if err != nil {
 			adapters.LLMConfigError = errors.New("Gemini adapter configuration: " + err.Error())
 		} else {
-			adapters.AIRuntime = client
+			adapters.GeminiHTTPClient = client
 		}
 	} else if cfg.LLMEnabled {
-		client, err := openaicompatible.NewClient(openaicompatible.Config{
-			BaseURL:            cfg.LLMBaseURL,
-			APIKey:             cfg.LLMAPIKey,
-			Model:              cfg.LLMModel,
-			RequestTimeout:     cfg.LLMHTTPTimeout,
-			MaxOutputTokens:    cfg.LLMMaxOutputTokens,
-			MaxInputCharacters: cfg.LLMMaxInputCharacters,
-			OutputTokensField:  cfg.LLMOutputTokensField,
-		})
-		if err != nil {
-			adapters.LLMConfigError = errors.New("LLM adapter configuration: " + err.Error())
-		} else {
-			adapters.AIRuntime = client
-		}
+		adapters.LLMConfigError = errors.New("the configured non-Gemini AI provider is not wired to a customer AI capability")
+
 	}
 	adapters.AutoReplyEnabled = cfg.AutoReplyEnabled
 	adapters.ChannelProvisioningEnabled = cfg.ChannelProvisioningEnabled

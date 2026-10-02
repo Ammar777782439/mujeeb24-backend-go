@@ -66,7 +66,7 @@ func isScopedNotFound(err error) bool {
 	return false
 }
 
-func (b AutoReplyContextBuilder) retrieveScoped(ctx context.Context, businessID string, focus *ports.ConversationFocus, _ *ports.ConversationComparison, now time.Time) ([]ports.AICatalogEvidence, []ports.AIOfferEvidence, []ports.AIVariantEvidence, error) {
+func (b AutoReplyContextBuilder) retrieveScoped(ctx context.Context, businessID string, focus *ports.ConversationFocus, _ *ports.ConversationComparison, now time.Time) ([]ports.CustomerSalesCatalogEvidence, []ports.CustomerSalesOfferEvidence, []ports.CustomerSalesVariantEvidence, error) {
 	if focus == nil {
 		return nil, nil, nil, errors.New("missing focus")
 	}
@@ -84,7 +84,7 @@ func (b AutoReplyContextBuilder) retrieveScoped(ctx context.Context, businessID 
 	}
 }
 
-func (b AutoReplyContextBuilder) retrieveScopedOffer(ctx context.Context, businessID string, focus *ports.ConversationFocus, now time.Time) ([]ports.AICatalogEvidence, []ports.AIOfferEvidence, []ports.AIVariantEvidence, error) {
+func (b AutoReplyContextBuilder) retrieveScopedOffer(ctx context.Context, businessID string, focus *ports.ConversationFocus, now time.Time) ([]ports.CustomerSalesCatalogEvidence, []ports.CustomerSalesOfferEvidence, []ports.CustomerSalesVariantEvidence, error) {
 	catalog, item, offer, err := b.findOfferByIDWithinBusiness(ctx, businessID, focus.ID, focus.ItemID)
 	if err != nil {
 		return nil, nil, nil, err
@@ -92,17 +92,17 @@ func (b AutoReplyContextBuilder) retrieveScopedOffer(ctx context.Context, busine
 	if offer.BusinessID != businessID || item.BusinessID != businessID || catalog.BusinessID != businessID {
 		return nil, nil, nil, errors.New("AI context offer scope mismatch")
 	}
-	catalogEvidence := []ports.AICatalogEvidence{{
+	catalogEvidence := []ports.CustomerSalesCatalogEvidence{{
 		Reference: item.ID, CatalogReference: item.CatalogID, ItemType: item.ItemType, Name: item.Name, Status: item.Status,
-		Attributes: safeJSONObject(item.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+		Attributes: safeJSONObject(item.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 	}}
-	offerEvidence := []ports.AIOfferEvidence{{
+	offerEvidence := []ports.CustomerSalesOfferEvidence{{
 		Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 		Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
 		AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
 		RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 	}}
-	var variantEvidence []ports.AIVariantEvidence
+	var variantEvidence []ports.CustomerSalesVariantEvidence
 	if offer.VariantID != nil && strings.TrimSpace(*offer.VariantID) != "" {
 		variants, listErr := b.Catalogs.ListVariants(ctx, businessID, item.ID, "active", b.maxVariants(), "")
 		if listErr != nil {
@@ -110,9 +110,9 @@ func (b AutoReplyContextBuilder) retrieveScopedOffer(ctx context.Context, busine
 		}
 		for _, v := range variants.Items {
 			if v.ID == *offer.VariantID {
-				variantEvidence = append(variantEvidence, ports.AIVariantEvidence{
+				variantEvidence = append(variantEvidence, ports.CustomerSalesVariantEvidence{
 					Reference: v.ID, CatalogItemReference: v.CatalogItemID, Name: v.Name, Status: v.Status,
-					Attributes: safeJSONObject(v.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+					Attributes: safeJSONObject(v.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 				})
 				break
 			}
@@ -121,25 +121,25 @@ func (b AutoReplyContextBuilder) retrieveScopedOffer(ctx context.Context, busine
 	return catalogEvidence, offerEvidence, variantEvidence, nil
 }
 
-func (b AutoReplyContextBuilder) retrieveScopedItem(ctx context.Context, businessID string, focus *ports.ConversationFocus, now time.Time) ([]ports.AICatalogEvidence, []ports.AIOfferEvidence, []ports.AIVariantEvidence, error) {
+func (b AutoReplyContextBuilder) retrieveScopedItem(ctx context.Context, businessID string, focus *ports.ConversationFocus, now time.Time) ([]ports.CustomerSalesCatalogEvidence, []ports.CustomerSalesOfferEvidence, []ports.CustomerSalesVariantEvidence, error) {
 	item, err := b.findItemByIDWithinBusiness(ctx, businessID, focus.ID, focus.CatalogID)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	catalogEvidence := []ports.AICatalogEvidence{{
+	catalogEvidence := []ports.CustomerSalesCatalogEvidence{{
 		Reference: item.ID, CatalogReference: item.CatalogID, ItemType: item.ItemType, Name: item.Name, Status: item.Status,
-		Attributes: safeJSONObject(item.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+		Attributes: safeJSONObject(item.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 	}}
 	offers, err := b.Catalogs.ListOffers(ctx, businessID, item.ID, "active", b.maxOffers(), "")
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	var offerEvidence []ports.AIOfferEvidence
+	var offerEvidence []ports.CustomerSalesOfferEvidence
 	for _, offer := range offers.Items {
 		if offer.BusinessID != businessID || offer.CatalogItemID != item.ID {
 			return nil, nil, nil, errors.New("AI context offer scope mismatch")
 		}
-		offerEvidence = append(offerEvidence, ports.AIOfferEvidence{
+		offerEvidence = append(offerEvidence, ports.CustomerSalesOfferEvidence{
 			Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 			Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
 			AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
@@ -150,20 +150,20 @@ func (b AutoReplyContextBuilder) retrieveScopedItem(ctx context.Context, busines
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	var variantEvidence []ports.AIVariantEvidence
+	var variantEvidence []ports.CustomerSalesVariantEvidence
 	for _, v := range variants.Items {
 		if v.BusinessID != businessID || v.CatalogItemID != item.ID {
 			return nil, nil, nil, errors.New("AI context variant scope mismatch")
 		}
-		variantEvidence = append(variantEvidence, ports.AIVariantEvidence{
+		variantEvidence = append(variantEvidence, ports.CustomerSalesVariantEvidence{
 			Reference: v.ID, CatalogItemReference: v.CatalogItemID, Name: v.Name, Status: v.Status,
-			Attributes: safeJSONObject(v.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+			Attributes: safeJSONObject(v.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 		})
 	}
 	return catalogEvidence, offerEvidence, variantEvidence, nil
 }
 
-func (b AutoReplyContextBuilder) retrieveScopedCatalog(ctx context.Context, businessID string, focus *ports.ConversationFocus, now time.Time) ([]ports.AICatalogEvidence, []ports.AIOfferEvidence, []ports.AIVariantEvidence, error) {
+func (b AutoReplyContextBuilder) retrieveScopedCatalog(ctx context.Context, businessID string, focus *ports.ConversationFocus, now time.Time) ([]ports.CustomerSalesCatalogEvidence, []ports.CustomerSalesOfferEvidence, []ports.CustomerSalesVariantEvidence, error) {
 	catalog, err := b.Catalogs.GetCatalog(ctx, businessID, focus.ID)
 	if err != nil {
 		return nil, nil, nil, err
@@ -175,7 +175,7 @@ func (b AutoReplyContextBuilder) retrieveScopedCatalog(ctx context.Context, busi
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	var catalogEvidence []ports.AICatalogEvidence
+	var catalogEvidence []ports.CustomerSalesCatalogEvidence
 	// Rank only within this catalog.
 	for _, item := range rankCatalogItems(items.Items, "") {
 		// Empty text means keep order; rank returns all with score 0 sorted by ID.
@@ -189,9 +189,9 @@ func (b AutoReplyContextBuilder) retrieveScopedCatalog(ctx context.Context, busi
 		if item.BusinessID != businessID || item.CatalogID != catalog.ID {
 			return nil, nil, nil, errors.New("AI context catalog item scope mismatch")
 		}
-		catalogEvidence = append(catalogEvidence, ports.AICatalogEvidence{
+		catalogEvidence = append(catalogEvidence, ports.CustomerSalesCatalogEvidence{
 			Reference: item.ID, CatalogReference: item.CatalogID, ItemType: item.ItemType, Name: item.Name, Status: item.Status,
-			Attributes: safeJSONObject(item.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+			Attributes: safeJSONObject(item.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 		})
 		count++
 		if count >= b.maxItems() {
@@ -201,15 +201,15 @@ func (b AutoReplyContextBuilder) retrieveScopedCatalog(ctx context.Context, busi
 	if len(catalogEvidence) == 0 {
 		return nil, nil, nil, &scopedNotFoundError{msg: "no active items in catalog"}
 	}
-	var offerEvidence []ports.AIOfferEvidence
-	var variantEvidence []ports.AIVariantEvidence
+	var offerEvidence []ports.CustomerSalesOfferEvidence
+	var variantEvidence []ports.CustomerSalesVariantEvidence
 	for _, item := range catalogEvidence {
 		offers, err := b.Catalogs.ListOffers(ctx, businessID, item.Reference, "active", b.maxOffers(), "")
 		if err != nil {
 			return nil, nil, nil, err
 		}
 		for _, offer := range offers.Items {
-			offerEvidence = append(offerEvidence, ports.AIOfferEvidence{
+			offerEvidence = append(offerEvidence, ports.CustomerSalesOfferEvidence{
 				Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 				Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
 				AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
@@ -221,7 +221,7 @@ func (b AutoReplyContextBuilder) retrieveScopedCatalog(ctx context.Context, busi
 	return catalogEvidence, offerEvidence, nil, nil
 }
 
-func (b AutoReplyContextBuilder) retrieveScopedVariant(ctx context.Context, businessID string, focus *ports.ConversationFocus, now time.Time) ([]ports.AICatalogEvidence, []ports.AIOfferEvidence, []ports.AIVariantEvidence, error) {
+func (b AutoReplyContextBuilder) retrieveScopedVariant(ctx context.Context, businessID string, focus *ports.ConversationFocus, now time.Time) ([]ports.CustomerSalesCatalogEvidence, []ports.CustomerSalesOfferEvidence, []ports.CustomerSalesVariantEvidence, error) {
 	if focus.ItemID == nil || strings.TrimSpace(*focus.ItemID) == "" {
 		return nil, nil, nil, &scopedNotFoundError{msg: "variant focus missing item"}
 	}
@@ -243,22 +243,22 @@ func (b AutoReplyContextBuilder) retrieveScopedVariant(ctx context.Context, busi
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	catalogEvidence := []ports.AICatalogEvidence{{
+	catalogEvidence := []ports.CustomerSalesCatalogEvidence{{
 		Reference: item.ID, CatalogReference: item.CatalogID, ItemType: item.ItemType, Name: item.Name, Status: item.Status,
-		Attributes: safeJSONObject(item.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+		Attributes: safeJSONObject(item.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 	}}
-	variantEvidence := []ports.AIVariantEvidence{{
+	variantEvidence := []ports.CustomerSalesVariantEvidence{{
 		Reference: matched.ID, CatalogItemReference: matched.CatalogItemID, Name: matched.Name, Status: matched.Status,
-		Attributes: safeJSONObject(matched.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+		Attributes: safeJSONObject(matched.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 	}}
 	offers, err := b.Catalogs.ListOffers(ctx, businessID, item.ID, "active", b.maxOffers(), "")
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	var offerEvidence []ports.AIOfferEvidence
+	var offerEvidence []ports.CustomerSalesOfferEvidence
 	for _, offer := range offers.Items {
 		if offer.VariantID != nil && *offer.VariantID == matched.ID {
-			offerEvidence = append(offerEvidence, ports.AIOfferEvidence{
+			offerEvidence = append(offerEvidence, ports.CustomerSalesOfferEvidence{
 				Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 				Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
 				AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
@@ -269,12 +269,12 @@ func (b AutoReplyContextBuilder) retrieveScopedVariant(ctx context.Context, busi
 	return catalogEvidence, offerEvidence, variantEvidence, nil
 }
 
-func (b AutoReplyContextBuilder) retrieveComparison(ctx context.Context, businessID string, comparison *ports.ConversationComparison, now time.Time) ([]ports.AICatalogEvidence, []ports.AIOfferEvidence, []ports.AIVariantEvidence, error) {
+func (b AutoReplyContextBuilder) retrieveComparison(ctx context.Context, businessID string, comparison *ports.ConversationComparison, now time.Time) ([]ports.CustomerSalesCatalogEvidence, []ports.CustomerSalesOfferEvidence, []ports.CustomerSalesVariantEvidence, error) {
 	if comparison == nil || len(comparison.IDs) < 2 {
 		return nil, nil, nil, &scopedNotFoundError{msg: "invalid comparison"}
 	}
-	var catalogEvidence []ports.AICatalogEvidence
-	var offerEvidence []ports.AIOfferEvidence
+	var catalogEvidence []ports.CustomerSalesCatalogEvidence
+	var offerEvidence []ports.CustomerSalesOfferEvidence
 	seenItems := map[string]bool{}
 	for _, id := range comparison.IDs {
 		if strings.TrimSpace(id) == "" {
@@ -289,9 +289,9 @@ func (b AutoReplyContextBuilder) retrieveComparison(ctx context.Context, busines
 				return nil, nil, nil, err
 			}
 			if !seenItems[it.ID] {
-				catalogEvidence = append(catalogEvidence, ports.AICatalogEvidence{
+				catalogEvidence = append(catalogEvidence, ports.CustomerSalesCatalogEvidence{
 					Reference: it.ID, CatalogReference: it.CatalogID, ItemType: it.ItemType, Name: it.Name, Status: it.Status,
-					Attributes: safeJSONObject(it.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+					Attributes: safeJSONObject(it.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 				})
 				seenItems[it.ID] = true
 			}
@@ -311,9 +311,9 @@ func (b AutoReplyContextBuilder) retrieveComparison(ctx context.Context, busines
 			return nil, nil, nil, errors.New("AI context comparison scope mismatch")
 		}
 		if !seenItems[item.ID] {
-			catalogEvidence = append(catalogEvidence, ports.AICatalogEvidence{
+			catalogEvidence = append(catalogEvidence, ports.CustomerSalesCatalogEvidence{
 				Reference: item.ID, CatalogReference: item.CatalogID, ItemType: item.ItemType, Name: item.Name, Status: item.Status,
-				Attributes: safeJSONObject(item.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+				Attributes: safeJSONObject(item.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 			})
 			seenItems[item.ID] = true
 		}
@@ -328,8 +328,8 @@ func (b AutoReplyContextBuilder) retrieveComparison(ctx context.Context, busines
 // toOfferEvidence projects a repository offer into AI evidence with a
 // single field mapping, so scoped, item-based, and comparison paths cannot
 // drift apart.
-func toOfferEvidence(offer ports.OfferRecord, now time.Time) ports.AIOfferEvidence {
-	return ports.AIOfferEvidence{
+func toOfferEvidence(offer ports.OfferRecord, now time.Time) ports.CustomerSalesOfferEvidence {
+	return ports.CustomerSalesOfferEvidence{
 		Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 		Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
 		AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
@@ -421,9 +421,9 @@ func (b AutoReplyContextBuilder) findOfferByIDWithinBusiness(ctx context.Context
 
 func offerEvidenceState(availabilityStatus string) string {
 	if strings.EqualFold(strings.TrimSpace(availabilityStatus), "unknown") || strings.EqualFold(strings.TrimSpace(availabilityStatus), "stale") {
-		return AIContextStale
+		return CustomerSalesContextStale
 	}
-	return AIContextFresh
+	return CustomerSalesContextFresh
 }
 
 type scopedNotFoundError struct{ msg string }
@@ -435,7 +435,7 @@ func (e *scopedNotFoundError) ErrorKind() string { return "not_found" }
 // topic switches to a new entity. Focused evidence stays first. Total
 // CatalogEvidence never exceeds maxItems. Candidates are siblings from the
 // focused catalog plus lexical matches (score>0) from other catalogs.
-func (b AutoReplyContextBuilder) augmentScopedWithCandidates(ctx context.Context, businessID, text string, focusedItems []ports.AICatalogEvidence, now time.Time) ([]ports.AICatalogEvidence, []ports.AIOfferEvidence, []ports.AIVariantEvidence, error) {
+func (b AutoReplyContextBuilder) augmentScopedWithCandidates(ctx context.Context, businessID, text string, focusedItems []ports.CustomerSalesCatalogEvidence, now time.Time) ([]ports.CustomerSalesCatalogEvidence, []ports.CustomerSalesOfferEvidence, []ports.CustomerSalesVariantEvidence, error) {
 	exclude := make(map[string]struct{}, len(focusedItems))
 	focusedCatalogs := make(map[string]struct{})
 	for _, item := range focusedItems {
@@ -502,16 +502,16 @@ func (b AutoReplyContextBuilder) augmentScopedWithCandidates(ctx context.Context
 			}
 		}
 	}
-	var addItems []ports.AICatalogEvidence
-	var addOffers []ports.AIOfferEvidence
-	var addVariants []ports.AIVariantEvidence
+	var addItems []ports.CustomerSalesCatalogEvidence
+	var addOffers []ports.CustomerSalesOfferEvidence
+	var addVariants []ports.CustomerSalesVariantEvidence
 	for _, item := range candidates {
 		if item.BusinessID != businessID {
 			return nil, nil, nil, errors.New("AI context candidate scope mismatch")
 		}
-		addItems = append(addItems, ports.AICatalogEvidence{
+		addItems = append(addItems, ports.CustomerSalesCatalogEvidence{
 			Reference: item.ID, CatalogReference: item.CatalogID, ItemType: item.ItemType, Name: item.Name, Status: item.Status,
-			Attributes: safeJSONObject(item.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+			Attributes: safeJSONObject(item.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 		})
 		offers, err := b.Catalogs.ListOffers(ctx, businessID, item.ID, "active", b.maxOffers(), "")
 		if err != nil {
@@ -521,7 +521,7 @@ func (b AutoReplyContextBuilder) augmentScopedWithCandidates(ctx context.Context
 			if offer.BusinessID != businessID || offer.CatalogItemID != item.ID {
 				return nil, nil, nil, errors.New("AI context candidate offer scope mismatch")
 			}
-			addOffers = append(addOffers, ports.AIOfferEvidence{
+			addOffers = append(addOffers, ports.CustomerSalesOfferEvidence{
 				Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
 				Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
 				AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
@@ -555,7 +555,7 @@ func rankPositive(items []ports.CatalogItemRecord, text string) []ports.CatalogI
 	return out
 }
 
-func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports.AIContext, input ports.ContextBuildInput, now time.Time) (ports.AIContext, error) {
+func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports.CustomerSalesContext, input ports.CustomerSalesContextInput, now time.Time) (ports.CustomerSalesContext, error) {
 	// Per ADR-048: Always populate catalog_names + catalog_summary
 	// regardless of retrieval mode. In scoped mode, the catalog loop
 	// in Build() is skipped (early return), so catalog_names and
@@ -580,7 +580,7 @@ func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports
 							break
 						}
 						for _, item := range summaryItems.Items {
-							entry := ports.CatalogSummaryEntry{
+							entry := ports.CustomerSalesCatalogSummaryEntry{
 								ID:          item.ID,
 								Name:        item.Name,
 								CatalogName: catalog.Name,
@@ -606,13 +606,13 @@ func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports
 	if b.Knowledge != nil {
 		knowledgeRecords, listErr := b.Knowledge.ListPublished(ctx, input.BusinessID, "", now, b.maxKnowledge()*3)
 		if listErr != nil {
-			return ports.AIContext{}, listErr
+			return ports.CustomerSalesContext{}, listErr
 		}
 		for _, record := range rankKnowledgeRecords(knowledgeRecords, input.Text) {
 			if record.BusinessID != input.BusinessID {
-				return ports.AIContext{}, errors.New("AI context knowledge scope mismatch")
+				return ports.CustomerSalesContext{}, errors.New("AI context knowledge scope mismatch")
 			}
-			base.KnowledgeEvidence = append(base.KnowledgeEvidence, ports.AIKnowledgeEvidence{
+			base.KnowledgeEvidence = append(base.KnowledgeEvidence, ports.CustomerSalesKnowledgeEvidence{
 				Reference: record.ID, KnowledgeKey: record.KnowledgeKey, Title: record.Title, Content: record.Content,
 				ContentType: record.ContentType, SourceReference: record.SourceReference, Authority: record.Authority,
 				EvidenceState: evidenceStateForValidity(now, record.ValidFrom, record.ValidUntil), Version: record.Version, ValidFrom: record.ValidFrom, ValidUntil: record.ValidUntil,
@@ -626,13 +626,13 @@ func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports
 	if b.Policies != nil {
 		policyRecords, listErr := b.Policies.ListPublished(ctx, input.BusinessID, "", now, b.maxPolicies()*3)
 		if listErr != nil {
-			return ports.AIContext{}, listErr
+			return ports.CustomerSalesContext{}, listErr
 		}
 		for _, record := range rankPolicyRecords(policyRecords, input.Text) {
 			if record.BusinessID != input.BusinessID {
-				return ports.AIContext{}, errors.New("AI context policy scope mismatch")
+				return ports.CustomerSalesContext{}, errors.New("AI context policy scope mismatch")
 			}
-			base.BusinessPolicyEvidence = append(base.BusinessPolicyEvidence, ports.AIBusinessPolicyEvidence{
+			base.BusinessPolicyEvidence = append(base.BusinessPolicyEvidence, ports.CustomerSalesBusinessPolicyEvidence{
 				Reference: record.ID, PolicyKey: record.PolicyKey, Category: record.Category, Title: record.Title,
 				Summary: record.Summary, Rules: safeJSONObject(record.Rules), Authority: record.Authority,
 				EvidenceState: evidenceStateForValidity(now, record.ValidFrom, record.ValidUntil), Version: record.Version, ValidFrom: record.ValidFrom, ValidUntil: record.ValidUntil,
@@ -644,22 +644,22 @@ func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports
 		}
 		if len(base.BusinessPolicyEvidence) > 0 {
 			first := base.BusinessPolicyEvidence[0]
-			base.PolicyEvidence = ports.AIPolicyEvidence{Reference: first.Reference, Version: "policy-v" + formatInt(first.Version), State: "published", RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion}
+			base.PolicyEvidence = ports.CustomerSalesPolicyEvidence{Reference: first.Reference, Version: "policy-v" + formatInt(first.Version), State: "published", RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion}
 		}
 	}
 	if len(base.CatalogEvidence) > 0 || len(base.OfferEvidence) > 0 || len(base.VariantEvidence) > 0 {
-		base.KnowledgeState = AIContextPartial
+		base.KnowledgeState = CustomerSalesContextPartial
 	}
 	if len(base.KnowledgeEvidence) > 0 || len(base.BusinessPolicyEvidence) > 0 {
-		base.KnowledgeState = AIContextGrounded
+		base.KnowledgeState = CustomerSalesContextGrounded
 	}
 	if len(base.CatalogEvidence) == 0 {
-		base.Freshness = AIContextPartial
+		base.Freshness = CustomerSalesContextPartial
 	}
 	for _, offer := range base.OfferEvidence {
-		if offer.EvidenceState == AIContextStale {
-			base.Freshness = AIContextStale
-			base.KnowledgeState = AIContextPartial
+		if offer.EvidenceState == CustomerSalesContextStale {
+			base.Freshness = CustomerSalesContextStale
+			base.KnowledgeState = CustomerSalesContextPartial
 			break
 		}
 	}

@@ -10,10 +10,10 @@ import (
 // AICostProtectionService implements ports.AICostProtectionChecker.
 //
 // Per AIUsageTokenTelemetry.md §19-21:
-// - When budget_status == EXCEEDED, no new Auto AI Execution starts.
-// - Cost Protection is NOT a round limit — it's a budget limit.
-// - Human replies, dashboard, customer data, leads, orders, and channel
-//   reception continue to work normally.
+//   - When budget_status == EXCEEDED, no new Auto AI Execution starts.
+//   - Cost Protection is NOT a round limit — it's a budget limit.
+//   - Human replies, dashboard, customer data, leads, orders, and channel
+//     reception continue to work normally.
 //
 // P0-2 + P0-3 fix: the checker now also enforces:
 //   - Platform-level AI Runtime Kill Switch (Contract §81): when the

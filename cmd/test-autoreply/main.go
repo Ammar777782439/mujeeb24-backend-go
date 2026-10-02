@@ -141,7 +141,7 @@ func main() {
 
 	// Step 5: Wire real components
 	fmt.Println("\n■ Step 5: Wire real AutoReplyService")
-	geminiClient, err := gemini.NewClient(gemini.Config{
+	geminiClient, err := gemini.NewGeminiHTTPClient(gemini.GeminiHTTPClientConfig{
 		BaseURL:        "https://generativelanguage.googleapis.com",
 		APIKey:         apiKey,
 		Model:          model,
@@ -151,12 +151,27 @@ func main() {
 		fmt.Printf("  ❌ Gemini client: %v\n", err)
 		os.Exit(1)
 	}
-	contractClient, err := gemini.NewContractClient(geminiClient)
-	if err != nil {
-		fmt.Printf("  ❌ ContractClient: %v\n", err)
+	catalogRepository := postgres.NewCatalogRepository(adapter)
+	capabilityRegistry := services.NewCustomerSalesToolRegistry()
+	catalogCapability := services.NewCustomerSalesCatalogDataTool(
+		services.ListCatalogsQueryService{Repository: catalogRepository},
+		services.ListCatalogItemsQueryService{Repository: catalogRepository},
+		services.GetCatalogItemQueryService{Repository: catalogRepository},
+		services.ListOffersQueryService{Repository: catalogRepository},
+		services.ListVariantsQueryService{Repository: catalogRepository},
+		services.GetAttributeSchemaQueryService{Repository: catalogRepository},
+	)
+	if err := capabilityRegistry.Register(catalogCapability); err != nil {
+		fmt.Printf("  ❌ Customer sales capability registry: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("  ✅ Gemini ContractClient ready")
+
+	contractClient, err := gemini.NewGeminiCustomerSalesAdapter(geminiClient, capabilityRegistry)
+	if err != nil {
+		fmt.Printf("  ❌ GeminiCustomerSalesAdapter: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("  ✅ Gemini GeminiCustomerSalesAdapter ready")
 
 	contextBuilder := services.NewAutoReplyContextBuilder(
 		businessRepo,
@@ -176,12 +191,12 @@ func main() {
 		postgres.NewPostgresOutboxStore(adapter),
 		adapter,
 	)
-	service.ContextBuilder = contextBuilder
+	service.CustomerSalesContextBuilder = contextBuilder
 	service.RunRepository = postgres.NewAIRunTraceRepository(adapter)
 	service.Validation = services.NewValidationPipeline(
 		postgres.NewPostgresReferenceValidator(adapter),
 		postgres.NewPostgresTenantValidator(adapter),
-		postgres.NewPostgresPolicyEvaluator(businessRepo),
+		postgres.NewPostgresCustomerSalesPolicyEvaluator(businessRepo),
 		nil,
 	)
 	service.Conversations = postgres.NewConversationRepository(adapter)

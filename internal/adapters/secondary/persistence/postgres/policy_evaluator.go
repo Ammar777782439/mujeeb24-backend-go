@@ -1,6 +1,6 @@
 // Package postgres — Postgres-backed Policy Evaluator (contract ⑥ §12-13).
 //
-// Implements the services.PolicyEvaluatorPort (which is ports.AIPolicyEvaluator)
+// Implements the services.PolicyEvaluatorPort (which is ports.CustomerSalesPolicyPort)
 // against the business_policies table per migration 000002.
 //
 // Per contract ⑥ §12, the PolicyEvaluator applies the merchant's business
@@ -49,12 +49,12 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
-// PostgresPolicyEvaluator implements ports.AIPolicyEvaluator against the
+// PostgresCustomerSalesPolicyEvaluator implements ports.CustomerSalesPolicyPort against the
 // business_policies table per migration 000002.
 //
 // Per contract ⑥ §12, this is the Mujeeb-side authority that decides
 // requires_approval — Gemini does NOT decide this per contract ④ §5.
-type PostgresPolicyEvaluator struct {
+type PostgresCustomerSalesPolicyEvaluator struct {
 	// Management is the BusinessManagementRepository that provides
 	// GetRuntimePolicy per ports.BusinessManagementRepository interface.
 	// Per contract ⑥ §9, business_id comes from the Authenticated Context,
@@ -62,31 +62,29 @@ type PostgresPolicyEvaluator struct {
 	Management ports.BusinessManagementRepository
 }
 
-// NewPostgresPolicyEvaluator wires the evaluator with the management repository.
-func NewPostgresPolicyEvaluator(management ports.BusinessManagementRepository) *PostgresPolicyEvaluator {
-	return &PostgresPolicyEvaluator{Management: management}
+// NewPostgresCustomerSalesPolicyEvaluator wires the evaluator with the management repository.
+func NewPostgresCustomerSalesPolicyEvaluator(management ports.BusinessManagementRepository) *PostgresCustomerSalesPolicyEvaluator {
+	return &PostgresCustomerSalesPolicyEvaluator{Management: management}
 }
 
-// Evaluate implements ports.AIPolicyEvaluator.Evaluate per contract ⑥ §12-13.
+// Evaluate implements ports.CustomerSalesPolicyPort.Evaluate per contract ⑥ §12-13.
 //
 // Per contract ⑥ §12, the evaluator applies the merchant's business policies
 // to the validated proposal. Per contract ⑥ §13, requires_approval is decided
 // here — NOT by Gemini.
 //
 // The input proposal is the legacy AIDecisionProposal shape (the bridge from
-// contract ④ §4 AIGeminiProposal is done by the ValidationPipeline's
+// contract ④ §4 CustomerSalesProposal is done by the ValidationPipeline's
 // toLegacyProposal helper). The returned proposal has PolicyDecision set
 // to 'allowed', 'requires_approval', or 'denied' per the business policy.
 //
 // Per contract ⑥ §20, validation is deterministic — no second LLM is used.
-func (e *PostgresPolicyEvaluator) Evaluate(proposal ports.AIDecisionProposal, contextValue *ports.AIContext) ports.AIDecisionProposal {
+func (e *PostgresCustomerSalesPolicyEvaluator) Evaluate(ctx context.Context, proposal ports.CustomerSalesProposal, contextValue *ports.CustomerSalesContext) ports.CustomerSalesPolicyDecision {
 	if e == nil || e.Management == nil {
-		// No policy evaluator configured — default to allowed per contract ⑥ §12
-		// (conservative default when no policy is registered).
-		if strings.TrimSpace(proposal.PolicyDecision) == "" {
-			proposal.PolicyDecision = "allowed"
+		return ports.CustomerSalesPolicyDecision{
+			Decision: "allowed",
+			Reason:   "no customer sales policy repository configured; defaulting to allowed per contract ⑥ §12",
 		}
-		return proposal
 	}
 
 	// Extract business_id from the context. Per contract ⑥ §9, business_id
@@ -98,32 +96,35 @@ func (e *PostgresPolicyEvaluator) Evaluate(proposal ports.AIDecisionProposal, co
 	if strings.TrimSpace(businessID) == "" {
 		// No business context — cannot evaluate policy. Default to
 		// requires_approval per contract ⑥ §13 (safe default).
-		proposal.PolicyDecision = "requires_approval"
-		proposal.RequiresHuman = true
-		return proposal
+		return ports.CustomerSalesPolicyDecision{
+			Decision:      "requires_approval",
+			RequiresHuman: true,
+			Reason:        "customer sales business context is missing; requiring human approval per contract ⑥ §13",
+		}
 	}
 
 	// Per contract ⑥ §12, fetch the actual business policy from PostgreSQL.
 	// The GetRuntimePolicy call is tenant-scoped via business_id per
 	// contract ⑧ §17.
-	policy, err := e.Management.GetRuntimePolicy(context.Background(), businessID)
+	policy, err := e.Management.GetRuntimePolicy(ctx, businessID)
 	if err != nil {
 		// Policy fetch failed — default to requires_approval per contract ⑥ §13.
 		// This is the safe default: when in doubt, require human review.
-		proposal.PolicyDecision = "requires_approval"
-		proposal.RequiresHuman = true
-		return proposal
+		return ports.CustomerSalesPolicyDecision{
+			Decision:      "requires_approval",
+			RequiresHuman: true,
+			Reason:        "customer sales business context is missing; requiring human approval per contract ⑥ §13",
+		}
 	}
 
 	// Evaluate per the migration 000002 columns. NO INVENTION — every
 	// rule below maps directly to a column in business_policies.
-	decision := evaluatePolicyAgainstAction(policy, proposal.RequestedAction)
-
-	proposal.PolicyDecision = decision
-	if decision == "requires_approval" {
-		proposal.RequiresHuman = true
+	decision := evaluatePolicyAgainstAction(policy, string(proposal.Action))
+	return ports.CustomerSalesPolicyDecision{
+		Decision:      decision,
+		RequiresHuman: decision == "requires_approval",
+		Reason:        "customer sales policy evaluation completed per contract ⑥ §12",
 	}
-	return proposal
 }
 
 // evaluatePolicyAgainstAction applies the business_policies columns to the
@@ -195,5 +196,5 @@ func evaluatePolicyAgainstAction(policy ports.BusinessRuntimePolicyRecord, actio
 	}
 }
 
-// Compile-time assertion: PostgresPolicyEvaluator implements ports.AIPolicyEvaluator.
-var _ ports.AIPolicyEvaluator = (*PostgresPolicyEvaluator)(nil)
+// Compile-time assertion: PostgresCustomerSalesPolicyEvaluator implements ports.CustomerSalesPolicyPort.
+var _ ports.CustomerSalesPolicyPort = (*PostgresCustomerSalesPolicyEvaluator)(nil)

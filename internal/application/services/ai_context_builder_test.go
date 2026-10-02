@@ -121,11 +121,11 @@ func TestAutoReplyContextBuilderBuildsBoundedGroundedContext(t *testing.T) {
 	builder.Now = func() time.Time { return now }
 	builder.MaxItems = 1
 	builder.MaxMessages = 2
-	contextValue, err := builder.Build(context.Background(), ports.ContextBuildInput{BusinessID: "business-1", ConversationID: "conversation-1", SourceMessageReference: "source-message", Text: "هل الآيفون 15 الأسود 256 متوفر؟", PolicyVersion: "auto-reply-v1"})
+	contextValue, err := builder.Build(context.Background(), ports.CustomerSalesContextInput{BusinessID: "business-1", ConversationID: "conversation-1", SourceMessageReference: "source-message", Text: "هل الآيفون 15 الأسود 256 متوفر؟", PolicyVersion: "auto-reply-v1"})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if contextValue.SchemaVersion != AIContextSchemaVersion || contextValue.Business.Reference != "business-1" || contextValue.Conversation.CustomerReference != "customer-1" || contextValue.Customer.Reference != "customer-1" {
+	if contextValue.SchemaVersion != CustomerSalesContextSchemaVersion || contextValue.Business.Reference != "business-1" || contextValue.Conversation.CustomerReference != "customer-1" || contextValue.Customer.Reference != "customer-1" {
 		t.Fatalf("unexpected base context: %#v", contextValue)
 	}
 	if len(contextValue.CatalogEvidence) != 1 || contextValue.CatalogEvidence[0].Reference != "item-iphone" || len(contextValue.OfferEvidence) != 1 || len(contextValue.VariantEvidence) != 1 {
@@ -137,7 +137,7 @@ func TestAutoReplyContextBuilderBuildsBoundedGroundedContext(t *testing.T) {
 	if len(contextValue.RecentMessages) != 2 || contextValue.RecentMessages[0].Reference != "message-older" || contextValue.RecentMessages[1].Reference != "message-newer" {
 		t.Fatalf("unexpected ordered history: %#v", contextValue.RecentMessages)
 	}
-	if contextValue.KnowledgeState != AIContextPartial || contextValue.Freshness != AIContextFresh || !contextValue.ExpiresAt.After(now) || contextValue.PolicyEvidence.State != "application_policy_only" {
+	if contextValue.KnowledgeState != CustomerSalesContextPartial || contextValue.Freshness != CustomerSalesContextFresh || !contextValue.ExpiresAt.After(now) || contextValue.PolicyEvidence.State != "application_policy_only" {
 		t.Fatalf("unexpected freshness/policy state: %#v", contextValue)
 	}
 	if string(contextValue.Customer.Profile) != `{"name":"عميل"}` || string(contextValue.Customer.ContactPoints) != `{"phone":"redacted-in-test"}` {
@@ -150,7 +150,7 @@ func TestAutoReplyContextBuilderRejectsTenantMismatch(t *testing.T) {
 		contextBusinessRepository{record: ports.BusinessRecord{ID: "other-business"}},
 		contextConversationRepository{}, contextCustomerRepository{}, contextCatalogRepository{}, contextMessageRepository{},
 	)
-	_, err := builder.Build(context.Background(), ports.ContextBuildInput{BusinessID: "business-1", ConversationID: "conversation-1", Text: "hello"})
+	_, err := builder.Build(context.Background(), ports.CustomerSalesContextInput{BusinessID: "business-1", ConversationID: "conversation-1", Text: "hello"})
 	if err == nil {
 		t.Fatal("Build accepted business tenant mismatch")
 	}
@@ -171,11 +171,11 @@ func TestAutoReplyContextBuilderMarksUnknownAvailabilityStale(t *testing.T) {
 		},
 		contextMessageRepository{},
 	)
-	contextValue, err := builder.Build(context.Background(), ports.ContextBuildInput{BusinessID: "business-1", ConversationID: "conversation-1", Text: "خدمة متوفرة؟"})
+	contextValue, err := builder.Build(context.Background(), ports.CustomerSalesContextInput{BusinessID: "business-1", ConversationID: "conversation-1", Text: "خدمة متوفرة؟"})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if len(contextValue.OfferEvidence) != 1 || contextValue.OfferEvidence[0].EvidenceState != AIContextStale || contextValue.Freshness != AIContextStale || contextValue.KnowledgeState != AIContextPartial {
+	if len(contextValue.OfferEvidence) != 1 || contextValue.OfferEvidence[0].EvidenceState != CustomerSalesContextStale || contextValue.Freshness != CustomerSalesContextStale || contextValue.KnowledgeState != CustomerSalesContextPartial {
 		t.Fatalf("unknown availability was not marked stale: %#v", contextValue)
 	}
 }
@@ -204,7 +204,7 @@ func TestAutoReplyContextBuilderAddsKnowledgeAndMerchantPolicyEvidence(t *testin
 	)
 	builder.Knowledge = contextKnowledgeRepository{records: []ports.KnowledgeDocumentRecord{{ID: "knowledge-1", BusinessID: "business-1", KnowledgeKey: "opening-hours", Title: "دوام المتجر", Content: "نفتح يوم الجمعة من التاسعة", ContentType: "hours", SourceReference: "merchant-doc-1", Authority: "merchant", Status: "published", Version: 2}}}
 	builder.Policies = contextPolicyRepository{records: []ports.BusinessPolicyRecord{{ID: "policy-1", BusinessID: "business-1", PolicyKey: "opening-hours", Category: "hours", Title: "سياسة الدوام", Summary: "الدوام المنشور هو المصدر المعتمد", Rules: []byte(`{"friday":"09:00-17:00"}`), Authority: "merchant", Status: "published", Version: 3}}}
-	contextValue, err := builder.Build(context.Background(), ports.ContextBuildInput{BusinessID: "business-1", ConversationID: "conversation-1", Text: "ما هو دوام الجمعة؟"})
+	contextValue, err := builder.Build(context.Background(), ports.CustomerSalesContextInput{BusinessID: "business-1", ConversationID: "conversation-1", Text: "ما هو دوام الجمعة؟"})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestAutoReplyContextBuilderAddsKnowledgeAndMerchantPolicyEvidence(t *testin
 	if len(contextValue.BusinessPolicyEvidence) != 1 || contextValue.BusinessPolicyEvidence[0].Reference != "policy-1" || contextValue.BusinessPolicyEvidence[0].Category != "hours" || contextValue.PolicyEvidence.State != "published" {
 		t.Fatalf("policy evidence mismatch: %#v", contextValue.BusinessPolicyEvidence)
 	}
-	if contextValue.KnowledgeState != AIContextGrounded {
+	if contextValue.KnowledgeState != CustomerSalesContextGrounded {
 		t.Fatalf("knowledge state was not grounded: %#v", contextValue)
 	}
 }

@@ -1,4 +1,4 @@
-// Package services — AI Runtime Retry / Backoff / Idempotency
+// Package services — AI Run Retry / Backoff / Idempotency
 //
 // Implements contract ⑨ §5-15 (Retry Principle, Retryable vs Non-Retryable,
 // Backoff, Provider Rate Limit, Timeout, Idempotency, Duplicate handling,
@@ -34,7 +34,7 @@ import (
 // deployment environment (env vars, config files).
 type RetryConfig struct {
 	// MaxAttempts is the maximum number of operational Attempts per AI Run.
-	// Per contract ⑨ §8, this is Runtime config, NOT Domain contract. A
+	// Per contract ⑨ §8, this is operational retry configuration, NOT Domain contract. A
 	// sensible production default is 3-5.
 	MaxAttempts int
 

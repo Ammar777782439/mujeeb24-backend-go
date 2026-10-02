@@ -57,7 +57,12 @@ type OfferRecord struct {
 	PricingUnit             *string
 	PriceSource             *string
 	PriceVerificationStatus string
+	PriceCheckedAt          *time.Time
 	AvailabilityMode        string
+	AvailabilitySource      *string
+	AvailabilityCheckedAt   *time.Time
+	AvailabilityValidUntil  *time.Time
+	AvailabilityEvidenceRef *string
 	FulfillmentMode         string
 	ValidityFrom            *time.Time
 	ValidityUntil           *time.Time
@@ -81,13 +86,14 @@ type VariantRecord struct {
 }
 
 type AttributeDefinitionRecord struct {
-	ID           string
-	Key          string
-	Label        string
-	DataType     string
-	Required     bool
-	Searchable   bool
-	DisplayOrder int
+	ID              string
+	Key             string
+	Label           string
+	DataType        string
+	Required        bool
+	Searchable      bool
+	ValidationRules []byte
+	DisplayOrder    int
 }
 
 type AttributeSchemaRecord struct {

@@ -20,7 +20,7 @@ func newPlatformServerWithOperations() *Server {
 	operations := services.NewInMemoryPlatformOperationsRepository(true, true)
 	return newPlatformServer(PlatformDeps{
 		Operations:    operations,
-		PlatformAudit:  &stubPlatformAuditRepository{},
+		PlatformAudit: &stubPlatformAuditRepository{},
 	})
 }
 
@@ -104,7 +104,7 @@ func TestPlatformAIHealthCheckRunsProbeAndAudits(t *testing.T) {
 	operations := services.NewInMemoryPlatformOperationsRepository(true, true)
 	// Register a stub probe that returns HEALTHY.
 	operations.RegisterProbe("google_gemini", &stubHealthCheckProbe{
-		health:  ports.ProviderHealthHealthy,
+		health: ports.ProviderHealthHealthy,
 	})
 	auditRepo := &stubPlatformAuditRepository{}
 	server := newPlatformServer(PlatformDeps{Operations: operations, PlatformAudit: auditRepo})
@@ -128,9 +128,9 @@ func TestPlatformAIHealthCheckRunsProbeAndAudits(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 type stubHealthCheckProbe struct {
-	health      ports.ProviderHealthState
+	health       ports.ProviderHealthState
 	latencyNanos int64
-	failureCode *string
+	failureCode  *string
 }
 
 func (p *stubHealthCheckProbe) Probe(_ context.Context) (ports.ProviderHealthState, int64, *string) {

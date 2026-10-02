@@ -9,7 +9,7 @@ import (
 
 const maxPreviousReferences = 5
 
-func validateStateProposal(proposal ports.AIDecisionProposal, ctx *ports.AIContext) (*ports.ConversationStateRecord, bool, error) {
+func validateStateProposal(proposal ports.AIDecisionProposal, ctx *ports.CustomerSalesContext) (*ports.ConversationStateRecord, bool, error) {
 	if proposal.StateProposal == nil {
 		return nil, false, nil
 	}
@@ -46,7 +46,7 @@ func validateStateProposal(proposal ports.AIDecisionProposal, ctx *ports.AIConte
 	return nil, false, nil
 }
 
-func focusInCandidates(focus *ports.ConversationFocus, ctx *ports.AIContext) bool {
+func focusInCandidates(focus *ports.ConversationFocus, ctx *ports.CustomerSalesContext) bool {
 	if focus == nil || ctx == nil {
 		return false
 	}
@@ -88,7 +88,7 @@ func focusInCandidates(focus *ports.ConversationFocus, ctx *ports.AIContext) boo
 	}
 }
 
-func idInCandidates(id string, ctx *ports.AIContext) bool {
+func idInCandidates(id string, ctx *ports.CustomerSalesContext) bool {
 	id = strings.TrimSpace(id)
 	if id == "" || ctx == nil {
 		return false
@@ -211,7 +211,7 @@ func buildValidatedState(current *ports.ConversationStateRecord, businessID, con
 	return &base
 }
 
-func validateEvidenceIdentity(proposal ports.AIDecisionProposal, ctx *ports.AIContext) bool {
+func validateEvidenceIdentity(proposal ports.AIDecisionProposal, ctx *ports.CustomerSalesContext) bool {
 	if ctx == nil {
 		return true
 	}
@@ -246,7 +246,7 @@ func validateEvidenceIdentity(proposal ports.AIDecisionProposal, ctx *ports.AICo
 // refsInContext reports whether every referenced ID exists in the current
 // context evidence. It blocks hallucinated references without constraining
 // which valid entity a general answer may mention.
-func refsInContext(raw []byte, ctx *ports.AIContext) bool {
+func refsInContext(raw []byte, ctx *ports.CustomerSalesContext) bool {
 	if len(raw) == 0 {
 		return true
 	}
@@ -262,7 +262,7 @@ func refsInContext(raw []byte, ctx *ports.AIContext) bool {
 	return true
 }
 
-func refsMatchFocus(raw []byte, focus *ports.ConversationFocus, ctx *ports.AIContext) bool {
+func refsMatchFocus(raw []byte, focus *ports.ConversationFocus, ctx *ports.CustomerSalesContext) bool {
 	switch normalizeFocusType(focus.Type) {
 	case "item":
 		if len(raw) == 0 {

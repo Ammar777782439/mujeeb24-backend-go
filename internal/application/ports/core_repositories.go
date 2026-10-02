@@ -1,55 +1,55 @@
 package ports
 
 import (
-        "context"
-        "time"
+	"context"
+	"time"
 )
 
 type CustomerRecord struct {
-        ID                 string
-        BusinessID         string
-        Profile            []byte
-        ContactPoints      []byte
-        LocalePreference   *string
-        Status             string
-        MergedIntoCustomer *string
-        ResourceVersion    int64
-        UpdatedAt          time.Time
+	ID                 string
+	BusinessID         string
+	Profile            []byte
+	ContactPoints      []byte
+	LocalePreference   *string
+	Status             string
+	MergedIntoCustomer *string
+	ResourceVersion    int64
+	UpdatedAt          time.Time
 }
 
 type CustomerRepository interface {
-        GetByID(ctx context.Context, businessID, customerID string) (CustomerRecord, error)
+	GetByID(ctx context.Context, businessID, customerID string) (CustomerRecord, error)
 }
 
 type CustomerPage struct {
-        Items      []CustomerRecord
-        NextCursor string
-        HasMore    bool
+	Items      []CustomerRecord
+	NextCursor string
+	HasMore    bool
 }
 
 type CustomerCreate struct {
-        ID               string
-        BusinessID       string
-        Profile          []byte
-        ContactPoints    []byte
-        LocalePreference *string
+	ID               string
+	BusinessID       string
+	Profile          []byte
+	ContactPoints    []byte
+	LocalePreference *string
 }
 
 type CustomerUpdate struct {
-        BusinessID       string
-        CustomerID       string
-        ExpectedVersion  int64
-        Profile          []byte
-        ContactPoints    []byte
-        LocalePreference *string
+	BusinessID       string
+	CustomerID       string
+	ExpectedVersion  int64
+	Profile          []byte
+	ContactPoints    []byte
+	LocalePreference *string
 }
 
 type CustomerMerge struct {
-        BusinessID       string
-        CustomerID       string
-        TargetCustomerID string
-        ExpectedVersion  int64
-        Reason           string
+	BusinessID       string
+	CustomerID       string
+	TargetCustomerID string
+	ExpectedVersion  int64
+	Reason           string
 }
 
 // CustomerProfileMerge is a partial, idempotent update to the customer.profile
@@ -67,134 +67,134 @@ type CustomerMerge struct {
 // of which originate from the local Materialize() result — never from the
 // provider response directly.
 type CustomerProfileMerge struct {
-        BusinessID      string
-        CustomerID      string
-        DisplayName     string
-        Picture         string
-        ExternalUserID  string
+	BusinessID     string
+	CustomerID     string
+	DisplayName    string
+	Picture        string
+	ExternalUserID string
 }
 
 type CustomerRuntimeRepository interface {
-        List(ctx context.Context, businessID, search, status string, limit int, cursor string) (CustomerPage, error)
-        Create(ctx context.Context, create CustomerCreate) (CustomerRecord, error)
-        Update(ctx context.Context, update CustomerUpdate) (CustomerRecord, error)
-        Merge(ctx context.Context, merge CustomerMerge) (CustomerRecord, error)
-        // MergeProfile atomically merges enrichment fields (display_name, picture,
-        // external_user_id) into the customer.profile JSONB column. Idempotent;
-        // does NOT require ExpectedVersion. Returns nil if no fields to merge or
-        // if the customer does not exist (silent no-op for enrichment safety).
-        MergeProfile(ctx context.Context, merge CustomerProfileMerge) error
+	List(ctx context.Context, businessID, search, status string, limit int, cursor string) (CustomerPage, error)
+	Create(ctx context.Context, create CustomerCreate) (CustomerRecord, error)
+	Update(ctx context.Context, update CustomerUpdate) (CustomerRecord, error)
+	Merge(ctx context.Context, merge CustomerMerge) (CustomerRecord, error)
+	// MergeProfile atomically merges enrichment fields (display_name, picture,
+	// external_user_id) into the customer.profile JSONB column. Idempotent;
+	// does NOT require ExpectedVersion. Returns nil if no fields to merge or
+	// if the customer does not exist (silent no-op for enrichment safety).
+	MergeProfile(ctx context.Context, merge CustomerProfileMerge) error
 }
 
 type ConversationRecord struct {
-        ID                  string
-        BusinessID          string
-        CustomerID          string
-        CustomerDisplayName *string
-        State               string
-        Ownership           string
-        AIModeOverride      *string
-        Priority            string
-        AssignmentReference *string
-        ResourceVersion     int64
-        LastActivityAt      time.Time
-        // LastGeminiInteractionID per contract ③ §4 + migration 000057.
-        //
-        // Per contract ③ §4, this is the gemini_interaction_id returned by the
-        // previous successful customer-facing Gemini call for this conversation.
-        // Empty/nil for the first turn or after Gemini history expiry (1 day free
-        // tier, 55 days paid tier per contract ③ §9).
-        //
-        // Per contract ③ §5: "Mujeeb retention = canonical; Gemini retention =
-        // convenience only." This column does NOT hold conversation truth —
-        // Mujeeb's canonical state lives in messages/conversation_state/business
-        // data. This column just enables previous_interaction_id chaining.
-        LastGeminiInteractionID *string
+	ID                  string
+	BusinessID          string
+	CustomerID          string
+	CustomerDisplayName *string
+	State               string
+	Ownership           string
+	AIModeOverride      *string
+	Priority            string
+	AssignmentReference *string
+	ResourceVersion     int64
+	LastActivityAt      time.Time
+	// LastGeminiInteractionID per contract ③ §4 + migration 000057.
+	//
+	// Per contract ③ §4, this is the gemini_interaction_id returned by the
+	// previous successful customer-facing Gemini call for this conversation.
+	// Empty/nil for the first turn or after Gemini history expiry (1 day free
+	// tier, 55 days paid tier per contract ③ §9).
+	//
+	// Per contract ③ §5: "Mujeeb retention = canonical; Gemini retention =
+	// convenience only." This column does NOT hold conversation truth —
+	// Mujeeb's canonical state lives in messages/conversation_state/business
+	// data. This column just enables previous_interaction_id chaining.
+	LastGeminiInteractionID *string
 }
 
 type ConversationRepository interface {
-        GetByID(ctx context.Context, businessID, conversationID string) (ConversationRecord, error)
+	GetByID(ctx context.Context, businessID, conversationID string) (ConversationRecord, error)
 }
 
 type ConversationPage struct {
-        Items      []ConversationRecord
-        NextCursor string
-        HasMore    bool
+	Items      []ConversationRecord
+	NextCursor string
+	HasMore    bool
 }
 
 type ConversationUpdate struct {
-        BusinessID          string
-        ConversationID      string
-        ExpectedVersion     int64
-        State               *string
-        Ownership           *string
-        AIModeOverride      *string
-        Priority            *string
-        AssignmentReference *string
+	BusinessID          string
+	ConversationID      string
+	ExpectedVersion     int64
+	State               *string
+	Ownership           *string
+	AIModeOverride      *string
+	Priority            *string
+	AssignmentReference *string
 }
 
 type ConversationLifecycleTransition struct {
-        BusinessID     string
-        ConversationID string
-        State          *string
-        Ownership      *string
-        Priority       *string
-        LastActivityAt *time.Time
+	BusinessID     string
+	ConversationID string
+	State          *string
+	Ownership      *string
+	Priority       *string
+	LastActivityAt *time.Time
 }
 
 type ConversationRuntimeRepository interface {
-        List(ctx context.Context, businessID, state, ownership, channel string, customerID *string, limit int, cursor string) (ConversationPage, error)
-        Update(ctx context.Context, update ConversationUpdate) (ConversationRecord, error)
-        AdvanceVersion(ctx context.Context, businessID, conversationID string, expectedVersion int64) (ConversationRecord, error)
-        TransitionLifecycle(ctx context.Context, transition ConversationLifecycleTransition) (ConversationRecord, error)
-        // UpdateLastGeminiInteractionID per contract ③ §4 + migration 000057.
-        //
-        // Persists the gemini_interaction_id returned by the most recent
-        // customer-facing Gemini call for this conversation, so the next turn can
-        // pass it as previous_interaction_id (Gemini Interactions API chaining
-        // with store=true per contract ③ §9).
-        //
-        // Per contract ③ §5: Mujeeb retention is canonical; this column just
-        // enables Gemini continuity. If Gemini is unavailable, Mujeeb does not
-        // lose any conversation/message/state — only the chaining breaks.
-        UpdateLastGeminiInteractionID(ctx context.Context, businessID, conversationID, interactionID string) error
+	List(ctx context.Context, businessID, state, ownership, channel string, customerID *string, limit int, cursor string) (ConversationPage, error)
+	Update(ctx context.Context, update ConversationUpdate) (ConversationRecord, error)
+	AdvanceVersion(ctx context.Context, businessID, conversationID string, expectedVersion int64) (ConversationRecord, error)
+	TransitionLifecycle(ctx context.Context, transition ConversationLifecycleTransition) (ConversationRecord, error)
+	// UpdateLastGeminiInteractionID per contract ③ §4 + migration 000057.
+	//
+	// Persists the gemini_interaction_id returned by the most recent
+	// customer-facing Gemini call for this conversation, so the next turn can
+	// pass it as previous_interaction_id (Gemini Interactions API chaining
+	// with store=true per contract ③ §9).
+	//
+	// Per contract ③ §5: Mujeeb retention is canonical; this column just
+	// enables Gemini continuity. If Gemini is unavailable, Mujeeb does not
+	// lose any conversation/message/state — only the chaining breaks.
+	UpdateLastGeminiInteractionID(ctx context.Context, businessID, conversationID, interactionID string) error
 }
 
 type ChannelConnectionRecord struct {
-        ID                       string
-        BusinessID               string
-        ProviderReference        string
-        Channel                  string
-        ProviderAccountReference *string
-        ProviderConnectionRef    string
-        Status                   string
-        SecretReference          string
-        ResourceVersion          int64
-        UpdatedAt                time.Time
+	ID                       string
+	BusinessID               string
+	ProviderReference        string
+	Channel                  string
+	ProviderAccountReference *string
+	ProviderConnectionRef    string
+	Status                   string
+	SecretReference          string
+	ResourceVersion          int64
+	UpdatedAt                time.Time
 }
 
 type ChannelConnectionRepository interface {
-        GetByID(ctx context.Context, businessID, connectionID string) (ChannelConnectionRecord, error)
-        GetByProviderReferences(ctx context.Context, providerReference, providerAccountReference, providerConnectionReference string) (ChannelConnectionRecord, error)
+	GetByID(ctx context.Context, businessID, connectionID string) (ChannelConnectionRecord, error)
+	GetByProviderReferences(ctx context.Context, providerReference, providerAccountReference, providerConnectionReference string) (ChannelConnectionRecord, error)
 }
 
 type ChannelConnectionPage struct {
-        Items      []ChannelConnectionRecord
-        NextCursor string
-        HasMore    bool
+	Items      []ChannelConnectionRecord
+	NextCursor string
+	HasMore    bool
 }
 
 type ChannelConnectionTransition struct {
-        BusinessID      string
-        ConnectionID    string
-        ExpectedVersion int64
-        TargetStatus    string
-        Action          string
-        Reason          string
-        ActorReference  string
+	BusinessID      string
+	ConnectionID    string
+	ExpectedVersion int64
+	TargetStatus    string
+	Action          string
+	Reason          string
+	ActorReference  string
 }
 
 type ChannelConnectionRuntimeRepository interface {
-        List(ctx context.Context, businessID, status, channel string, limit int, cursor string) (ChannelConnectionPage, error)
-        Transition(ctx context.Context, transition ChannelConnectionTransition) (ChannelConnectionRecord, error)
+	List(ctx context.Context, businessID, status, channel string, limit int, cursor string) (ChannelConnectionPage, error)
+	Transition(ctx context.Context, transition ChannelConnectionTransition) (ChannelConnectionRecord, error)
 }

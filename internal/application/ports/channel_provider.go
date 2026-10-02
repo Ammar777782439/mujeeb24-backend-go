@@ -1,20 +1,20 @@
 package ports
 
 import (
-        "context"
+	"context"
 
-        "github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/channel"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/channel"
 )
 
 type WebhookReceiver interface {
-        VerifyWebhook(ctx context.Context, headers map[string]string, rawBody []byte) error
-        NormalizeWebhook(ctx context.Context, headers map[string]string, rawBody []byte) ([]channel.InboundEvent, error)
+	VerifyWebhook(ctx context.Context, headers map[string]string, rawBody []byte) error
+	NormalizeWebhook(ctx context.Context, headers map[string]string, rawBody []byte) ([]channel.InboundEvent, error)
 }
 
 type ChannelProvider interface {
-        WebhookReceiver
-        SendMessage(ctx context.Context, command SendMessageCommand) (ProviderSendResult, error)
-        GetDeliveryStatus(ctx context.Context, reference DeliveryReference) (channel.DeliveryStatus, error)
+	WebhookReceiver
+	SendMessage(ctx context.Context, command SendMessageCommand) (ProviderSendResult, error)
+	GetDeliveryStatus(ctx context.Context, reference DeliveryReference) (channel.DeliveryStatus, error)
 }
 
 // ConversationProfile is the customer-identity snapshot returned by a provider
@@ -32,9 +32,9 @@ type ChannelProvider interface {
 // against any cross-merchant contamination (the provider API key is shared
 // across all merchants — the conversation_id is the per-merchant anchor).
 type ConversationProfile struct {
-        ParticipantID      string
-        ParticipantName    string
-        ParticipantPicture string
+	ParticipantID      string
+	ParticipantName    string
+	ParticipantPicture string
 }
 
 // ConversationEnricher is an OPTIONAL interface that a WebhookReceiver may
@@ -47,27 +47,27 @@ type ConversationProfile struct {
 // (the underlying provider client uses a single API key; per-merchant
 // isolation is anchored by the conversation_id passed in).
 type ConversationEnricher interface {
-        GetConversationProfile(ctx context.Context, providerConversationID string) (ConversationProfile, error)
+	GetConversationProfile(ctx context.Context, providerConversationID string) (ConversationProfile, error)
 }
 
 type SendMessageCommand struct {
-        ConnectionID           string
-        ProviderAccountID      string
-        ProviderConversationID string
-        Text                   string
-        IdempotencyKey         string
+	ConnectionID           string
+	ProviderAccountID      string
+	ProviderConversationID string
+	Text                   string
+	IdempotencyKey         string
 }
 
 type ProviderSendResult struct {
-        ProviderRequestID string
-        ProviderMessageID string
-        Status            channel.DeliveryStatus
+	ProviderRequestID string
+	ProviderMessageID string
+	Status            channel.DeliveryStatus
 }
 
 type DeliveryReference struct {
-        ConnectionID           string
-        ProviderAccountID      string
-        ProviderConversationID string
-        ProviderMessageID      string
-        OutboundMessageID      string
+	ConnectionID           string
+	ProviderAccountID      string
+	ProviderConversationID string
+	ProviderMessageID      string
+	OutboundMessageID      string
 }

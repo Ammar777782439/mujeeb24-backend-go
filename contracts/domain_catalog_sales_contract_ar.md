@@ -236,7 +236,13 @@ Variant
 
 ### 1.9 AttributeSchema وAttributeDefinition
 
-لا نسمح بـfree-form JSON بلا تعريف.
+الـAttributeSchema هو **تعريف اختياري ومُدار** للمواصفات، وليس سجلًا مطلوبًا لكل attribute key.
+حقل `attributes` نفسه هو JSONB object ديناميكي:
+- المفتاح يجب أن يكون English `snake_case`.
+- القيمة يمكن أن تكون أي JSON value صالحة.
+- لا يشترط أن يكون المفتاح موجودًا كسجل في `attribute_definitions`.
+- `attribute_schema_id` و`attribute_schema_version` يبقيان اختياريين على CatalogItem.
+- إذا وُجد Schema حقيقي، يمكن استخدامه لفهم/تنظيم المواصفات، لكنه لا يمنع حفظ attribute key/value صالحين لا يوجدان في definitions.
 
 ```text
 AttributeSchema

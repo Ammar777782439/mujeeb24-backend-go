@@ -31,7 +31,7 @@ func TestGeminiLiveSmoke(t *testing.T) {
 		t.Skip("GEMINI_API_KEY not set — skipping live Gemini smoke test")
 	}
 
-	client, err := NewClient(Config{
+	client, err := NewGeminiHTTPClient(GeminiHTTPClientConfig{
 		BaseURL:        "https://generativelanguage.googleapis.com",
 		APIKey:         apiKey,
 		Model:          "gemini-3.5-flash",
@@ -41,13 +41,13 @@ func TestGeminiLiveSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build client: %v", err)
 	}
-	cc, err := NewContractClient(client)
+	cc, err := NewGeminiCustomerSalesAdapter(client)
 	if err != nil {
 		t.Fatalf("build contract client: %v", err)
 	}
 
-	out, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
-		DecisionInput: ports.AIDecisionInput{
+	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
+		Request: ports.CustomerSalesDecisionRequest{
 			BusinessID:     "test-biz",
 			ConversationID: "test-conv",
 			Text:           "Hello, please say 'ok'.",

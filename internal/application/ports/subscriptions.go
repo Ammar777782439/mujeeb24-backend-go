@@ -1,8 +1,8 @@
 package ports
 
 import (
-        "context"
-        "time"
+	"context"
+	"time"
 )
 
 // ----------------------------------------------------------------------------
@@ -56,58 +56,58 @@ import (
 // subscription retains the limits it was created with. The plan_id is kept
 // as a reference for audit only.
 type SubscriptionRecord struct {
-        ID                            string
-        BusinessID                    string
-        PlanID                        string
-        PlanCode                      string
-        PlanVersion                   int
-        PeriodStart                   time.Time
-        PeriodEnd                     time.Time
-        Status                        string
-        AIReplyLimit                  int
-        AICatalogLimit                int
-        ChannelLimit                  int
-        InternalAICostBudgetYER        int
-        CostBudgetOverrideYER         *int
-        CostBudgetOverrideReason      *string
-        CostBudgetOverrideBy          *string
-        CostBudgetOverrideAt          *time.Time
-        CancelledAt                   *time.Time
-        CancelledReason               *string
-        CancelledBy                   *string
-        CreatedAt                     time.Time
-        UpdatedAt                     time.Time
+	ID                       string
+	BusinessID               string
+	PlanID                   string
+	PlanCode                 string
+	PlanVersion              int
+	PeriodStart              time.Time
+	PeriodEnd                time.Time
+	Status                   string
+	AIReplyLimit             int
+	AICatalogLimit           int
+	ChannelLimit             int
+	InternalAICostBudgetYER  int
+	CostBudgetOverrideYER    *int
+	CostBudgetOverrideReason *string
+	CostBudgetOverrideBy     *string
+	CostBudgetOverrideAt     *time.Time
+	CancelledAt              *time.Time
+	CancelledReason          *string
+	CancelledBy              *string
+	CreatedAt                time.Time
+	UpdatedAt                time.Time
 }
 
 // SubscriptionCreate is the input to Create. All plan-derived fields are
 // snapshot from the plan at creation time — they become immutable for the
 // lifetime of this subscription row.
 type SubscriptionCreate struct {
-        ID                     string
-        BusinessID             string
-        PlanID                 string
-        PeriodStart            time.Time
-        PeriodEnd              time.Time
-        AIReplyLimit           int
-        AICatalogLimit         int
-        ChannelLimit          int
-        InternalAICostBudgetYER int
-        Now                    time.Time
+	ID                      string
+	BusinessID              string
+	PlanID                  string
+	PeriodStart             time.Time
+	PeriodEnd               time.Time
+	AIReplyLimit            int
+	AICatalogLimit          int
+	ChannelLimit            int
+	InternalAICostBudgetYER int
+	Now                     time.Time
 }
 
 // SubscriptionListFilter is the query input to List.
 // Per Contract §13 / §36: list supports pagination + status filter.
 type SubscriptionListFilter struct {
-        BusinessID string
-        Status     string
-        Limit      int
-        Cursor     string
+	BusinessID string
+	Status     string
+	Limit      int
+	Cursor     string
 }
 
 type SubscriptionPage struct {
-        Items      []SubscriptionRecord
-        NextCursor string
-        HasMore    bool
+	Items      []SubscriptionRecord
+	NextCursor string
+	HasMore    bool
 }
 
 // SubscriptionRepository is the Platform-side subscription port.
@@ -122,24 +122,24 @@ type SubscriptionPage struct {
 //   - Activate      → transitions PENDING → ACTIVE. Returns Conflict if not PENDING.
 //   - Cancel        → transitions PENDING|ACTIVE → CANCELLED. Returns Conflict if already terminal.
 //   - MarkExpired   → transitions ACTIVE → EXPIRED. Used by the expiry worker.
-//                     Returns Conflict if not ACTIVE (idempotent on EXPIRED).
+//     Returns Conflict if not ACTIVE (idempotent on EXPIRED).
 //   - ApplyCostBudgetOverride → updates the per-subscription cost budget override.
-//                               Per Contract §24 (AIUsageTokenTelemetry) — does NOT change plan version.
+//     Per Contract §24 (AIUsageTokenTelemetry) — does NOT change plan version.
 type SubscriptionRepository interface {
-        Create(ctx context.Context, create SubscriptionCreate) (SubscriptionRecord, error)
-        GetByID(ctx context.Context, subscriptionID string) (SubscriptionRecord, error)
-        List(ctx context.Context, filter SubscriptionListFilter) (SubscriptionPage, error)
-        Activate(ctx context.Context, subscriptionID string, now time.Time) (SubscriptionRecord, error)
-        Cancel(ctx context.Context, subscriptionID, reason, cancelledBy string, now time.Time) (SubscriptionRecord, error)
-        MarkExpired(ctx context.Context, subscriptionID string, now time.Time) (SubscriptionRecord, error)
-        ApplyCostBudgetOverride(ctx context.Context, subscriptionID string, newBudgetYER int, reason, overrideBy string, now time.Time) (SubscriptionRecord, error)
-        // CheckEntitlements verifies that the business's current catalog item count
-        // and active channel count do not exceed the subscription's plan limits.
-        // Per Contract §34-35: if the current state is higher than the new plan's
-        // limits, the subscription does NOT become ACTIVE until the merchant resolves
-        // the overrun. No silent data deletion.
-        //
-        // Returns nil if within limits. Returns Conflict error if catalog or channel
-        // count exceeds the subscription's snapshotted limits.
-        CheckEntitlements(ctx context.Context, businessID string, catalogLimit, channelLimit int) error
+	Create(ctx context.Context, create SubscriptionCreate) (SubscriptionRecord, error)
+	GetByID(ctx context.Context, subscriptionID string) (SubscriptionRecord, error)
+	List(ctx context.Context, filter SubscriptionListFilter) (SubscriptionPage, error)
+	Activate(ctx context.Context, subscriptionID string, now time.Time) (SubscriptionRecord, error)
+	Cancel(ctx context.Context, subscriptionID, reason, cancelledBy string, now time.Time) (SubscriptionRecord, error)
+	MarkExpired(ctx context.Context, subscriptionID string, now time.Time) (SubscriptionRecord, error)
+	ApplyCostBudgetOverride(ctx context.Context, subscriptionID string, newBudgetYER int, reason, overrideBy string, now time.Time) (SubscriptionRecord, error)
+	// CheckEntitlements verifies that the business's current catalog item count
+	// and active channel count do not exceed the subscription's plan limits.
+	// Per Contract §34-35: if the current state is higher than the new plan's
+	// limits, the subscription does NOT become ACTIVE until the merchant resolves
+	// the overrun. No silent data deletion.
+	//
+	// Returns nil if within limits. Returns Conflict error if catalog or channel
+	// count exceeds the subscription's snapshotted limits.
+	CheckEntitlements(ctx context.Context, businessID string, catalogLimit, channelLimit int) error
 }

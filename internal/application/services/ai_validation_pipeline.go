@@ -50,7 +50,7 @@ import (
 type ValidationPipeline struct {
 	ReferenceValidator   ReferenceValidator
 	TenantValidator      TenantValidator
-	PolicyEvaluator      ports.AIPolicyEvaluator
+	CustomerSalesPolicy ports.CustomerSalesPolicyPort
 	AuthorizationService AuthorizationService
 	Now                  func() time.Time
 }
@@ -62,13 +62,13 @@ type ValidationPipeline struct {
 func NewValidationPipeline(
 	rv ReferenceValidator,
 	tv TenantValidator,
-	pe ports.AIPolicyEvaluator,
+	policy ports.CustomerSalesPolicyPort,
 	as AuthorizationService,
 ) *ValidationPipeline {
 	return &ValidationPipeline{
 		ReferenceValidator:   rv,
 		TenantValidator:      tv,
-		PolicyEvaluator:      pe,
+		CustomerSalesPolicy: policy,
 		AuthorizationService: as,
 		Now:                  func() time.Time { return time.Now().UTC() },
 	}
@@ -99,7 +99,7 @@ func (p *ValidationPipeline) Validate(ctx context.Context, input ValidationInput
 	if err := p.validateTenant(ctx, input); err != nil {
 		return ports.EffectiveDecision{}, err
 	}
-	decision, err := p.evaluatePolicy(input)
+	decision, err := p.evaluateCustomerSalesPolicy(ctx, input)
 	if err != nil {
 		return ports.EffectiveDecision{}, err
 	}
@@ -118,12 +118,12 @@ func (p *ValidationPipeline) Validate(ctx context.Context, input ValidationInput
 // response_text: non-empty when action != human_request.
 // selected: each SelectedReference has a non-empty item_id (variant_id and
 // offer_id may be nil per contract ④ §4).
-func (p *ValidationPipeline) validateStructural(proposal ports.AIGeminiProposal) *StageFailure {
+func (p *ValidationPipeline) validateStructural(proposal ports.CustomerSalesProposal) *StageFailure {
 	switch proposal.Status {
-	case ports.AIProposalStatusResolved,
-		ports.AIProposalStatusAmbiguous,
-		ports.AIProposalStatusNotFound,
-		ports.AIProposalStatusNeedsMoreData:
+	case ports.CustomerSalesProposalStatusResolved,
+		ports.CustomerSalesProposalStatusAmbiguous,
+		ports.CustomerSalesProposalStatusNotFound,
+		ports.CustomerSalesProposalStatusNeedsMoreData:
 		// allowed
 	default:
 		return &StageFailure{
@@ -133,11 +133,11 @@ func (p *ValidationPipeline) validateStructural(proposal ports.AIGeminiProposal)
 		}
 	}
 	switch proposal.Action {
-	case ports.AIProposalActionAnswer,
-		ports.AIProposalActionClarification,
-		ports.AIProposalActionHumanRequest,
-		ports.AIProposalActionLeadDraft,
-		ports.AIProposalActionOrderDraft:
+	case ports.CustomerSalesProposalActionAnswer,
+		ports.CustomerSalesProposalActionClarification,
+		ports.CustomerSalesProposalActionHumanRequest,
+		ports.CustomerSalesProposalActionLeadDraft,
+		ports.CustomerSalesProposalActionOrderDraft:
 		// allowed
 	default:
 		return &StageFailure{
@@ -146,7 +146,7 @@ func (p *ValidationPipeline) validateStructural(proposal ports.AIGeminiProposal)
 			Reason:   fmt.Sprintf("invalid action %q per contract ④ §4", proposal.Action),
 		}
 	}
-	if proposal.Action != ports.AIProposalActionHumanRequest && strings.TrimSpace(proposal.ResponseText) == "" {
+	if proposal.Action != ports.CustomerSalesProposalActionHumanRequest && strings.TrimSpace(proposal.ResponseText) == "" {
 		return &StageFailure{
 			Stage:    ports.AIRunFailureStageValidation,
 			Category: ports.AIRunFailureCategoryInvalidAIOutput,
@@ -244,34 +244,30 @@ func (p *ValidationPipeline) validateTenant(ctx context.Context, input Validatio
 	return nil
 }
 
-// evaluatePolicy is contract ⑥ §12 — PolicyEvaluator applies the merchant's
-// business policies to the validated proposal. Per contract ⑥ §13,
-// requires_approval comes ONLY from Mujeeb's PolicyEvaluator, never from Gemini.
-func (p *ValidationPipeline) evaluatePolicy(input ValidationInput) (ports.EffectiveDecision, *StageFailure) {
-	if p.PolicyEvaluator == nil {
-		// No policy configured → default allow (per contract ⑥, this is the
-		// conservative default when no policy is registered).
+// evaluateCustomerSalesPolicy is contract ⑥ §12 — Mujeeb applies the
+// merchant's business policy to the validated customer-sales proposal.
+// Gemini only proposes; policy never re-interprets customer intent.
+func (p *ValidationPipeline) evaluateCustomerSalesPolicy(ctx context.Context, input ValidationInput) (ports.EffectiveDecision, *StageFailure) {
+	if p.CustomerSalesPolicy == nil {
 		return ports.EffectiveDecision{
 			DecisionID:      input.DecisionID,
 			EffectiveAction: string(input.Proposal.Action),
 			PolicyDecision:  "allowed",
-			Reason:          "no policy evaluator configured; defaulting to allowed per contract ⑥ §12",
+			Reason:          "no customer sales policy configured; defaulting to allowed per contract ⑥ §12",
 		}, nil
 	}
-	// Convert the contract-aligned AIGeminiProposal to the legacy
-	// AIDecisionProposal expected by ports.AIPolicyEvaluator. This is a
-	// bridge while services migrate to the contract-aligned types.
-	legacy := p.toLegacyProposal(input)
-	evaluated := p.PolicyEvaluator.Evaluate(legacy, input.Context)
-	policyDecision := strings.TrimSpace(evaluated.PolicyDecision)
+
+	result := p.CustomerSalesPolicy.Evaluate(ctx, input.Proposal, input.Context)
+	policyDecision := strings.TrimSpace(result.Decision)
 	if policyDecision == "" {
 		policyDecision = "allowed"
 	}
+
 	return ports.EffectiveDecision{
 		DecisionID:      input.DecisionID,
 		EffectiveAction: string(input.Proposal.Action),
 		PolicyDecision:  policyDecision,
-		Reason:          "policy evaluation completed per contract ⑥ §12",
+		Reason:          result.Reason,
 	}, nil
 }
 
@@ -313,10 +309,10 @@ type ValidationInput struct {
 	ConversationID string
 
 	// Proposal is the contract ④ §4 Gemini output.
-	Proposal ports.AIGeminiProposal
+	Proposal ports.CustomerSalesProposal
 
-	// Context is the AIContext built by the ContextBuilder.
-	Context *ports.AIContext
+	// Context is the CustomerSalesContext built by the ContextBuilder.
+	Context *ports.CustomerSalesContext
 
 	// EvidenceItemIDs is the set of item IDs that were actually sent to
 	// Gemini as evidence. Used by ReferenceValidator per contract ⑥ §10.
@@ -327,65 +323,6 @@ type ValidationInput struct {
 
 	// EvidenceOfferIDs is the set of offer IDs sent.
 	EvidenceOfferIDs []string
-}
-
-// toLegacyProposal converts the contract-aligned AIGeminiProposal to the
-// legacy AIDecisionProposal shape expected by the existing PolicyEvaluator.
-// This is a temporary bridge; once the PolicyEvaluator is migrated to consume
-// AIGeminiProposal directly, this conversion will be removed.
-func (p *ValidationPipeline) toLegacyProposal(input ValidationInput) ports.AIDecisionProposal {
-	entities := []byte(`{}`)
-	evidence := []byte(`[]`)
-	if len(input.Proposal.Selected) > 0 {
-		// Encode selected references as evidence_references JSON array.
-		evidence = encodeSelectedAsLegacyJSON(input.Proposal.Selected)
-	}
-	return ports.AIDecisionProposal{
-		IntentBase:         string(input.Proposal.Status),
-		DomainContext:      "",
-		Entities:           entities,
-		EvidenceReferences: evidence,
-		RequestedAction:    string(input.Proposal.Action),
-		ResponseText:       input.Proposal.ResponseText,
-		ConfidenceBand:     "medium",
-		RequiresHuman:      input.Proposal.Action == ports.AIProposalActionHumanRequest,
-		MissingInformation: []byte(`[]`),
-		ReasonCodes:        []byte(`[]`),
-		PolicyDecision:     "",
-		PolicyVersion:      "",
-		KnowledgeVersion:   "none",
-		ModelReference:     "",
-		SchemaVersion:      1,
-	}
-}
-
-// encodeSelectedAsLegacyJSON is a minimal helper to encode SelectedReference
-// slice to the legacy evidence_references JSON shape. It avoids importing
-// encoding/json here to keep the file focused.
-func encodeSelectedAsLegacyJSON(selected []ports.SelectedReference) []byte {
-	var sb strings.Builder
-	sb.WriteByte('[')
-	for i, ref := range selected {
-		if i > 0 {
-			sb.WriteByte(',')
-		}
-		sb.WriteString(`{"item_id":"`)
-		sb.WriteString(ref.ItemID)
-		sb.WriteByte('"')
-		if ref.VariantID != nil && *ref.VariantID != "" {
-			sb.WriteString(`,"variant_id":"`)
-			sb.WriteString(*ref.VariantID)
-			sb.WriteByte('"')
-		}
-		if ref.OfferID != nil && *ref.OfferID != "" {
-			sb.WriteString(`,"offer_id":"`)
-			sb.WriteString(*ref.OfferID)
-			sb.WriteByte('"')
-		}
-		sb.WriteByte('}')
-	}
-	sb.WriteByte(']')
-	return []byte(sb.String())
 }
 
 // ReferenceValidator is the contract ⑥ §6-7 reference-existence check.

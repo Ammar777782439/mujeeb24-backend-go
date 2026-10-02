@@ -52,11 +52,11 @@ func TestLifecycleFailure_MarkWaitingTool_StopsLoop(t *testing.T) {
 
 	dispatcher := makeDispatcher()
 	lc := &stubLifecycleFailWaitingTool{}
-	cc, _ := buildContractClientForFixTests(t, mock.URL(), dispatcher, lc)
+	cc, _ := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, lc)
 
-	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
-		AIRunID:      "run-fail-wt",
+	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
+		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
+		AIRunID:       "run-fail-wt",
 	})
 	if err == nil {
 		t.Fatalf("expected error when MarkWaitingTool fails — loop must NOT continue")
@@ -81,11 +81,11 @@ func TestLifecycleFailure_MarkRunning_StopsLoop(t *testing.T) {
 
 	dispatcher := makeDispatcher()
 	lc := &stubLifecycleFailRunning{}
-	cc, _ := buildContractClientForFixTests(t, mock.URL(), dispatcher, lc)
+	cc, _ := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, lc)
 
-	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
-		AIRunID:      "run-fail-r",
+	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
+		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
+		AIRunID:       "run-fail-r",
 	})
 	if err == nil {
 		t.Fatalf("expected error when MarkRunning fails — loop must NOT continue")
@@ -130,14 +130,14 @@ func TestLifecycle_Ordering_WaitingToolBeforeRunning(t *testing.T) {
 
 	dispatcher := makeDispatcher()
 	lc := &stubLifecycleOrdered{}
-	cc, _ := buildContractClientForFixTests(t, mock.URL(), dispatcher, lc)
+	cc, _ := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, lc)
 
-	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
-		AIRunID:      "run-order",
+	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
+		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
+		AIRunID:       "run-order",
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 	expected := []string{"WAITING_TOOL", "RUNNING", "WAITING_TOOL", "RUNNING"}
 	if len(lc.transitions) != len(expected) {
@@ -157,9 +157,9 @@ func TestLifecycle_Ordering_WaitingToolBeforeRunning(t *testing.T) {
 // ValidationPipeline, Repository — too many stubs).
 //
 // Verifies the critical link:
-//   ContractRuntimeInput.AIRunID → ContractClient → AIToolCallRecord.AIRunID
+//   CustomerSalesDecisionInput.AIRunID → GeminiCustomerSalesAdapter → AIToolCallRecord.AIRunID
 
-func TestB2B_AIRunID_Path_ContractRuntimeInputToToolCallRecord(t *testing.T) {
+func TestB2B_AIRunID_Path_CustomerSalesDecisionInputToToolCallRecord(t *testing.T) {
 	t.Parallel()
 	mock := newMockServerConfigurable(t, []string{
 		makeToolCallResponse("i-1", "catalog_data", "call-1"),
@@ -168,11 +168,11 @@ func TestB2B_AIRunID_Path_ContractRuntimeInputToToolCallRecord(t *testing.T) {
 	defer mock.Close()
 
 	dispatcher := makeDispatcher()
-	cc, runRepo := buildContractClientForFixTests(t, mock.URL(), dispatcher, nil)
+	cc, runRepo := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, nil)
 
 	runID := "run-b2b-agent-1"
-	out, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
-		DecisionInput: ports.AIDecisionInput{
+	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
+		Request: ports.CustomerSalesDecisionRequest{
 			BusinessID:     "b2b-business-1",
 			ConversationID: "session-1",
 			Text:           "add a product",
@@ -180,9 +180,9 @@ func TestB2B_AIRunID_Path_ContractRuntimeInputToToolCallRecord(t *testing.T) {
 		AIRunID: runID,
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
-	if out.Proposal.Status != ports.AIProposalStatusResolved {
+	if out.Proposal.Status != ports.CustomerSalesProposalStatusResolved {
 		t.Errorf("expected status=resolved, got %s", out.Proposal.Status)
 	}
 	if len(runRepo.createdToolCalls) != 1 {

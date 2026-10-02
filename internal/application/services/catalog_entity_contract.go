@@ -51,7 +51,7 @@ type CatalogEntityDefinition struct {
 //     'always_available', 'unknown')
 //   - fulfillment_mode IN ('delivery', 'pickup', 'digital', 'appointment',
 //     'travel', 'manual')
-//   - attributes is JSONB object (map[string]any) per Catalog Contract §6.
+//   - attributes is a dynamic JSONB object. Keys are English snake_case; values may be any valid JSON value.
 type CatalogItemEntityDefinition struct {
 	ID                     string         `json:"id"`
 	CatalogID              string         `json:"catalog_id"`
@@ -102,7 +102,7 @@ type AttributeDefinitionEntityDefinition struct {
 // Per SQL migration 000017:
 //   - status IN ('active', 'inactive', 'archived') — NO "draft" (variants
 //     are not draftable; only CatalogItem and Offer have draft state).
-//   - attributes is JSONB object (map[string]any).
+//   - attributes is a dynamic JSONB object. Keys are English snake_case; values may be any valid JSON value.
 type VariantEntityDefinition struct {
 	ID            string         `json:"id"`
 	CatalogItemID string         `json:"catalog_item_id"`
@@ -166,10 +166,8 @@ type CatalogEntityContractDescriptor struct {
 	AvailabilityStatuses      map[string]string `json:"availability_statuses"`
 	PriceVerificationStatuses map[string]string `json:"price_verification_statuses"`
 	FulfillmentModes          map[string]string `json:"fulfillment_modes"`
-	// ItemStatuses per migration 000016 catalog_items_status_chk (5 values:
-	// draft, active, inactive, archived, expired) + migration 000018
-	// offers_status_chk. The values are identical across both tables; we
-	// expose a single map here.
+	// ItemStatuses is the CatalogItem status set from migration 000016.
+	// CatalogItem does NOT allow expired; expired belongs to Offer status in migration 000018.
 	ItemStatuses map[string]string `json:"item_statuses"`
 	// NOTE: ItemTypes is intentionally ABSENT. Per SQL migration 000016,
 	// item_type is TEXT (non-empty), NOT an enum. Per Catalog Contract
@@ -271,7 +269,6 @@ func DefaultCatalogEntityContractDescriptor() CatalogEntityContractDescriptor {
 			"active":   "نشط",
 			"inactive": "غير نشط",
 			"archived": "مؤرشف",
-			"expired":  "منتهي",
 		},
 		Relationships: []EntityRelationship{
 			{From: "Catalog", To: "CatalogItem", Cardinality: "one_to_many", Description: "Catalog يحتوي على عدة CatalogItems"},
@@ -324,7 +321,7 @@ func BuildCatalogEntityContractPayload() CatalogEntityContractPayload {
 				AvailabilityMode:       "stock|schedule|supplier_check|always_available|unknown",
 				FulfillmentMode:        "delivery|pickup|digital|appointment|travel|manual",
 				RequiresConfirmation:   false,
-				Attributes:             map[string]any{"attribute_key": "value_per_definition"},
+				Attributes:             map[string]any{"attribute_key": "any_json_value"},
 			},
 			AttributeSchema: AttributeSchemaEntityDefinition{
 				ID:      "UUID",
@@ -360,7 +357,7 @@ func BuildCatalogEntityContractPayload() CatalogEntityContractPayload {
 				ID:            "UUID",
 				CatalogItemID: "UUID",
 				Name:          "TEXT",
-				Attributes:    map[string]any{"attribute_key": "value_per_definition"},
+				Attributes:    map[string]any{"attribute_key": "any_json_value"},
 				Status:        "active|inactive|archived",
 			},
 			// Offer status per SQL migration 000018:

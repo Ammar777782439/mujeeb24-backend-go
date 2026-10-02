@@ -61,9 +61,9 @@ func (m mockGetAttributeSchemaHandler) Handle(ctx context.Context, q queries.Get
 }
 
 func TestCapabilityRegistry(t *testing.T) {
-	registry := NewCapabilityRegistry()
+	registry := NewCustomerSalesToolRegistry()
 
-	cap := &CatalogDataCapability{}
+	cap := &CustomerSalesCatalogDataTool{}
 	if err := registry.Register(cap); err != nil {
 		t.Fatalf("register capability: %v", err)
 	}
@@ -84,27 +84,27 @@ func TestCapabilityRegistry(t *testing.T) {
 	}
 
 	// Dispatch unknown capability
-	_, err := registry.Execute(context.Background(), ports.AICapabilityExecutionContext{BusinessID: "biz-1"}, "non_existent", nil)
+	_, err := registry.Execute(context.Background(), ports.CustomerSalesToolExecutionContext{BusinessID: "biz-1"}, "non_existent", nil)
 	if err == nil {
 		t.Fatal("expected unknown capability error, got nil")
 	}
 }
 
-func TestCatalogDataCapabilityTenantDefense(t *testing.T) {
-	cap := &CatalogDataCapability{}
+func TestCustomerSalesCatalogDataToolTenantDefense(t *testing.T) {
+	cap := &CustomerSalesCatalogDataTool{}
 
 	// Empty BusinessID must be rejected
-	_, err := cap.Execute(context.Background(), ports.AICapabilityExecutionContext{BusinessID: ""}, []byte(`{"operation":"list_catalogs"}`))
+	_, err := cap.Execute(context.Background(), ports.CustomerSalesToolExecutionContext{BusinessID: ""}, []byte(`{"operation":"list_catalogs"}`))
 	if err == nil || !strings.Contains(err.Error(), "unauthorized") {
 		t.Fatalf("expected unauthorized error for empty BusinessID, got %v", err)
 	}
 }
 
-func TestCatalogDataCapabilityOperations(t *testing.T) {
+func TestCustomerSalesCatalogDataToolOperations(t *testing.T) {
 	const testBiz = "biz-123"
 	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
 
-	cap := &CatalogDataCapability{
+	cap := &CustomerSalesCatalogDataTool{
 		Now: func() time.Time { return now },
 		ListCatalogs: mockListCatalogsHandler{
 			fn: func(ctx context.Context, q queries.ListCatalogsQuery) (commands.ListResult[commands.CatalogView], error) {
@@ -210,7 +210,7 @@ func TestCatalogDataCapabilityOperations(t *testing.T) {
 		},
 	}
 
-	execCtx := ports.AICapabilityExecutionContext{BusinessID: testBiz, ConversationID: "conv-1"}
+	execCtx := ports.CustomerSalesToolExecutionContext{BusinessID: testBiz, ConversationID: "conv-1"}
 
 	// 1. list_catalogs
 	res1, err := cap.Execute(context.Background(), execCtx, []byte(`{"operation":"list_catalogs"}`))
@@ -275,30 +275,30 @@ func TestCatalogDataCapabilityOperations(t *testing.T) {
 	}
 }
 
-func TestIncorporateCapabilityEvidence(t *testing.T) {
-	aiCtx := &ports.AIContext{
-		CatalogEvidence: []ports.AICatalogEvidence{
+func TestIncorporateCustomerSalesToolEvidence(t *testing.T) {
+	aiCtx := &ports.CustomerSalesContext{
+		CatalogEvidence: []ports.CustomerSalesCatalogEvidence{
 			{Reference: "item-1", Name: "Existing Item"},
 		},
-		OfferEvidence: []ports.AIOfferEvidence{
+		OfferEvidence: []ports.CustomerSalesOfferEvidence{
 			{Reference: "offer-1", Name: "Existing Offer"},
 		},
 	}
 
-	result := ports.AICapabilityResult{
-		CatalogEvidence: []ports.AICatalogEvidence{
+	result := ports.CustomerSalesToolResult{
+		CatalogEvidence: []ports.CustomerSalesCatalogEvidence{
 			{Reference: "item-1", Name: "Duplicate Item"},
 			{Reference: "item-2", Name: "New Item"},
 		},
-		OfferEvidence: []ports.AIOfferEvidence{
+		OfferEvidence: []ports.CustomerSalesOfferEvidence{
 			{Reference: "offer-2", Name: "New Offer"},
 		},
-		VariantEvidence: []ports.AIVariantEvidence{
+		VariantEvidence: []ports.CustomerSalesVariantEvidence{
 			{Reference: "var-1", Name: "New Variant"},
 		},
 	}
 
-	IncorporateCapabilityEvidence(aiCtx, result)
+	IncorporateCustomerSalesToolEvidence(aiCtx, result)
 
 	if len(aiCtx.CatalogEvidence) != 2 {
 		t.Fatalf("expected 2 catalog items, got %d", len(aiCtx.CatalogEvidence))
@@ -314,11 +314,11 @@ func TestIncorporateCapabilityEvidence(t *testing.T) {
 	}
 }
 
-func TestCatalogDataCapabilityPaginationAndContinuation(t *testing.T) {
+func TestCustomerSalesCatalogDataToolPaginationAndContinuation(t *testing.T) {
 	const testBiz = "biz-paged"
 	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
 
-	cap := &CatalogDataCapability{
+	cap := &CustomerSalesCatalogDataTool{
 		Now: func() time.Time { return now },
 		ListCatalogItems: mockListCatalogItemsHandler{
 			fn: func(ctx context.Context, q queries.ListCatalogItemsQuery) (commands.ListResult[commands.CatalogItemView], error) {
@@ -345,7 +345,7 @@ func TestCatalogDataCapabilityPaginationAndContinuation(t *testing.T) {
 		},
 	}
 
-	execCtx := ports.AICapabilityExecutionContext{BusinessID: testBiz, ConversationID: "conv-1"}
+	execCtx := ports.CustomerSalesToolExecutionContext{BusinessID: testBiz, ConversationID: "conv-1"}
 
 	// Page 1: returns has_more=true and next_cursor
 	res1, err := cap.Execute(context.Background(), execCtx, []byte(`{"operation":"list_catalog_items","catalog_id":"cat-1","limit":1}`))
@@ -374,11 +374,11 @@ func TestCatalogDataCapabilityPaginationAndContinuation(t *testing.T) {
 	}
 }
 
-func TestCatalogDataCapabilityTenantIsolationNeverOverriddenByAI(t *testing.T) {
+func TestCustomerSalesCatalogDataToolTenantIsolationNeverOverriddenByAI(t *testing.T) {
 	const trustedBiz = "trusted-tenant-123"
 	receivedBiz := ""
 
-	cap := &CatalogDataCapability{
+	cap := &CustomerSalesCatalogDataTool{
 		ListCatalogs: mockListCatalogsHandler{
 			fn: func(ctx context.Context, q queries.ListCatalogsQuery) (commands.ListResult[commands.CatalogView], error) {
 				receivedBiz = string(q.Meta.Actor.BusinessID)
@@ -389,7 +389,7 @@ func TestCatalogDataCapabilityTenantIsolationNeverOverriddenByAI(t *testing.T) {
 		},
 	}
 
-	execCtx := ports.AICapabilityExecutionContext{BusinessID: trustedBiz, ConversationID: "conv-1"}
+	execCtx := ports.CustomerSalesToolExecutionContext{BusinessID: trustedBiz, ConversationID: "conv-1"}
 
 	// AI maliciously attempts to inject business_id into parameters
 	_, err := cap.Execute(context.Background(), execCtx, []byte(`{"operation":"list_catalogs","business_id":"attacker-tenant-666"}`))

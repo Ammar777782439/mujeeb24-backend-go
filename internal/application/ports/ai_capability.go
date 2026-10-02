@@ -4,17 +4,17 @@ import (
 	"context"
 )
 
-// AICapabilityDefinition specifies the name, description, and parameter JSON
+// CustomerSalesToolDefinition specifies the name, description, and parameter JSON
 // schema for an application-level AI capability exposed to LLMs.
-type AICapabilityDefinition struct {
+type CustomerSalesToolDefinition struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	Parameters  map[string]any `json:"parameters"`
 }
 
-// AICapabilityExecutionContext encapsulates server-side trusted execution context.
+// CustomerSalesToolExecutionContext encapsulates server-side trusted execution context.
 // BusinessID is strictly determined by the server and never by the AI model.
-type AICapabilityExecutionContext struct {
+type CustomerSalesToolExecutionContext struct {
 	BusinessID     string
 	ConversationID string
 	PrincipalID    string
@@ -24,13 +24,13 @@ type AICapabilityExecutionContext struct {
 	CorrelationID  string
 }
 
-// AICapabilityResult contains the bounded factual data returned to the LLM
+// CustomerSalesToolResult contains the bounded factual data returned to the LLM
 // along with evidence metadata for downstream policy grounding and data-driven completion.
-type AICapabilityResult struct {
+type CustomerSalesToolResult struct {
 	Data            any                 `json:"data"`
-	CatalogEvidence []AICatalogEvidence `json:"catalog_evidence,omitempty"`
-	OfferEvidence   []AIOfferEvidence   `json:"offer_evidence,omitempty"`
-	VariantEvidence []AIVariantEvidence `json:"variant_evidence,omitempty"`
+	CatalogEvidence []CustomerSalesCatalogEvidence `json:"catalog_evidence,omitempty"`
+	OfferEvidence   []CustomerSalesOfferEvidence   `json:"offer_evidence,omitempty"`
+	VariantEvidence []CustomerSalesVariantEvidence `json:"variant_evidence,omitempty"`
 	HasMore         bool                `json:"has_more,omitempty"`
 	NextCursor      string              `json:"next_cursor,omitempty"`
 	Incomplete      bool                `json:"incomplete,omitempty"`
@@ -38,28 +38,28 @@ type AICapabilityResult struct {
 	StreamKey       string              `json:"stream_key,omitempty"`
 }
 
-// AICapability represents an individual application-level AI capability.
-type AICapability interface {
-	Definition() AICapabilityDefinition
-	Execute(ctx context.Context, execCtx AICapabilityExecutionContext, rawParams []byte) (AICapabilityResult, error)
+// CustomerSalesTool represents an individual application-level AI capability.
+type CustomerSalesTool interface {
+	Definition() CustomerSalesToolDefinition
+	Execute(ctx context.Context, execCtx CustomerSalesToolExecutionContext, rawParams []byte) (CustomerSalesToolResult, error)
 }
 
-// AICapabilityDispatcher dispatches capability calls by name and provides definitions.
-type AICapabilityDispatcher interface {
-	Definitions() []AICapabilityDefinition
-	Execute(ctx context.Context, execCtx AICapabilityExecutionContext, name string, rawParams []byte) (AICapabilityResult, error)
+// CustomerSalesToolPort dispatches capability calls by name and provides definitions.
+type CustomerSalesToolPort interface {
+	Definitions() []CustomerSalesToolDefinition
+	Execute(ctx context.Context, execCtx CustomerSalesToolExecutionContext, name string, rawParams []byte) (CustomerSalesToolResult, error)
 }
 
-// AICapabilityRegistry supports registering and dispatching capabilities.
-type AICapabilityRegistry interface {
-	AICapabilityDispatcher
-	Register(capability AICapability) error
-	Get(name string) (AICapability, bool)
+// CustomerSalesToolRegistry supports registering and dispatching capabilities.
+type CustomerSalesToolRegistry interface {
+	CustomerSalesToolPort
+	Register(capability CustomerSalesTool) error
+	Get(name string) (CustomerSalesTool, bool)
 }
 
-// IncorporateCapabilityEvidence merges evidence returned by capability execution
-// into the AIContext so downstream policy validation recognizes verified facts.
-func IncorporateCapabilityEvidence(target *AIContext, result AICapabilityResult) {
+// IncorporateCustomerSalesToolEvidence merges evidence returned by capability execution
+// into the CustomerSalesContext so downstream policy validation recognizes verified facts.
+func IncorporateCustomerSalesToolEvidence(target *CustomerSalesContext, result CustomerSalesToolResult) {
 	if target == nil {
 		return
 	}
@@ -114,7 +114,7 @@ func IncorporateCapabilityEvidence(target *AIContext, result AICapabilityResult)
 //
 // This function is kept as a no-op for migration safety; it will be removed
 // once all callers are migrated to the contract-aligned flow.
-func IncorporateProposalEvidence(target *AIContext, proposal AIDecisionProposal) {
+func IncorporateProposalEvidence(target *CustomerSalesContext, proposal AIDecisionProposal) {
 	if target == nil {
 		return
 	}

@@ -106,7 +106,7 @@ func TestAutoReplyContextBuilderGroundsCatalogAgainstPostgres(t *testing.T) {
 	builder.Knowledge = NewKnowledgeDocumentRepository(adapter)
 	builder.Policies = NewBusinessPolicyRepository(adapter)
 	builder.Now = func() time.Time { return base }
-	contextValue, err := builder.Build(ctx, ports.ContextBuildInput{BusinessID: businessID, ConversationID: conversationID, SourceMessageReference: "incoming-current", Text: "هل iPhone 15 الأسود 256GB متوفر؟", Channel: "whatsapp", PolicyVersion: "auto-reply-v1"})
+	contextValue, err := builder.Build(ctx, ports.CustomerSalesContextInput{BusinessID: businessID, ConversationID: conversationID, SourceMessageReference: "incoming-current", Text: "هل iPhone 15 الأسود 256GB متوفر؟", Channel: "whatsapp", PolicyVersion: "auto-reply-v1"})
 	if err != nil {
 		t.Fatalf("build grounded context: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestAutoReplyContextBuilderGroundsCatalogAgainstPostgres(t *testing.T) {
 	if contextValue.KnowledgeState != services.AIContextGrounded || contextValue.Freshness != services.AIContextFresh || len(contextValue.KnowledgeEvidence) != 1 || contextValue.KnowledgeEvidence[0].Reference != knowledgeID || len(contextValue.BusinessPolicyEvidence) != 1 || contextValue.BusinessPolicyEvidence[0].Reference != policyID || contextValue.PolicyEvidence.State != "published" {
 		t.Fatalf("unexpected knowledge state: %#v", contextValue)
 	}
-	otherContext, err := builder.Build(ctx, ports.ContextBuildInput{BusinessID: otherBusinessID, ConversationID: conversationID, Text: "iPhone"})
+	otherContext, err := builder.Build(ctx, ports.CustomerSalesContextInput{BusinessID: otherBusinessID, ConversationID: conversationID, Text: "iPhone"})
 	if err == nil || otherContext.Business.Reference != "" {
 		t.Fatalf("cross-tenant conversation was accepted: context=%#v err=%v", otherContext, err)
 	}
