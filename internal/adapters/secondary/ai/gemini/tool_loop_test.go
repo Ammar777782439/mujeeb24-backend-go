@@ -236,7 +236,7 @@ func TestToolLoop_GeminiRequestsCapability_MujeebExecutes_FinalProposalReturned(
 
 	cc, runRepo := buildContractClientWithTools(t, mock, dispatcher)
 
-	out, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{
 			BusinessID:     "trusted-business-1",
 			ConversationID: "conv-1",
@@ -247,7 +247,7 @@ func TestToolLoop_GeminiRequestsCapability_MujeebExecutes_FinalProposalReturned(
 
 	// Test 4: Final proposal is returned.
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 	if out.Proposal.Status != "resolved" {
 		t.Errorf("expected status=resolved, got %s", out.Proposal.Status)
@@ -322,7 +322,7 @@ func TestToolLoop_MultipleToolCallsInOneDecision(t *testing.T) {
 
 	cc, runRepo := buildContractClientWithTools(t, mock, dispatcher)
 
-	out, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{
 			BusinessID:     "b-1",
 			ConversationID: "c-1",
@@ -331,7 +331,7 @@ func TestToolLoop_MultipleToolCallsInOneDecision(t *testing.T) {
 		AIRunID: "run-multi",
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 	if out.Proposal.ResponseText != "done" {
 		t.Errorf("expected response='done', got %s", out.Proposal.ResponseText)
@@ -384,12 +384,12 @@ func TestToolLoop_ToolCallRecordSavedAndUpdated(t *testing.T) {
 
 	cc, runRepo := buildContractClientWithTools(t, mock, dispatcher)
 
-	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-save",
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 
 	// Tool call was created.
@@ -446,7 +446,7 @@ func TestToolLoop_ToolFailureReturnsError(t *testing.T) {
 
 	cc, _ := buildContractClientWithTools(t, mock, dispatcher)
 
-	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-fail",
 	})
@@ -488,12 +488,12 @@ func TestToolLoop_TenantIsolation_GeminiBusinessIDIgnored(t *testing.T) {
 
 	cc, _ := buildContractClientWithTools(t, mock, dispatcher)
 
-	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "trusted-biz", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-tenant",
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 
 	// The capability's execution context should have BusinessID from the
@@ -524,11 +524,11 @@ func TestToolLoop_NoTools_BackwardCompatible(t *testing.T) {
 
 	cc, _ := buildContractClientWithTools(t, mock, dispatcher)
 
-	out, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 	if out.Proposal.ResponseText != "hello" {
 		t.Errorf("expected response='hello', got %s", out.Proposal.ResponseText)
@@ -562,7 +562,7 @@ func TestToolLoop_ContextDeadlineStopsLoop(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	_, err := cc.DecideContract(ctx, ports.ContractRuntimeInput{
+	_, err := cc.Decide(ctx, ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-timeout",
 	})
@@ -591,11 +591,11 @@ func TestToolLoop_ToolsExtractedFromCapabilitiesDefinitions(t *testing.T) {
 
 	cc, _ := buildContractClientWithTools(t, mock, dispatcher)
 
-	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 
 	// Per fix #1: "tools" is an ARRAY, each element uses
@@ -660,12 +660,12 @@ func TestToolLoop_FunctionResponseRoleIsUser(t *testing.T) {
 
 	cc, _ := buildContractClientWithTools(t, mock, dispatcher)
 
-	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-role",
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 
 	// Inspect the SECOND request body (the follow-up after tool execution).
@@ -728,12 +728,12 @@ func TestToolLoop_ThoughtSignaturePreservedInFollowUp(t *testing.T) {
 
 	cc, _ := buildContractClientWithTools(t, mock, dispatcher)
 
-	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-sig",
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 
 	// Inspect the second request body — the model content (index 1)
@@ -786,12 +786,12 @@ func TestToolLoop_AIRunIDSavedInToolCallRecord(t *testing.T) {
 
 	cc, runRepo := buildContractClientWithTools(t, mock, dispatcher)
 
-	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-airunid-test",
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 
 	if len(runRepo.createdToolCalls) != 1 {
