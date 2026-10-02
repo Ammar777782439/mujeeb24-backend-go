@@ -171,7 +171,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	// is stateless except for its runtime flag, so creating it early
 	// is safe.
 	platformOperations := services.NewInMemoryPlatformOperationsRepository(
-		(external.GeminiClient != nil || external.OpenAICompatibleClient != nil) && external.LLMConfigError == nil,
+		external.GeminiClient != nil && external.LLMConfigError == nil,
 		external.SocialAPI != nil,
 	)
 	// Per §1-2: create the AIConfigurationCache + AIProviderConfigRepository
