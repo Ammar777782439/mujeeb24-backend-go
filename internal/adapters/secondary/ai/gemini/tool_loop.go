@@ -147,7 +147,7 @@ func (c *GeminiCustomerSalesAdapter) executeToolCalls(
 		execCtx := ports.AICapabilityExecutionContext{
 			BusinessID:     businessID,
 			ConversationID: conversationID,
-			RequestID:      input.DecisionInput.SourceMessageReference,
+			RequestID:      input.Request.SourceMessageReference,
 		}
 
 		// Marshal args for the capability + for the tool call record.
