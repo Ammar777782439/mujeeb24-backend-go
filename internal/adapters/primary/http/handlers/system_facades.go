@@ -230,8 +230,8 @@ func (s *Server) authResponseProjection(ctx context.Context, v commands.AuthResu
 		IsPlatformAdmin: isPlatformAdmin,
 		Principal: contract.Principal{
 			PrincipalID: contract.UUID(v.Principal.ID),
-			DisplayName:  v.Principal.DisplayName,
-			Email:        optionalString(v.Principal.Email),
+			DisplayName: v.Principal.DisplayName,
+			Email:       optionalString(v.Principal.Email),
 		},
 	}, nil
 }

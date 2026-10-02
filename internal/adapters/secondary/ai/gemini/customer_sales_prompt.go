@@ -26,25 +26,25 @@ func buildUserPrompt(input ports.CustomerSalesDecisionRequest) string {
 }
 
 type customerSalesPromptContext struct {
-	SchemaVersion          int                                            `json:"schema_version"`
-	Freshness              string                                         `json:"freshness"`
-	Business               ports.CustomerSalesContextBusiness             `json:"business"`
-	Conversation           ports.CustomerSalesContextConversation         `json:"conversation"`
-	Customer               customerSalesPromptCustomer                    `json:"customer"`
-	CatalogEvidence        []ports.CustomerSalesCatalogEvidence            `json:"catalog_evidence"`
-	CatalogSummary         []ports.CustomerSalesCatalogSummaryEntry        `json:"catalog_summary,omitempty"`
-	OfferEvidence          []ports.CustomerSalesOfferEvidence              `json:"offer_evidence"`
-	VariantEvidence        []ports.CustomerSalesVariantEvidence            `json:"variant_evidence"`
-	KnowledgeEvidence      []ports.CustomerSalesKnowledgeEvidence          `json:"knowledge_evidence"`
-	BusinessPolicyEvidence []ports.CustomerSalesBusinessPolicyEvidence     `json:"business_policy_evidence"`
-	RecentMessages         []ports.CustomerSalesRecentMessageEvidence      `json:"recent_messages"`
-	PolicyEvidence         ports.CustomerSalesPolicyEvidence              `json:"policy_evidence"`
-	KnowledgeState         string                                         `json:"knowledge_state"`
-	ConversationState      *ports.ConversationStateRecord                 `json:"conversation_state,omitempty"`
-	ConversationSummary    string                                         `json:"conversation_summary,omitempty"`
-	CatalogNames           []string                                       `json:"catalog_names,omitempty"`
-	GeneratedAt            time.Time                                      `json:"generated_at"`
-	ExpiresAt              time.Time                                      `json:"expires_at"`
+	SchemaVersion          int                                         `json:"schema_version"`
+	Freshness              string                                      `json:"freshness"`
+	Business               ports.CustomerSalesContextBusiness          `json:"business"`
+	Conversation           ports.CustomerSalesContextConversation      `json:"conversation"`
+	Customer               customerSalesPromptCustomer                 `json:"customer"`
+	CatalogEvidence        []ports.CustomerSalesCatalogEvidence        `json:"catalog_evidence"`
+	CatalogSummary         []ports.CustomerSalesCatalogSummaryEntry    `json:"catalog_summary,omitempty"`
+	OfferEvidence          []ports.CustomerSalesOfferEvidence          `json:"offer_evidence"`
+	VariantEvidence        []ports.CustomerSalesVariantEvidence        `json:"variant_evidence"`
+	KnowledgeEvidence      []ports.CustomerSalesKnowledgeEvidence      `json:"knowledge_evidence"`
+	BusinessPolicyEvidence []ports.CustomerSalesBusinessPolicyEvidence `json:"business_policy_evidence"`
+	RecentMessages         []ports.CustomerSalesRecentMessageEvidence  `json:"recent_messages"`
+	PolicyEvidence         ports.CustomerSalesPolicyEvidence           `json:"policy_evidence"`
+	KnowledgeState         string                                      `json:"knowledge_state"`
+	ConversationState      *ports.ConversationStateRecord              `json:"conversation_state,omitempty"`
+	ConversationSummary    string                                      `json:"conversation_summary,omitempty"`
+	CatalogNames           []string                                    `json:"catalog_names,omitempty"`
+	GeneratedAt            time.Time                                   `json:"generated_at"`
+	ExpiresAt              time.Time                                   `json:"expires_at"`
 }
 
 type customerSalesPromptCustomer struct {
@@ -55,10 +55,10 @@ type customerSalesPromptCustomer struct {
 
 func customerSalesPromptContextFrom(value *ports.CustomerSalesContext) customerSalesPromptContext {
 	return customerSalesPromptContext{
-		SchemaVersion:   value.SchemaVersion,
-		Freshness:       value.Freshness,
-		Business:        value.Business,
-		Conversation:    value.Conversation,
+		SchemaVersion: value.SchemaVersion,
+		Freshness:     value.Freshness,
+		Business:      value.Business,
+		Conversation:  value.Conversation,
 		Customer: customerSalesPromptCustomer{
 			Reference:        value.Customer.Reference,
 			LocalePreference: value.Customer.LocalePreference,

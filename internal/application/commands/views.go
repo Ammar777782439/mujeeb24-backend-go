@@ -155,9 +155,9 @@ type OfferView struct {
 	ValidityUntil           *time.Time
 	AvailabilityStatus      string
 	Status                  string
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-	ResourceVersion    ResourceVersion
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
+	ResourceVersion         ResourceVersion
 }
 type VariantView struct {
 	ID              VariantID
