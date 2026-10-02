@@ -73,25 +73,25 @@ func (m *mockGeminiToolServer) handle(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(response))
 }
 
-// stubCapabilityDispatcher is a minimal AICapabilityDispatcher for tests.
+// stubCapabilityDispatcher is a minimal CustomerSalesToolPort for tests.
 type stubCapabilityDispatcher struct {
-	definitions []ports.AICapabilityDefinition
-	executeFn   func(ctx context.Context, execCtx ports.AICapabilityExecutionContext, name string, rawParams []byte) (ports.AICapabilityResult, error)
+	definitions []ports.CustomerSalesToolDefinition
+	executeFn   func(ctx context.Context, execCtx ports.CustomerSalesToolExecutionContext, name string, rawParams []byte) (ports.CustomerSalesToolResult, error)
 	execCount   int64
-	lastExecCtx ports.AICapabilityExecutionContext
+	lastExecCtx ports.CustomerSalesToolExecutionContext
 }
 
-func (s *stubCapabilityDispatcher) Definitions() []ports.AICapabilityDefinition {
+func (s *stubCapabilityDispatcher) Definitions() []ports.CustomerSalesToolDefinition {
 	return s.definitions
 }
 
-func (s *stubCapabilityDispatcher) Execute(ctx context.Context, execCtx ports.AICapabilityExecutionContext, name string, rawParams []byte) (ports.AICapabilityResult, error) {
+func (s *stubCapabilityDispatcher) Execute(ctx context.Context, execCtx ports.CustomerSalesToolExecutionContext, name string, rawParams []byte) (ports.CustomerSalesToolResult, error) {
 	atomic.AddInt64(&s.execCount, 1)
 	s.lastExecCtx = execCtx
 	if s.executeFn != nil {
 		return s.executeFn(ctx, execCtx, name, rawParams)
 	}
-	return ports.AICapabilityResult{Data: map[string]any{"status": "ok"}}, nil
+	return ports.CustomerSalesToolResult{Data: map[string]any{"status": "ok"}}, nil
 }
 
 // stubRunRepoForTools is a minimal AIRunRepository that records tool calls.
@@ -167,7 +167,7 @@ var _ ports.AIRunRepository = (*stubRunRepoForTools)(nil)
 
 // buildGeminiCustomerSalesAdapterWithTools builds a GeminiCustomerSalesAdapter wired with
 // a mock Gemini server + stub capability dispatcher + stub run repo.
-func buildGeminiCustomerSalesAdapterWithTools(t *testing.T, mock *mockGeminiToolServer, dispatcher ports.AICapabilityDispatcher) (*GeminiCustomerSalesAdapter, *stubRunRepoForTools) {
+func buildGeminiCustomerSalesAdapterWithTools(t *testing.T, mock *mockGeminiToolServer, dispatcher ports.CustomerSalesToolPort) (*GeminiCustomerSalesAdapter, *stubRunRepoForTools) {
 	client, err := NewClient(Config{
 		BaseURL:        mock.URL(),
 		APIKey:         "test-key",
@@ -229,7 +229,7 @@ func TestToolLoop_GeminiRequestsCapability_MujeebExecutes_FinalProposalReturned(
         }`
 
 	dispatcher := &stubCapabilityDispatcher{
-		definitions: []ports.AICapabilityDefinition{
+		definitions: []ports.CustomerSalesToolDefinition{
 			{Name: "catalog_data", Description: "Retrieve catalog data", Parameters: map[string]any{"type": "object"}},
 		},
 	}
@@ -315,7 +315,7 @@ func TestToolLoop_MultipleToolCallsInOneDecision(t *testing.T) {
 	}
 
 	dispatcher := &stubCapabilityDispatcher{
-		definitions: []ports.AICapabilityDefinition{
+		definitions: []ports.CustomerSalesToolDefinition{
 			{Name: "catalog_data", Description: "Catalog data", Parameters: map[string]any{"type": "object"}},
 		},
 	}
@@ -377,7 +377,7 @@ func TestToolLoop_ToolCallRecordSavedAndUpdated(t *testing.T) {
         }`
 
 	dispatcher := &stubCapabilityDispatcher{
-		definitions: []ports.AICapabilityDefinition{
+		definitions: []ports.CustomerSalesToolDefinition{
 			{Name: "catalog_data", Description: "Catalog", Parameters: map[string]any{"type": "object"}},
 		},
 	}
@@ -436,11 +436,11 @@ func TestToolLoop_ToolFailureReturnsError(t *testing.T) {
         }`
 
 	dispatcher := &stubCapabilityDispatcher{
-		definitions: []ports.AICapabilityDefinition{
+		definitions: []ports.CustomerSalesToolDefinition{
 			{Name: "catalog_data", Description: "Catalog", Parameters: map[string]any{"type": "object"}},
 		},
-		executeFn: func(_ context.Context, _ ports.AICapabilityExecutionContext, _ string, _ []byte) (ports.AICapabilityResult, error) {
-			return ports.AICapabilityResult{}, errors.New("capability DB unreachable")
+		executeFn: func(_ context.Context, _ ports.CustomerSalesToolExecutionContext, _ string, _ []byte) (ports.CustomerSalesToolResult, error) {
+			return ports.CustomerSalesToolResult{}, errors.New("capability DB unreachable")
 		},
 	}
 
@@ -481,7 +481,7 @@ func TestToolLoop_TenantIsolation_GeminiBusinessIDIgnored(t *testing.T) {
         }`
 
 	dispatcher := &stubCapabilityDispatcher{
-		definitions: []ports.AICapabilityDefinition{
+		definitions: []ports.CustomerSalesToolDefinition{
 			{Name: "catalog_data", Description: "Catalog", Parameters: map[string]any{"type": "object"}},
 		},
 	}
@@ -551,7 +551,7 @@ func TestToolLoop_ContextDeadlineStopsLoop(t *testing.T) {
 	mock.secondResponse = mock.firstResponse // keep looping
 
 	dispatcher := &stubCapabilityDispatcher{
-		definitions: []ports.AICapabilityDefinition{
+		definitions: []ports.CustomerSalesToolDefinition{
 			{Name: "catalog_data", Description: "Catalog", Parameters: map[string]any{"type": "object"}},
 		},
 	}
@@ -583,7 +583,7 @@ func TestToolLoop_ToolsExtractedFromCapabilitiesDefinitions(t *testing.T) {
 	mock.firstResponse = `{"interactionId":"i-1","candidates":[{"content":{"role":"model","parts":[{"text":"{\"status\":\"resolved\",\"action\":\"answer\",\"response_text\":\"ok\"}"}]}}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":5}}`
 
 	dispatcher := &stubCapabilityDispatcher{
-		definitions: []ports.AICapabilityDefinition{
+		definitions: []ports.CustomerSalesToolDefinition{
 			{Name: "catalog_data", Description: "Retrieve catalog data", Parameters: map[string]any{"type": "object", "properties": map[string]any{}}},
 			{Name: "catalog_authoring", Description: "Author catalog items", Parameters: map[string]any{"type": "object"}},
 		},
@@ -653,7 +653,7 @@ func TestToolLoop_FunctionResponseRoleIsUser(t *testing.T) {
 	mock.secondResponse = `{"interactionId":"i-2","candidates":[{"content":{"role":"model","parts":[{"text":"{\"status\":\"resolved\",\"action\":\"answer\",\"response_text\":\"ok\"}"}]}}],"usageMetadata":{"promptTokenCount":20,"candidatesTokenCount":10}}`
 
 	dispatcher := &stubCapabilityDispatcher{
-		definitions: []ports.AICapabilityDefinition{
+		definitions: []ports.CustomerSalesToolDefinition{
 			{Name: "catalog_data", Description: "Catalog", Parameters: map[string]any{"type": "object"}},
 		},
 	}
@@ -721,7 +721,7 @@ func TestToolLoop_ThoughtSignaturePreservedInFollowUp(t *testing.T) {
 	mock.secondResponse = `{"interactionId":"i-2","candidates":[{"content":{"role":"model","parts":[{"text":"{\"status\":\"resolved\",\"action\":\"answer\",\"response_text\":\"ok\"}"}]}}],"usageMetadata":{"promptTokenCount":20,"candidatesTokenCount":10}}`
 
 	dispatcher := &stubCapabilityDispatcher{
-		definitions: []ports.AICapabilityDefinition{
+		definitions: []ports.CustomerSalesToolDefinition{
 			{Name: "catalog_data", Description: "Catalog", Parameters: map[string]any{"type": "object"}},
 		},
 	}
@@ -779,7 +779,7 @@ func TestToolLoop_AIRunIDSavedInToolCallRecord(t *testing.T) {
 	mock.secondResponse = `{"interactionId":"i-2","candidates":[{"content":{"role":"model","parts":[{"text":"{\"status\":\"resolved\",\"action\":\"answer\",\"response_text\":\"ok\"}"}]}}],"usageMetadata":{"promptTokenCount":20,"candidatesTokenCount":10}}`
 
 	dispatcher := &stubCapabilityDispatcher{
-		definitions: []ports.AICapabilityDefinition{
+		definitions: []ports.CustomerSalesToolDefinition{
 			{Name: "catalog_data", Description: "Catalog", Parameters: map[string]any{"type": "object"}},
 		},
 	}
