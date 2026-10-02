@@ -67,20 +67,6 @@ func BuildAPI(ctx context.Context, cfg config.ProcessConfig) (*APIRuntime, error
 		database.Close()
 		return nil, err
 	}
-	catalogRepository := postgres.NewCatalogRepository(database)
-	capabilityRegistry := services.NewCustomerSalesToolRegistry()
-	catalogCapability := services.NewCustomerSalesCatalogDataTool(
-		services.ListCatalogsQueryService{Repository: catalogRepository},
-		services.ListCatalogItemsQueryService{Repository: catalogRepository},
-		services.GetCatalogItemQueryService{Repository: catalogRepository},
-		services.ListOffersQueryService{Repository: catalogRepository},
-		services.ListVariantsQueryService{Repository: catalogRepository},
-		services.GetAttributeSchemaQueryService{Repository: catalogRepository},
-	)
-	if err := capabilityRegistry.Register(catalogCapability); err != nil {
-		database.Close()
-		return nil, err
-	}
 	runtime, err := newAPIWithExternalAndAuthentication(database, cfg.HTTPAddr, BuildExternalAdapters(cfg), authentication)
 	if err != nil {
 		database.Close()
@@ -161,6 +147,22 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		external.GeminiHTTPClient != nil && external.LLMConfigError == nil,
 		external.SocialAPI != nil,
 	)
+
+	// Customer-sales capabilities are owned by the application layer.
+	// The Gemini adapter receives only the narrow CustomerSalesToolPort.
+	catalogRepository := postgres.NewCatalogRepository(database)
+	capabilityRegistry := services.NewCustomerSalesToolRegistry()
+	catalogCapability := services.NewCustomerSalesCatalogDataTool(
+		services.ListCatalogsQueryService{Repository: catalogRepository},
+		services.ListCatalogItemsQueryService{Repository: catalogRepository},
+		services.GetCatalogItemQueryService{Repository: catalogRepository},
+		services.ListOffersQueryService{Repository: catalogRepository},
+		services.ListVariantsQueryService{Repository: catalogRepository},
+		services.GetAttributeSchemaQueryService{Repository: catalogRepository},
+	)
+	if err := capabilityRegistry.Register(catalogCapability); err != nil {
+		return nil, fmt.Errorf("register customer sales catalog capability: %w", err)
+	}
 	// Per §1-2: create the AIConfigurationCache + AIProviderConfigRepository
 	// unconditionally — the Platform Admin can manage credentials and models
 	// even when AutoReply is disabled. The cache seeds from env on first
