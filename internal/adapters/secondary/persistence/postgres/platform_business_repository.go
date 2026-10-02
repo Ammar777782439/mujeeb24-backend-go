@@ -255,5 +255,6 @@ func (r *PlatformBusinessRepository) transition(ctx context.Context, op, busines
 		}
 	}
 	return r.GetByID(ctx, businessID)
+}
 
 var _ ports.PlatformBusinessLifecyclePort = (*PlatformBusinessRepository)(nil)
