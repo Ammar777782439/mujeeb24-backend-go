@@ -35,7 +35,7 @@ func NewSubscriptionRepository(adapter *Adapter) *SubscriptionRepository {
 	return &SubscriptionRepository{adapter: adapter}
 }
 
-const subscriptionSelectColumns = `id::text, business_id::text, plan_id::text, plan_code, plan_version, period_start, period_end, status, ai_reply_limit, ai_catalog_limit, channel_limit, internal_ai_cost_budget_yer, cost_budget_override_yer, cost_budget_override_reason, cost_budget_override_by::text, cost_budget_override_at, cancelled_at, cancelled_reason, cancelled_by::text, created_at, updated_at`
+const subscriptionSelectColumns = `s.id::text, s.business_id::text, s.plan_id::text, p.code, p.version, s.period_start, s.period_end, s.status, s.ai_reply_limit, s.ai_catalog_limit, s.channel_limit, s.internal_ai_cost_budget_yer, s.cost_budget_override_yer, s.cost_budget_override_reason, s.cost_budget_override_by::text, s.cost_budget_override_at, s.cancelled_at, s.cancelled_reason, s.cancelled_by::text, s.created_at, s.updated_at`
 
 func scanSubscription(scanner interface {
 	Scan(dest ...any) error
