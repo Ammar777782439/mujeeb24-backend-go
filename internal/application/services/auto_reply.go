@@ -174,7 +174,7 @@ func NewAutoReplyService(customerSalesDecision ports.CustomerSalesDecisionPort, 
 //  2. Start AI Run (RECEIVED) per contract ⑨ §1. Idempotent on
 //     (business_id, source_message_reference).
 //  3. Build context (CONTEXT_BUILT) per contract ③ §2.
-//  4. Call Gemini via Runtime.Decide (RUNNING) per contract ④ §8.
+//  4. Call Gemini via CustomerSalesDecision.Decide (RUNNING) per contract ④ §8.
 //  5. Run ValidationPipeline (VALIDATING) per contract ⑥ §2.
 //  6. If validation fails → Mark FAILED per contract ⑨ §18; no execution.
 //  7. If policy denied → Mark FAILED; no execution.
@@ -194,7 +194,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		return commands.AutoReplyResult{}, err
 	}
 	if s.CustomerSalesDecision == nil || s.DecisionRepository == nil || s.ReferenceRepository == nil || s.OutboundRepository == nil || s.Outbox == nil || s.Transactions == nil {
-		log.Printf("[AutoReply] NOT_WIRED business=%s runtime=%v decisions=%v", businessID, s.CustomerSalesDecision != nil, s.DecisionRepository != nil)
+		log.Printf("[AutoReply] NOT_WIRED business=%s customer_sales_decision=%v decisions=%v", businessID, s.CustomerSalesDecision != nil, s.DecisionRepository != nil)
 		return commands.AutoReplyResult{}, appErrors.NotImplemented()
 	}
 
