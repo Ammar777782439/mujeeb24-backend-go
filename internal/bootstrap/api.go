@@ -103,6 +103,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	dependencies.IngestSocialAPIWebhook = services.WebhookReceiverDisabledService{Receiver: "SocialAPI"}
 	if authentication != nil {
 		dependencies.Scope = handlers.PostgresScopeProvider{Memberships: authentication.Repository}
+		dependencies.PlatformAccess = authentication.PlatformChecker
 		dependencies.AuthenticatePrincipal = authentication.Service
 		dependencies.RotateRefreshSession = services.RefreshSessionRotationService{Authentication: authentication.Service}
 		dependencies.RevokeRefreshSession = services.RefreshSessionRevocationService{Authentication: authentication.Service}
