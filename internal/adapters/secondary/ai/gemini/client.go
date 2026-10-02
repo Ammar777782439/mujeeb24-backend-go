@@ -160,7 +160,7 @@ func (c *Client) Capabilities() ports.AICapabilityDispatcher { return c.capabili
 //
 // Per contract ④ §3, the input includes: business_context,
 // conversation_context, conversation_state, catalog_evidence, user_message.
-func buildUserPrompt(input ports.AIDecisionInput) string {
+func buildUserPrompt(input ports.CustomerSalesDecisionRequest) string {
 	prompt := fmt.Sprintf("Business ID: %s\nConversation ID: %s\nChannel: %s\nPolicy version: %s\nSource message reference: %s\nCustomer message:\n%s",
 		input.BusinessID, input.ConversationID, input.Channel, input.PolicyVersion,
 		input.SourceMessageReference, strings.TrimSpace(input.Text))
