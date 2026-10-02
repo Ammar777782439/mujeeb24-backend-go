@@ -79,9 +79,9 @@ func (r *ReadOnlyCapabilityRegistry) Execute(ctx context.Context, execCtx Mercha
 			execCtx.BusinessID, execCtx.ConversationID, len(schemaIDs), schemaIDs)
 	}
 
-	log.Printf("[MerchantCatalogAI][DISCOVERY] OK business=%s session=%s tool=%s operation=%s latency_ms=%d catalog_refs=%d variant_refs=%d offer_refs=%d",
+	log.Printf("[MerchantCatalogAI][DISCOVERY] OK business=%s session=%s tool=%s operation=%s latency_ms=%d evidence_refs=%d",
 		execCtx.BusinessID, execCtx.ConversationID, name, result.Operation, time.Since(started).Milliseconds(),
-		len(result.CatalogEvidence), len(result.VariantEvidence), len(result.OfferEvidence))
+		len(result.EvidenceReferences))
 	return result, nil
 }
 
