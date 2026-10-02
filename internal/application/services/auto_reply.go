@@ -84,7 +84,7 @@ type AutoReplyService struct {
 	CustomerSalesDecision ports.CustomerSalesDecisionPort
 
 	// ContextBuilder per contract ③ §2 builds the AIContext.
-	ContextBuilder ports.AIContextBuilder
+	CustomerSalesContextBuilder ports.CustomerSalesContextBuilder
 
 	// Validation is the contract ⑥ §2 pipeline. If nil, validation is
 	// skipped (defaulting to "allowed"); production deployments MUST wire it.
@@ -237,8 +237,8 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		}
 	}
 	var builtContext *ports.AIContext
-	if s.ContextBuilder != nil {
-		bc, contextErr := s.ContextBuilder.Build(ctx, ports.ContextBuildInput{
+	if s.CustomerSalesContextBuilder != nil {
+		bc, contextErr := s.ContextBuilder.Build(ctx, ports.CustomerSalesContextInput{
 			BusinessID:             businessID,
 			ConversationID:         conversationID,
 			SourceMessageReference: sourceMessageRef,
