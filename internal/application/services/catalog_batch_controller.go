@@ -104,7 +104,7 @@ type BatchEvaluationInput struct {
 	BusinessID          string
 	ConversationID      string
 	CustomerMessage     string
-	ConversationContext ports.AIContext
+	ConversationContext ports.CustomerSalesContext
 	EntityContract      CatalogEntityContractPayload
 	Batch               CatalogAIBatchPayload
 }
@@ -116,7 +116,7 @@ type FinalEvaluationInput struct {
 	BusinessID          string
 	ConversationID      string
 	CustomerMessage     string
-	ConversationContext ports.AIContext
+	ConversationContext ports.CustomerSalesContext
 	EntityContract      CatalogEntityContractPayload
 	CandidateResults    []ports.CatalogBatchCandidate
 }
@@ -661,7 +661,7 @@ type CatalogEvaluationInput struct {
 	ConversationID      string
 	CatalogScope        string // the catalog scope to evaluate (e.g., a specific catalog_id)
 	CustomerMessage     string
-	ConversationContext ports.AIContext
+	ConversationContext ports.CustomerSalesContext
 	EntityContract      CatalogEntityContractPayload
 }
 
