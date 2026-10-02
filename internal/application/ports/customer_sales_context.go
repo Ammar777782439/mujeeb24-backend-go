@@ -25,7 +25,7 @@ type CustomerSalesContextInput struct {
 	Channel                string
 	PolicyVersion          string
 	ConversationState      *ConversationStateRecord
-	RecentMessages         []AIRecentMessageEvidence
+	RecentMessages         []CustomerSalesRecentMessageEvidence
 }
 
 type CustomerSalesContextBuilder interface {
@@ -52,13 +52,13 @@ type CustomerSalesContext struct {
 	Business               CustomerSalesContextBusiness
 	Conversation           CustomerSalesContextConversation
 	Customer               CustomerSalesContextCustomer
-	CatalogEvidence        []AICatalogEvidence
-	OfferEvidence          []AIOfferEvidence
-	VariantEvidence        []AIVariantEvidence
-	KnowledgeEvidence      []AIKnowledgeEvidence
-	BusinessPolicyEvidence []AIBusinessPolicyEvidence
-	RecentMessages         []AIRecentMessageEvidence
-	PolicyEvidence         AIPolicyEvidence
+	CatalogEvidence        []CustomerSalesCatalogEvidence
+	OfferEvidence          []CustomerSalesOfferEvidence
+	VariantEvidence        []CustomerSalesVariantEvidence
+	KnowledgeEvidence      []CustomerSalesKnowledgeEvidence
+	BusinessPolicyEvidence []CustomerSalesBusinessPolicyEvidence
+	RecentMessages         []CustomerSalesRecentMessageEvidence
+	PolicyEvidence         CustomerSalesPolicyEvidence
 	KnowledgeState         string
 	ConversationState      *ConversationStateRecord
 	GeneratedAt            time.Time
@@ -68,7 +68,7 @@ type CustomerSalesContext struct {
 	// though only MaxItems have full evidence. When a customer asks
 	// about a product that's in the summary but not in the detailed
 	// evidence, Gemini returns needs_more_data → triggers batch evaluation.
-	CatalogSummary []CatalogSummaryEntry
+	CatalogSummary []CustomerSalesCatalogSummaryEntry
 	// ConversationSummary is the LLM-generated running summary of older
 	// conversation turns (everything older than the sliding window of
 	// recent messages). Per ADR-039, this is sent to Gemini alongside
@@ -83,10 +83,10 @@ type CustomerSalesContext struct {
 	CatalogNames []string
 }
 
-// CatalogSummaryEntry is a lightweight catalog item reference — just
+// CustomerSalesCatalogSummaryEntry is a lightweight catalog item reference — just
 // enough for Gemini to know the product exists without loading full
 // evidence for every item (which would exceed token limits).
-type CatalogSummaryEntry struct {
+type CustomerSalesCatalogSummaryEntry struct {
 	ID                 string `json:"id"`
 	Name               string `json:"name"`
 	CatalogName        string `json:"catalog_name,omitempty"`
@@ -95,7 +95,7 @@ type CatalogSummaryEntry struct {
 	AvailabilityStatus string `json:"availability_status,omitempty"`
 }
 
-type AIStateProposal struct {
+type CustomerSalesStateProposal struct {
 	Focus         *ConversationFocus      `json:"focus,omitempty"`
 	Comparison    *ConversationComparison `json:"comparison,omitempty"`
 	Kind          string                  `json:"kind"`
@@ -140,7 +140,7 @@ type CustomerSalesContextCustomer struct {
 	ContactPoints    []byte
 }
 
-type AICatalogEvidence struct {
+type CustomerSalesCatalogEvidence struct {
 	Reference        string
 	CatalogReference string
 	ItemType         string
@@ -163,7 +163,7 @@ type AICatalogEvidence struct {
 	RequiresConfirmation bool
 }
 
-type AIOfferEvidence struct {
+type CustomerSalesOfferEvidence struct {
 	Reference            string
 	CatalogItemReference string
 	VariantReference     string
@@ -178,7 +178,7 @@ type AIOfferEvidence struct {
 	SchemaVersion        int
 }
 
-type AIKnowledgeEvidence struct {
+type CustomerSalesKnowledgeEvidence struct {
 	Reference       string
 	KnowledgeKey    string
 	Title           string
@@ -194,7 +194,7 @@ type AIKnowledgeEvidence struct {
 	SchemaVersion   int
 }
 
-type AIBusinessPolicyEvidence struct {
+type CustomerSalesBusinessPolicyEvidence struct {
 	Reference     string
 	PolicyKey     string
 	Category      string
@@ -210,7 +210,7 @@ type AIBusinessPolicyEvidence struct {
 	SchemaVersion int
 }
 
-type AIVariantEvidence struct {
+type CustomerSalesVariantEvidence struct {
 	Reference            string
 	CatalogItemReference string
 	Name                 string
@@ -221,7 +221,7 @@ type AIVariantEvidence struct {
 	SchemaVersion        int
 }
 
-type AIRecentMessageEvidence struct {
+type CustomerSalesRecentMessageEvidence struct {
 	Reference     string
 	Direction     string
 	Origin        string
@@ -231,7 +231,7 @@ type AIRecentMessageEvidence struct {
 	SchemaVersion int
 }
 
-type AIPolicyEvidence struct {
+type CustomerSalesPolicyEvidence struct {
 	Reference     string
 	Version       string
 	State         string
@@ -272,7 +272,7 @@ type AIDecisionProposal struct {
 	KnowledgeVersion   string
 	ModelReference     string
 	SchemaVersion      int
-	StateProposal      *AIStateProposal
+	StateProposal      *CustomerSalesStateProposal
 	// Deprecated Mujeeb-side tracking fields (per contract ④ §5 + ⑥ §20):
 	// Removed in favor of ai_runs table (operational) + ValidationPipeline
 	// (deterministic). Kept struct minimal for persistence migration.
