@@ -1,4 +1,4 @@
-// Package services — Fake ContractRuntime for tests.
+// Package services — Test fake for the customer-sales decision port.
 //
 // This fake implements ports.CustomerSalesDecisionPort so application/postgres tests can
 // exercise the contract-aligned AutoReplyService flow without an HTTP Gemini
