@@ -16,19 +16,19 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/queries"
 )
 
-// CapabilityRegistry is a thread-safe implementation of ports.AICapabilityRegistry.
-type CapabilityRegistry struct {
+// CustomerSalesToolRegistry is a thread-safe implementation of ports.AICustomerSalesToolRegistry.
+type CustomerSalesToolRegistry struct {
 	mu           sync.RWMutex
-	capabilities map[string]ports.AICapability
+	capabilities map[string]ports.CustomerSalesTool
 }
 
-func NewCapabilityRegistry() *CapabilityRegistry {
-	return &CapabilityRegistry{
-		capabilities: make(map[string]ports.AICapability),
+func NewCustomerSalesToolRegistry() *CustomerSalesToolRegistry {
+	return &CustomerSalesToolRegistry{
+		capabilities: make(map[string]ports.CustomerSalesTool),
 	}
 }
 
-func (r *CapabilityRegistry) Register(capability ports.AICapability) error {
+func (r *CustomerSalesToolRegistry) Register(capability ports.CustomerSalesTool) error {
 	if capability == nil {
 		return errors.New("capability cannot be nil")
 	}
@@ -47,42 +47,42 @@ func (r *CapabilityRegistry) Register(capability ports.AICapability) error {
 	return nil
 }
 
-func (r *CapabilityRegistry) Get(name string) (ports.AICapability, bool) {
+func (r *CustomerSalesToolRegistry) Get(name string) (ports.CustomerSalesTool, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	cap, ok := r.capabilities[strings.TrimSpace(name)]
 	return cap, ok
 }
 
-func (r *CapabilityRegistry) Definitions() []ports.AICapabilityDefinition {
+func (r *CustomerSalesToolRegistry) Definitions() []ports.CustomerSalesToolDefinition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	defs := make([]ports.AICapabilityDefinition, 0, len(r.capabilities))
+	defs := make([]ports.CustomerSalesToolDefinition, 0, len(r.capabilities))
 	for _, cap := range r.capabilities {
 		defs = append(defs, cap.Definition())
 	}
 	return defs
 }
 
-func (r *CapabilityRegistry) Execute(ctx context.Context, execCtx ports.AICapabilityExecutionContext, name string, rawParams []byte) (ports.AICapabilityResult, error) {
+func (r *CustomerSalesToolRegistry) Execute(ctx context.Context, execCtx ports.CustomerSalesToolExecutionContext, name string, rawParams []byte) (ports.CustomerSalesToolResult, error) {
 	cap, ok := r.Get(name)
 	if !ok {
-		return ports.AICapabilityResult{}, fmt.Errorf("unknown capability %q", name)
+		return ports.CustomerSalesToolResult{}, fmt.Errorf("unknown capability %q", name)
 	}
 	return cap.Execute(ctx, execCtx, rawParams)
 }
 
-var _ ports.AICapabilityRegistry = (*CapabilityRegistry)(nil)
+var _ ports.AICustomerSalesToolRegistry = (*CustomerSalesToolRegistry)(nil)
 
-// IncorporateCapabilityEvidence delegates to ports.IncorporateCapabilityEvidence.
-func IncorporateCapabilityEvidence(target *ports.CustomerSalesContext, result ports.AICapabilityResult) {
-	ports.IncorporateCapabilityEvidence(target, result)
+// IncorporateCustomerSalesToolEvidence delegates to ports.IncorporateCustomerSalesToolEvidence.
+func IncorporateCustomerSalesToolEvidence(target *ports.CustomerSalesContext, result ports.CustomerSalesToolResult) {
+	ports.IncorporateCustomerSalesToolEvidence(target, result)
 }
 
-// CatalogDataCapability is a pure DATA ACCESS capability exposing explicitly
+// CustomerSalesCatalogDataTool is a pure DATA ACCESS capability exposing explicitly
 // requested catalog data via application query services. It contains NO search,
 // ranking, or reasoning logic.
-type CatalogDataCapability struct {
+type CustomerSalesCatalogDataTool struct {
 	ListCatalogs       queries.ListCatalogsHandler
 	ListCatalogItems   queries.ListCatalogItemsHandler
 	GetCatalogItem     queries.GetCatalogItemHandler
@@ -92,15 +92,15 @@ type CatalogDataCapability struct {
 	Now                func() time.Time
 }
 
-func NewCatalogDataCapability(
+func NewCustomerSalesCatalogDataTool(
 	listCatalogs queries.ListCatalogsHandler,
 	listCatalogItems queries.ListCatalogItemsHandler,
 	getCatalogItem queries.GetCatalogItemHandler,
 	listOffers queries.ListOffersHandler,
 	listVariants queries.ListVariantsHandler,
 	getAttributeSchema queries.GetAttributeSchemaHandler,
-) *CatalogDataCapability {
-	return &CatalogDataCapability{
+) *CustomerSalesCatalogDataTool {
+	return &CustomerSalesCatalogDataTool{
 		ListCatalogs:       listCatalogs,
 		ListCatalogItems:   listCatalogItems,
 		GetCatalogItem:     getCatalogItem,
@@ -110,15 +110,15 @@ func NewCatalogDataCapability(
 	}
 }
 
-func (c *CatalogDataCapability) now() time.Time {
+func (c *CustomerSalesCatalogDataTool) now() time.Time {
 	if c.Now != nil {
 		return c.Now().UTC()
 	}
 	return time.Now().UTC()
 }
 
-func (c *CatalogDataCapability) Definition() ports.AICapabilityDefinition {
-	return ports.AICapabilityDefinition{
+func (c *CustomerSalesCatalogDataTool) Definition() ports.CustomerSalesToolDefinition {
+	return ports.CustomerSalesToolDefinition{
 		Name: "catalog_data",
 		Description: "Retrieve factual merchant catalog data (catalogs, items, offers, variants, schemas) for this business. " +
 			"This is a deterministic data access tool, not a search engine or recommendation system.",
@@ -225,16 +225,16 @@ type AttributeSchemaProjection struct {
 	Definitions []AttributeDefinitionProjection `json:"definitions"`
 }
 
-func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICapabilityExecutionContext, rawParams []byte) (ports.AICapabilityResult, error) {
+func (c *CustomerSalesCatalogDataTool) Execute(ctx context.Context, execCtx ports.CustomerSalesToolExecutionContext, rawParams []byte) (ports.CustomerSalesToolResult, error) {
 	businessID := strings.TrimSpace(execCtx.BusinessID)
 	if businessID == "" {
-		return ports.AICapabilityResult{}, errors.New("unauthorized: business ID is required in capability execution context")
+		return ports.CustomerSalesToolResult{}, errors.New("unauthorized: business ID is required in capability execution context")
 	}
 
 	var params catalogDataParams
 	if len(rawParams) > 0 {
 		if err := json.Unmarshal(rawParams, &params); err != nil {
-			return ports.AICapabilityResult{}, fmt.Errorf("invalid parameters for catalog_data: %w", err)
+			return ports.CustomerSalesToolResult{}, fmt.Errorf("invalid parameters for catalog_data: %w", err)
 		}
 	}
 
@@ -245,7 +245,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 	switch strings.TrimSpace(params.Operation) {
 	case "list_catalogs":
 		if c.ListCatalogs == nil {
-			return ports.AICapabilityResult{}, errors.New("list_catalogs handler is not configured")
+			return ports.CustomerSalesToolResult{}, errors.New("list_catalogs handler is not configured")
 		}
 		res, err := c.ListCatalogs.Handle(ctx, queries.ListCatalogsQuery{
 			Meta:   queryMeta,
@@ -254,7 +254,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 			Cursor: params.Cursor,
 		})
 		if err != nil {
-			return ports.AICapabilityResult{}, err
+			return ports.CustomerSalesToolResult{}, err
 		}
 		projections := make([]CatalogProjection, 0, len(res.Items))
 		for _, item := range res.Items {
@@ -266,7 +266,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 			})
 		}
 		streamKey := fmt.Sprintf("list_catalogs:status=%s", params.Status)
-		return ports.AICapabilityResult{
+		return ports.CustomerSalesToolResult{
 			Data: map[string]any{
 				"catalogs":    projections,
 				"count":       len(projections),
@@ -281,11 +281,11 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 
 	case "list_catalog_items":
 		if c.ListCatalogItems == nil {
-			return ports.AICapabilityResult{}, errors.New("list_catalog_items handler is not configured")
+			return ports.CustomerSalesToolResult{}, errors.New("list_catalog_items handler is not configured")
 		}
 		catalogID := strings.TrimSpace(params.CatalogID)
 		if catalogID == "" {
-			return ports.AICapabilityResult{}, errors.New("catalog_id is required for list_catalog_items")
+			return ports.CustomerSalesToolResult{}, errors.New("catalog_id is required for list_catalog_items")
 		}
 		res, err := c.ListCatalogItems.Handle(ctx, queries.ListCatalogItemsQuery{
 			Meta:      queryMeta,
@@ -295,7 +295,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 			Cursor:    params.Cursor,
 		})
 		if err != nil {
-			return ports.AICapabilityResult{}, err
+			return ports.CustomerSalesToolResult{}, err
 		}
 		projections := make([]CatalogItemProjection, 0, len(res.Items))
 		evidence := make([]ports.CustomerSalesCatalogEvidence, 0, len(res.Items))
@@ -332,7 +332,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 			})
 		}
 		streamKey := fmt.Sprintf("list_catalog_items:catalog=%s:status=%s", catalogID, params.Status)
-		return ports.AICapabilityResult{
+		return ports.CustomerSalesToolResult{
 			Data: map[string]any{
 				"items":       projections,
 				"count":       len(projections),
@@ -348,12 +348,12 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 
 	case "get_catalog_item":
 		if c.GetCatalogItem == nil {
-			return ports.AICapabilityResult{}, errors.New("get_catalog_item handler is not configured")
+			return ports.CustomerSalesToolResult{}, errors.New("get_catalog_item handler is not configured")
 		}
 		catalogID := strings.TrimSpace(params.CatalogID)
 		itemID := strings.TrimSpace(params.ItemID)
 		if catalogID == "" || itemID == "" {
-			return ports.AICapabilityResult{}, errors.New("catalog_id and item_id are required for get_catalog_item")
+			return ports.CustomerSalesToolResult{}, errors.New("catalog_id and item_id are required for get_catalog_item")
 		}
 		item, err := c.GetCatalogItem.Handle(ctx, queries.GetCatalogItemQuery{
 			Meta:      queryMeta,
@@ -361,7 +361,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 			ItemID:    commands.CatalogItemID(itemID),
 		})
 		if err != nil {
-			return ports.AICapabilityResult{}, err
+			return ports.CustomerSalesToolResult{}, err
 		}
 		var attrs map[string]any
 		if len(item.Attributes) > 0 {
@@ -396,7 +396,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 			},
 		}
 		streamKey := fmt.Sprintf("get_catalog_item:catalog=%s:item=%s", catalogID, itemID)
-		return ports.AICapabilityResult{
+		return ports.CustomerSalesToolResult{
 			Data:            projection,
 			CatalogEvidence: evidence,
 			HasMore:         false,
@@ -406,11 +406,11 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 
 	case "list_offers":
 		if c.ListOffers == nil {
-			return ports.AICapabilityResult{}, errors.New("list_offers handler is not configured")
+			return ports.CustomerSalesToolResult{}, errors.New("list_offers handler is not configured")
 		}
 		itemID := strings.TrimSpace(params.ItemID)
 		if itemID == "" {
-			return ports.AICapabilityResult{}, errors.New("item_id is required for list_offers")
+			return ports.CustomerSalesToolResult{}, errors.New("item_id is required for list_offers")
 		}
 		res, err := c.ListOffers.Handle(ctx, queries.ListOffersQuery{
 			Meta:   queryMeta,
@@ -420,7 +420,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 			Cursor: params.Cursor,
 		})
 		if err != nil {
-			return ports.AICapabilityResult{}, err
+			return ports.CustomerSalesToolResult{}, err
 		}
 		projections := make([]OfferProjection, 0, len(res.Items))
 		evidence := make([]ports.CustomerSalesOfferEvidence, 0, len(res.Items))
@@ -461,7 +461,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 			})
 		}
 		streamKey := fmt.Sprintf("list_offers:item=%s:status=%s", itemID, params.Status)
-		return ports.AICapabilityResult{
+		return ports.CustomerSalesToolResult{
 			Data: map[string]any{
 				"offers":      projections,
 				"count":       len(projections),
@@ -477,11 +477,11 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 
 	case "list_variants":
 		if c.ListVariants == nil {
-			return ports.AICapabilityResult{}, errors.New("list_variants handler is not configured")
+			return ports.CustomerSalesToolResult{}, errors.New("list_variants handler is not configured")
 		}
 		itemID := strings.TrimSpace(params.ItemID)
 		if itemID == "" {
-			return ports.AICapabilityResult{}, errors.New("item_id is required for list_variants")
+			return ports.CustomerSalesToolResult{}, errors.New("item_id is required for list_variants")
 		}
 		res, err := c.ListVariants.Handle(ctx, queries.ListVariantsQuery{
 			Meta:   queryMeta,
@@ -491,7 +491,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 			Cursor: params.Cursor,
 		})
 		if err != nil {
-			return ports.AICapabilityResult{}, err
+			return ports.CustomerSalesToolResult{}, err
 		}
 		projections := make([]VariantProjection, 0, len(res.Items))
 		evidence := make([]ports.CustomerSalesVariantEvidence, 0, len(res.Items))
@@ -519,7 +519,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 			})
 		}
 		streamKey := fmt.Sprintf("list_variants:item=%s:status=%s", itemID, params.Status)
-		return ports.AICapabilityResult{
+		return ports.CustomerSalesToolResult{
 			Data: map[string]any{
 				"variants":    projections,
 				"count":       len(projections),
@@ -535,18 +535,18 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 
 	case "get_attribute_schema":
 		if c.GetAttributeSchema == nil {
-			return ports.AICapabilityResult{}, errors.New("get_attribute_schema handler is not configured")
+			return ports.CustomerSalesToolResult{}, errors.New("get_attribute_schema handler is not configured")
 		}
 		schemaID := strings.TrimSpace(params.SchemaID)
 		if schemaID == "" {
-			return ports.AICapabilityResult{}, errors.New("schema_id is required for get_attribute_schema")
+			return ports.CustomerSalesToolResult{}, errors.New("schema_id is required for get_attribute_schema")
 		}
 		schema, err := c.GetAttributeSchema.Handle(ctx, queries.GetAttributeSchemaQuery{
 			Meta:     queryMeta,
 			SchemaID: commands.AttributeSchemaID(schemaID),
 		})
 		if err != nil {
-			return ports.AICapabilityResult{}, err
+			return ports.CustomerSalesToolResult{}, err
 		}
 		defs := make([]AttributeDefinitionProjection, 0, len(schema.Definitions))
 		for _, d := range schema.Definitions {
@@ -561,7 +561,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 			})
 		}
 		streamKey := fmt.Sprintf("get_attribute_schema:schema=%s", schemaID)
-		return ports.AICapabilityResult{
+		return ports.CustomerSalesToolResult{
 			Data: AttributeSchemaProjection{
 				ID:          string(schema.ID),
 				Name:        schema.Name,
@@ -574,15 +574,15 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 		}, nil
 
 	default:
-		return ports.AICapabilityResult{}, fmt.Errorf("unsupported catalog_data operation: %q", params.Operation)
+		return ports.CustomerSalesToolResult{}, fmt.Errorf("unsupported catalog_data operation: %q", params.Operation)
 	}
 }
 
-var _ ports.AICapability = (*CatalogDataCapability)(nil)
+var _ ports.CustomerSalesTool = (*CustomerSalesCatalogDataTool)(nil)
 
-// CatalogAuthoringCapability is an AI capability exposing governed catalog mutation operations.
+// CustomerSalesCatalogAuthoringTool is an AI capability exposing governed catalog mutation operations.
 // All operations strictly validate against domain rules and enforce server-side tenant isolation.
-type CatalogAuthoringCapability struct {
+type CustomerSalesCatalogAuthoringTool struct {
 	AuthorCatalogItem            commands.AuthorCatalogItemHandler
 	CreateCatalog                commands.CreateCatalogHandler
 	CreateCatalogItem            commands.CreateCatalogItemHandler
@@ -592,15 +592,15 @@ type CatalogAuthoringCapability struct {
 	Now                          func() time.Time
 }
 
-func NewCatalogAuthoringCapability(
+func NewCustomerSalesCatalogAuthoringTool(
 	authorCatalogItem commands.AuthorCatalogItemHandler,
 	createCatalog commands.CreateCatalogHandler,
 	createCatalogItem commands.CreateCatalogItemHandler,
 	createOffer commands.CreateOfferHandler,
 	createVariant commands.CreateVariantHandler,
 	createAttributeSchema commands.CreateAttributeSchemaVersionHandler,
-) *CatalogAuthoringCapability {
-	return &CatalogAuthoringCapability{
+) *CustomerSalesCatalogAuthoringTool {
+	return &CustomerSalesCatalogAuthoringTool{
 		AuthorCatalogItem:            authorCatalogItem,
 		CreateCatalog:                createCatalog,
 		CreateCatalogItem:            createCatalogItem,
@@ -610,15 +610,15 @@ func NewCatalogAuthoringCapability(
 	}
 }
 
-func (c *CatalogAuthoringCapability) now() time.Time {
+func (c *CustomerSalesCatalogAuthoringTool) now() time.Time {
 	if c.Now != nil {
 		return c.Now().UTC()
 	}
 	return time.Now().UTC()
 }
 
-func (c *CatalogAuthoringCapability) Definition() ports.AICapabilityDefinition {
-	return ports.AICapabilityDefinition{
+func (c *CustomerSalesCatalogAuthoringTool) Definition() ports.CustomerSalesToolDefinition {
+	return ports.CustomerSalesToolDefinition{
 		Name: "catalog_authoring",
 		Description: "Execute governed catalog authoring operations (authoring full catalog items with variants and offers, creating catalogs, items, offers, variants, or schemas) for this business. " +
 			"This tool mutates merchant catalog data with full server-side domain validation and tenant isolation.",
@@ -863,16 +863,16 @@ func parseAmountToMinor(amount any, amountMinor *int64) (*int64, error) {
 	}
 }
 
-func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.AICapabilityExecutionContext, rawParams []byte) (ports.AICapabilityResult, error) {
+func (c *CustomerSalesCatalogAuthoringTool) Execute(ctx context.Context, execCtx ports.CustomerSalesToolExecutionContext, rawParams []byte) (ports.CustomerSalesToolResult, error) {
 	businessID := strings.TrimSpace(execCtx.BusinessID)
 	if businessID == "" {
-		return ports.AICapabilityResult{}, errors.New("unauthorized: business ID is required in capability execution context")
+		return ports.CustomerSalesToolResult{}, errors.New("unauthorized: business ID is required in capability execution context")
 	}
 
 	var params catalogAuthoringParams
 	if len(rawParams) > 0 {
 		if err := json.Unmarshal(rawParams, &params); err != nil {
-			return ports.AICapabilityResult{}, fmt.Errorf("invalid parameters for catalog_authoring: %w", err)
+			return ports.CustomerSalesToolResult{}, fmt.Errorf("invalid parameters for catalog_authoring: %w", err)
 		}
 	}
 
@@ -892,15 +892,15 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 	switch strings.TrimSpace(params.Operation) {
 	case "author_catalog_item":
 		if c.AuthorCatalogItem == nil {
-			return ports.AICapabilityResult{}, errors.New("author_catalog_item handler is not configured")
+			return ports.CustomerSalesToolResult{}, errors.New("author_catalog_item handler is not configured")
 		}
 		catalogID := strings.TrimSpace(params.CatalogID)
 		if catalogID == "" {
-			return ports.AICapabilityResult{}, errors.New("catalog_id is required for author_catalog_item")
+			return ports.CustomerSalesToolResult{}, errors.New("catalog_id is required for author_catalog_item")
 		}
 		name := strings.TrimSpace(params.Name)
 		if name == "" {
-			return ports.AICapabilityResult{}, errors.New("name is required for author_catalog_item")
+			return ports.CustomerSalesToolResult{}, errors.New("name is required for author_catalog_item")
 		}
 
 		var schemaID *commands.AttributeSchemaID
@@ -921,7 +921,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 		for _, o := range params.Offers {
 			minor, err := parseAmountToMinor(o.Amount, o.AmountMinor)
 			if err != nil {
-				return ports.AICapabilityResult{}, fmt.Errorf("invalid offer amount: %w", err)
+				return ports.CustomerSalesToolResult{}, fmt.Errorf("invalid offer amount: %w", err)
 			}
 			var currency *string
 			if strings.TrimSpace(o.Currency) != "" {
@@ -957,7 +957,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 		if len(offers) == 0 && (params.Amount != nil || params.AmountMinor != nil) {
 			minor, err := parseAmountToMinor(params.Amount, params.AmountMinor)
 			if err != nil {
-				return ports.AICapabilityResult{}, fmt.Errorf("invalid amount: %w", err)
+				return ports.CustomerSalesToolResult{}, fmt.Errorf("invalid amount: %w", err)
 			}
 			var currency *string
 			if strings.TrimSpace(params.Currency) != "" {
@@ -996,7 +996,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 			Offers:               offers,
 		})
 		if err != nil {
-			return ports.AICapabilityResult{}, err
+			return ports.CustomerSalesToolResult{}, err
 		}
 
 		var itemAttrs map[string]any
@@ -1095,7 +1095,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 			})
 		}
 
-		return ports.AICapabilityResult{
+		return ports.CustomerSalesToolResult{
 			Data: map[string]any{
 				"item":     itemProjection,
 				"variants": variantProjections,
@@ -1111,11 +1111,11 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 
 	case "create_catalog":
 		if c.CreateCatalog == nil {
-			return ports.AICapabilityResult{}, errors.New("create_catalog handler is not configured")
+			return ports.CustomerSalesToolResult{}, errors.New("create_catalog handler is not configured")
 		}
 		name := strings.TrimSpace(params.Name)
 		if name == "" {
-			return ports.AICapabilityResult{}, errors.New("name is required for create_catalog")
+			return ports.CustomerSalesToolResult{}, errors.New("name is required for create_catalog")
 		}
 		res, err := c.CreateCatalog.Handle(ctx, commands.CreateCatalogCommand{
 			Meta:        cmdMeta,
@@ -1123,9 +1123,9 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 			Description: params.Description,
 		})
 		if err != nil {
-			return ports.AICapabilityResult{}, err
+			return ports.CustomerSalesToolResult{}, err
 		}
-		return ports.AICapabilityResult{
+		return ports.CustomerSalesToolResult{
 			Data: CatalogProjection{
 				ID:          string(res.Catalog.ID),
 				Name:        res.Catalog.Name,
@@ -1137,15 +1137,15 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 
 	case "create_catalog_item":
 		if c.CreateCatalogItem == nil {
-			return ports.AICapabilityResult{}, errors.New("create_catalog_item handler is not configured")
+			return ports.CustomerSalesToolResult{}, errors.New("create_catalog_item handler is not configured")
 		}
 		catalogID := strings.TrimSpace(params.CatalogID)
 		if catalogID == "" {
-			return ports.AICapabilityResult{}, errors.New("catalog_id is required for create_catalog_item")
+			return ports.CustomerSalesToolResult{}, errors.New("catalog_id is required for create_catalog_item")
 		}
 		name := strings.TrimSpace(params.Name)
 		if name == "" {
-			return ports.AICapabilityResult{}, errors.New("name is required for create_catalog_item")
+			return ports.CustomerSalesToolResult{}, errors.New("name is required for create_catalog_item")
 		}
 		itemType := strings.TrimSpace(params.ItemType)
 		if itemType == "" {
@@ -1183,7 +1183,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 			Attributes:           params.Attributes,
 		})
 		if err != nil {
-			return ports.AICapabilityResult{}, err
+			return ports.CustomerSalesToolResult{}, err
 		}
 
 		var attrs map[string]any
@@ -1218,7 +1218,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 				SchemaVersion:    AIEvidenceSchemaVersion,
 			},
 		}
-		return ports.AICapabilityResult{
+		return ports.CustomerSalesToolResult{
 			Data:            projection,
 			CatalogEvidence: catEvidence,
 			Operation:       "create_catalog_item",
@@ -1226,15 +1226,15 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 
 	case "create_offer":
 		if c.CreateOffer == nil {
-			return ports.AICapabilityResult{}, errors.New("create_offer handler is not configured")
+			return ports.CustomerSalesToolResult{}, errors.New("create_offer handler is not configured")
 		}
 		itemID := strings.TrimSpace(params.ItemID)
 		if itemID == "" {
-			return ports.AICapabilityResult{}, errors.New("item_id is required for create_offer")
+			return ports.CustomerSalesToolResult{}, errors.New("item_id is required for create_offer")
 		}
 		name := strings.TrimSpace(params.Name)
 		if name == "" {
-			return ports.AICapabilityResult{}, errors.New("name is required for create_offer")
+			return ports.CustomerSalesToolResult{}, errors.New("name is required for create_offer")
 		}
 		pricingMode := strings.TrimSpace(params.PricingMode)
 		if pricingMode == "" {
@@ -1242,7 +1242,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 		}
 		minor, err := parseAmountToMinor(params.Amount, params.AmountMinor)
 		if err != nil {
-			return ports.AICapabilityResult{}, fmt.Errorf("invalid offer amount: %w", err)
+			return ports.CustomerSalesToolResult{}, fmt.Errorf("invalid offer amount: %w", err)
 		}
 		var currency *string
 		if strings.TrimSpace(params.Currency) != "" {
@@ -1292,7 +1292,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 			Status:             status,
 		})
 		if err != nil {
-			return ports.AICapabilityResult{}, err
+			return ports.CustomerSalesToolResult{}, err
 		}
 
 		var retVid *string
@@ -1327,7 +1327,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 				SchemaVersion:        AIEvidenceSchemaVersion,
 			},
 		}
-		return ports.AICapabilityResult{
+		return ports.CustomerSalesToolResult{
 			Data:          projection,
 			OfferEvidence: offerEvidence,
 			Operation:     "create_offer",
@@ -1335,15 +1335,15 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 
 	case "create_variant":
 		if c.CreateVariant == nil {
-			return ports.AICapabilityResult{}, errors.New("create_variant handler is not configured")
+			return ports.CustomerSalesToolResult{}, errors.New("create_variant handler is not configured")
 		}
 		itemID := strings.TrimSpace(params.ItemID)
 		if itemID == "" {
-			return ports.AICapabilityResult{}, errors.New("item_id is required for create_variant")
+			return ports.CustomerSalesToolResult{}, errors.New("item_id is required for create_variant")
 		}
 		name := strings.TrimSpace(params.Name)
 		if name == "" {
-			return ports.AICapabilityResult{}, errors.New("name is required for create_variant")
+			return ports.CustomerSalesToolResult{}, errors.New("name is required for create_variant")
 		}
 
 		res, err := c.CreateVariant.Handle(ctx, commands.CreateVariantCommand{
@@ -1353,7 +1353,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 			Attributes:    params.Attributes,
 		})
 		if err != nil {
-			return ports.AICapabilityResult{}, err
+			return ports.CustomerSalesToolResult{}, err
 		}
 
 		var attrs map[string]any
@@ -1379,7 +1379,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 				SchemaVersion:        AIEvidenceSchemaVersion,
 			},
 		}
-		return ports.AICapabilityResult{
+		return ports.CustomerSalesToolResult{
 			Data:            projection,
 			VariantEvidence: variantEvidence,
 			Operation:       "create_variant",
@@ -1387,11 +1387,11 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 
 	case "create_attribute_schema":
 		if c.CreateAttributeSchemaVersion == nil {
-			return ports.AICapabilityResult{}, errors.New("create_attribute_schema handler is not configured")
+			return ports.CustomerSalesToolResult{}, errors.New("create_attribute_schema handler is not configured")
 		}
 		name := strings.TrimSpace(params.Name)
 		if name == "" {
-			return ports.AICapabilityResult{}, errors.New("name is required for create_attribute_schema")
+			return ports.CustomerSalesToolResult{}, errors.New("name is required for create_attribute_schema")
 		}
 		defs := make([]commands.AttributeDefinition, 0, len(params.Definitions))
 		for _, d := range params.Definitions {
@@ -1410,7 +1410,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 			Definitions: defs,
 		})
 		if err != nil {
-			return ports.AICapabilityResult{}, err
+			return ports.CustomerSalesToolResult{}, err
 		}
 
 		defProjections := make([]AttributeDefinitionProjection, 0, len(res.Schema.Definitions))
@@ -1425,7 +1425,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 				DisplayOrder: d.DisplayOrder,
 			})
 		}
-		return ports.AICapabilityResult{
+		return ports.CustomerSalesToolResult{
 			Data: AttributeSchemaProjection{
 				ID:          string(res.Schema.ID),
 				Name:        res.Schema.Name,
@@ -1436,8 +1436,8 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 		}, nil
 
 	default:
-		return ports.AICapabilityResult{}, fmt.Errorf("unsupported catalog_authoring operation: %q", params.Operation)
+		return ports.CustomerSalesToolResult{}, fmt.Errorf("unsupported catalog_authoring operation: %q", params.Operation)
 	}
 }
 
-var _ ports.AICapability = (*CatalogAuthoringCapability)(nil)
+var _ ports.CustomerSalesTool = (*CustomerSalesCatalogAuthoringTool)(nil)
