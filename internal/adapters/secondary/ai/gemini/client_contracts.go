@@ -1,6 +1,6 @@
 // Package gemini — Contract-aligned Gemini Client.
 //
-// Implements ports.ContractRuntime, the contract ④ §8 mapping of Mujeeb
+// Implements ports.CustomerSalesDecisionPort, the contract ④ §8 mapping of Mujeeb
 // Contract to Gemini API:
 //   - Mujeeb System Contract → system_instruction
 //   - Mujeeb Input Context → input (contents)
@@ -33,7 +33,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
-// ContractClient is the contract ④ §8 implementation of ports.ContractRuntime.
+// ContractClient is the contract ④ §8 implementation of ports.CustomerSalesDecisionPort.
 //
 // It wraps an existing Client to reuse HTTP machinery (base URL, API key,
 // model, system prompt) but adds:
@@ -111,7 +111,7 @@ func (c *ContractClient) resolveConfig(ctx context.Context) (*resolvedAIConfig, 
 // NewContractClient wraps an existing Client with contract-aligned methods.
 //
 // Per contract ⑤ §7, the Catalog Entity Contract is built once at startup
-// and reused for every call; callers pass it via ContractRuntimeInput.
+// and reused for every call; callers pass it via CustomerSalesDecisionInput.
 func NewContractClient(base *Client) (*ContractClient, error) {
 	if base == nil {
 		return nil, errors.New("base client is required")
@@ -126,7 +126,7 @@ func NewContractClient(base *Client) (*ContractClient, error) {
 	}, nil
 }
 
-// DecideContract is the contract ④ §8 method implementing ports.ContractRuntime.
+// DecideContract is the contract ④ §8 method implementing ports.CustomerSalesDecisionPort.
 //
 // Per contract ③ §4, it carries previous_interaction_id chaining via input.GeminiInteraction.
 // Per contract ⑤ §7, the Entity Contract is sent as part of system_instruction.
@@ -144,21 +144,21 @@ func NewContractClient(base *Client) (*ContractClient, error) {
 // tool fails non-retryably, or the context deadline expires.
 //
 // This method supersedes the legacy ports.AIRuntime.Decide.
-func (c *ContractClient) DecideContract(ctx context.Context, input ports.ContractRuntimeInput) (ports.ContractRuntimeOutput, error) {
+func (c *ContractClient) DecideContract(ctx context.Context, input ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
 	if err := ctx.Err(); err != nil {
-		return ports.ContractRuntimeOutput{}, err
+		return ports.CustomerSalesDecisionOutput{}, err
 	}
 	if strings.TrimSpace(input.DecisionInput.Text) == "" {
-		return ports.ContractRuntimeOutput{}, errors.New("AI input text is required")
+		return ports.CustomerSalesDecisionOutput{}, errors.New("AI input text is required")
 	}
 	// Per §1-2: resolve the ACTIVE runtime configuration from cache/DB.
 	rc, err := c.resolveConfig(ctx)
 	if err != nil {
-		return ports.ContractRuntimeOutput{}, err
+		return ports.CustomerSalesDecisionOutput{}, err
 	}
 	// Per contract ④ §6: enforce LLMMaxInputCharacters on the contract path.
 	if rc.maxInputCharacters > 0 && len([]rune(input.DecisionInput.Text)) > rc.maxInputCharacters {
-		return ports.ContractRuntimeOutput{}, fmt.Errorf("AI input text exceeds %d characters", rc.maxInputCharacters)
+		return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("AI input text exceeds %d characters", rc.maxInputCharacters)
 	}
 
 	startedAt := time.Now().UTC()
@@ -202,17 +202,17 @@ func (c *ContractClient) DecideContract(ctx context.Context, input ports.Contrac
 	// Non-tool path (backward compatible — same as before).
 	resp, err := c.sendContractRequest(ctx, reqBody, rc)
 	if err != nil {
-		return ports.ContractRuntimeOutput{}, err
+		return ports.CustomerSalesDecisionOutput{}, err
 	}
 
 	latencyMs := time.Since(startedAt).Milliseconds()
 
 	proposal, err := parseContractProposal(resp)
 	if err != nil {
-		return ports.ContractRuntimeOutput{}, err
+		return ports.CustomerSalesDecisionOutput{}, err
 	}
 
-	return ports.ContractRuntimeOutput{
+	return ports.CustomerSalesDecisionOutput{
 		Proposal: proposal,
 		GeminiInteraction: ports.GeminiInteractionContext{
 			PreviousInteractionID:  input.GeminiInteraction.PreviousInteractionID,
@@ -449,5 +449,5 @@ type contractUsageMetadata struct {
 	TotalTokenCount         int `json:"totalTokenCount,omitempty"`
 }
 
-// Compile-time assertion: ContractClient implements ports.ContractRuntime.
-var _ ports.ContractRuntime = (*ContractClient)(nil)
+// Compile-time assertion: ContractClient implements ports.CustomerSalesDecisionPort.
+var _ ports.CustomerSalesDecisionPort = (*ContractClient)(nil)
