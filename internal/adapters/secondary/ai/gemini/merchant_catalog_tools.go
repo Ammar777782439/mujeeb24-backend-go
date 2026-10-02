@@ -45,11 +45,11 @@ func extractMerchantCatalogFunctionCalls(resp merchantCatalogInteractionResponse
 	return calls
 }
 
-func (r *MerchantCatalogRuntime) executeInteractionTools(
+func (r *GeminiMerchantCatalogAuthoringAdapter) executeInteractionTools(
 	ctx context.Context,
 	resp merchantCatalogInteractionResponse,
 	calls []merchantCatalogFunctionCall,
-	input merchantcatalogai.RuntimeInput,
+	input merchantcatalogai.MerchantCatalogAuthoringInput,
 ) ([]map[string]any, error) {
 	toolResults := make([]map[string]any, 0, len(calls))
 	for _, call := range calls {
