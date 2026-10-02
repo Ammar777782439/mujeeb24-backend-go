@@ -118,12 +118,12 @@ type ConversationSummaryService struct {
 func NewConversationSummaryService(
 	stateRepo ports.ConversationStateRepository,
 	messages ports.MessageRepository,
-	contractRuntime ports.CustomerSalesDecisionPort,
+	customerSalesDecision ports.CustomerSalesDecisionPort,
 ) *ConversationSummaryService {
 	return &ConversationSummaryService{
 		StateRepository:           stateRepo,
 		Messages:                  messages,
-		CustomerSalesDecisionPort: contractRuntime,
+		CustomerSalesDecisionPort: customerSalesDecision,
 		Now:                       func() time.Time { return time.Now().UTC() },
 	}
 }
