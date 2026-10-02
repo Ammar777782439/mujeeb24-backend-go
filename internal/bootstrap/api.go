@@ -468,7 +468,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	dashboardServer := handlers.NewServer(dependencies)
 
 	var merchantCatalogErr error
-	dashboardServer, merchantCatalogErr = wireMerchantCatalogAIV2(dashboardServer, database, external.GeminiHTTPClient, aiConfigCache)
+	dashboardServer, merchantCatalogErr = wireMerchantCatalogAuthoringAI(dashboardServer, database, external.GeminiHTTPClient, aiConfigCache)
 	if merchantCatalogErr != nil {
 		return nil, merchantCatalogErr
 	}
