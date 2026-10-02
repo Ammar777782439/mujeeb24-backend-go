@@ -85,8 +85,8 @@ func buildServiceForUsageTest(usageRepo ports.AIUsageRepository, subsRepo ports.
 	}
 }
 
-func buildUsageOutput() ports.ContractRuntimeOutput {
-	return ports.ContractRuntimeOutput{
+func buildUsageOutput() ports.CustomerSalesDecisionOutput {
+	return ports.CustomerSalesDecisionOutput{
 		Proposal: ports.AIGeminiProposal{
 			Status:       "resolved",
 			Action:       "answer",
@@ -239,12 +239,12 @@ type fakeInteractionRuntime struct {
 	callCount      int64
 }
 
-func (f *fakeInteractionRuntime) DecideContract(_ context.Context, input ports.ContractRuntimeInput) (ports.ContractRuntimeOutput, error) {
+func (f *fakeInteractionRuntime) DecideContract(_ context.Context, input ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.callCount++
 	f.receivedPrevID = input.GeminiInteraction.PreviousInteractionID
-	return ports.ContractRuntimeOutput{
+	return ports.CustomerSalesDecisionOutput{
 		Proposal: ports.AIGeminiProposal{
 			Status:       "resolved",
 			Action:       "answer",
@@ -392,7 +392,7 @@ func TestItem8_GeminiInteractionContinuity_TurnChaining(t *testing.T) {
 	}
 
 	// 2. Call DecideContract with prevID
-	out1, err := runtime.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	out1, err := runtime.DecideContract(context.Background(), ports.CustomerSalesDecisionInput{
 		GeminiInteraction: ports.GeminiInteractionContext{
 			PreviousInteractionID: prevID,
 			Store:                 true,
@@ -428,7 +428,7 @@ func TestItem8_GeminiInteractionContinuity_TurnChaining(t *testing.T) {
 		prevID = *convRepo.lastGeminiInteractionID
 	}
 
-	out2, err := runtime.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	out2, err := runtime.DecideContract(context.Background(), ports.CustomerSalesDecisionInput{
 		GeminiInteraction: ports.GeminiInteractionContext{
 			PreviousInteractionID: prevID,
 			Store:                 true,
@@ -463,7 +463,7 @@ func TestItem8_GeminiInteractionContinuity_TurnChaining(t *testing.T) {
 		prevID = *convRepo.lastGeminiInteractionID
 	}
 
-	_, err = runtime.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	_, err = runtime.DecideContract(context.Background(), ports.CustomerSalesDecisionInput{
 		GeminiInteraction: ports.GeminiInteractionContext{
 			PreviousInteractionID: prevID,
 			Store:                 true,
@@ -485,7 +485,7 @@ func TestItem8_GeminiInteractionContinuity_TurnChaining(t *testing.T) {
 }
 
 // Ensure compile-time interface compliance.
-var _ ports.ContractRuntime = (*fakeInteractionRuntime)(nil)
+var _ ports.CustomerSalesDecisionPort = (*fakeInteractionRuntime)(nil)
 var _ ports.ConversationRepository = (*fakeConversationRepo)(nil)
 var _ ports.ConversationRuntimeRepository = (*fakeConversationRuntimeRepo)(nil)
 var _ commands.AutoReplyHandler = (*fakeAutoReplyHandler)(nil)
