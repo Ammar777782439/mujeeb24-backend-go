@@ -11,11 +11,11 @@ import (
 
 func testBusinessCtx() *ports.CustomerSalesContext {
 	return &ports.CustomerSalesContext{
-		CatalogEvidence: []ports.AICatalogEvidence{
+		CatalogEvidence: []ports.CustomerSalesCatalogEvidence{
 			{Reference: "item-basic", CatalogReference: "cat-1", Name: "Basic"},
 			{Reference: "item-pro", CatalogReference: "cat-1", Name: "Pro"},
 		},
-		OfferEvidence: []ports.AIOfferEvidence{
+		OfferEvidence: []ports.CustomerSalesOfferEvidence{
 			{Reference: "offer-basic", CatalogItemReference: "item-basic", Name: "Basic", PricingMode: "fixed", Amount: "100", Currency: "YER", AvailabilityStatus: "available", Status: "active"},
 			{Reference: "offer-pro", CatalogItemReference: "item-pro", Name: "Pro", PricingMode: "fixed", Amount: "200", Currency: "YER", AvailabilityStatus: "available", Status: "active"},
 		},
@@ -25,7 +25,7 @@ func testBusinessCtx() *ports.CustomerSalesContext {
 func TestValidateStateProposal_Resolved(t *testing.T) {
 	ctx := testBusinessCtx()
 	proposal := ports.AIDecisionProposal{
-		StateProposal: &ports.AIStateProposal{
+		StateProposal: &ports.CustomerSalesStateProposal{
 			Kind:  "RESOLVED",
 			Focus: &ports.ConversationFocus{Type: "offer", ID: "offer-basic"},
 		},
@@ -39,7 +39,7 @@ func TestValidateStateProposal_Resolved(t *testing.T) {
 func TestValidateStateProposal_Ambiguous(t *testing.T) {
 	ctx := testBusinessCtx()
 	proposal := ports.AIDecisionProposal{
-		StateProposal: &ports.AIStateProposal{Kind: "AMBIGUOUS"},
+		StateProposal: &ports.CustomerSalesStateProposal{Kind: "AMBIGUOUS"},
 	}
 	_, needsClar, _ := validateStateProposal(proposal, ctx)
 	if !needsClar {
@@ -50,7 +50,7 @@ func TestValidateStateProposal_Ambiguous(t *testing.T) {
 func TestValidateStateProposal_UnknownFocus(t *testing.T) {
 	ctx := testBusinessCtx()
 	proposal := ports.AIDecisionProposal{
-		StateProposal: &ports.AIStateProposal{
+		StateProposal: &ports.CustomerSalesStateProposal{
 			Kind:  "RESOLVED",
 			Focus: &ports.ConversationFocus{Type: "offer", ID: "offer-unknown"},
 		},
@@ -67,7 +67,7 @@ func TestBuildValidatedState_Replacement(t *testing.T) {
 		Focus: &ports.ConversationFocus{Type: "offer", ID: "offer-basic"},
 	}
 	proposal := ports.AIDecisionProposal{
-		StateProposal: &ports.AIStateProposal{
+		StateProposal: &ports.CustomerSalesStateProposal{
 			Kind:  "RESOLVED",
 			Focus: &ports.ConversationFocus{Type: "offer", ID: "offer-pro"},
 		},
@@ -108,7 +108,7 @@ func TestValidateEvidenceIdentity_GeneralQuestionAfterFocus(t *testing.T) {
 	}
 	proposal := ports.AIDecisionProposal{
 		EvidenceReferences: []byte(`["offer-basic","offer-pro"]`),
-		StateProposal:      &ports.AIStateProposal{Kind: "NO_REFERENCE"},
+		StateProposal:      &ports.CustomerSalesStateProposal{Kind: "NO_REFERENCE"},
 	}
 	if !validateEvidenceIdentity(proposal, ctx) {
 		t.Fatal("general answer with NO_REFERENCE must not be flagged as mixing")
@@ -124,7 +124,7 @@ func TestValidateEvidenceIdentity_TopicSwitchToNewFocus(t *testing.T) {
 	}
 	proposal := ports.AIDecisionProposal{
 		EvidenceReferences: []byte(`["offer-pro"]`),
-		StateProposal: &ports.AIStateProposal{
+		StateProposal: &ports.CustomerSalesStateProposal{
 			Kind:  "RESOLVED",
 			Focus: &ports.ConversationFocus{Type: "offer", ID: "offer-pro", ItemID: strPtr("item-pro")},
 		},
@@ -142,7 +142,7 @@ func TestValidateEvidenceIdentity_MixingStillRejectedWithResolvedFocus(t *testin
 	}
 	proposal := ports.AIDecisionProposal{
 		EvidenceReferences: []byte(`["offer-pro"]`),
-		StateProposal: &ports.AIStateProposal{
+		StateProposal: &ports.CustomerSalesStateProposal{
 			Kind:  "RESOLVED",
 			Focus: &ports.ConversationFocus{Type: "offer", ID: "offer-basic", ItemID: strPtr("item-basic")},
 		},
@@ -160,7 +160,7 @@ func TestValidateEvidenceIdentity_InventedRefRejected(t *testing.T) {
 	}
 	proposal := ports.AIDecisionProposal{
 		EvidenceReferences: []byte(`["offer-invented"]`),
-		StateProposal:      &ports.AIStateProposal{Kind: "NO_REFERENCE"},
+		StateProposal:      &ports.CustomerSalesStateProposal{Kind: "NO_REFERENCE"},
 	}
 	if validateEvidenceIdentity(proposal, ctx) {
 		t.Fatal("invented reference must be rejected even with NO_REFERENCE")
@@ -171,14 +171,14 @@ func TestValidateEvidenceIdentity_InventedRefRejected(t *testing.T) {
 // catalog and knowledge/policy documents, not only item/offer/variant IDs.
 func TestValidateEvidenceIdentity_CatalogAndKnowledgeRefs(t *testing.T) {
 	ctx := testBusinessCtx()
-	ctx.KnowledgeEvidence = []ports.AIKnowledgeEvidence{{Reference: "knowledge-1"}}
-	ctx.BusinessPolicyEvidence = []ports.AIBusinessPolicyEvidence{{Reference: "policy-1"}}
+	ctx.KnowledgeEvidence = []ports.CustomerSalesKnowledgeEvidence{{Reference: "knowledge-1"}}
+	ctx.BusinessPolicyEvidence = []ports.CustomerSalesBusinessPolicyEvidence{{Reference: "policy-1"}}
 	ctx.ConversationState = &ports.ConversationStateRecord{
 		Focus: &ports.ConversationFocus{Type: "offer", ID: "offer-basic", ItemID: strPtr("item-basic")},
 	}
 	proposal := ports.AIDecisionProposal{
 		EvidenceReferences: []byte(`["cat-1","knowledge-1","policy-1","offer-basic","offer-pro"]`),
-		StateProposal:      &ports.AIStateProposal{Kind: "NO_REFERENCE"},
+		StateProposal:      &ports.CustomerSalesStateProposal{Kind: "NO_REFERENCE"},
 	}
 	if !validateEvidenceIdentity(proposal, ctx) {
 		t.Fatal("catalog/knowledge/policy references must be accepted for general answers")
@@ -187,7 +187,7 @@ func TestValidateEvidenceIdentity_CatalogAndKnowledgeRefs(t *testing.T) {
 
 func TestFocusInCandidates_AllBranches(t *testing.T) {
 	ctx := testBusinessCtx()
-	ctx.VariantEvidence = []ports.AIVariantEvidence{{Reference: "variant-1", CatalogItemReference: "item-basic"}}
+	ctx.VariantEvidence = []ports.CustomerSalesVariantEvidence{{Reference: "variant-1", CatalogItemReference: "item-basic"}}
 	cases := []struct {
 		name  string
 		focus *ports.ConversationFocus
@@ -254,17 +254,17 @@ func TestValidateStateProposal_EdgeCases(t *testing.T) {
 		t.Fatal("nil StateProposal must not force clarification")
 	}
 	if _, clar, _ := validateStateProposal(ports.AIDecisionProposal{
-		StateProposal: &ports.AIStateProposal{Kind: "WEIRD"},
+		StateProposal: &ports.CustomerSalesStateProposal{Kind: "WEIRD"},
 	}, ctx); clar {
 		t.Fatal("unknown kind must not force clarification")
 	}
 	if _, clar, _ := validateStateProposal(ports.AIDecisionProposal{
-		StateProposal: &ports.AIStateProposal{Kind: "RESOLVED"},
+		StateProposal: &ports.CustomerSalesStateProposal{Kind: "RESOLVED"},
 	}, ctx); !clar {
 		t.Fatal("RESOLVED without focus must force clarification")
 	}
 	if _, clar, _ := validateStateProposal(ports.AIDecisionProposal{
-		StateProposal: &ports.AIStateProposal{
+		StateProposal: &ports.CustomerSalesStateProposal{
 			Kind:       "RESOLVED",
 			Focus:      &ports.ConversationFocus{Type: "offer", ID: "offer-basic"},
 			Comparison: &ports.ConversationComparison{Type: "offer_set", IDs: []string{"offer-basic", "offer-ghost"}},
@@ -281,7 +281,7 @@ func TestBuildValidatedState_NoReferenceResetsComparison(t *testing.T) {
 		Comparison: &ports.ConversationComparison{Type: "offer_set", IDs: []string{"offer-basic", "offer-pro"}},
 	}
 	next := buildValidatedState(current, "b1", "c1", ports.AIDecisionProposal{
-		StateProposal: &ports.AIStateProposal{Kind: "NO_REFERENCE"},
+		StateProposal: &ports.CustomerSalesStateProposal{Kind: "NO_REFERENCE"},
 	})
 	if next == nil {
 		t.Fatal("NO_REFERENCE with stale comparison must return updated state")
