@@ -121,10 +121,10 @@ func NewConversationSummaryService(
 	contractRuntime ports.CustomerSalesDecisionPort,
 ) *ConversationSummaryService {
 	return &ConversationSummaryService{
-		StateRepository: stateRepo,
-		Messages:        messages,
+		StateRepository:           stateRepo,
+		Messages:                  messages,
 		CustomerSalesDecisionPort: contractRuntime,
-		Now:             func() time.Time { return time.Now().UTC() },
+		Now:                       func() time.Time { return time.Now().UTC() },
 	}
 }
 
