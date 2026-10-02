@@ -52,7 +52,7 @@ type Config struct {
 	MaxOutputTokens    int
 	MaxInputCharacters int
 	SystemPrompt       string
-	Capabilities       ports.AICapabilityDispatcher
+	Capabilities       ports.CustomerSalesToolPort
 }
 
 // Client is the low-level Gemini HTTP client. Capability-specific adapters
@@ -69,7 +69,7 @@ type Client struct {
 	maxOutputTokens    int
 	maxInputCharacters int
 	systemPrompt       string
-	capabilities       ports.AICapabilityDispatcher
+	capabilities       ports.CustomerSalesToolPort
 }
 
 // NewClient creates a Gemini HTTP client with the given config.
@@ -151,7 +151,7 @@ func (c *Client) RequestTimeout() time.Duration { return c.requestTimeout }
 func (c *Client) HTTPClient() *http.Client { return c.httpClient }
 
 // Capabilities returns the configured AI capability dispatcher.
-func (c *Client) Capabilities() ports.AICapabilityDispatcher { return c.capabilities }
+func (c *Client) Capabilities() ports.CustomerSalesToolPort { return c.capabilities }
 
 // buildUserPrompt encodes the AIContext + customer message into the
 // customer-facing prompt text for Gemini. Used by GeminiCustomerSalesAdapter.
