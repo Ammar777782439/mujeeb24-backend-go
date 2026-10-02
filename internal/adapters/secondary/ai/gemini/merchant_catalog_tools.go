@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
 func merchantCatalogInteractionTools(caps merchantcatalogai.MerchantCatalogDiscoveryPort) []merchantCatalogInteractionTool {
