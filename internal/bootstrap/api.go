@@ -149,6 +149,12 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		external.GeminiHTTPClient != nil && external.LLMConfigError == nil,
 		external.SocialAPI != nil,
 	)
+	if external.GeminiHTTPClient != nil && external.LLMConfigError == nil {
+		platformOperations.RegisterProbe("google_gemini", gemini.NewHealthCheckProbe(external.GeminiHTTPClient))
+	}
+	if external.SocialAPIHealthProbe != nil {
+		platformOperations.RegisterProbe("socialapi", external.SocialAPIHealthProbe)
+	}
 	if external.GeminiHTTPClient != nil {
 		platformOperations.RegisterProbe("google_gemini", gemini.NewHealthCheckProbe(external.GeminiHTTPClient))
 	}
