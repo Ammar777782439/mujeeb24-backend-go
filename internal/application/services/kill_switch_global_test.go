@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
 // ---- Item 2: Kill Switch blocks Summary path ----
@@ -218,7 +219,7 @@ func contains(s, substr string) bool {
 
 // Ensure the fakeAutoReplyHandler satisfies the interface at compile time.
 var _ commands.AutoReplyHandler = (*fakeAutoReplyHandler)(nil)
-var _ ports.CustomerSalesDecisionPort = (*fakeContractRuntime)(nil)
+var _ ports.CustomerSalesDecisionPort = (*FakeCustomerSalesDecisionPort)(nil)
 var _ AICostProtectionChecker = (*stubChecker)(nil)
 
 // dummyErr keeps the errors import alive if needed later.
