@@ -156,6 +156,8 @@ func (s *Server) dispatchPlatformCommandInner(ctx context.Context, operationID s
 	// ---- Business Management (Contract §13-14) ----
 	case "platformCreateBusiness":
 		return s.platformCreateBusiness(ctx, input.(*dto.CreateBusinessInput))
+case "platformAssignBusinessOwner":
+		return s.platformAssignBusinessOwner(ctx, input.(*dto.AssignBusinessOwnerInput))
 	case "platformListBusinesses":
 		return s.platformListBusinesses(ctx, input.(*dto.PlatformBusinessListInput))
 	case "platformGetBusiness":
@@ -549,6 +551,35 @@ func (s *Server) platformCreatePlanVersion(ctx context.Context, in *dto.CreatePl
 }
 
 // ----------------------------------------------------------------------------
+func (s *Server) platformAssignBusinessOwner(ctx context.Context, in *dto.AssignBusinessOwnerInput) (any, bool) {
+	if s.platformDeps.AssignBusinessOwner == nil {
+		return mapApplicationError(appErrors.NotImplemented()), true
+	}
+	result, err := s.platformDeps.AssignBusinessOwner.Handle(ctx, services.AssignBusinessOwnerInput{
+		BusinessID:  string(in.BusinessID),
+		Email:       in.Body.Email,
+		DisplayName: in.Body.DisplayName,
+		Password:    in.Body.Password,
+		Now:         time.Now().UTC(),
+	})
+	if err != nil {
+		return mapApplicationError(err), true
+	}
+	s.appendPlatformAudit(ctx, "business.owner_assigned", "business", &result.BusinessID, &result.BusinessID, "SUCCESS", "", map[string]any{
+		"principal_id": result.PrincipalID,
+		"role":         result.Role,
+	})
+	out := &contract.Single[dto.AssignBusinessOwnerView]{}
+	out.Body.Data = dto.AssignBusinessOwnerView{
+		PrincipalID:    result.PrincipalID,
+		Email:          result.Email,
+		DisplayName:    result.DisplayName,
+		Role:           result.Role,
+		BusinessStatus: result.BusinessStatus,
+	}
+	return out, true
+}
+
 // Business lifecycle façades
 // ----------------------------------------------------------------------------
 
