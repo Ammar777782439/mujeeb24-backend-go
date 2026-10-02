@@ -62,7 +62,7 @@ type TokenCounter struct {
 	requestTimeout time.Duration
 	// configProvider, when set, is called at the start of every CountTokens
 	// call to read the ACTIVE runtime config. Per P1-4: this is the same
-	// AIConfigurationProvider that ContractClient + BatchClient use, so
+	// AIConfigurationProvider that GeminiCustomerSalesAdapter + BatchClient use, so
 	// token counting never drifts from the actual model used by Gemini
 	// generateContent calls.
 	configProvider ports.AIConfigurationProvider
