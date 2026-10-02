@@ -119,6 +119,10 @@ func extractIdempotencyKey(operationID string, input any) string {
 		if in, ok := input.(*dto.CreateBusinessInput); ok {
 			return in.IdempotencyKey
 		}
+	case "platformAssignBusinessOwner":
+		if in, ok := input.(*dto.AssignBusinessOwnerInput); ok {
+			return in.IdempotencyKey
+		}
 	case "platformCreateSubscription":
 		if in, ok := input.(*dto.CreateSubscriptionInput); ok {
 			return in.IdempotencyKey
@@ -156,7 +160,7 @@ func (s *Server) dispatchPlatformCommandInner(ctx context.Context, operationID s
 	// ---- Business Management (Contract §13-14) ----
 	case "platformCreateBusiness":
 		return s.platformCreateBusiness(ctx, input.(*dto.CreateBusinessInput))
-case "platformAssignBusinessOwner":
+	case "platformAssignBusinessOwner":
 		return s.platformAssignBusinessOwner(ctx, input.(*dto.AssignBusinessOwnerInput))
 	case "platformListBusinesses":
 		return s.platformListBusinesses(ctx, input.(*dto.PlatformBusinessListInput))
