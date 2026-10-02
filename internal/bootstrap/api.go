@@ -297,23 +297,15 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 contextBuilder.Knowledge = postgres.NewKnowledgeDocumentRepository(database)
                 contextBuilder.Policies = postgres.NewBusinessPolicyRepository(database)
                 service.ContextBuilder = contextBuilder
-                // Per ADR-039 + P1-5: wire the ConversationSummaryService with
-                // the ContractClient (not the legacy gemini.Client) so the
-                // summary call uses the dynamic AI configuration via the
-                // AIConfigurationProvider wired at line 188. Also wire the
-                // AIUsageRepository + AIPricingRepository + SubscriptionRepository
-                // so the summary Gemini call is metered (per P1-5: summary calls
-                // MUST be recorded in ai_usage_records — they consume tokens).
+                // Per ADR-039 + P1-5: summaries use the SAME ContractClient
+                // instance as AutoReply. There is no legacy AI fallback.
+                // The ContractClient reads the active AI configuration through
+                // the AIConfigurationCache and provides usage telemetry.
                 service.SummaryService = services.NewConversationSummaryService(
                         postgres.NewConversationStateRepository(database),
                         postgres.NewMessageRepository(database),
-                        geminiClient, // legacy fallback when ContractRuntime is nil
-                        geminiClient.Model(),
+                        contractRuntime,
                 )
-                // Per P1-5: wire the ContractClient + telemetry deps. The
-                // ContractClient is the SAME instance used by AutoReply.Handle
-                // — both read the same dynamic config via the AIConfigurationCache.
-                service.SummaryService.ContractRuntime = contractRuntime
                 service.SummaryService.AIUsage = postgres.NewAIUsageRepository(database)
                 service.SummaryService.AIPricing = postgres.NewAIProviderPricingRepository(database)
                 service.SummaryService.Subscriptions = postgres.NewSubscriptionRepository(database)
