@@ -1,10 +1,10 @@
-// Package gemini — Gemini HTTP Client (Config Holder + Prompt Builder).
+// Package gemini — Gemini low-level provider HTTP client.
 //
 // This file holds ONLY:
-//   1. GeminiHTTPClient struct (config: API key, model, base URL, HTTP client, system prompt)
+//   1. GeminiHTTPClient struct (provider configuration + HTTP client)
 //   2. NewGeminiHTTPClient constructor
 //   3. Getters (BaseURL, APIKey, Model) — used by Gemini capability adapters and bootstrap
-//   4. buildUserPrompt — used by the customer-sales adapter to build Gemini input
+// Capability-specific prompts and serializers live outside this provider client.
 //
 // The old generic decision path and its legacy proposal parser were removed.
 // Domain-specific Gemini adapters own their request/response contracts and
@@ -16,22 +16,18 @@
 //   Catalog boundary → Structured Output (responseSchema)
 //   Mujeeb Output Contract → capability-specific proposal
 //
-// Per contract ④ §3 (No Execution): the Gemini adapter contains NO database
-// imports (no pgx, no sql, no database). It does HTTP only.
+// Per contract ④ §3 (No Execution): this client contains no database or domain imports.
+// It owns provider HTTP transport only.
 
 package gemini
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/prompts"
 )
 
 const (
@@ -50,7 +46,6 @@ type GeminiHTTPClientConfig struct {
 	RequestTimeout     time.Duration
 	MaxOutputTokens    int
 	MaxInputCharacters int
-	SystemPrompt       string
 }
 
 // GeminiHTTPClient is the low-level Gemini HTTP client. Capability-specific adapters
@@ -66,13 +61,11 @@ type GeminiHTTPClient struct {
 	requestTimeout     time.Duration
 	maxOutputTokens    int
 	maxInputCharacters int
-	systemPrompt       string
 }
 
 // NewGeminiHTTPClient creates a Gemini HTTP client with the given config.
 //
-// Per contract ④ §2, the system prompt defaults to the versioned
-// prompts.CustomerSalesSystemPrompt from the prompts package.
+// The client contains no capability-specific prompt defaults.
 func NewGeminiHTTPClient(cfg GeminiHTTPClientConfig) (*GeminiHTTPClient, error) {
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
 	if baseURL == "" {
@@ -105,11 +98,6 @@ func NewGeminiHTTPClient(cfg GeminiHTTPClientConfig) (*GeminiHTTPClient, error) 
 	if client == nil {
 		client = &http.Client{}
 	}
-	systemPrompt := strings.TrimSpace(cfg.SystemPrompt)
-	if systemPrompt == "" {
-		// Per contract ④ §2, the system prompt is a versioned asset.
-		systemPrompt = prompts.CustomerSalesSystemPrompt
-	}
 	return &GeminiHTTPClient{
 		baseURL:            baseURL,
 		apiKey:             strings.TrimSpace(cfg.APIKey),
@@ -118,7 +106,6 @@ func NewGeminiHTTPClient(cfg GeminiHTTPClientConfig) (*GeminiHTTPClient, error) 
 		requestTimeout:     requestTimeout,
 		maxOutputTokens:    maxOutputTokens,
 		maxInputCharacters: maxInputCharacters,
-		systemPrompt:       systemPrompt,
 	}, nil
 }
 
@@ -145,82 +132,3 @@ func (c *GeminiHTTPClient) RequestTimeout() time.Duration { return c.requestTime
 
 // HTTPClient returns the configured HTTP client shared by Gemini capability adapters.
 func (c *GeminiHTTPClient) HTTPClient() *http.Client { return c.httpClient }
-
-// buildUserPrompt encodes the AIContext + customer message into the
-// customer-facing prompt text for Gemini. Used by GeminiCustomerSalesAdapter.
-//
-// Per contract ④ §3, the input includes: business_context,
-// conversation_context, conversation_state, catalog_evidence, user_message.
-func buildUserPrompt(input ports.CustomerSalesDecisionRequest) string {
-	prompt := fmt.Sprintf("Business ID: %s\nConversation ID: %s\nChannel: %s\nPolicy version: %s\nSource message reference: %s\nCustomer message:\n%s",
-		input.BusinessID, input.ConversationID, input.Channel, input.PolicyVersion,
-		input.SourceMessageReference, strings.TrimSpace(input.Text))
-	if input.Context == nil {
-		return prompt
-	}
-	encoded, err := json.Marshal(promptContextFrom(input.Context))
-	if err != nil {
-		return prompt + "\nVerified Mujeeb context: unavailable"
-	}
-	return prompt + "\nVerified Mujeeb context (evidence only; do not infer missing facts):\n" + string(encoded)
-}
-
-// promptContext is the JSON-serialized context sent to Gemini.
-type promptContext struct {
-	SchemaVersion          int                              `json:"schema_version"`
-	Freshness              string                           `json:"freshness"`
-	Business               ports.CustomerSalesContextBusiness          `json:"business"`
-	Conversation           ports.CustomerSalesContextConversation      `json:"conversation"`
-	Customer               promptCustomerContext            `json:"customer"`
-	CatalogEvidence        []ports.CustomerSalesCatalogEvidence        `json:"catalog_evidence"`
-	CatalogSummary         []ports.CustomerSalesCatalogSummaryEntry      `json:"catalog_summary,omitempty"`
-	OfferEvidence          []ports.CustomerSalesOfferEvidence          `json:"offer_evidence"`
-	VariantEvidence        []ports.CustomerSalesVariantEvidence        `json:"variant_evidence"`
-	KnowledgeEvidence      []ports.CustomerSalesKnowledgeEvidence      `json:"knowledge_evidence"`
-	BusinessPolicyEvidence []ports.CustomerSalesBusinessPolicyEvidence `json:"business_policy_evidence"`
-	RecentMessages         []ports.CustomerSalesRecentMessageEvidence  `json:"recent_messages"`
-	PolicyEvidence         ports.CustomerSalesPolicyEvidence           `json:"policy_evidence"`
-	KnowledgeState         string                           `json:"knowledge_state"`
-	ConversationState      *ports.ConversationStateRecord   `json:"conversation_state,omitempty"`
-	// ConversationSummary is the running LLM-generated summary of older
-	// conversation turns (everything before the sliding window of
-	// recent_messages). Per ADR-039. Empty when the conversation is
-	// short (less than SummaryInterval turns).
-	ConversationSummary string `json:"conversation_summary,omitempty"`
-	// CatalogNames per ADR-048 — category names only (no IDs, no counts).
-	// Gemini uses this for hierarchical navigation: when customer asks
-	// "what do you have?", Gemini lists these names as categories.
-	CatalogNames []string  `json:"catalog_names,omitempty"`
-	GeneratedAt  time.Time `json:"generated_at"`
-	ExpiresAt    time.Time `json:"expires_at"`
-}
-
-type promptCustomerContext struct {
-	Reference        string `json:"reference"`
-	LocalePreference string `json:"locale_preference"`
-	Status           string `json:"status"`
-}
-
-func promptContextFrom(value *ports.CustomerSalesContext) promptContext {
-	return promptContext{
-		SchemaVersion:          value.SchemaVersion,
-		Freshness:              value.Freshness,
-		Business:               value.Business,
-		Conversation:           value.Conversation,
-		Customer:               promptCustomerContext{Reference: value.Customer.Reference, LocalePreference: value.Customer.LocalePreference, Status: value.Customer.Status},
-		CatalogEvidence:        value.CatalogEvidence,
-		OfferEvidence:          value.OfferEvidence,
-		VariantEvidence:        value.VariantEvidence,
-		KnowledgeEvidence:      value.KnowledgeEvidence,
-		BusinessPolicyEvidence: value.BusinessPolicyEvidence,
-		RecentMessages:         value.RecentMessages,
-		PolicyEvidence:         value.PolicyEvidence,
-		KnowledgeState:         value.KnowledgeState,
-		ConversationState:      value.ConversationState,
-		CatalogSummary:         value.CatalogSummary,
-		CatalogNames:           value.CatalogNames,
-		ConversationSummary:    value.ConversationSummary,
-		GeneratedAt:            value.GeneratedAt,
-		ExpiresAt:              value.ExpiresAt,
-	}
-}
