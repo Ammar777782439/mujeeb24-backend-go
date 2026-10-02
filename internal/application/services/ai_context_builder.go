@@ -62,7 +62,7 @@ func NewAutoReplyContextBuilder(businesses ports.BusinessRepository, conversatio
 	}
 }
 
-func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.ContextBuildInput) (ports.AIContext, error) {
+func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.CustomerSalesContextInput) (ports.AIContext, error) {
 	if strings.TrimSpace(input.BusinessID) == "" || strings.TrimSpace(input.ConversationID) == "" || strings.TrimSpace(input.Text) == "" {
 		return ports.AIContext{}, errors.New("business, conversation, and message text are required to build AI context")
 	}
@@ -673,7 +673,7 @@ func nonEmpty(value, fallback string) string {
 	return strings.TrimSpace(value)
 }
 
-var _ ports.AIContextBuilder = AutoReplyContextBuilder{}
+var _ ports.CustomerSalesContextBuilder = AutoReplyContextBuilder{}
 
 // formatPrice trims trailing zeros from a numeric string.
 // "200.0000" → "200", "200.5000" → "200.5", "200" → "200"
