@@ -369,6 +369,8 @@ components:
           type: string
         expires_at:
           type: string
+        is_platform_admin:
+          type: boolean
         principal:
           $ref: "#/components/schemas/Principal"
         token_type:
@@ -377,6 +379,7 @@ components:
         - access_token
         - token_type
         - expires_at
+        - is_platform_admin
         - principal
       type: object
     AutomationRule:
@@ -743,20 +746,37 @@ components:
     CatalogItem:
       additionalProperties: false
       properties:
+        attribute_schema_id:
+          type: string
+        attribute_schema_version:
+          format: int64
+          type: integer
         attributes:
           additionalProperties: {}
           type: object
+        availability_mode:
+          type: string
         business_id:
           type: string
         catalog_id:
+          type: string
+        fulfillment_mode:
           type: string
         id:
           type: string
         item_type:
           type: string
+        long_description:
+          type: string
         name:
           type: string
+        pricing_mode:
+          type: string
+        requires_confirmation:
+          type: boolean
         resource_version:
+          type: string
+        short_description:
           type: string
         status:
           type: string
@@ -767,6 +787,10 @@ components:
         - item_type
         - name
         - status
+        - pricing_mode
+        - availability_mode
+        - fulfillment_mode
+        - requires_confirmation
         - resource_version
       type: object
     ChannelConnection:
@@ -1699,16 +1723,30 @@ components:
         attributes:
           additionalProperties: {}
           type: object
+        availability_mode:
+          type: string
+        fulfillment_mode:
+          type: string
+        item_type:
+          type: string
+        long_description:
+          type: string
         name:
+          type: string
+        pricing_mode:
           type: string
         requires_confirmation:
           type: boolean
+        short_description:
+          type: string
         status:
           type: string
       type: object
     ItemCreate:
       additionalProperties: false
       properties:
+        attribute_schema_id:
+          type: string
         attributes:
           additionalProperties: {}
           type: object
@@ -1717,6 +1755,8 @@ components:
         fulfillment_mode:
           type: string
         item_type:
+          type: string
+        long_description:
           type: string
         name:
           type: string
@@ -1729,6 +1769,8 @@ components:
           type: string
         requires_confirmation:
           type: boolean
+        short_description:
+          type: string
         variants:
           items:
             $ref: "#/components/schemas/VariantCreate"
@@ -1741,7 +1783,6 @@ components:
         - availability_mode
         - fulfillment_mode
         - requires_confirmation
-        - offers
       type: object
     LabelsRequest:
       additionalProperties: false
@@ -2743,7 +2784,19 @@ components:
         amount:
           format: double
           type: number
+        availability_checked_at:
+          format: date-time
+          type: string
+        availability_evidence_ref:
+          type: string
+        availability_mode:
+          type: string
+        availability_source:
+          type: string
         availability_status:
+          type: string
+        availability_valid_until:
+          format: date-time
           type: string
         business_id:
           type: string
@@ -2751,15 +2804,32 @@ components:
           type: string
         currency:
           type: string
+        fulfillment_mode:
+          type: string
         id:
           type: string
         name:
           type: string
+        price_checked_at:
+          format: date-time
+          type: string
+        price_source:
+          type: string
+        price_verification_status:
+          type: string
         pricing_mode:
+          type: string
+        pricing_unit:
           type: string
         resource_version:
           type: string
         status:
+          type: string
+        validity_from:
+          format: date-time
+          type: string
+        validity_until:
+          format: date-time
           type: string
         variant_id:
           type: string
@@ -2769,6 +2839,9 @@ components:
         - catalog_item_id
         - name
         - pricing_mode
+        - price_verification_status
+        - availability_mode
+        - fulfillment_mode
         - availability_status
         - status
         - resource_version
@@ -2788,6 +2861,10 @@ components:
           type: string
         name:
           type: string
+        name_source:
+          type: string
+        price_source:
+          type: string
         pricing_mode:
           type: string
         pricing_unit:
@@ -2800,7 +2877,9 @@ components:
           type: string
       required:
         - name
+        - name_source
         - pricing_mode
+        - price_source
         - availability_mode
         - availability_status
         - fulfillment_mode
@@ -3235,8 +3314,6 @@ components:
         response_text:
           type: string
         schema_version:
-          enum:
-            - 2
           format: int64
           type: integer
         status:
