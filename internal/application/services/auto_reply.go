@@ -1,7 +1,7 @@
 // Package services — AutoReplyService refactored to contract-aligned flow.
 //
 // Implements contracts ③ §1 (Mujeeb = canonical conversation state),
-// ④ §4 (Gemini output is AIGeminiProposal only),
+// ④ §4 (Gemini output is CustomerSalesProposal only),
 // ⑥ §2 (Structural→Reference→Tenant→Ownership→Policy→Authorization→EffectiveDecision),
 // ⑨ §2 (AI Run lifecycle),
 // ⑧ §5 (operational trace via ai_runs + ai_run_attempts + ai_tool_calls).
@@ -70,7 +70,7 @@ func isSubscriptionHandoffIntent(intent string) bool {
 // Per contract ⑨ §1, each Handle() call is one AI Run.
 // Per contract ⑨ §2, the Run progresses: RECEIVED → CONTEXT_BUILT → RUNNING
 // → VALIDATING → AUTHORIZED → EXECUTING → COMPLETED (or FAILED/CANCELLED).
-// Per contract ⑥ §2, after Gemini produces AIGeminiProposal, the ValidationPipeline
+// Per contract ⑥ §2, after Gemini produces CustomerSalesProposal, the ValidationPipeline
 // runs Structural→Reference→Tenant→Ownership→Policy→Authorization.
 // Per contract ⑥ §19, Execution happens only after Authorization succeeds.
 //
@@ -98,7 +98,7 @@ type AutoReplyService struct {
 	// when Gemini's first response indicates catalog data is needed.
 	// Per contract ② §9, the flow is: Gemini → needs_catalog → build
 	// projection → token-count → batch → evaluate → aggregate candidates
-	// → final evaluate → AIGeminiProposal.
+	// → final evaluate → CustomerSalesProposal.
 	// If nil, catalog evaluation is skipped (the AI replies with whatever
 	// it can infer from the context alone).
 	CatalogBatch *CatalogBatchController
@@ -335,14 +335,14 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	//   3. Evaluate each batch independently (contract ② §5-8)
 	//   4. Aggregate candidates and run Final Evaluation (contract ② §6)
 	//
-	// The Final Evaluation produces a new AIGeminiProposal that replaces
+	// The Final Evaluation produces a new CustomerSalesProposal that replaces
 	// the initial one. This is the contract ② §9 flow:
 	//   Customer Message → Gemini → needs_catalog? → Catalog Evaluation
 	//   → Final Gemini → AI Proposal → Validation → Execution
 	//
 	// Per contract ② "ما أغلقناه": no semantic search, no product matching
 	// inside Mujeeb. Mujeeb only builds the projection and counts tokens.
-	if s.CatalogBatch != nil && proposal.Status == ports.AIProposalStatusNeedsMoreData {
+	if s.CatalogBatch != nil && proposal.Status == ports.CustomerSalesProposalStatusNeedsMoreData {
 		// Per contract ② §9, invoke catalog evaluation whenever Gemini
 		// says it needs more data — regardless of whether some evidence
 		// already exists. The fact that Gemini returned needs_more_data
@@ -479,7 +479,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	// not reference resolution.
 	farewellHandoff := false
 	var farewellReasonCodes []string
-	if proposal.Action == ports.AIProposalActionHumanRequest &&
+	if proposal.Action == ports.CustomerSalesProposalActionHumanRequest &&
 		effective.PolicyDecision == "allowed" &&
 		isSubscriptionHandoffIntent(proposal.ResponseText) {
 		farewellHandoff = true
@@ -488,7 +488,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		// Per contract ⑥ §14, handoff is governed by Mujeeb policy, not by
 		// Gemini prompt text — Mujeeb decides what to send.
 		proposal.ResponseText = HandoffFarewellMessage
-		proposal.Action = ports.AIProposalActionAnswer
+		proposal.Action = ports.CustomerSalesProposalActionAnswer
 		farewellReasonCodes = []string{"handoff_farewell_sent"}
 	}
 
@@ -507,7 +507,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		EvidenceReferences:     encodeProposalSelectedAsJSON(proposal.Selected),
 		RequestedAction:        string(proposal.Action),
 		ConfidenceBand:         "medium",
-		RequiresHuman:          proposal.Action == ports.AIProposalActionHumanRequest || farewellHandoff,
+		RequiresHuman:          proposal.Action == ports.CustomerSalesProposalActionHumanRequest || farewellHandoff,
 		MissingInformation:     []byte(`[]`),
 		ReasonCodes:            encodeReasonCodes(farewellReasonCodes),
 		PolicyVersion:          policyVersion,
@@ -570,15 +570,15 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			var targetState *string
 			var targetOwnership *string
 			switch proposal.Action {
-			case ports.AIProposalActionAnswer, ports.AIProposalActionClarification:
+			case ports.CustomerSalesProposalActionAnswer, ports.CustomerSalesProposalActionClarification:
 				st := "waiting_customer"
 				targetState = &st
 				own := "ai"
 				targetOwnership = &own
-			case ports.AIProposalActionHumanRequest:
+			case ports.CustomerSalesProposalActionHumanRequest:
 				st := "waiting_human"
 				targetState = &st
-			case ports.AIProposalActionLeadDraft, ports.AIProposalActionOrderDraft:
+			case ports.CustomerSalesProposalActionLeadDraft, ports.CustomerSalesProposalActionOrderDraft:
 				st := "waiting_human"
 				targetState = &st
 			}
@@ -597,8 +597,8 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 
 		// Per contract ⑥ §21, only answer/clarification are customer-facing
 		// messaging actions. Lead/Order drafts follow their own flow.
-		sendable := proposal.Action == ports.AIProposalActionAnswer ||
-			proposal.Action == ports.AIProposalActionClarification
+		sendable := proposal.Action == ports.CustomerSalesProposalActionAnswer ||
+			proposal.Action == ports.CustomerSalesProposalActionClarification
 		if !sendable {
 			return nil
 		}
@@ -1035,7 +1035,7 @@ func appendUniqueString(slice []string, s string) []string {
 // This is the END-TO-END wiring that connects:
 //
 //	Gemini API response (usageMetadata)
-//	→ token extraction (ContractUsageTelemetry)
+//	→ token extraction (CustomerSalesUsageTelemetry)
 //	→ pricing lookup (AIProviderPricingRepository)
 //	→ provider_cost computation
 //	→ ai_usage_records INSERT (AppendRecord)
