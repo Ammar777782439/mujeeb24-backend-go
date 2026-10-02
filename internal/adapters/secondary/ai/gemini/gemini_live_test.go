@@ -46,7 +46,7 @@ func TestGeminiLiveSmoke(t *testing.T) {
 		t.Fatalf("build contract client: %v", err)
 	}
 
-	out, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{
 			BusinessID:     "test-biz",
 			ConversationID: "test-conv",
