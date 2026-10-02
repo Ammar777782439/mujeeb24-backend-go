@@ -1032,7 +1032,7 @@ func TestPlatformAICredentialSwitchWithoutRestart(t *testing.T) {
 // records the model that was actually used (from the active config).
 // This test verifies the wiring: after model switch, the cache returns
 // the new model, so ContractClient.DecideContract records it in
-// ContractUsageTelemetry.Model, and recordAIUsage persists it.
+// CustomerSalesUsageTelemetry.Model, and recordAIUsage persists it.
 func TestPlatformAIUsageRecordsNewModelAfterSwitch(t *testing.T) {
 	mock := newMockGeminiServer(t)
 	defer mock.Close()
@@ -1072,7 +1072,7 @@ func TestPlatformAIUsageRecordsNewModelAfterSwitch(t *testing.T) {
 	if cfg.PricingVersion != "new-v1" {
 		t.Errorf("expected new pricing version, got %s", cfg.PricingVersion)
 	}
-	// The runtime's recordAIUsage() persists cfg.Model (via ContractUsageTelemetry)
+	// The runtime's recordAIUsage() persists cfg.Model (via CustomerSalesUsageTelemetry)
 	// and cfg.PricingVersion. So usage records the new model. This is verified
 	// via the GeminiCustomerSalesAdapter configuration path that uses cfg.Model.
 	// Old records remain unchanged (append-only — see Test N).
