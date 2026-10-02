@@ -346,7 +346,7 @@ func TestAutoReply_OneAICallPerTurn(t *testing.T) {
 
 type stubBuilder struct{}
 
-func (stubBuilder) Build(_ context.Context, _ ports.ContextBuildInput) (ports.AIContext, error) {
+func (stubBuilder) Build(_ context.Context, _ ports.CustomerSalesContextInput) (ports.AIContext, error) {
 	return ports.AIContext{Conversation: ports.AIContextConversation{State: "open"}}, nil
 }
 
