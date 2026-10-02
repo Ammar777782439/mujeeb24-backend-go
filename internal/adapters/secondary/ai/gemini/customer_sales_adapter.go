@@ -41,7 +41,7 @@ import (
 //   - Structured Output enforcement for CustomerSalesProposal per contract ④ §4
 //   - Usage telemetry capture for AI Trace per contract ⑧ §8
 type GeminiCustomerSalesAdapter struct {
-	base           *Client
+	base           *GeminiHTTPClient
 	httpClient     *http.Client
 	baseURL        string
 	apiKey         string
@@ -111,7 +111,7 @@ func (c *GeminiCustomerSalesAdapter) resolveConfig(ctx context.Context) (*resolv
 //
 // Per contract ⑤ §7, the Catalog Entity Contract is built once at startup
 // and reused for every call; callers pass it via CustomerSalesDecisionInput.
-func NewGeminiCustomerSalesAdapter(base *Client) (*GeminiCustomerSalesAdapter, error) {
+func NewGeminiCustomerSalesAdapter(base *GeminiHTTPClient) (*GeminiCustomerSalesAdapter, error) {
 	if base == nil {
 		return nil, errors.New("base client is required")
 	}
