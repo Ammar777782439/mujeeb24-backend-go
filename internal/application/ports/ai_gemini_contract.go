@@ -566,18 +566,6 @@ type CustomerSalesDecisionInput struct {
 	AIRunID string
 }
 
-// CustomerSalesDecisionRequest contains the customer-facing input that is
-// safe and authoritative for the customer-sales AI.
-type CustomerSalesDecisionRequest struct {
-	BusinessID             string
-	ConversationID         string
-	SourceMessageReference string
-	Text                   string
-	Channel                string
-	PolicyVersion          string
-	Context                *AIContext
-}
-
 // CustomerSalesDecisionOutput is the output of CustomerSalesDecisionPort.Decide.
 type CustomerSalesDecisionOutput struct {
 	// Proposal is the contract ④ §4 structured Gemini output.
