@@ -48,15 +48,7 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 	return checks
 }
 
-func BuildExternalAdapters(cfg config.ProcessConfig, capabilities ...ports.CustomerSalesToolPort) ExternalAdapters {
-	var caps ports.CustomerSalesToolPort
-	if len(capabilities) > 0 {
-		caps = capabilities[0]
-	}
-	return BuildExternalAdaptersWithCapabilities(cfg, caps)
-}
-
-func BuildExternalAdaptersWithCapabilities(cfg config.ProcessConfig, capabilities ports.CustomerSalesToolPort) ExternalAdapters {
+func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 	adapters := ExternalAdapters{}
 	if cfg.SocialAPIAPIKey != "" || cfg.SocialAPIWebhookSecret != "" {
 		client := socialapi.NewClient(socialapi.Config{BaseURL: cfg.SocialAPIBaseURL, APIKey: cfg.SocialAPIAPIKey, WebhookSecret: cfg.SocialAPIWebhookSecret, HTTPTimeout: cfg.SocialAPIHTTPTimeout})
@@ -78,7 +70,6 @@ func BuildExternalAdaptersWithCapabilities(cfg config.ProcessConfig, capabilitie
 			RequestTimeout:     cfg.GeminiHTTPTimeout,
 			MaxOutputTokens:    cfg.LLMMaxOutputTokens,
 			MaxInputCharacters: cfg.LLMMaxInputCharacters,
-			Capabilities:       capabilities,
 		})
 		if err != nil {
 			adapters.LLMConfigError = errors.New("Gemini adapter configuration: " + err.Error())
