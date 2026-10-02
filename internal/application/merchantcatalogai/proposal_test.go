@@ -253,7 +253,7 @@ func TestProposalValidateCreateOfferProvenance(t *testing.T) {
 			name: "not stated price stays empty",
 			offer: OfferCreate{
 				Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault,
-				PricingMode: "quote_required", Amount: nil, PriceSource: OfferPriceSourceNotStated,
+				PricingMode: "quote_required", Amount: nil, Currency: stringPtr("YER"), PriceSource: OfferPriceSourceNotStated,
 				AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
 			},
 		},
