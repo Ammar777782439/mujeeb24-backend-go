@@ -1,0 +1,53 @@
+services:
+  - type: web
+    name: mujeeb24-api
+    runtime: docker
+    plan: free
+    branch: refactor/merchant-catalog-ai-v2-structure
+    dockerfilePath: ./Dockerfile
+    autoDeployTrigger: checksPass
+    healthCheckPath: /
+    maxShutdownDelaySeconds: 60
+
+    envVars:
+      - key: APP_ENV
+        value: production
+
+      - key: DATABASE_URL
+        sync: false
+
+      - key: AUTH_ENABLED
+        value: "true"
+
+      - key: JWT_ISSUER
+        value: mujeeb24
+
+      - key: JWT_ED25519_PRIVATE_KEY
+        sync: false
+
+      - key: JWT_ED25519_PUBLIC_KEY
+        sync: false
+
+      - key: AI_CONFIG_ENCRYPTION_KEY
+        sync: false
+
+      - key: SOCIALAPI_BASE_URL
+        value: https://api.social-api.ai
+
+      - key: SOCIALAPI_API_KEY
+        sync: false
+
+      - key: SOCIALAPI_WEBHOOK_SECRET
+        sync: false
+
+      - key: FRONTEND_URL
+        value: https://mujeeb24-frontend.ai.studio/landing
+
+      - key: CHANNEL_PROVISIONING_ENABLED
+        value: "false"
+
+      - key: AUTOREPLY_ENABLED
+        value: "false"
+
+      - key: LLM_ENABLED
+        value: "false"
