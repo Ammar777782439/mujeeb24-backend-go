@@ -58,8 +58,8 @@ type AICapabilityRegistry interface {
 }
 
 // IncorporateCapabilityEvidence merges evidence returned by capability execution
-// into the AIContext so downstream policy validation recognizes verified facts.
-func IncorporateCapabilityEvidence(target *AIContext, result AICapabilityResult) {
+// into the CustomerSalesContext so downstream policy validation recognizes verified facts.
+func IncorporateCapabilityEvidence(target *CustomerSalesContext, result AICapabilityResult) {
 	if target == nil {
 		return
 	}
@@ -114,7 +114,7 @@ func IncorporateCapabilityEvidence(target *AIContext, result AICapabilityResult)
 //
 // This function is kept as a no-op for migration safety; it will be removed
 // once all callers are migrated to the contract-aligned flow.
-func IncorporateProposalEvidence(target *AIContext, proposal AIDecisionProposal) {
+func IncorporateProposalEvidence(target *CustomerSalesContext, proposal AIDecisionProposal) {
 	if target == nil {
 		return
 	}
