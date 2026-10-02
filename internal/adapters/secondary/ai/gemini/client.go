@@ -176,8 +176,8 @@ func buildUserPrompt(input ports.CustomerSalesDecisionRequest) string {
 type promptContext struct {
 	SchemaVersion          int                              `json:"schema_version"`
 	Freshness              string                           `json:"freshness"`
-	Business               ports.AIContextBusiness          `json:"business"`
-	Conversation           ports.AIContextConversation      `json:"conversation"`
+	Business               ports.CustomerSalesContextBusiness          `json:"business"`
+	Conversation           ports.CustomerSalesContextConversation      `json:"conversation"`
 	Customer               promptCustomerContext            `json:"customer"`
 	CatalogEvidence        []ports.AICatalogEvidence        `json:"catalog_evidence"`
 	CatalogSummary         []ports.CatalogSummaryEntry      `json:"catalog_summary,omitempty"`
@@ -208,7 +208,7 @@ type promptCustomerContext struct {
 	Status           string `json:"status"`
 }
 
-func promptContextFrom(value *ports.AIContext) promptContext {
+func promptContextFrom(value *ports.CustomerSalesContext) promptContext {
 	return promptContext{
 		SchemaVersion:          value.SchemaVersion,
 		Freshness:              value.Freshness,
