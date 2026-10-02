@@ -151,12 +151,12 @@ func main() {
 		fmt.Printf("  ❌ Gemini client: %v\n", err)
 		os.Exit(1)
 	}
-	contractClient, err := gemini.NewContractClient(geminiClient)
+	contractClient, err := gemini.NewGeminiCustomerSalesAdapter(geminiClient)
 	if err != nil {
-		fmt.Printf("  ❌ ContractClient: %v\n", err)
+		fmt.Printf("  ❌ GeminiCustomerSalesAdapter: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("  ✅ Gemini ContractClient ready")
+	fmt.Println("  ✅ Gemini GeminiCustomerSalesAdapter ready")
 
 	contextBuilder := services.NewAutoReplyContextBuilder(
 		businessRepo,
