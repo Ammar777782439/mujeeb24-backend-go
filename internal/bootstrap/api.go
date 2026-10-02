@@ -475,15 +475,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		autoReplyPool = webhookService.AutoReplyWorkerPool
 		dependencies.IngestSocialAPIWebhook = webhookService
 	}
-	var assignBusinessOwner *services.AssignBusinessOwnerService
-	if authentication != nil {
-		assignBusinessOwner = &services.AssignBusinessOwnerService{
-			Transactions:       database,
-			PrincipalBootstrap: authentication.Repository,
-			Business:           postgres.NewPlatformBusinessRepository(database),
-		}
-	}
-dashboardServer := handlers.NewServer(dependencies)
+	dashboardServer := handlers.NewServer(dependencies)
 	dashboardServer = dashboardServer.WithPlatformDeps(handlers.PlatformDeps{
 		Plans:             postgres.NewPlanRepository(database),
 		PlatformBusiness:  postgres.NewPlatformBusinessRepository(database),
@@ -498,7 +490,6 @@ dashboardServer := handlers.NewServer(dependencies)
 		AIConfigRepo:      aiConfigRepo,
 		AIConfigCache:     aiConfigCache,
 		ModelDiscovery:    gemini.NewModelsClient(),
-		AssignBusinessOwner: assignBusinessOwner,
 	})
 
 	var merchantCatalogErr error
