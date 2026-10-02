@@ -9,25 +9,25 @@ import (
 )
 
 type TurnInput struct {
-	BusinessID string
-	PrincipalID string
-	SessionID string
-	Message string
+	BusinessID        string
+	PrincipalID       string
+	SessionID         string
+	Message           string
 	ExplicitCatalogID string
 }
 
 type TurnResult struct {
-	SessionID string
+	SessionID       string
 	SelectedCatalog ports.CatalogRecord
-	Proposal Proposal
+	Proposal        Proposal
 }
 
 type Agent struct {
-	Sessions SessionStore
-	Selector CatalogSelector
-	Business ports.BusinessRepository
-	EntityContract EntityContractProvider
-	Runtime Runtime
+	Sessions            SessionStore
+	Selector            CatalogSelector
+	Business            ports.BusinessRepository
+	EntityContract      EntityContractProvider
+	Runtime             Runtime
 	CapabilitiesFactory func(selectedCatalogID string) ports.AICapabilityDispatcher
 }
 
@@ -61,22 +61,22 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 	}
 
 	selected, err := a.Selector.Select(ctx, CatalogSelectionInput{
-		BusinessID: in.BusinessID,
+		BusinessID:        in.BusinessID,
 		ExplicitCatalogID: in.ExplicitCatalogID,
-		StickyCatalogID: stickyCatalogID,
+		StickyCatalogID:   stickyCatalogID,
 	})
 	if err != nil {
 		if errors.Is(err, ErrCatalogSelectionRequired) {
 			return TurnResult{SessionID: sessionID, Proposal: Proposal{
 				SchemaVersion: 1,
-				Status: StatusNeedsMoreData,
-				Operation: OperationAskMerchant,
-				ResponseText: "حدّد الكتالوج الذي تريد إدارة بياناته أولًا.",
+				Status:        StatusNeedsMoreData,
+				Operation:     OperationAskMerchant,
+				ResponseText:  "حدّد الكتالوج الذي تريد إدارة بياناته أولًا.",
 				MissingInformation: []MissingField{{
-					Path: "target_catalog_id",
+					Path:        "target_catalog_id",
 					DisplayName: "الكتالوج",
-					DataType: "uuid",
-					Reason: "يوجد أكثر من كتالوج صالح ولم يتم تحديد الكتالوج المستهدف.",
+					DataType:    "uuid",
+					Reason:      "يوجد أكثر من كتالوج صالح ولم يتم تحديد الكتالوج المستهدف.",
 				}},
 			}}, nil
 		}
@@ -108,15 +108,15 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 	}
 
 	proposal, err := a.Runtime.Decide(ctx, RuntimeInput{
-		BusinessID: in.BusinessID,
-		PrincipalID: in.PrincipalID,
-		SessionID: sessionID,
-		Message: in.Message,
+		BusinessID:      in.BusinessID,
+		PrincipalID:     in.PrincipalID,
+		SessionID:       sessionID,
+		Message:         in.Message,
 		DefaultCurrency: business.DefaultCurrency,
 		SelectedCatalog: selected.Catalog,
-		History: history,
-		EntityContract: entityContract,
-		Capabilities: capabilities,
+		History:         history,
+		EntityContract:  entityContract,
+		Capabilities:    capabilities,
 	})
 	if err != nil {
 		return TurnResult{}, err
@@ -130,8 +130,8 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 	}
 
 	return TurnResult{
-		SessionID: sessionID,
+		SessionID:       sessionID,
 		SelectedCatalog: selected.Catalog,
-		Proposal: proposal,
+		Proposal:        proposal,
 	}, nil
 }

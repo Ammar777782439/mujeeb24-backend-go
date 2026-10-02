@@ -2,9 +2,9 @@ package merchantcatalogai
 
 import (
 	"context"
-	"time"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
@@ -16,7 +16,7 @@ type listVariantsCapability struct {
 
 func (c listVariantsCapability) Definition() ports.AICapabilityDefinition {
 	return ports.AICapabilityDefinition{
-		Name: "merchant_catalog_list_variants",
+		Name:        "merchant_catalog_list_variants",
 		Description: "Read variants for one catalog item.",
 		Parameters: map[string]any{
 			"type": "object",
@@ -67,7 +67,7 @@ func (c listVariantsCapability) Execute(ctx context.Context, execCtx ports.AICap
 			"attributes":      json.RawMessage(variant.Attributes),
 		})
 		evidence = append(evidence, ports.AIVariantEvidence{
-			Reference:           variant.ID,
+			Reference:            variant.ID,
 			CatalogItemReference: variant.CatalogItemID,
 			Name:                 variant.Name,
 			Status:               variant.Status,

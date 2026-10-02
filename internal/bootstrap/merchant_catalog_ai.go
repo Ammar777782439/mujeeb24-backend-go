@@ -28,11 +28,11 @@ func wireMerchantCatalogAIV2(
 
 	catalogRepo := postgres.NewCatalogRepository(database)
 	b2bAgent := &merchantcatalogai.Agent{
-		Sessions: postgres.NewMerchantCatalogAISessionStore(database),
-		Selector: merchantcatalogai.DeterministicCatalogSelector{Repository: catalogRepo},
-		Business: postgres.NewBusinessRepository(database),
+		Sessions:       postgres.NewMerchantCatalogAISessionStore(database),
+		Selector:       merchantcatalogai.DeterministicCatalogSelector{Repository: catalogRepo},
+		Business:       postgres.NewBusinessRepository(database),
 		EntityContract: merchantcatalogai.CanonicalEntityContractProvider{},
-		Runtime: b2bRuntime,
+		Runtime:        b2bRuntime,
 		CapabilitiesFactory: func(selectedCatalogID string) ports.AICapabilityDispatcher {
 			return merchantcatalogai.NewReadOnlyCapabilityRegistry(catalogRepo, selectedCatalogID)
 		},

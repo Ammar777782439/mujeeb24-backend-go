@@ -36,10 +36,10 @@ package prompts
 //
 // Per contract ④ §4, the output is an AIGeminiProposal with:
 //
-//      status (resolved|ambiguous|not_found|needs_more_data)
-//      action (answer|clarification|human_request|lead_draft|order_draft)
-//      response_text (string)
-//      selected[] (array of {item_id, variant_id?, offer_id?})
+//	status (resolved|ambiguous|not_found|needs_more_data)
+//	action (answer|clarification|human_request|lead_draft|order_draft)
+//	response_text (string)
+//	selected[] (array of {item_id, variant_id?, offer_id?})
 //
 // Version: v6 — adds conversation_summary field handling (ADR-039:
 // Summary + Sliding Window hybrid context strategy). Adds new context
@@ -131,7 +131,6 @@ const CustomerSalesSystemPrompt = `أنت وكيل الذكاء الاصطناع
 // v6 (ADR-039): conversation_summary field handling (Summary + Sliding
 // Window hybrid context strategy).
 const CustomerSalesSystemPromptVersion = "customer-sales-v9"
-
 
 const BatchEvaluationSystemPrompt = `
 

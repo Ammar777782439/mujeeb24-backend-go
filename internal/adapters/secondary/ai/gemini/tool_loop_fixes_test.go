@@ -35,9 +35,9 @@ var _ ports.AIRunLifecyclePort = (*stubLifecyclePort)(nil)
 // mockServerConfigurable is a mock that returns configurable responses
 // per request count. Used by tests #1-3.
 type mockServerConfigurable struct {
-	t           *testing.T
-	server      *httptest.Server
-	responses   []string
+	t            *testing.T
+	server       *httptest.Server
+	responses    []string
 	requestCount int64
 }
 
@@ -47,7 +47,7 @@ func newMockServerConfigurable(t *testing.T, responses []string) *mockServerConf
 	return m
 }
 
-func (m *mockServerConfigurable) Close() { m.server.Close() }
+func (m *mockServerConfigurable) Close()      { m.server.Close() }
 func (m *mockServerConfigurable) URL() string { return m.server.URL }
 
 func (m *mockServerConfigurable) handle(w http.ResponseWriter, r *http.Request) {
@@ -148,7 +148,7 @@ func TestFix1_ToolLoop_ModelRequestsIs2_ToolCallsIs1(t *testing.T) {
 
 	out, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "what products?"},
-		AIRunID:      "run-1",
+		AIRunID:       "run-1",
 	})
 	if err != nil {
 		t.Fatalf("DecideContract failed: %v", err)
@@ -178,7 +178,7 @@ func TestFix1_ToolLoop_TwoTools_ModelRequestsIs3_ToolCallsIs2(t *testing.T) {
 
 	out, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "show me"},
-		AIRunID:      "run-2",
+		AIRunID:       "run-2",
 	})
 	if err != nil {
 		t.Fatalf("DecideContract failed: %v", err)
@@ -206,7 +206,7 @@ func TestFix2_Lifecycle_RunningToWaitingToolToRunning(t *testing.T) {
 
 	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
-		AIRunID:      "run-lc",
+		AIRunID:       "run-lc",
 	})
 	if err != nil {
 		t.Fatalf("DecideContract failed: %v", err)
@@ -241,7 +241,7 @@ func TestFix3_B2B_AIRunIDSavedInToolCallRecord(t *testing.T) {
 	// ContractRuntimeInput.AIRunID.
 	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b2b-biz", ConversationID: "session-1", Text: "add product"},
-		AIRunID:      "run-b2b-1",
+		AIRunID:       "run-b2b-1",
 	})
 	if err != nil {
 		t.Fatalf("DecideContract failed: %v", err)

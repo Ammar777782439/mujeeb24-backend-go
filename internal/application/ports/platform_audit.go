@@ -16,28 +16,29 @@ import (
 //     result, correlation_id, occurred_at, opaque metadata.
 //
 // All Platform Commands listed in Contract §46 must write a row:
-//   business.created / .suspended / .reactivated / .archived
-//   plan.created / .activated / .retired
-//   subscription.created / .activated / .cancelled / .expired
-//   payment.recorded
-//   support.ticket.started / .resolved / .closed / support.message.created
-//   ai.disabled / .enabled / provider.health_checked / channel.health_checked
-//   platform.channel_action
-//   ai.cost_budget_changed / subscription.cost_budget_overridden
-//   plan.ai_reply_limit_changed / plan.internal_ai_cost_budget_changed
-//   provider.pricing_version_changed
+//
+//	business.created / .suspended / .reactivated / .archived
+//	plan.created / .activated / .retired
+//	subscription.created / .activated / .cancelled / .expired
+//	payment.recorded
+//	support.ticket.started / .resolved / .closed / support.message.created
+//	ai.disabled / .enabled / provider.health_checked / channel.health_checked
+//	platform.channel_action
+//	ai.cost_budget_changed / subscription.cost_budget_overridden
+//	plan.ai_reply_limit_changed / plan.internal_ai_cost_budget_changed
+//	provider.pricing_version_changed
 type PlatformAuditEvent struct {
-	ID                  string
+	ID                   string
 	ActorPlatformAdminID *string
-	Action              string
-	TargetType          string
-	TargetID            *string
-	BusinessID          *string
-	Result              string
-	FailureCode         *string
-	CorrelationID       *string
-	OccurredAt          time.Time
-	Metadata            []byte // JSONB; defaults to {} on insert
+	Action               string
+	TargetType           string
+	TargetID             *string
+	BusinessID           *string
+	Result               string
+	FailureCode          *string
+	CorrelationID        *string
+	OccurredAt           time.Time
+	Metadata             []byte // JSONB; defaults to {} on insert
 }
 
 // PlatformAuditDraft is the input shape for the Append method.
@@ -45,15 +46,15 @@ type PlatformAuditEvent struct {
 // UUID + now()); the caller supplies the substantive fields.
 type PlatformAuditDraft struct {
 	ActorPlatformAdminID *string
-	Action              string
-	TargetType          string
-	TargetID            *string
-	BusinessID          *string
-	Result              string
-	FailureCode         *string
-	CorrelationID       *string
-	OccurredAt          time.Time
-	Metadata            []byte
+	Action               string
+	TargetType           string
+	TargetID             *string
+	BusinessID           *string
+	Result               string
+	FailureCode          *string
+	CorrelationID        *string
+	OccurredAt           time.Time
+	Metadata             []byte
 }
 
 // PlatformAuditFilter is the query input for List.

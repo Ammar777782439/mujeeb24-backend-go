@@ -17,7 +17,7 @@ type listItemsCapability struct {
 
 func (c listItemsCapability) Definition() ports.AICapabilityDefinition {
 	return ports.AICapabilityDefinition{
-		Name: "merchant_catalog_list_items",
+		Name:        "merchant_catalog_list_items",
 		Description: "Read items from the already selected merchant catalog. This is bounded factual retrieval, not semantic search. The catalog is selected by Mujeeb; the model must not choose it.",
 		Parameters: map[string]any{
 			"type": "object",
@@ -76,7 +76,7 @@ func (c listItemsCapability) Execute(ctx context.Context, execCtx ports.AICapabi
 			Name:                 item.Name,
 			Status:               item.Status,
 			Attributes:           append([]byte(nil), item.Attributes...),
-			ShortDescription:      item.ShortDescription,
+			ShortDescription:     item.ShortDescription,
 			LongDescription:      item.LongDescription,
 			PricingMode:          item.PricingMode,
 			AvailabilityMode:     item.AvailabilityMode,
@@ -103,7 +103,7 @@ type getItemCapability struct {
 
 func (c getItemCapability) Definition() ports.AICapabilityDefinition {
 	return ports.AICapabilityDefinition{
-		Name: "merchant_catalog_get_item",
+		Name:        "merchant_catalog_get_item",
 		Description: "Read one item by exact item_id in the already selected merchant catalog using tenant-scoped repository access.",
 		Parameters: map[string]any{
 			"type": "object",

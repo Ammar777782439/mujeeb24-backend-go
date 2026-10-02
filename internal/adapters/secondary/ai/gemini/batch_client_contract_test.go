@@ -21,8 +21,9 @@ import (
 // TestBatchClientEvaluateBatchSystemInstruction verifies that EvaluateBatch
 // injects the Catalog Entity Contract into system_instruction.Parts[1],
 // following the same authoritative ordering as ContractClient:
-//   part 0 = Batch Evaluation System Prompt
-//   part 1 = Catalog Entity Contract JSON
+//
+//	part 0 = Batch Evaluation System Prompt
+//	part 1 = Catalog Entity Contract JSON
 func TestBatchClientEvaluateBatchSystemInstruction(t *testing.T) {
 	client, err := NewBatchClient(BatchClientConfig{
 		BaseURL: "https://test.example.com",

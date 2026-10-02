@@ -19,7 +19,7 @@ type listAttributeSchemasCapability struct {
 // is read-only; this capability never creates or mutates schemas.
 func (c listAttributeSchemasCapability) Definition() ports.AICapabilityDefinition {
 	return ports.AICapabilityDefinition{
-		Name: "merchant_catalog_list_attribute_schemas",
+		Name:        "merchant_catalog_list_attribute_schemas",
 		Description: "List existing AttributeSchema versions and definitions for the current business when existing schema evidence is relevant. Dynamic attributes do not require a schema. This is read-only and tenant-scoped.",
 		Parameters: map[string]any{
 			"type": "object",

@@ -7,8 +7,8 @@ import (
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
 )
 
 type MerchantCatalogAIV2Handler struct {
@@ -28,10 +28,10 @@ func (h *MerchantCatalogAIV2Handler) HandleTurn(ctx context.Context, in *contrac
 	}
 
 	result, err := h.Agent.HandleTurn(ctx, merchantcatalogai.TurnInput{
-		BusinessID: string(actor.BusinessID),
-		PrincipalID: string(actor.PrincipalID),
-		SessionID: in.Body.SessionID,
-		Message: in.Body.Message,
+		BusinessID:        string(actor.BusinessID),
+		PrincipalID:       string(actor.PrincipalID),
+		SessionID:         in.Body.SessionID,
+		Message:           in.Body.Message,
 		ExplicitCatalogID: in.Body.TargetCatalogID,
 	})
 	if err != nil {
@@ -41,10 +41,10 @@ func (h *MerchantCatalogAIV2Handler) HandleTurn(ctx context.Context, in *contrac
 
 	out := &contract.Single[contract.MerchantCatalogAIResponse]{}
 	out.Body.Data = contract.MerchantCatalogAIResponse{
-		SessionID: result.SessionID,
-		CatalogID: result.SelectedCatalog.ID,
+		SessionID:   result.SessionID,
+		CatalogID:   result.SelectedCatalog.ID,
 		CatalogName: result.SelectedCatalog.Name,
-		Proposal: result.Proposal,
+		Proposal:    result.Proposal,
 	}
 	return out, nil
 }

@@ -15,14 +15,14 @@ import (
 )
 
 type merchantCatalogInteractionRequest struct {
-	Model                 string                           `json:"model"`
-	Store                 bool                             `json:"store"`
-	Input                 any                              `json:"input"`
-	SystemInstruction     string                           `json:"system_instruction,omitempty"`
-	Tools                 []merchantCatalogInteractionTool `json:"tools,omitempty"`
+	Model                 string                            `json:"model"`
+	Store                 bool                              `json:"store"`
+	Input                 any                               `json:"input"`
+	SystemInstruction     string                            `json:"system_instruction,omitempty"`
+	Tools                 []merchantCatalogInteractionTool  `json:"tools,omitempty"`
 	ResponseFormat        *merchantCatalogInteractionFormat `json:"response_format,omitempty"`
-	GenerationConfig      *merchantCatalogGenerationConfig `json:"generation_config,omitempty"`
-	PreviousInteractionID string                           `json:"previous_interaction_id,omitempty"`
+	GenerationConfig      *merchantCatalogGenerationConfig  `json:"generation_config,omitempty"`
+	PreviousInteractionID string                            `json:"previous_interaction_id,omitempty"`
 }
 
 type merchantCatalogInteractionTool struct {
@@ -44,11 +44,11 @@ type merchantCatalogGenerationConfig struct {
 }
 
 type merchantCatalogInteractionResponse struct {
-	ID         string                         `json:"id"`
-	Status     string                         `json:"status"`
-	OutputText string                         `json:"output_text,omitempty"`
+	ID         string                           `json:"id"`
+	Status     string                           `json:"status"`
+	OutputText string                           `json:"output_text,omitempty"`
 	Steps      []merchantCatalogInteractionStep `json:"steps,omitempty"`
-	Usage      merchantCatalogUsage           `json:"usage,omitempty"`
+	Usage      merchantCatalogUsage             `json:"usage,omitempty"`
 }
 
 type merchantCatalogInteractionStep struct {

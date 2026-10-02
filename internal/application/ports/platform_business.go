@@ -1,8 +1,8 @@
 package ports
 
 import (
-        "context"
-        "time"
+	"context"
+	"time"
 )
 
 // PlatformBusinessRecord is the Platform Admin view of a business.
@@ -26,31 +26,31 @@ import (
 // the existing schema; pending_setup is the pre-activation state owned by the
 // existing merchant bootstrap flow.
 type PlatformBusinessRecord struct {
-        ID                       string
-        Name                     string
-        Slug                     string
-        PlatformStatus           string
-        OwnerIdentitySummary    *string
-        SubscriptionSummary     *string
-        CreatedAt                time.Time
-        UpdatedAt                time.Time
+	ID                   string
+	Name                 string
+	Slug                 string
+	PlatformStatus       string
+	OwnerIdentitySummary *string
+	SubscriptionSummary  *string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // PlatformBusinessListFilter is the input to List.
 // Per Contract §13: supports pagination, search, status filter, created date filter.
 type PlatformBusinessListFilter struct {
-        Search     string
-        Status     string
-        CreatedFrom *time.Time
-        CreatedTo   *time.Time
-        Limit      int
-        Cursor     string
+	Search      string
+	Status      string
+	CreatedFrom *time.Time
+	CreatedTo   *time.Time
+	Limit       int
+	Cursor      string
 }
 
 type PlatformBusinessPage struct {
-        Items      []PlatformBusinessRecord
-        NextCursor string
-        HasMore    bool
+	Items      []PlatformBusinessRecord
+	NextCursor string
+	HasMore    bool
 }
 
 // PlatformBusinessLifecyclePort is the Platform Admin's lifecycle hook into
@@ -67,12 +67,12 @@ type PlatformBusinessPage struct {
 // admin endpoints — only Platform Admin can suspend/archive a business. The
 // HTTP handler enforces Platform Scope (RequirePlatformAdminHuma).
 type PlatformBusinessLifecyclePort interface {
-        Create(ctx context.Context, create PlatformBusinessCreate) (PlatformBusinessRecord, error)
-        List(ctx context.Context, filter PlatformBusinessListFilter) (PlatformBusinessPage, error)
-        GetByID(ctx context.Context, businessID string) (PlatformBusinessRecord, error)
-        Suspend(ctx context.Context, businessID string, now time.Time) (PlatformBusinessRecord, error)
-        Reactivate(ctx context.Context, businessID string, now time.Time) (PlatformBusinessRecord, error)
-        Archive(ctx context.Context, businessID string, now time.Time) (PlatformBusinessRecord, error)
+	Create(ctx context.Context, create PlatformBusinessCreate) (PlatformBusinessRecord, error)
+	List(ctx context.Context, filter PlatformBusinessListFilter) (PlatformBusinessPage, error)
+	GetByID(ctx context.Context, businessID string) (PlatformBusinessRecord, error)
+	Suspend(ctx context.Context, businessID string, now time.Time) (PlatformBusinessRecord, error)
+	Reactivate(ctx context.Context, businessID string, now time.Time) (PlatformBusinessRecord, error)
+	Archive(ctx context.Context, businessID string, now time.Time) (PlatformBusinessRecord, error)
 }
 
 // PlatformBusinessCreate is the input for creating a new business from the
@@ -84,12 +84,12 @@ type PlatformBusinessLifecyclePort interface {
 // state owned by the merchant bootstrap flow. The admin does NOT enter the
 // owner's password.
 type PlatformBusinessCreate struct {
-        ID              string
-        Name            string
-        Slug            string
-        VerticalType    string
-        Timezone        string
-        DefaultCurrency string
-        Locale          string
-        Now             time.Time
+	ID              string
+	Name            string
+	Slug            string
+	VerticalType    string
+	Timezone        string
+	DefaultCurrency string
+	Locale          string
+	Now             time.Time
 }

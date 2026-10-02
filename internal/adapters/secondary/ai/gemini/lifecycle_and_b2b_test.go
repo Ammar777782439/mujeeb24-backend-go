@@ -56,7 +56,7 @@ func TestLifecycleFailure_MarkWaitingTool_StopsLoop(t *testing.T) {
 
 	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
-		AIRunID:      "run-fail-wt",
+		AIRunID:       "run-fail-wt",
 	})
 	if err == nil {
 		t.Fatalf("expected error when MarkWaitingTool fails — loop must NOT continue")
@@ -85,7 +85,7 @@ func TestLifecycleFailure_MarkRunning_StopsLoop(t *testing.T) {
 
 	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
-		AIRunID:      "run-fail-r",
+		AIRunID:       "run-fail-r",
 	})
 	if err == nil {
 		t.Fatalf("expected error when MarkRunning fails — loop must NOT continue")
@@ -134,7 +134,7 @@ func TestLifecycle_Ordering_WaitingToolBeforeRunning(t *testing.T) {
 
 	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
-		AIRunID:      "run-order",
+		AIRunID:       "run-order",
 	})
 	if err != nil {
 		t.Fatalf("DecideContract failed: %v", err)

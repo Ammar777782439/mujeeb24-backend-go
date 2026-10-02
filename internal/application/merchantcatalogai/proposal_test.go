@@ -56,7 +56,6 @@ func TestProposalNormalizeResolvedEmptyUpdate(t *testing.T) {
 	}
 }
 
-
 func TestReadOnlyCapabilityRegistryRejectsUnknownMutationReference(t *testing.T) {
 	registry := &ReadOnlyCapabilityRegistry{
 		evidenceReferences: map[string]struct{}{
@@ -66,13 +65,13 @@ func TestReadOnlyCapabilityRegistryRejectsUnknownMutationReference(t *testing.T)
 	}
 
 	proposal := Proposal{
-		SchemaVersion: 1,
-		Status:        StatusResolved,
-		Operation:     OperationUpdate,
-		ResponseText:  "أعددت اقتراح التعديل.",
+		SchemaVersion:      1,
+		Status:             StatusResolved,
+		Operation:          OperationUpdate,
+		ResponseText:       "أعددت اقتراح التعديل.",
 		EvidenceReferences: []string{"item-1"},
 		Update: &UpdateOperation{
-			ItemID: "item-1",
+			ItemID:         "item-1",
 			ExistingOffers: []OfferUpdate{{ID: "offer-unknown"}},
 		},
 	}
@@ -97,8 +96,8 @@ func TestReadOnlyCapabilityRegistryAcceptsEvidenceBackedUpdate(t *testing.T) {
 		ResponseText:       "أعددت اقتراح تعديل السعر.",
 		EvidenceReferences: []string{"item-1", "offer-1"},
 		Update: &UpdateOperation{
-			ItemID:          "item-1",
-			ExistingOffers:  []OfferUpdate{{ID: "offer-1"}},
+			ItemID:         "item-1",
+			ExistingOffers: []OfferUpdate{{ID: "offer-1"}},
 		},
 	}
 
@@ -107,7 +106,6 @@ func TestReadOnlyCapabilityRegistryAcceptsEvidenceBackedUpdate(t *testing.T) {
 	}
 }
 
-
 func TestProposalValidateCreateResolvesNewVariantOffersByRef(t *testing.T) {
 	proposal := Proposal{
 		SchemaVersion: ProposalSchemaVersion,
@@ -115,11 +113,11 @@ func TestProposalValidateCreateResolvesNewVariantOffersByRef(t *testing.T) {
 		Operation:     OperationCreate,
 		ResponseText:  "أعددت اقتراح إضافة المنتج.",
 		Create: &ItemCreate{
-			Name:                  "ساعة",
-			ItemType:              "physical_good",
-			PricingMode:            "fixed",
-			AvailabilityMode:      "always_available",
-			FulfillmentMode:       "delivery",
+			Name:                 "ساعة",
+			ItemType:             "physical_good",
+			PricingMode:          "fixed",
+			AvailabilityMode:     "always_available",
+			FulfillmentMode:      "delivery",
 			RequiresConfirmation: false,
 			Variants: []VariantCreate{
 				{Ref: "variant-black", Name: "أسود"},
@@ -145,13 +143,13 @@ func TestProposalValidateCreateRejectsDatabaseVariantID(t *testing.T) {
 		Operation:     OperationCreate,
 		ResponseText:  "أعددت اقتراح إضافة المنتج.",
 		Create: &ItemCreate{
-			Name:                  "ساعة",
-			ItemType:              "physical_good",
-			PricingMode:            "fixed",
-			AvailabilityMode:      "always_available",
-			FulfillmentMode:       "delivery",
+			Name:                 "ساعة",
+			ItemType:             "physical_good",
+			PricingMode:          "fixed",
+			AvailabilityMode:     "always_available",
+			FulfillmentMode:      "delivery",
 			RequiresConfirmation: false,
-			Variants:               []VariantCreate{{Ref: "variant-red", Name: "أحمر"}},
+			Variants:             []VariantCreate{{Ref: "variant-red", Name: "أحمر"}},
 			Offers: []OfferCreate{{
 				VariantID:          stringPtr("00000000-0000-0000-0000-000000000001"),
 				Name:               DefaultOfferName,
@@ -176,13 +174,13 @@ func TestProposalValidateRejectsUnknownVariantRef(t *testing.T) {
 		Operation:     OperationCreate,
 		ResponseText:  "أعددت اقتراح إضافة المنتج.",
 		Create: &ItemCreate{
-			Name:                  "ساعة",
-			ItemType:              "physical_good",
-			PricingMode:            "fixed",
-			AvailabilityMode:      "always_available",
-			FulfillmentMode:       "delivery",
+			Name:                 "ساعة",
+			ItemType:             "physical_good",
+			PricingMode:          "fixed",
+			AvailabilityMode:     "always_available",
+			FulfillmentMode:      "delivery",
 			RequiresConfirmation: false,
-			Variants:               []VariantCreate{{Ref: "variant-red", Name: "أحمر"}},
+			Variants:             []VariantCreate{{Ref: "variant-red", Name: "أحمر"}},
 			Offers: []OfferCreate{{
 				Name:               DefaultOfferName,
 				VariantRef:         stringPtr("variant-blue"),
@@ -202,28 +200,27 @@ func TestProposalValidateRejectsUnknownVariantRef(t *testing.T) {
 
 func stringPtr(value string) *string { return &value }
 
-
 func TestProposalValidateCreateOfferProvenance(t *testing.T) {
 	base := func(offer OfferCreate) Proposal {
 		return Proposal{
 			SchemaVersion: ProposalSchemaVersion,
-			Status: StatusResolved,
-			Operation: OperationCreate,
-			ResponseText: "أعددت الاقتراح.",
+			Status:        StatusResolved,
+			Operation:     OperationCreate,
+			ResponseText:  "أعددت الاقتراح.",
 			Create: &ItemCreate{
-				Name: "ساعة",
-				ItemType: "physical_good",
-				PricingMode: "fixed",
+				Name:             "ساعة",
+				ItemType:         "physical_good",
+				PricingMode:      "fixed",
 				AvailabilityMode: "always_available",
-				FulfillmentMode: "delivery",
-				Offers: []OfferCreate{offer},
+				FulfillmentMode:  "delivery",
+				Offers:           []OfferCreate{offer},
 			},
 		}
 	}
 
 	tests := []struct {
-		name string
-		offer OfferCreate
+		name    string
+		offer   OfferCreate
 		wantErr bool
 	}{
 		{
@@ -275,7 +272,6 @@ func TestProposalValidateCreateOfferProvenance(t *testing.T) {
 	}
 }
 
-
 func TestProposalValidateAllowsDynamicAttributesWithoutSchema(t *testing.T) {
 	proposal := Proposal{
 		SchemaVersion: ProposalSchemaVersion,
@@ -283,11 +279,11 @@ func TestProposalValidateAllowsDynamicAttributesWithoutSchema(t *testing.T) {
 		Operation:     OperationCreate,
 		ResponseText:  "أعددت اقتراح إضافة المنتج.",
 		Create: &ItemCreate{
-			Name:                  "ساعة",
-			ItemType:              "physical_good",
-			PricingMode:            "fixed",
-			AvailabilityMode:      "always_available",
-			FulfillmentMode:       "delivery",
+			Name:                 "ساعة",
+			ItemType:             "physical_good",
+			PricingMode:          "fixed",
+			AvailabilityMode:     "always_available",
+			FulfillmentMode:      "delivery",
 			RequiresConfirmation: false,
 			Attributes: map[string]any{
 				"water_resistant": true,
@@ -300,7 +296,7 @@ func TestProposalValidateAllowsDynamicAttributesWithoutSchema(t *testing.T) {
 				PricingMode:        "fixed",
 				Amount:             stringPtr("20000"),
 				PriceSource:        OfferPriceSourceMerchantStated,
-				Currency:            stringPtr("YER"),
+				Currency:           stringPtr("YER"),
 				AvailabilityMode:   "always_available",
 				AvailabilityStatus: "available",
 				FulfillmentMode:    "delivery",
@@ -320,19 +316,19 @@ func TestProposalValidateRejectsNonEnglishAttributeKey(t *testing.T) {
 		Operation:     OperationCreate,
 		ResponseText:  "أعددت الاقتراح.",
 		Create: &ItemCreate{
-			Name:                  "ساعة",
-			ItemType:              "physical_good",
-			PricingMode:            "fixed",
-			AvailabilityMode:      "always_available",
-			FulfillmentMode:       "delivery",
-			Attributes:             map[string]any{"مقاوم_للماء": true},
+			Name:             "ساعة",
+			ItemType:         "physical_good",
+			PricingMode:      "fixed",
+			AvailabilityMode: "always_available",
+			FulfillmentMode:  "delivery",
+			Attributes:       map[string]any{"مقاوم_للماء": true},
 			Offers: []OfferCreate{{
 				Name:               DefaultOfferName,
 				NameSource:         OfferNameSourceSystemDefault,
 				PricingMode:        "fixed",
 				Amount:             stringPtr("20000"),
 				PriceSource:        OfferPriceSourceMerchantStated,
-				Currency:            stringPtr("YER"),
+				Currency:           stringPtr("YER"),
 				AvailabilityMode:   "always_available",
 				AvailabilityStatus: "available",
 				FulfillmentMode:    "delivery",
@@ -345,7 +341,6 @@ func TestProposalValidateRejectsNonEnglishAttributeKey(t *testing.T) {
 	}
 }
 
-
 func TestProposalValidateUpdateOfferUsesCreateOfferRules(t *testing.T) {
 	base := func(offer OfferCreate) Proposal {
 		return Proposal{
@@ -354,7 +349,7 @@ func TestProposalValidateUpdateOfferUsesCreateOfferRules(t *testing.T) {
 			Operation:     OperationUpdate,
 			ResponseText:  "أعددت اقتراح التعديل.",
 			Update: &UpdateOperation{
-				ItemID: "00000000-0000-0000-0000-000000000001",
+				ItemID:    "00000000-0000-0000-0000-000000000001",
 				NewOffers: []OfferCreate{offer},
 			},
 		}
@@ -368,31 +363,31 @@ func TestProposalValidateUpdateOfferUsesCreateOfferRules(t *testing.T) {
 		{
 			name: "invalid name source",
 			offer: OfferCreate{
-			Name: DefaultOfferName, NameSource: "invented",
-			PricingMode: "fixed", Amount: stringPtr("25000"), PriceSource: OfferPriceSourceMerchantStated,
-			Currency: stringPtr("YER"), AvailabilityMode: "always_available",
-			AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
+				Name: DefaultOfferName, NameSource: "invented",
+				PricingMode: "fixed", Amount: stringPtr("25000"), PriceSource: OfferPriceSourceMerchantStated,
+				Currency: stringPtr("YER"), AvailabilityMode: "always_available",
+				AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
 			},
 			wantErr: true,
 		},
 		{
 			name: "merchant stated quote required is invalid",
 			offer: OfferCreate{
-			Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault,
-			PricingMode: "quote_required", Amount: nil, PriceSource: OfferPriceSourceMerchantStated,
-			Currency: stringPtr("YER"), AvailabilityMode: "always_available",
-			AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
+				Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault,
+				PricingMode: "quote_required", Amount: nil, PriceSource: OfferPriceSourceMerchantStated,
+				Currency: stringPtr("YER"), AvailabilityMode: "always_available",
+				AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
 			},
 			wantErr: true,
 		},
 		{
 			name: "existing variant id is allowed on update",
 			offer: OfferCreate{
-			VariantID: stringPtr("00000000-0000-0000-0000-000000000002"),
-			Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault,
-			PricingMode: "fixed", Amount: stringPtr("25000"), PriceSource: OfferPriceSourceMerchantStated,
-			Currency: stringPtr("YER"), AvailabilityMode: "always_available",
-			AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
+				VariantID: stringPtr("00000000-0000-0000-0000-000000000002"),
+				Name:      DefaultOfferName, NameSource: OfferNameSourceSystemDefault,
+				PricingMode: "fixed", Amount: stringPtr("25000"), PriceSource: OfferPriceSourceMerchantStated,
+				Currency: stringPtr("YER"), AvailabilityMode: "always_available",
+				AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
 			},
 		},
 	}

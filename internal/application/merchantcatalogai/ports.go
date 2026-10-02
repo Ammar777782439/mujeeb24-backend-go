@@ -8,10 +8,10 @@ import (
 )
 
 type SessionMessage struct {
-	ID string
+	ID         string
 	SenderType string
-	Text string
-	CreatedAt time.Time
+	Text       string
+	CreatedAt  time.Time
 }
 
 type SessionStore interface {
@@ -27,15 +27,15 @@ type EntityContractProvider interface {
 }
 
 type RuntimeInput struct {
-	BusinessID string
-	PrincipalID string
-	SessionID string
-	Message string
+	BusinessID      string
+	PrincipalID     string
+	SessionID       string
+	Message         string
 	DefaultCurrency string
 	SelectedCatalog ports.CatalogRecord
-	History []SessionMessage
-	EntityContract []byte
-	Capabilities ports.AICapabilityDispatcher
+	History         []SessionMessage
+	EntityContract  []byte
+	Capabilities    ports.AICapabilityDispatcher
 }
 
 type Runtime interface {
@@ -43,11 +43,11 @@ type Runtime interface {
 }
 
 type ExecutionInput struct {
-	BusinessID string
-	PrincipalID string
-	SessionID string
+	BusinessID      string
+	PrincipalID     string
+	SessionID       string
 	SelectedCatalog ports.CatalogRecord
-	Proposal Proposal
+	Proposal        Proposal
 }
 
 type ProposalExecutor interface {
@@ -55,14 +55,14 @@ type ProposalExecutor interface {
 }
 
 type ExecutionResult struct {
-	ItemID string
+	ItemID     string
 	VariantIDs []string
-	OfferIDs []string
+	OfferIDs   []string
 }
 
 type CatalogSelection struct {
 	Catalog ports.CatalogRecord
-	Reason string
+	Reason  string
 }
 
 type CatalogSelector interface {
@@ -70,7 +70,7 @@ type CatalogSelector interface {
 }
 
 type CatalogSelectionInput struct {
-	BusinessID string
+	BusinessID        string
 	ExplicitCatalogID string
-	StickyCatalogID string
+	StickyCatalogID   string
 }

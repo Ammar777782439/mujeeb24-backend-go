@@ -20,17 +20,17 @@
 package gemini
 
 import (
-        "bytes"
-        "context"
-        "encoding/json"
-        "errors"
-        "fmt"
-        "io"
-        "net/http"
-        "strings"
-        "time"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
 
-        "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
 // ContractClient is the contract ④ §8 implementation of ports.ContractRuntime.
@@ -42,36 +42,36 @@ import (
 //   - Structured Output enforcement for AIGeminiProposal per contract ④ §4
 //   - Usage telemetry capture for AI Trace per contract ⑧ §8
 type ContractClient struct {
-        base           *Client
-        httpClient     *http.Client
-        baseURL        string
-        apiKey         string
-        model          string
-        requestTimeout time.Duration
-        // configProvider, when set, is called at the start of every DecideContract
-        // call to get the ACTIVE runtime configuration (API key, model, limits).
-        // Per §2: the runtime gets the active config from Configuration abstraction,
-        // not from static env vars. If nil, falls back to static fields (bootstrap/tests).
-        configProvider ports.AIConfigurationProvider
-        // runRepo (optional) persists tool call records during the Function
-        // Calling Tool Loop. Reuses the SAME AIRunRepository instance wired
-        // into AutoReplyService — no second repository.
-        runRepo ports.AIRunRepository
-        // newID generates UUIDs for tool call records.
-        newID func() string
-        // lifecycle (optional) transitions RUNNING → WAITING_TOOL → RUNNING
-        // during the Tool Loop. Per fix #2: uses the existing AIRunLifecycle
-        // via the AIRunLifecyclePort abstraction (no services import).
-        lifecycle ports.AIRunLifecyclePort
+	base           *Client
+	httpClient     *http.Client
+	baseURL        string
+	apiKey         string
+	model          string
+	requestTimeout time.Duration
+	// configProvider, when set, is called at the start of every DecideContract
+	// call to get the ACTIVE runtime configuration (API key, model, limits).
+	// Per §2: the runtime gets the active config from Configuration abstraction,
+	// not from static env vars. If nil, falls back to static fields (bootstrap/tests).
+	configProvider ports.AIConfigurationProvider
+	// runRepo (optional) persists tool call records during the Function
+	// Calling Tool Loop. Reuses the SAME AIRunRepository instance wired
+	// into AutoReplyService — no second repository.
+	runRepo ports.AIRunRepository
+	// newID generates UUIDs for tool call records.
+	newID func() string
+	// lifecycle (optional) transitions RUNNING → WAITING_TOOL → RUNNING
+	// during the Tool Loop. Per fix #2: uses the existing AIRunLifecycle
+	// via the AIRunLifecyclePort abstraction (no services import).
+	lifecycle ports.AIRunLifecyclePort
 }
 
 // resolvedAIConfig holds the effective values for one Gemini call.
 type resolvedAIConfig struct {
-        apiKey            string
-        model             string
-        baseURL           string
-        maxOutputTokens   int
-        maxInputCharacters int
+	apiKey             string
+	model              string
+	baseURL            string
+	maxOutputTokens    int
+	maxInputCharacters int
 }
 
 // SetConfigurationProvider wires the dynamic AIConfigurationProvider.
@@ -79,33 +79,33 @@ type resolvedAIConfig struct {
 // the provider (cache/DB) instead of static struct fields. Per §9:
 // cache invalidation makes new config active without restart.
 func (c *ContractClient) SetConfigurationProvider(provider ports.AIConfigurationProvider) {
-        c.configProvider = provider
+	c.configProvider = provider
 }
 
 // resolveConfig returns the effective AI configuration for this call.
 // Per §1-2: if configProvider is wired, reads from cache/DB. Otherwise
 // falls back to static fields (env bootstrap, tests).
 func (c *ContractClient) resolveConfig(ctx context.Context) (*resolvedAIConfig, error) {
-        if c.configProvider != nil {
-                cfg, err := c.configProvider.GetActiveConfig(ctx)
-                if err != nil {
-                        return nil, fmt.Errorf("resolve AI config: %w", err)
-                }
-                return &resolvedAIConfig{
-                        apiKey:            cfg.APIKey,
-                        model:             cfg.Model,
-                        baseURL:           cfg.BaseURL,
-                        maxOutputTokens:   cfg.MaxOutputTokens,
-                        maxInputCharacters: cfg.MaxInputCharacters,
-                }, nil
-        }
-        return &resolvedAIConfig{
-                apiKey:            c.apiKey,
-                model:             c.model,
-                baseURL:           c.baseURL,
-                maxOutputTokens:   c.base.maxOutputTokens,
-                maxInputCharacters: c.base.maxInputCharacters,
-        }, nil
+	if c.configProvider != nil {
+		cfg, err := c.configProvider.GetActiveConfig(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("resolve AI config: %w", err)
+		}
+		return &resolvedAIConfig{
+			apiKey:             cfg.APIKey,
+			model:              cfg.Model,
+			baseURL:            cfg.BaseURL,
+			maxOutputTokens:    cfg.MaxOutputTokens,
+			maxInputCharacters: cfg.MaxInputCharacters,
+		}, nil
+	}
+	return &resolvedAIConfig{
+		apiKey:             c.apiKey,
+		model:              c.model,
+		baseURL:            c.baseURL,
+		maxOutputTokens:    c.base.maxOutputTokens,
+		maxInputCharacters: c.base.maxInputCharacters,
+	}, nil
 }
 
 // NewContractClient wraps an existing Client with contract-aligned methods.
@@ -113,17 +113,17 @@ func (c *ContractClient) resolveConfig(ctx context.Context) (*resolvedAIConfig, 
 // Per contract ⑤ §7, the Catalog Entity Contract is built once at startup
 // and reused for every call; callers pass it via ContractRuntimeInput.
 func NewContractClient(base *Client) (*ContractClient, error) {
-        if base == nil {
-                return nil, errors.New("base client is required")
-        }
-        return &ContractClient{
-                base:           base,
-                httpClient:     base.httpClient,
-                baseURL:        base.baseURL,
-                apiKey:         base.apiKey,
-                model:          base.model,
-                requestTimeout: base.requestTimeout,
-        }, nil
+	if base == nil {
+		return nil, errors.New("base client is required")
+	}
+	return &ContractClient{
+		base:           base,
+		httpClient:     base.httpClient,
+		baseURL:        base.baseURL,
+		apiKey:         base.apiKey,
+		model:          base.model,
+		requestTimeout: base.requestTimeout,
+	}, nil
 }
 
 // DecideContract is the contract ④ §8 method implementing ports.ContractRuntime.
@@ -145,92 +145,92 @@ func NewContractClient(base *Client) (*ContractClient, error) {
 //
 // This method supersedes the legacy ports.AIRuntime.Decide.
 func (c *ContractClient) DecideContract(ctx context.Context, input ports.ContractRuntimeInput) (ports.ContractRuntimeOutput, error) {
-        if err := ctx.Err(); err != nil {
-                return ports.ContractRuntimeOutput{}, err
-        }
-        if strings.TrimSpace(input.DecisionInput.Text) == "" {
-                return ports.ContractRuntimeOutput{}, errors.New("AI input text is required")
-        }
-        // Per §1-2: resolve the ACTIVE runtime configuration from cache/DB.
-        rc, err := c.resolveConfig(ctx)
-        if err != nil {
-                return ports.ContractRuntimeOutput{}, err
-        }
-        // Per contract ④ §6: enforce LLMMaxInputCharacters on the contract path.
-        if rc.maxInputCharacters > 0 && len([]rune(input.DecisionInput.Text)) > rc.maxInputCharacters {
-                return ports.ContractRuntimeOutput{}, fmt.Errorf("AI input text exceeds %d characters", rc.maxInputCharacters)
-        }
+	if err := ctx.Err(); err != nil {
+		return ports.ContractRuntimeOutput{}, err
+	}
+	if strings.TrimSpace(input.DecisionInput.Text) == "" {
+		return ports.ContractRuntimeOutput{}, errors.New("AI input text is required")
+	}
+	// Per §1-2: resolve the ACTIVE runtime configuration from cache/DB.
+	rc, err := c.resolveConfig(ctx)
+	if err != nil {
+		return ports.ContractRuntimeOutput{}, err
+	}
+	// Per contract ④ §6: enforce LLMMaxInputCharacters on the contract path.
+	if rc.maxInputCharacters > 0 && len([]rune(input.DecisionInput.Text)) > rc.maxInputCharacters {
+		return ports.ContractRuntimeOutput{}, fmt.Errorf("AI input text exceeds %d characters", rc.maxInputCharacters)
+	}
 
-        startedAt := time.Now().UTC()
+	startedAt := time.Now().UTC()
 
-        // Build the initial request.
-        reqBody := contractGeminiRequest{
-                Model:                 rc.model,
-                PreviousInteractionID: input.GeminiInteraction.PreviousInteractionID,
-                Store:                 input.GeminiInteraction.Store,
-                SystemInstruction:     c.buildContractSystemInstruction(input.EntityContractPayload),
-                Contents:              c.buildContractContents(input.DecisionInput),
-                GenerationConfig: contractGenerationConfig{
-                        ResponseMimeType:  "application/json",
-                        ResponseSchema:    contractProposalResponseSchema(),
-                        MaxOutputTokens:   rc.maxOutputTokens,
-                },
-        }
+	// Build the initial request.
+	reqBody := contractGeminiRequest{
+		Model:                 rc.model,
+		PreviousInteractionID: input.GeminiInteraction.PreviousInteractionID,
+		Store:                 input.GeminiInteraction.Store,
+		SystemInstruction:     c.buildContractSystemInstruction(input.EntityContractPayload),
+		Contents:              c.buildContractContents(input.DecisionInput),
+		GenerationConfig: contractGenerationConfig{
+			ResponseMimeType: "application/json",
+			ResponseSchema:   contractProposalResponseSchema(),
+			MaxOutputTokens:  rc.maxOutputTokens,
+		},
+	}
 
-        // Per the Tool Loop spec: extract tool declarations from the
-        // configured AICapabilityDispatcher. If the dispatcher has
-        // capabilities, attach them to the request so Gemini can invoke
-        // function calling.
-        toolDecls := c.buildToolDeclarations()
-        if len(toolDecls) > 0 {
-                reqBody.Tools = []contractTools{
-                        {FunctionDeclarations: toolDecls},
-                }
-        }
+	// Per the Tool Loop spec: extract tool declarations from the
+	// configured AICapabilityDispatcher. If the dispatcher has
+	// capabilities, attach them to the request so Gemini can invoke
+	// function calling.
+	toolDecls := c.buildToolDeclarations()
+	if len(toolDecls) > 0 {
+		reqBody.Tools = []contractTools{
+			{FunctionDeclarations: toolDecls},
+		}
+	}
 
-        // If tools are configured, run the tool loop. Otherwise, send a
-        // single request (backward-compatible with the pre-tool-loop path).
-        businessID := input.DecisionInput.BusinessID
-        conversationID := input.DecisionInput.ConversationID
-        runID := input.AIRunID
+	// If tools are configured, run the tool loop. Otherwise, send a
+	// single request (backward-compatible with the pre-tool-loop path).
+	businessID := input.DecisionInput.BusinessID
+	conversationID := input.DecisionInput.ConversationID
+	runID := input.AIRunID
 
-        if len(toolDecls) > 0 {
-                // Tool Loop path.
-                return c.runToolLoop(ctx, reqBody, rc, input, businessID, conversationID, runID, startedAt)
-        }
+	if len(toolDecls) > 0 {
+		// Tool Loop path.
+		return c.runToolLoop(ctx, reqBody, rc, input, businessID, conversationID, runID, startedAt)
+	}
 
-        // Non-tool path (backward compatible — same as before).
-        resp, err := c.sendContractRequest(ctx, reqBody, rc)
-        if err != nil {
-                return ports.ContractRuntimeOutput{}, err
-        }
+	// Non-tool path (backward compatible — same as before).
+	resp, err := c.sendContractRequest(ctx, reqBody, rc)
+	if err != nil {
+		return ports.ContractRuntimeOutput{}, err
+	}
 
-        latencyMs := time.Since(startedAt).Milliseconds()
+	latencyMs := time.Since(startedAt).Milliseconds()
 
-        proposal, err := parseContractProposal(resp)
-        if err != nil {
-                return ports.ContractRuntimeOutput{}, err
-        }
+	proposal, err := parseContractProposal(resp)
+	if err != nil {
+		return ports.ContractRuntimeOutput{}, err
+	}
 
-        return ports.ContractRuntimeOutput{
-                Proposal: proposal,
-                GeminiInteraction: ports.GeminiInteractionContext{
-                        PreviousInteractionID:  input.GeminiInteraction.PreviousInteractionID,
-                        ResultingInteractionID: resp.InteractionID,
-                        Store:                  input.GeminiInteraction.Store,
-                },
-                Usage: ports.ContractUsageTelemetry{
-                        InputTokens:         resp.UsageMetadata.PromptTokenCount,
-                        CachedTokens:        resp.UsageMetadata.CachedContentTokenCount,
-                        OutputTokens:        resp.UsageMetadata.CandidatesTokenCount,
-                        Model:               rc.model,
-                        EstimatedCostMicros: 0,
-                        LatencyMs:           latencyMs,
-                        // Per fix #1: non-tool path = exactly 1 model request.
-                        ModelRequests:       1,
-                },
-                LatencyMs: latencyMs,
-        }, nil
+	return ports.ContractRuntimeOutput{
+		Proposal: proposal,
+		GeminiInteraction: ports.GeminiInteractionContext{
+			PreviousInteractionID:  input.GeminiInteraction.PreviousInteractionID,
+			ResultingInteractionID: resp.InteractionID,
+			Store:                  input.GeminiInteraction.Store,
+		},
+		Usage: ports.ContractUsageTelemetry{
+			InputTokens:         resp.UsageMetadata.PromptTokenCount,
+			CachedTokens:        resp.UsageMetadata.CachedContentTokenCount,
+			OutputTokens:        resp.UsageMetadata.CandidatesTokenCount,
+			Model:               rc.model,
+			EstimatedCostMicros: 0,
+			LatencyMs:           latencyMs,
+			// Per fix #1: non-tool path = exactly 1 model request.
+			ModelRequests: 1,
+		},
+		LatencyMs: latencyMs,
+	}, nil
 }
 
 // buildContractSystemInstruction builds the system_instruction content combining
@@ -239,18 +239,18 @@ func (c *ContractClient) DecideContract(ctx context.Context, input ports.Contrac
 // Per contract ⑤ §8, this tells Gemini the meaning of every enum value so it
 // never has to guess.
 func (c *ContractClient) buildContractSystemInstruction(entityContractJSON []byte) *contractContent {
-        parts := []contractPart{
-                {Text: c.base.systemPrompt},
-        }
-        if len(entityContractJSON) > 0 {
-                parts = append(parts, contractPart{
-                        Text: "\n\n# Catalog Entity Contract (contract ⑤ §7)\n\n" + string(entityContractJSON),
-                })
-        }
-        return &contractContent{
-                Role:  "system",
-                Parts: parts,
-        }
+	parts := []contractPart{
+		{Text: c.base.systemPrompt},
+	}
+	if len(entityContractJSON) > 0 {
+		parts = append(parts, contractPart{
+			Text: "\n\n# Catalog Entity Contract (contract ⑤ §7)\n\n" + string(entityContractJSON),
+		})
+	}
+	return &contractContent{
+		Role:  "system",
+		Parts: parts,
+	}
 }
 
 // buildContractContents builds the input contents (the conversation context).
@@ -258,15 +258,15 @@ func (c *ContractClient) buildContractSystemInstruction(entityContractJSON []byt
 // Per contract ④ §3, the input includes: business_context, conversation_context,
 // conversation_state, catalog_evidence, user_message.
 func (c *ContractClient) buildContractContents(input ports.AIDecisionInput) []contractContent {
-        // The existing client.go has buildUserPrompt(input) which encodes the
-        // AIContext (Business, Conversation, Customer, CatalogEvidence, etc.) into
-        // the user-facing prompt text. We reuse it for the contract-aligned path.
-        return []contractContent{
-                {
-                        Role:  "user",
-                        Parts: []contractPart{{Text: buildUserPrompt(input)}},
-                },
-        }
+	// The existing client.go has buildUserPrompt(input) which encodes the
+	// AIContext (Business, Conversation, Customer, CatalogEvidence, etc.) into
+	// the user-facing prompt text. We reuse it for the contract-aligned path.
+	return []contractContent{
+		{
+			Role:  "user",
+			Parts: []contractPart{{Text: buildUserPrompt(input)}},
+		},
+	}
 }
 
 // sendContractRequest is the HTTP call to the Gemini Interactions API.
@@ -274,43 +274,43 @@ func (c *ContractClient) buildContractContents(input ports.AIDecisionInput) []co
 // Per contract ③ §9, Mujeeb uses store=true to enable previous_interaction_id.
 // Per contract ⑨ §11, every external operation has a Timeout.
 func (c *ContractClient) sendContractRequest(ctx context.Context, reqBody contractGeminiRequest, rc *resolvedAIConfig) (contractGeminiResponse, error) {
-        buf, err := json.Marshal(reqBody)
-        if err != nil {
-                return contractGeminiResponse{}, fmt.Errorf("marshal request: %w", err)
-        }
+	buf, err := json.Marshal(reqBody)
+	if err != nil {
+		return contractGeminiResponse{}, fmt.Errorf("marshal request: %w", err)
+	}
 
-        // P1-8: API key sent via x-goog-api-key header only — never in URL.
-        url := fmt.Sprintf("%s/v1beta/models/%s:generateContent", rc.baseURL, rc.model)
+	// P1-8: API key sent via x-goog-api-key header only — never in URL.
+	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent", rc.baseURL, rc.model)
 
-        reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
-        defer cancel()
+	reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
+	defer cancel()
 
-        httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(buf))
-        if err != nil {
-                return contractGeminiResponse{}, fmt.Errorf("build request: %w", err)
-        }
-        httpReq.Header.Set("Content-Type", "application/json")
-        httpReq.Header.Set("x-goog-api-key", rc.apiKey)
+	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(buf))
+	if err != nil {
+		return contractGeminiResponse{}, fmt.Errorf("build request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("x-goog-api-key", rc.apiKey)
 
-        resp, err := c.httpClient.Do(httpReq)
-        if err != nil {
-                return contractGeminiResponse{}, fmt.Errorf("send request: %w", err)
-        }
-        defer resp.Body.Close()
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return contractGeminiResponse{}, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
 
-        body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-        if err != nil {
-                return contractGeminiResponse{}, fmt.Errorf("read response: %w", err)
-        }
-        if resp.StatusCode >= 400 {
-                return contractGeminiResponse{}, fmt.Errorf("gemini http %d: %s", resp.StatusCode, string(body))
-        }
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return contractGeminiResponse{}, fmt.Errorf("read response: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return contractGeminiResponse{}, fmt.Errorf("gemini http %d: %s", resp.StatusCode, string(body))
+	}
 
-        var out contractGeminiResponse
-        if err := json.Unmarshal(body, &out); err != nil {
-                return contractGeminiResponse{}, fmt.Errorf("unmarshal response: %w", err)
-        }
-        return out, nil
+	var out contractGeminiResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		return contractGeminiResponse{}, fmt.Errorf("unmarshal response: %w", err)
+	}
+	return out, nil
 }
 
 // parseContractProposal extracts the AIGeminiProposal from the structured
@@ -319,22 +319,22 @@ func (c *ContractClient) sendContractRequest(ctx context.Context, reqBody contra
 // Per contract ④ §8, Structured Outputs enforces the JSON shape; Mujeeb
 // additionally validates the values (per contract ⑥ §3).
 func parseContractProposal(resp contractGeminiResponse) (ports.AIGeminiProposal, error) {
-        if len(resp.Candidates) == 0 {
-                return ports.AIGeminiProposal{}, errors.New("no candidates in gemini response per contract ④ §4")
-        }
-        candidate := resp.Candidates[0]
-        if len(candidate.Content.Parts) == 0 {
-                return ports.AIGeminiProposal{}, errors.New("no content parts in gemini response per contract ④ §4")
-        }
-        raw := candidate.Content.Parts[0].Text
-        if strings.TrimSpace(raw) == "" {
-                return ports.AIGeminiProposal{}, errors.New("empty structured output text per contract ④ §4")
-        }
-        var proposal ports.AIGeminiProposal
-        if err := json.Unmarshal([]byte(raw), &proposal); err != nil {
-                return ports.AIGeminiProposal{}, fmt.Errorf("unmarshal structured output: %w", err)
-        }
-        return proposal, nil
+	if len(resp.Candidates) == 0 {
+		return ports.AIGeminiProposal{}, errors.New("no candidates in gemini response per contract ④ §4")
+	}
+	candidate := resp.Candidates[0]
+	if len(candidate.Content.Parts) == 0 {
+		return ports.AIGeminiProposal{}, errors.New("no content parts in gemini response per contract ④ §4")
+	}
+	raw := candidate.Content.Parts[0].Text
+	if strings.TrimSpace(raw) == "" {
+		return ports.AIGeminiProposal{}, errors.New("empty structured output text per contract ④ §4")
+	}
+	var proposal ports.AIGeminiProposal
+	if err := json.Unmarshal([]byte(raw), &proposal); err != nil {
+		return ports.AIGeminiProposal{}, fmt.Errorf("unmarshal structured output: %w", err)
+	}
+	return proposal, nil
 }
 
 // contractProposalResponseSchema is the JSON Schema that enforces the contract
@@ -342,111 +342,111 @@ func parseContractProposal(resp contractGeminiResponse) (ports.AIGeminiProposal,
 //
 // The contract response schema is shared by contract-aligned AI calls.
 func contractProposalResponseSchema() map[string]any {
-        return map[string]any{
-                "type": "object",
-                "properties": map[string]any{
-                        "status": map[string]any{
-                                "type": "string",
-                                "enum": []string{
-                                        string(ports.AIProposalStatusResolved),
-                                        string(ports.AIProposalStatusAmbiguous),
-                                        string(ports.AIProposalStatusNotFound),
-                                        string(ports.AIProposalStatusNeedsMoreData),
-                                },
-                        },
-                        "action": map[string]any{
-                                "type": "string",
-                                "enum": []string{
-                                        string(ports.AIProposalActionAnswer),
-                                        string(ports.AIProposalActionClarification),
-                                        string(ports.AIProposalActionHumanRequest),
-                                        string(ports.AIProposalActionLeadDraft),
-                                        string(ports.AIProposalActionOrderDraft),
-                                },
-                        },
-                        "response_text": map[string]any{"type": "string"},
-                        "selected": map[string]any{
-                                "type": "array",
-                                "items": map[string]any{
-                                        "type": "object",
-                                        "properties": map[string]any{
-                                                "item_id":    map[string]any{"type": "string"},
-                                                "variant_id": map[string]any{"type": "string"},
-                                                "offer_id":   map[string]any{"type": "string"},
-                                        },
-                                        "required": []string{"item_id"},
-                                },
-                        },
-                },
-                "required": []string{"status", "action", "response_text"},
-        }
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"status": map[string]any{
+				"type": "string",
+				"enum": []string{
+					string(ports.AIProposalStatusResolved),
+					string(ports.AIProposalStatusAmbiguous),
+					string(ports.AIProposalStatusNotFound),
+					string(ports.AIProposalStatusNeedsMoreData),
+				},
+			},
+			"action": map[string]any{
+				"type": "string",
+				"enum": []string{
+					string(ports.AIProposalActionAnswer),
+					string(ports.AIProposalActionClarification),
+					string(ports.AIProposalActionHumanRequest),
+					string(ports.AIProposalActionLeadDraft),
+					string(ports.AIProposalActionOrderDraft),
+				},
+			},
+			"response_text": map[string]any{"type": "string"},
+			"selected": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"item_id":    map[string]any{"type": "string"},
+						"variant_id": map[string]any{"type": "string"},
+						"offer_id":   map[string]any{"type": "string"},
+					},
+					"required": []string{"item_id"},
+				},
+			},
+		},
+		"required": []string{"status", "action", "response_text"},
+	}
 }
 
 // contractGeminiRequest is the Interactions API request body.
 type contractGeminiRequest struct {
-        Model                 string                   `json:"model"`
-        PreviousInteractionID string                   `json:"previous_interaction_id,omitempty"`
-        Store                 bool                     `json:"store"`
-        SystemInstruction     *contractContent         `json:"systemInstruction,omitempty"`
-        Contents              []contractContent        `json:"contents"`
-        GenerationConfig      contractGenerationConfig `json:"generationConfig"`
-        // Tools is an array of tool objects per Gemini generateContent API.
-        // Each element has a "functionDeclarations" key (camelCase per
-        // Gemini REST API spec). Per fix #1: must be a slice, not a
-        // pointer to a single object.
-        Tools []contractTools `json:"tools,omitempty"`
+	Model                 string                   `json:"model"`
+	PreviousInteractionID string                   `json:"previous_interaction_id,omitempty"`
+	Store                 bool                     `json:"store"`
+	SystemInstruction     *contractContent         `json:"systemInstruction,omitempty"`
+	Contents              []contractContent        `json:"contents"`
+	GenerationConfig      contractGenerationConfig `json:"generationConfig"`
+	// Tools is an array of tool objects per Gemini generateContent API.
+	// Each element has a "functionDeclarations" key (camelCase per
+	// Gemini REST API spec). Per fix #1: must be a slice, not a
+	// pointer to a single object.
+	Tools []contractTools `json:"tools,omitempty"`
 }
 
 // contractTools wraps function declarations for one tools entry.
 // Per fix #1: JSON field is "functionDeclarations" (camelCase) to
 // match the Gemini generateContent REST API.
 type contractTools struct {
-        FunctionDeclarations []contractFunctionDeclaration `json:"functionDeclarations"`
+	FunctionDeclarations []contractFunctionDeclaration `json:"functionDeclarations"`
 }
 
 type contractGenerationConfig struct {
-        ResponseMimeType string         `json:"responseMimeType,omitempty"`
-        ResponseSchema   map[string]any `json:"responseSchema,omitempty"`
-        // MaxOutputTokens enforces the LLMMaxOutputTokens config limit.
-        // Per contract ④ §6: the output token limit MUST be sent to Gemini
-        // so the model respects the platform's operational boundary.
-        MaxOutputTokens  int            `json:"maxOutputTokens,omitempty"`
+	ResponseMimeType string         `json:"responseMimeType,omitempty"`
+	ResponseSchema   map[string]any `json:"responseSchema,omitempty"`
+	// MaxOutputTokens enforces the LLMMaxOutputTokens config limit.
+	// Per contract ④ §6: the output token limit MUST be sent to Gemini
+	// so the model respects the platform's operational boundary.
+	MaxOutputTokens int `json:"maxOutputTokens,omitempty"`
 }
 
 type contractContent struct {
-        Role  string         `json:"role,omitempty"`
-        Parts []contractPart `json:"parts"`
+	Role  string         `json:"role,omitempty"`
+	Parts []contractPart `json:"parts"`
 }
 
 // contractPart carries one part of a content block. Gemini responses
 // can include Text (structured output), FunctionCall (tool invocation),
 // or FunctionResponse (tool result sent back).
 type contractPart struct {
-        Text             string                   `json:"text,omitempty"`
-        FunctionCall     *contractFunctionCall     `json:"functionCall,omitempty"`
-        FunctionResponse *contractFunctionResponse `json:"functionResponse,omitempty"`
-        // Per fix #3: preserve thoughtSignature from Gemini's model
-        // response so it can be sent back unchanged in follow-up requests.
-        // Gemini uses this for internal reasoning continuity — if we drop
-        // it, the model may produce different/worse results on follow-up.
-        ThoughtSignature string `json:"thoughtSignature,omitempty"`
+	Text             string                    `json:"text,omitempty"`
+	FunctionCall     *contractFunctionCall     `json:"functionCall,omitempty"`
+	FunctionResponse *contractFunctionResponse `json:"functionResponse,omitempty"`
+	// Per fix #3: preserve thoughtSignature from Gemini's model
+	// response so it can be sent back unchanged in follow-up requests.
+	// Gemini uses this for internal reasoning continuity — if we drop
+	// it, the model may produce different/worse results on follow-up.
+	ThoughtSignature string `json:"thoughtSignature,omitempty"`
 }
 
 type contractGeminiResponse struct {
-        InteractionID string                `json:"interactionId,omitempty"`
-        Candidates    []contractCandidate   `json:"candidates"`
-        UsageMetadata contractUsageMetadata `json:"usageMetadata"`
+	InteractionID string                `json:"interactionId,omitempty"`
+	Candidates    []contractCandidate   `json:"candidates"`
+	UsageMetadata contractUsageMetadata `json:"usageMetadata"`
 }
 
 type contractCandidate struct {
-        Content contractContent `json:"content"`
+	Content contractContent `json:"content"`
 }
 
 type contractUsageMetadata struct {
-        PromptTokenCount        int `json:"promptTokenCount,omitempty"`
-        CandidatesTokenCount    int `json:"candidatesTokenCount,omitempty"`
-        CachedContentTokenCount int `json:"cachedContentTokenCount,omitempty"`
-        TotalTokenCount         int `json:"totalTokenCount,omitempty"`
+	PromptTokenCount        int `json:"promptTokenCount,omitempty"`
+	CandidatesTokenCount    int `json:"candidatesTokenCount,omitempty"`
+	CachedContentTokenCount int `json:"cachedContentTokenCount,omitempty"`
+	TotalTokenCount         int `json:"totalTokenCount,omitempty"`
 }
 
 // Compile-time assertion: ContractClient implements ports.ContractRuntime.

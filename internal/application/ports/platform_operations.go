@@ -76,7 +76,7 @@ import (
 type ProviderType string
 
 const (
-	ProviderTypeAI              ProviderType = "AI"
+	ProviderTypeAI               ProviderType = "AI"
 	ProviderTypeChannelTransport ProviderType = "CHANNEL_TRANSPORT"
 )
 
@@ -92,26 +92,26 @@ const (
 type ProviderHealthState string
 
 const (
-	ProviderHealthHealthy   ProviderHealthState = "HEALTHY"
-	ProviderHealthDegraded  ProviderHealthState = "DEGRADED"
-	ProviderHealthDown      ProviderHealthState = "DOWN"
+	ProviderHealthHealthy  ProviderHealthState = "HEALTHY"
+	ProviderHealthDegraded ProviderHealthState = "DEGRADED"
+	ProviderHealthDown     ProviderHealthState = "DOWN"
 	ProviderHealthUnknown  ProviderHealthState = "UNKNOWN"
 )
 
 // ProviderRecord is the in-memory provider registry entry. No API Key /
 // Secret / Private Credential is stored here — only `configured` (boolean).
 type ProviderRecord struct {
-	ProviderID         string
-	ProviderType       ProviderType
-	DisplayName        string
-	AdminState         ProviderAdminState
-	HealthState        ProviderHealthState
-	Configured         bool // true if a secret exists in env / secrets manager
-	LastHealthCheck    *time.Time
-	LastSuccess        *time.Time
-	LastFailure        *time.Time
-	LastFailureCode    *string
-	Model              string // for AI providers — empty for transport
+	ProviderID      string
+	ProviderType    ProviderType
+	DisplayName     string
+	AdminState      ProviderAdminState
+	HealthState     ProviderHealthState
+	Configured      bool // true if a secret exists in env / secrets manager
+	LastHealthCheck *time.Time
+	LastSuccess     *time.Time
+	LastFailure     *time.Time
+	LastFailureCode *string
+	Model           string // for AI providers — empty for transport
 }
 
 // AIRuntimeState is the runtime-level master gate (Contract §80).

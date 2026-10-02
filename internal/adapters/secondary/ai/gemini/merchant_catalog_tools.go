@@ -65,9 +65,9 @@ func (r *MerchantCatalogRuntime) executeInteractionTools(
 			input.BusinessID, input.SessionID, call.Name, call.ID)
 
 		execCtx := ports.AICapabilityExecutionContext{
-			BusinessID:       input.BusinessID,
-			ConversationID:   input.SessionID,
-			PrincipalID:      input.PrincipalID,
+			BusinessID:     input.BusinessID,
+			ConversationID: input.SessionID,
+			PrincipalID:    input.PrincipalID,
 		}
 		result, err := input.Capabilities.Execute(ctx, execCtx, call.Name, call.Arguments)
 		if err != nil {

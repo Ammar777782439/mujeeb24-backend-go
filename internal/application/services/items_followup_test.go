@@ -41,7 +41,7 @@ var _ ports.AIUsageRepository = (*stubUsageRepoFailAppend)(nil)
 func TestPersistenceFailurePropagatesError(t *testing.T) {
 	t.Parallel()
 	svc := AutoReplyService{
-		AIUsage: &stubUsageRepoFailAppend{},
+		AIUsage:   &stubUsageRepoFailAppend{},
 		AIPricing: &stubPricingRepoAlwaysFail{},
 		Subscriptions: &stubSubscriptionsRepo{
 			items: []ports.SubscriptionRecord{{ID: "sub-1", BusinessID: "b-1", Status: "ACTIVE"}},
@@ -79,7 +79,7 @@ func TestPersistenceFailurePropagatesError(t *testing.T) {
 func TestWorkerPoolConcurrentSubmitStopNoPanic(t *testing.T) {
 	pool := NewAutoReplyWorkerPool(2, 10)
 	task := autoReplyTask{
-		handler: &fakeAutoReplyHandler{},
+		handler:          &fakeAutoReplyHandler{},
 		executionTimeout: 1 * time.Second,
 	}
 	var submitCount int64
@@ -131,9 +131,9 @@ func (s *stubRepoNotFound) ListVersions(_ context.Context, _ string, _ int) ([]p
 // notFoundErr implements kindedErrorCache (ErrorKind() == "not_found").
 type notFoundErr struct{}
 
-func (e *notFoundErr) Error() string         { return "not found" }
-func (e *notFoundErr) ErrorKind() string     { return "not_found" }
-func (e *notFoundErr) Unwrap() error         { return nil }
+func (e *notFoundErr) Error() string     { return "not found" }
+func (e *notFoundErr) ErrorKind() string { return "not_found" }
+func (e *notFoundErr) Unwrap() error     { return nil }
 
 // stubCredNotFound returns not_found from GetActiveCredential.
 type stubCredNotFound struct{}
@@ -147,11 +147,15 @@ func (s *stubCredNotFound) GetActiveCredential(_ context.Context, _ string) (por
 func (s *stubCredNotFound) GetCredentialByID(_ context.Context, _ string) (ports.AICredentialRecord, error) {
 	return ports.AICredentialRecord{}, nil
 }
-func (s *stubCredNotFound) GetDecryptedKeyByID(_ context.Context, _ string) (string, error) { return "", nil }
+func (s *stubCredNotFound) GetDecryptedKeyByID(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
 func (s *stubCredNotFound) UpdateCredentialStatus(_ context.Context, _, _ string, _ *string, _ time.Time) (ports.AICredentialRecord, error) {
 	return ports.AICredentialRecord{}, nil
 }
-func (s *stubCredNotFound) RevokeCredential(_ context.Context, _ string, _ time.Time) error { return nil }
+func (s *stubCredNotFound) RevokeCredential(_ context.Context, _ string, _ time.Time) error {
+	return nil
+}
 func (s *stubCredNotFound) ListCredentials(_ context.Context, _ string) ([]ports.AICredentialRecord, error) {
 	return nil, nil
 }
@@ -168,11 +172,15 @@ func (s *stubCredDBError) GetActiveCredential(_ context.Context, _ string) (port
 func (s *stubCredDBError) GetCredentialByID(_ context.Context, _ string) (ports.AICredentialRecord, error) {
 	return ports.AICredentialRecord{}, nil
 }
-func (s *stubCredDBError) GetDecryptedKeyByID(_ context.Context, _ string) (string, error) { return "", nil }
+func (s *stubCredDBError) GetDecryptedKeyByID(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
 func (s *stubCredDBError) UpdateCredentialStatus(_ context.Context, _, _ string, _ *string, _ time.Time) (ports.AICredentialRecord, error) {
 	return ports.AICredentialRecord{}, nil
 }
-func (s *stubCredDBError) RevokeCredential(_ context.Context, _ string, _ time.Time) error { return nil }
+func (s *stubCredDBError) RevokeCredential(_ context.Context, _ string, _ time.Time) error {
+	return nil
+}
 func (s *stubCredDBError) ListCredentials(_ context.Context, _ string) ([]ports.AICredentialRecord, error) {
 	return nil, nil
 }
@@ -181,7 +189,7 @@ func (s *stubCredDBError) ListCredentials(_ context.Context, _ string) ([]ports.
 func TestCacheNoActiveVersionFallsBackToEnv(t *testing.T) {
 	t.Parallel()
 	cache := NewAIConfigurationCache(&stubRepoNotFound{}, &stubAICredRepo{
-		activeRecord:  ports.AICredentialRecord{ID: "cred-1", Status: "VALID"},
+		activeRecord: ports.AICredentialRecord{ID: "cred-1", Status: "VALID"},
 		decryptedKey: "env-key-fallback",
 	})
 	cache.LoadFromEnv("env-key-fallback", "env-model", "https://env.example.com", 700, 12000, "")

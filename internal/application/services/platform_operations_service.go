@@ -27,10 +27,10 @@ import (
 // exists but is NOT marked as an active production provider — it doesn't
 // appear in ListProviders() as active.
 type InMemoryPlatformOperationsRepository struct {
-	mu          sync.RWMutex
-	runtime     ports.AIRuntimeState
-	providers   map[string]ports.ProviderRecord
-	probes      map[string]ports.HealthCheckProbe
+	mu        sync.RWMutex
+	runtime   ports.AIRuntimeState
+	providers map[string]ports.ProviderRecord
+	probes    map[string]ports.HealthCheckProbe
 }
 
 // NewInMemoryPlatformOperationsRepository seeds the registry with the
@@ -56,7 +56,7 @@ func NewInMemoryPlatformOperationsRepository(aiConfigured, channelConfigured boo
 		DisplayName:  "Google Gemini",
 		AdminState:   ports.ProviderAdminEnabled,
 		HealthState:  ports.ProviderHealthUnknown,
-		Configured:  aiConfigured,
+		Configured:   aiConfigured,
 		Model:        "gemini-3.1-flash-lite",
 	}
 	// Seed the channel transport provider (Contract §90)
@@ -66,7 +66,7 @@ func NewInMemoryPlatformOperationsRepository(aiConfigured, channelConfigured boo
 		DisplayName:  "SocialAPI",
 		AdminState:   ports.ProviderAdminEnabled,
 		HealthState:  ports.ProviderHealthUnknown,
-		Configured:  channelConfigured,
+		Configured:   channelConfigured,
 	}
 	return registry
 }

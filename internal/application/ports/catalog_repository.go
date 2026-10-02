@@ -57,7 +57,7 @@ type OfferRecord struct {
 	PricingUnit             *string
 	PriceSource             *string
 	PriceVerificationStatus string
-	PriceCheckedAt         *time.Time
+	PriceCheckedAt          *time.Time
 	AvailabilityMode        string
 	AvailabilitySource      *string
 	AvailabilityCheckedAt   *time.Time

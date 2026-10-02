@@ -148,7 +148,7 @@ func TestPlatformCreateSupportMessageRequiresBody(t *testing.T) {
 	defer cancel()
 	_, handled := server.dispatchPlatformCommand(ctx, "platformCreateSupportMessage", &dto.CreateSupportMessageInput{
 		PlatformSupportTicketPath: platformSupportTicketPath(),
-		Body: dto.CreateSupportMessageRequest{Body: "  "},
+		Body:                      dto.CreateSupportMessageRequest{Body: "  "},
 	})
 	if !handled {
 		t.Fatalf("expected handled=true")
@@ -163,7 +163,7 @@ func TestPlatformCreateSupportMessageFailsIfTicketMissing(t *testing.T) {
 	defer cancel()
 	_, handled := server.dispatchPlatformCommand(ctx, "platformCreateSupportMessage", &dto.CreateSupportMessageInput{
 		PlatformSupportTicketPath: platformSupportTicketPath(),
-		Body: dto.CreateSupportMessageRequest{Body: "Hello"},
+		Body:                      dto.CreateSupportMessageRequest{Body: "Hello"},
 	})
 	if !handled {
 		t.Fatalf("expected handled=true")
@@ -178,8 +178,8 @@ func TestPlatformCreateSupportMessageFailsIfTicketMissing(t *testing.T) {
 
 func TestPlatformCreateSupportMessageAuditsSuccess(t *testing.T) {
 	supportRepo := &stubSupportRepository{
-		getByID:      ports.SupportTicketRecord{ID: ticketIDForTests, BusinessID: "biz-1", Status: "OPEN"},
-		appendedMsg:  ports.SupportMessageRecord{ID: "msg-1", TicketID: ticketIDForTests, BusinessID: "biz-1", AuthorType: "PLATFORM_ADMIN"},
+		getByID:     ports.SupportTicketRecord{ID: ticketIDForTests, BusinessID: "biz-1", Status: "OPEN"},
+		appendedMsg: ports.SupportMessageRecord{ID: "msg-1", TicketID: ticketIDForTests, BusinessID: "biz-1", AuthorType: "PLATFORM_ADMIN"},
 	}
 	auditRepo := &stubPlatformAuditRepository{}
 	server := newPlatformServer(PlatformDeps{Support: supportRepo, PlatformAudit: auditRepo})
@@ -187,7 +187,7 @@ func TestPlatformCreateSupportMessageAuditsSuccess(t *testing.T) {
 	defer cancel()
 	_, handled := server.dispatchPlatformCommand(ctx, "platformCreateSupportMessage", &dto.CreateSupportMessageInput{
 		PlatformSupportTicketPath: platformSupportTicketPath(),
-		Body: dto.CreateSupportMessageRequest{Body: "Hello, how can we help?"},
+		Body:                      dto.CreateSupportMessageRequest{Body: "Hello, how can we help?"},
 	})
 	if !handled {
 		t.Fatalf("expected handled=true")

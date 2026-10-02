@@ -42,21 +42,21 @@ import (
 
 // SupportTicketRecord is a single support ticket.
 type SupportTicketRecord struct {
-	ID              string
-	BusinessID      string
-	Subject         string
-	Status          string
-	Priority        string
-	Category        string
-	CreatedBy       string
-	CreatedByType   string
-	ResolvedAt      *time.Time
-	ResolvedBy      *string
-	ClosedAt        *time.Time
-	ClosedBy        *string
-	LastMessageAt   *time.Time
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID            string
+	BusinessID    string
+	Subject       string
+	Status        string
+	Priority      string
+	Category      string
+	CreatedBy     string
+	CreatedByType string
+	ResolvedAt    *time.Time
+	ResolvedBy    *string
+	ClosedAt      *time.Time
+	ClosedBy      *string
+	LastMessageAt *time.Time
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // SupportTicketCreate is the input to CreateTicket. Note: the platform
@@ -67,27 +67,27 @@ type SupportTicketRecord struct {
 // Create method so the platform admin can create a ticket on behalf of a
 // business (e.g., to log an inbound phone complaint).
 type SupportTicketCreate struct {
-	ID              string
-	BusinessID      string
-	Subject         string
-	Priority        string
-	Category        string
-	CreatedBy       string
-	CreatedByType   string
-	Now             time.Time
+	ID            string
+	BusinessID    string
+	Subject       string
+	Priority      string
+	Category      string
+	CreatedBy     string
+	CreatedByType string
+	Now           time.Time
 }
 
 // SupportTicketListFilter is the query input to List. Per Contract §44:
 // supports status, priority, category, business, date range filters.
 type SupportTicketListFilter struct {
-	BusinessID string
-	Status     string
-	Priority   string
-	Category   string
+	BusinessID  string
+	Status      string
+	Priority    string
+	Category    string
 	CreatedFrom *time.Time
 	CreatedTo   *time.Time
-	Limit      int
-	Cursor     string
+	Limit       int
+	Cursor      string
 }
 
 type SupportTicketPage struct {
@@ -98,26 +98,26 @@ type SupportTicketPage struct {
 
 // SupportMessageRecord is a single message in a support ticket.
 type SupportMessageRecord struct {
-	ID           string
-	TicketID     string
-	BusinessID   string
-	AuthorType   string
-	AuthorID     string
-	Body         string
-	CreatedAt    time.Time
+	ID         string
+	TicketID   string
+	BusinessID string
+	AuthorType string
+	AuthorID   string
+	Body       string
+	CreatedAt  time.Time
 }
 
 // SupportMessageCreate is the input to AppendMessage. Per Contract §42:
 // author_type is BUSINESS_USER or PLATFORM_ADMIN. The repository enforces
 // the CHECK constraint at the SQL layer.
 type SupportMessageCreate struct {
-	ID          string
-	TicketID    string
-	BusinessID  string
-	AuthorType  string
-	AuthorID    string
-	Body        string
-	Now         time.Time
+	ID         string
+	TicketID   string
+	BusinessID string
+	AuthorType string
+	AuthorID   string
+	Body       string
+	Now        time.Time
 }
 
 // SupportMessageListFilter is the query input to ListMessages.

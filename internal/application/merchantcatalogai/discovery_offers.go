@@ -3,7 +3,7 @@ package merchantcatalogai
 import (
 	"context"
 	"time"
-	
+
 	"errors"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
@@ -16,7 +16,7 @@ type listOffersCapability struct {
 
 func (c listOffersCapability) Definition() ports.AICapabilityDefinition {
 	return ports.AICapabilityDefinition{
-		Name: "merchant_catalog_list_offers",
+		Name:        "merchant_catalog_list_offers",
 		Description: "Read offers for one catalog item, including factual price and availability evidence.",
 		Parameters: map[string]any{
 			"type": "object",
@@ -79,7 +79,7 @@ func (c listOffersCapability) Execute(ctx context.Context, execCtx ports.AICapab
 			"availability_mode":         offer.AvailabilityMode,
 			"availability_status":       offer.AvailabilityStatus,
 			"availability_source":       offer.AvailabilitySource,
-			"availability_checked_at":  offer.AvailabilityCheckedAt,
+			"availability_checked_at":   offer.AvailabilityCheckedAt,
 			"availability_valid_until":  offer.AvailabilityValidUntil,
 			"availability_evidence_ref": offer.AvailabilityEvidenceRef,
 			"fulfillment_mode":          offer.FulfillmentMode,
@@ -88,17 +88,17 @@ func (c listOffersCapability) Execute(ctx context.Context, execCtx ports.AICapab
 			"status":                    offer.Status,
 		})
 		evidence = append(evidence, ports.AIOfferEvidence{
-			Reference:           offer.ID,
+			Reference:            offer.ID,
 			CatalogItemReference: offer.CatalogItemID,
-			VariantReference:    variantID,
+			VariantReference:     variantID,
 			Name:                 offer.Name,
 			PricingMode:          offer.PricingMode,
-			Amount:              dereferenceString(offer.Amount),
-			Currency:            dereferenceString(offer.Currency),
-			AvailabilityStatus:  offer.AvailabilityStatus,
-			Status:              offer.Status,
-			EvidenceState:       "verified",
-			RetrievedAt:         now,
+			Amount:               dereferenceString(offer.Amount),
+			Currency:             dereferenceString(offer.Currency),
+			AvailabilityStatus:   offer.AvailabilityStatus,
+			Status:               offer.Status,
+			EvidenceState:        "verified",
+			RetrievedAt:          now,
 		})
 	}
 

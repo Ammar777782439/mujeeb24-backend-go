@@ -14,7 +14,7 @@ func TestParseMerchantCatalogProposalRejectsIncompleteInteraction(t *testing.T) 
 				Type: "thought",
 			},
 			{
-				Type: "model_output",
+				Type:    "model_output",
 				Content: []merchantCatalogOutputPart{{Type: "text", Text: "{\"schema_version\":3,\"status\""}},
 			},
 		},

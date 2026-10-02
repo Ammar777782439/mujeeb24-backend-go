@@ -24,13 +24,14 @@ import (
 // (snake_case), matching the Catalog Entity Contract and DB column.
 //
 // Per ADR-046, the chain is:
-//   DB column: availability_status
-//   Domain: AvailabilityStatus
-//   Contract: AvailabilityStatus (json:"availability_status")
-//   AI Evidence: AvailabilityStatus (json:"availability_status")
-//   JSON to Gemini: "availability_status"
-//   Prompt: availability_status
-//   Gemini output: availability_status
+//
+//	DB column: availability_status
+//	Domain: AvailabilityStatus
+//	Contract: AvailabilityStatus (json:"availability_status")
+//	AI Evidence: AvailabilityStatus (json:"availability_status")
+//	JSON to Gemini: "availability_status"
+//	Prompt: availability_status
+//	Gemini output: availability_status
 //
 // This test specifically proves the JSON serialization boundary —
 // it uses the SAME encoding/json path as the production code
