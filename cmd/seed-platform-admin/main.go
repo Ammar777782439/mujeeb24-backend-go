@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 	"strings"
@@ -16,26 +17,23 @@ import (
 
 const seedConfirmation = "CREATE_PLATFORM_SUPER_ADMIN"
 
-func main() {
-	databaseURL := requiredEnv("DATABASE_URL")
-	email := requiredEnv("PLATFORM_SEED_EMAIL")
-	password := requiredEnv("PLATFORM_SEED_PASSWORD")
-	if strings.TrimSpace(os.Getenv("PLATFORM_SEED_CONFIRM")) != seedConfirmation {
-		log.Fatalf("PLATFORM_SEED_CONFIRM must equal %s", seedConfirmation)
-	}
-	if len(password) < 12 {
-		log.Fatal("PLATFORM_SEED_PASSWORD must contain at least 12 characters")
-	}
+type seedConfig struct {
+	databaseURL string
+	email       string
+	password    string
+	displayName string
+}
 
-	displayName := strings.TrimSpace(os.Getenv("PLATFORM_SEED_DISPLAY_NAME"))
-	if displayName == "" {
-		displayName = "مدير المنصة"
+func main() {
+	cfg, err := loadSeedConfig()
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	adapter, err := postgres.Open(ctx, databaseURL, postgres.PoolConfig{
+	adapter, err := postgres.Open(ctx, cfg.databaseURL, postgres.PoolConfig{
 		MaxConns:       2,
 		MinConns:       0,
 		ConnectTimeout: 10 * time.Second,
@@ -45,7 +43,7 @@ func main() {
 	}
 	defer adapter.Close()
 
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(cfg.password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Fatalf("hash password: %v", err)
 	}
@@ -53,8 +51,8 @@ func main() {
 	repository := postgres.NewPlatformAccessRepository(adapter)
 	principalID, err := repository.EnsurePlatformSuperAdmin(ctx, ports.PlatformSuperAdminBootstrap{
 		Principal: commands.PrincipalID(uuid.NewString()),
-		Email:     email,
-		Name:      displayName,
+		Email:     cfg.email,
+		Name:      cfg.displayName,
 		Hash:      string(passwordHash),
 		Now:       time.Now().UTC(),
 	})
@@ -65,18 +63,50 @@ func main() {
 	log.Println("==========================================================")
 	log.Println("Platform Super Admin Seeder completed.")
 	log.Printf("Principal ID: %s", principalID)
-	log.Printf("Email: %s", email)
-	log.Printf("Display name: %s", displayName)
+	log.Printf("Email: %s", cfg.email)
+	log.Printf("Display name: %s", cfg.displayName)
 	log.Println("Scope: PLATFORM ONLY")
 	log.Println("Business membership: NONE")
 	log.Println("Business owner role: NONE")
 	log.Println("==========================================================")
 }
 
-func requiredEnv(key string) string {
+func loadSeedConfig() (seedConfig, error) {
+	databaseURL, err := requiredEnv("DATABASE_URL")
+	if err != nil {
+		return seedConfig{}, err
+	}
+	email, err := requiredEnv("PLATFORM_SEED_EMAIL")
+	if err != nil {
+		return seedConfig{}, err
+	}
+
+	password := os.Getenv("PLATFORM_SEED_PASSWORD")
+	if len(password) < 12 {
+		return seedConfig{}, errors.New("PLATFORM_SEED_PASSWORD must contain at least 12 characters")
+	}
+
+	if strings.TrimSpace(os.Getenv("PLATFORM_SEED_CONFIRM")) != seedConfirmation {
+		return seedConfig{}, errors.New("PLATFORM_SEED_CONFIRM must equal " + seedConfirmation)
+	}
+
+	displayName := strings.TrimSpace(os.Getenv("PLATFORM_SEED_DISPLAY_NAME"))
+	if displayName == "" {
+		displayName = "مدير المنصة"
+	}
+
+	return seedConfig{
+		databaseURL: databaseURL,
+		email:       email,
+		password:    password,
+		displayName: displayName,
+	}, nil
+}
+
+func requiredEnv(key string) (string, error) {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
-		log.Fatalf("%s is required", key)
+		return "", errors.New(key + " is required")
 	}
-	return value
+	return value, nil
 }
