@@ -171,7 +171,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
         // is stateless except for its runtime flag, so creating it early
         // is safe.
         platformOperations := services.NewInMemoryPlatformOperationsRepository(
-                external.AIRuntime != nil && external.LLMConfigError == nil,
+                (external.GeminiClient != nil || external.OpenAICompatibleClient != nil) && external.LLMConfigError == nil,
                 external.SocialAPI != nil,
         )
         // Per §1-2: create the AIConfigurationCache + AIProviderConfigRepository
@@ -218,7 +218,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
         )
 
         if external.AutoReplyEnabled {
-                if external.AIRuntime == nil {
+                if external.GeminiClient == nil && external.OpenAICompatibleClient == nil {
                         return nil, errors.New("AutoReply requires a configured LLM runtime")
                 }
                 // Per contract ④ §8, wrap the legacy Gemini Client with the
@@ -227,8 +227,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 var contractRuntime ports.ContractRuntime
                 var geminiClient *gemini.Client
                 var runRepo ports.AIRunRepository
-                if gc, ok := external.AIRuntime.(*gemini.Client); ok {
-                        geminiClient = gc
+                if external.GeminiClient != nil {
+                        geminiClient = external.GeminiClient
                         cc, err := gemini.NewContractClient(geminiClient)
                         if err != nil {
                                 return nil, fmt.Errorf("build contract client: %w", err)
@@ -358,7 +358,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
                 //
                 // Per contract ② §2, TokenBudget is token-based (no hardcoded
                 // item count). 8000 is a sensible default per runtime config.
-                if geminiClient, gok := external.AIRuntime.(*gemini.Client); gok {
+                if geminiClient := external.GeminiClient; geminiClient != nil {
                         batchTokenCounter, _ := gemini.NewTokenCounter(gemini.TokenCounterConfig{
                                 BaseURL: geminiClient.BaseURL(),
                                 APIKey:  geminiClient.APIKey(),
@@ -479,7 +479,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
         dashboardServer := handlers.NewServer(dependencies)
 
         var merchantCatalogErr error
-        dashboardServer, merchantCatalogErr = wireMerchantCatalogAIV2(dashboardServer, database, external.AIRuntime, aiConfigCache)
+        dashboardServer, merchantCatalogErr = wireMerchantCatalogAIV2(dashboardServer, database, external.GeminiClient, aiConfigCache)
         if merchantCatalogErr != nil {
                 return nil, merchantCatalogErr
         }
