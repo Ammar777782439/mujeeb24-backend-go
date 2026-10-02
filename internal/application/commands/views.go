@@ -120,23 +120,41 @@ type CatalogItemView struct {
 	AttributeSchemaVersion *int
 	Name                   string
 	ItemType               string
+	ShortDescription       *string
+	LongDescription        *string
 	Status                 string
+	PricingMode            string
+	AvailabilityMode       string
+	FulfillmentMode        string
+	RequiresConfirmation   bool
 	Attributes             []byte
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
 	ResourceVersion        ResourceVersion
 }
 type OfferView struct {
-	ID                 OfferID
-	BusinessID         BusinessID
-	CatalogItemID      CatalogItemID
-	VariantID          VariantID
-	Name               string
-	PricingMode        string
-	Amount             *string
-	Currency           *string
-	AvailabilityStatus string
-	Status             string
+	ID                      OfferID
+	BusinessID              BusinessID
+	CatalogItemID           CatalogItemID
+	VariantID               VariantID
+	Name                    string
+	PricingMode             string
+	Amount                  *string
+	Currency                *string
+	PricingUnit             *string
+	PriceSource             *string
+	PriceVerificationStatus string
+	PriceCheckedAt          *time.Time
+	AvailabilityMode        string
+	AvailabilitySource      *string
+	AvailabilityCheckedAt   *time.Time
+	AvailabilityValidUntil  *time.Time
+	AvailabilityEvidenceRef *string
+	FulfillmentMode         string
+	ValidityFrom            *time.Time
+	ValidityUntil           *time.Time
+	AvailabilityStatus      string
+	Status                  string
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 	ResourceVersion    ResourceVersion
