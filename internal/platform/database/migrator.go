@@ -85,6 +85,15 @@ func RunMigrations(ctx context.Context, databaseURL string, appliedAt time.Time)
 	}
 	defer conn.Close(ctx)
 
+	// Serialize migrations across overlapping deploys/restarts.
+	const migrationAdvisoryLock int64 = 240024
+	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", migrationAdvisoryLock); err != nil {
+		return 0, fmt.Errorf("acquire migration lock: %w", err)
+	}
+	defer func() {
+		_, _ = conn.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", migrationAdvisoryLock)
+	}()
+
 	loaded, err := LoadMigrations()
 	if err != nil {
 		return 0, err
