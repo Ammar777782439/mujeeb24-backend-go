@@ -535,11 +535,19 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			}
 			session, err := provisioningService.CompleteOAuthCallback(request.Context(), callback)
 			if external.FrontendURL != "" {
+				// FRONTEND_URL may include a UI route such as /landing. The
+				// merchant dashboard lives at /channels, so appending /channels
+				// to FRONTEND_URL directly would produce /landing/channels.
+				// Redirect to the configured frontend origin instead.
+				frontendRedirectBase := external.FrontendURL
+				if parsed, parseErr := url.Parse(external.FrontendURL); parseErr == nil && parsed.Scheme != "" && parsed.Host != "" {
+					frontendRedirectBase = parsed.Scheme + "://" + parsed.Host
+				}
 				var redirectURL string
 				if err != nil {
-					redirectURL = fmt.Sprintf("%s/channels?status=failed&error=%s", external.FrontendURL, url.QueryEscape(err.Error()))
+					redirectURL = fmt.Sprintf("%s/channels?status=failed&error=%s", strings.TrimRight(frontendRedirectBase, "/"), url.QueryEscape(err.Error()))
 				} else {
-					redirectURL = fmt.Sprintf("%s/channels?status=connected&channel=%s&provisioning_id=%s", external.FrontendURL, url.QueryEscape(session.Channel), url.QueryEscape(session.ID))
+					redirectURL = fmt.Sprintf("%s/channels?status=connected&channel=%s&provisioning_id=%s", strings.TrimRight(frontendRedirectBase, "/"), url.QueryEscape(session.Channel), url.QueryEscape(session.ID))
 				}
 				http.Redirect(writer, request, redirectURL, http.StatusFound)
 				return
