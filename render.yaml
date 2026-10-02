@@ -58,10 +58,11 @@ services:
       - key: SOCIALAPI_HTTP_TIMEOUT
         value: 10s
 
-      # Channel provisioning is enabled only after the final Render URL
-      # is known and the SocialAPI OAuth callback is configured.
+      # Social account OAuth callback.
       - key: CHANNEL_PROVISIONING_ENABLED
-        value: "false"
+        value: "true"
+      - key: CHANNEL_PROVISIONING_REDIRECT_URI
+        value: https://mujeeb24-api.onrender.com/oauth/socialapi/callback
 
       # Customer auto-reply / Gemini AI runtime.
       # Gemini is the supported customer-sales provider in the current code.
