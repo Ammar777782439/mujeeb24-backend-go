@@ -469,6 +469,21 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		dependencies.IngestSocialAPIWebhook = webhookService
 	}
 	dashboardServer := handlers.NewServer(dependencies)
+	dashboardServer = dashboardServer.WithPlatformDeps(handlers.PlatformDeps{
+		Plans:             postgres.NewPlanRepository(database),
+		PlatformBusiness:  postgres.NewPlatformBusinessRepository(database),
+		PlatformAudit:     postgres.NewPlatformAuditRepository(database),
+		Subscriptions:     postgres.NewSubscriptionRepository(database),
+		Payments:          postgres.NewPaymentRepository(database),
+		Support:           postgres.NewSupportRepository(database),
+		AIUsage:           postgres.NewAIUsageRepository(database),
+		AIProviderPricing: postgres.NewAIProviderPricingRepository(database),
+		Operations:        platformOperations,
+		ChannelReader:     postgres.NewPlatformChannelReadRepository(database),
+		AIConfigRepo:      aiConfigRepo,
+		AIConfigCache:     aiConfigCache,
+		ModelDiscovery:    gemini.NewModelsClient(),
+	})
 
 	var merchantCatalogErr error
 	dashboardServer, merchantCatalogErr = wireMerchantCatalogAuthoringAI(dashboardServer, database, external.GeminiHTTPClient, aiConfigCache)
