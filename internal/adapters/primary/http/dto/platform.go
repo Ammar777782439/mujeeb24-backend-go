@@ -19,18 +19,6 @@ package dto
 // Shared path/header inputs
 // ----------------------------------------------------------------------------
 
-type AssignBusinessOwnerRequest struct {
-	Email       string `json:"email" minLength:"3" maxLength:"320"`
-	DisplayName string `json:"display_name" minLength:"1" maxLength:"200"`
-	Password    string `json:"password" minLength:"12" maxLength:"256"`
-}
-
-type AssignBusinessOwnerInput struct {
-	PlatformBusinessPath
-	PlatformCommandHeaders
-	Body AssignBusinessOwnerRequest
-}
-
 type PlatformBusinessPath struct {
 	BusinessID UUID `path:"business_id" format:"uuid"`
 }
