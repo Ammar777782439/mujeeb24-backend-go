@@ -298,7 +298,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 			return ports.AICapabilityResult{}, err
 		}
 		projections := make([]CatalogItemProjection, 0, len(res.Items))
-		evidence := make([]ports.AICatalogEvidence, 0, len(res.Items))
+		evidence := make([]ports.CustomerSalesCatalogEvidence, 0, len(res.Items))
 		for _, item := range res.Items {
 			var attrs map[string]any
 			if len(item.Attributes) > 0 {
@@ -319,7 +319,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 				Status:                 item.Status,
 				Attributes:             attrs,
 			})
-			evidence = append(evidence, ports.AICatalogEvidence{
+			evidence = append(evidence, ports.CustomerSalesCatalogEvidence{
 				Reference:        string(item.ID),
 				CatalogReference: string(item.CatalogID),
 				ItemType:         item.ItemType,
@@ -382,7 +382,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 			Status:                 item.Status,
 			Attributes:             attrs,
 		}
-		evidence := []ports.AICatalogEvidence{
+		evidence := []ports.CustomerSalesCatalogEvidence{
 			{
 				Reference:        string(item.ID),
 				CatalogReference: string(item.CatalogID),
@@ -423,7 +423,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 			return ports.AICapabilityResult{}, err
 		}
 		projections := make([]OfferProjection, 0, len(res.Items))
-		evidence := make([]ports.AIOfferEvidence, 0, len(res.Items))
+		evidence := make([]ports.CustomerSalesOfferEvidence, 0, len(res.Items))
 		for _, offer := range res.Items {
 			var variantID *string
 			if offer.VariantID != "" {
@@ -445,7 +445,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 			if strings.EqualFold(strings.TrimSpace(offer.AvailabilityStatus), "unknown") || strings.EqualFold(strings.TrimSpace(offer.AvailabilityStatus), "stale") {
 				evState = CustomerSalesContextStale
 			}
-			evidence = append(evidence, ports.AIOfferEvidence{
+			evidence = append(evidence, ports.CustomerSalesOfferEvidence{
 				Reference:            string(offer.ID),
 				CatalogItemReference: string(offer.CatalogItemID),
 				VariantReference:     stringValue(variantID),
@@ -494,7 +494,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 			return ports.AICapabilityResult{}, err
 		}
 		projections := make([]VariantProjection, 0, len(res.Items))
-		evidence := make([]ports.AIVariantEvidence, 0, len(res.Items))
+		evidence := make([]ports.CustomerSalesVariantEvidence, 0, len(res.Items))
 		for _, v := range res.Items {
 			var attrs map[string]any
 			if len(v.Attributes) > 0 {
@@ -507,7 +507,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 				Status:        v.Status,
 				Attributes:    attrs,
 			})
-			evidence = append(evidence, ports.AIVariantEvidence{
+			evidence = append(evidence, ports.CustomerSalesVariantEvidence{
 				Reference:            string(v.ID),
 				CatalogItemReference: string(v.CatalogItemID),
 				Name:                 v.Name,
@@ -1020,7 +1020,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 			Attributes:             itemAttrs,
 		}
 
-		catEvidence := []ports.AICatalogEvidence{
+		catEvidence := []ports.CustomerSalesCatalogEvidence{
 			{
 				Reference:        string(res.Item.ID),
 				CatalogReference: string(res.Item.CatalogID),
@@ -1035,7 +1035,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 		}
 
 		variantProjections := make([]VariantProjection, 0, len(res.Variants))
-		variantEvidence := make([]ports.AIVariantEvidence, 0, len(res.Variants))
+		variantEvidence := make([]ports.CustomerSalesVariantEvidence, 0, len(res.Variants))
 		for _, v := range res.Variants {
 			var vAttrs map[string]any
 			if len(v.Attributes) > 0 {
@@ -1048,7 +1048,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 				Status:        v.Status,
 				Attributes:    vAttrs,
 			})
-			variantEvidence = append(variantEvidence, ports.AIVariantEvidence{
+			variantEvidence = append(variantEvidence, ports.CustomerSalesVariantEvidence{
 				Reference:            string(v.ID),
 				CatalogItemReference: string(v.CatalogItemID),
 				Name:                 v.Name,
@@ -1061,7 +1061,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 		}
 
 		offerProjections := make([]OfferProjection, 0, len(res.Offers))
-		offerEvidence := make([]ports.AIOfferEvidence, 0, len(res.Offers))
+		offerEvidence := make([]ports.CustomerSalesOfferEvidence, 0, len(res.Offers))
 		for _, o := range res.Offers {
 			var vid *string
 			if o.VariantID != "" {
@@ -1079,7 +1079,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 				AvailabilityStatus: o.AvailabilityStatus,
 				Status:             o.Status,
 			})
-			offerEvidence = append(offerEvidence, ports.AIOfferEvidence{
+			offerEvidence = append(offerEvidence, ports.CustomerSalesOfferEvidence{
 				Reference:            string(o.ID),
 				CatalogItemReference: string(o.CatalogItemID),
 				VariantReference:     stringValue(vid),
@@ -1205,7 +1205,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 			Status:                 res.Item.Status,
 			Attributes:             attrs,
 		}
-		catEvidence := []ports.AICatalogEvidence{
+		catEvidence := []ports.CustomerSalesCatalogEvidence{
 			{
 				Reference:        string(res.Item.ID),
 				CatalogReference: string(res.Item.CatalogID),
@@ -1311,7 +1311,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 			AvailabilityStatus: res.Offer.AvailabilityStatus,
 			Status:             res.Offer.Status,
 		}
-		offerEvidence := []ports.AIOfferEvidence{
+		offerEvidence := []ports.CustomerSalesOfferEvidence{
 			{
 				Reference:            string(res.Offer.ID),
 				CatalogItemReference: string(res.Offer.CatalogItemID),
@@ -1367,7 +1367,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 			Status:        res.Variant.Status,
 			Attributes:    attrs,
 		}
-		variantEvidence := []ports.AIVariantEvidence{
+		variantEvidence := []ports.CustomerSalesVariantEvidence{
 			{
 				Reference:            string(res.Variant.ID),
 				CatalogItemReference: string(res.Variant.CatalogItemID),
