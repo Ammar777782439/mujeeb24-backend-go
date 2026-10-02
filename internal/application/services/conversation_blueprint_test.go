@@ -239,7 +239,7 @@ func TestAutoReplyHandoffFarewellOnSubscription(t *testing.T) {
 	// containing "subscribe"/"activat"/"purchase" keywords (the system prompt
 	// instructs Gemini to use those words when handing off a subscription intent).
 	service := NewAutoReplyService(
-		&FakeCustomerSalesDecisionPort{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusResolved, Action: ports.AIProposalActionHumanRequest, ResponseText: "model suggests subscribe"}},
+		&FakeCustomerSalesDecisionPort{Proposal: ports.CustomerSalesProposal{Status: ports.CustomerSalesProposalStatusResolved, Action: ports.CustomerSalesProposalActionHumanRequest, ResponseText: "model suggests subscribe"}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
 		outbound,
@@ -258,7 +258,7 @@ func TestAutoReplyHandoffFarewellOnSubscription(t *testing.T) {
 	// Per contract ⑥ §14, the proposal.Action is human_request but the farewell
 	// flow overrides the action to "answer" (so it gets enqueued) and overrides
 	// ResponseText with the fixed HandoffFarewellMessage.
-	if !result.Enqueued || outbox.calls != 1 || result.Action != string(ports.AIProposalActionAnswer) {
+	if !result.Enqueued || outbox.calls != 1 || result.Action != string(ports.CustomerSalesProposalActionAnswer) {
 		t.Fatalf("farewell must be enqueued, got %#v calls=%d", result, outbox.calls)
 	}
 	if !result.Decision.RequiresHuman {
@@ -287,7 +287,7 @@ func TestAutoReplyHandoffFarewellOnSubscription(t *testing.T) {
 func TestAutoReplyHandoffFarewellBlockedWhenApprovalRequired(t *testing.T) {
 	outbox := &fakeOutboxStore{}
 	service := NewAutoReplyService(
-		&FakeCustomerSalesDecisionPort{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusResolved, Action: ports.AIProposalActionHumanRequest, ResponseText: "model text"}},
+		&FakeCustomerSalesDecisionPort{Proposal: ports.CustomerSalesProposal{Status: ports.CustomerSalesProposalStatusResolved, Action: ports.CustomerSalesProposalActionHumanRequest, ResponseText: "model text"}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
 		&fakeOutboundRepository{},
