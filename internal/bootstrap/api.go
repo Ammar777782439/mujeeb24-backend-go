@@ -81,19 +81,6 @@ func BuildAPI(ctx context.Context, cfg config.ProcessConfig) (*APIRuntime, error
 		database.Close()
 		return nil, err
 	}
-	catalogCommands := services.NewCatalogCommandServices(catalogRepository, database)
-	catalogAuthoringCapability := services.NewCatalogAuthoringCapability(
-		services.AuthorCatalogItemCommandService{CatalogCommandServices: catalogCommands},
-		services.CreateCatalogCommandService{CatalogCommandServices: catalogCommands},
-		services.CreateCatalogItemCommandService{CatalogCommandServices: catalogCommands},
-		services.CreateOfferCommandService{CatalogCommandServices: catalogCommands},
-		services.CreateVariantCommandService{CatalogCommandServices: catalogCommands},
-		services.CreateAttributeSchemaVersionCommandService{CatalogCommandServices: catalogCommands},
-	)
-	if err := capabilityRegistry.Register(catalogAuthoringCapability); err != nil {
-		database.Close()
-		return nil, err
-	}
 	runtime, err := newAPIWithExternalAndAuthentication(database, cfg.HTTPAddr, BuildExternalAdapters(cfg, capabilityRegistry), authentication)
 	if err != nil {
 		database.Close()
