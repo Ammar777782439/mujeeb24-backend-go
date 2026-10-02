@@ -112,7 +112,11 @@ func (s *Server) dispatchSystemCommand(ctx context.Context, operationID string, 
 		log.Printf("[Auth] LOGIN_OK principal=%s email=%q", result.Principal.ID, in.Body.Email)
 		out := &contract.AuthOutput{}
 		out.SetCookie = refreshCookie(result.RefreshToken, result.RefreshExpiresAt)
-		out.Body.Data = authResponseProjection(result)
+		projection, projectionErr := s.authResponseProjection(ctx, result)
+		if projectionErr != nil {
+			return mapApplicationError(projectionErr), true
+		}
+		out.Body.Data = projection
 		return out, true
 	case "rotateRefreshSession":
 		in := input.(*contract.RefreshInput)
@@ -131,7 +135,11 @@ func (s *Server) dispatchSystemCommand(ctx context.Context, operationID string, 
 		}
 		out := &contract.AuthOutput{}
 		out.SetCookie = refreshCookie(result.RefreshToken, result.RefreshExpiresAt)
-		out.Body.Data = authResponseProjection(result)
+		projection, projectionErr := s.authResponseProjection(ctx, result)
+		if projectionErr != nil {
+			return mapApplicationError(projectionErr), true
+		}
+		out.Body.Data = projection
 		return out, true
 	case "revokeRefreshSession":
 		if s.deps.RevokeRefreshSession == nil {
@@ -206,8 +214,26 @@ func (s *Server) dispatchSystemCommand(ctx context.Context, operationID string, 
 	}
 }
 
-func authResponseProjection(v commands.AuthResult) contract.AuthResponse {
-	return contract.AuthResponse{AccessToken: v.AccessToken, TokenType: "Bearer", ExpiresAt: v.ExpiresAt, Principal: contract.Principal{PrincipalID: contract.UUID(v.Principal.ID), DisplayName: v.Principal.DisplayName, Email: optionalString(v.Principal.Email)}}
+func (s *Server) authResponseProjection(ctx context.Context, v commands.AuthResult) (contract.AuthResponse, error) {
+	isPlatformAdmin := false
+	if s.deps.PlatformAccess != nil {
+		active, err := s.deps.PlatformAccess.IsActiveSuperAdmin(ctx, string(v.Principal.ID))
+		if err != nil {
+			return contract.AuthResponse{}, err
+		}
+		isPlatformAdmin = active
+	}
+	return contract.AuthResponse{
+		AccessToken:     v.AccessToken,
+		TokenType:       "Bearer",
+		ExpiresAt:       v.ExpiresAt,
+		IsPlatformAdmin: isPlatformAdmin,
+		Principal: contract.Principal{
+			PrincipalID: contract.UUID(v.Principal.ID),
+			DisplayName:  v.Principal.DisplayName,
+			Email:        optionalString(v.Principal.Email),
+		},
+	}, nil
 }
 
 func refreshTokenFromCookie(raw string) (string, error) {
