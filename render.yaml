@@ -8,26 +8,87 @@ services:
     dockerContext: .
     autoDeployTrigger: checksPass
     healthCheckPath: /health
+
     envVars:
+      # Render injects PORT automatically. The Go config uses PORT when
+      # HTTP_ADDR is not explicitly set.
       - key: APP_ENV
         value: production
-      - key: AUTH_ENABLED
-        value: "true"
-      - key: AUTOREPLY_ENABLED
-        value: "false"
-      - key: LLM_ENABLED
-        value: "false"
-      - key: CHANNEL_PROVISIONING_ENABLED
-        value: "false"
-      - key: FRONTEND_URL
-        value: https://mujeeb24-frontend.ai.studio/landing
+
+      # Database: external PostgreSQL (Neon). Do not create Render Postgres.
       - key: DATABASE_URL
         sync: false
+
+      # Authentication
+      - key: AUTH_ENABLED
+        value: "true"
       - key: JWT_ISSUER
         value: mujeeb24
       - key: JWT_ED25519_PRIVATE_KEY
         sync: false
       - key: JWT_ED25519_PUBLIC_KEY
         sync: false
+      - key: JWT_ACCESS_TTL
+        value: 15m
+      - key: REFRESH_SESSION_TTL
+        value: 720h
+
+      # Required encrypted AI credential storage at API startup.
+      # Gemini itself stays disabled for the initial smoke test.
       - key: AI_CONFIG_ENCRYPTION_KEY
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: GEMINI_HTTP_TIMEOUT
+        value: 30s
+
+      # SocialAPI transport / Facebook, Instagram, WhatsApp provider.
+      # Keep disabled for the first smoke test; credentials can be added
+      # without changing the application image.
+      - key: SOCIALAPI_BASE_URL
+        value: https://api.social-api.ai
+      - key: SOCIALAPI_API_KEY
+        sync: false
+      - key: SOCIALAPI_WEBHOOK_SECRET
+        sync: false
+      - key: SOCIALAPI_HTTP_TIMEOUT
+        value: 10s
+
+      # Channel provisioning is enabled only after the final Render URL
+      # is known and the SocialAPI OAuth callback is configured.
+      - key: CHANNEL_PROVISIONING_ENABLED
+        value: "false"
+
+      # Customer auto-reply / AI runtime: disabled for first deployment.
+      - key: AUTOREPLY_ENABLED
+        value: "false"
+      - key: LLM_ENABLED
+        value: "false"
+
+      # Frontend already deployed on Google AI Studio.
+      - key: FRONTEND_URL
+        value: https://mujeeb24-frontend.ai.studio/landing
+
+      # Worker / database runtime tuning.
+      - key: WORKER_OWNER
+        value: mujeeb-render-worker
+      - key: WORKER_POLL_INTERVAL
+        value: 2s
+      - key: WORKER_BATCH_SIZE
+        value: "20"
+      - key: SHUTDOWN_TIMEOUT
+        value: 10s
+      - key: DB_MAX_CONNS
+        value: "5"
+      - key: DB_MIN_CONNS
+        value: "0"
+      - key: DB_MAX_CONN_LIFETIME
+        value: 1h
+      - key: DB_MAX_CONN_IDLE_TIME
+        value: 10m
+      - key: DB_HEALTH_CHECK_PERIOD
+        value: 1m
+      - key: DB_CONNECT_TIMEOUT
+        value: 5s
