@@ -173,7 +173,7 @@ func NewAutoReplyService(runtime ports.CustomerSalesDecisionPort, decisions port
 //  2. Start AI Run (RECEIVED) per contract ⑨ §1. Idempotent on
 //     (business_id, source_message_reference).
 //  3. Build context (CONTEXT_BUILT) per contract ③ §2.
-//  4. Call Gemini via Runtime.DecideContract (RUNNING) per contract ④ §8.
+//  4. Call Gemini via Runtime.Decide (RUNNING) per contract ④ §8.
 //  5. Run ValidationPipeline (VALIDATING) per contract ⑥ §2.
 //  6. If validation fails → Mark FAILED per contract ⑨ §18; no execution.
 //  7. If policy denied → Mark FAILED; no execution.
@@ -279,7 +279,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	if builtContext != nil && builtContext.Conversation.LastGeminiInteractionID != nil {
 		previousInteractionID = *builtContext.Conversation.LastGeminiInteractionID
 	}
-	out, err := s.Runtime.DecideContract(ctx, ports.CustomerSalesDecisionInput{
+	out, err := s.Runtime.Decide(ctx, ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{
 			BusinessID:             businessID,
 			ConversationID:         conversationID,
