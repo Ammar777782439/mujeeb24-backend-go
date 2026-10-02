@@ -122,7 +122,7 @@ func NewBatchClient(cfg BatchClientConfig) (*BatchClient, error) {
 
 // buildBatchSystemInstruction builds the Gemini system_instruction content
 // combining the Batch Evaluation system prompt + the Catalog Entity Contract
-// JSON per contract ⑤ §7. Mirrors ContractClient.buildContractSystemInstruction
+// JSON per contract ⑤ §7. Mirrors the customer-sales system-instruction contract
 // — same authoritative ordering: part 0 = system prompt, part 1 = Catalog
 // Entity Contract. Per ADR-047: before this fix, BatchClient ignored the
 // EntityContract field available in BatchEvaluationInput, causing Gemini to
