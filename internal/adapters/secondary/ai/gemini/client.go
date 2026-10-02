@@ -1,13 +1,12 @@
 // Package gemini — Gemini HTTP Client (Config Holder + Prompt Builder).
 //
 // This file holds ONLY:
-//   1. Client struct (config: API key, model, base URL, HTTP client, system prompt)
+//   1. GeminiHTTPClient struct (config: API key, model, base URL, HTTP client, system prompt)
 //   2. NewGeminiHTTPClient constructor
 //   3. Getters (BaseURL, APIKey, Model) — used by Gemini capability adapters and bootstrap
 //   4. buildUserPrompt — used by the customer-sales adapter to build Gemini input
 //
-// The LEGACY Client.Decide method, proposalWire, proposalJSONSchema,
-// The generic decision path and its legacy proposal parser were removed.
+// The old generic decision path and its legacy proposal parser were removed.
 // Domain-specific Gemini adapters own their request/response contracts and
 // use this client only for shared HTTP configuration.
 //
@@ -15,7 +14,7 @@
 //   Mujeeb System Contract → system_instruction
 //   Mujeeb Input Context → input (contents)
 //   Catalog boundary → Structured Output (responseSchema)
-//   Mujeeb Output Contract → AIGeminiProposal
+//   Mujeeb Output Contract → capability-specific proposal
 //
 // Per contract ④ §3 (No Execution): the Gemini adapter contains NO database
 // imports (no pgx, no sql, no database). It does HTTP only.
@@ -41,7 +40,7 @@ const (
 	defaultModel           = "gemini-3.5-flash-lite"
 )
 
-// Config contains only runtime configuration. API keys are never copied
+// GeminiHTTPClientConfig contains only runtime configuration. API keys are never copied
 // into a proposal, error, log, or domain record (per contract ⑧ §23).
 type GeminiHTTPClientConfig struct {
 	BaseURL            string
