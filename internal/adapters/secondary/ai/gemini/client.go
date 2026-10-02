@@ -7,10 +7,9 @@
 //   4. buildUserPrompt — used by the customer-sales adapter to build Gemini input
 //
 // The LEGACY Client.Decide method, proposalWire, proposalJSONSchema,
-// safetyTurnBudget loop, sendRequest, and all legacy types were REMOVED
-// per the "purge dead code" directive. The contract-aligned path uses
-// ContractClient.DecideContract (in client_contracts.go) which has its
-// own HTTP send method and Structured Output enforcement.
+// The generic decision path and its legacy proposal parser were removed.
+// Domain-specific Gemini adapters own their request/response contracts and
+// use this client only for shared HTTP configuration.
 //
 // Per contract ④ §8:
 //   Mujeeb System Contract → system_instruction
