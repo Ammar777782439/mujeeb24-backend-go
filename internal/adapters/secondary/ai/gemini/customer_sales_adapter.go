@@ -143,7 +143,7 @@ func NewGeminiCustomerSalesAdapter(base *Client) (*GeminiCustomerSalesAdapter, e
 // continues until Gemini returns a final structured proposal, a
 // tool fails non-retryably, or the context deadline expires.
 //
-// This method supersedes the legacy ports.AIRuntime.Decide.
+// This method is the Customer Sales decision adapter; no generic AI runtime is used.
 func (c *GeminiCustomerSalesAdapter) Decide(ctx context.Context, input ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
 	if err := ctx.Err(); err != nil {
 		return ports.CustomerSalesDecisionOutput{}, err
