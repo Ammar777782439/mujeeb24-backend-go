@@ -279,10 +279,10 @@ func TestAutoReplyServiceRejectsEmptyClarificationText(t *testing.T) {
 }
 
 type stubCustomerSalesContextBuilder struct {
-	context ports.AIContext
+	context ports.CustomerSalesContext
 }
 
-func (s stubCustomerSalesContextBuilder) Build(context.Context, ports.CustomerSalesContextInput) (ports.AIContext, error) {
+func (s stubCustomerSalesContextBuilder) Build(context.Context, ports.CustomerSalesContextInput) (ports.CustomerSalesContext, error) {
 	return s.context, nil
 }
 
@@ -317,7 +317,7 @@ func TestAutoReplyServiceEnqueuesGeneralAnswerAfterFocus(t *testing.T) {
 		outbox,
 		fakeTransactionManager{},
 	)
-	service.CustomerSalesContextBuilder = stubCustomerSalesContextBuilder{context: ports.AIContext{
+	service.CustomerSalesContextBuilder = stubCustomerSalesContextBuilder{context: ports.CustomerSalesContext{
 		CatalogEvidence: []ports.AICatalogEvidence{
 			{Reference: "item-basic", CatalogReference: "cat-1"},
 			{Reference: "item-pro", CatalogReference: "cat-1"},
