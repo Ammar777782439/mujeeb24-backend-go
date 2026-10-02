@@ -20,7 +20,7 @@ func TestAutoReplyUsesContractRuntimeProposalBeforeEnqueue(t *testing.T) {
 	decisions := &fakeDecisionRepository{}
 	outbound := &fakeOutboundRepository{}
 	outbox := &fakeOutboxStore{}
-	// Use FakeCustomerSalesDecisionPort which returns a contract-aligned AIGeminiProposal
+	// Use FakeCustomerSalesDecisionPort which returns a contract-aligned CustomerSalesProposal
 	// per contract ④ §4 (status + action + response_text + selected[]).
 	runtime := NewFakeCustomerSalesDecisionPort("تم استلام رسالتك")
 	service := NewAutoReplyService(
@@ -43,7 +43,7 @@ func TestAutoReplyUsesContractRuntimeProposalBeforeEnqueue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
-	if !result.Enqueued || result.Action != string(ports.AIProposalActionAnswer) || result.OutboundMessageID == "" || result.OutboxEntryID == "" {
+	if !result.Enqueued || result.Action != string(ports.CustomerSalesProposalActionAnswer) || result.OutboundMessageID == "" || result.OutboxEntryID == "" {
 		t.Fatalf("unexpected result: %#v", result)
 	}
 	if outbox.calls != 1 {
