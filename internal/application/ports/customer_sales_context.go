@@ -5,7 +5,8 @@ import (
 	"time"
 )
 
-type AIDecisionInput struct {
+// CustomerSalesDecisionRequest is the customer-facing request supplied to the B2C AI.
+type CustomerSalesDecisionRequest struct {
 	BusinessID             string
 	ConversationID         string
 	SourceMessageReference string
