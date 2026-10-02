@@ -3,8 +3,8 @@
 // This file holds ONLY:
 //   1. Client struct (config: API key, model, base URL, HTTP client, system prompt)
 //   2. NewClient constructor
-//   3. Getters (BaseURL, APIKey, Model) — used by ContractClient and bootstrap
-//   4. buildUserPrompt — used by ContractClient to build the user-facing prompt
+//   3. Getters (BaseURL, APIKey, Model) — used by Gemini capability adapters and bootstrap
+//   4. buildUserPrompt — used by the customer-sales adapter to build Gemini input
 //
 // The LEGACY Client.Decide method, proposalWire, proposalJSONSchema,
 // safetyTurnBudget loop, sendRequest, and all legacy types were REMOVED
@@ -56,9 +56,8 @@ type Config struct {
 	Capabilities       ports.AICapabilityDispatcher
 }
 
-// Client is the Gemini HTTP client. It holds config only — the actual
-// contract-aligned API calls are in ContractClient (client_contracts.go)
-// which wraps this Client.
+// Client is the low-level Gemini HTTP client. Capability-specific adapters
+// wrap it to implement explicit application ports.
 //
 // Per contract ④ §3 (No Execution): this client does HTTP only.
 // No database imports, no external API calls beyond Gemini.
@@ -149,14 +148,14 @@ func (c *Client) MaxOutputTokens() int { return c.maxOutputTokens }
 // RequestTimeout returns the configured request timeout.
 func (c *Client) RequestTimeout() time.Duration { return c.requestTimeout }
 
-// HTTPClient returns the configured HTTP client (shared with ContractClient).
+// HTTPClient returns the configured HTTP client shared by Gemini capability adapters.
 func (c *Client) HTTPClient() *http.Client { return c.httpClient }
 
 // Capabilities returns the configured AI capability dispatcher.
 func (c *Client) Capabilities() ports.AICapabilityDispatcher { return c.capabilities }
 
 // buildUserPrompt encodes the AIContext + customer message into the
-// user-facing prompt text for Gemini. Used by ContractClient.
+// customer-facing prompt text for Gemini. Used by GeminiCustomerSalesAdapter.
 //
 // Per contract ④ §3, the input includes: business_context,
 // conversation_context, conversation_state, catalog_evidence, user_message.
