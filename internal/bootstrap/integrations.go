@@ -13,6 +13,7 @@ type ExternalAdapters struct {
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
 	GeminiHTTPClient               *gemini.GeminiHTTPClient
+	SocialAPIHealthProbe           ports.HealthCheckProbe
 	LLMConfigError                 error
 	AutoReplyEnabled               bool
 	ChannelProvisioningSocial      ports.SocialChannelProvisioner
@@ -54,6 +55,7 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 		client := socialapi.NewClient(socialapi.Config{BaseURL: cfg.SocialAPIBaseURL, APIKey: cfg.SocialAPIAPIKey, WebhookSecret: cfg.SocialAPIWebhookSecret, HTTPTimeout: cfg.SocialAPIHTTPTimeout})
 		adapters.SocialAPI = client
 		adapters.SocialWebhook = client
+		adapters.SocialAPIHealthProbe = socialapi.NewHealthCheckProbe(client)
 		adapters.ChannelProvisioningSocial = socialapi.NewProvisioningAdapter(client)
 	}
 	if cfg.ChannelProvisioningEnabled {
