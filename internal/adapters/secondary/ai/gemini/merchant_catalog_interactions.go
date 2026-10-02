@@ -76,7 +76,7 @@ type merchantCatalogFunctionCall struct {
 	Arguments json.RawMessage
 }
 
-func (r *MerchantCatalogRuntime) sendInteraction(ctx context.Context, reqBody merchantCatalogInteractionRequest, apiKey, baseURL string) (merchantCatalogInteractionResponse, error) {
+func (r *GeminiMerchantCatalogAuthoringAdapter) sendInteraction(ctx context.Context, reqBody merchantCatalogInteractionRequest, apiKey, baseURL string) (merchantCatalogInteractionResponse, error) {
 	payload, err := json.Marshal(reqBody)
 	if err != nil {
 		return merchantCatalogInteractionResponse{}, fmt.Errorf("encode Gemini interaction request: %w", err)
