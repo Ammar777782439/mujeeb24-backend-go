@@ -165,40 +165,6 @@ func (r *PlatformBusinessRepository) GetByID(ctx context.Context, businessID str
 	return record, nil
 }
 
-func (r *PlatformBusinessRepository) ActivateFromPendingSetup(ctx context.Context, businessID string, now time.Time) (ports.PlatformBusinessRecord, error) {
-	if r == nil || r.adapter == nil {
-		return ports.PlatformBusinessRecord{}, ErrPoolClosed
-	}
-	if strings.TrimSpace(businessID) == "" {
-		return ports.PlatformBusinessRecord{}, invalidRepositoryInput("platform_business.activate_from_pending_setup", "business id is required")
-	}
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	executor, err := r.adapter.Executor(ctx)
-	if err != nil {
-		return ports.PlatformBusinessRecord{}, err
-	}
-	var record ports.PlatformBusinessRecord
-	err = executor.QueryRow(ctx,
-		`UPDATE businesses SET status = 'active', updated_at = $2
-		 WHERE id = $1::uuid AND status = 'pending_setup'
-		 RETURNING `+platformBusinessReturnColumns,
-		businessID, now,
-	).Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.OwnerIdentitySummary, &record.CreatedAt, &record.UpdatedAt)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			current, getErr := r.GetByID(ctx, businessID)
-			if getErr != nil {
-				return ports.PlatformBusinessRecord{}, getErr
-			}
-			return ports.PlatformBusinessRecord{}, &RepositoryError{Operation: "platform_business.activate_from_pending_setup", Kind: RepositoryConflict, Err: fmt.Errorf("business %s is in status %s", businessID, current.PlatformStatus)}
-		}
-		return ports.PlatformBusinessRecord{}, &RepositoryError{Operation: "platform_business.activate_from_pending_setup", Kind: RepositoryInvalid, Err: err}
-	}
-	return record, nil
-}
-
 func (r *PlatformBusinessRepository) Suspend(ctx context.Context, businessID string, now time.Time) (ports.PlatformBusinessRecord, error) {
 	return r.transition(ctx, "platform_business.suspend", businessID, now, []string{"active", "pending_setup"}, "suspended")
 }
