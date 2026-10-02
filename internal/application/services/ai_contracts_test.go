@@ -175,39 +175,39 @@ func TestValidateStructural(t *testing.T) {
 	pipeline := &ValidationPipeline{}
 	cases := []struct {
 		name     string
-		proposal ports.AIGeminiProposal
+		proposal ports.CustomerSalesProposal
 		wantErr  bool
 	}{
 		{
 			name: "valid resolved answer",
-			proposal: ports.AIGeminiProposal{
-				Status:       ports.AIProposalStatusResolved,
-				Action:       ports.AIProposalActionAnswer,
+			proposal: ports.CustomerSalesProposal{
+				Status:       ports.CustomerSalesProposalStatusResolved,
+				Action:       ports.CustomerSalesProposalActionAnswer,
 				ResponseText: "السعر 12000 ريال",
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid human_request without response_text",
-			proposal: ports.AIGeminiProposal{
-				Status: ports.AIProposalStatusAmbiguous,
-				Action: ports.AIProposalActionHumanRequest,
+			proposal: ports.CustomerSalesProposal{
+				Status: ports.CustomerSalesProposalStatusAmbiguous,
+				Action: ports.CustomerSalesProposalActionHumanRequest,
 			},
 			wantErr: false,
 		},
 		{
 			name: "invalid status",
-			proposal: ports.AIGeminiProposal{
+			proposal: ports.CustomerSalesProposal{
 				Status:       "approved",
-				Action:       ports.AIProposalActionAnswer,
+				Action:       ports.CustomerSalesProposalActionAnswer,
 				ResponseText: "x",
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid action",
-			proposal: ports.AIGeminiProposal{
-				Status:       ports.AIProposalStatusResolved,
+			proposal: ports.CustomerSalesProposal{
+				Status:       ports.CustomerSalesProposalStatusResolved,
 				Action:       "create_lead", // legacy, no longer valid
 				ResponseText: "x",
 			},
@@ -215,9 +215,9 @@ func TestValidateStructural(t *testing.T) {
 		},
 		{
 			name: "missing response_text for answer",
-			proposal: ports.AIGeminiProposal{
-				Status: ports.AIProposalStatusResolved,
-				Action: ports.AIProposalActionAnswer,
+			proposal: ports.CustomerSalesProposal{
+				Status: ports.CustomerSalesProposalStatusResolved,
+				Action: ports.CustomerSalesProposalActionAnswer,
 			},
 			wantErr: true,
 		},
