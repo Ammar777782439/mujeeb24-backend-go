@@ -22,6 +22,7 @@ type AssignBusinessOwnerInput struct {
 }
 
 type AssignBusinessOwnerResult struct {
+	BusinessID    string
 	PrincipalID   string
 	Email         string
 	DisplayName   string
@@ -102,6 +103,7 @@ func (s AssignBusinessOwnerService) Handle(ctx context.Context, in AssignBusines
 			return err
 		}
 		result = AssignBusinessOwnerResult{
+			BusinessID:     in.BusinessID,
 			PrincipalID:    string(principal.ID),
 			Email:          principal.Email,
 			DisplayName:    principal.DisplayName,
