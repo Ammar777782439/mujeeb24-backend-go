@@ -20,7 +20,6 @@ import (
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
         realtimePostgres "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/realtime/postgres"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
-        "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
         "github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
@@ -487,30 +486,10 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
         }
         dashboardServer := handlers.NewServer(dependencies)
 
-        // B2B Merchant Catalog AI v2 is isolated from Customer Sales AI:
-        // separate Agent, Runtime, Proposal Contract, and read-only capabilities.
-        if gc, ok := external.AIRuntime.(*gemini.Client); ok {
-                b2bRuntime, runtimeErr := gemini.NewMerchantCatalogRuntime(gc)
-                if runtimeErr != nil {
-                        return nil, fmt.Errorf("build merchant catalog AI v2 runtime: %w", runtimeErr)
-                }
-                b2bRuntime.SetConfigurationProvider(aiConfigCache)
-                catalogRepo := postgres.NewCatalogRepository(database)
-                b2bAgent := &merchantcatalogai.Agent{
-                        Sessions:       postgres.NewMerchantCatalogAISessionStore(database),
-                        Selector:       merchantcatalogai.DeterministicCatalogSelector{Repository: catalogRepo},
-                        Business:       postgres.NewBusinessRepository(database),
-                        EntityContract: merchantcatalogai.CanonicalEntityContractProvider{},
-                        Runtime:        b2bRuntime,
-                        CapabilitiesFactory: func(selectedCatalogID string) ports.AICapabilityDispatcher {
-                                return merchantcatalogai.NewReadOnlyCapabilityRegistry(catalogRepo, selectedCatalogID)
-                        },
-                }
-                dashboardServer = dashboardServer.WithMerchantCatalogAIV2(
-                        handlers.MerchantCatalogAIV2Deps{
-                                Handler: handlers.NewMerchantCatalogAIV2Handler(b2bAgent),
-                        },
-                )
+        var merchantCatalogErr error
+        dashboardServer, merchantCatalogErr = wireMerchantCatalogAIV2(dashboardServer, database, external.AIRuntime, aiConfigCache)
+        if merchantCatalogErr != nil {
+                return nil, merchantCatalogErr
         }
 
         var apiMiddleware []func(ctx huma.Context, next func(huma.Context))
