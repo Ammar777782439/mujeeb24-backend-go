@@ -536,7 +536,7 @@ type AICatalogBatchPatch struct {
 // Per contract ⑤ §7, the Catalog Entity Contract is sent as part of system
 // instruction; it is passed through as opaque JSON.
 type CustomerSalesDecisionPort interface {
-	DecideContract(ctx context.Context, input CustomerSalesDecisionInput) (CustomerSalesDecisionOutput, error)
+	Decide(ctx context.Context, input CustomerSalesDecisionInput) (CustomerSalesDecisionOutput, error)
 }
 
 // AIRunLifecyclePort is the minimal interface ContractClient needs to
@@ -552,7 +552,7 @@ type AIRunLifecyclePort interface {
 	MarkRunning(ctx context.Context, businessID, runID string) (AIRunRecord, error)
 }
 
-// CustomerSalesDecisionInput is the input to CustomerSalesDecisionPort.DecideContract.
+// CustomerSalesDecisionInput is the input to CustomerSalesDecisionPort.Decide.
 type CustomerSalesDecisionInput struct {
 	// DecisionInput carries business_id, conversation_id, message text, channel,
 	// and the built AIContext (per contract ③ §2).
@@ -576,7 +576,7 @@ type CustomerSalesDecisionInput struct {
 	AIRunID string
 }
 
-// CustomerSalesDecisionOutput is the output of CustomerSalesDecisionPort.DecideContract.
+// CustomerSalesDecisionOutput is the output of CustomerSalesDecisionPort.Decide.
 type CustomerSalesDecisionOutput struct {
 	// Proposal is the contract ④ §4 structured Gemini output.
 	Proposal AIGeminiProposal
