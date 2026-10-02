@@ -65,7 +65,7 @@ func (m *mockServerConfigurable) handle(w http.ResponseWriter, r *http.Request) 
 
 // buildGeminiCustomerSalesAdapterForFixTests builds a GeminiCustomerSalesAdapter with tools
 // + lifecycle stub wired.
-func buildGeminiCustomerSalesAdapterForFixTests(t *testing.T, mockURL string, dispatcher ports.AICapabilityDispatcher, lc ports.AIRunLifecyclePort) (*GeminiCustomerSalesAdapter, *stubRunRepoForTools) {
+func buildGeminiCustomerSalesAdapterForFixTests(t *testing.T, mockURL string, dispatcher ports.CustomerSalesToolPort, lc ports.AIRunLifecyclePort) (*GeminiCustomerSalesAdapter, *stubRunRepoForTools) {
 	client, err := NewClient(Config{
 		BaseURL:        mockURL,
 		APIKey:         "test-key",
@@ -92,7 +92,7 @@ func buildGeminiCustomerSalesAdapterForFixTests(t *testing.T, mockURL string, di
 
 func makeDispatcher() *stubCapabilityDispatcher {
 	return &stubCapabilityDispatcher{
-		definitions: []ports.AICapabilityDefinition{
+		definitions: []ports.CustomerSalesToolDefinition{
 			{Name: "catalog_data", Description: "Catalog", Parameters: map[string]any{"type": "object"}},
 		},
 	}
