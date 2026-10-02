@@ -75,6 +75,14 @@ type PlatformBusinessLifecyclePort interface {
 	Archive(ctx context.Context, businessID string, now time.Time) (PlatformBusinessRecord, error)
 }
 
+
+// PlatformBusinessOwnerPort handles the pending_setup → active transition used
+// by the platform owner-assignment flow.
+type PlatformBusinessOwnerPort interface {
+	GetByID(ctx context.Context, businessID string) (PlatformBusinessRecord, error)
+	ActivateFromPendingSetup(ctx context.Context, businessID string, now time.Time) (PlatformBusinessRecord, error)
+}
+
 // PlatformBusinessCreate is the input for creating a new business from the
 // Platform Admin. Per Contract §9: the admin creates the business + initial
 // owner invitation. The owner invitation is a SEPARATE call using the existing
