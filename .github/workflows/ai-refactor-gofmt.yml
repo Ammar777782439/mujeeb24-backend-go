@@ -1,0 +1,45 @@
+name: AI Refactor Go Format
+
+on:
+  push:
+    branches:
+      - refactor/merchant-catalog-ai-v2-structure
+
+permissions:
+  contents: write
+
+jobs:
+  gofmt:
+    name: Format Go sources
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+
+      - name: Format tracked Go sources
+        shell: bash
+        run: |
+          mapfile -t go_files < <(git ls-files '*.go')
+          if ((${#go_files[@]} > 0)); then
+            gofmt -w "${go_files[@]}"
+          fi
+
+      - name: Commit formatting changes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "Go sources already formatted."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- '*.go'
+          git commit -m "style: gofmt AI refactor branch"
+          git push
