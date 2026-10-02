@@ -125,7 +125,7 @@ func TestAutoReplyContextBuilderBuildsBoundedGroundedContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if contextValue.SchemaVersion != AIContextSchemaVersion || contextValue.Business.Reference != "business-1" || contextValue.Conversation.CustomerReference != "customer-1" || contextValue.Customer.Reference != "customer-1" {
+	if contextValue.SchemaVersion != CustomerSalesContextSchemaVersion || contextValue.Business.Reference != "business-1" || contextValue.Conversation.CustomerReference != "customer-1" || contextValue.Customer.Reference != "customer-1" {
 		t.Fatalf("unexpected base context: %#v", contextValue)
 	}
 	if len(contextValue.CatalogEvidence) != 1 || contextValue.CatalogEvidence[0].Reference != "item-iphone" || len(contextValue.OfferEvidence) != 1 || len(contextValue.VariantEvidence) != 1 {
@@ -137,7 +137,7 @@ func TestAutoReplyContextBuilderBuildsBoundedGroundedContext(t *testing.T) {
 	if len(contextValue.RecentMessages) != 2 || contextValue.RecentMessages[0].Reference != "message-older" || contextValue.RecentMessages[1].Reference != "message-newer" {
 		t.Fatalf("unexpected ordered history: %#v", contextValue.RecentMessages)
 	}
-	if contextValue.KnowledgeState != AIContextPartial || contextValue.Freshness != AIContextFresh || !contextValue.ExpiresAt.After(now) || contextValue.PolicyEvidence.State != "application_policy_only" {
+	if contextValue.KnowledgeState != CustomerSalesContextPartial || contextValue.Freshness != CustomerSalesContextFresh || !contextValue.ExpiresAt.After(now) || contextValue.PolicyEvidence.State != "application_policy_only" {
 		t.Fatalf("unexpected freshness/policy state: %#v", contextValue)
 	}
 	if string(contextValue.Customer.Profile) != `{"name":"عميل"}` || string(contextValue.Customer.ContactPoints) != `{"phone":"redacted-in-test"}` {
@@ -175,7 +175,7 @@ func TestAutoReplyContextBuilderMarksUnknownAvailabilityStale(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if len(contextValue.OfferEvidence) != 1 || contextValue.OfferEvidence[0].EvidenceState != AIContextStale || contextValue.Freshness != AIContextStale || contextValue.KnowledgeState != AIContextPartial {
+	if len(contextValue.OfferEvidence) != 1 || contextValue.OfferEvidence[0].EvidenceState != CustomerSalesContextStale || contextValue.Freshness != CustomerSalesContextStale || contextValue.KnowledgeState != CustomerSalesContextPartial {
 		t.Fatalf("unknown availability was not marked stale: %#v", contextValue)
 	}
 }
@@ -214,7 +214,7 @@ func TestAutoReplyContextBuilderAddsKnowledgeAndMerchantPolicyEvidence(t *testin
 	if len(contextValue.BusinessPolicyEvidence) != 1 || contextValue.BusinessPolicyEvidence[0].Reference != "policy-1" || contextValue.BusinessPolicyEvidence[0].Category != "hours" || contextValue.PolicyEvidence.State != "published" {
 		t.Fatalf("policy evidence mismatch: %#v", contextValue.BusinessPolicyEvidence)
 	}
-	if contextValue.KnowledgeState != AIContextGrounded {
+	if contextValue.KnowledgeState != CustomerSalesContextGrounded {
 		t.Fatalf("knowledge state was not grounded: %#v", contextValue)
 	}
 }
