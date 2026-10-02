@@ -555,7 +555,7 @@ func rankPositive(items []ports.CatalogItemRecord, text string) []ports.CatalogI
 	return out
 }
 
-func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports.AIContext, input ports.ContextBuildInput, now time.Time) (ports.AIContext, error) {
+func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports.AIContext, input ports.CustomerSalesContextInput, now time.Time) (ports.AIContext, error) {
 	// Per ADR-048: Always populate catalog_names + catalog_summary
 	// regardless of retrieval mode. In scoped mode, the catalog loop
 	// in Build() is skipped (early return), so catalog_names and
