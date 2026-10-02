@@ -158,7 +158,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	// is stateless except for its runtime flag, so creating it early
 	// is safe.
 	platformOperations := services.NewInMemoryPlatformOperationsRepository(
-		external.GeminiClient != nil && external.LLMConfigError == nil,
+		external.GeminiHTTPClient != nil && external.LLMConfigError == nil,
 		external.SocialAPI != nil,
 	)
 	// Per §1-2: create the AIConfigurationCache + AIProviderConfigRepository
@@ -211,7 +211,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	)
 
 	if external.AutoReplyEnabled {
-		if external.GeminiClient == nil {
+		if external.GeminiHTTPClient == nil {
 			return nil, errors.New("AutoReply requires the Gemini customer-sales AI to be configured")
 		}
 		// Per contract ④ §8, adapt the Gemini provider client to the
@@ -219,8 +219,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		var customerSalesDecision ports.CustomerSalesDecisionPort
 		var geminiClient *gemini.GeminiHTTPClient
 		var runRepo ports.AIRunRepository
-		if external.GeminiClient != nil {
-			geminiClient = external.GeminiClient
+		if external.GeminiHTTPClient != nil {
+			geminiClient = external.GeminiHTTPClient
 			customerSalesAdapter, err := gemini.NewGeminiCustomerSalesAdapter(geminiClient)
 			if err != nil {
 				return nil, fmt.Errorf("build customer sales AI adapter: %w", err)
@@ -347,7 +347,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		//
 		// Per contract ② §2, TokenBudget is token-based (no hardcoded
 		// item count). 8000 is a sensible default per runtime config.
-		if geminiClient := external.GeminiClient; geminiClient != nil {
+		if geminiClient := external.GeminiHTTPClient; geminiClient != nil {
 			batchTokenCounter, _ := gemini.NewTokenCounter(gemini.TokenCounterConfig{
 				BaseURL: geminiClient.BaseURL(),
 				APIKey:  geminiClient.APIKey(),
@@ -403,7 +403,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	// PlatformDeps wire-up). The previous local declaration here has
 	// been removed. The flags below remain here for the
 	// aiConfigured/channelConfigured dashboard view.
-	aiConfigured := external.GeminiClient != nil && external.LLMConfigError == nil
+	aiConfigured := external.GeminiHTTPClient != nil && external.LLMConfigError == nil
 	channelConfigured := external.SocialAPI != nil
 	_ = aiConfigured
 	_ = channelConfigured
@@ -468,7 +468,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	dashboardServer := handlers.NewServer(dependencies)
 
 	var merchantCatalogErr error
-	dashboardServer, merchantCatalogErr = wireMerchantCatalogAIV2(dashboardServer, database, external.GeminiClient, aiConfigCache)
+	dashboardServer, merchantCatalogErr = wireMerchantCatalogAIV2(dashboardServer, database, external.GeminiHTTPClient, aiConfigCache)
 	if merchantCatalogErr != nil {
 		return nil, merchantCatalogErr
 	}
