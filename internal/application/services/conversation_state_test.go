@@ -300,14 +300,14 @@ func TestBuildValidatedState_NoReferenceResetsComparison(t *testing.T) {
 func strPtr(s string) *string { return &s }
 
 // Fake runtime counting calls to prove ONE AI call per turn.
-// Per contract ④ §4, the new flow uses AIGeminiProposal. FakeContractRuntime
+// Per contract ④ §4, the new flow uses AIGeminiProposal. FakeCustomerSalesDecisionPort
 // tracks LastInput which can be inspected to count calls.
 type countingRuntime struct {
-	Fake *FakeContractRuntime
+	Fake *FakeCustomerSalesDecisionPort
 }
 
 func TestAutoReply_OneAICallPerTurn(t *testing.T) {
-	rt := &FakeContractRuntime{
+	rt := &FakeCustomerSalesDecisionPort{
 		Proposal: ports.AIGeminiProposal{
 			Status:       ports.AIProposalStatusResolved,
 			Action:       ports.AIProposalActionAnswer,
@@ -337,7 +337,7 @@ func TestAutoReply_OneAICallPerTurn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
-	// Per contract ④ §4, FakeContractRuntime tracks LastInput instead of a call counter.
+	// Per contract ④ §4, FakeCustomerSalesDecisionPort tracks LastInput instead of a call counter.
 	// We verify the AI was called exactly once by checking LastInput was populated.
 	if rt.LastInput.DecisionInput.Text != "hello" {
 		t.Fatalf("expected one AI call with text \"hello\", got LastInput.Text=%q", rt.LastInput.DecisionInput.Text)
