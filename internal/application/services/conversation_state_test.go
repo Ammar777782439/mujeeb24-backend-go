@@ -315,7 +315,7 @@ func TestAutoReply_OneAICallPerTurn(t *testing.T) {
 		},
 	}
 	svc := AutoReplyService{
-		Runtime:             rt,
+		CustomerSalesDecision: rt,
 		ContextBuilder:      stubBuilder{},
 		DecisionRepository:  stubDecisionRepo{},
 		ReferenceRepository: stubRefRepo{},
