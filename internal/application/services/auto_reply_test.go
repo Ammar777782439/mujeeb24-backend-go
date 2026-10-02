@@ -318,11 +318,11 @@ func TestAutoReplyServiceEnqueuesGeneralAnswerAfterFocus(t *testing.T) {
 		fakeTransactionManager{},
 	)
 	service.CustomerSalesContextBuilder = stubCustomerSalesContextBuilder{context: ports.CustomerSalesContext{
-		CatalogEvidence: []ports.AICatalogEvidence{
+		CatalogEvidence: []ports.CustomerSalesCatalogEvidence{
 			{Reference: "item-basic", CatalogReference: "cat-1"},
 			{Reference: "item-pro", CatalogReference: "cat-1"},
 		},
-		OfferEvidence: []ports.AIOfferEvidence{
+		OfferEvidence: []ports.CustomerSalesOfferEvidence{
 			{Reference: "offer-basic", CatalogItemReference: "item-basic"},
 			{Reference: "offer-pro", CatalogItemReference: "item-pro"},
 		},
