@@ -1,0 +1,33 @@
+name: Format merchant seeder once
+
+on:
+  push:
+    branches:
+      - refactor/merchant-catalog-ai-v2-structure
+    paths:
+      - "cmd/seed-merchant/main.go"
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+          cache: true
+      - run: gofmt -w cmd/seed-merchant/main.go
+      - name: Commit formatting
+        run: |
+          if git diff --quiet; then
+            echo "Already formatted"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@github.com"
+          git add cmd/seed-merchant/main.go
+          git commit -m "chore: gofmt merchant seeder"
+          git push
