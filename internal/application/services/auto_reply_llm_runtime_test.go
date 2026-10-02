@@ -10,7 +10,7 @@ import (
 
 // TestAutoReplyUsesStructuredLLMProposalBeforeEnqueue was the legacy test that
 // used openaicompatible.Client directly. Per contract ④ §8, the AutoReplyService
-// now uses ports.CustomerSalesDecisionPort (implemented by gemini.ContractClient). The
+// now uses ports.CustomerSalesDecisionPort (implemented by GeminiCustomerSalesAdapter). The
 // OpenAI-compatible adapter does not yet implement ContractRuntime.
 //
 // The contract-aligned test that replaces this one is TestAutoReplyServicePersistsDecisionAndEnqueuesAnswerAtomically
