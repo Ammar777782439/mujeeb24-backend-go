@@ -26,7 +26,7 @@ type GeminiMerchantCatalogAuthoringAdapter struct {
 	configProvider ports.AIConfigurationProvider
 }
 
-func NewGeminiMerchantCatalogAuthoringAdapter(client *Client) (*GeminiMerchantCatalogAuthoringAdapter, error) {
+func NewGeminiMerchantCatalogAuthoringAdapter(client *GeminiHTTPClient) (*GeminiMerchantCatalogAuthoringAdapter, error) {
 	if client == nil {
 		return nil, errors.New("gemini client is required")
 	}
