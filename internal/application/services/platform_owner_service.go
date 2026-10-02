@@ -36,7 +36,7 @@ type AssignBusinessOwnerResult struct {
 type AssignBusinessOwnerService struct {
 	Transactions       ports.TransactionManager
 	PrincipalBootstrap ports.PrincipalBootstrapRepository
-	Business            ports.PlatformBusinessOwnerPort
+	Business           ports.PlatformBusinessOwnerPort
 }
 
 func (s AssignBusinessOwnerService) Handle(ctx context.Context, in AssignBusinessOwnerInput) (AssignBusinessOwnerResult, error) {
