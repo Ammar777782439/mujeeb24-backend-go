@@ -57,7 +57,7 @@ func (c listOffersCapability) Execute(ctx context.Context, execCtx ports.AICapab
 
 	now := time.Now().UTC()
 	data := make([]map[string]any, 0, len(page.Items))
-	evidence := make([]ports.AIOfferEvidence, 0, len(page.Items))
+	evidence := make([]ports.CustomerSalesOfferEvidence, 0, len(page.Items))
 	for _, offer := range page.Items {
 		variantID := ""
 		if offer.VariantID != nil {
@@ -87,7 +87,7 @@ func (c listOffersCapability) Execute(ctx context.Context, execCtx ports.AICapab
 			"validity_until":            offer.ValidityUntil,
 			"status":                    offer.Status,
 		})
-		evidence = append(evidence, ports.AIOfferEvidence{
+		evidence = append(evidence, ports.CustomerSalesOfferEvidence{
 			Reference:            offer.ID,
 			CatalogItemReference: offer.CatalogItemID,
 			VariantReference:     variantID,
