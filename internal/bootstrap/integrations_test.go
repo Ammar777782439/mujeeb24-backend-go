@@ -48,7 +48,7 @@ func TestBuildExternalAdaptersRejectsUnwiredNonGeminiProvider(t *testing.T) {
 	if adapters.LLMConfigError == nil {
 		t.Fatal("expected unsupported non-Gemini AI provider error")
 	}
-	if adapters.GeminiClient != nil {
+	if adapters.GeminiHTTPClient != nil {
 		t.Fatal("non-Gemini provider must not construct the Gemini client")
 	}
 }
