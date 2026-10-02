@@ -46,7 +46,7 @@ func (f *FakeCustomerSalesDecisionPort) Decide(ctx context.Context, input ports.
 	if f.Error != nil {
 		return ports.CustomerSalesDecisionOutput{}, f.Error
 	}
-	if strings.TrimSpace(input.DecisionInput.Text) == "" {
+	if strings.TrimSpace(input.Request.Text) == "" {
 		return ports.CustomerSalesDecisionOutput{}, errors.New("text is required")
 	}
 	return ports.CustomerSalesDecisionOutput{
