@@ -49,7 +49,7 @@ func TestPersistenceFailurePropagatesError(t *testing.T) {
 		Now:   func() time.Time { return time.Now().UTC() },
 		NewID: func() string { return "test-id" },
 	}
-	out := ports.ContractRuntimeOutput{
+	out := ports.CustomerSalesDecisionOutput{
 		Proposal: ports.AIGeminiProposal{
 			Status:       "resolved",
 			Action:       "answer",
