@@ -155,7 +155,7 @@ func (r *PlatformBusinessRepository) GetByID(ctx context.Context, businessID str
 	err = executor.QueryRow(ctx,
 		`SELECT `+platformBusinessSelectColumns+` FROM businesses b WHERE b.id = $1::uuid`,
 		businessID,
-	).Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.CreatedAt, &record.UpdatedAt)
+	).Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.OwnerIdentitySummary, &record.CreatedAt, &record.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ports.PlatformBusinessRecord{}, &RepositoryError{Operation: "platform_business.get", Kind: RepositoryNotFound, Err: err}
