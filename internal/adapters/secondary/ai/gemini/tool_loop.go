@@ -121,7 +121,7 @@ func (c *GeminiCustomerSalesAdapter) executeToolCalls(
 	input ports.CustomerSalesDecisionInput,
 	businessID, conversationID, runID string,
 ) ([]contractContent, error) {
-	caps := c.base.Capabilities()
+	caps := c.capabilities
 	if caps == nil {
 		return nil, fmt.Errorf("capability dispatcher not configured but Gemini requested tool calls")
 	}
