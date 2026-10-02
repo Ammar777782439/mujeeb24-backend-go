@@ -13,7 +13,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
-func merchantCatalogInteractionTools(caps ports.AICapabilityDispatcher) []merchantCatalogInteractionTool {
+func merchantCatalogInteractionTools(caps merchantcatalogai.MerchantCatalogDiscoveryPort) []merchantCatalogInteractionTool {
 	if caps == nil {
 		return nil
 	}
@@ -64,10 +64,10 @@ func (r *GeminiMerchantCatalogAuthoringAdapter) executeInteractionTools(
 		log.Printf("[MerchantCatalogAI][TOOL] START business=%s session=%s tool=%s call_id=%s",
 			input.BusinessID, input.SessionID, call.Name, call.ID)
 
-		execCtx := ports.AICapabilityExecutionContext{
-			BusinessID:     input.BusinessID,
+		execCtx := merchantcatalogai.MerchantCatalogDiscoveryExecutionContext{
+			BusinessID: input.BusinessID,
 			ConversationID: input.SessionID,
-			PrincipalID:    input.PrincipalID,
+			PrincipalID: input.PrincipalID,
 		}
 		result, err := input.Capabilities.Execute(ctx, execCtx, call.Name, call.Arguments)
 		if err != nil {
