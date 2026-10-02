@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -114,7 +114,7 @@ func main() {
 		FOR UPDATE
 	`, email).Scan(&principalID)
 
-	if errors.Is(err, nil) {
+	if err == nil {
 		_, err = tx.Exec(ctx, `
 			UPDATE principals
 			SET display_name = $2, password_hash = $3, status = 'active', updated_at = $4
@@ -124,7 +124,7 @@ func main() {
 			log.Fatalf("update merchant principal failed: %v", err)
 		}
 	} else if err != nil {
-		if !strings.Contains(err.Error(), "no rows") {
+		if !errors.Is(err, pgx.ErrNoRows) {
 			log.Fatalf("lookup merchant principal failed: %v", err)
 		}
 		principalID = uuid.New().String()
@@ -161,7 +161,7 @@ func main() {
 			log.Fatalf("update merchant business failed: %v", err)
 		}
 	} else if err != nil {
-		if !strings.Contains(err.Error(), "no rows") {
+		if !errors.Is(err, pgx.ErrNoRows) {
 			log.Fatalf("lookup merchant business failed: %v", err)
 		}
 		businessID = uuid.New().String()
@@ -187,7 +187,7 @@ func main() {
 	if err == nil && existingOwner != principalID {
 		log.Fatalf("business %s already has a different active owner", businessSlug)
 	}
-	if err != nil && !strings.Contains(err.Error(), "no rows") {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		log.Fatalf("owner lookup failed: %v", err)
 	}
 
@@ -240,7 +240,7 @@ func main() {
 		if existingPlanID != planID {
 			log.Fatalf("business already has a PENDING/ACTIVE subscription on another plan")
 		}
-	} else if !strings.Contains(err.Error(), "no rows") {
+	} else if !errors.Is(err, pgx.ErrNoRows) {
 		log.Fatalf("subscription lookup failed: %v", err)
 	} else {
 		subscriptionID = uuid.New().String()
@@ -274,20 +274,3 @@ func main() {
 	log.Println("No payment was fabricated; subscription remains PENDING until a real payment is recorded.")
 }
 
-func subscriptionStatus(pool interface {
-	QueryRow(context.Context, string, ...any) interface {
-		Scan(...any) error
-	}
-}, ctx context.Context, subscriptionID string) string {
-	var status string
-	if err := pool.QueryRow(ctx, "SELECT status FROM subscriptions WHERE id = $1::uuid", subscriptionID).Scan(&status); err != nil {
-		return "UNKNOWN"
-	}
-	return status
-}
-
-func init() {
-	if os.Getenv("BCRYPT_COST") != "" {
-		_ = fmt.Sprint("")
-	}
-}
