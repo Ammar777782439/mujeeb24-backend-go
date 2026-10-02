@@ -2,6 +2,7 @@ package gemini
 
 import (
 	"context"
+	"io"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -258,8 +259,10 @@ func TestFix6_ToolsShapeArrayAndCamelCase(t *testing.T) {
 	t.Parallel()
 	var capturedBody []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body := make([]byte, r.ContentLength)
-		r.Body.Read(body)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
 		capturedBody = body
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
