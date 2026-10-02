@@ -41,6 +41,7 @@ type PlatformDeps struct {
 	AIConfigRepo   ports.AIProviderConfigService
 	AIConfigCache  *services.AIConfigurationCache
 	ModelDiscovery ports.ModelDiscoveryClient
+	AssignBusinessOwner *services.AssignBusinessOwnerService
 }
 
 // WithPlatformDeps is the explicit setter for Platform-side dependencies.
