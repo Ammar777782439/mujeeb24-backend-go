@@ -40,8 +40,8 @@ func NewFakeCustomerSalesDecisionPort(responseText string) *FakeCustomerSalesDec
 	}
 }
 
-// DecideContract implements ports.CustomerSalesDecisionPort.
-func (f *FakeCustomerSalesDecisionPort) DecideContract(ctx context.Context, input ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
+// Decide implements ports.CustomerSalesDecisionPort.
+func (f *FakeCustomerSalesDecisionPort) Decide(ctx context.Context, input ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
 	f.LastInput = input
 	if f.Error != nil {
 		return ports.CustomerSalesDecisionOutput{}, f.Error
