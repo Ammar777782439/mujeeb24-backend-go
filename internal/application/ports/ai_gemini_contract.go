@@ -597,7 +597,7 @@ type ContractUsageTelemetry struct {
 	// — resulting in StartedAt == CompletedAt + latency=0.
 	LatencyMs int64
 	// ModelRequests is the actual count of Gemini API calls made during
-	// this DecideContract invocation. Per fix #1: 1 for non-tool path,
+	// this customer-sales Decide invocation. Per fix #1: 1 for non-tool path,
 	// N for tool loop (one per sendContractRequest call).
 	// The caller (recordAIUsage) uses this instead of hardcoding 1.
 	ModelRequests int
