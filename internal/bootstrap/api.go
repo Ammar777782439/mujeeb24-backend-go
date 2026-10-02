@@ -605,7 +605,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			writer.Header().Set("Access-Control-Allow-Origin", frontendOrigin)
 			writer.Header().Set("Access-Control-Allow-Credentials", "true")
 			writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			writer.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Authorization, X-Request-ID")
+			writer.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Authorization, X-Request-ID, Idempotency-Key")
 			writer.Header().Add("Vary", "Origin")
 		}
 		if request.Method == http.MethodOptions {
