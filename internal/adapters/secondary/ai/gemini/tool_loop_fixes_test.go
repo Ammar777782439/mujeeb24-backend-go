@@ -70,7 +70,6 @@ func buildGeminiCustomerSalesAdapterForFixTests(t *testing.T, mockURL string, di
 		BaseURL:        mockURL,
 		APIKey:         "test-key",
 		Model:          "gemini-3.5-flash",
-		SystemPrompt:   "test",
 		RequestTimeout: 5 * time.Second,
 	})
 	if err != nil {
