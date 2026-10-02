@@ -24,7 +24,6 @@
 package gemini
 
 import (
-        "context"
         "encoding/json"
         "errors"
         "fmt"
@@ -235,127 +234,6 @@ func promptContextFrom(value *ports.AIContext) promptContext {
         }
 }
 
-// Decide implements ports.AIRuntime with a SIMPLE single-call flow.
-//
-// This is NOT the legacy tool-calling loop. It makes one generateContent
-// call, parses the structured JSON response, and returns AIDecisionProposal.
-//
-// Production code uses ContractClient.DecideContract (in client_contracts.go)
-// which returns the contract ④ §4 AIGeminiProposal with Structured Output
-// enforcement. This method exists only to satisfy the ports.AIRuntime
-// interface so the bootstrap type assertion works.
-func (c *Client) Decide(ctx context.Context, input ports.AIDecisionInput) (ports.AIDecisionProposal, error) {
-        if c == nil {
-                return ports.AIDecisionProposal{}, errors.New("gemini client is not configured")
-        }
-        if err := ctx.Err(); err != nil {
-                return ports.AIDecisionProposal{}, err
-        }
-        text := strings.TrimSpace(input.Text)
-        if text == "" {
-                return ports.AIDecisionProposal{}, errors.New("AI input text is required")
-        }
-        if len([]rune(text)) > c.maxInputCharacters {
-                return ports.AIDecisionProposal{}, fmt.Errorf("AI input text exceeds %d characters", c.maxInputCharacters)
-        }
-
-        userPrompt := buildUserPrompt(input)
-        reqBody := map[string]any{
-                "systemInstruction": map[string]any{
-                        "parts": []map[string]any{{"text": c.systemPrompt}},
-                },
-                "contents": []map[string]any{
-                        {"role": "user", "parts": []map[string]any{{"text": userPrompt}}},
-                },
-                "generationConfig": map[string]any{
-                        "maxOutputTokens":  c.maxOutputTokens,
-                        "responseMimeType": "application/json",
-                },
-        }
-        encoded, err := json.Marshal(reqBody)
-        if err != nil {
-                return ports.AIDecisionProposal{}, fmt.Errorf("encode request: %w", err)
-        }
-
-        requestCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
-        defer cancel()
-
-        // P1-8: API key sent via x-goog-api-key header only — never in URL.
-        // Previous implementation included ?key=<apiKey> in the URL query string,
-        // which leaks the credential via proxy/access logs. The header is the
-        // Google-recommended transport.
-        u := fmt.Sprintf("%s/v1beta/models/%s:generateContent", c.baseURL, url.PathEscape(c.model))
-        req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, u, strings.NewReader(string(encoded)))
-        if err != nil {
-                return ports.AIDecisionProposal{}, fmt.Errorf("create request: %w", err)
-        }
-        req.Header.Set("Content-Type", "application/json")
-        req.Header.Set("x-goog-api-key", c.apiKey)
-
-        resp, err := c.httpClient.Do(req)
-        if err != nil {
-                return ports.AIDecisionProposal{}, fmt.Errorf("send request: %w", err)
-        }
-        defer resp.Body.Close()
-
-        var gemResp struct {
-                Candidates []struct {
-                        Content struct {
-                                Parts []struct {
-                                        Text string `json:"text"`
-                                } `json:"parts"`
-                        } `json:"content"`
-                } `json:"candidates"`
-        }
-        if err := json.NewDecoder(resp.Body).Decode(&gemResp); err != nil {
-                return ports.AIDecisionProposal{}, fmt.Errorf("decode response: %w", err)
-        }
-        if len(gemResp.Candidates) == 0 || len(gemResp.Candidates[0].Content.Parts) == 0 {
-                return ports.AIDecisionProposal{}, errors.New("Gemini response did not contain a candidate")
-        }
-        rawText := strings.TrimSpace(gemResp.Candidates[0].Content.Parts[0].Text)
-        if rawText == "" {
-                return ports.AIDecisionProposal{}, errors.New("Gemini response did not contain structured content")
-        }
-
-        var wire struct {
-                IntentBase      string `json:"intent_base"`
-                DomainContext   string `json:"domain_context"`
-                RequestedAction string `json:"requested_action"`
-                ResponseText    string `json:"response_text"`
-                ConfidenceBand  string `json:"confidence_band"`
-                PolicyDecision  string `json:"policy_decision"`
-                PolicyVersion   string `json:"policy_version"`
-                RequiresHuman   bool   `json:"requires_human"`
-                SchemaVersion   int    `json:"schema_version"`
-        }
-        if err := json.Unmarshal([]byte(rawText), &wire); err != nil {
-                return ports.AIDecisionProposal{}, fmt.Errorf("decode structured proposal: %w", err)
-        }
-
-        policyVersion := strings.TrimSpace(wire.PolicyVersion)
-        if policyVersion == "" {
-                policyVersion = strings.TrimSpace(input.PolicyVersion)
-        }
-        return ports.AIDecisionProposal{
-                IntentBase:         strings.TrimSpace(wire.IntentBase),
-                DomainContext:      strings.TrimSpace(wire.DomainContext),
-                Entities:           []byte(`{}`),
-                EvidenceReferences: []byte(`[]`),
-                RequestedAction:    strings.TrimSpace(wire.RequestedAction),
-                ResponseText:       strings.TrimSpace(wire.ResponseText),
-                ConfidenceBand:     strings.TrimSpace(wire.ConfidenceBand),
-                RequiresHuman:      wire.RequiresHuman,
-                MissingInformation: []byte(`[]`),
-                ReasonCodes:        []byte(`[]`),
-                PolicyDecision:     strings.TrimSpace(wire.PolicyDecision),
-                PolicyVersion:      policyVersion,
-                ModelReference:     "gemini/" + c.model,
-                SchemaVersion:      1,
-        }, nil
-}
-
-// Context import needed for Decide.
 var _ = context.Background
 
 var _ ports.AIRuntime = (*Client)(nil)
