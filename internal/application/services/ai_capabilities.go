@@ -580,4 +580,3 @@ var _ ports.CustomerSalesTool = (*CustomerSalesCatalogDataTool)(nil)
 
 // CustomerSalesCatalogAuthoringTool is an AI capability exposing governed catalog mutation operations.
 // All operations strictly validate against domain rules and enforce server-side tenant isolation.
-

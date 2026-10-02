@@ -315,15 +315,15 @@ func TestAutoReply_OneAICallPerTurn(t *testing.T) {
 		},
 	}
 	svc := AutoReplyService{
-		CustomerSalesDecision: rt,
+		CustomerSalesDecision:       rt,
 		CustomerSalesContextBuilder: stubBuilder{},
-		DecisionRepository:  stubDecisionRepo{},
-		ReferenceRepository: stubRefRepo{},
-		OutboundRepository:  stubOutboundRepo{},
-		Outbox:              stubOutbox{},
-		Transactions:        passthroughTransactionManager{},
-		StateRepository:     stubStateRepo{},
-		Mode:                AutoReplyModeRestrictedAuto,
+		DecisionRepository:          stubDecisionRepo{},
+		ReferenceRepository:         stubRefRepo{},
+		OutboundRepository:          stubOutboundRepo{},
+		Outbox:                      stubOutbox{},
+		Transactions:                passthroughTransactionManager{},
+		StateRepository:             stubStateRepo{},
+		Mode:                        AutoReplyModeRestrictedAuto,
 		// Per Item 4: wire AIUsage + Subscriptions so recordAIUsage doesn't fail.
 		AIUsage:       &stubAIUsageRepo{},
 		Subscriptions: &stubSubscriptionsRepo{items: []ports.SubscriptionRecord{{ID: "sub-1", BusinessID: "b1", Status: "ACTIVE"}}},

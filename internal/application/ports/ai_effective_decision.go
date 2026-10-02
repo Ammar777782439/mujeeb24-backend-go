@@ -48,4 +48,3 @@ type EffectiveDecision struct {
 	// ai_runs.status (EXECUTING → COMPLETED/FAILED), not here.
 	ExecutedAt *time.Time
 }
-

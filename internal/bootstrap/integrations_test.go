@@ -43,7 +43,7 @@ func TestBuildExternalAdaptersRejectsUnwiredNonGeminiProvider(t *testing.T) {
 		LLMEnabled: true,
 		LLMBaseURL: "https://example.invalid/v1",
 		LLMAPIKey:  "test-only-key",
-		LLMModel:  "test-model",
+		LLMModel:   "test-model",
 	})
 	if adapters.LLMConfigError == nil {
 		t.Fatal("expected unsupported non-Gemini AI provider error")

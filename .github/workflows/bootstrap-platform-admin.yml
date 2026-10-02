@@ -1,0 +1,33 @@
+name: Bootstrap platform administrator
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    name: Create or update platform super admin
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.PLATFORM_DATABASE_URL }}
+      PLATFORM_SEED_EMAIL: ${{ secrets.PLATFORM_SEED_EMAIL }}
+      PLATFORM_SEED_PASSWORD: ${{ secrets.PLATFORM_SEED_PASSWORD }}
+      PLATFORM_SEED_CONFIRM: CREATE_PLATFORM_SUPER_ADMIN
+      PLATFORM_SEED_DISPLAY_NAME: ${{ secrets.PLATFORM_SEED_DISPLAY_NAME }}
+      GOTOOLCHAIN: local
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+          cache: true
+
+      - name: Bootstrap platform super admin
+        run: go run ./cmd/seed-platform-admin

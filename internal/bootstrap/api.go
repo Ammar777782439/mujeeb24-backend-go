@@ -103,6 +103,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	dependencies.IngestSocialAPIWebhook = services.WebhookReceiverDisabledService{Receiver: "SocialAPI"}
 	if authentication != nil {
 		dependencies.Scope = handlers.PostgresScopeProvider{Memberships: authentication.Repository}
+		dependencies.PlatformAccess = authentication.PlatformChecker
 		dependencies.AuthenticatePrincipal = authentication.Service
 		dependencies.RotateRefreshSession = services.RefreshSessionRotationService{Authentication: authentication.Service}
 		dependencies.RevokeRefreshSession = services.RefreshSessionRevocationService{Authentication: authentication.Service}
@@ -468,6 +469,21 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		dependencies.IngestSocialAPIWebhook = webhookService
 	}
 	dashboardServer := handlers.NewServer(dependencies)
+	dashboardServer = dashboardServer.WithPlatformDeps(handlers.PlatformDeps{
+		Plans:             postgres.NewPlanRepository(database),
+		PlatformBusiness:  postgres.NewPlatformBusinessRepository(database),
+		PlatformAudit:     postgres.NewPlatformAuditRepository(database),
+		Subscriptions:     postgres.NewSubscriptionRepository(database),
+		Payments:          postgres.NewPaymentRepository(database),
+		Support:           postgres.NewSupportRepository(database),
+		AIUsage:           postgres.NewAIUsageRepository(database),
+		AIProviderPricing: postgres.NewAIProviderPricingRepository(database),
+		Operations:        platformOperations,
+		ChannelReader:     postgres.NewPlatformChannelReadRepository(database),
+		AIConfigRepo:      aiConfigRepo,
+		AIConfigCache:     aiConfigCache,
+		ModelDiscovery:    gemini.NewModelsClient(),
+	})
 
 	var merchantCatalogErr error
 	dashboardServer, merchantCatalogErr = wireMerchantCatalogAuthoringAI(dashboardServer, database, external.GeminiHTTPClient, aiConfigCache)
@@ -566,7 +582,35 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		}
 		mux.ServeHTTP(writer, request)
 	})
-	server := &http.Server{Addr: address, Handler: wrappedMux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
+	// Cross-origin browser access is required because the production frontend is hosted
+	// separately from the Render API. Allow only the configured frontend origin and
+	// allow credentials for the HttpOnly refresh cookie.
+	frontendOrigin := ""
+	if external.FrontendURL != "" {
+		if parsed, err := url.Parse(external.FrontendURL); err == nil && parsed.Scheme != "" && parsed.Host != "" {
+			frontendOrigin = parsed.Scheme + "://" + parsed.Host
+		}
+	}
+	corsMux := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		origin := strings.TrimSpace(request.Header.Get("Origin"))
+		if origin != "" && frontendOrigin != "" && origin == frontendOrigin {
+			writer.Header().Set("Access-Control-Allow-Origin", frontendOrigin)
+			writer.Header().Set("Access-Control-Allow-Credentials", "true")
+			writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			writer.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Authorization, X-Request-ID")
+			writer.Header().Add("Vary", "Origin")
+		}
+		if request.Method == http.MethodOptions {
+			if origin == "" || origin != frontendOrigin {
+				writer.WriteHeader(http.StatusForbidden)
+				return
+			}
+			writer.WriteHeader(http.StatusNoContent)
+			return
+		}
+		wrappedMux.ServeHTTP(writer, request)
+	})
+	server := &http.Server{Addr: address, Handler: corsMux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	return &APIRuntime{
 		HTTP:                server,
 		Database:            database,

@@ -54,25 +54,24 @@ func (c listVariantsCapability) Execute(ctx context.Context, execCtx MerchantCat
 		return MerchantCatalogDiscoveryResult{}, err
 	}
 
-
 	data := make([]map[string]any, 0, len(page.Items))
 	evidenceReferences := make([]string, 0, len(page.Items))
 	for _, variant := range page.Items {
 		data = append(data, map[string]any{
-			"id": variant.ID,
+			"id":              variant.ID,
 			"catalog_item_id": variant.CatalogItemID,
-			"name": variant.Name,
-			"attributes": json.RawMessage(variant.Attributes),
-			"status": variant.Status,
+			"name":            variant.Name,
+			"attributes":      json.RawMessage(variant.Attributes),
+			"status":          variant.Status,
 		})
 		evidenceReferences = append(evidenceReferences, variant.ID)
 	}
 
 	return MerchantCatalogDiscoveryResult{
-		Data: data,
+		Data:               data,
 		EvidenceReferences: evidenceReferences,
-		HasMore: page.HasMore,
-		NextCursor: page.NextCursor,
-		Operation: "merchant_catalog_list_variants",
+		HasMore:            page.HasMore,
+		NextCursor:         page.NextCursor,
+		Operation:          "merchant_catalog_list_variants",
 	}, nil
 }

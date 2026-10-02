@@ -232,27 +232,47 @@ type Catalog struct {
 	ResourceVersion string    `json:"resource_version"`
 }
 type CatalogItem struct {
-	ID              UUID           `json:"id"`
-	BusinessID      UUID           `json:"business_id"`
-	CatalogID       UUID           `json:"catalog_id"`
-	ItemType        string         `json:"item_type"`
-	Name            string         `json:"name"`
-	Status          string         `json:"status"`
-	Attributes      map[string]any `json:"attributes,omitempty"`
-	ResourceVersion string         `json:"resource_version"`
+	ID                     UUID           `json:"id"`
+	BusinessID             UUID           `json:"business_id"`
+	CatalogID              UUID           `json:"catalog_id"`
+	AttributeSchemaID      *UUID          `json:"attribute_schema_id,omitempty"`
+	AttributeSchemaVersion *int           `json:"attribute_schema_version,omitempty"`
+	ItemType               string         `json:"item_type"`
+	Name                   string         `json:"name"`
+	ShortDescription       *string        `json:"short_description,omitempty"`
+	LongDescription        *string        `json:"long_description,omitempty"`
+	Status                 string         `json:"status"`
+	PricingMode            string         `json:"pricing_mode"`
+	AvailabilityMode       string         `json:"availability_mode"`
+	FulfillmentMode        string         `json:"fulfillment_mode"`
+	RequiresConfirmation   bool           `json:"requires_confirmation"`
+	Attributes             map[string]any `json:"attributes,omitempty"`
+	ResourceVersion        string         `json:"resource_version"`
 }
 type Offer struct {
-	ID                 UUID     `json:"id"`
-	BusinessID         UUID     `json:"business_id"`
-	CatalogItemID      UUID     `json:"catalog_item_id"`
-	VariantID          *UUID    `json:"variant_id,omitempty"`
-	Name               string   `json:"name"`
-	PricingMode        string   `json:"pricing_mode"`
-	Amount             *float64 `json:"amount,omitempty"`
-	Currency           *string  `json:"currency,omitempty"`
-	AvailabilityStatus string   `json:"availability_status"`
-	Status             string   `json:"status"`
-	ResourceVersion    string   `json:"resource_version"`
+	ID                      UUID       `json:"id"`
+	BusinessID              UUID       `json:"business_id"`
+	CatalogItemID           UUID       `json:"catalog_item_id"`
+	VariantID               *UUID      `json:"variant_id,omitempty"`
+	Name                    string     `json:"name"`
+	PricingMode             string     `json:"pricing_mode"`
+	Amount                  *float64   `json:"amount,omitempty"`
+	Currency                *string    `json:"currency,omitempty"`
+	PricingUnit             *string    `json:"pricing_unit,omitempty"`
+	PriceSource             *string    `json:"price_source,omitempty"`
+	PriceVerificationStatus string     `json:"price_verification_status"`
+	PriceCheckedAt          *time.Time `json:"price_checked_at,omitempty"`
+	AvailabilityMode        string     `json:"availability_mode"`
+	AvailabilitySource      *string    `json:"availability_source,omitempty"`
+	AvailabilityCheckedAt   *time.Time `json:"availability_checked_at,omitempty"`
+	AvailabilityValidUntil  *time.Time `json:"availability_valid_until,omitempty"`
+	AvailabilityEvidenceRef *string    `json:"availability_evidence_ref,omitempty"`
+	FulfillmentMode         string     `json:"fulfillment_mode"`
+	ValidityFrom            *time.Time `json:"validity_from,omitempty"`
+	ValidityUntil           *time.Time `json:"validity_until,omitempty"`
+	AvailabilityStatus      string     `json:"availability_status"`
+	Status                  string     `json:"status"`
+	ResourceVersion         string     `json:"resource_version"`
 }
 type Variant struct {
 	ID              UUID           `json:"id"`

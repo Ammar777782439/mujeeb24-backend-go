@@ -64,9 +64,9 @@ func (r *GeminiMerchantCatalogAuthoringAdapter) executeInteractionTools(
 			input.BusinessID, input.SessionID, call.Name, call.ID)
 
 		execCtx := merchantcatalogai.MerchantCatalogDiscoveryExecutionContext{
-			BusinessID: input.BusinessID,
+			BusinessID:     input.BusinessID,
 			ConversationID: input.SessionID,
-			PrincipalID: input.PrincipalID,
+			PrincipalID:    input.PrincipalID,
 		}
 		result, err := input.Capabilities.Execute(ctx, execCtx, call.Name, call.Arguments)
 		if err != nil {

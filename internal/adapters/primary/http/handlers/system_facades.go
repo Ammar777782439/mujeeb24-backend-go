@@ -112,7 +112,11 @@ func (s *Server) dispatchSystemCommand(ctx context.Context, operationID string, 
 		log.Printf("[Auth] LOGIN_OK principal=%s email=%q", result.Principal.ID, in.Body.Email)
 		out := &contract.AuthOutput{}
 		out.SetCookie = refreshCookie(result.RefreshToken, result.RefreshExpiresAt)
-		out.Body.Data = authResponseProjection(result)
+		projection, projectionErr := s.authResponseProjection(ctx, result)
+		if projectionErr != nil {
+			return mapApplicationError(projectionErr), true
+		}
+		out.Body.Data = projection
 		return out, true
 	case "rotateRefreshSession":
 		in := input.(*contract.RefreshInput)
@@ -131,7 +135,11 @@ func (s *Server) dispatchSystemCommand(ctx context.Context, operationID string, 
 		}
 		out := &contract.AuthOutput{}
 		out.SetCookie = refreshCookie(result.RefreshToken, result.RefreshExpiresAt)
-		out.Body.Data = authResponseProjection(result)
+		projection, projectionErr := s.authResponseProjection(ctx, result)
+		if projectionErr != nil {
+			return mapApplicationError(projectionErr), true
+		}
+		out.Body.Data = projection
 		return out, true
 	case "revokeRefreshSession":
 		if s.deps.RevokeRefreshSession == nil {
@@ -162,7 +170,7 @@ func (s *Server) dispatchSystemCommand(ctx context.Context, operationID string, 
 		// clearing the cookie stops the browser from sending it
 		// on every /auth/* request until natural expiry.
 		out := &contract.NoContentOutput{}
-		out.SetCookie = &http.Cookie{Name: "mujeeb_refresh", Value: "", Path: "/api/v1/auth", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: cookieSecureEnabled(), MaxAge: -1, Expires: time.Unix(1, 0).UTC()}
+		out.SetCookie = &http.Cookie{Name: "mujeeb_refresh", Value: "", Path: "/api/v1/auth", HttpOnly: true, SameSite: http.SameSiteNoneMode, Secure: cookieSecureEnabled(), MaxAge: -1, Expires: time.Unix(1, 0).UTC()}
 		return out, true
 	case "requestHumanReview":
 		in := input.(*contract.AIHumanInput)
@@ -206,8 +214,26 @@ func (s *Server) dispatchSystemCommand(ctx context.Context, operationID string, 
 	}
 }
 
-func authResponseProjection(v commands.AuthResult) contract.AuthResponse {
-	return contract.AuthResponse{AccessToken: v.AccessToken, TokenType: "Bearer", ExpiresAt: v.ExpiresAt, Principal: contract.Principal{PrincipalID: contract.UUID(v.Principal.ID), DisplayName: v.Principal.DisplayName, Email: optionalString(v.Principal.Email)}}
+func (s *Server) authResponseProjection(ctx context.Context, v commands.AuthResult) (contract.AuthResponse, error) {
+	isPlatformAdmin := false
+	if s.deps.PlatformAccess != nil {
+		active, err := s.deps.PlatformAccess.IsActiveSuperAdmin(ctx, string(v.Principal.ID))
+		if err != nil {
+			return contract.AuthResponse{}, err
+		}
+		isPlatformAdmin = active
+	}
+	return contract.AuthResponse{
+		AccessToken:     v.AccessToken,
+		TokenType:       "Bearer",
+		ExpiresAt:       v.ExpiresAt,
+		IsPlatformAdmin: isPlatformAdmin,
+		Principal: contract.Principal{
+			PrincipalID: contract.UUID(v.Principal.ID),
+			DisplayName: v.Principal.DisplayName,
+			Email:       optionalString(v.Principal.Email),
+		},
+	}, nil
 }
 
 func refreshTokenFromCookie(raw string) (string, error) {
@@ -228,7 +254,7 @@ func refreshCookie(value string, expiresAt time.Time) *http.Cookie {
 	// is never transmitted over plain HTTP. cookieSecureEnabled() returns
 	// true unless APP_ENV=development — operators running a local dev
 	// server over HTTP can opt out via the environment.
-	return &http.Cookie{Name: "mujeeb_refresh", Value: value, Path: "/api/v1/auth", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: cookieSecureEnabled(), Expires: expiresAt.UTC(), MaxAge: maxAge}
+	return &http.Cookie{Name: "mujeeb_refresh", Value: value, Path: "/api/v1/auth", HttpOnly: true, SameSite: http.SameSiteNoneMode, Secure: cookieSecureEnabled(), Expires: expiresAt.UTC(), MaxAge: maxAge}
 }
 
 // cookieSecureEnabled returns true when the deployment is NOT development.

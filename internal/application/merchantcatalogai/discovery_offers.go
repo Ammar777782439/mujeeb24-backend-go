@@ -85,15 +85,15 @@ func (c listOffersCapability) Execute(ctx context.Context, execCtx MerchantCatal
 			"validity_until":            offer.ValidityUntil,
 			"status":                    offer.Status,
 		})
-				evidenceReferences = append(evidenceReferences, offer.ID)
+		evidenceReferences = append(evidenceReferences, offer.ID)
 	}
 
 	return MerchantCatalogDiscoveryResult{
-		Data:          data,
+		Data:               data,
 		EvidenceReferences: evidenceReferences,
-		HasMore:       page.HasMore,
-		NextCursor:    page.NextCursor,
-		Operation:     "merchant_catalog_list_offers",
+		HasMore:            page.HasMore,
+		NextCursor:         page.NextCursor,
+		Operation:          "merchant_catalog_list_offers",
 	}, nil
 }
 

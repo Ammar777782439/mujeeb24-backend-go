@@ -144,7 +144,7 @@ func catalogItemView(record ports.CatalogItemRecord) commands.CatalogItemView {
 		value := commands.AttributeSchemaID(*record.AttributeSchemaID)
 		schemaID = &value
 	}
-	return commands.CatalogItemView{ID: commands.CatalogItemID(record.ID), BusinessID: commands.BusinessID(record.BusinessID), CatalogID: commands.CatalogID(record.CatalogID), AttributeSchemaID: schemaID, AttributeSchemaVersion: record.AttributeSchemaVersion, ItemType: record.ItemType, Name: record.Name, Status: record.Status, Attributes: append([]byte(nil), record.Attributes...), ResourceVersion: commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10)), CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
+	return commands.CatalogItemView{ID: commands.CatalogItemID(record.ID), BusinessID: commands.BusinessID(record.BusinessID), CatalogID: commands.CatalogID(record.CatalogID), AttributeSchemaID: schemaID, AttributeSchemaVersion: record.AttributeSchemaVersion, ItemType: record.ItemType, Name: record.Name, ShortDescription: record.ShortDescription, LongDescription: record.LongDescription, Status: record.Status, PricingMode: record.PricingMode, AvailabilityMode: record.AvailabilityMode, FulfillmentMode: record.FulfillmentMode, RequiresConfirmation: record.RequiresConfirmation, Attributes: append([]byte(nil), record.Attributes...), ResourceVersion: commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10)), CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
 }
 
 func offerView(record ports.OfferRecord) commands.OfferView {
@@ -152,7 +152,7 @@ func offerView(record ports.OfferRecord) commands.OfferView {
 	if record.VariantID != nil {
 		variantID = commands.VariantID(*record.VariantID)
 	}
-	return commands.OfferView{ID: commands.OfferID(record.ID), BusinessID: commands.BusinessID(record.BusinessID), CatalogItemID: commands.CatalogItemID(record.CatalogItemID), VariantID: variantID, Name: record.Name, PricingMode: record.PricingMode, Amount: record.Amount, Currency: record.Currency, AvailabilityStatus: record.AvailabilityStatus, Status: record.Status, ResourceVersion: commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10)), CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
+	return commands.OfferView{ID: commands.OfferID(record.ID), BusinessID: commands.BusinessID(record.BusinessID), CatalogItemID: commands.CatalogItemID(record.CatalogItemID), VariantID: variantID, Name: record.Name, PricingMode: record.PricingMode, Amount: record.Amount, Currency: record.Currency, PricingUnit: record.PricingUnit, PriceSource: record.PriceSource, PriceVerificationStatus: record.PriceVerificationStatus, PriceCheckedAt: record.PriceCheckedAt, AvailabilityMode: record.AvailabilityMode, AvailabilitySource: record.AvailabilitySource, AvailabilityCheckedAt: record.AvailabilityCheckedAt, AvailabilityValidUntil: record.AvailabilityValidUntil, AvailabilityEvidenceRef: record.AvailabilityEvidenceRef, FulfillmentMode: record.FulfillmentMode, ValidityFrom: record.ValidityFrom, ValidityUntil: record.ValidityUntil, AvailabilityStatus: record.AvailabilityStatus, Status: record.Status, ResourceVersion: commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10)), CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
 }
 
 func variantView(record ports.VariantRecord) commands.VariantView {

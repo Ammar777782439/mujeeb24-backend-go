@@ -50,7 +50,7 @@ import (
 type ValidationPipeline struct {
 	ReferenceValidator   ReferenceValidator
 	TenantValidator      TenantValidator
-	CustomerSalesPolicy ports.CustomerSalesPolicyPort
+	CustomerSalesPolicy  ports.CustomerSalesPolicyPort
 	AuthorizationService AuthorizationService
 	Now                  func() time.Time
 }
@@ -68,7 +68,7 @@ func NewValidationPipeline(
 	return &ValidationPipeline{
 		ReferenceValidator:   rv,
 		TenantValidator:      tv,
-		CustomerSalesPolicy: policy,
+		CustomerSalesPolicy:  policy,
 		AuthorizationService: as,
 		Now:                  func() time.Time { return time.Now().UTC() },
 	}

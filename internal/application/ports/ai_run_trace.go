@@ -334,4 +334,3 @@ type AIRunLifecyclePort interface {
 	MarkWaitingTool(ctx context.Context, businessID, runID string) (AIRunRecord, error)
 	MarkRunning(ctx context.Context, businessID, runID string) (AIRunRecord, error)
 }
-

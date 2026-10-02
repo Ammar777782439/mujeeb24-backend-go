@@ -640,10 +640,11 @@ type NoContentOutput struct {
 	SetCookie *http.Cookie `header:"Set-Cookie,omitempty"`
 }
 type AuthResponse struct {
-	AccessToken string    `json:"access_token"`
-	TokenType   string    `json:"token_type"`
-	ExpiresAt   string    `json:"expires_at"`
-	Principal   Principal `json:"principal"`
+	AccessToken     string    `json:"access_token"`
+	TokenType       string    `json:"token_type"`
+	ExpiresAt       string    `json:"expires_at"`
+	IsPlatformAdmin bool      `json:"is_platform_admin"`
+	Principal       Principal `json:"principal"`
 }
 type Health struct {
 	Status string            `json:"status"`

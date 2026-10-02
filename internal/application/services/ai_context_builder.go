@@ -13,13 +13,13 @@ import (
 )
 
 const (
-	CustomerSalesContextSchemaVersion  = 1
-	AIEvidenceSchemaVersion = 1
-	CustomerSalesContextFresh          = "fresh"
-	CustomerSalesContextPartial        = "partial"
-	CustomerSalesContextMissing        = "missing"
-	CustomerSalesContextStale          = "stale"
-	CustomerSalesContextGrounded       = "grounded"
+	CustomerSalesContextSchemaVersion = 1
+	AIEvidenceSchemaVersion           = 1
+	CustomerSalesContextFresh         = "fresh"
+	CustomerSalesContextPartial       = "partial"
+	CustomerSalesContextMissing       = "missing"
+	CustomerSalesContextStale         = "stale"
+	CustomerSalesContextGrounded      = "grounded"
 )
 
 // AutoReplyContextBuilder builds a bounded, tenant-scoped context from Mujeeb

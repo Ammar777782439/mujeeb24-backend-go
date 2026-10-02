@@ -15,8 +15,13 @@ type ScopeProvider interface {
 	Resolve(context.Context, commands.BusinessID) (commands.ActorContext, error)
 }
 
+type PlatformAccessChecker interface {
+	IsActiveSuperAdmin(context.Context, string) (bool, error)
+}
+
 type Dependencies struct {
 	Scope                        ScopeProvider
+	PlatformAccess               PlatformAccessChecker
 	GetCurrentPrincipal          queries.GetCurrentPrincipalHandler
 	ListAccessibleBusinesses     queries.ListAccessibleBusinessesHandler
 	GetBusiness                  queries.GetBusinessHandler
