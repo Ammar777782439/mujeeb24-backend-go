@@ -307,7 +307,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		service.SummaryService = services.NewConversationSummaryService(
 			postgres.NewConversationStateRepository(database),
 			postgres.NewMessageRepository(database),
-			contractRuntime,
+			customerSalesDecision,
 		)
 		service.SummaryService.AIUsage = postgres.NewAIUsageRepository(database)
 		service.SummaryService.AIPricing = postgres.NewAIProviderPricingRepository(database)
