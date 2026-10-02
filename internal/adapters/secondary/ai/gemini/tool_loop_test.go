@@ -387,7 +387,7 @@ func TestToolLoop_ToolCallRecordSavedAndUpdated(t *testing.T) {
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
-		AIRunID:       "run-save",
+		AIRunID: "run-save",
 	})
 	if err != nil {
 		t.Fatalf("Decide failed: %v", err)
@@ -449,7 +449,7 @@ func TestToolLoop_ToolFailureReturnsError(t *testing.T) {
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
-		AIRunID:       "run-fail",
+		AIRunID: "run-fail",
 	})
 	if err == nil {
 		t.Fatalf("expected error when tool execution fails")
@@ -491,7 +491,7 @@ func TestToolLoop_TenantIsolation_GeminiBusinessIDIgnored(t *testing.T) {
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{BusinessID: "trusted-biz", ConversationID: "c-1", Text: "hello"},
-		AIRunID:       "run-tenant",
+		AIRunID: "run-tenant",
 	})
 	if err != nil {
 		t.Fatalf("Decide failed: %v", err)
@@ -565,7 +565,7 @@ func TestToolLoop_ContextDeadlineStopsLoop(t *testing.T) {
 
 	_, err := cc.Decide(ctx, ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
-		AIRunID:       "run-timeout",
+		AIRunID: "run-timeout",
 	})
 	if err == nil {
 		t.Fatalf("expected error on context deadline")
@@ -663,7 +663,7 @@ func TestToolLoop_FunctionResponseRoleIsUser(t *testing.T) {
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
-		AIRunID:       "run-role",
+		AIRunID: "run-role",
 	})
 	if err != nil {
 		t.Fatalf("Decide failed: %v", err)
@@ -731,7 +731,7 @@ func TestToolLoop_ThoughtSignaturePreservedInFollowUp(t *testing.T) {
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
-		AIRunID:       "run-sig",
+		AIRunID: "run-sig",
 	})
 	if err != nil {
 		t.Fatalf("Decide failed: %v", err)
@@ -789,7 +789,7 @@ func TestToolLoop_AIRunIDSavedInToolCallRecord(t *testing.T) {
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
-		AIRunID:       "run-airunid-test",
+		AIRunID: "run-airunid-test",
 	})
 	if err != nil {
 		t.Fatalf("Decide failed: %v", err)

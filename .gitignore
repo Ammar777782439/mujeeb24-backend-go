@@ -15,3 +15,5 @@ tmp/
 .DS_Store
 .idea/
 .vscode/
+
+.dockhosting.generated.env

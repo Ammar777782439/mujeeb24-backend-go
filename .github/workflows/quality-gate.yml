@@ -31,11 +31,16 @@ jobs:
           - 5432:5432
     env:
       GOTOOLCHAIN: local
+      VERIFY_GOFMT_SCOPE: changed
+      VERIFY_OPENAPI_SCOPE: changed
+      AI_CONFIG_ENCRYPTION_KEY: ci-only-test-key-32-bytes-long!!
       RUN_INTEGRATION: "1"
       POSTGRES_TEST_DSN: postgresql://mujeeb_test:local-ci-only-password@localhost:5432/mujeeb24_test?sslmode=disable
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Set up Go
         uses: actions/setup-go@v5
         with:

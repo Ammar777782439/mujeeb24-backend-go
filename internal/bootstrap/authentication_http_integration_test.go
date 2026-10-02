@@ -82,15 +82,15 @@ func TestAuthenticationHTTPRuntimeAgainstPostgres(t *testing.T) {
 	}
 	defer runtime.Shutdown(context.Background())
 	handler := runtime.HTTP.Handler
-	if response := callAuthRequest(t, handler, http.MethodGet, "/api/v1/metrics", nil, "", ""); response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte("mujeeb_postgres_pool_total_connections")) {
-		t.Fatalf("metrics status=%d body=%s", response.Code, response.Body.String())
-	}
 	login := callAuthRequest(t, handler, http.MethodPost, "/api/v1/auth/login", []byte(`{"email":"postman.auth@example.test","password":"local-test-password"}`), "", "")
 	if login.Code != http.StatusOK {
 		t.Fatalf("login status=%d body=%s", login.Code, login.Body.String())
 	}
 	if bytes.Contains(login.Body.Bytes(), []byte("refresh_token")) {
 		t.Fatal("refresh token leaked into login JSON")
+	}
+	if response := callAuthRequest(t, handler, http.MethodGet, "/api/v1/metrics", nil, "", ""); response.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated metrics status=%d body=%s", response.Code, response.Body.String())
 	}
 	accessToken := extractAccessToken(t, login)
 	refreshCookie := login.Header().Get("Set-Cookie")

@@ -1,0 +1,54 @@
+name: Bootstrap platform super admin
+
+on:
+  workflow_dispatch:
+    inputs:
+      display_name:
+        description: "Platform super admin display name"
+        required: false
+        default: "Ammar Ragha"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    name: Migrate and bootstrap platform admin
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+          cache: true
+
+      - name: Validate required bootstrap secrets
+        env:
+          DATABASE_URL: ${{ secrets.MUJEEB_PROD_DATABASE_URL }}
+          ADMIN_EMAIL: ${{ secrets.PLATFORM_BOOTSTRAP_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.PLATFORM_BOOTSTRAP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL" || { echo "Missing MUJEEB_PROD_DATABASE_URL"; exit 1; }
+          test -n "$ADMIN_EMAIL" || { echo "Missing PLATFORM_BOOTSTRAP_EMAIL"; exit 1; }
+          test -n "$ADMIN_PASSWORD" || { echo "Missing PLATFORM_BOOTSTRAP_PASSWORD"; exit 1; }
+          test "${#ADMIN_PASSWORD}" -ge 12 || { echo "PLATFORM_BOOTSTRAP_PASSWORD must be at least 12 characters"; exit 1; }
+
+      - name: Apply production migrations
+        env:
+          DATABASE_URL: ${{ secrets.MUJEEB_PROD_DATABASE_URL }}
+        run: go run ./cmd/migrate
+
+      - name: Bootstrap platform super admin
+        env:
+          DATABASE_URL: ${{ secrets.MUJEEB_PROD_DATABASE_URL }}
+          PLATFORM_BOOTSTRAP_EMAIL: ${{ secrets.PLATFORM_BOOTSTRAP_EMAIL }}
+          PLATFORM_BOOTSTRAP_PASSWORD: ${{ secrets.PLATFORM_BOOTSTRAP_PASSWORD }}
+          PLATFORM_BOOTSTRAP_CONFIRM: CREATE_PLATFORM_SUPER_ADMIN
+          PLATFORM_BOOTSTRAP_DISPLAY_NAME: ${{ inputs.display_name }}
+        run: go run ./cmd/bootstrap-platform-admin

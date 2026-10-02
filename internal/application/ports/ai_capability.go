@@ -27,15 +27,15 @@ type CustomerSalesToolExecutionContext struct {
 // CustomerSalesToolResult contains the bounded factual data returned to the LLM
 // along with evidence metadata for downstream policy grounding and data-driven completion.
 type CustomerSalesToolResult struct {
-	Data            any                 `json:"data"`
+	Data            any                            `json:"data"`
 	CatalogEvidence []CustomerSalesCatalogEvidence `json:"catalog_evidence,omitempty"`
 	OfferEvidence   []CustomerSalesOfferEvidence   `json:"offer_evidence,omitempty"`
 	VariantEvidence []CustomerSalesVariantEvidence `json:"variant_evidence,omitempty"`
-	HasMore         bool                `json:"has_more,omitempty"`
-	NextCursor      string              `json:"next_cursor,omitempty"`
-	Incomplete      bool                `json:"incomplete,omitempty"`
-	Operation       string              `json:"operation,omitempty"`
-	StreamKey       string              `json:"stream_key,omitempty"`
+	HasMore         bool                           `json:"has_more,omitempty"`
+	NextCursor      string                         `json:"next_cursor,omitempty"`
+	Incomplete      bool                           `json:"incomplete,omitempty"`
+	Operation       string                         `json:"operation,omitempty"`
+	StreamKey       string                         `json:"stream_key,omitempty"`
 }
 
 // CustomerSalesTool represents an individual application-level AI capability.

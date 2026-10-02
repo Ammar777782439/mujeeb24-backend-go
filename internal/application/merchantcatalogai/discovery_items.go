@@ -74,8 +74,8 @@ func (c listItemsCapability) Execute(ctx context.Context, execCtx MerchantCatalo
 		Data:               items,
 		EvidenceReferences: evidenceReferences,
 		HasMore:            page.HasMore,
-		NextCursor:      page.NextCursor,
-		Operation:       "merchant_catalog_list_items",
+		NextCursor:         page.NextCursor,
+		Operation:          "merchant_catalog_list_items",
 	}, nil
 }
 
@@ -134,6 +134,6 @@ func (c getItemCapability) Execute(ctx context.Context, execCtx MerchantCatalogD
 			"attributes":               json.RawMessage(item.Attributes),
 		},
 		EvidenceReferences: []string{item.ID},
-		Operation: "merchant_catalog_get_item",
+		Operation:          "merchant_catalog_get_item",
 	}, nil
 }

@@ -2,8 +2,8 @@ package gemini
 
 import (
 	"context"
-	"io"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -147,7 +147,7 @@ func TestFix1_ToolLoop_ModelRequestsIs2_ToolCallsIs1(t *testing.T) {
 
 	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "what products?"},
-		AIRunID:       "run-1",
+		AIRunID: "run-1",
 	})
 	if err != nil {
 		t.Fatalf("Decide failed: %v", err)
@@ -177,7 +177,7 @@ func TestFix1_ToolLoop_TwoTools_ModelRequestsIs3_ToolCallsIs2(t *testing.T) {
 
 	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "show me"},
-		AIRunID:       "run-2",
+		AIRunID: "run-2",
 	})
 	if err != nil {
 		t.Fatalf("Decide failed: %v", err)
@@ -205,7 +205,7 @@ func TestFix2_Lifecycle_RunningToWaitingToolToRunning(t *testing.T) {
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
-		AIRunID:       "run-lc",
+		AIRunID: "run-lc",
 	})
 	if err != nil {
 		t.Fatalf("Decide failed: %v", err)
@@ -240,7 +240,7 @@ func TestFix3_B2B_AIRunIDSavedInToolCallRecord(t *testing.T) {
 	// CustomerSalesDecisionInput.AIRunID.
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b2b-biz", ConversationID: "session-1", Text: "add product"},
-		AIRunID:       "run-b2b-1",
+		AIRunID: "run-b2b-1",
 	})
 	if err != nil {
 		t.Fatalf("Decide failed: %v", err)

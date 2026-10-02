@@ -46,12 +46,12 @@ type MerchantCatalogDiscoveryExecutionContext struct {
 // merchant catalog discovery tool. Evidence is tracked as opaque references;
 // B2C customer-sales evidence types do not cross this boundary.
 type MerchantCatalogDiscoveryResult struct {
-	Data                     any
-	EvidenceReferences       []string
+	Data                      any
+	EvidenceReferences        []string
 	AttributeSchemaReferences []string
-	HasMore                  bool
-	NextCursor               string
-	Operation                string
+	HasMore                   bool
+	NextCursor                string
+	Operation                 string
 }
 
 // MerchantCatalogDiscoveryTool is one bounded read-only capability for B2B
