@@ -67,8 +67,8 @@ func TestPricingFailureDoesNotEraseReplyFromEntitlement(t *testing.T) {
 	usageRepo := &stubUsageRepoCapture{}
 	svc := AutoReplyService{
 		CustomerSalesDecision: nil, // not used in this test
-		AIUsage:   usageRepo,
-		AIPricing: &stubPricingRepoAlwaysFail{},
+		AIUsage:               usageRepo,
+		AIPricing:             &stubPricingRepoAlwaysFail{},
 		Subscriptions: &stubSubscriptionsRepo{
 			items: []ports.SubscriptionRecord{{ID: "sub-1", BusinessID: "b-1", Status: "ACTIVE"}},
 		},

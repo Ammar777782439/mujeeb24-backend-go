@@ -82,10 +82,10 @@ type CatalogBatchCandidate struct {
 //
 // Such fields are Mujeeb's responsibility and live in EffectiveDecision.
 type CustomerSalesProposal struct {
-	Status       CustomerSalesProposalStatus    `json:"status"`
-	Action       CustomerSalesProposalAction    `json:"action"`
-	ResponseText string              `json:"response_text"`
-	Selected     []SelectedReference `json:"selected,omitempty"`
+	Status       CustomerSalesProposalStatus `json:"status"`
+	Action       CustomerSalesProposalAction `json:"action"`
+	ResponseText string                      `json:"response_text"`
+	Selected     []SelectedReference         `json:"selected,omitempty"`
 }
 
 // CatalogBatchResult is the contract ② §5 per-batch evaluation output.

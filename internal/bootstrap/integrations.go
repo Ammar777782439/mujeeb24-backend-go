@@ -12,7 +12,7 @@ import (
 type ExternalAdapters struct {
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
-	GeminiHTTPClient              *gemini.GeminiHTTPClient
+	GeminiHTTPClient               *gemini.GeminiHTTPClient
 	LLMConfigError                 error
 	AutoReplyEnabled               bool
 	ChannelProvisioningSocial      ports.SocialChannelProvisioner
