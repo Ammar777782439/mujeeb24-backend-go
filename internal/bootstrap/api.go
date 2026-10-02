@@ -18,6 +18,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gemini"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/auth/ed25519jwt"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/providers/socialapi"
 	realtimePostgres "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/realtime/postgres"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
@@ -148,6 +149,12 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		external.GeminiHTTPClient != nil && external.LLMConfigError == nil,
 		external.SocialAPI != nil,
 	)
+	if external.GeminiHTTPClient != nil {
+		platformOperations.RegisterProbe("google_gemini", gemini.NewHealthCheckProbe(external.GeminiHTTPClient))
+	}
+	if socialClient, ok := external.SocialAPI.(*socialapi.Client); ok && socialClient != nil {
+		platformOperations.RegisterProbe("socialapi", socialapi.NewHealthCheckProbe(socialClient))
+	}
 
 	// Customer-sales capabilities are owned by the application layer.
 	// The Gemini adapter receives only the narrow CustomerSalesToolPort.
