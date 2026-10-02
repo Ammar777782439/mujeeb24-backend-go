@@ -32,8 +32,18 @@ type CustomerSalesContextBuilder interface {
 	Build(context.Context, CustomerSalesContextInput) (CustomerSalesContext, error)
 }
 
-type AIPolicyEvaluator interface {
-	Evaluate(AIDecisionProposal, *CustomerSalesContext) AIDecisionProposal
+// CustomerSalesPolicyDecision is the deterministic B2C policy outcome
+// applied after the customer-sales proposal has been validated.
+type CustomerSalesPolicyDecision struct {
+	Decision      string
+	RequiresHuman bool
+	Reason        string
+}
+
+// CustomerSalesPolicyPort evaluates merchant policy for a customer-sales proposal.
+// It never interprets customer intent and never executes the proposed action.
+type CustomerSalesPolicyPort interface {
+	Evaluate(context.Context, AIGeminiProposal, *CustomerSalesContext) CustomerSalesPolicyDecision
 }
 
 type CustomerSalesContext struct {
