@@ -1,4 +1,4 @@
-name: DockHosting deploy image verification
+name: Render production image verification
 
 on:
   pull_request:
@@ -9,6 +9,7 @@ on:
       - "migrations/**"
       - "go.mod"
       - "go.sum"
+      - "render.yaml"
   push:
     branches:
       - main
@@ -19,6 +20,7 @@ on:
       - "migrations/**"
       - "go.mod"
       - "go.sum"
+      - "render.yaml"
   workflow_dispatch:
 
 permissions:
