@@ -2,7 +2,6 @@ package merchantcatalogai
 
 import (
 	"context"
-	"time"
 
 	"errors"
 
@@ -14,8 +13,8 @@ type listOffersCapability struct {
 	selectedCatalogID string
 }
 
-func (c listOffersCapability) Definition() ports.AICapabilityDefinition {
-	return ports.AICapabilityDefinition{
+func (c listOffersCapability) Definition() MerchantCatalogDiscoveryToolDefinition {
+	return MerchantCatalogDiscoveryToolDefinition{
 		Name:        "merchant_catalog_list_offers",
 		Description: "Read offers for one catalog item, including factual price and availability evidence.",
 		Parameters: map[string]any{
@@ -31,33 +30,32 @@ func (c listOffersCapability) Definition() ports.AICapabilityDefinition {
 	}
 }
 
-func (c listOffersCapability) Execute(ctx context.Context, execCtx ports.AICapabilityExecutionContext, rawParams []byte) (ports.AICapabilityResult, error) {
+func (c listOffersCapability) Execute(ctx context.Context, execCtx MerchantCatalogDiscoveryExecutionContext, rawParams []byte) (MerchantCatalogDiscoveryResult, error) {
 	params, err := jsonParams(rawParams)
 	if err != nil {
-		return ports.AICapabilityResult{}, err
+		return MerchantCatalogDiscoveryResult{}, err
 	}
 	if c.selectedCatalogID == "" {
-		return ports.AICapabilityResult{}, errors.New("selected merchant catalog is required")
+		return MerchantCatalogDiscoveryResult{}, errors.New("selected merchant catalog is required")
 	}
 
 	itemID, err := requiredString(params, "item_id")
 	if err != nil {
-		return ports.AICapabilityResult{}, err
+		return MerchantCatalogDiscoveryResult{}, err
 	}
 	if _, err := c.repository.GetCatalogItem(ctx, execCtx.BusinessID, c.selectedCatalogID, itemID); err != nil {
-		return ports.AICapabilityResult{}, err
+		return MerchantCatalogDiscoveryResult{}, err
 	}
 
 	status, _ := params["status"].(string)
 	cursor, _ := params["cursor"].(string)
 	page, err := c.repository.ListOffers(ctx, execCtx.BusinessID, itemID, status, readLimit(params), cursor)
 	if err != nil {
-		return ports.AICapabilityResult{}, err
+		return MerchantCatalogDiscoveryResult{}, err
 	}
 
-	now := time.Now().UTC()
 	data := make([]map[string]any, 0, len(page.Items))
-	evidence := make([]ports.CustomerSalesOfferEvidence, 0, len(page.Items))
+	evidenceReferences := make([]string, 0, len(page.Items))
 	for _, offer := range page.Items {
 		variantID := ""
 		if offer.VariantID != nil {
@@ -87,22 +85,10 @@ func (c listOffersCapability) Execute(ctx context.Context, execCtx ports.AICapab
 			"validity_until":            offer.ValidityUntil,
 			"status":                    offer.Status,
 		})
-		evidence = append(evidence, ports.CustomerSalesOfferEvidence{
-			Reference:            offer.ID,
-			CatalogItemReference: offer.CatalogItemID,
-			VariantReference:     variantID,
-			Name:                 offer.Name,
-			PricingMode:          offer.PricingMode,
-			Amount:               dereferenceString(offer.Amount),
-			Currency:             dereferenceString(offer.Currency),
-			AvailabilityStatus:   offer.AvailabilityStatus,
-			Status:               offer.Status,
-			EvidenceState:        "verified",
-			RetrievedAt:          now,
-		})
+		evidenceReferences = append(evidenceReferences, offer.ID)
 	}
 
-	return ports.AICapabilityResult{
+	return MerchantCatalogDiscoveryResult{
 		Data:          data,
 		OfferEvidence: evidence,
 		HasMore:       page.HasMore,
