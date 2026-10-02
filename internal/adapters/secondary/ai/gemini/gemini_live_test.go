@@ -31,7 +31,7 @@ func TestGeminiLiveSmoke(t *testing.T) {
 		t.Skip("GEMINI_API_KEY not set — skipping live Gemini smoke test")
 	}
 
-	client, err := NewClient(Config{
+	client, err := NewGeminiHTTPClient(GeminiHTTPClientConfig{
 		BaseURL:        "https://generativelanguage.googleapis.com",
 		APIKey:         apiKey,
 		Model:          "gemini-3.5-flash",
