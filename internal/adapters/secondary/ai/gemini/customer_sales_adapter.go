@@ -47,6 +47,7 @@ type GeminiCustomerSalesAdapter struct {
 	apiKey         string
 	model          string
 	requestTimeout time.Duration
+	capabilities   ports.CustomerSalesToolPort
 	// configProvider, when set, is called at the start of every Decide
 	// call to get the ACTIVE runtime configuration (API key, model, limits).
 	// Per §2: the runtime gets the active config from Configuration abstraction,
@@ -111,7 +112,7 @@ func (c *GeminiCustomerSalesAdapter) resolveConfig(ctx context.Context) (*resolv
 //
 // Per contract ⑤ §7, the Catalog Entity Contract is built once at startup
 // and reused for every call; callers pass it via CustomerSalesDecisionInput.
-func NewGeminiCustomerSalesAdapter(base *GeminiHTTPClient) (*GeminiCustomerSalesAdapter, error) {
+func NewGeminiCustomerSalesAdapter(base *GeminiHTTPClient, capabilities ports.CustomerSalesToolPort) (*GeminiCustomerSalesAdapter, error) {
 	if base == nil {
 		return nil, errors.New("base client is required")
 	}
@@ -122,6 +123,7 @@ func NewGeminiCustomerSalesAdapter(base *GeminiHTTPClient) (*GeminiCustomerSales
 		apiKey:         base.apiKey,
 		model:          base.model,
 		requestTimeout: base.requestTimeout,
+		capabilities:   capabilities,
 	}, nil
 }
 
