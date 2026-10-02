@@ -2,9 +2,9 @@ package gemini
 
 import (
 	"context"
-	"io"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -49,8 +49,10 @@ func (m *mockGeminiToolServer) URL() string { return m.server.URL }
 
 func (m *mockGeminiToolServer) handle(w http.ResponseWriter, r *http.Request) {
 	m.capturedAPIKey = r.Header.Get("x-goog-api-key")
-	body := make([]byte, r.ContentLength)
-	r.Body.Read(body)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		m.t.Fatalf("read request body: %v", err)
+	}
 	m.capturedBody = body
 
 	count := atomic.AddInt64(&m.requestCount, 1)
