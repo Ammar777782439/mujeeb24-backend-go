@@ -72,12 +72,11 @@ func buildGeminiCustomerSalesAdapterForFixTests(t *testing.T, mockURL string, di
 		Model:          "gemini-3.5-flash",
 		SystemPrompt:   "test",
 		RequestTimeout: 5 * time.Second,
-		Capabilities:   dispatcher,
 	})
 	if err != nil {
 		t.Fatalf("build client: %v", err)
 	}
-	cc, err := NewGeminiCustomerSalesAdapter(client)
+	cc, err := NewGeminiCustomerSalesAdapter(client, dispatcher)
 	if err != nil {
 		t.Fatalf("build contract client: %v", err)
 	}
