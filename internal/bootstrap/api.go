@@ -230,7 +230,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// Per contract ④ §8, wrap the legacy Gemini Client with the
 		// contract-aligned GeminiCustomerSalesAdapter (implements ports.CustomerSalesDecisionPort).
 		// The legacy Client.Decide method is no longer used for AutoReply.
-		var contractRuntime ports.CustomerSalesDecisionPort
+		var customerSalesDecision ports.CustomerSalesDecisionPort
 		var geminiClient *gemini.Client
 		var runRepo ports.AIRunRepository
 		if external.GeminiClient != nil {
