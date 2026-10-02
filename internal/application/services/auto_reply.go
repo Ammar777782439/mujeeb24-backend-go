@@ -78,7 +78,8 @@ func isSubscriptionHandoffIntent(intent string) bool {
 // proposal's status/action are validated but never overridden by Mujeeb
 // (per contract ⑥ §11 we do NOT re-interpret intent).
 type AutoReplyService struct {
-	// Runtime is the contract ④ §8 CustomerSalesDecisionPort (Gemini ContractClient).
+	// CustomerSalesDecision is the contract ④ §8 customer-sales application port.
+	// Its Gemini implementation is GeminiCustomerSalesAdapter.
 	// Per contract ④ §8, this is the only way to call Gemini.
 	CustomerSalesDecision ports.CustomerSalesDecisionPort
 
