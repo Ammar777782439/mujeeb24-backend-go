@@ -119,7 +119,7 @@ func comparisonTestBuilder(repo comparisonStubRepo) AutoReplyContextBuilder {
 	)
 }
 
-func offerRefs(evidence []ports.AIOfferEvidence) map[string]string {
+func offerRefs(evidence []ports.CustomerSalesOfferEvidence) map[string]string {
 	out := map[string]string{}
 	for _, offer := range evidence {
 		out[offer.Reference] = offer.Amount
@@ -182,7 +182,7 @@ func TestBuildValidatedStateNoReferenceResetsComparison(t *testing.T) {
 		Comparison: &ports.ConversationComparison{Type: "offer_set", IDs: []string{"item-a", "item-b"}},
 	}
 	next := buildValidatedState(current, "b1", "c1", ports.AIDecisionProposal{
-		StateProposal: &ports.AIStateProposal{Kind: "NO_REFERENCE"},
+		StateProposal: &ports.CustomerSalesStateProposal{Kind: "NO_REFERENCE"},
 	})
 	if next == nil {
 		t.Fatal("expected state update resetting comparison")
@@ -205,7 +205,7 @@ func TestBuildValidatedStateAmbiguousKeepsState(t *testing.T) {
 		Comparison: &ports.ConversationComparison{Type: "offer_set", IDs: []string{"item-a", "item-b"}},
 	}
 	next := buildValidatedState(current, "b1", "c1", ports.AIDecisionProposal{
-		StateProposal: &ports.AIStateProposal{Kind: "AMBIGUOUS"},
+		StateProposal: &ports.CustomerSalesStateProposal{Kind: "AMBIGUOUS"},
 	})
 	if next != nil {
 		t.Fatalf("ambiguous must not mutate state, got %#v", next)
