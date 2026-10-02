@@ -16,7 +16,8 @@ type CustomerSalesDecisionRequest struct {
 	Context                *AIContext
 }
 
-type ContextBuildInput struct {
+// CustomerSalesContextInput is the tenant-scoped input for B2C customer-sales context building.
+type CustomerSalesContextInput struct {
 	BusinessID             string
 	ConversationID         string
 	SourceMessageReference string
