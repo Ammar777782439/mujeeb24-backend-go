@@ -254,7 +254,7 @@ func (c *GeminiCustomerSalesAdapter) executeToolCalls(
 }
 
 // accumulateUsage adds usage from one Gemini response into the running total.
-func accumulateUsage(total *ports.ContractUsageTelemetry, resp contractGeminiResponse) {
+func accumulateUsage(total *ports.CustomerSalesUsageTelemetry, resp contractGeminiResponse) {
 	total.InputTokens += resp.UsageMetadata.PromptTokenCount
 	total.CachedTokens += resp.UsageMetadata.CachedContentTokenCount
 	total.OutputTokens += resp.UsageMetadata.CandidatesTokenCount
@@ -284,7 +284,7 @@ func (c *GeminiCustomerSalesAdapter) runToolLoop(
 ) (ports.CustomerSalesDecisionOutput, error) {
 	// Per the spec: "Usage يتم تجميعه عبر جميع Gemini requests."
 	// Don't return only the last request's usage — accumulate.
-	var totalUsage ports.ContractUsageTelemetry
+	var totalUsage ports.CustomerSalesUsageTelemetry
 	totalUsage.Model = rc.model
 
 	var lastInteractionID string
