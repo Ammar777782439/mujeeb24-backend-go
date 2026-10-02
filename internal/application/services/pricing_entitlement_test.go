@@ -66,7 +66,7 @@ func TestPricingFailureDoesNotEraseReplyFromEntitlement(t *testing.T) {
 	// Build an AutoReplyService with a pricing repo that always fails.
 	usageRepo := &stubUsageRepoCapture{}
 	svc := AutoReplyService{
-		Runtime:   nil, // not used in this test
+		CustomerSalesDecision: nil, // not used in this test
 		AIUsage:   usageRepo,
 		AIPricing: &stubPricingRepoAlwaysFail{},
 		Subscriptions: &stubSubscriptionsRepo{
