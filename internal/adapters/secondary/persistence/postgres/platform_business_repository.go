@@ -33,17 +33,37 @@ func NewPlatformBusinessRepository(adapter *Adapter) *PlatformBusinessRepository
 }
 
 const platformBusinessSelectColumns = `b.id::text, b.name, b.slug, b.status,
-       (SELECT p.display_name || ' <' || p.email || '>'
+       (SELECT NULLIF(TRIM(COALESCE(p.display_name, '') || CASE
+                          WHEN NULLIF(TRIM(p.email), '') IS NULL THEN ''
+                          ELSE ' <' || TRIM(p.email) || '>'
+                        END), '')
           FROM business_memberships bm
           JOIN principals p ON p.id = bm.principal_id
          WHERE bm.business_id = b.id
-           AND bm.role = 'owner'
-           AND bm.status = 'active'
-         ORDER BY bm.created_at ASC
+           AND LOWER(TRIM(bm.role)) = 'owner'
+           AND LOWER(TRIM(bm.status)) = 'active'
+         ORDER BY bm.created_at ASC, bm.principal_id ASC
          LIMIT 1) AS owner_identity_summary,
+       (SELECT CONCAT(
+                  COALESCE(p2.code, 'unknown'),
+                  ' v', COALESCE(p2.version, 0),
+                  ' — ', s.status
+                )
+          FROM subscriptions s
+          JOIN plans p2 ON p2.id = s.plan_id
+         WHERE s.business_id = b.id
+         ORDER BY CASE s.status
+                    WHEN 'ACTIVE' THEN 0
+                    WHEN 'PENDING' THEN 1
+                    WHEN 'EXPIRED' THEN 2
+                    WHEN 'CANCELLED' THEN 3
+                    ELSE 4
+                  END,
+                  s.created_at DESC, s.id DESC
+         LIMIT 1) AS subscription_summary,
        b.created_at, b.updated_at`
 
-const platformBusinessReturnColumns = `id::text, name, slug, status, NULL::text AS owner_identity_summary, created_at, updated_at`
+const platformBusinessReturnColumns = `id::text, name, slug, status, NULL::text AS owner_identity_summary, NULL::text AS subscription_summary, created_at, updated_at`
 
 // Create inserts a new business row with status='pending_setup'.
 // Per Contract §9: the Platform Admin creates the business; the owner
