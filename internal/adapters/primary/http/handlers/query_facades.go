@@ -608,7 +608,7 @@ func catalogList(v commands.ListResult[commands.CatalogView]) *contract.List[con
 	return listPage(items, v.NextCursor, v.HasMore)
 }
 func catalogItemProjection(v commands.CatalogItemView) contract.CatalogItem {
-	return contract.CatalogItem{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), CatalogID: contract.UUID(v.CatalogID), ItemType: v.ItemType, Name: v.Name, Status: v.Status, Attributes: jsonObject(v.Attributes), ResourceVersion: string(v.ResourceVersion)}
+	return contract.CatalogItem{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), CatalogID: contract.UUID(v.CatalogID), AttributeSchemaID: optionalAttributeSchemaUUID(v.AttributeSchemaID), AttributeSchemaVersion: v.AttributeSchemaVersion, ItemType: v.ItemType, Name: v.Name, ShortDescription: v.ShortDescription, LongDescription: v.LongDescription, Status: v.Status, PricingMode: v.PricingMode, AvailabilityMode: v.AvailabilityMode, FulfillmentMode: v.FulfillmentMode, RequiresConfirmation: v.RequiresConfirmation, Attributes: jsonObject(v.Attributes), ResourceVersion: string(v.ResourceVersion)}
 }
 func catalogItemList(v commands.ListResult[commands.CatalogItemView]) *contract.List[contract.CatalogItem] {
 	items := make([]contract.CatalogItem, 0, len(v.Items))
@@ -618,7 +618,7 @@ func catalogItemList(v commands.ListResult[commands.CatalogItemView]) *contract.
 	return listPage(items, v.NextCursor, v.HasMore)
 }
 func offerProjection(v commands.OfferView) contract.Offer {
-	return contract.Offer{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), CatalogItemID: contract.UUID(v.CatalogItemID), VariantID: optionalUUID(v.VariantID), Name: v.Name, PricingMode: v.PricingMode, Amount: decimalFloat(v.Amount), Currency: v.Currency, AvailabilityStatus: v.AvailabilityStatus, Status: v.Status, ResourceVersion: string(v.ResourceVersion)}
+	return contract.Offer{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), CatalogItemID: contract.UUID(v.CatalogItemID), VariantID: optionalUUID(v.VariantID), Name: v.Name, PricingMode: v.PricingMode, Amount: decimalFloat(v.Amount), Currency: v.Currency, PricingUnit: v.PricingUnit, PriceSource: v.PriceSource, PriceVerificationStatus: v.PriceVerificationStatus, PriceCheckedAt: v.PriceCheckedAt, AvailabilityMode: v.AvailabilityMode, AvailabilitySource: v.AvailabilitySource, AvailabilityCheckedAt: v.AvailabilityCheckedAt, AvailabilityValidUntil: v.AvailabilityValidUntil, AvailabilityEvidenceRef: v.AvailabilityEvidenceRef, FulfillmentMode: v.FulfillmentMode, ValidityFrom: v.ValidityFrom, ValidityUntil: v.ValidityUntil, AvailabilityStatus: v.AvailabilityStatus, Status: v.Status, ResourceVersion: string(v.ResourceVersion)}
 }
 func offerList(v commands.ListResult[commands.OfferView]) *contract.List[contract.Offer] {
 	items := make([]contract.Offer, 0, len(v.Items))
@@ -678,6 +678,13 @@ func optionalUUID(v commands.VariantID) *contract.UUID {
 		return nil
 	}
 	id := contract.UUID(v)
+	return &id
+}
+func optionalAttributeSchemaUUID(v *commands.AttributeSchemaID) *contract.UUID {
+	if v == nil || *v == "" {
+		return nil
+	}
+	id := contract.UUID(*v)
 	return &id
 }
 
