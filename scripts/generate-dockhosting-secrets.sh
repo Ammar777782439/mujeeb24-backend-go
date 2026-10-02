@@ -19,8 +19,7 @@ openssl pkey -in "$tmpdir/private.pem" -pubout -out "$tmpdir/public.pem" >/dev/n
 private_b64="$(
   openssl pkey -in "$tmpdir/private.pem" -text -noout 2>/dev/null |
     awk '/priv:/{flag=1;next} /pub:/{flag=0} flag' |
-    tr -d ' :
-' |
+    tr -d '[:space:]:' |
     xxd -r -p |
     base64 -w0
 )"
@@ -28,8 +27,7 @@ private_b64="$(
 public_b64="$(
   openssl pkey -in "$tmpdir/public.pem" -pubin -text -noout 2>/dev/null |
     awk '/pub:/{flag=1;next} flag' |
-    tr -d ' :
-' |
+    tr -d '[:space:]:' |
     xxd -r -p |
     tail -c 32 |
     base64 -w0
