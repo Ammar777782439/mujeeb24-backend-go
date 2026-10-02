@@ -47,7 +47,7 @@ func TestGeminiLiveSmoke(t *testing.T) {
 	}
 
 	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.AIDecisionInput{
+		DecisionInput: ports.CustomerSalesDecisionRequest{
 			BusinessID:     "test-biz",
 			ConversationID: "test-conv",
 			Text:           "Hello, please say 'ok'.",
