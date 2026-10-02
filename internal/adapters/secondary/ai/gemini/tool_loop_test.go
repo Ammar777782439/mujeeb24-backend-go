@@ -2,6 +2,7 @@ package gemini
 
 import (
 	"context"
+	"io"
 	"encoding/json"
 	"errors"
 	"net/http"
