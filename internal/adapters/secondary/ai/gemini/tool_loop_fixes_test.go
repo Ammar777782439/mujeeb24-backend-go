@@ -123,11 +123,11 @@ func TestFix1_NonToolPath_ModelRequestsIs1(t *testing.T) {
 	dispatcher := makeDispatcher()
 	cc, _ := buildContractClientForFixTests(t, mock.URL(), dispatcher, nil)
 
-	out, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 	if out.Usage.ModelRequests != 1 {
 		t.Errorf("expected ModelRequests=1 (non-tool path), got %d", out.Usage.ModelRequests)
@@ -146,12 +146,12 @@ func TestFix1_ToolLoop_ModelRequestsIs2_ToolCallsIs1(t *testing.T) {
 	dispatcher := makeDispatcher()
 	cc, runRepo := buildContractClientForFixTests(t, mock.URL(), dispatcher, nil)
 
-	out, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "what products?"},
 		AIRunID:       "run-1",
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 	// ModelRequests should be 2 (initial + follow-up after tool).
 	if out.Usage.ModelRequests != 2 {
@@ -176,12 +176,12 @@ func TestFix1_ToolLoop_TwoTools_ModelRequestsIs3_ToolCallsIs2(t *testing.T) {
 	dispatcher := makeDispatcher()
 	cc, runRepo := buildContractClientForFixTests(t, mock.URL(), dispatcher, nil)
 
-	out, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "show me"},
 		AIRunID:       "run-2",
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 	if out.Usage.ModelRequests != 3 {
 		t.Errorf("expected ModelRequests=3 (two tools), got %d", out.Usage.ModelRequests)
@@ -204,12 +204,12 @@ func TestFix2_Lifecycle_RunningToWaitingToolToRunning(t *testing.T) {
 	lc := &stubLifecyclePort{}
 	cc, _ := buildContractClientForFixTests(t, mock.URL(), dispatcher, lc)
 
-	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-lc",
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 	// Should have 1 WAITING_TOOL call + 1 RUNNING call.
 	if atomic.LoadInt64(&lc.waitingToolCalls) != 1 {
@@ -222,8 +222,8 @@ func TestFix2_Lifecycle_RunningToWaitingToolToRunning(t *testing.T) {
 
 // Test 5: B2B — AIRunID is saved in AIToolCallRecord.
 // This test uses the same ContractClient + tool loop path as B2B
-// (the B2B agent calls the same ContractClient.DecideContract).
-// The key assertion: when AIRunID is passed in ContractRuntimeInput,
+// (the B2B agent calls the same ContractClient.Decide).
+// The key assertion: when AIRunID is passed in CustomerSalesDecisionInput,
 // it appears in the AIToolCallRecord.
 func TestFix3_B2B_AIRunIDSavedInToolCallRecord(t *testing.T) {
 	t.Parallel()
@@ -238,13 +238,13 @@ func TestFix3_B2B_AIRunIDSavedInToolCallRecord(t *testing.T) {
 
 	// Simulate what the MerchantCatalogAIAgent does: it creates a run
 	// (with ID "run-b2b-1") and passes it through BuildForTurn →
-	// ContractRuntimeInput.AIRunID.
-	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	// CustomerSalesDecisionInput.AIRunID.
+	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b2b-biz", ConversationID: "session-1", Text: "add product"},
 		AIRunID:       "run-b2b-1",
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 	if len(runRepo.createdToolCalls) != 1 {
 		t.Fatalf("expected 1 tool call record, got %d", len(runRepo.createdToolCalls))
@@ -272,11 +272,11 @@ func TestFix6_ToolsShapeArrayAndCamelCase(t *testing.T) {
 	dispatcher := makeDispatcher()
 	cc, _ := buildContractClientForFixTests(t, server.URL, dispatcher, nil)
 
-	_, err := cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 	})
 	if err != nil {
-		t.Fatalf("DecideContract failed: %v", err)
+		t.Fatalf("Decide failed: %v", err)
 	}
 
 	var reqBody map[string]any
