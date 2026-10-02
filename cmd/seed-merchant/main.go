@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
-	"github.com/jackc/pgx/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -291,7 +291,6 @@ func main() {
 	log.Println("Mujeeb merchant seed completed successfully.")
 	log.Printf("Business:  %s\n", merchantName)
 	log.Printf("Email:     %s\n", merchantEmail)
-	log.Printf("Password:  %s\n", merchantPassword)
 	log.Printf("Plan:      Basic (%d YER/month)\n", basicPlanPriceYER)
 	log.Println("Subscription: ACTIVE")
 	log.Printf("Business ID: %s\n", merchantBusinessID)
