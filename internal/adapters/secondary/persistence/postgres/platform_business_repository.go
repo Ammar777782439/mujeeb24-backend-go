@@ -104,7 +104,7 @@ func (r *PlatformBusinessRepository) Create(ctx context.Context, create ports.Pl
                  VALUES ($1::uuid, $2, $3, 'pending_setup', $4, $5, $6, $7, $8, $8)
                  RETURNING `+platformBusinessReturnColumns,
 		create.ID, create.Name, create.Slug, create.VerticalType, create.Timezone, create.DefaultCurrency, create.Locale, create.Now,
-	).Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.OwnerIdentitySummary, &record.CreatedAt, &record.UpdatedAt)
+	).Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.OwnerIdentitySummary, &record.SubscriptionSummary, &record.CreatedAt, &record.UpdatedAt)
 	if err != nil {
 		return ports.PlatformBusinessRecord{}, classifyRepositoryWriteError("platform_business.create", err)
 	}
@@ -167,7 +167,7 @@ func (r *PlatformBusinessRepository) GetByID(ctx context.Context, businessID str
 	err = executor.QueryRow(ctx,
 		`SELECT `+platformBusinessSelectColumns+` FROM businesses b WHERE b.id = $1::uuid`,
 		businessID,
-	).Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.OwnerIdentitySummary, &record.CreatedAt, &record.UpdatedAt)
+	).Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.OwnerIdentitySummary, &record.SubscriptionSummary, &record.CreatedAt, &record.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ports.PlatformBusinessRecord{}, &RepositoryError{Operation: "platform_business.get", Kind: RepositoryNotFound, Err: err}
