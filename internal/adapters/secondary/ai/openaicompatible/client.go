@@ -399,4 +399,3 @@ func proposalJSONSchema() map[string]any {
 		"additionalProperties": false,
 	}
 }
-
