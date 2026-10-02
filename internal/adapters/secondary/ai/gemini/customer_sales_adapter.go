@@ -13,9 +13,8 @@
 // Structured Output via responseSchema. Per contract ⑧ §8, captures usage
 // telemetry. Per contract ⑧ §9, captures latency.
 //
-// This file REPLACES the legacy Client.Decide method (in client.go) for
-// contract-aligned callers. The legacy Client.Decide is kept only for
-// migration; new code must use GeminiCustomerSalesAdapter.
+// This adapter is the sole Gemini implementation of the customer-sales
+// decision capability. No generic AI execution path is used.
 
 package gemini
 
