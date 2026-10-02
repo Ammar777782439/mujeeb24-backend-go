@@ -299,7 +299,7 @@ Rules:
 	// CustomerSalesDecisionPort is the only AI execution path.
 	fullPrompt := systemPrompt + "\n\n" + userPrompt
 	startedAt := s.now()
-	out, err := s.CustomerSalesDecisionPort.DecideContract(ctx, ports.CustomerSalesDecisionInput{
+	out, err := s.CustomerSalesDecisionPort.Decide(ctx, ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{
 			BusinessID:     businessID,
 			ConversationID: conversationID,
