@@ -239,7 +239,7 @@ type fakeInteractionRuntime struct {
 	callCount      int64
 }
 
-func (f *fakeInteractionRuntime) DecideContract(_ context.Context, input ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
+func (f *fakeInteractionRuntime) Decide(_ context.Context, input ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.callCount++
@@ -375,7 +375,7 @@ func TestItem8_GeminiInteractionContinuity_TurnChaining(t *testing.T) {
 	// Instead of wiring the full Handle (which needs many stubs), we test
 	// the interaction ID flow directly:
 	// 1. Read the conversation's LastGeminiInteractionID (via context builder).
-	// 2. Pass it as PreviousInteractionID to DecideContract.
+	// 2. Pass it as PreviousInteractionID to Decide.
 	// 3. After Gemini success, call UpdateLastGeminiInteractionID with the result.
 	//
 	// This proves the turn-chaining contract ③ §4.
@@ -391,15 +391,15 @@ func TestItem8_GeminiInteractionContinuity_TurnChaining(t *testing.T) {
 		prevID = *convRepo.lastGeminiInteractionID
 	}
 
-	// 2. Call DecideContract with prevID
-	out1, err := runtime.DecideContract(context.Background(), ports.CustomerSalesDecisionInput{
+	// 2. Call Decide with prevID
+	out1, err := runtime.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		GeminiInteraction: ports.GeminiInteractionContext{
 			PreviousInteractionID: prevID,
 			Store:                 true,
 		},
 	})
 	if err != nil {
-		t.Fatalf("turn 1: DecideContract failed: %v", err)
+		t.Fatalf("turn 1: Decide failed: %v", err)
 	}
 
 	// Assert: PreviousInteractionID was "" (first turn)
@@ -428,14 +428,14 @@ func TestItem8_GeminiInteractionContinuity_TurnChaining(t *testing.T) {
 		prevID = *convRepo.lastGeminiInteractionID
 	}
 
-	out2, err := runtime.DecideContract(context.Background(), ports.CustomerSalesDecisionInput{
+	out2, err := runtime.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		GeminiInteraction: ports.GeminiInteractionContext{
 			PreviousInteractionID: prevID,
 			Store:                 true,
 		},
 	})
 	if err != nil {
-		t.Fatalf("turn 2: DecideContract failed: %v", err)
+		t.Fatalf("turn 2: Decide failed: %v", err)
 	}
 
 	// Assert: PreviousInteractionID was "A" (from turn 1)
@@ -463,14 +463,14 @@ func TestItem8_GeminiInteractionContinuity_TurnChaining(t *testing.T) {
 		prevID = *convRepo.lastGeminiInteractionID
 	}
 
-	_, err = runtime.DecideContract(context.Background(), ports.CustomerSalesDecisionInput{
+	_, err = runtime.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		GeminiInteraction: ports.GeminiInteractionContext{
 			PreviousInteractionID: prevID,
 			Store:                 true,
 		},
 	})
 	if err != nil {
-		t.Fatalf("turn 3: DecideContract failed: %v", err)
+		t.Fatalf("turn 3: Decide failed: %v", err)
 	}
 
 	// Assert: PreviousInteractionID was "B" (from turn 2)
@@ -480,7 +480,7 @@ func TestItem8_GeminiInteractionContinuity_TurnChaining(t *testing.T) {
 
 	// Assert: 3 calls total
 	if runtime.getCallCount() != 3 {
-		t.Errorf("expected 3 DecideContract calls, got %d", runtime.getCallCount())
+		t.Errorf("expected 3 Decide calls, got %d", runtime.getCallCount())
 	}
 }
 
