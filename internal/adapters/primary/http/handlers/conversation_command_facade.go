@@ -14,6 +14,8 @@ func (s *Server) dispatchConversationCommand(ctx context.Context, operationID st
 		return s.updateConversation(ctx, input.(*contract.ConversationUpdateInput)), true
 	case "assignConversation":
 		return s.assignConversation(ctx, input.(*contract.ConversationAssignInput)), true
+	case "addPrivateNote":
+		return s.addPrivateNote(ctx, input.(*contract.ConversationNoteInput)), true
 	case "updateConversationLabels":
 		return s.updateConversationLabels(ctx, input.(*contract.ConversationLabelsInput)), true
 	default:
@@ -44,6 +46,28 @@ func (s *Server) updateConversation(ctx context.Context, input *contract.Convers
 	}
 
 	return singleConversation(result.Conversation)
+}
+
+func (s *Server) addPrivateNote(ctx context.Context, input *contract.ConversationNoteInput) any {
+	if s.deps.AddPrivateNote == nil {
+		return mapApplicationError(appErrors.NotImplemented())
+	}
+
+	actor, err := s.requireScope(ctx, input.BusinessID)
+	if err != nil {
+		return mapApplicationError(err)
+	}
+
+	result, err := s.deps.AddPrivateNote.Handle(ctx, commands.AddPrivateNoteCommand{
+		Meta:           commandMeta(ctx, actor, input.CommandHeaders),
+		ConversationID: commands.ConversationID(input.ConversationID),
+		Text:           input.Body.Text,
+	})
+	if err != nil {
+		return mapApplicationError(err)
+	}
+
+	return singleMessage(result.Message)
 }
 
 func (s *Server) updateConversationLabels(ctx context.Context, input *contract.ConversationLabelsInput) any {
