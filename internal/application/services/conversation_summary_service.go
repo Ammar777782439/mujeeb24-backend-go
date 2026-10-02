@@ -84,11 +84,11 @@ const SlidingWindowSize = 4
 type ConversationSummaryService struct {
 	StateRepository ports.ConversationStateRepository
 	Messages        ports.MessageRepository
-	// ContractRuntime is the only AI execution path for summaries.
+	// CustomerSalesDecisionPort is the only AI execution path for summaries.
 	// It reads the active AI configuration through the provider wired
 	// into the ContractClient, so summaries use the same runtime contract
 	// as AutoReply.
-	ContractRuntime ports.ContractRuntime
+	CustomerSalesDecisionPort ports.CustomerSalesDecisionPort
 	// AIUsageRepository records per-execution telemetry for the summary
 	// call. Per P1-5: summary Gemini calls MUST be metered — they are
 	// not free. If nil, telemetry is logged but not persisted.
@@ -114,16 +114,16 @@ type ConversationSummaryService struct {
 }
 
 // NewConversationSummaryService constructs a ConversationSummaryService.
-// ContractRuntime is required; there is no legacy AI fallback.
+// CustomerSalesDecisionPort is required; there is no legacy AI fallback.
 func NewConversationSummaryService(
 	stateRepo ports.ConversationStateRepository,
 	messages ports.MessageRepository,
-	contractRuntime ports.ContractRuntime,
+	contractRuntime ports.CustomerSalesDecisionPort,
 ) *ConversationSummaryService {
 	return &ConversationSummaryService{
 		StateRepository: stateRepo,
 		Messages:        messages,
-		ContractRuntime: contractRuntime,
+		CustomerSalesDecisionPort: contractRuntime,
 		Now:             func() time.Time { return time.Now().UTC() },
 	}
 }
@@ -170,7 +170,7 @@ func (s *ConversationSummaryService) MaybeSummarize(
 		result.SkippedReason = "service_not_configured"
 		return result, nil
 	}
-	if s.ContractRuntime == nil {
+	if s.CustomerSalesDecisionPort == nil {
 		result.SkippedReason = "contract_runtime_not_configured"
 		return result, nil
 	}
@@ -235,7 +235,7 @@ func (s *ConversationSummaryService) MaybeSummarize(
 		transcript = transcript[:4000]
 	}
 
-	// Generate summary via Gemini (per P1-5: use ContractRuntime when
+	// Generate summary via Gemini (per P1-5: use CustomerSalesDecisionPort when
 	// wired so the dynamic AI config applies).
 	summaryText, err := s.generateSummary(ctx, businessID, conversationID, transcript, state.Summary)
 	if err != nil {
@@ -296,10 +296,10 @@ Rules:
 
 	userPrompt := fmt.Sprintf("Previous summary:\n%s\n\nConversation transcript to summarize:\n%s", previousSummary, transcript)
 
-	// ContractRuntime is the only AI execution path.
+	// CustomerSalesDecisionPort is the only AI execution path.
 	fullPrompt := systemPrompt + "\n\n" + userPrompt
 	startedAt := s.now()
-	out, err := s.ContractRuntime.DecideContract(ctx, ports.ContractRuntimeInput{
+	out, err := s.CustomerSalesDecisionPort.DecideContract(ctx, ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{
 			BusinessID:     businessID,
 			ConversationID: conversationID,
