@@ -43,16 +43,7 @@ const platformBusinessSelectColumns = `b.id::text, b.name, b.slug, b.status,
          LIMIT 1) AS owner_identity_summary,
        b.created_at, b.updated_at`
 
-const platformBusinessReturnColumns = `id::text, name, slug, status,
-       (SELECT p.display_name || ' <' || p.email || '>'
-          FROM business_memberships bm
-          JOIN principals p ON p.id = bm.principal_id
-         WHERE bm.business_id = businesses.id
-           AND bm.role = 'owner'
-           AND bm.status = 'active'
-         ORDER BY bm.created_at ASC
-         LIMIT 1) AS owner_identity_summary,
-       created_at, updated_at`
+const platformBusinessReturnColumns = `id::text, name, slug, status, NULL::text AS owner_identity_summary, created_at, updated_at`
 
 // Create inserts a new business row with status='pending_setup'.
 // Per Contract §9: the Platform Admin creates the business; the owner
