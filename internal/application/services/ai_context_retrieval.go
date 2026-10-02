@@ -94,7 +94,7 @@ func (b AutoReplyContextBuilder) retrieveScopedOffer(ctx context.Context, busine
 	}
 	catalogEvidence := []ports.AICatalogEvidence{{
 		Reference: item.ID, CatalogReference: item.CatalogID, ItemType: item.ItemType, Name: item.Name, Status: item.Status,
-		Attributes: safeJSONObject(item.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+		Attributes: safeJSONObject(item.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 	}}
 	offerEvidence := []ports.AIOfferEvidence{{
 		Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
@@ -112,7 +112,7 @@ func (b AutoReplyContextBuilder) retrieveScopedOffer(ctx context.Context, busine
 			if v.ID == *offer.VariantID {
 				variantEvidence = append(variantEvidence, ports.AIVariantEvidence{
 					Reference: v.ID, CatalogItemReference: v.CatalogItemID, Name: v.Name, Status: v.Status,
-					Attributes: safeJSONObject(v.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+					Attributes: safeJSONObject(v.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 				})
 				break
 			}
@@ -128,7 +128,7 @@ func (b AutoReplyContextBuilder) retrieveScopedItem(ctx context.Context, busines
 	}
 	catalogEvidence := []ports.AICatalogEvidence{{
 		Reference: item.ID, CatalogReference: item.CatalogID, ItemType: item.ItemType, Name: item.Name, Status: item.Status,
-		Attributes: safeJSONObject(item.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+		Attributes: safeJSONObject(item.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 	}}
 	offers, err := b.Catalogs.ListOffers(ctx, businessID, item.ID, "active", b.maxOffers(), "")
 	if err != nil {
@@ -157,7 +157,7 @@ func (b AutoReplyContextBuilder) retrieveScopedItem(ctx context.Context, busines
 		}
 		variantEvidence = append(variantEvidence, ports.AIVariantEvidence{
 			Reference: v.ID, CatalogItemReference: v.CatalogItemID, Name: v.Name, Status: v.Status,
-			Attributes: safeJSONObject(v.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+			Attributes: safeJSONObject(v.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 		})
 	}
 	return catalogEvidence, offerEvidence, variantEvidence, nil
@@ -191,7 +191,7 @@ func (b AutoReplyContextBuilder) retrieveScopedCatalog(ctx context.Context, busi
 		}
 		catalogEvidence = append(catalogEvidence, ports.AICatalogEvidence{
 			Reference: item.ID, CatalogReference: item.CatalogID, ItemType: item.ItemType, Name: item.Name, Status: item.Status,
-			Attributes: safeJSONObject(item.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+			Attributes: safeJSONObject(item.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 		})
 		count++
 		if count >= b.maxItems() {
@@ -245,11 +245,11 @@ func (b AutoReplyContextBuilder) retrieveScopedVariant(ctx context.Context, busi
 	}
 	catalogEvidence := []ports.AICatalogEvidence{{
 		Reference: item.ID, CatalogReference: item.CatalogID, ItemType: item.ItemType, Name: item.Name, Status: item.Status,
-		Attributes: safeJSONObject(item.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+		Attributes: safeJSONObject(item.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 	}}
 	variantEvidence := []ports.AIVariantEvidence{{
 		Reference: matched.ID, CatalogItemReference: matched.CatalogItemID, Name: matched.Name, Status: matched.Status,
-		Attributes: safeJSONObject(matched.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+		Attributes: safeJSONObject(matched.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 	}}
 	offers, err := b.Catalogs.ListOffers(ctx, businessID, item.ID, "active", b.maxOffers(), "")
 	if err != nil {
@@ -291,7 +291,7 @@ func (b AutoReplyContextBuilder) retrieveComparison(ctx context.Context, busines
 			if !seenItems[it.ID] {
 				catalogEvidence = append(catalogEvidence, ports.AICatalogEvidence{
 					Reference: it.ID, CatalogReference: it.CatalogID, ItemType: it.ItemType, Name: it.Name, Status: it.Status,
-					Attributes: safeJSONObject(it.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+					Attributes: safeJSONObject(it.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 				})
 				seenItems[it.ID] = true
 			}
@@ -313,7 +313,7 @@ func (b AutoReplyContextBuilder) retrieveComparison(ctx context.Context, busines
 		if !seenItems[item.ID] {
 			catalogEvidence = append(catalogEvidence, ports.AICatalogEvidence{
 				Reference: item.ID, CatalogReference: item.CatalogID, ItemType: item.ItemType, Name: item.Name, Status: item.Status,
-				Attributes: safeJSONObject(item.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+				Attributes: safeJSONObject(item.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 			})
 			seenItems[item.ID] = true
 		}
@@ -421,9 +421,9 @@ func (b AutoReplyContextBuilder) findOfferByIDWithinBusiness(ctx context.Context
 
 func offerEvidenceState(availabilityStatus string) string {
 	if strings.EqualFold(strings.TrimSpace(availabilityStatus), "unknown") || strings.EqualFold(strings.TrimSpace(availabilityStatus), "stale") {
-		return AIContextStale
+		return CustomerSalesContextStale
 	}
-	return AIContextFresh
+	return CustomerSalesContextFresh
 }
 
 type scopedNotFoundError struct{ msg string }
@@ -511,7 +511,7 @@ func (b AutoReplyContextBuilder) augmentScopedWithCandidates(ctx context.Context
 		}
 		addItems = append(addItems, ports.AICatalogEvidence{
 			Reference: item.ID, CatalogReference: item.CatalogID, ItemType: item.ItemType, Name: item.Name, Status: item.Status,
-			Attributes: safeJSONObject(item.Attributes), EvidenceState: AIContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+			Attributes: safeJSONObject(item.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 		})
 		offers, err := b.Catalogs.ListOffers(ctx, businessID, item.ID, "active", b.maxOffers(), "")
 		if err != nil {
@@ -555,7 +555,7 @@ func rankPositive(items []ports.CatalogItemRecord, text string) []ports.CatalogI
 	return out
 }
 
-func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports.AIContext, input ports.CustomerSalesContextInput, now time.Time) (ports.AIContext, error) {
+func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports.CustomerSalesContext, input ports.CustomerSalesContextInput, now time.Time) (ports.CustomerSalesContext, error) {
 	// Per ADR-048: Always populate catalog_names + catalog_summary
 	// regardless of retrieval mode. In scoped mode, the catalog loop
 	// in Build() is skipped (early return), so catalog_names and
@@ -606,11 +606,11 @@ func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports
 	if b.Knowledge != nil {
 		knowledgeRecords, listErr := b.Knowledge.ListPublished(ctx, input.BusinessID, "", now, b.maxKnowledge()*3)
 		if listErr != nil {
-			return ports.AIContext{}, listErr
+			return ports.CustomerSalesContext{}, listErr
 		}
 		for _, record := range rankKnowledgeRecords(knowledgeRecords, input.Text) {
 			if record.BusinessID != input.BusinessID {
-				return ports.AIContext{}, errors.New("AI context knowledge scope mismatch")
+				return ports.CustomerSalesContext{}, errors.New("AI context knowledge scope mismatch")
 			}
 			base.KnowledgeEvidence = append(base.KnowledgeEvidence, ports.AIKnowledgeEvidence{
 				Reference: record.ID, KnowledgeKey: record.KnowledgeKey, Title: record.Title, Content: record.Content,
@@ -626,11 +626,11 @@ func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports
 	if b.Policies != nil {
 		policyRecords, listErr := b.Policies.ListPublished(ctx, input.BusinessID, "", now, b.maxPolicies()*3)
 		if listErr != nil {
-			return ports.AIContext{}, listErr
+			return ports.CustomerSalesContext{}, listErr
 		}
 		for _, record := range rankPolicyRecords(policyRecords, input.Text) {
 			if record.BusinessID != input.BusinessID {
-				return ports.AIContext{}, errors.New("AI context policy scope mismatch")
+				return ports.CustomerSalesContext{}, errors.New("AI context policy scope mismatch")
 			}
 			base.BusinessPolicyEvidence = append(base.BusinessPolicyEvidence, ports.AIBusinessPolicyEvidence{
 				Reference: record.ID, PolicyKey: record.PolicyKey, Category: record.Category, Title: record.Title,
@@ -648,18 +648,18 @@ func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports
 		}
 	}
 	if len(base.CatalogEvidence) > 0 || len(base.OfferEvidence) > 0 || len(base.VariantEvidence) > 0 {
-		base.KnowledgeState = AIContextPartial
+		base.KnowledgeState = CustomerSalesContextPartial
 	}
 	if len(base.KnowledgeEvidence) > 0 || len(base.BusinessPolicyEvidence) > 0 {
-		base.KnowledgeState = AIContextGrounded
+		base.KnowledgeState = CustomerSalesContextGrounded
 	}
 	if len(base.CatalogEvidence) == 0 {
-		base.Freshness = AIContextPartial
+		base.Freshness = CustomerSalesContextPartial
 	}
 	for _, offer := range base.OfferEvidence {
-		if offer.EvidenceState == AIContextStale {
-			base.Freshness = AIContextStale
-			base.KnowledgeState = AIContextPartial
+		if offer.EvidenceState == CustomerSalesContextStale {
+			base.Freshness = CustomerSalesContextStale
+			base.KnowledgeState = CustomerSalesContextPartial
 			break
 		}
 	}
