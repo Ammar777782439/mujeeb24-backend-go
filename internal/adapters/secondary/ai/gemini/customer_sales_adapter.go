@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/prompts"
 )
 
 // GeminiCustomerSalesAdapter is the contract ④ §8 implementation of ports.CustomerSalesDecisionPort.
@@ -241,7 +242,7 @@ func (c *GeminiCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cus
 // never has to guess.
 func (c *GeminiCustomerSalesAdapter) buildContractSystemInstruction(entityContractJSON []byte) *contractContent {
 	parts := []contractPart{
-		{Text: c.base.systemPrompt},
+		{Text: prompts.CustomerSalesSystemPrompt},
 	}
 	if len(entityContractJSON) > 0 {
 		parts = append(parts, contractPart{
