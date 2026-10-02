@@ -176,7 +176,7 @@ func main() {
 		postgres.NewPostgresOutboxStore(adapter),
 		adapter,
 	)
-	service.ContextBuilder = contextBuilder
+	service.CustomerSalesContextBuilder = contextBuilder
 	service.RunRepository = postgres.NewAIRunTraceRepository(adapter)
 	service.Validation = services.NewValidationPipeline(
 		postgres.NewPostgresReferenceValidator(adapter),
