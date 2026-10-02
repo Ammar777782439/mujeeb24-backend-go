@@ -298,7 +298,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		)
 		contextBuilder.Knowledge = postgres.NewKnowledgeDocumentRepository(database)
 		contextBuilder.Policies = postgres.NewBusinessPolicyRepository(database)
-		service.ContextBuilder = contextBuilder
+		service.CustomerSalesContextBuilder = contextBuilder
 		// Per ADR-039 + P1-5: summaries use the SAME GeminiCustomerSalesAdapter
 		// instance as AutoReply. No generic AI fallback is used.
 		// The GeminiCustomerSalesAdapter reads the active AI configuration through
