@@ -9,7 +9,8 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/mujeeb-api ./cmd/api \
     && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/mujeeb-worker ./cmd/worker \
     && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/mujeeb-migrate ./cmd/migrate \
-    && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/mujeeb-runtime ./cmd/runtime
+    && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/mujeeb-runtime ./cmd/runtime \
+    && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/mujeeb-bootstrap-platform-admin ./cmd/bootstrap-platform-admin
 
 FROM gcr.io/distroless/static-debian12:nonroot
 
@@ -17,6 +18,7 @@ COPY --from=build /out/mujeeb-api /usr/local/bin/mujeeb-api
 COPY --from=build /out/mujeeb-worker /usr/local/bin/mujeeb-worker
 COPY --from=build /out/mujeeb-migrate /usr/local/bin/mujeeb-migrate
 COPY --from=build /out/mujeeb-runtime /usr/local/bin/mujeeb-runtime
+COPY --from=build /out/mujeeb-bootstrap-platform-admin /usr/local/bin/mujeeb-bootstrap-platform-admin
 
 USER nonroot:nonroot
 EXPOSE 3001
