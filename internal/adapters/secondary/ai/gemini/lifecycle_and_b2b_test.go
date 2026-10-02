@@ -52,7 +52,7 @@ func TestLifecycleFailure_MarkWaitingTool_StopsLoop(t *testing.T) {
 
 	dispatcher := makeDispatcher()
 	lc := &stubLifecycleFailWaitingTool{}
-	cc, _ := buildContractClientForFixTests(t, mock.URL(), dispatcher, lc)
+	cc, _ := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, lc)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
@@ -81,7 +81,7 @@ func TestLifecycleFailure_MarkRunning_StopsLoop(t *testing.T) {
 
 	dispatcher := makeDispatcher()
 	lc := &stubLifecycleFailRunning{}
-	cc, _ := buildContractClientForFixTests(t, mock.URL(), dispatcher, lc)
+	cc, _ := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, lc)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
@@ -130,7 +130,7 @@ func TestLifecycle_Ordering_WaitingToolBeforeRunning(t *testing.T) {
 
 	dispatcher := makeDispatcher()
 	lc := &stubLifecycleOrdered{}
-	cc, _ := buildContractClientForFixTests(t, mock.URL(), dispatcher, lc)
+	cc, _ := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, lc)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
@@ -168,7 +168,7 @@ func TestB2B_AIRunID_Path_CustomerSalesDecisionInputToToolCallRecord(t *testing.
 	defer mock.Close()
 
 	dispatcher := makeDispatcher()
-	cc, runRepo := buildContractClientForFixTests(t, mock.URL(), dispatcher, nil)
+	cc, runRepo := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, nil)
 
 	runID := "run-b2b-agent-1"
 	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
