@@ -9,8 +9,8 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
-func testBusinessCtx() *ports.AIContext {
-	return &ports.AIContext{
+func testBusinessCtx() *ports.CustomerSalesContext {
+	return &ports.CustomerSalesContext{
 		CatalogEvidence: []ports.AICatalogEvidence{
 			{Reference: "item-basic", CatalogReference: "cat-1", Name: "Basic"},
 			{Reference: "item-pro", CatalogReference: "cat-1", Name: "Pro"},
@@ -346,8 +346,8 @@ func TestAutoReply_OneAICallPerTurn(t *testing.T) {
 
 type stubBuilder struct{}
 
-func (stubBuilder) Build(_ context.Context, _ ports.CustomerSalesContextInput) (ports.AIContext, error) {
-	return ports.AIContext{Conversation: ports.AIContextConversation{State: "open"}}, nil
+func (stubBuilder) Build(_ context.Context, _ ports.CustomerSalesContextInput) (ports.CustomerSalesContext, error) {
+	return ports.CustomerSalesContext{Conversation: ports.CustomerSalesContextConversation{State: "open"}}, nil
 }
 
 type stubDecisionRepo struct{}
