@@ -277,23 +277,23 @@ func TestCatalogDataCapabilityOperations(t *testing.T) {
 
 func TestIncorporateCapabilityEvidence(t *testing.T) {
 	aiCtx := &ports.CustomerSalesContext{
-		CatalogEvidence: []ports.AICatalogEvidence{
+		CatalogEvidence: []ports.CustomerSalesCatalogEvidence{
 			{Reference: "item-1", Name: "Existing Item"},
 		},
-		OfferEvidence: []ports.AIOfferEvidence{
+		OfferEvidence: []ports.CustomerSalesOfferEvidence{
 			{Reference: "offer-1", Name: "Existing Offer"},
 		},
 	}
 
 	result := ports.AICapabilityResult{
-		CatalogEvidence: []ports.AICatalogEvidence{
+		CatalogEvidence: []ports.CustomerSalesCatalogEvidence{
 			{Reference: "item-1", Name: "Duplicate Item"},
 			{Reference: "item-2", Name: "New Item"},
 		},
-		OfferEvidence: []ports.AIOfferEvidence{
+		OfferEvidence: []ports.CustomerSalesOfferEvidence{
 			{Reference: "offer-2", Name: "New Offer"},
 		},
-		VariantEvidence: []ports.AIVariantEvidence{
+		VariantEvidence: []ports.CustomerSalesVariantEvidence{
 			{Reference: "var-1", Name: "New Variant"},
 		},
 	}
