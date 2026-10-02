@@ -31,7 +31,7 @@ func TestProposalNormalizeNonResolvedMutation(t *testing.T) {
 
 func TestProposalNormalizeResolvedEmptyUpdate(t *testing.T) {
 	proposal := Proposal{
-		SchemaVersion: 1,
+		SchemaVersion: ProposalSchemaVersion,
 		Status:        StatusResolved,
 		Operation:     OperationUpdate,
 		ResponseText:  "تم التحديث.",
@@ -125,9 +125,9 @@ func TestProposalValidateCreateResolvesNewVariantOffersByRef(t *testing.T) {
 				{Ref: "variant-red", Name: "أحمر"},
 			},
 			Offers: []OfferCreate{
-				{Name: DefaultOfferName, VariantRef: stringPtr("variant-black"), PricingMode: "fixed", Amount: stringPtr("20000"), AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"},
-				{Name: DefaultOfferName, VariantRef: stringPtr("variant-yellow"), PricingMode: "fixed", Amount: stringPtr("22000"), AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"},
-				{Name: DefaultOfferName, VariantRef: stringPtr("variant-red"), PricingMode: "fixed", Amount: stringPtr("25000"), AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"},
+				{Name: DefaultOfferName, VariantRef: stringPtr("variant-black"), PricingMode: "fixed", Amount: stringPtr("20000"), Currency: stringPtr("YER"), AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"},
+				{Name: DefaultOfferName, VariantRef: stringPtr("variant-yellow"), PricingMode: "fixed", Amount: stringPtr("22000"), Currency: stringPtr("YER"), AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"},
+				{Name: DefaultOfferName, VariantRef: stringPtr("variant-red"), PricingMode: "fixed", Amount: stringPtr("25000"), Currency: stringPtr("YER"), AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"},
 			},
 		},
 	}
@@ -227,7 +227,7 @@ func TestProposalValidateCreateOfferProvenance(t *testing.T) {
 			name: "merchant stated concrete price",
 			offer: OfferCreate{
 				Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault,
-				PricingMode: "fixed", Amount: stringPtr("22000"), PriceSource: OfferPriceSourceMerchantStated,
+				PricingMode: "fixed", Amount: stringPtr("22000"), Currency: stringPtr("YER"), PriceSource: OfferPriceSourceMerchantStated,
 				AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
 			},
 		},
@@ -235,7 +235,7 @@ func TestProposalValidateCreateOfferProvenance(t *testing.T) {
 			name: "merchant stated price cannot be quote required",
 			offer: OfferCreate{
 				Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault,
-				PricingMode: "quote_required", Amount: nil, PriceSource: OfferPriceSourceMerchantStated,
+				PricingMode: "quote_required", Amount: nil, Currency: stringPtr("YER"), PriceSource: OfferPriceSourceMerchantStated,
 				AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
 			},
 			wantErr: true,
