@@ -179,14 +179,14 @@ type promptContext struct {
 	Business               ports.CustomerSalesContextBusiness          `json:"business"`
 	Conversation           ports.CustomerSalesContextConversation      `json:"conversation"`
 	Customer               promptCustomerContext            `json:"customer"`
-	CatalogEvidence        []ports.AICatalogEvidence        `json:"catalog_evidence"`
-	CatalogSummary         []ports.CatalogSummaryEntry      `json:"catalog_summary,omitempty"`
-	OfferEvidence          []ports.AIOfferEvidence          `json:"offer_evidence"`
-	VariantEvidence        []ports.AIVariantEvidence        `json:"variant_evidence"`
-	KnowledgeEvidence      []ports.AIKnowledgeEvidence      `json:"knowledge_evidence"`
-	BusinessPolicyEvidence []ports.AIBusinessPolicyEvidence `json:"business_policy_evidence"`
-	RecentMessages         []ports.AIRecentMessageEvidence  `json:"recent_messages"`
-	PolicyEvidence         ports.AIPolicyEvidence           `json:"policy_evidence"`
+	CatalogEvidence        []ports.CustomerSalesCatalogEvidence        `json:"catalog_evidence"`
+	CatalogSummary         []ports.CustomerSalesCatalogSummaryEntry      `json:"catalog_summary,omitempty"`
+	OfferEvidence          []ports.CustomerSalesOfferEvidence          `json:"offer_evidence"`
+	VariantEvidence        []ports.CustomerSalesVariantEvidence        `json:"variant_evidence"`
+	KnowledgeEvidence      []ports.CustomerSalesKnowledgeEvidence      `json:"knowledge_evidence"`
+	BusinessPolicyEvidence []ports.CustomerSalesBusinessPolicyEvidence `json:"business_policy_evidence"`
+	RecentMessages         []ports.CustomerSalesRecentMessageEvidence  `json:"recent_messages"`
+	PolicyEvidence         ports.CustomerSalesPolicyEvidence           `json:"policy_evidence"`
 	KnowledgeState         string                           `json:"knowledge_state"`
 	ConversationState      *ports.ConversationStateRecord   `json:"conversation_state,omitempty"`
 	// ConversationSummary is the running LLM-generated summary of older
