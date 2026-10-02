@@ -91,7 +91,7 @@ func TestGeminiCustomerSalesAdapterSendsAPIKeyInHeaderNotURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build client: %v", err)
 	}
-	cc, err := NewGeminiCustomerSalesAdapter(client)
+	cc, err := NewGeminiCustomerSalesAdapter(client, nil)
 	if err != nil {
 		t.Fatalf("build contract client: %v", err)
 	}
