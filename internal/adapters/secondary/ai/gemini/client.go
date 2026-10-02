@@ -2,7 +2,7 @@
 //
 // This file holds ONLY:
 //   1. Client struct (config: API key, model, base URL, HTTP client, system prompt)
-//   2. NewClient constructor
+//   2. NewGeminiHTTPClient constructor
 //   3. Getters (BaseURL, APIKey, Model) — used by Gemini capability adapters and bootstrap
 //   4. buildUserPrompt — used by the customer-sales adapter to build Gemini input
 //
@@ -43,7 +43,7 @@ const (
 
 // Config contains only runtime configuration. API keys are never copied
 // into a proposal, error, log, or domain record (per contract ⑧ §23).
-type Config struct {
+type GeminiHTTPClientConfig struct {
 	BaseURL            string
 	APIKey             string
 	Model              string
@@ -55,12 +55,12 @@ type Config struct {
 	Capabilities       ports.CustomerSalesToolPort
 }
 
-// Client is the low-level Gemini HTTP client. Capability-specific adapters
+// GeminiHTTPClient is the low-level Gemini HTTP client. Capability-specific adapters
 // wrap it to implement explicit application ports.
 //
 // Per contract ④ §3 (No Execution): this client does HTTP only.
 // No database imports, no external API calls beyond Gemini.
-type Client struct {
+type GeminiHTTPClient struct {
 	baseURL            string
 	apiKey             string
 	model              string
@@ -72,11 +72,11 @@ type Client struct {
 	capabilities       ports.CustomerSalesToolPort
 }
 
-// NewClient creates a Gemini HTTP client with the given config.
+// NewGeminiHTTPClient creates a Gemini HTTP client with the given config.
 //
 // Per contract ④ §2, the system prompt defaults to the versioned
 // prompts.CustomerSalesSystemPrompt from the prompts package.
-func NewClient(cfg Config) (*Client, error) {
+func NewGeminiHTTPClient(cfg GeminiHTTPClientConfig) (*GeminiHTTPClient, error) {
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
 	if baseURL == "" {
 		baseURL = defaultBaseURL
@@ -113,7 +113,7 @@ func NewClient(cfg Config) (*Client, error) {
 		// Per contract ④ §2, the system prompt is a versioned asset.
 		systemPrompt = prompts.CustomerSalesSystemPrompt
 	}
-	return &Client{
+	return &GeminiHTTPClient{
 		baseURL:            baseURL,
 		apiKey:             strings.TrimSpace(cfg.APIKey),
 		model:              model,
@@ -127,31 +127,31 @@ func NewClient(cfg Config) (*Client, error) {
 }
 
 // BaseURL returns the configured Gemini API base URL.
-func (c *Client) BaseURL() string { return c.baseURL }
+func (c *GeminiHTTPClient) BaseURL() string { return c.baseURL }
 
 // APIKey returns the configured Gemini API key.
-func (c *Client) APIKey() string { return c.apiKey }
+func (c *GeminiHTTPClient) APIKey() string { return c.apiKey }
 
 // Model returns the configured Gemini model name.
-func (c *Client) Model() string { return c.model }
+func (c *GeminiHTTPClient) Model() string { return c.model }
 
 // SystemPrompt returns the configured system prompt.
-func (c *Client) SystemPrompt() string { return c.systemPrompt }
+func (c *GeminiHTTPClient) SystemPrompt() string { return c.systemPrompt }
 
 // MaxInputCharacters returns the max input character limit.
-func (c *Client) MaxInputCharacters() int { return c.maxInputCharacters }
+func (c *GeminiHTTPClient) MaxInputCharacters() int { return c.maxInputCharacters }
 
 // MaxOutputTokens returns the max output token limit.
-func (c *Client) MaxOutputTokens() int { return c.maxOutputTokens }
+func (c *GeminiHTTPClient) MaxOutputTokens() int { return c.maxOutputTokens }
 
 // RequestTimeout returns the configured request timeout.
-func (c *Client) RequestTimeout() time.Duration { return c.requestTimeout }
+func (c *GeminiHTTPClient) RequestTimeout() time.Duration { return c.requestTimeout }
 
 // HTTPClient returns the configured HTTP client shared by Gemini capability adapters.
-func (c *Client) HTTPClient() *http.Client { return c.httpClient }
+func (c *GeminiHTTPClient) HTTPClient() *http.Client { return c.httpClient }
 
 // Capabilities returns the configured AI capability dispatcher.
-func (c *Client) Capabilities() ports.CustomerSalesToolPort { return c.capabilities }
+func (c *GeminiHTTPClient) Capabilities() ports.CustomerSalesToolPort { return c.capabilities }
 
 // buildUserPrompt encodes the AIContext + customer message into the
 // customer-facing prompt text for Gemini. Used by GeminiCustomerSalesAdapter.
