@@ -68,8 +68,8 @@ func BuildAPI(ctx context.Context, cfg config.ProcessConfig) (*APIRuntime, error
 		return nil, err
 	}
 	catalogRepository := postgres.NewCatalogRepository(database)
-	capabilityRegistry := services.NewCapabilityRegistry()
-	catalogCapability := services.NewCatalogDataCapability(
+	capabilityRegistry := services.NewCustomerSalesToolRegistry()
+	catalogCapability := services.NewCustomerSalesCatalogDataTool(
 		services.ListCatalogsQueryService{Repository: catalogRepository},
 		services.ListCatalogItemsQueryService{Repository: catalogRepository},
 		services.GetCatalogItemQueryService{Repository: catalogRepository},
