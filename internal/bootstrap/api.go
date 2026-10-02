@@ -344,7 +344,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		service.Validation = services.NewValidationPipeline(
 			postgres.NewPostgresReferenceValidator(database),
 			postgres.NewPostgresTenantValidator(database),
-			postgres.NewPostgresPolicyEvaluator(postgres.NewBusinessRepository(database)),
+			postgres.NewPostgresCustomerSalesPolicyEvaluator(postgres.NewBusinessRepository(database)),
 			nil, // AuthorizationService: nil means PolicyDecision is final
 		)
 		service.StateRepository = postgres.NewConversationStateRepository(database)
