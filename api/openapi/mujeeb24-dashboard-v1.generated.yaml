@@ -12037,7 +12037,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
           description: Internal Server Error
-      security: []
+      security:
+        - bearerAuth: []
       summary: Internal metrics
       tags:
         - Operational
