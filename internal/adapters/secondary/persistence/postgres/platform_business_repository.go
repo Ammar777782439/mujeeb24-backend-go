@@ -43,6 +43,17 @@ const platformBusinessSelectColumns = `b.id::text, b.name, b.slug, b.status,
          LIMIT 1) AS owner_identity_summary,
        b.created_at, b.updated_at`
 
+const platformBusinessReturnColumns = `id::text, name, slug, status,
+       (SELECT p.display_name || ' <' || p.email || '>'
+          FROM business_memberships bm
+          JOIN principals p ON p.id = bm.principal_id
+         WHERE bm.business_id = businesses.id
+           AND bm.role = 'owner'
+           AND bm.status = 'active'
+         ORDER BY bm.created_at ASC
+         LIMIT 1) AS owner_identity_summary,
+       created_at, updated_at`
+
 // Create inserts a new business row with status='pending_setup'.
 // Per Contract §9: the Platform Admin creates the business; the owner
 // invitation is a SEPARATE step using the existing team invitation mechanism.
@@ -80,7 +91,7 @@ func (r *PlatformBusinessRepository) Create(ctx context.Context, create ports.Pl
 	err = executor.QueryRow(ctx,
 		`INSERT INTO businesses (id, name, slug, status, vertical_type, timezone, default_currency, locale, created_at, updated_at)
                  VALUES ($1::uuid, $2, $3, 'pending_setup', $4, $5, $6, $7, $8, $8)
-                 RETURNING `+platformBusinessSelectColumns,
+                 RETURNING `+platformBusinessReturnColumns,
 		create.ID, create.Name, create.Slug, create.VerticalType, create.Timezone, create.DefaultCurrency, create.Locale, create.Now,
 	).Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.OwnerIdentitySummary, &record.CreatedAt, &record.UpdatedAt)
 	if err != nil {
@@ -172,7 +183,7 @@ func (r *PlatformBusinessRepository) ActivateFromPendingSetup(ctx context.Contex
 	err = executor.QueryRow(ctx,
 		`UPDATE businesses SET status = 'active', updated_at = $2
 		 WHERE id = $1::uuid AND status = 'pending_setup'
-		 RETURNING `+platformBusinessSelectColumns,
+		 RETURNING `+platformBusinessReturnColumns,
 		businessID, now,
 	).Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.OwnerIdentitySummary, &record.CreatedAt, &record.UpdatedAt)
 	if err != nil {
@@ -230,7 +241,7 @@ func (r *PlatformBusinessRepository) transition(ctx context.Context, op, busines
 	err = executor.QueryRow(ctx,
 		`UPDATE businesses SET status = $2, updated_at = $3
                  WHERE id = $1::uuid AND status = ANY($4::text[])
-                 RETURNING `+platformBusinessSelectColumns,
+                 RETURNING `+platformBusinessReturnColumns,
 		businessID, target, now, expectedFrom,
 	).Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.CreatedAt, &record.UpdatedAt)
 	if err != nil {
