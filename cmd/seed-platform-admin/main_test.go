@@ -2,23 +2,32 @@ package main
 
 import "testing"
 
-func TestRequiredEnvRejectsBlankValue(t *testing.T) {
-	t.Setenv("PLATFORM_SEED_EMAIL", "")
-	if _, ok := lookupRequiredEnvForTest("PLATFORM_SEED_EMAIL"); ok {
-		t.Fatal("expected blank env to be rejected")
+func TestLoadSeedConfigRequiresPlatformOnlyConfirmation(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test")
+	t.Setenv("PLATFORM_SEED_EMAIL", "admin@example.com")
+	t.Setenv("PLATFORM_SEED_PASSWORD", "Password123456!")
+	t.Setenv("PLATFORM_SEED_CONFIRM", "")
+
+	if _, err := loadSeedConfig(); err == nil {
+		t.Fatal("expected platform seed confirmation error")
 	}
 }
 
-func TestSeedConfirmationConstantIsPlatformOnly(t *testing.T) {
-	if seedConfirmation != "CREATE_PLATFORM_SUPER_ADMIN" {
-		t.Fatalf("seedConfirmation = %q", seedConfirmation)
-	}
-}
+func TestLoadSeedConfigUsesPlatformAdminDefaults(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test")
+	t.Setenv("PLATFORM_SEED_EMAIL", "admin@example.com")
+	t.Setenv("PLATFORM_SEED_PASSWORD", "Password123456!")
+	t.Setenv("PLATFORM_SEED_CONFIRM", seedConfirmation)
+	t.Setenv("PLATFORM_SEED_DISPLAY_NAME", "")
 
-func lookupRequiredEnvForTest(key string) (string, bool) {
-	value := ""
-	if key == "PLATFORM_SEED_EMAIL" {
-		value = ""
+	cfg, err := loadSeedConfig()
+	if err != nil {
+		t.Fatalf("loadSeedConfig() error = %v", err)
 	}
-	return value, value != ""
+	if cfg.displayName != "مدير المنصة" {
+		t.Fatalf("displayName = %q, want %q", cfg.displayName, "مدير المنصة")
+	}
+	if cfg.email != "admin@example.com" {
+		t.Fatalf("email = %q, want %q", cfg.email, "admin@example.com")
+	}
 }
