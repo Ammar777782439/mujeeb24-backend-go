@@ -78,9 +78,9 @@ func isSubscriptionHandoffIntent(intent string) bool {
 // proposal's status/action are validated but never overridden by Mujeeb
 // (per contract ⑥ §11 we do NOT re-interpret intent).
 type AutoReplyService struct {
-	// Runtime is the contract ④ §8 ContractRuntime (Gemini ContractClient).
+	// Runtime is the contract ④ §8 CustomerSalesDecisionPort (Gemini ContractClient).
 	// Per contract ④ §8, this is the only way to call Gemini.
-	Runtime ports.ContractRuntime
+	Runtime ports.CustomerSalesDecisionPort
 
 	// ContextBuilder per contract ③ §2 builds the AIContext.
 	ContextBuilder ports.AIContextBuilder
@@ -151,7 +151,7 @@ type AutoReplyService struct {
 // NewAutoReplyService wires the required dependencies for the contract-aligned
 // AutoReply flow. Optional dependencies (ContextBuilder, Validation,
 // RunRepository, etc.) are set on the returned struct by the caller.
-func NewAutoReplyService(runtime ports.ContractRuntime, decisions ports.AIDecisionRepository, references ports.ConversationReferenceRepository, outbound ports.OutboundMessageRepository, outbox ports.OutboxStore, transactions ports.TransactionManager) AutoReplyService {
+func NewAutoReplyService(runtime ports.CustomerSalesDecisionPort, decisions ports.AIDecisionRepository, references ports.ConversationReferenceRepository, outbound ports.OutboundMessageRepository, outbox ports.OutboxStore, transactions ports.TransactionManager) AutoReplyService {
 	return AutoReplyService{
 		Runtime:             runtime,
 		DecisionRepository:  decisions,
@@ -268,7 +268,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	s.markRunningSafe(ctx, run)
 	log.Printf("[AutoReply] STATE→RUNNING run=%s", run.ID)
 
-	// Per contract ④ §8, call Gemini via the ContractRuntime.
+	// Per contract ④ §8, call Gemini via the CustomerSalesDecisionPort.
 	log.Printf("[AutoReply] GEMINI_CALL business=%s conversation=%s run=%s", businessID, conversationID, run.ID)
 	// Per contract ③ §4 + Item 8: carry previous_interaction_id
 	// from the conversation's last Gemini call. Empty for the
@@ -279,7 +279,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	if builtContext != nil && builtContext.Conversation.LastGeminiInteractionID != nil {
 		previousInteractionID = *builtContext.Conversation.LastGeminiInteractionID
 	}
-	out, err := s.Runtime.DecideContract(ctx, ports.ContractRuntimeInput{
+	out, err := s.Runtime.DecideContract(ctx, ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{
 			BusinessID:             businessID,
 			ConversationID:         conversationID,
@@ -1064,7 +1064,7 @@ func appendUniqueString(slice []string, s string) []string {
 //
 // When replyEnqueued is false, telemetry is best-effort (the reply
 // wasn't sent, so no entitlement was consumed — nil return is OK).
-func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, out ports.ContractRuntimeOutput, run ports.AIRunRecord, replyEnqueued bool) error {
+func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, out ports.CustomerSalesDecisionOutput, run ports.AIRunRecord, replyEnqueued bool) error {
 	if s.AIUsage == nil {
 		if replyEnqueued {
 			log.Printf("[AutoReply] AI_USAGE_ENTITLEMENT_DRIFT business=%s reason=AIUsage_repository_not_wired replyEnqueued=true (entitlement cannot be accounted — propagating error per Item 4)", businessID)
