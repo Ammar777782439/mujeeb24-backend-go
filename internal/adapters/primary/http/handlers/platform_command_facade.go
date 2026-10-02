@@ -41,7 +41,6 @@ type PlatformDeps struct {
 	AIConfigRepo   ports.AIProviderConfigService
 	AIConfigCache  *services.AIConfigurationCache
 	ModelDiscovery ports.ModelDiscoveryClient
-	PrincipalBootstrap ports.PrincipalBootstrapRepository
 	AssignBusinessOwner *services.AssignBusinessOwnerService
 }
 
