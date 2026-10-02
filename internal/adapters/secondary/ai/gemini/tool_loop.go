@@ -3,7 +3,7 @@
 // This file implements the Gemini Function Calling Tool Loop per the
 // user's specification. It does NOT create new architecture — it
 // reuses:
-//   - ports.CustomerSalesToolPort (from GeminiHTTPClient.Capabilities())
+//   - ports.CustomerSalesToolPort (owned by GeminiCustomerSalesAdapter)
 //   - ports.AIRunRepository (CreateToolCall / UpdateToolCall)
 //   - ports.AIRunLifecycle (MarkWaitingTool / MarkRunning)
 //   - ports.AIToolCallRecord / AIToolCallPatch
@@ -60,7 +60,7 @@ func (c *GeminiCustomerSalesAdapter) SetLifecycle(lc ports.AIRunLifecyclePort) {
 // Per the spec: "لا تكتب Tool definitions يدوياً داخل Gemini client.
 // استخرجها من c.base.Capabilities().Definitions()"
 func (c *GeminiCustomerSalesAdapter) buildToolDeclarations() []contractFunctionDeclaration {
-	caps := c.base.Capabilities()
+	caps := c.capabilities
 	if caps == nil {
 		return nil
 	}
