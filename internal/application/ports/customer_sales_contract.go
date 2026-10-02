@@ -115,7 +115,7 @@ type CatalogBatchResult struct {
 
 // GeminiInteractionContext carries the previous_interaction_id (if any) for
 // the current customer turn. Mujeeb stores it on the conversation row; the
-// AI Runtime passes it to the Gemini adapter which then sends it to the API.
+// The customer-sales adapter passes it to Gemini for continuity.
 //
 // Per contract ③ §4, last_gemini_interaction_id is NOT the source of truth —
 // Mujeeb's canonical conversation state is. This ID is only for Gemini's
@@ -128,7 +128,7 @@ type GeminiInteractionContext struct {
 	// expiry (1 day free tier, 55 days paid tier per contract ③ §9).
 	PreviousInteractionID string
 
-	// ResultingInteractionID is populated by the AI Runtime after a successful
+	// ResultingInteractionID is populated by the customer-sales adapter after a successful
 	// Gemini call. Mujeeb persists this as the new last_gemini_interaction_id
 	// on the conversation row, to be used as PreviousInteractionID in the
 	// next turn.
