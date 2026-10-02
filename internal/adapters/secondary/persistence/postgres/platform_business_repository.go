@@ -102,6 +102,7 @@ func (r *PlatformBusinessRepository) List(ctx context.Context, filter ports.Plat
 	if err != nil {
 		return ports.PlatformBusinessPage{}, err
 	}
+	statusFilter := strings.ToLower(strings.TrimSpace(filter.Status))
 	rows, err := executor.Query(ctx,
 		`SELECT `+platformBusinessSelectColumns+`
                  FROM businesses b
@@ -111,7 +112,7 @@ func (r *PlatformBusinessRepository) List(ctx context.Context, filter ports.Plat
                    AND ($4::timestamptz IS NULL OR b.created_at <= $4)
                  ORDER BY b.created_at DESC, b.id DESC
                  LIMIT $5`,
-		strings.TrimSpace(filter.Search), strings.TrimSpace(filter.Status), filter.CreatedFrom, filter.CreatedTo, filter.Limit,
+		strings.TrimSpace(filter.Search), statusFilter, filter.CreatedFrom, filter.CreatedTo, filter.Limit,
 	)
 	if err != nil {
 		return ports.PlatformBusinessPage{}, &RepositoryError{Operation: "platform_business.list", Kind: RepositoryInvalid, Err: err}
