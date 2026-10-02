@@ -43,7 +43,7 @@ type CustomerSalesPolicyDecision struct {
 // CustomerSalesPolicyPort evaluates merchant policy for a customer-sales proposal.
 // It never interprets customer intent and never executes the proposed action.
 type CustomerSalesPolicyPort interface {
-	Evaluate(context.Context, AIGeminiProposal, *CustomerSalesContext) CustomerSalesPolicyDecision
+	Evaluate(context.Context, CustomerSalesProposal, *CustomerSalesContext) CustomerSalesPolicyDecision
 }
 
 type CustomerSalesContext struct {
@@ -249,9 +249,9 @@ type CustomerSalesPolicyEvidence struct {
 
 // AIDecisionProposal is the LEGACY proposal shape used only by ai_decisions row.
 //
-// Per contract ④ §5, the contract-aligned output shape is AIGeminiProposal
+// Per contract ④ §5, the contract-aligned output shape is CustomerSalesProposal
 // (status + action + response_text + selected[]) defined in ai_gemini_contract.go.
-// New code MUST use AIGeminiProposal + ValidationPipeline, not AIDecisionProposal.
+// New code MUST use CustomerSalesProposal + ValidationPipeline, not AIDecisionProposal.
 //
 // This struct is kept only as the persistence shape for ai_decisions (the
 // business decision row), NOT as Gemini's output contract.
