@@ -13,7 +13,7 @@ type CustomerSalesDecisionRequest struct {
 	Text                   string
 	Channel                string
 	PolicyVersion          string
-	Context                *AIContext
+	Context                *CustomerSalesContext
 }
 
 // CustomerSalesContextInput is the tenant-scoped input for B2C customer-sales context building.
@@ -29,19 +29,19 @@ type CustomerSalesContextInput struct {
 }
 
 type CustomerSalesContextBuilder interface {
-	Build(context.Context, CustomerSalesContextInput) (AIContext, error)
+	Build(context.Context, CustomerSalesContextInput) (CustomerSalesContext, error)
 }
 
 type AIPolicyEvaluator interface {
-	Evaluate(AIDecisionProposal, *AIContext) AIDecisionProposal
+	Evaluate(AIDecisionProposal, *CustomerSalesContext) AIDecisionProposal
 }
 
-type AIContext struct {
+type CustomerSalesContext struct {
 	SchemaVersion          int
 	Freshness              string
-	Business               AIContextBusiness
-	Conversation           AIContextConversation
-	Customer               AIContextCustomer
+	Business               CustomerSalesContextBusiness
+	Conversation           CustomerSalesContextConversation
+	Customer               CustomerSalesContextCustomer
 	CatalogEvidence        []AICatalogEvidence
 	OfferEvidence          []AIOfferEvidence
 	VariantEvidence        []AIVariantEvidence
@@ -93,7 +93,7 @@ type AIStateProposal struct {
 	Alternatives  []ConversationFocus     `json:"alternatives,omitempty"`
 }
 
-type AIContextBusiness struct {
+type CustomerSalesContextBusiness struct {
 	Reference       string
 	Name            string
 	VerticalType    string
@@ -101,7 +101,7 @@ type AIContextBusiness struct {
 	DefaultCurrency string
 }
 
-type AIContextConversation struct {
+type CustomerSalesContextConversation struct {
 	Reference           string
 	CustomerReference   string
 	State               string
@@ -122,7 +122,7 @@ type AIContextConversation struct {
 	LastGeminiInteractionID *string
 }
 
-type AIContextCustomer struct {
+type CustomerSalesContextCustomer struct {
 	Reference        string
 	LocalePreference string
 	Status           string
