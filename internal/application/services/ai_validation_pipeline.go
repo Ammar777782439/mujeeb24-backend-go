@@ -315,8 +315,8 @@ type ValidationInput struct {
 	// Proposal is the contract ④ §4 Gemini output.
 	Proposal ports.AIGeminiProposal
 
-	// Context is the AIContext built by the ContextBuilder.
-	Context *ports.AIContext
+	// Context is the CustomerSalesContext built by the ContextBuilder.
+	Context *ports.CustomerSalesContext
 
 	// EvidenceItemIDs is the set of item IDs that were actually sent to
 	// Gemini as evidence. Used by ReferenceValidator per contract ⑥ §10.
