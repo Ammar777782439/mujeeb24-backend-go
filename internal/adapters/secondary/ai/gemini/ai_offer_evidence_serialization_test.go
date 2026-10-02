@@ -1,6 +1,6 @@
 // Package gemini — JSON serialization contract tests for CustomerSalesOfferEvidence.
 //
-// Per ADR-046: verifies that the JSON sent to Gemini via promptContext
+// Per ADR-046: verifies that the JSON sent to Gemini via customerSalesPromptContext
 // uses "availability_status" (snake_case) as the field key — matching
 // the DB column, Catalog Entity Contract, and the prompt references.
 //
@@ -35,11 +35,11 @@ import (
 //
 // This test specifically proves the JSON serialization boundary —
 // it uses the SAME encoding/json path as the production code
-// (buildUserPrompt → promptContextFrom → json.Marshal).
+// (buildUserPrompt → customerSalesPromptContextFrom → json.Marshal).
 func TestCustomerSalesOfferEvidenceJSONSerialization(t *testing.T) {
-	// Build a promptContext with one offer evidence, exactly like
-	// the production code does in promptContextFrom().
-	ctx := promptContext{
+	// Build a customerSalesPromptContext with one offer evidence, exactly like
+	// the production code does in customerSalesPromptContextFrom().
+	ctx := customerSalesPromptContext{
 		OfferEvidence: []ports.CustomerSalesOfferEvidence{{
 			Reference:          "offer-001",
 			Name:               "Test Offer",
