@@ -71,7 +71,7 @@ func BuildExternalAdaptersWithCapabilities(cfg config.ProcessConfig, capabilitie
 		}
 	}
 	if cfg.GeminiAPIKey != "" {
-		client, err := gemini.NewGeminiHTTPClient(gemini.Config{
+		client, err := gemini.NewGeminiHTTPClient(gemini.GeminiHTTPClientConfig{
 			BaseURL:            cfg.GeminiBaseURL,
 			APIKey:             cfg.GeminiAPIKey,
 			Model:              cfg.GeminiModel,
