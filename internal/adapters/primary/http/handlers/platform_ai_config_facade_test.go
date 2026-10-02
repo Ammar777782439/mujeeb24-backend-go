@@ -1074,7 +1074,7 @@ func TestPlatformAIUsageRecordsNewModelAfterSwitch(t *testing.T) {
 	}
 	// The runtime's recordAIUsage() persists cfg.Model (via ContractUsageTelemetry)
 	// and cfg.PricingVersion. So usage records the new model. This is verified
-	// via the ContractClient.resolveConfig code path that uses cfg.Model.
+	// via the GeminiCustomerSalesAdapter configuration path that uses cfg.Model.
 	// Old records remain unchanged (append-only — see Test N).
 }
 
