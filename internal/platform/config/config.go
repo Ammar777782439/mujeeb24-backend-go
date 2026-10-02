@@ -53,10 +53,16 @@ type ProcessConfig struct {
 }
 
 func LoadFromEnv() (ProcessConfig, error) {
+	httpAddr := strings.TrimSpace(os.Getenv("HTTP_ADDR"))
+	if httpAddr == "" {
+		port := envOr("PORT", "3001")
+		httpAddr = ":" + port
+	}
+
 	cfg := ProcessConfig{
 		Environment:                    envOr("APP_ENV", "development"),
 		DatabaseURL:                    strings.TrimSpace(os.Getenv("DATABASE_URL")),
-		HTTPAddr:                       envOr("HTTP_ADDR", ":3001"),
+		HTTPAddr:                       httpAddr,
 		ShutdownTimeout:                10 * time.Second,
 		WorkerPollInterval:             2 * time.Second,
 		WorkerBatchSize:                20,
