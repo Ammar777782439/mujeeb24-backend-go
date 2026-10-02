@@ -10,7 +10,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
-func wireMerchantCatalogAIV2(
+func wireMerchantCatalogAuthoringAI(
 	dashboardServer *handlers.Server,
 	database *postgres.Adapter,
 	geminiHTTPClient *gemini.GeminiHTTPClient,
@@ -27,7 +27,7 @@ func wireMerchantCatalogAIV2(
 	merchantCatalogAuthoring.SetConfigurationProvider(configProvider)
 
 	catalogRepo := postgres.NewCatalogRepository(database)
-	b2bAgent := &merchantcatalogai.Agent{
+	merchantCatalogAuthoringAgent := &merchantcatalogai.Agent{
 		Sessions:       postgres.NewMerchantCatalogAISessionStore(database),
 		Selector:       merchantcatalogai.DeterministicCatalogSelector{Repository: catalogRepo},
 		Business:       postgres.NewBusinessRepository(database),
@@ -40,7 +40,7 @@ func wireMerchantCatalogAIV2(
 
 	return dashboardServer.WithMerchantCatalogAIV2(
 		handlers.MerchantCatalogAIV2Deps{
-			Handler: handlers.NewMerchantCatalogAIV2Handler(b2bAgent),
+			Handler: handlers.NewMerchantCatalogAIV2Handler(merchantCatalogAuthoringAgent),
 		},
 	), nil
 }
