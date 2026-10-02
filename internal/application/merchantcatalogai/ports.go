@@ -26,7 +26,7 @@ type EntityContractProvider interface {
 	Payload(context.Context) ([]byte, error)
 }
 
-type RuntimeInput struct {
+type MerchantCatalogAuthoringInput struct {
 	BusinessID      string
 	PrincipalID     string
 	SessionID       string
@@ -38,8 +38,8 @@ type RuntimeInput struct {
 	Capabilities    ports.AICapabilityDispatcher
 }
 
-type Runtime interface {
-	Decide(context.Context, RuntimeInput) (Proposal, error)
+type MerchantCatalogAuthoringPort interface {
+	Propose(context.Context, MerchantCatalogAuthoringInput) (Proposal, error)
 }
 
 type ExecutionInput struct {
