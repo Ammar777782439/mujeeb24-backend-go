@@ -68,6 +68,19 @@ func NewClient(cfg Config) *Client {
 	return &Client{baseURL: baseURL, apiKey: strings.TrimSpace(cfg.APIKey), webhookSecret: cfg.WebhookSecret, httpClient: client, tolerance: tolerance}
 }
 
+// HealthCheck verifies SocialAPI authentication/reachability without persisting
+// or returning account data to callers.
+func (c *Client) HealthCheck(ctx context.Context) error {
+	if c == nil || strings.TrimSpace(c.apiKey) == "" {
+		return ErrNotConfigured
+	}
+	var response struct {
+		Count int `json:"count"`
+	}
+	_, err := c.doJSON(ctx, http.MethodGet, "/v1/accounts?limit=1", nil, &response)
+	return err
+}
+
 type ConnectedAccount struct {
 	ID       string         `json:"id"`
 	BrandID  string         `json:"brand_id"`
