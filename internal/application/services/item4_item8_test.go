@@ -87,12 +87,12 @@ func buildServiceForUsageTest(usageRepo ports.AIUsageRepository, subsRepo ports.
 
 func buildUsageOutput() ports.CustomerSalesDecisionOutput {
 	return ports.CustomerSalesDecisionOutput{
-		Proposal: ports.AIGeminiProposal{
+		Proposal: ports.CustomerSalesProposal{
 			Status:       "resolved",
 			Action:       "answer",
 			ResponseText: "test response",
 		},
-		Usage: ports.ContractUsageTelemetry{
+		Usage: ports.CustomerSalesUsageTelemetry{
 			InputTokens:  10,
 			OutputTokens: 5,
 			Model:        "gemini-3.5-flash-lite",
@@ -245,7 +245,7 @@ func (f *fakeInteractionRuntime) Decide(_ context.Context, input ports.CustomerS
 	f.callCount++
 	f.receivedPrevID = input.GeminiInteraction.PreviousInteractionID
 	return ports.CustomerSalesDecisionOutput{
-		Proposal: ports.AIGeminiProposal{
+		Proposal: ports.CustomerSalesProposal{
 			Status:       "resolved",
 			Action:       "answer",
 			ResponseText: "ok",
@@ -255,7 +255,7 @@ func (f *fakeInteractionRuntime) Decide(_ context.Context, input ports.CustomerS
 			ResultingInteractionID: f.resultingID,
 			Store:                  input.GeminiInteraction.Store,
 		},
-		Usage: ports.ContractUsageTelemetry{
+		Usage: ports.CustomerSalesUsageTelemetry{
 			InputTokens:  10,
 			OutputTokens: 5,
 			Model:        "test-model",
