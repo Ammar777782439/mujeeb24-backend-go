@@ -72,7 +72,7 @@ func (r *CustomerSalesToolRegistry) Execute(ctx context.Context, execCtx ports.C
 	return cap.Execute(ctx, execCtx, rawParams)
 }
 
-var _ ports.AICustomerSalesToolRegistry = (*CustomerSalesToolRegistry)(nil)
+var _ ports.CustomerSalesToolRegistry = (*CustomerSalesToolRegistry)(nil)
 
 // IncorporateCustomerSalesToolEvidence delegates to ports.IncorporateCustomerSalesToolEvidence.
 func IncorporateCustomerSalesToolEvidence(target *ports.CustomerSalesContext, result ports.CustomerSalesToolResult) {
