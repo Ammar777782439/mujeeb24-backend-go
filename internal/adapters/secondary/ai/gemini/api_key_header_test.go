@@ -96,7 +96,7 @@ func TestGeminiCustomerSalesAdapterSendsAPIKeyInHeaderNotURL(t *testing.T) {
 		t.Fatalf("build contract client: %v", err)
 	}
 	_, _ = cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.AIDecisionInput{
+		DecisionInput: ports.CustomerSalesDecisionRequest{
 			BusinessID: "b-1", ConversationID: "c-1",
 			SourceMessageReference: "msg-1", Text: "Hello",
 		},
