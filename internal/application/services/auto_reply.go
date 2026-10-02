@@ -83,7 +83,7 @@ type AutoReplyService struct {
 	// Per contract ④ §8, this is the only way to call Gemini.
 	CustomerSalesDecision ports.CustomerSalesDecisionPort
 
-	// ContextBuilder per contract ③ §2 builds the AIContext.
+	// ContextBuilder per contract ③ §2 builds the CustomerSalesContext.
 	CustomerSalesContextBuilder ports.CustomerSalesContextBuilder
 
 	// Validation is the contract ⑥ §2 pipeline. If nil, validation is
@@ -221,7 +221,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		run = started
 	}
 
-	// Per contract ③ §2, build the AIContext.
+	// Per contract ③ §2, build the CustomerSalesContext.
 	var loadedState *ports.ConversationStateRecord
 	if s.StateRepository != nil {
 		if st, err := s.StateRepository.Get(ctx, businessID, conversationID); err == nil {
@@ -236,7 +236,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			loadedState.Focus = nil
 		}
 	}
-	var builtContext *ports.AIContext
+	var builtContext *ports.CustomerSalesContext
 	if s.CustomerSalesContextBuilder != nil {
 		bc, contextErr := s.CustomerSalesContextBuilder.Build(ctx, ports.CustomerSalesContextInput{
 			BusinessID:             businessID,
@@ -369,7 +369,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			ConversationID:      conversationID,
 			CatalogScope:        "", // evaluate all active catalogs for the business
 			CustomerMessage:     command.Text,
-			ConversationContext: derefAIContext(builtContext),
+			ConversationContext: derefCustomerSalesContext(builtContext),
 			EntityContract:      entityContract,
 		})
 		if err != nil {
@@ -951,19 +951,19 @@ func encodeProposalSelectedAsJSON(selected []ports.SelectedReference) []byte {
 	return []byte(sb.String())
 }
 
-// derefAIContext safely dereferences a *ports.AIContext, returning a zero
+// derefCustomerSalesContext safely dereferences a *ports.CustomerSalesContext, returning a zero
 // value if nil. Used when passing the context to CatalogBatchController
 // which expects a value (not a pointer).
-func derefAIContext(ctx *ports.AIContext) ports.AIContext {
+func derefCustomerSalesContext(ctx *ports.CustomerSalesContext) ports.CustomerSalesContext {
 	if ctx == nil {
-		return ports.AIContext{}
+		return ports.CustomerSalesContext{}
 	}
 	return *ctx
 }
 
 // extractItemIDs/extractVariantIDs/extractOfferIDs pull the evidence IDs from
-// the AIContext so the ValidationPipeline can verify per contract ⑥ §10.
-func extractItemIDs(ctx *ports.AIContext) []string {
+// the CustomerSalesContext so the ValidationPipeline can verify per contract ⑥ §10.
+func extractItemIDs(ctx *ports.CustomerSalesContext) []string {
 	if ctx == nil {
 		return nil
 	}
@@ -973,7 +973,7 @@ func extractItemIDs(ctx *ports.AIContext) []string {
 	}
 	return out
 }
-func extractVariantIDs(ctx *ports.AIContext) []string {
+func extractVariantIDs(ctx *ports.CustomerSalesContext) []string {
 	if ctx == nil {
 		return nil
 	}
@@ -983,7 +983,7 @@ func extractVariantIDs(ctx *ports.AIContext) []string {
 	}
 	return out
 }
-func extractOfferIDs(ctx *ports.AIContext) []string {
+func extractOfferIDs(ctx *ports.CustomerSalesContext) []string {
 	if ctx == nil {
 		return nil
 	}
