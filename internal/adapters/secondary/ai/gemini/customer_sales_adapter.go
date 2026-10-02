@@ -5,7 +5,7 @@
 //   - Mujeeb System Contract → system_instruction
 //   - Mujeeb Input Context → input (contents)
 //   - Catalog boundary → Structured Output (responseSchema)
-//   - Mujeeb Output Contract → AIGeminiProposal
+//   - Mujeeb Output Contract → CustomerSalesProposal
 //
 // Per contract ③ §4, supports Gemini Interactions API with previous_interaction_id
 // chaining (store=true per contract ③ §9). Per contract ⑤ §7, includes the
@@ -38,7 +38,7 @@ import (
 // model, system prompt) but adds:
 //   - previous_interaction_id chaining per contract ③ §4
 //   - Catalog Entity Contract in system_instruction per contract ⑤ §7
-//   - Structured Output enforcement for AIGeminiProposal per contract ④ §4
+//   - Structured Output enforcement for CustomerSalesProposal per contract ④ §4
 //   - Usage telemetry capture for AI Trace per contract ⑧ §8
 type GeminiCustomerSalesAdapter struct {
 	base           *Client
@@ -129,7 +129,7 @@ func NewGeminiCustomerSalesAdapter(base *Client) (*GeminiCustomerSalesAdapter, e
 //
 // Per contract ③ §4, it carries previous_interaction_id chaining via input.GeminiInteraction.
 // Per contract ⑤ §7, the Entity Contract is sent as part of system_instruction.
-// Per contract ④ §4, Structured Output enforces the AIGeminiProposal shape.
+// Per contract ④ §4, Structured Output enforces the CustomerSalesProposal shape.
 // Per contract ⑧ §8, usage telemetry is captured for AI Trace.
 //
 // Per the Tool Loop spec: when the base Client has a configured
@@ -218,7 +218,7 @@ func (c *GeminiCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cus
 			ResultingInteractionID: resp.InteractionID,
 			Store:                  input.GeminiInteraction.Store,
 		},
-		Usage: ports.ContractUsageTelemetry{
+		Usage: ports.CustomerSalesUsageTelemetry{
 			InputTokens:         resp.UsageMetadata.PromptTokenCount,
 			CachedTokens:        resp.UsageMetadata.CachedContentTokenCount,
 			OutputTokens:        resp.UsageMetadata.CandidatesTokenCount,
@@ -312,26 +312,26 @@ func (c *GeminiCustomerSalesAdapter) sendContractRequest(ctx context.Context, re
 	return out, nil
 }
 
-// parseContractProposal extracts the AIGeminiProposal from the structured
+// parseContractProposal extracts the CustomerSalesProposal from the structured
 // output per contract ④ §4.
 //
 // Per contract ④ §8, Structured Outputs enforces the JSON shape; Mujeeb
 // additionally validates the values (per contract ⑥ §3).
-func parseContractProposal(resp contractGeminiResponse) (ports.AIGeminiProposal, error) {
+func parseContractProposal(resp contractGeminiResponse) (ports.CustomerSalesProposal, error) {
 	if len(resp.Candidates) == 0 {
-		return ports.AIGeminiProposal{}, errors.New("no candidates in gemini response per contract ④ §4")
+		return ports.CustomerSalesProposal{}, errors.New("no candidates in gemini response per contract ④ §4")
 	}
 	candidate := resp.Candidates[0]
 	if len(candidate.Content.Parts) == 0 {
-		return ports.AIGeminiProposal{}, errors.New("no content parts in gemini response per contract ④ §4")
+		return ports.CustomerSalesProposal{}, errors.New("no content parts in gemini response per contract ④ §4")
 	}
 	raw := candidate.Content.Parts[0].Text
 	if strings.TrimSpace(raw) == "" {
-		return ports.AIGeminiProposal{}, errors.New("empty structured output text per contract ④ §4")
+		return ports.CustomerSalesProposal{}, errors.New("empty structured output text per contract ④ §4")
 	}
-	var proposal ports.AIGeminiProposal
+	var proposal ports.CustomerSalesProposal
 	if err := json.Unmarshal([]byte(raw), &proposal); err != nil {
-		return ports.AIGeminiProposal{}, fmt.Errorf("unmarshal structured output: %w", err)
+		return ports.CustomerSalesProposal{}, fmt.Errorf("unmarshal structured output: %w", err)
 	}
 	return proposal, nil
 }
@@ -347,20 +347,20 @@ func contractProposalResponseSchema() map[string]any {
 			"status": map[string]any{
 				"type": "string",
 				"enum": []string{
-					string(ports.AIProposalStatusResolved),
-					string(ports.AIProposalStatusAmbiguous),
-					string(ports.AIProposalStatusNotFound),
-					string(ports.AIProposalStatusNeedsMoreData),
+					string(ports.CustomerSalesProposalStatusResolved),
+					string(ports.CustomerSalesProposalStatusAmbiguous),
+					string(ports.CustomerSalesProposalStatusNotFound),
+					string(ports.CustomerSalesProposalStatusNeedsMoreData),
 				},
 			},
 			"action": map[string]any{
 				"type": "string",
 				"enum": []string{
-					string(ports.AIProposalActionAnswer),
-					string(ports.AIProposalActionClarification),
-					string(ports.AIProposalActionHumanRequest),
-					string(ports.AIProposalActionLeadDraft),
-					string(ports.AIProposalActionOrderDraft),
+					string(ports.CustomerSalesProposalActionAnswer),
+					string(ports.CustomerSalesProposalActionClarification),
+					string(ports.CustomerSalesProposalActionHumanRequest),
+					string(ports.CustomerSalesProposalActionLeadDraft),
+					string(ports.CustomerSalesProposalActionOrderDraft),
 				},
 			},
 			"response_text": map[string]any{"type": "string"},
