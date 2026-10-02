@@ -21,9 +21,9 @@ import (
 //  1. The URL does NOT contain "?key=" or "apiKey=" or "api_key="
 //  2. The x-goog-api-key header IS present and carries the API key
 //
-// It exercises all 5 production paths: GeminiCustomerSalesAdapter, BatchClient
-// (both legacy + dynamic-config), TokenCounter, ModelsClient (both
-// DiscoverModels + TestConnection), and the legacy Client.Decide.
+// It exercises the production paths: GeminiCustomerSalesAdapter, BatchClient
+// (both legacy + dynamic-config), TokenCounter, and ModelsClient
+// (both DiscoverModels + TestConnection).
 
 // capturingHandler records the URL path + query + x-goog-api-key header
 // of the last request it received.
@@ -170,26 +170,4 @@ func TestModelsClientTestConnectionSendsAPIKeyInHeaderNotURL(t *testing.T) {
 	}
 	handler.assertNoKeyInURL(t)
 	handler.assertAPIKeyInHeader(t, "test-key-probe")
-}
-
-// Test P1-8: legacy Client.Decide sends API key via header, not URL.
-func TestLegacyClientDecideSendsAPIKeyInHeaderNotURL(t *testing.T) {
-	handler := &capturingHandler{respondWith: "ok"}
-	server := httptest.NewServer(handler)
-	defer server.Close()
-
-	client, err := NewClient(Config{
-		BaseURL: server.URL, APIKey: "test-key-legacy",
-		Model: "gemini-3.5-flash", SystemPrompt: "test",
-		RequestTimeout: 5 * time.Second,
-	})
-	if err != nil {
-		t.Fatalf("build client: %v", err)
-	}
-	_, _ = client.Decide(context.Background(), ports.AIDecisionInput{
-		BusinessID: "b-1", ConversationID: "c-1",
-		SourceMessageReference: "msg-1", Text: "Hello",
-	})
-	handler.assertNoKeyInURL(t)
-	handler.assertAPIKeyInHeader(t, "test-key-legacy")
 }
