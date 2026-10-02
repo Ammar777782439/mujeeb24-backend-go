@@ -74,12 +74,12 @@ func NewPostgresCustomerSalesPolicyEvaluator(management ports.BusinessManagement
 // here — NOT by Gemini.
 //
 // The input proposal is the legacy AIDecisionProposal shape (the bridge from
-// contract ④ §4 AIGeminiProposal is done by the ValidationPipeline's
+// contract ④ §4 CustomerSalesProposal is done by the ValidationPipeline's
 // toLegacyProposal helper). The returned proposal has PolicyDecision set
 // to 'allowed', 'requires_approval', or 'denied' per the business policy.
 //
 // Per contract ⑥ §20, validation is deterministic — no second LLM is used.
-func (e *PostgresCustomerSalesPolicyEvaluator) Evaluate(ctx context.Context, proposal ports.AIGeminiProposal, contextValue *ports.CustomerSalesContext) ports.CustomerSalesPolicyDecision {
+func (e *PostgresCustomerSalesPolicyEvaluator) Evaluate(ctx context.Context, proposal ports.CustomerSalesProposal, contextValue *ports.CustomerSalesContext) ports.CustomerSalesPolicyDecision {
 	if e == nil || e.Management == nil {
 		return ports.CustomerSalesPolicyDecision{
 			Decision: "allowed",
