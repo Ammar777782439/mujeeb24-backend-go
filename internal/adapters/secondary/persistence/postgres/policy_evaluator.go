@@ -1,6 +1,6 @@
 // Package postgres — Postgres-backed Policy Evaluator (contract ⑥ §12-13).
 //
-// Implements the services.PolicyEvaluatorPort (which is ports.AIPolicyEvaluator)
+// Implements the services.PolicyEvaluatorPort (which is ports.CustomerSalesPolicyPort)
 // against the business_policies table per migration 000002.
 //
 // Per contract ⑥ §12, the PolicyEvaluator applies the merchant's business
@@ -49,12 +49,12 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
-// PostgresPolicyEvaluator implements ports.AIPolicyEvaluator against the
+// PostgresCustomerSalesPolicyEvaluator implements ports.CustomerSalesPolicyPort against the
 // business_policies table per migration 000002.
 //
 // Per contract ⑥ §12, this is the Mujeeb-side authority that decides
 // requires_approval — Gemini does NOT decide this per contract ④ §5.
-type PostgresPolicyEvaluator struct {
+type PostgresCustomerSalesPolicyEvaluator struct {
 	// Management is the BusinessManagementRepository that provides
 	// GetRuntimePolicy per ports.BusinessManagementRepository interface.
 	// Per contract ⑥ §9, business_id comes from the Authenticated Context,
@@ -62,12 +62,12 @@ type PostgresPolicyEvaluator struct {
 	Management ports.BusinessManagementRepository
 }
 
-// NewPostgresPolicyEvaluator wires the evaluator with the management repository.
-func NewPostgresPolicyEvaluator(management ports.BusinessManagementRepository) *PostgresPolicyEvaluator {
-	return &PostgresPolicyEvaluator{Management: management}
+// NewPostgresCustomerSalesPolicyEvaluator wires the evaluator with the management repository.
+func NewPostgresCustomerSalesPolicyEvaluator(management ports.BusinessManagementRepository) *PostgresCustomerSalesPolicyEvaluator {
+	return &PostgresCustomerSalesPolicyEvaluator{Management: management}
 }
 
-// Evaluate implements ports.AIPolicyEvaluator.Evaluate per contract ⑥ §12-13.
+// Evaluate implements ports.CustomerSalesPolicyPort.Evaluate per contract ⑥ §12-13.
 //
 // Per contract ⑥ §12, the evaluator applies the merchant's business policies
 // to the validated proposal. Per contract ⑥ §13, requires_approval is decided
@@ -79,7 +79,7 @@ func NewPostgresPolicyEvaluator(management ports.BusinessManagementRepository) *
 // to 'allowed', 'requires_approval', or 'denied' per the business policy.
 //
 // Per contract ⑥ §20, validation is deterministic — no second LLM is used.
-func (e *PostgresPolicyEvaluator) Evaluate(proposal ports.AIDecisionProposal, contextValue *ports.CustomerSalesContext) ports.AIDecisionProposal {
+func (e *PostgresCustomerSalesPolicyEvaluator) Evaluate(ctx context.Context, proposal ports.AIGeminiProposal, contextValue *ports.CustomerSalesContext) ports.CustomerSalesPolicyDecision {
 	if e == nil || e.Management == nil {
 		// No policy evaluator configured — default to allowed per contract ⑥ §12
 		// (conservative default when no policy is registered).
@@ -195,5 +195,5 @@ func evaluatePolicyAgainstAction(policy ports.BusinessRuntimePolicyRecord, actio
 	}
 }
 
-// Compile-time assertion: PostgresPolicyEvaluator implements ports.AIPolicyEvaluator.
-var _ ports.AIPolicyEvaluator = (*PostgresPolicyEvaluator)(nil)
+// Compile-time assertion: PostgresCustomerSalesPolicyEvaluator implements ports.CustomerSalesPolicyPort.
+var _ ports.CustomerSalesPolicyPort = (*PostgresCustomerSalesPolicyEvaluator)(nil)
