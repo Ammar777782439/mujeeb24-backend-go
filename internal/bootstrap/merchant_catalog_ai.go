@@ -16,7 +16,7 @@ func wireMerchantCatalogAIV2(
 	geminiHTTPClient *gemini.GeminiHTTPClient,
 	configProvider ports.AIConfigurationProvider,
 ) (*handlers.Server, error) {
-	if geminiClient == nil {
+	if geminiHTTPClient == nil {
 		return dashboardServer, nil
 	}
 
