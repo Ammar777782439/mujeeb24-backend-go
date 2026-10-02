@@ -1,10 +1,10 @@
 // Package services — Fake ContractRuntime for tests.
 //
-// This fake implements ports.ContractRuntime so application/postgres tests can
+// This fake implements ports.CustomerSalesDecisionPort so application/postgres tests can
 // exercise the contract-aligned AutoReplyService flow without an HTTP Gemini
 // call. It returns a fixed AIGeminiProposal per contract ④ §4.
 //
-// Tests can override the returned proposal by setting FakeContractRuntime.Proposal.
+// Tests can override the returned proposal by setting FakeCustomerSalesDecisionPort.Proposal.
 
 package services
 
@@ -16,21 +16,21 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
-// FakeContractRuntime is a test fake implementing ports.ContractRuntime.
+// FakeCustomerSalesDecisionPort is a test fake implementing ports.CustomerSalesDecisionPort.
 //
 // It returns the configured Proposal on every call, recording the input
 // arguments for assertions. Tests may set Error to simulate a provider failure.
-type FakeContractRuntime struct {
+type FakeCustomerSalesDecisionPort struct {
 	Proposal            ports.AIGeminiProposal
 	GeminiInteractionID string // returned as ResultingInteractionID
 	Error               error
-	LastInput           ports.ContractRuntimeInput
+	LastInput           ports.CustomerSalesDecisionInput
 }
 
-// NewFakeContractRuntime returns a fake that produces a contract-aligned
+// NewFakeCustomerSalesDecisionPort returns a fake that produces a contract-aligned
 // resolved/answer proposal with the given response text.
-func NewFakeContractRuntime(responseText string) *FakeContractRuntime {
-	return &FakeContractRuntime{
+func NewFakeCustomerSalesDecisionPort(responseText string) *FakeCustomerSalesDecisionPort {
+	return &FakeCustomerSalesDecisionPort{
 		Proposal: ports.AIGeminiProposal{
 			Status:       ports.AIProposalStatusResolved,
 			Action:       ports.AIProposalActionAnswer,
@@ -40,16 +40,16 @@ func NewFakeContractRuntime(responseText string) *FakeContractRuntime {
 	}
 }
 
-// DecideContract implements ports.ContractRuntime.
-func (f *FakeContractRuntime) DecideContract(ctx context.Context, input ports.ContractRuntimeInput) (ports.ContractRuntimeOutput, error) {
+// DecideContract implements ports.CustomerSalesDecisionPort.
+func (f *FakeCustomerSalesDecisionPort) DecideContract(ctx context.Context, input ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
 	f.LastInput = input
 	if f.Error != nil {
-		return ports.ContractRuntimeOutput{}, f.Error
+		return ports.CustomerSalesDecisionOutput{}, f.Error
 	}
 	if strings.TrimSpace(input.DecisionInput.Text) == "" {
-		return ports.ContractRuntimeOutput{}, errors.New("text is required")
+		return ports.CustomerSalesDecisionOutput{}, errors.New("text is required")
 	}
-	return ports.ContractRuntimeOutput{
+	return ports.CustomerSalesDecisionOutput{
 		Proposal: f.Proposal,
 		GeminiInteraction: ports.GeminiInteractionContext{
 			PreviousInteractionID:  input.GeminiInteraction.PreviousInteractionID,
@@ -65,4 +65,4 @@ func (f *FakeContractRuntime) DecideContract(ctx context.Context, input ports.Co
 	}, nil
 }
 
-var _ ports.ContractRuntime = (*FakeContractRuntime)(nil)
+var _ ports.CustomerSalesDecisionPort = (*FakeCustomerSalesDecisionPort)(nil)
