@@ -55,7 +55,7 @@ func TestLifecycleFailure_MarkWaitingTool_StopsLoop(t *testing.T) {
 	cc, _ := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, lc)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
+		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-fail-wt",
 	})
 	if err == nil {
@@ -84,7 +84,7 @@ func TestLifecycleFailure_MarkRunning_StopsLoop(t *testing.T) {
 	cc, _ := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, lc)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
+		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-fail-r",
 	})
 	if err == nil {
@@ -133,7 +133,7 @@ func TestLifecycle_Ordering_WaitingToolBeforeRunning(t *testing.T) {
 	cc, _ := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, lc)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
+		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-order",
 	})
 	if err != nil {
@@ -172,7 +172,7 @@ func TestB2B_AIRunID_Path_CustomerSalesDecisionInputToToolCallRecord(t *testing.
 
 	runID := "run-b2b-agent-1"
 	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.CustomerSalesDecisionRequest{
+		Request: ports.CustomerSalesDecisionRequest{
 			BusinessID:     "b2b-business-1",
 			ConversationID: "session-1",
 			Text:           "add a product",
