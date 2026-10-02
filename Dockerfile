@@ -15,6 +15,8 @@ FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/mujeeb-api /usr/local/bin/mujeeb-api
 COPY --from=build /out/mujeeb-worker /usr/local/bin/mujeeb-worker
 COPY --from=build /out/mujeeb-migrate /usr/local/bin/mujeeb-migrate
+COPY --from=build /out/mujeeb-runtime /usr/local/bin/mujeeb-runtime
 
 USER nonroot:nonroot
-CMD ["/usr/local/bin/mujeeb-api"]
+EXPOSE 3001
+CMD ["/usr/local/bin/mujeeb-runtime"]
