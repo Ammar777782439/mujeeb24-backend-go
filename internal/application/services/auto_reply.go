@@ -238,7 +238,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	}
 	var builtContext *ports.AIContext
 	if s.CustomerSalesContextBuilder != nil {
-		bc, contextErr := s.ContextBuilder.Build(ctx, ports.CustomerSalesContextInput{
+		bc, contextErr := s.CustomerSalesContextBuilder.Build(ctx, ports.CustomerSalesContextInput{
 			BusinessID:             businessID,
 			ConversationID:         conversationID,
 			SourceMessageReference: sourceMessageRef,
