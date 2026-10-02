@@ -66,7 +66,7 @@ func (m *mockServerConfigurable) handle(w http.ResponseWriter, r *http.Request) 
 // buildGeminiCustomerSalesAdapterForFixTests builds a GeminiCustomerSalesAdapter with tools
 // + lifecycle stub wired.
 func buildGeminiCustomerSalesAdapterForFixTests(t *testing.T, mockURL string, dispatcher ports.CustomerSalesToolPort, lc ports.AIRunLifecyclePort) (*GeminiCustomerSalesAdapter, *stubRunRepoForTools) {
-	client, err := NewClient(Config{
+	client, err := NewGeminiHTTPClient(GeminiHTTPClientConfig{
 		BaseURL:        mockURL,
 		APIKey:         "test-key",
 		Model:          "gemini-3.5-flash",
