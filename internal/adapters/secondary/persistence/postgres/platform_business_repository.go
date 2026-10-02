@@ -157,6 +157,42 @@ func (r *PlatformBusinessRepository) GetByID(ctx context.Context, businessID str
 	return record, nil
 }
 
+func (r *PlatformBusinessRepository) ActivateFromPendingSetup(ctx context.Context, businessID string, now time.Time) (ports.PlatformBusinessRecord, error) {
+	if r == nil || r.adapter == nil {
+		return ports.PlatformBusinessRecord{}, ErrPoolClosed
+	}
+	if strings.TrimSpace(businessID) == "" {
+		return ports.PlatformBusinessRecord{}, invalidRepositoryInput("platform_business.activate_from_pending_setup", "business id is required")
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.PlatformBusinessRecord{}, err
+	}
+	result, err := executor.Exec(ctx,
+		`UPDATE businesses SET status = 'active', updated_at = $2
+                 WHERE id = $1::uuid AND status = 'pending_setup'`,
+		businessID, now,
+	)
+	if err != nil {
+		return ports.PlatformBusinessRecord{}, &RepositoryError{Operation: "platform_business.activate_from_pending_setup", Kind: RepositoryInvalid, Err: err}
+	}
+	if result.RowsAffected() == 0 {
+		current, getErr := r.GetByID(ctx, businessID)
+		if getErr != nil {
+			return ports.PlatformBusinessRecord{}, getErr
+		}
+		return ports.PlatformBusinessRecord{}, &RepositoryError{
+			Operation: "platform_business.activate_from_pending_setup",
+			Kind:      RepositoryConflict,
+			Err:       fmt.Errorf("business %s is in status %s", businessID, current.PlatformStatus),
+		}
+	}
+	return r.GetByID(ctx, businessID)
+}
+
 func (r *PlatformBusinessRepository) Suspend(ctx context.Context, businessID string, now time.Time) (ports.PlatformBusinessRecord, error) {
 	return r.transition(ctx, "platform_business.suspend", businessID, now, []string{"active", "pending_setup"}, "suspended")
 }
@@ -196,31 +232,28 @@ func (r *PlatformBusinessRepository) transition(ctx context.Context, op, busines
 	}
 	// Build the IN list using the ANY($3::text[]) idiom for parameterized safety.
 	var record ports.PlatformBusinessRecord
-	err = executor.QueryRow(ctx,
+	command, err := executor.Exec(ctx,
 		`UPDATE businesses SET status = $2, updated_at = $3
-                 WHERE id = $1::uuid AND status = ANY($4::text[])
-                 RETURNING `+platformBusinessReturnColumns,
+                 WHERE id = $1::uuid AND status = ANY($4::text[])`,
 		businessID, target, now, expectedFrom,
-	).Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.CreatedAt, &record.UpdatedAt)
+	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			// Distinguish not-found vs invalid transition with a follow-up probe.
-			var exists bool
-			if checkErr := executor.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM businesses WHERE id = $1::uuid)`, businessID).Scan(&exists); checkErr != nil {
-				return ports.PlatformBusinessRecord{}, &RepositoryError{Operation: op, Kind: RepositoryInvalid, Err: checkErr}
-			}
-			if !exists {
-				return ports.PlatformBusinessRecord{}, &RepositoryError{Operation: op, Kind: RepositoryNotFound, Err: err}
-			}
-			return ports.PlatformBusinessRecord{}, &RepositoryError{
-				Operation: op,
-				Kind:      RepositoryConflict,
-				Err:       fmt.Errorf("business %s is not in one of statuses %v (cannot transition to %s)", businessID, expectedFrom, target),
-			}
-		}
 		return ports.PlatformBusinessRecord{}, &RepositoryError{Operation: op, Kind: RepositoryInvalid, Err: err}
 	}
-	return record, nil
-}
+	if command.RowsAffected() == 0 {
+		var exists bool
+		if checkErr := executor.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM businesses WHERE id = $1::uuid)`, businessID).Scan(&exists); checkErr != nil {
+			return ports.PlatformBusinessRecord{}, &RepositoryError{Operation: op, Kind: RepositoryInvalid, Err: checkErr}
+		}
+		if !exists {
+			return ports.PlatformBusinessRecord{}, &RepositoryError{Operation: op, Kind: RepositoryNotFound, Err: pgx.ErrNoRows}
+		}
+		return ports.PlatformBusinessRecord{}, &RepositoryError{
+			Operation: op,
+			Kind:      RepositoryConflict,
+			Err:       fmt.Errorf("business %s is not in one of statuses %v (cannot transition to %s)", businessID, expectedFrom, target),
+		}
+	}
+	return r.GetByID(ctx, businessID)
 
 var _ ports.PlatformBusinessLifecyclePort = (*PlatformBusinessRepository)(nil)
