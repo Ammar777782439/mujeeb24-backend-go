@@ -95,7 +95,7 @@ func TestContractClientSendsAPIKeyInHeaderNotURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build contract client: %v", err)
 	}
-	_, _ = cc.DecideContract(context.Background(), ports.ContractRuntimeInput{
+	_, _ = cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{
 			BusinessID: "b-1", ConversationID: "c-1",
 			SourceMessageReference: "msg-1", Text: "Hello",
