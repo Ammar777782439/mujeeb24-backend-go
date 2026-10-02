@@ -51,7 +51,6 @@ type GeminiHTTPClientConfig struct {
 	MaxOutputTokens    int
 	MaxInputCharacters int
 	SystemPrompt       string
-	Capabilities       ports.CustomerSalesToolPort
 }
 
 // GeminiHTTPClient is the low-level Gemini HTTP client. Capability-specific adapters
@@ -68,7 +67,6 @@ type GeminiHTTPClient struct {
 	maxOutputTokens    int
 	maxInputCharacters int
 	systemPrompt       string
-	capabilities       ports.CustomerSalesToolPort
 }
 
 // NewGeminiHTTPClient creates a Gemini HTTP client with the given config.
@@ -121,7 +119,6 @@ func NewGeminiHTTPClient(cfg GeminiHTTPClientConfig) (*GeminiHTTPClient, error) 
 		maxOutputTokens:    maxOutputTokens,
 		maxInputCharacters: maxInputCharacters,
 		systemPrompt:       systemPrompt,
-		capabilities:       cfg.Capabilities,
 	}, nil
 }
 
@@ -148,9 +145,6 @@ func (c *GeminiHTTPClient) RequestTimeout() time.Duration { return c.requestTime
 
 // HTTPClient returns the configured HTTP client shared by Gemini capability adapters.
 func (c *GeminiHTTPClient) HTTPClient() *http.Client { return c.httpClient }
-
-// Capabilities returns the configured AI capability dispatcher.
-func (c *GeminiHTTPClient) Capabilities() ports.CustomerSalesToolPort { return c.capabilities }
 
 // buildUserPrompt encodes the AIContext + customer message into the
 // customer-facing prompt text for Gemini. Used by GeminiCustomerSalesAdapter.
