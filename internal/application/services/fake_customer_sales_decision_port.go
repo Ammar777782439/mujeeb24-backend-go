@@ -2,7 +2,7 @@
 //
 // This fake implements ports.CustomerSalesDecisionPort so application/postgres tests can
 // exercise the contract-aligned AutoReplyService flow without an HTTP Gemini
-// call. It returns a fixed AIGeminiProposal per contract ④ §4.
+// call. It returns a fixed CustomerSalesProposal per contract ④ §4.
 //
 // Tests can override the returned proposal by setting FakeCustomerSalesDecisionPort.Proposal.
 
@@ -21,7 +21,7 @@ import (
 // It returns the configured Proposal on every call, recording the input
 // arguments for assertions. Tests may set Error to simulate a provider failure.
 type FakeCustomerSalesDecisionPort struct {
-	Proposal            ports.AIGeminiProposal
+	Proposal            ports.CustomerSalesProposal
 	GeminiInteractionID string // returned as ResultingInteractionID
 	Error               error
 	LastInput           ports.CustomerSalesDecisionInput
@@ -31,9 +31,9 @@ type FakeCustomerSalesDecisionPort struct {
 // resolved/answer proposal with the given response text.
 func NewFakeCustomerSalesDecisionPort(responseText string) *FakeCustomerSalesDecisionPort {
 	return &FakeCustomerSalesDecisionPort{
-		Proposal: ports.AIGeminiProposal{
-			Status:       ports.AIProposalStatusResolved,
-			Action:       ports.AIProposalActionAnswer,
+		Proposal: ports.CustomerSalesProposal{
+			Status:       ports.CustomerSalesProposalStatusResolved,
+			Action:       ports.CustomerSalesProposalActionAnswer,
 			ResponseText: responseText,
 		},
 		GeminiInteractionID: "fake-interaction-id",
@@ -56,7 +56,7 @@ func (f *FakeCustomerSalesDecisionPort) Decide(ctx context.Context, input ports.
 			ResultingInteractionID: f.GeminiInteractionID,
 			Store:                  input.GeminiInteraction.Store,
 		},
-		Usage: ports.ContractUsageTelemetry{
+		Usage: ports.CustomerSalesUsageTelemetry{
 			InputTokens:  10,
 			OutputTokens: 5,
 			Model:        "fake-model",
