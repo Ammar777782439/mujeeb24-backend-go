@@ -278,11 +278,11 @@ func TestAutoReplyServiceRejectsEmptyClarificationText(t *testing.T) {
 	}
 }
 
-type stubAIContextBuilder struct {
+type stubCustomerSalesContextBuilder struct {
 	context ports.AIContext
 }
 
-func (s stubAIContextBuilder) Build(context.Context, ports.ContextBuildInput) (ports.AIContext, error) {
+func (s stubCustomerSalesContextBuilder) Build(context.Context, ports.CustomerSalesContextInput) (ports.AIContext, error) {
 	return s.context, nil
 }
 
@@ -317,7 +317,7 @@ func TestAutoReplyServiceEnqueuesGeneralAnswerAfterFocus(t *testing.T) {
 		outbox,
 		fakeTransactionManager{},
 	)
-	service.ContextBuilder = stubAIContextBuilder{context: ports.AIContext{
+	service.CustomerSalesContextBuilder = stubCustomerSalesContextBuilder{context: ports.AIContext{
 		CatalogEvidence: []ports.AICatalogEvidence{
 			{Reference: "item-basic", CatalogReference: "cat-1"},
 			{Reference: "item-pro", CatalogReference: "cat-1"},
@@ -360,7 +360,7 @@ func TestAutoReplyServiceHandlesHumanOwnership(t *testing.T) {
 		&fakeOutboxStore{},
 		fakeTransactionManager{},
 	)
-	service.ContextBuilder = builder
+	service.CustomerSalesContextBuilder = builder
 
 	result, err := service.Handle(context.Background(), commands.AutoReplyCommand{
 		Meta:                   commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}},
@@ -395,7 +395,7 @@ func TestAutoReplyServiceHandlesWaitingHuman(t *testing.T) {
 		&fakeOutboxStore{},
 		fakeTransactionManager{},
 	)
-	service.ContextBuilder = builder
+	service.CustomerSalesContextBuilder = builder
 
 	result, err := service.Handle(context.Background(), commands.AutoReplyCommand{
 		Meta:                   commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}},
