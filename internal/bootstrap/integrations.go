@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gemini"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/openaicompatible"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/providers/socialapi"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
@@ -14,7 +13,6 @@ type ExternalAdapters struct {
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
 	GeminiClient                   *gemini.Client
-	OpenAICompatibleClient         *openaicompatible.Client
 	LLMConfigError                 error
 	AutoReplyEnabled               bool
 	ChannelProvisioningSocial      ports.SocialChannelProvisioner
@@ -44,7 +42,7 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 			checks["channel_provisioning"] = "configured"
 		}
 	}
-	if a.GeminiClient != nil || a.OpenAICompatibleClient != nil {
+	if a.GeminiClient != nil {
 		checks["llm_runtime"] = "configured"
 	}
 	return checks
@@ -88,20 +86,8 @@ func BuildExternalAdaptersWithCapabilities(cfg config.ProcessConfig, capabilitie
 			adapters.GeminiClient = client
 		}
 	} else if cfg.LLMEnabled {
-		client, err := openaicompatible.NewClient(openaicompatible.Config{
-			BaseURL:            cfg.LLMBaseURL,
-			APIKey:             cfg.LLMAPIKey,
-			Model:              cfg.LLMModel,
-			RequestTimeout:     cfg.LLMHTTPTimeout,
-			MaxOutputTokens:    cfg.LLMMaxOutputTokens,
-			MaxInputCharacters: cfg.LLMMaxInputCharacters,
-			OutputTokensField:  cfg.LLMOutputTokensField,
-		})
-		if err != nil {
-			adapters.LLMConfigError = errors.New("LLM adapter configuration: " + err.Error())
-		} else {
-			adapters.OpenAICompatibleClient = client
-		}
+		adapters.LLMConfigError = errors.New("the configured non-Gemini AI provider is not wired to a customer AI capability")
+
 	}
 	adapters.AutoReplyEnabled = cfg.AutoReplyEnabled
 	adapters.ChannelProvisioningEnabled = cfg.ChannelProvisioningEnabled
