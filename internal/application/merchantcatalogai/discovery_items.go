@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
@@ -15,8 +14,8 @@ type listItemsCapability struct {
 	selectedCatalogID string
 }
 
-func (c listItemsCapability) Definition() ports.AICapabilityDefinition {
-	return ports.AICapabilityDefinition{
+func (c listItemsCapability) Definition() MerchantCatalogDiscoveryToolDefinition {
+	return MerchantCatalogDiscoveryToolDefinition{
 		Name:        "merchant_catalog_list_items",
 		Description: "Read items from the already selected merchant catalog. This is bounded factual retrieval, not semantic search. The catalog is selected by Mujeeb; the model must not choose it.",
 		Parameters: map[string]any{
@@ -32,13 +31,13 @@ func (c listItemsCapability) Definition() ports.AICapabilityDefinition {
 	}
 }
 
-func (c listItemsCapability) Execute(ctx context.Context, execCtx ports.AICapabilityExecutionContext, rawParams []byte) (ports.AICapabilityResult, error) {
+func (c listItemsCapability) Execute(ctx context.Context, execCtx MerchantCatalogDiscoveryExecutionContext, rawParams []byte) (MerchantCatalogDiscoveryResult, error) {
 	params, err := jsonParams(rawParams)
 	if err != nil {
-		return ports.AICapabilityResult{}, err
+		return MerchantCatalogDiscoveryResult{}, err
 	}
 	if c.selectedCatalogID == "" {
-		return ports.AICapabilityResult{}, errors.New("selected merchant catalog is required")
+		return MerchantCatalogDiscoveryResult{}, errors.New("selected merchant catalog is required")
 	}
 
 	status, _ := params["status"].(string)
@@ -46,12 +45,11 @@ func (c listItemsCapability) Execute(ctx context.Context, execCtx ports.AICapabi
 	cursor, _ := params["cursor"].(string)
 	page, err := c.repository.ListCatalogItems(ctx, execCtx.BusinessID, c.selectedCatalogID, strings.TrimSpace(search), status, readLimit(params), cursor)
 	if err != nil {
-		return ports.AICapabilityResult{}, err
+		return MerchantCatalogDiscoveryResult{}, err
 	}
 
-	now := time.Now().UTC()
 	items := make([]map[string]any, 0, len(page.Items))
-	evidence := make([]ports.CustomerSalesCatalogEvidence, 0, len(page.Items))
+	evidenceReferences := make([]string, 0, len(page.Items))
 	for _, item := range page.Items {
 		items = append(items, map[string]any{
 			"id":                       item.ID,
@@ -69,27 +67,12 @@ func (c listItemsCapability) Execute(ctx context.Context, execCtx ports.AICapabi
 			"requires_confirmation":    item.RequiresConfirmation,
 			"attributes":               json.RawMessage(item.Attributes),
 		})
-		evidence = append(evidence, ports.CustomerSalesCatalogEvidence{
-			Reference:            item.ID,
-			CatalogReference:     item.CatalogID,
-			ItemType:             item.ItemType,
-			Name:                 item.Name,
-			Status:               item.Status,
-			Attributes:           append([]byte(nil), item.Attributes...),
-			ShortDescription:     item.ShortDescription,
-			LongDescription:      item.LongDescription,
-			PricingMode:          item.PricingMode,
-			AvailabilityMode:     item.AvailabilityMode,
-			FulfillmentMode:      item.FulfillmentMode,
-			RequiresConfirmation: item.RequiresConfirmation,
-			EvidenceState:        "verified",
-			RetrievedAt:          now,
-		})
+		evidenceReferences = append(evidenceReferences, item.ID)
 	}
 
-	return ports.AICapabilityResult{
+	return MerchantCatalogDiscoveryResult{
 		Data:            items,
-		CatalogEvidence: evidence,
+		EvidenceReferences: evidenceReferences,
 		HasMore:         page.HasMore,
 		NextCursor:      page.NextCursor,
 		Operation:       "merchant_catalog_list_items",
@@ -101,8 +84,8 @@ type getItemCapability struct {
 	selectedCatalogID string
 }
 
-func (c getItemCapability) Definition() ports.AICapabilityDefinition {
-	return ports.AICapabilityDefinition{
+func (c getItemCapability) Definition() MerchantCatalogDiscoveryToolDefinition {
+	return MerchantCatalogDiscoveryToolDefinition{
 		Name:        "merchant_catalog_get_item",
 		Description: "Read one item by exact item_id in the already selected merchant catalog using tenant-scoped repository access.",
 		Parameters: map[string]any{
@@ -115,26 +98,26 @@ func (c getItemCapability) Definition() ports.AICapabilityDefinition {
 	}
 }
 
-func (c getItemCapability) Execute(ctx context.Context, execCtx ports.AICapabilityExecutionContext, rawParams []byte) (ports.AICapabilityResult, error) {
+func (c getItemCapability) Execute(ctx context.Context, execCtx MerchantCatalogDiscoveryExecutionContext, rawParams []byte) (MerchantCatalogDiscoveryResult, error) {
 	params, err := jsonParams(rawParams)
 	if err != nil {
-		return ports.AICapabilityResult{}, err
+		return MerchantCatalogDiscoveryResult{}, err
 	}
 	if c.selectedCatalogID == "" {
-		return ports.AICapabilityResult{}, errors.New("selected merchant catalog is required")
+		return MerchantCatalogDiscoveryResult{}, errors.New("selected merchant catalog is required")
 	}
 
 	itemID, err := requiredString(params, "item_id")
 	if err != nil {
-		return ports.AICapabilityResult{}, err
+		return MerchantCatalogDiscoveryResult{}, err
 	}
 	item, err := c.repository.GetCatalogItem(ctx, execCtx.BusinessID, c.selectedCatalogID, itemID)
 	if err != nil {
-		return ports.AICapabilityResult{}, err
+		return MerchantCatalogDiscoveryResult{}, err
 	}
 
 	now := time.Now().UTC()
-	return ports.AICapabilityResult{
+	return MerchantCatalogDiscoveryResult{
 		Data: map[string]any{
 			"id":                       item.ID,
 			"catalog_id":               item.CatalogID,
@@ -151,16 +134,7 @@ func (c getItemCapability) Execute(ctx context.Context, execCtx ports.AICapabili
 			"requires_confirmation":    item.RequiresConfirmation,
 			"attributes":               json.RawMessage(item.Attributes),
 		},
-		CatalogEvidence: []ports.CustomerSalesCatalogEvidence{{
-			Reference:        item.ID,
-			CatalogReference: item.CatalogID,
-			ItemType:         item.ItemType,
-			Name:             item.Name,
-			Status:           item.Status,
-			Attributes:       append([]byte(nil), item.Attributes...),
-			EvidenceState:    "verified",
-			RetrievedAt:      now,
-		}},
+		EvidenceReferences: []string{item.ID},
 		Operation: "merchant_catalog_get_item",
 	}, nil
 }
