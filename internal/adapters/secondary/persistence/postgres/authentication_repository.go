@@ -155,8 +155,8 @@ func (r *AuthenticationRepository) EnsurePrincipalAndMembership(ctx context.Cont
 	if err != nil {
 		return ports.PrincipalRecord{}, err
 	}
-	var output ports.PrincipalRecord
-	err = r.adapter.Within(ctx, func(txCtx context.Context) error {
+
+	work := func(txCtx context.Context) error {
 		executor, err := r.adapter.Executor(txCtx)
 		if err != nil {
 			return err
@@ -165,17 +165,28 @@ func (r *AuthenticationRepository) EnsurePrincipalAndMembership(ctx context.Cont
 			VALUES ($1::uuid, lower($2), $3, $4, $5, $6, $6)
 			ON CONFLICT (lower(email)) DO UPDATE SET display_name = EXCLUDED.display_name, password_hash = EXCLUDED.password_hash, status = EXCLUDED.status, updated_at = EXCLUDED.updated_at
 			RETURNING id::text, email, display_name, password_hash, status`
-		output, err = scanPrincipal(executor.QueryRow(txCtx, upsertPrincipal, principal.ID, principal.Email, principal.DisplayName, principal.PasswordHash, principal.Status, now), "auth.bootstrap")
+		output, err := scanPrincipal(executor.QueryRow(txCtx, upsertPrincipal, principal.ID, principal.Email, principal.DisplayName, principal.PasswordHash, principal.Status, now), "auth.bootstrap")
 		if err != nil {
 			return err
 		}
+		principal = output
 		const upsertMembership = `INSERT INTO business_memberships (business_id, principal_id, role, permissions, status, created_at, updated_at)
 			VALUES ($1::uuid, $2::uuid, $3, $4::jsonb, 'active', $5, $5)
 			ON CONFLICT (business_id, principal_id) DO UPDATE SET role = EXCLUDED.role, permissions = EXCLUDED.permissions, status = 'active', updated_at = EXCLUDED.updated_at`
 		_, err = executor.Exec(txCtx, upsertMembership, businessID, output.ID, role, permissionsJSON, now)
 		return err
-	})
-	return output, err
+	}
+
+	if _, inTx := transactionFromContext(ctx); inTx {
+		if err := work(ctx); err != nil {
+			return ports.PrincipalRecord{}, err
+		}
+		return principal, nil
+	}
+	if err := r.adapter.Within(ctx, work); err != nil {
+		return ports.PrincipalRecord{}, err
+	}
+	return principal, nil
 }
 
 func (r *AuthenticationRepository) Create(ctx context.Context, session ports.RefreshSessionRecord, now time.Time) error {
