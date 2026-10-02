@@ -15,7 +15,7 @@
 //
 // This file REPLACES the legacy Client.Decide method (in client.go) for
 // contract-aligned callers. The legacy Client.Decide is kept only for
-// migration; new code must use ContractClient.
+// migration; new code must use GeminiCustomerSalesAdapter.
 
 package gemini
 
@@ -33,7 +33,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
-// ContractClient is the contract ④ §8 implementation of ports.CustomerSalesDecisionPort.
+// GeminiCustomerSalesAdapter is the contract ④ §8 implementation of ports.CustomerSalesDecisionPort.
 //
 // It wraps an existing Client to reuse HTTP machinery (base URL, API key,
 // model, system prompt) but adds:
@@ -41,7 +41,7 @@ import (
 //   - Catalog Entity Contract in system_instruction per contract ⑤ §7
 //   - Structured Output enforcement for AIGeminiProposal per contract ④ §4
 //   - Usage telemetry capture for AI Trace per contract ⑧ §8
-type ContractClient struct {
+type GeminiCustomerSalesAdapter struct {
 	base           *Client
 	httpClient     *http.Client
 	baseURL        string
@@ -78,14 +78,14 @@ type resolvedAIConfig struct {
 // After this call, every Decide resolves the active config from
 // the provider (cache/DB) instead of static struct fields. Per §9:
 // cache invalidation makes new config active without restart.
-func (c *ContractClient) SetConfigurationProvider(provider ports.AIConfigurationProvider) {
+func (c *GeminiCustomerSalesAdapter) SetConfigurationProvider(provider ports.AIConfigurationProvider) {
 	c.configProvider = provider
 }
 
 // resolveConfig returns the effective AI configuration for this call.
 // Per §1-2: if configProvider is wired, reads from cache/DB. Otherwise
 // falls back to static fields (env bootstrap, tests).
-func (c *ContractClient) resolveConfig(ctx context.Context) (*resolvedAIConfig, error) {
+func (c *GeminiCustomerSalesAdapter) resolveConfig(ctx context.Context) (*resolvedAIConfig, error) {
 	if c.configProvider != nil {
 		cfg, err := c.configProvider.GetActiveConfig(ctx)
 		if err != nil {
@@ -108,15 +108,15 @@ func (c *ContractClient) resolveConfig(ctx context.Context) (*resolvedAIConfig, 
 	}, nil
 }
 
-// NewContractClient wraps an existing Client with contract-aligned methods.
+// NewGeminiCustomerSalesAdapter wraps an existing Client with contract-aligned methods.
 //
 // Per contract ⑤ §7, the Catalog Entity Contract is built once at startup
 // and reused for every call; callers pass it via CustomerSalesDecisionInput.
-func NewContractClient(base *Client) (*ContractClient, error) {
+func NewGeminiCustomerSalesAdapter(base *Client) (*GeminiCustomerSalesAdapter, error) {
 	if base == nil {
 		return nil, errors.New("base client is required")
 	}
-	return &ContractClient{
+	return &GeminiCustomerSalesAdapter{
 		base:           base,
 		httpClient:     base.httpClient,
 		baseURL:        base.baseURL,
@@ -144,7 +144,7 @@ func NewContractClient(base *Client) (*ContractClient, error) {
 // tool fails non-retryably, or the context deadline expires.
 //
 // This method supersedes the legacy ports.AIRuntime.Decide.
-func (c *ContractClient) Decide(ctx context.Context, input ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
+func (c *GeminiCustomerSalesAdapter) Decide(ctx context.Context, input ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
 	if err := ctx.Err(); err != nil {
 		return ports.CustomerSalesDecisionOutput{}, err
 	}
@@ -238,7 +238,7 @@ func (c *ContractClient) Decide(ctx context.Context, input ports.CustomerSalesDe
 //
 // Per contract ⑤ §8, this tells Gemini the meaning of every enum value so it
 // never has to guess.
-func (c *ContractClient) buildContractSystemInstruction(entityContractJSON []byte) *contractContent {
+func (c *GeminiCustomerSalesAdapter) buildContractSystemInstruction(entityContractJSON []byte) *contractContent {
 	parts := []contractPart{
 		{Text: c.base.systemPrompt},
 	}
@@ -257,7 +257,7 @@ func (c *ContractClient) buildContractSystemInstruction(entityContractJSON []byt
 //
 // Per contract ④ §3, the input includes: business_context, conversation_context,
 // conversation_state, catalog_evidence, user_message.
-func (c *ContractClient) buildContractContents(input ports.AIDecisionInput) []contractContent {
+func (c *GeminiCustomerSalesAdapter) buildContractContents(input ports.AIDecisionInput) []contractContent {
 	// The existing client.go has buildUserPrompt(input) which encodes the
 	// AIContext (Business, Conversation, Customer, CatalogEvidence, etc.) into
 	// the user-facing prompt text. We reuse it for the contract-aligned path.
@@ -273,7 +273,7 @@ func (c *ContractClient) buildContractContents(input ports.AIDecisionInput) []co
 //
 // Per contract ③ §9, Mujeeb uses store=true to enable previous_interaction_id.
 // Per contract ⑨ §11, every external operation has a Timeout.
-func (c *ContractClient) sendContractRequest(ctx context.Context, reqBody contractGeminiRequest, rc *resolvedAIConfig) (contractGeminiResponse, error) {
+func (c *GeminiCustomerSalesAdapter) sendContractRequest(ctx context.Context, reqBody contractGeminiRequest, rc *resolvedAIConfig) (contractGeminiResponse, error) {
 	buf, err := json.Marshal(reqBody)
 	if err != nil {
 		return contractGeminiResponse{}, fmt.Errorf("marshal request: %w", err)
@@ -449,5 +449,5 @@ type contractUsageMetadata struct {
 	TotalTokenCount         int `json:"totalTokenCount,omitempty"`
 }
 
-// Compile-time assertion: ContractClient implements ports.CustomerSalesDecisionPort.
-var _ ports.CustomerSalesDecisionPort = (*ContractClient)(nil)
+// Compile-time assertion: GeminiCustomerSalesAdapter implements ports.CustomerSalesDecisionPort.
+var _ ports.CustomerSalesDecisionPort = (*GeminiCustomerSalesAdapter)(nil)
