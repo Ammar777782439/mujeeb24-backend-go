@@ -400,4 +400,3 @@ func proposalJSONSchema() map[string]any {
 	}
 }
 
-var _ ports.AIRuntime = (*Client)(nil)
