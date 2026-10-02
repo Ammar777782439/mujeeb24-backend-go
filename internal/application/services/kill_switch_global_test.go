@@ -218,7 +218,7 @@ func contains(s, substr string) bool {
 
 // Ensure the fakeAutoReplyHandler satisfies the interface at compile time.
 var _ commands.AutoReplyHandler = (*fakeAutoReplyHandler)(nil)
-var _ ports.ContractRuntime = (*fakeContractRuntime)(nil)
+var _ ports.CustomerSalesDecisionPort = (*fakeContractRuntime)(nil)
 var _ AICostProtectionChecker = (*stubChecker)(nil)
 
 // dummyErr keeps the errors import alive if needed later.
