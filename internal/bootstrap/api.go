@@ -228,9 +228,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			return nil, errors.New("AutoReply requires a configured LLM runtime")
 		}
 		// Per contract ④ §8, wrap the legacy Gemini Client with the
-		// contract-aligned ContractClient (implements ports.ContractRuntime).
+		// contract-aligned ContractClient (implements ports.CustomerSalesDecisionPort).
 		// The legacy Client.Decide method is no longer used for AutoReply.
-		var contractRuntime ports.ContractRuntime
+		var contractRuntime ports.CustomerSalesDecisionPort
 		var geminiClient *gemini.Client
 		var runRepo ports.AIRunRepository
 		if external.GeminiClient != nil {
@@ -259,9 +259,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			contractRuntime = cc
 		} else {
 			// Fallback for openaicompatible.Client or other AIRuntime
-			// implementations: they do NOT yet implement ContractRuntime.
+			// implementations: they do NOT yet implement CustomerSalesDecisionPort.
 			// Production should use gemini.NewContractClient. Until the
-			// OpenAI-compatible adapter implements ContractRuntime, AutoReply
+			// OpenAI-compatible adapter implements CustomerSalesDecisionPort, AutoReply
 			// is unavailable for that provider.
 			return nil, errors.New("AutoReply requires a gemini.Client (contract-aligned); OpenAI-compatible provider not yet supported")
 		}
