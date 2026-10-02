@@ -80,7 +80,7 @@ func isSubscriptionHandoffIntent(intent string) bool {
 type AutoReplyService struct {
 	// Runtime is the contract ④ §8 CustomerSalesDecisionPort (Gemini ContractClient).
 	// Per contract ④ §8, this is the only way to call Gemini.
-	Runtime ports.CustomerSalesDecisionPort
+	CustomerSalesDecision ports.CustomerSalesDecisionPort
 
 	// ContextBuilder per contract ③ §2 builds the AIContext.
 	ContextBuilder ports.AIContextBuilder
@@ -151,9 +151,9 @@ type AutoReplyService struct {
 // NewAutoReplyService wires the required dependencies for the contract-aligned
 // AutoReply flow. Optional dependencies (ContextBuilder, Validation,
 // RunRepository, etc.) are set on the returned struct by the caller.
-func NewAutoReplyService(runtime ports.CustomerSalesDecisionPort, decisions ports.AIDecisionRepository, references ports.ConversationReferenceRepository, outbound ports.OutboundMessageRepository, outbox ports.OutboxStore, transactions ports.TransactionManager) AutoReplyService {
+func NewAutoReplyService(customerSalesDecision ports.CustomerSalesDecisionPort, decisions ports.AIDecisionRepository, references ports.ConversationReferenceRepository, outbound ports.OutboundMessageRepository, outbox ports.OutboxStore, transactions ports.TransactionManager) AutoReplyService {
 	return AutoReplyService{
-		Runtime:             runtime,
+		CustomerSalesDecision: customerSalesDecision,
 		DecisionRepository:  decisions,
 		ReferenceRepository: references,
 		OutboundRepository:  outbound,
@@ -192,8 +192,8 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		log.Printf("[AutoReply] VALIDATE_FAILED business=%s err=%v", businessID, err)
 		return commands.AutoReplyResult{}, err
 	}
-	if s.Runtime == nil || s.DecisionRepository == nil || s.ReferenceRepository == nil || s.OutboundRepository == nil || s.Outbox == nil || s.Transactions == nil {
-		log.Printf("[AutoReply] NOT_WIRED business=%s runtime=%v decisions=%v", businessID, s.Runtime != nil, s.DecisionRepository != nil)
+	if s.CustomerSalesDecision == nil || s.DecisionRepository == nil || s.ReferenceRepository == nil || s.OutboundRepository == nil || s.Outbox == nil || s.Transactions == nil {
+		log.Printf("[AutoReply] NOT_WIRED business=%s runtime=%v decisions=%v", businessID, s.CustomerSalesDecision != nil, s.DecisionRepository != nil)
 		return commands.AutoReplyResult{}, appErrors.NotImplemented()
 	}
 
@@ -279,7 +279,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	if builtContext != nil && builtContext.Conversation.LastGeminiInteractionID != nil {
 		previousInteractionID = *builtContext.Conversation.LastGeminiInteractionID
 	}
-	out, err := s.Runtime.Decide(ctx, ports.CustomerSalesDecisionInput{
+	out, err := s.CustomerSalesDecision.Decide(ctx, ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{
 			BusinessID:             businessID,
 			ConversationID:         conversationID,
