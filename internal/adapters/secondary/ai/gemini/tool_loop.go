@@ -118,7 +118,7 @@ func extractFunctionCalls(resp contractGeminiResponse) []*contractFunctionCall {
 func (c *ContractClient) executeToolCalls(
 	ctx context.Context,
 	resp contractGeminiResponse,
-	input ports.ContractRuntimeInput,
+	input ports.CustomerSalesDecisionInput,
 	businessID, conversationID, runID string,
 ) ([]contractContent, error) {
 	caps := c.base.Capabilities()
@@ -278,10 +278,10 @@ func (c *ContractClient) runToolLoop(
 	ctx context.Context,
 	reqBody contractGeminiRequest,
 	rc *resolvedAIConfig,
-	input ports.ContractRuntimeInput,
+	input ports.CustomerSalesDecisionInput,
 	businessID, conversationID, runID string,
 	startedAt time.Time,
-) (ports.ContractRuntimeOutput, error) {
+) (ports.CustomerSalesDecisionOutput, error) {
 	// Per the spec: "Usage يتم تجميعه عبر جميع Gemini requests."
 	// Don't return only the last request's usage — accumulate.
 	var totalUsage ports.ContractUsageTelemetry
@@ -295,13 +295,13 @@ func (c *ContractClient) runToolLoop(
 	for {
 		// Check context deadline before each iteration.
 		if err := ctx.Err(); err != nil {
-			return ports.ContractRuntimeOutput{}, fmt.Errorf("tool loop context cancelled: %w", err)
+			return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("tool loop context cancelled: %w", err)
 		}
 
 		// Send the request.
 		resp, err := c.sendContractRequest(ctx, reqBody, rc)
 		if err != nil {
-			return ports.ContractRuntimeOutput{}, fmt.Errorf("gemini request in tool loop: %w", err)
+			return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("gemini request in tool loop: %w", err)
 		}
 		// Per fix #1: each sendContractRequest = 1 model request.
 		modelRequestCount++
@@ -317,13 +317,13 @@ func (c *ContractClient) runToolLoop(
 			// No function calls — parse the final structured proposal.
 			proposal, parseErr := parseContractProposal(resp)
 			if parseErr != nil {
-				return ports.ContractRuntimeOutput{}, parseErr
+				return ports.CustomerSalesDecisionOutput{}, parseErr
 			}
 
 			totalUsage.LatencyMs = time.Since(startedAt).Milliseconds()
 			totalUsage.ModelRequests = modelRequestCount
 
-			return ports.ContractRuntimeOutput{
+			return ports.CustomerSalesDecisionOutput{
 				Proposal: proposal,
 				GeminiInteraction: ports.GeminiInteractionContext{
 					PreviousInteractionID:  input.GeminiInteraction.PreviousInteractionID,
@@ -343,14 +343,14 @@ func (c *ContractClient) runToolLoop(
 		// WAITING_TOOL marker).
 		if c.lifecycle != nil && runID != "" && businessID != "" {
 			if _, err := c.lifecycle.MarkWaitingTool(ctx, businessID, runID); err != nil {
-				return ports.ContractRuntimeOutput{}, fmt.Errorf("lifecycle MarkWaitingTool failed (cannot continue tool loop in inconsistent state): %w", err)
+				return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("lifecycle MarkWaitingTool failed (cannot continue tool loop in inconsistent state): %w", err)
 			}
 		}
 
 		// Execute all function calls from the response.
 		toolContents, execErr := c.executeToolCalls(ctx, resp, input, businessID, conversationID, runID)
 		if execErr != nil {
-			return ports.ContractRuntimeOutput{}, execErr
+			return ports.CustomerSalesDecisionOutput{}, execErr
 		}
 
 		// Per fix #2: mark RUNNING before sending the next Gemini request.
@@ -358,7 +358,7 @@ func (c *ContractClient) runToolLoop(
 		// in WAITING_TOOL when tools are already executed.
 		if c.lifecycle != nil && runID != "" && businessID != "" {
 			if _, err := c.lifecycle.MarkRunning(ctx, businessID, runID); err != nil {
-				return ports.ContractRuntimeOutput{}, fmt.Errorf("lifecycle MarkRunning failed (cannot continue tool loop in inconsistent state): %w", err)
+				return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("lifecycle MarkRunning failed (cannot continue tool loop in inconsistent state): %w", err)
 			}
 		}
 
