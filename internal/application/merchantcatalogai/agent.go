@@ -28,7 +28,7 @@ type Agent struct {
 	Business            ports.BusinessRepository
 	EntityContract      EntityContractProvider
 	Authoring           MerchantCatalogAuthoringPort
-	CapabilitiesFactory func(selectedCatalogID string) ports.AICapabilityDispatcher
+	CapabilitiesFactory func(selectedCatalogID string) MerchantCatalogDiscoveryPort
 }
 
 func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error) {
@@ -102,7 +102,7 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 		return TurnResult{}, err
 	}
 
-	var capabilities ports.AICapabilityDispatcher
+	var capabilities MerchantCatalogDiscoveryPort
 	if a.CapabilitiesFactory != nil {
 		capabilities = a.CapabilitiesFactory(selected.Catalog.ID)
 	}
