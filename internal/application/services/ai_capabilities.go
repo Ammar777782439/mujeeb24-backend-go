@@ -75,7 +75,7 @@ func (r *CapabilityRegistry) Execute(ctx context.Context, execCtx ports.AICapabi
 var _ ports.AICapabilityRegistry = (*CapabilityRegistry)(nil)
 
 // IncorporateCapabilityEvidence delegates to ports.IncorporateCapabilityEvidence.
-func IncorporateCapabilityEvidence(target *ports.AIContext, result ports.AICapabilityResult) {
+func IncorporateCapabilityEvidence(target *ports.CustomerSalesContext, result ports.AICapabilityResult) {
 	ports.IncorporateCapabilityEvidence(target, result)
 }
 
@@ -326,7 +326,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 				Name:             item.Name,
 				Status:           item.Status,
 				Attributes:       safeJSONObject(item.Attributes),
-				EvidenceState:    AIContextFresh,
+				EvidenceState:    CustomerSalesContextFresh,
 				RetrievedAt:      now,
 				SchemaVersion:    AIEvidenceSchemaVersion,
 			})
@@ -390,7 +390,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 				Name:             item.Name,
 				Status:           item.Status,
 				Attributes:       safeJSONObject(item.Attributes),
-				EvidenceState:    AIContextFresh,
+				EvidenceState:    CustomerSalesContextFresh,
 				RetrievedAt:      now,
 				SchemaVersion:    AIEvidenceSchemaVersion,
 			},
@@ -441,9 +441,9 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 				AvailabilityStatus: offer.AvailabilityStatus,
 				Status:             offer.Status,
 			})
-			evState := AIContextFresh
+			evState := CustomerSalesContextFresh
 			if strings.EqualFold(strings.TrimSpace(offer.AvailabilityStatus), "unknown") || strings.EqualFold(strings.TrimSpace(offer.AvailabilityStatus), "stale") {
-				evState = AIContextStale
+				evState = CustomerSalesContextStale
 			}
 			evidence = append(evidence, ports.AIOfferEvidence{
 				Reference:            string(offer.ID),
@@ -513,7 +513,7 @@ func (c *CatalogDataCapability) Execute(ctx context.Context, execCtx ports.AICap
 				Name:                 v.Name,
 				Status:               v.Status,
 				Attributes:           safeJSONObject(v.Attributes),
-				EvidenceState:        AIContextFresh,
+				EvidenceState:        CustomerSalesContextFresh,
 				RetrievedAt:          now,
 				SchemaVersion:        AIEvidenceSchemaVersion,
 			})
@@ -1028,7 +1028,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 				Name:             res.Item.Name,
 				Status:           res.Item.Status,
 				Attributes:       safeJSONObject(res.Item.Attributes),
-				EvidenceState:    AIContextFresh,
+				EvidenceState:    CustomerSalesContextFresh,
 				RetrievedAt:      now,
 				SchemaVersion:    AIEvidenceSchemaVersion,
 			},
@@ -1054,7 +1054,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 				Name:                 v.Name,
 				Status:               v.Status,
 				Attributes:           safeJSONObject(v.Attributes),
-				EvidenceState:        AIContextFresh,
+				EvidenceState:        CustomerSalesContextFresh,
 				RetrievedAt:          now,
 				SchemaVersion:        AIEvidenceSchemaVersion,
 			})
@@ -1089,7 +1089,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 				Currency:             stringValue(o.Currency),
 				AvailabilityStatus:   o.AvailabilityStatus,
 				Status:               o.Status,
-				EvidenceState:        AIContextFresh,
+				EvidenceState:        CustomerSalesContextFresh,
 				RetrievedAt:          now,
 				SchemaVersion:        AIEvidenceSchemaVersion,
 			})
@@ -1213,7 +1213,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 				Name:             res.Item.Name,
 				Status:           res.Item.Status,
 				Attributes:       safeJSONObject(res.Item.Attributes),
-				EvidenceState:    AIContextFresh,
+				EvidenceState:    CustomerSalesContextFresh,
 				RetrievedAt:      now,
 				SchemaVersion:    AIEvidenceSchemaVersion,
 			},
@@ -1322,7 +1322,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 				Currency:             stringValue(res.Offer.Currency),
 				AvailabilityStatus:   res.Offer.AvailabilityStatus,
 				Status:               res.Offer.Status,
-				EvidenceState:        AIContextFresh,
+				EvidenceState:        CustomerSalesContextFresh,
 				RetrievedAt:          now,
 				SchemaVersion:        AIEvidenceSchemaVersion,
 			},
@@ -1374,7 +1374,7 @@ func (c *CatalogAuthoringCapability) Execute(ctx context.Context, execCtx ports.
 				Name:                 res.Variant.Name,
 				Status:               res.Variant.Status,
 				Attributes:           safeJSONObject(res.Variant.Attributes),
-				EvidenceState:        AIContextFresh,
+				EvidenceState:        CustomerSalesContextFresh,
 				RetrievedAt:          now,
 				SchemaVersion:        AIEvidenceSchemaVersion,
 			},
