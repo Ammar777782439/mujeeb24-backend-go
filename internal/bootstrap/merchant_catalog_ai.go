@@ -13,14 +13,14 @@ import (
 func wireMerchantCatalogAIV2(
 	dashboardServer *handlers.Server,
 	database *postgres.Adapter,
-	geminiClient *gemini.GeminiHTTPClient,
+	geminiHTTPClient *gemini.GeminiHTTPClient,
 	configProvider ports.AIConfigurationProvider,
 ) (*handlers.Server, error) {
 	if geminiClient == nil {
 		return dashboardServer, nil
 	}
 
-	merchantCatalogAuthoring, err := gemini.NewGeminiMerchantCatalogAuthoringAdapter(geminiClient)
+	merchantCatalogAuthoring, err := gemini.NewGeminiMerchantCatalogAuthoringAdapter(geminiHTTPClient)
 	if err != nil {
 		return nil, fmt.Errorf("build Gemini merchant catalog authoring adapter: %w", err)
 	}
