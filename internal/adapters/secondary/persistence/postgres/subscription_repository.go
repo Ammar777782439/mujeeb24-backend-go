@@ -83,7 +83,7 @@ func (r *SubscriptionRepository) Create(ctx context.Context, create ports.Subscr
 	if err != nil {
 		return ports.SubscriptionRecord{}, classifyRepositoryWriteError("subscription.create", err)
 	}
-	return r.GetByID(ctx, create.ID)	return record, nil
+	return r.GetByID(ctx, create.ID)
 }
 
 func (r *SubscriptionRepository) GetByID(ctx context.Context, subscriptionID string) (ports.SubscriptionRecord, error) {
