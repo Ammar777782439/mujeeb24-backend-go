@@ -127,7 +127,7 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 			Profile:          safeJSONDocument(customer.Profile),
 			ContactPoints:    safeJSONDocument(customer.ContactPoints),
 		},
-		PolicyEvidence: ports.AIPolicyEvidence{
+		PolicyEvidence: ports.CustomerSalesPolicyEvidence{
 			Reference:     "application-policy/" + nonEmpty(input.PolicyVersion, "auto-reply-v1"),
 			Version:       nonEmpty(input.PolicyVersion, "auto-reply-v1"),
 			State:         "application_policy_only",
@@ -217,7 +217,7 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 			if item.BusinessID != input.BusinessID || item.CatalogID != catalog.ID {
 				return ports.CustomerSalesContext{}, errors.New("AI context catalog item scope mismatch")
 			}
-			context.CatalogEvidence = append(context.CatalogEvidence, ports.AICatalogEvidence{
+			context.CatalogEvidence = append(context.CatalogEvidence, ports.CustomerSalesCatalogEvidence{
 				Reference:            item.ID,
 				CatalogReference:     item.CatalogID,
 				ItemType:             item.ItemType,
@@ -256,7 +256,7 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 				break
 			}
 			for _, item := range summaryItems.Items {
-				entry := ports.CatalogSummaryEntry{
+				entry := ports.CustomerSalesCatalogSummaryEntry{
 					ID:          item.ID,
 					Name:        item.Name,
 					CatalogName: catalog.Name,
@@ -292,7 +292,7 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 			if record.BusinessID != input.BusinessID {
 				return ports.CustomerSalesContext{}, errors.New("AI context knowledge scope mismatch")
 			}
-			context.KnowledgeEvidence = append(context.KnowledgeEvidence, ports.AIKnowledgeEvidence{
+			context.KnowledgeEvidence = append(context.KnowledgeEvidence, ports.CustomerSalesKnowledgeEvidence{
 				Reference: record.ID, KnowledgeKey: record.KnowledgeKey, Title: record.Title, Content: record.Content,
 				ContentType: record.ContentType, SourceReference: record.SourceReference, Authority: record.Authority,
 				EvidenceState: evidenceStateForValidity(now, record.ValidFrom, record.ValidUntil), Version: record.Version, ValidFrom: record.ValidFrom, ValidUntil: record.ValidUntil,
@@ -312,7 +312,7 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 			if record.BusinessID != input.BusinessID {
 				return ports.CustomerSalesContext{}, errors.New("AI context policy scope mismatch")
 			}
-			context.BusinessPolicyEvidence = append(context.BusinessPolicyEvidence, ports.AIBusinessPolicyEvidence{
+			context.BusinessPolicyEvidence = append(context.BusinessPolicyEvidence, ports.CustomerSalesBusinessPolicyEvidence{
 				Reference: record.ID, PolicyKey: record.PolicyKey, Category: record.Category, Title: record.Title,
 				Summary: record.Summary, Rules: safeJSONObject(record.Rules), Authority: record.Authority,
 				EvidenceState: evidenceStateForValidity(now, record.ValidFrom, record.ValidUntil), Version: record.Version, ValidFrom: record.ValidFrom, ValidUntil: record.ValidUntil,
@@ -324,7 +324,7 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 		}
 		if len(context.BusinessPolicyEvidence) > 0 {
 			first := context.BusinessPolicyEvidence[0]
-			context.PolicyEvidence = ports.AIPolicyEvidence{Reference: first.Reference, Version: "policy-v" + formatInt(first.Version), State: "published", RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion}
+			context.PolicyEvidence = ports.CustomerSalesPolicyEvidence{Reference: first.Reference, Version: "policy-v" + formatInt(first.Version), State: "published", RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion}
 		}
 	}
 
@@ -341,7 +341,7 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 			if strings.EqualFold(strings.TrimSpace(offer.AvailabilityStatus), "unknown") || strings.EqualFold(strings.TrimSpace(offer.AvailabilityStatus), "stale") {
 				evidenceState = CustomerSalesContextStale
 			}
-			context.OfferEvidence = append(context.OfferEvidence, ports.AIOfferEvidence{
+			context.OfferEvidence = append(context.OfferEvidence, ports.CustomerSalesOfferEvidence{
 				Reference:            offer.ID,
 				CatalogItemReference: offer.CatalogItemID,
 				VariantReference:     stringValue(offer.VariantID),
@@ -365,7 +365,7 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 			if variant.BusinessID != input.BusinessID || variant.CatalogItemID != item.Reference {
 				return ports.CustomerSalesContext{}, errors.New("AI context variant scope mismatch")
 			}
-			context.VariantEvidence = append(context.VariantEvidence, ports.AIVariantEvidence{
+			context.VariantEvidence = append(context.VariantEvidence, ports.CustomerSalesVariantEvidence{
 				Reference:            variant.ID,
 				CatalogItemReference: variant.CatalogItemID,
 				Name:                 variant.Name,
@@ -410,8 +410,8 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 	return context, nil
 }
 
-func buildRecentMessageEvidence(records []ports.CommunicationMessageRecord, sourceReference string, now time.Time) []ports.AIRecentMessageEvidence {
-	items := make([]ports.AIRecentMessageEvidence, 0, len(records))
+func buildRecentMessageEvidence(records []ports.CommunicationMessageRecord, sourceReference string, now time.Time) []ports.CustomerSalesRecentMessageEvidence {
+	items := make([]ports.CustomerSalesRecentMessageEvidence, 0, len(records))
 	for _, record := range records {
 		if record.ProviderMessageID != nil && strings.TrimSpace(*record.ProviderMessageID) == strings.TrimSpace(sourceReference) {
 			continue
@@ -423,7 +423,7 @@ func buildRecentMessageEvidence(records []ports.CommunicationMessageRecord, sour
 		if text == "" {
 			continue
 		}
-		items = append(items, ports.AIRecentMessageEvidence{
+		items = append(items, ports.CustomerSalesRecentMessageEvidence{
 			Reference:     record.ID,
 			Direction:     record.Direction,
 			Origin:        record.Origin,
