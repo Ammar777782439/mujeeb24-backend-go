@@ -12,7 +12,7 @@ import (
 type ExternalAdapters struct {
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
-	GeminiClient                   *gemini.GeminiHTTPClient
+	GeminiHTTPClient              *gemini.GeminiHTTPClient
 	LLMConfigError                 error
 	AutoReplyEnabled               bool
 	ChannelProvisioningSocial      ports.SocialChannelProvisioner
@@ -42,7 +42,7 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 			checks["channel_provisioning"] = "configured"
 		}
 	}
-	if a.GeminiClient != nil {
+	if a.GeminiHTTPClient != nil {
 		checks["llm_runtime"] = "configured"
 	}
 	return checks
@@ -83,7 +83,7 @@ func BuildExternalAdaptersWithCapabilities(cfg config.ProcessConfig, capabilitie
 		if err != nil {
 			adapters.LLMConfigError = errors.New("Gemini adapter configuration: " + err.Error())
 		} else {
-			adapters.GeminiClient = client
+			adapters.GeminiHTTPClient = client
 		}
 	} else if cfg.LLMEnabled {
 		adapters.LLMConfigError = errors.New("the configured non-Gemini AI provider is not wired to a customer AI capability")
