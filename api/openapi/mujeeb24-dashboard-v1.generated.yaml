@@ -12025,6 +12025,12 @@ paths:
               schema:
                 type: string
           description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
         "403":
           content:
             application/json:
