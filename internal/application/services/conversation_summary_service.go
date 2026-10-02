@@ -300,7 +300,7 @@ Rules:
 	fullPrompt := systemPrompt + "\n\n" + userPrompt
 	startedAt := s.now()
 	out, err := s.CustomerSalesDecisionPort.Decide(ctx, ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.CustomerSalesDecisionRequest{
+		Request: ports.CustomerSalesDecisionRequest{
 			BusinessID:     businessID,
 			ConversationID: conversationID,
 			Channel:        "internal",
