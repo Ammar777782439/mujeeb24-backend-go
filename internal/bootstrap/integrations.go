@@ -59,7 +59,7 @@ func BuildExternalAdapters(cfg config.ProcessConfig, capabilities ...ports.Custo
 func BuildExternalAdaptersWithCapabilities(cfg config.ProcessConfig, capabilities ports.CustomerSalesToolPort) ExternalAdapters {
 	adapters := ExternalAdapters{}
 	if cfg.SocialAPIAPIKey != "" || cfg.SocialAPIWebhookSecret != "" {
-		client := socialapi.NewClient(socialapi.Config{BaseURL: cfg.SocialAPIBaseURL, APIKey: cfg.SocialAPIAPIKey, WebhookSecret: cfg.SocialAPIWebhookSecret, HTTPTimeout: cfg.SocialAPIHTTPTimeout})
+		client := socialapi.NewGeminiHTTPClient(socialapi.Config{BaseURL: cfg.SocialAPIBaseURL, APIKey: cfg.SocialAPIAPIKey, WebhookSecret: cfg.SocialAPIWebhookSecret, HTTPTimeout: cfg.SocialAPIHTTPTimeout})
 		adapters.SocialAPI = client
 		adapters.SocialWebhook = client
 		adapters.ChannelProvisioningSocial = socialapi.NewProvisioningAdapter(client)
@@ -71,7 +71,7 @@ func BuildExternalAdaptersWithCapabilities(cfg config.ProcessConfig, capabilitie
 		}
 	}
 	if cfg.GeminiAPIKey != "" {
-		client, err := gemini.NewClient(gemini.Config{
+		client, err := gemini.NewGeminiHTTPClient(gemini.Config{
 			BaseURL:            cfg.GeminiBaseURL,
 			APIKey:             cfg.GeminiAPIKey,
 			Model:              cfg.GeminiModel,
