@@ -1,0 +1,60 @@
+name: Seed Mujeeb Services Merchant
+
+on:
+  workflow_dispatch:
+    inputs:
+      owner_email:
+        description: "Merchant owner login email"
+        required: true
+        type: string
+      owner_display_name:
+        description: "Merchant owner display name"
+        required: false
+        default: "نظام مجيب مقدم خدمات"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    name: Seed real merchant
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.PLATFORM_DATABASE_URL }}
+      MERCHANT_SEED_EMAIL: ${{ inputs.owner_email }}
+      MERCHANT_SEED_DISPLAY_NAME: ${{ inputs.owner_display_name }}
+      MERCHANT_SEED_PASSWORD: ${{ secrets.MERCHANT_SEED_PASSWORD }}
+      GOTOOLCHAIN: local
+    steps:
+      - name: Checkout trusted backend branch
+        uses: actions/checkout@v4
+        with:
+          ref: refactor/merchant-catalog-ai-v2-structure
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+          cache: true
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${DATABASE_URL}" || { echo "PLATFORM_DATABASE_URL is not configured."; exit 1; }
+          test -n "${MERCHANT_SEED_PASSWORD}" || { echo "MERCHANT_SEED_PASSWORD is not configured."; exit 1; }
+
+      - name: Format and verify seed command
+        shell: bash
+        run: |
+          set -euo pipefail
+          gofmt -w cmd/seed-merchant/main.go
+          go test ./cmd/seed-merchant
+
+      - name: Seed merchant
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run ./cmd/seed-merchant
