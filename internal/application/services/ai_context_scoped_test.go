@@ -62,7 +62,7 @@ func TestScopedOfferRetrieval_BasicOnly(t *testing.T) {
 		BusinessID: "b1", ConversationID: "c1",
 		Focus: &ports.ConversationFocus{Type: "offer", ID: "offer-basic", ItemID: &focusItem, CatalogID: &focusCatalog},
 	}
-	ctx, err := b.Build(context.Background(), ports.ContextBuildInput{
+	ctx, err := b.Build(context.Background(), ports.CustomerSalesContextInput{
 		BusinessID: "b1", ConversationID: "c1", Text: "وكم مدتها؟", Channel: "whatsapp",
 		ConversationState: state,
 	})
