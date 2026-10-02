@@ -27,12 +27,12 @@ type Agent struct {
 	Selector            CatalogSelector
 	Business            ports.BusinessRepository
 	EntityContract      EntityContractProvider
-	Runtime             Runtime
+	Authoring           MerchantCatalogAuthoringPort
 	CapabilitiesFactory func(selectedCatalogID string) ports.AICapabilityDispatcher
 }
 
 func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error) {
-	if a == nil || a.Sessions == nil || a.Selector == nil || a.EntityContract == nil || a.Runtime == nil || a.Business == nil {
+	if a == nil || a.Sessions == nil || a.Selector == nil || a.EntityContract == nil || a.Authoring == nil || a.Business == nil {
 		return TurnResult{}, errors.New("merchant catalog AI is not fully configured")
 	}
 	if strings.TrimSpace(in.BusinessID) == "" || strings.TrimSpace(in.PrincipalID) == "" {
@@ -107,7 +107,7 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 		capabilities = a.CapabilitiesFactory(selected.Catalog.ID)
 	}
 
-	proposal, err := a.Runtime.Decide(ctx, RuntimeInput{
+	proposal, err := a.Authoring.Propose(ctx, MerchantCatalogAuthoringInput{
 		BusinessID:      in.BusinessID,
 		PrincipalID:     in.PrincipalID,
 		SessionID:       sessionID,
