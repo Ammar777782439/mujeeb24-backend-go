@@ -162,7 +162,7 @@ func (s *Server) dispatchSystemCommand(ctx context.Context, operationID string, 
 		// clearing the cookie stops the browser from sending it
 		// on every /auth/* request until natural expiry.
 		out := &contract.NoContentOutput{}
-		out.SetCookie = &http.Cookie{Name: "mujeeb_refresh", Value: "", Path: "/api/v1/auth", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: cookieSecureEnabled(), MaxAge: -1, Expires: time.Unix(1, 0).UTC()}
+		out.SetCookie = &http.Cookie{Name: "mujeeb_refresh", Value: "", Path: "/api/v1/auth", HttpOnly: true, SameSite: http.SameSiteNoneMode, Secure: cookieSecureEnabled(), MaxAge: -1, Expires: time.Unix(1, 0).UTC()}
 		return out, true
 	case "requestHumanReview":
 		in := input.(*contract.AIHumanInput)
@@ -228,7 +228,7 @@ func refreshCookie(value string, expiresAt time.Time) *http.Cookie {
 	// is never transmitted over plain HTTP. cookieSecureEnabled() returns
 	// true unless APP_ENV=development — operators running a local dev
 	// server over HTTP can opt out via the environment.
-	return &http.Cookie{Name: "mujeeb_refresh", Value: value, Path: "/api/v1/auth", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: cookieSecureEnabled(), Expires: expiresAt.UTC(), MaxAge: maxAge}
+	return &http.Cookie{Name: "mujeeb_refresh", Value: value, Path: "/api/v1/auth", HttpOnly: true, SameSite: http.SameSiteNoneMode, Secure: cookieSecureEnabled(), Expires: expiresAt.UTC(), MaxAge: maxAge}
 }
 
 // cookieSecureEnabled returns true when the deployment is NOT development.
