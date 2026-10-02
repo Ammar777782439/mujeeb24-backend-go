@@ -181,7 +181,7 @@ func main() {
 	service.Validation = services.NewValidationPipeline(
 		postgres.NewPostgresReferenceValidator(adapter),
 		postgres.NewPostgresTenantValidator(adapter),
-		postgres.NewPostgresPolicyEvaluator(businessRepo),
+		postgres.NewPostgresCustomerSalesPolicyEvaluator(businessRepo),
 		nil,
 	)
 	service.Conversations = postgres.NewConversationRepository(adapter)
