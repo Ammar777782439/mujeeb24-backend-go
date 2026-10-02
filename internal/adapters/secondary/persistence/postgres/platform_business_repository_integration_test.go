@@ -89,5 +89,12 @@ func TestPlatformBusinessRepositoryProjectsActiveOwner(t *testing.T) {
 	if withOwner.OwnerIdentitySummary == nil || *withOwner.OwnerIdentitySummary != "Platform Owner <owner.platform@example.test>" {
 		t.Fatalf("owner summary = %v, want expected identity", withOwner.OwnerIdentitySummary)
 	}
+	page, err := repo.List(ctx, ports.PlatformBusinessListFilter{Status: "PENDING_SETUP", Limit: 10})
+	if err != nil {
+		t.Fatalf("list pending businesses: %v", err)
+	}
+	if len(page.Items) != 1 || page.Items[0].ID != businessID {
+		t.Fatalf("pending status filter did not match business: %#v", page.Items)
+	}
 
 }
