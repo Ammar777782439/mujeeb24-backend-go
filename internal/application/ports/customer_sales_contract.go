@@ -12,20 +12,20 @@ import "context"
 // Contract ④ §4 — Gemini → Mujeeb Output Contract (Final Proposal)
 // ════════════════════════════════════════════════════════════════════════════
 
-// AIProposalStatus — the four closed status values per contract ④ §4.
+// CustomerSalesProposalStatus — the four closed status values per contract ④ §4.
 //
 // These are the ONLY allowed status values Gemini may return. Any other value
 // fails Structural Validation per contract ⑥ §4.
-type AIProposalStatus string
+type CustomerSalesProposalStatus string
 
 const (
-	AIProposalStatusResolved      AIProposalStatus = "resolved"
-	AIProposalStatusAmbiguous     AIProposalStatus = "ambiguous"
-	AIProposalStatusNotFound      AIProposalStatus = "not_found"
-	AIProposalStatusNeedsMoreData AIProposalStatus = "needs_more_data"
+	CustomerSalesProposalStatusResolved      CustomerSalesProposalStatus = "resolved"
+	CustomerSalesProposalStatusAmbiguous     CustomerSalesProposalStatus = "ambiguous"
+	CustomerSalesProposalStatusNotFound      CustomerSalesProposalStatus = "not_found"
+	CustomerSalesProposalStatusNeedsMoreData CustomerSalesProposalStatus = "needs_more_data"
 )
 
-// AIProposalAction — the five closed action values per contract ④ §4.
+// CustomerSalesProposalAction — the five closed action values per contract ④ §4.
 //
 // These are the ONLY allowed action values Gemini may return. Any other value
 // fails Structural Validation per contract ⑥ §5.
@@ -34,14 +34,14 @@ const (
 // "clarification" (not "ask_clarification"), "lead_draft" (not "create_lead"),
 // "order_draft" (not "create_transaction_draft"). Migration 000056 aligns the
 // ai_decisions table accordingly.
-type AIProposalAction string
+type CustomerSalesProposalAction string
 
 const (
-	AIProposalActionAnswer        AIProposalAction = "answer"
-	AIProposalActionClarification AIProposalAction = "clarification"
-	AIProposalActionHumanRequest  AIProposalAction = "human_request"
-	AIProposalActionLeadDraft     AIProposalAction = "lead_draft"
-	AIProposalActionOrderDraft    AIProposalAction = "order_draft"
+	CustomerSalesProposalActionAnswer        CustomerSalesProposalAction = "answer"
+	CustomerSalesProposalActionClarification CustomerSalesProposalAction = "clarification"
+	CustomerSalesProposalActionHumanRequest  CustomerSalesProposalAction = "human_request"
+	CustomerSalesProposalActionLeadDraft     CustomerSalesProposalAction = "lead_draft"
+	CustomerSalesProposalActionOrderDraft    CustomerSalesProposalAction = "order_draft"
 )
 
 // SelectedReference is a per-contract ④ §4 reference to a catalog entity that
@@ -69,7 +69,7 @@ type CatalogBatchCandidate struct {
 	Reason     string   `json:"reason,omitempty"`
 }
 
-// AIGeminiProposal is the contract ④ §4 final output of one Gemini interaction
+// CustomerSalesProposal is the contract ④ §4 final output of one Gemini interaction
 // for one AI Run. It is the ONLY shape Gemini is allowed to return for the
 // customer-facing decision.
 //
@@ -81,9 +81,9 @@ type CatalogBatchCandidate struct {
 //   - payment_confirmed, order_created
 //
 // Such fields are Mujeeb's responsibility and live in EffectiveDecision.
-type AIGeminiProposal struct {
-	Status       AIProposalStatus    `json:"status"`
-	Action       AIProposalAction    `json:"action"`
+type CustomerSalesProposal struct {
+	Status       CustomerSalesProposalStatus    `json:"status"`
+	Action       CustomerSalesProposalAction    `json:"action"`
 	ResponseText string              `json:"response_text"`
 	Selected     []SelectedReference `json:"selected,omitempty"`
 }
@@ -100,7 +100,7 @@ type CatalogBatchResult struct {
 	// Per AIUsageTokenTelemetry.md §6: every Gemini call's tokens must be
 	// recorded. This field carries the usageMetadata from the batch's
 	// Gemini response so the CatalogBatchController can persist it.
-	Usage ContractUsageTelemetry `json:"-"`
+	Usage CustomerSalesUsageTelemetry `json:"-"`
 	// LatencyMs is the wall-clock duration of the Gemini batch call.
 	// Per P2-13: this is the REAL latency from start-of-request to
 	// end-of-response, NOT derived from EstimatedCostMicros (which is
@@ -183,7 +183,7 @@ type CustomerSalesDecisionInput struct {
 // CustomerSalesDecisionOutput is the output of CustomerSalesDecisionPort.Decide.
 type CustomerSalesDecisionOutput struct {
 	// Proposal is the contract ④ §4 structured Gemini output.
-	Proposal AIGeminiProposal
+	Proposal CustomerSalesProposal
 
 	// GeminiInteraction echoes the input and is populated with the
 	// ResultingInteractionID returned by Gemini. Caller persists this as the
@@ -191,14 +191,14 @@ type CustomerSalesDecisionOutput struct {
 	GeminiInteraction GeminiInteractionContext
 
 	// Usage per contract ⑧ §8 (token counts + estimated cost).
-	Usage ContractUsageTelemetry
+	Usage CustomerSalesUsageTelemetry
 
 	// LatencyMs per contract ⑧ §9 (the Gemini API call latency).
 	LatencyMs int64
 }
 
-// ContractUsageTelemetry is the per-call usage data per contract ⑧ §8.
-type ContractUsageTelemetry struct {
+// CustomerSalesUsageTelemetry is the per-call usage data per contract ⑧ §8.
+type CustomerSalesUsageTelemetry struct {
 	InputTokens         int
 	CachedTokens        int
 	OutputTokens        int
