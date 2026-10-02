@@ -14,8 +14,8 @@ type listVariantsCapability struct {
 	selectedCatalogID string
 }
 
-func (c listVariantsCapability) Definition() MerchantCatalogDiscoveryToolDefinition {
-	return MerchantCatalogDiscoveryToolDefinition{
+func (c listVariantsCapability) Definition() ports.AICapabilityDefinition {
+	return ports.AICapabilityDefinition{
 		Name:        "merchant_catalog_list_variants",
 		Description: "Read variants for one catalog item.",
 		Parameters: map[string]any{
@@ -31,42 +31,53 @@ func (c listVariantsCapability) Definition() MerchantCatalogDiscoveryToolDefinit
 	}
 }
 
-func (c listVariantsCapability) Execute(ctx context.Context, execCtx MerchantCatalogDiscoveryExecutionContext, rawParams []byte) (MerchantCatalogDiscoveryResult, error) {
+func (c listVariantsCapability) Execute(ctx context.Context, execCtx ports.AICapabilityExecutionContext, rawParams []byte) (ports.AICapabilityResult, error) {
 	params, err := jsonParams(rawParams)
 	if err != nil {
-		return MerchantCatalogDiscoveryResult{}, err
+		return ports.AICapabilityResult{}, err
 	}
 	if c.selectedCatalogID == "" {
-		return MerchantCatalogDiscoveryResult{}, errors.New("selected merchant catalog is required")
+		return ports.AICapabilityResult{}, errors.New("selected merchant catalog is required")
 	}
 
 	itemID, err := requiredString(params, "item_id")
 	if err != nil {
-		return MerchantCatalogDiscoveryResult{}, err
+		return ports.AICapabilityResult{}, err
 	}
 	if _, err := c.repository.GetCatalogItem(ctx, execCtx.BusinessID, c.selectedCatalogID, itemID); err != nil {
-		return MerchantCatalogDiscoveryResult{}, err
+		return ports.AICapabilityResult{}, err
 	}
 
 	status, _ := params["status"].(string)
 	cursor, _ := params["cursor"].(string)
 	page, err := c.repository.ListVariants(ctx, execCtx.BusinessID, itemID, status, readLimit(params), cursor)
 	if err != nil {
-		return MerchantCatalogDiscoveryResult{}, err
+		return ports.AICapabilityResult{}, err
 	}
 
-	now := time.Now().UTC()
+
 	data := make([]map[string]any, 0, len(page.Items))
-	evidenceReferences := make([]string, 0, len(page.Items))
+	evidence := make([]ports.CustomerSalesVariantEvidence, 0, len(page.Items))
 	for _, variant := range page.Items {
-		evidenceReferences = append(evidenceReferences, variant.ID)
+		data = append(data, map[string]any{
+			"id": variant.ID,
+			"catalog_item_id": variant.CatalogItemID,
+			"name": variant.Name,
+			"attributes": json.RawMessage(variant.Attributes),
+			"status": variant.Status,
+		})
+		evidence = append(evidence, ports.CustomerSalesVariantEvidence{
+			Reference: variant.ID, CatalogItemReference: variant.CatalogItemID,
+			Name: variant.Name, Status: variant.Status, Attributes: variant.Attributes,
+			RetrievedAt: time.Now().UTC(),
+		})
 	}
 
-	return MerchantCatalogDiscoveryResult{
-		Data:            data,
-		EvidenceReferences: evidenceReferences,
-		HasMore:         page.HasMore,
-		NextCursor:      page.NextCursor,
-		Operation:       "merchant_catalog_list_variants",
+	return ports.AICapabilityResult{
+		Data: data,
+		VariantEvidence: evidence,
+		HasMore: page.HasMore,
+		NextCursor: page.NextCursor,
+		Operation: "merchant_catalog_list_variants",
 	}, nil
 }
