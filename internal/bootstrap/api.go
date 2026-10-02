@@ -417,7 +417,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	// PlatformDeps wire-up). The previous local declaration here has
 	// been removed. The flags below remain here for the
 	// aiConfigured/channelConfigured dashboard view.
-	aiConfigured := (external.GeminiClient != nil || external.OpenAICompatibleClient != nil) && external.LLMConfigError == nil
+	aiConfigured := external.GeminiClient != nil && external.LLMConfigError == nil
 	channelConfigured := external.SocialAPI != nil
 	_ = aiConfigured
 	_ = channelConfigured
