@@ -227,9 +227,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		if external.GeminiClient == nil {
 			return nil, errors.New("AutoReply requires the Gemini customer-sales AI to be configured")
 		}
-		// Per contract ④ §8, wrap the legacy Gemini Client with the
-		// contract-aligned GeminiCustomerSalesAdapter (implements ports.CustomerSalesDecisionPort).
-		// The legacy Client.Decide method is no longer used for AutoReply.
+		// Per contract ④ §8, adapt the Gemini provider client to the
+		// CustomerSalesDecisionPort used by AutoReply and conversation summaries.
 		var customerSalesDecision ports.CustomerSalesDecisionPort
 		var geminiClient *gemini.Client
 		var runRepo ports.AIRunRepository
@@ -239,7 +238,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			if err != nil {
 				return nil, fmt.Errorf("build customer sales AI adapter: %w", err)
 			}
-			// Per §1: wire the dynamic config provider so every DecideContract
+			// Per §1: wire the dynamic config provider so every customer-sales Decide
 			// call reads the ACTIVE config from cache/DB.
 			customerSalesAdapter.SetConfigurationProvider(aiConfigCache)
 			// Per the Tool Loop spec: wire the SAME runRepo
@@ -301,7 +300,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		contextBuilder.Policies = postgres.NewBusinessPolicyRepository(database)
 		service.ContextBuilder = contextBuilder
 		// Per ADR-039 + P1-5: summaries use the SAME GeminiCustomerSalesAdapter
-		// instance as AutoReply. There is no legacy AI fallback.
+		// instance as AutoReply. No generic AI fallback is used.
 		// The GeminiCustomerSalesAdapter reads the active AI configuration through
 		// the AIConfigurationCache and provides usage telemetry.
 		service.SummaryService = services.NewConversationSummaryService(
