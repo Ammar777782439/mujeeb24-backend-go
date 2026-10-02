@@ -333,7 +333,7 @@ func platformBusinessProjection(b ports.PlatformBusinessRecord) dto.PlatformBusi
 		ID:                   b.ID,
 		Name:                 b.Name,
 		Slug:                 b.Slug,
-		PlatformStatus:       b.PlatformStatus,
+		PlatformStatus:       strings.ToUpper(b.PlatformStatus),
 		OwnerIdentitySummary: b.OwnerIdentitySummary,
 		SubscriptionSummary:  b.SubscriptionSummary,
 		CreatedAt:            b.CreatedAt.UTC().Format(time.RFC3339),
