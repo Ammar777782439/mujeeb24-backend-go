@@ -57,7 +57,7 @@ func (c listVariantsCapability) Execute(ctx context.Context, execCtx ports.AICap
 
 	now := time.Now().UTC()
 	data := make([]map[string]any, 0, len(page.Items))
-	evidence := make([]ports.AIVariantEvidence, 0, len(page.Items))
+	evidence := make([]ports.CustomerSalesVariantEvidence, 0, len(page.Items))
 	for _, variant := range page.Items {
 		data = append(data, map[string]any{
 			"id":              variant.ID,
@@ -66,7 +66,7 @@ func (c listVariantsCapability) Execute(ctx context.Context, execCtx ports.AICap
 			"status":          variant.Status,
 			"attributes":      json.RawMessage(variant.Attributes),
 		})
-		evidence = append(evidence, ports.AIVariantEvidence{
+		evidence = append(evidence, ports.CustomerSalesVariantEvidence{
 			Reference:            variant.ID,
 			CatalogItemReference: variant.CatalogItemID,
 			Name:                 variant.Name,
