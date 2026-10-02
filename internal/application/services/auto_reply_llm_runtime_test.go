@@ -10,19 +10,19 @@ import (
 
 // TestAutoReplyUsesStructuredLLMProposalBeforeEnqueue was the legacy test that
 // used openaicompatible.Client directly. Per contract ④ §8, the AutoReplyService
-// now uses ports.ContractRuntime (implemented by gemini.ContractClient). The
+// now uses ports.CustomerSalesDecisionPort (implemented by gemini.ContractClient). The
 // OpenAI-compatible adapter does not yet implement ContractRuntime.
 //
 // The contract-aligned test that replaces this one is TestAutoReplyServicePersistsDecisionAndEnqueuesAnswerAtomically
-// in auto_reply_test.go, which uses FakeContractRuntime.
+// in auto_reply_test.go, which uses FakeCustomerSalesDecisionPort.
 
 func TestAutoReplyUsesContractRuntimeProposalBeforeEnqueue(t *testing.T) {
 	decisions := &fakeDecisionRepository{}
 	outbound := &fakeOutboundRepository{}
 	outbox := &fakeOutboxStore{}
-	// Use FakeContractRuntime which returns a contract-aligned AIGeminiProposal
+	// Use FakeCustomerSalesDecisionPort which returns a contract-aligned AIGeminiProposal
 	// per contract ④ §4 (status + action + response_text + selected[]).
-	runtime := NewFakeContractRuntime("تم استلام رسالتك")
+	runtime := NewFakeCustomerSalesDecisionPort("تم استلام رسالتك")
 	service := NewAutoReplyService(
 		runtime,
 		decisions,
