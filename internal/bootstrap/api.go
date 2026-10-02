@@ -155,12 +155,6 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	if external.SocialAPIHealthProbe != nil {
 		platformOperations.RegisterProbe("socialapi", external.SocialAPIHealthProbe)
 	}
-	if external.GeminiHTTPClient != nil {
-		platformOperations.RegisterProbe("google_gemini", gemini.NewHealthCheckProbe(external.GeminiHTTPClient))
-	}
-	if socialClient, ok := external.SocialAPI.(*socialapi.Client); ok && socialClient != nil {
-		platformOperations.RegisterProbe("socialapi", socialapi.NewHealthCheckProbe(socialClient))
-	}
 
 	// Customer-sales capabilities are owned by the application layer.
 	// The Gemini adapter receives only the narrow CustomerSalesToolPort.
