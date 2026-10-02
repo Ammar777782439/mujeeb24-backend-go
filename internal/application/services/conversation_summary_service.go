@@ -341,7 +341,7 @@ Rules:
 // helper) to keep the change minimal. Per P1-6: when pricing lookup
 // fails, the record is marked status="pricing_failed" — never silently
 // stored as "success" with cost=0.
-func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, businessID string, usage ports.ContractUsageTelemetry, latencyMs int64, startedAt time.Time) {
+func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, businessID string, usage ports.CustomerSalesUsageTelemetry, latencyMs int64, startedAt time.Time) {
 	if s.AIUsage == nil {
 		log.Printf("[SummaryService] AI_USAGE_SKIP business=%s reason=AIUsage_repository_not_wired", businessID)
 		return
