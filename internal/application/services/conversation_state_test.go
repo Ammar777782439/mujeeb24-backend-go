@@ -300,7 +300,7 @@ func TestBuildValidatedState_NoReferenceResetsComparison(t *testing.T) {
 func strPtr(s string) *string { return &s }
 
 // Fake runtime counting calls to prove ONE AI call per turn.
-// Per contract ④ §4, the new flow uses AIGeminiProposal. FakeCustomerSalesDecisionPort
+// Per contract ④ §4, the new flow uses CustomerSalesProposal. FakeCustomerSalesDecisionPort
 // tracks LastInput which can be inspected to count calls.
 type countingRuntime struct {
 	Fake *FakeCustomerSalesDecisionPort
@@ -308,9 +308,9 @@ type countingRuntime struct {
 
 func TestAutoReply_OneAICallPerTurn(t *testing.T) {
 	rt := &FakeCustomerSalesDecisionPort{
-		Proposal: ports.AIGeminiProposal{
-			Status:       ports.AIProposalStatusResolved,
-			Action:       ports.AIProposalActionAnswer,
+		Proposal: ports.CustomerSalesProposal{
+			Status:       ports.CustomerSalesProposalStatusResolved,
+			Action:       ports.CustomerSalesProposalActionAnswer,
 			ResponseText: "ok",
 		},
 	}
