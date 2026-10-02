@@ -130,7 +130,7 @@ func offerRefs(evidence []ports.AIOfferEvidence) map[string]string {
 // Item-based comparison entries must still carry offers (prices).
 func TestRetrieveComparisonItemBranchIncludesOffers(t *testing.T) {
 	builder := comparisonTestBuilder(newComparisonStubRepo())
-	ctx, err := builder.Build(context.Background(), ports.ContextBuildInput{
+	ctx, err := builder.Build(context.Background(), ports.CustomerSalesContextInput{
 		BusinessID: "b1", ConversationID: "c1", Text: "compare",
 		ConversationState: &ports.ConversationStateRecord{
 			BusinessID: "b1", ConversationID: "c1",
@@ -149,7 +149,7 @@ func TestRetrieveComparisonItemBranchIncludesOffers(t *testing.T) {
 // Comparison mode must still admit new candidates so the AI can leave it.
 func TestRetrieveComparisonAugmentsCandidates(t *testing.T) {
 	builder := comparisonTestBuilder(newComparisonStubRepo())
-	ctx, err := builder.Build(context.Background(), ports.ContextBuildInput{
+	ctx, err := builder.Build(context.Background(), ports.CustomerSalesContextInput{
 		BusinessID: "b1", ConversationID: "c1", Text: "what about extra?",
 		ConversationState: &ports.ConversationStateRecord{
 			BusinessID: "b1", ConversationID: "c1",
