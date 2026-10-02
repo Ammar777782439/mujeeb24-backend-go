@@ -276,7 +276,7 @@ func TestCatalogDataCapabilityOperations(t *testing.T) {
 }
 
 func TestIncorporateCapabilityEvidence(t *testing.T) {
-	aiCtx := &ports.AIContext{
+	aiCtx := &ports.CustomerSalesContext{
 		CatalogEvidence: []ports.AICatalogEvidence{
 			{Reference: "item-1", Name: "Existing Item"},
 		},
