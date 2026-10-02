@@ -481,7 +481,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			PrincipalBootstrap: authentication.Repository,
 			Business:           postgres.NewPlatformBusinessRepository(database),
 		}
-		}
+	}
 	dashboardServer := handlers.NewServer(dependencies)
 	dashboardServer = dashboardServer.WithPlatformDeps(handlers.PlatformDeps{
 		Plans:               postgres.NewPlanRepository(database),
