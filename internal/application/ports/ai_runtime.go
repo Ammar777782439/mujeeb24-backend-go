@@ -5,10 +5,6 @@ import (
 	"time"
 )
 
-type AIRuntime interface {
-	Decide(context.Context, AIDecisionInput) (AIDecisionProposal, error)
-}
-
 type AIDecisionInput struct {
 	BusinessID             string
 	ConversationID         string
