@@ -339,8 +339,8 @@ func TestAutoReply_OneAICallPerTurn(t *testing.T) {
 	}
 	// Per contract ④ §4, FakeCustomerSalesDecisionPort tracks LastInput instead of a call counter.
 	// We verify the AI was called exactly once by checking LastInput was populated.
-	if rt.LastInput.DecisionInput.Text != "hello" {
-		t.Fatalf("expected one AI call with text \"hello\", got LastInput.Text=%q", rt.LastInput.DecisionInput.Text)
+	if rt.LastInput.Request.Text != "hello" {
+		t.Fatalf("expected one AI call with text \"hello\", got LastInput.Text=%q", rt.LastInput.Request.Text)
 	}
 }
 
