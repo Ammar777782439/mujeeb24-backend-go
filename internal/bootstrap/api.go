@@ -217,7 +217,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// Per contract ④ §8, adapt the Gemini provider client to the
 		// CustomerSalesDecisionPort used by AutoReply and conversation summaries.
 		var customerSalesDecision ports.CustomerSalesDecisionPort
-		var geminiClient *gemini.Client
+		var geminiClient *gemini.GeminiHTTPClient
 		var runRepo ports.AIRunRepository
 		if external.GeminiClient != nil {
 			geminiClient = external.GeminiClient
