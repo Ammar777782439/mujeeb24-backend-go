@@ -13,7 +13,7 @@ import (
 func wireMerchantCatalogAIV2(
 	dashboardServer *handlers.Server,
 	database *postgres.Adapter,
-	geminiClient *gemini.Client,
+	geminiClient *gemini.GeminiHTTPClient,
 	configProvider ports.AIConfigurationProvider,
 ) (*handlers.Server, error) {
 	if geminiClient == nil {
