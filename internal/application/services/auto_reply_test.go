@@ -9,7 +9,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
-// fakeAIRuntime was removed; tests now use FakeContractRuntime (defined in
+// fakeAIRuntime was removed; tests now use FakeCustomerSalesDecisionPort (defined in
 // fake_contract_runtime.go) which returns ports.AIGeminiProposal per contract ④ §4.
 
 type fakeDecisionRepository struct {
@@ -155,7 +155,7 @@ func TestAutoReplyServicePersistsDecisionAndEnqueuesAnswerAtomically(t *testing.
 	convRepo := &fakeConversationRuntimeRepository{}
 	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
 	service := NewAutoReplyService(
-		NewFakeContractRuntime("تم استلام رسالتك"),
+		NewFakeCustomerSalesDecisionPort("تم استلام رسالتك"),
 		decisions,
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
 		outbound,
@@ -215,7 +215,7 @@ func TestAutoReplyServiceDoesNotEnqueueNonAnswerDecision(t *testing.T) {
 		// Per contract ④ §4, lead_draft is one of the closed action values.
 		// Lead drafts do not enqueue; they persist a decision and wait for the
 		// separate Lead flow.
-		&FakeContractRuntime{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusResolved, Action: ports.AIProposalActionLeadDraft, ResponseText: "تم تجهيز مسودة العميل المحتمل"}},
+		&FakeCustomerSalesDecisionPort{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusResolved, Action: ports.AIProposalActionLeadDraft, ResponseText: "تم تجهيز مسودة العميل المحتمل"}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
 		&fakeOutboundRepository{},
@@ -234,7 +234,7 @@ func TestAutoReplyServiceDoesNotEnqueueNonAnswerDecision(t *testing.T) {
 func TestAutoReplyServiceEnqueuesAllowedClarification(t *testing.T) {
 	outbox := &fakeOutboxStore{}
 	service := NewAutoReplyService(
-		&FakeContractRuntime{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusAmbiguous, Action: ports.AIProposalActionClarification, ResponseText: "أي باقة تقصد؟"}},
+		&FakeCustomerSalesDecisionPort{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusAmbiguous, Action: ports.AIProposalActionClarification, ResponseText: "أي باقة تقصد؟"}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
 		&fakeOutboundRepository{},
@@ -265,7 +265,7 @@ func TestAutoReplyServiceRejectsEmptyClarificationText(t *testing.T) {
 		// Per contract ④ §4, clarification action requires non-empty response_text.
 		// We set ResponseText empty to simulate a malformed Gemini output (which
 		// the API schema would normally reject; we test the secondary Mujeeb gate).
-		&FakeContractRuntime{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusAmbiguous, Action: ports.AIProposalActionClarification, ResponseText: ""}},
+		&FakeCustomerSalesDecisionPort{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusAmbiguous, Action: ports.AIProposalActionClarification, ResponseText: ""}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
 		&fakeOutboundRepository{},
@@ -310,7 +310,7 @@ func TestAutoReplyServiceEnqueuesGeneralAnswerAfterFocus(t *testing.T) {
 	}}
 	outbox := &fakeOutboxStore{}
 	service := NewAutoReplyService(
-		&FakeContractRuntime{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusResolved, Action: ports.AIProposalActionAnswer, ResponseText: "الباقات: الأساسية والاحترافية", Selected: []ports.SelectedReference{{ItemID: "offer-basic"}, {ItemID: "offer-pro"}}}},
+		&FakeCustomerSalesDecisionPort{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusResolved, Action: ports.AIProposalActionAnswer, ResponseText: "الباقات: الأساسية والاحترافية", Selected: []ports.SelectedReference{{ItemID: "offer-basic"}, {ItemID: "offer-pro"}}}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
 		&fakeOutboundRepository{},
@@ -353,7 +353,7 @@ func TestAutoReplyServiceHandlesHumanOwnership(t *testing.T) {
 	)
 
 	service := NewAutoReplyService(
-		NewFakeContractRuntime("Hello"),
+		NewFakeCustomerSalesDecisionPort("Hello"),
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{},
 		&fakeOutboundRepository{},
@@ -388,7 +388,7 @@ func TestAutoReplyServiceHandlesWaitingHuman(t *testing.T) {
 	)
 
 	service := NewAutoReplyService(
-		NewFakeContractRuntime("Hello"),
+		NewFakeCustomerSalesDecisionPort("Hello"),
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{},
 		&fakeOutboundRepository{},
@@ -417,7 +417,7 @@ func TestAutoReplyServiceHandlesDraftOrder(t *testing.T) {
 	outbox := &fakeOutboxStore{}
 	convRepo := &fakeConversationRuntimeRepository{}
 	service := NewAutoReplyService(
-		&FakeContractRuntime{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusResolved, Action: ports.AIProposalActionOrderDraft, ResponseText: "تم تجهيز مسودة الطلب"}},
+		&FakeCustomerSalesDecisionPort{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusResolved, Action: ports.AIProposalActionOrderDraft, ResponseText: "تم تجهيز مسودة الطلب"}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{},
 		&fakeOutboundRepository{},
@@ -449,7 +449,7 @@ func TestAutoReplyServiceHandlesDraftLead(t *testing.T) {
 	outbox := &fakeOutboxStore{}
 	convRepo := &fakeConversationRuntimeRepository{}
 	service := NewAutoReplyService(
-		&FakeContractRuntime{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusResolved, Action: ports.AIProposalActionLeadDraft, ResponseText: "تم تجهيز مسودة العميل المحتمل"}},
+		&FakeCustomerSalesDecisionPort{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusResolved, Action: ports.AIProposalActionLeadDraft, ResponseText: "تم تجهيز مسودة العميل المحتمل"}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{},
 		&fakeOutboundRepository{},
