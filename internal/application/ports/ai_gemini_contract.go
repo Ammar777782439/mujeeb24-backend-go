@@ -527,8 +527,7 @@ type AICatalogBatchPatch struct {
 //	Catalog boundary → Function Calling / tool
 //	Mujeeb Output Contract → Structured Output (responseSchema)
 //
-// CustomerSalesDecisionPort replaces the legacy AIRuntime interface. New code MUST
-// use CustomerSalesDecisionPort; the legacy AIRuntime is kept only for migration.
+// CustomerSalesDecisionPort is the application port for customer-facing sales decisions.
 //
 // Per contract ③ §4, this interface carries GeminiInteractionContext with
 // previous_interaction_id chaining.
@@ -569,6 +568,17 @@ type CustomerSalesDecisionInput struct {
 
 // CustomerSalesDecisionRequest contains the customer-facing input that is
 // safe and authoritative for the customer-sales AI.
+type CustomerSalesDecisionRequest struct {
+	BusinessID             string
+	ConversationID         string
+	SourceMessageReference string
+	Text                   string
+	Channel                string
+	PolicyVersion          string
+	Context                *AIContext
+}
+
+// CustomerSalesDecisionRequest is the customer-side decision data supplied by Mujeeb.
 type CustomerSalesDecisionRequest struct {
 	BusinessID             string
 	ConversationID         string
