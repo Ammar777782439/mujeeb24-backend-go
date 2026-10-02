@@ -230,8 +230,7 @@ func (r *PlatformBusinessRepository) transition(ctx context.Context, op, busines
 	if err != nil {
 		return ports.PlatformBusinessRecord{}, err
 	}
-	// Build the IN list using the ANY($3::text[]) idiom for parameterized safety.
-	var record ports.PlatformBusinessRecord
+	// Build the IN list using the ANY($4::text[]) idiom for parameterized safety.
 	command, err := executor.Exec(ctx,
 		`UPDATE businesses SET status = $2, updated_at = $3
                  WHERE id = $1::uuid AND status = ANY($4::text[])`,
