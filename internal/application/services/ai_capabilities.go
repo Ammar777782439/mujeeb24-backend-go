@@ -16,7 +16,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/queries"
 )
 
-// CustomerSalesToolRegistry is a thread-safe implementation of ports.AICustomerSalesToolRegistry.
+// CustomerSalesToolRegistry is a thread-safe implementation of ports.CustomerSalesToolRegistry.
 type CustomerSalesToolRegistry struct {
 	mu           sync.RWMutex
 	capabilities map[string]ports.CustomerSalesTool
