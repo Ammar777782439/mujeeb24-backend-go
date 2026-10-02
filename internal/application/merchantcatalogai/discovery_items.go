@@ -117,7 +117,6 @@ func (c getItemCapability) Execute(ctx context.Context, execCtx MerchantCatalogD
 		return MerchantCatalogDiscoveryResult{}, err
 	}
 
-	now := time.Now().UTC()
 	return MerchantCatalogDiscoveryResult{
 		Data: map[string]any{
 			"id":                       item.ID,
