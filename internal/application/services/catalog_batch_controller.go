@@ -93,7 +93,7 @@ type BatchGeminiClient interface {
 	// user prompt that includes BOTH candidate IDs AND full product details.
 	// This allows Gemini to compose a response with names, prices, descriptions.
 	// Returns the proposal + usage telemetry for cost recording.
-	FinalEvaluateWithDetails(ctx context.Context, input FinalEvaluationInput, userPrompt string) (ports.AIGeminiProposal, ports.ContractUsageTelemetry, error)
+	FinalEvaluateWithDetails(ctx context.Context, input FinalEvaluationInput, userPrompt string) (ports.CustomerSalesProposal, ports.CustomerSalesUsageTelemetry, error)
 }
 
 // BatchEvaluationInput is one batch's input to Gemini.
@@ -142,26 +142,26 @@ type TokenCounter interface {
 
 // RunCatalogEvaluation drives the full contract ② §9 evaluation pipeline.
 //
-// Returns the final AIGeminiProposal (post-Final-Evaluation) on success.
+// Returns the final CustomerSalesProposal (post-Final-Evaluation) on success.
 // On failure, returns the failure stage + category for ai_runs.failure_*.
-func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input CatalogEvaluationInput) (ports.AIGeminiProposal, error) {
+func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input CatalogEvaluationInput) (ports.CustomerSalesProposal, error) {
 	if c.ProjectionBuilder == nil || c.TokenCounter == nil || c.Gemini == nil || c.RunRepo == nil {
-		return ports.AIGeminiProposal{}, errors.New("CatalogBatchController is not fully wired per contract ② §1")
+		return ports.CustomerSalesProposal{}, errors.New("CatalogBatchController is not fully wired per contract ② §1")
 	}
 	if strings.TrimSpace(input.BusinessID) == "" || strings.TrimSpace(input.AIRunID) == "" {
-		return ports.AIGeminiProposal{}, errors.New("business_id and ai_run_id are required for Catalog Evaluation per contract ② §1")
+		return ports.CustomerSalesProposal{}, errors.New("business_id and ai_run_id are required for Catalog Evaluation per contract ② §1")
 	}
 
 	// Step 1: Build the Projection. Per contract ① §6, Mujeeb builds it.
 	projection, err := c.buildProjection(ctx, input.BusinessID, input.CatalogScope)
 	if err != nil {
-		return ports.AIGeminiProposal{}, fmt.Errorf("build projection: %w", err)
+		return ports.CustomerSalesProposal{}, fmt.Errorf("build projection: %w", err)
 	}
 
 	// Step 2: Token-count and split. Per contract ② §2, token-based not item-count.
 	batches, err := c.splitIntoBatches(ctx, projection, input.EntityContract)
 	if err != nil {
-		return ports.AIGeminiProposal{}, fmt.Errorf("split batches: %w", err)
+		return ports.CustomerSalesProposal{}, fmt.Errorf("split batches: %w", err)
 	}
 	if len(batches) == 0 {
 		// No items in scope — Final Evaluation with empty candidate set.
@@ -173,7 +173,7 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 	for _, b := range batches {
 		rec, err := c.createBatchRecord(ctx, input.AIRunID, b)
 		if err != nil {
-			return ports.AIGeminiProposal{}, fmt.Errorf("create batch %d record: %w", b.BatchNumber, err)
+			return ports.CustomerSalesProposal{}, fmt.Errorf("create batch %d record: %w", b.BatchNumber, err)
 		}
 		batchRecords = append(batchRecords, rec)
 	}
@@ -184,7 +184,7 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 	for i, b := range batches {
 		// Per contract ⑨ §22, mark batch RUNNING.
 		if err := c.markBatchRunning(ctx, batchRecords[i].ID); err != nil {
-			return ports.AIGeminiProposal{}, err
+			return ports.CustomerSalesProposal{}, err
 		}
 		result, err := c.Gemini.EvaluateBatch(ctx, BatchEvaluationInput{
 			AIRunID:             input.AIRunID,
@@ -200,11 +200,11 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 		if err != nil {
 			// Per contract ⑨ §22, mark batch FAILED; per ⑨ §21 do NOT re-run other batches.
 			_ = c.markBatchFailed(ctx, batchRecords[i].ID, err.Error())
-			return ports.AIGeminiProposal{}, fmt.Errorf("batch %d evaluation: %w", b.BatchNumber, err)
+			return ports.CustomerSalesProposal{}, fmt.Errorf("batch %d evaluation: %w", b.BatchNumber, err)
 		}
 		// Per contract ⑨ §22, mark batch COMPLETED — update the in-memory record too.
 		if err := c.markBatchCompleted(ctx, batchRecords[i].ID, len(result.Candidates)); err != nil {
-			return ports.AIGeminiProposal{}, err
+			return ports.CustomerSalesProposal{}, err
 		}
 		batchRecords[i].Status = "completed"
 		candidateSet = append(candidateSet, result.Candidates...)
@@ -217,7 +217,7 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 	// Coverage is complete when all batches are COMPLETED.
 	log.Printf("[CatalogBatch] COVERAGE total=%d completed=%d", len(batchRecords), countCompleted(batchRecords))
 	if !c.coverageComplete(batchRecords) {
-		return ports.AIGeminiProposal{}, fmt.Errorf("coverage incomplete per contract ② §3 — %d/%d batches completed", countCompleted(batchRecords), len(batchRecords))
+		return ports.CustomerSalesProposal{}, fmt.Errorf("coverage incomplete per contract ② §3 — %d/%d batches completed", countCompleted(batchRecords), len(batchRecords))
 	}
 
 	// Step 6: Final Gemini Evaluation per contract ② §6.
@@ -605,7 +605,7 @@ func (c *CatalogBatchController) coverageComplete(records []ports.AICatalogBatch
 //
 // Without the full product details, Gemini only sees IDs and cannot
 // compose a response with names, prices, descriptions.
-func (c *CatalogBatchController) runFinalEvaluation(ctx context.Context, input CatalogEvaluationInput, candidates []ports.CatalogBatchCandidate, projection CatalogAIProjection) (ports.AIGeminiProposal, error) {
+func (c *CatalogBatchController) runFinalEvaluation(ctx context.Context, input CatalogEvaluationInput, candidates []ports.CatalogBatchCandidate, projection CatalogAIProjection) (ports.CustomerSalesProposal, error) {
 	// Build the candidate evidence: full item details for each candidate.
 	// Look up each candidate item_id in the projection.
 	var candidateItems []CatalogAIItem
@@ -636,7 +636,7 @@ func (c *CatalogBatchController) runFinalEvaluation(ctx context.Context, input C
 		CandidateResults:    candidates,
 	}, userPrompt)
 	if err != nil {
-		return ports.AIGeminiProposal{}, err
+		return ports.CustomerSalesProposal{}, err
 	}
 	// Record the final evaluation call's usage (final_ai_replies=0 —
 	// the final reply is counted by AutoReply.recordAIUsage, not here).
@@ -687,7 +687,7 @@ func countCompleted(records []ports.AICatalogBatchRecord) int {
 //   - correlation_id = runID + "|" + phase (for dedup)
 //
 // Best-effort: errors are logged but never fail the catalog evaluation.
-func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessID, runID string, usage ports.ContractUsageTelemetry, phase string) {
+func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessID, runID string, usage ports.CustomerSalesUsageTelemetry, phase string) {
 	if c.AIUsage == nil {
 		return
 	}
