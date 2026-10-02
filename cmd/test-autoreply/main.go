@@ -141,7 +141,7 @@ func main() {
 
 	// Step 5: Wire real components
 	fmt.Println("\n■ Step 5: Wire real AutoReplyService")
-	geminiClient, err := gemini.NewClient(gemini.Config{
+	geminiClient, err := gemini.NewGeminiHTTPClient(gemini.GeminiHTTPClientConfig{
 		BaseURL:        "https://generativelanguage.googleapis.com",
 		APIKey:         apiKey,
 		Model:          model,
