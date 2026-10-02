@@ -213,7 +213,7 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
 	return ports.CatalogBatchResult{
 		BatchNumber: input.BatchNumber,
 		Candidates:  candidates,
-		Usage: ports.ContractUsageTelemetry{
+		Usage: ports.CustomerSalesUsageTelemetry{
 			InputTokens:  resp.UsageMetadata.PromptTokenCount,
 			CachedTokens: resp.UsageMetadata.CachedContentTokenCount,
 			OutputTokens: resp.UsageMetadata.CandidatesTokenCount,
@@ -232,7 +232,7 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
 // أخرى. يرى: Customer Message + Conversation Context + Candidate Results +
 // الدليل التجاري المرتبط بالمرشحين. ثم يقوم بالقرار النهائي وصياغة الرد."
 //
-// Per contract ④ §4, the final output is an AIGeminiProposal (status +
+// Per contract ④ §4, the final output is an CustomerSalesProposal (status +
 // action + response_text + selected[]).
 // FinalEvaluateWithDetails runs the contract ② §6 final evaluation with
 // a custom user prompt that includes BOTH candidate IDs AND full product
@@ -244,13 +244,13 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
 // The "الدليل التجاري المرتبط بالمرشحين" = full product details for each
 // candidate item. Without this, Gemini only sees IDs and can't compose
 // a response with product names, prices, descriptions.
-func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input services.FinalEvaluationInput, userPrompt string) (ports.AIGeminiProposal, ports.ContractUsageTelemetry, error) {
+func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input services.FinalEvaluationInput, userPrompt string) (ports.CustomerSalesProposal, ports.CustomerSalesUsageTelemetry, error) {
 	if c == nil {
-		return ports.AIGeminiProposal{}, ports.ContractUsageTelemetry{}, errors.New("batch client is not configured")
+		return ports.CustomerSalesProposal{}, ports.CustomerSalesUsageTelemetry{}, errors.New("batch client is not configured")
 	}
 	rc, err := c.resolveConfig(ctx)
 	if err != nil {
-		return ports.AIGeminiProposal{}, ports.ContractUsageTelemetry{}, err
+		return ports.CustomerSalesProposal{}, ports.CustomerSalesUsageTelemetry{}, err
 	}
 	reqBody := batchGeminiRequest{
 		Model: rc.model,
@@ -270,13 +270,13 @@ func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input servic
 	resp, err := c.sendRequestWithConfig(ctx, reqBody, rc)
 	finalEnd := time.Now()
 	if err != nil {
-		return ports.AIGeminiProposal{}, ports.ContractUsageTelemetry{}, fmt.Errorf("final evaluate: %w", err)
+		return ports.CustomerSalesProposal{}, ports.CustomerSalesUsageTelemetry{}, fmt.Errorf("final evaluate: %w", err)
 	}
 	proposal, err := parseFinalProposal(resp)
 	if err != nil {
-		return ports.AIGeminiProposal{}, ports.ContractUsageTelemetry{}, fmt.Errorf("parse final proposal: %w", err)
+		return ports.CustomerSalesProposal{}, ports.CustomerSalesUsageTelemetry{}, fmt.Errorf("parse final proposal: %w", err)
 	}
-	usage := ports.ContractUsageTelemetry{
+	usage := ports.CustomerSalesUsageTelemetry{
 		InputTokens:  resp.UsageMetadata.PromptTokenCount,
 		CachedTokens: resp.UsageMetadata.CachedContentTokenCount,
 		OutputTokens: resp.UsageMetadata.CandidatesTokenCount,
@@ -288,7 +288,7 @@ func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input servic
 
 // FinalEvaluate is kept for backward compatibility but delegates to
 // FinalEvaluateWithDetails with a basic prompt.
-func (c *BatchClient) FinalEvaluate(ctx context.Context, input services.FinalEvaluationInput) (ports.AIGeminiProposal, error) {
+func (c *BatchClient) FinalEvaluate(ctx context.Context, input services.FinalEvaluationInput) (ports.CustomerSalesProposal, error) {
 	candidatesJSON, _ := json.Marshal(input.CandidateResults)
 	userPrompt := fmt.Sprintf("Customer message: %s\n\nAggregated candidate set from catalog evaluation:\n%s\n\nBased on the candidates above, produce your final proposal.",
 		input.CustomerMessage, string(candidatesJSON))
@@ -401,23 +401,23 @@ func parseBatchCandidates(resp batchGeminiResponse) ([]ports.CatalogBatchCandida
 	return wrapper.Candidates, nil
 }
 
-// parseFinalProposal extracts the AIGeminiProposal from the structured
+// parseFinalProposal extracts the CustomerSalesProposal from the structured
 // output per contract ④ §4.
-func parseFinalProposal(resp batchGeminiResponse) (ports.AIGeminiProposal, error) {
+func parseFinalProposal(resp batchGeminiResponse) (ports.CustomerSalesProposal, error) {
 	if len(resp.Candidates) == 0 {
-		return ports.AIGeminiProposal{}, errors.New("no candidates in gemini response per contract ④ §4")
+		return ports.CustomerSalesProposal{}, errors.New("no candidates in gemini response per contract ④ §4")
 	}
 	candidate := resp.Candidates[0]
 	if len(candidate.Content.Parts) == 0 {
-		return ports.AIGeminiProposal{}, errors.New("no content parts in gemini response per contract ④ §4")
+		return ports.CustomerSalesProposal{}, errors.New("no content parts in gemini response per contract ④ §4")
 	}
 	raw := candidate.Content.Parts[0].Text
 	if strings.TrimSpace(raw) == "" {
-		return ports.AIGeminiProposal{}, errors.New("empty structured output text per contract ④ §4")
+		return ports.CustomerSalesProposal{}, errors.New("empty structured output text per contract ④ §4")
 	}
-	var proposal ports.AIGeminiProposal
+	var proposal ports.CustomerSalesProposal
 	if err := json.Unmarshal([]byte(raw), &proposal); err != nil {
-		return ports.AIGeminiProposal{}, fmt.Errorf("unmarshal final proposal: %w", err)
+		return ports.CustomerSalesProposal{}, fmt.Errorf("unmarshal final proposal: %w", err)
 	}
 	return proposal, nil
 }
@@ -459,20 +459,20 @@ func finalProposalResponseSchema() map[string]any {
 			"status": map[string]any{
 				"type": "string",
 				"enum": []string{
-					string(ports.AIProposalStatusResolved),
-					string(ports.AIProposalStatusAmbiguous),
-					string(ports.AIProposalStatusNotFound),
-					string(ports.AIProposalStatusNeedsMoreData),
+					string(ports.CustomerSalesProposalStatusResolved),
+					string(ports.CustomerSalesProposalStatusAmbiguous),
+					string(ports.CustomerSalesProposalStatusNotFound),
+					string(ports.CustomerSalesProposalStatusNeedsMoreData),
 				},
 			},
 			"action": map[string]any{
 				"type": "string",
 				"enum": []string{
-					string(ports.AIProposalActionAnswer),
-					string(ports.AIProposalActionClarification),
-					string(ports.AIProposalActionHumanRequest),
-					string(ports.AIProposalActionLeadDraft),
-					string(ports.AIProposalActionOrderDraft),
+					string(ports.CustomerSalesProposalActionAnswer),
+					string(ports.CustomerSalesProposalActionClarification),
+					string(ports.CustomerSalesProposalActionHumanRequest),
+					string(ports.CustomerSalesProposalActionLeadDraft),
+					string(ports.CustomerSalesProposalActionOrderDraft),
 				},
 			},
 			"response_text": map[string]any{"type": "string"},
