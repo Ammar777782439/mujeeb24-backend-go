@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: mujeeb24-api
+    runtime: docker
+    plan: free
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: checksPass
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: AUTH_ENABLED
+        value: "true"
+      - key: AUTOREPLY_ENABLED
+        value: "false"
+      - key: LLM_ENABLED
+        value: "false"
+      - key: CHANNEL_PROVISIONING_ENABLED
+        value: "false"
+      - key: FRONTEND_URL
+        value: https://mujeeb24-frontend.ai.studio/landing
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_ISSUER
+        value: mujeeb24
+      - key: JWT_ED25519_PRIVATE_KEY
+        sync: false
+      - key: JWT_ED25519_PUBLIC_KEY
+        sync: false
+      - key: AI_CONFIG_ENCRYPTION_KEY
+        sync: false
