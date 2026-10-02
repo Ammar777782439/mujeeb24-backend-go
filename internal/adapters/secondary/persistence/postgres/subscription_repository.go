@@ -108,7 +108,7 @@ func (r *SubscriptionRepository) GetByID(ctx context.Context, subscriptionID str
 	}
 	var record ports.SubscriptionRecord
 	err = executor.QueryRow(ctx,
-		`SELECT `+subscriptionSelectColumns+` FROM subscriptions WHERE id = $1::uuid`,
+		`SELECT `+subscriptionSelectColumns+` FROM subscriptions s JOIN plans p ON p.id = s.plan_id WHERE s.id = $1::uuid`,
 		subscriptionID,
 	).Scan(
 		&record.ID, &record.BusinessID, &record.PlanID, &record.PlanCode, &record.PlanVersion,
@@ -149,11 +149,12 @@ func (r *SubscriptionRepository) List(ctx context.Context, filter ports.Subscrip
 	}
 	rows, err := executor.Query(ctx,
 		`SELECT `+subscriptionSelectColumns+`
-                 FROM subscriptions
-                 WHERE ($1 = '' OR business_id::text = $1)
-                   AND ($2 = '' OR status = $2)
-                   AND ($3::timestamptz IS NULL OR (created_at, id) < ($3, $4::uuid))
-                 ORDER BY created_at DESC, id DESC
+                 FROM subscriptions s
+                 JOIN plans p ON p.id = s.plan_id
+                 WHERE ($1 = '' OR s.business_id::text = $1)
+                   AND ($2 = '' OR s.status = $2)
+                   AND ($3::timestamptz IS NULL OR (s.created_at, s.id) < ($3, $4::uuid))
+                 ORDER BY s.created_at DESC, s.id DESC
                  LIMIT $5`,
 		strings.TrimSpace(filter.BusinessID), strings.TrimSpace(filter.Status), cursorAt, cursorID, filter.Limit+1,
 	)
