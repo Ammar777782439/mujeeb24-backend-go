@@ -228,14 +228,14 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			return nil, errors.New("AutoReply requires a configured LLM runtime")
 		}
 		// Per contract ④ §8, wrap the legacy Gemini Client with the
-		// contract-aligned ContractClient (implements ports.CustomerSalesDecisionPort).
+		// contract-aligned GeminiCustomerSalesAdapter (implements ports.CustomerSalesDecisionPort).
 		// The legacy Client.Decide method is no longer used for AutoReply.
 		var contractRuntime ports.CustomerSalesDecisionPort
 		var geminiClient *gemini.Client
 		var runRepo ports.AIRunRepository
 		if external.GeminiClient != nil {
 			geminiClient = external.GeminiClient
-			cc, err := gemini.NewContractClient(geminiClient)
+			cc, err := gemini.NewGeminiCustomerSalesAdapter(geminiClient)
 			if err != nil {
 				return nil, fmt.Errorf("build contract client: %w", err)
 			}
@@ -243,7 +243,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			// call reads the ACTIVE config from cache/DB.
 			cc.SetConfigurationProvider(aiConfigCache)
 			// Per the Tool Loop spec: wire the SAME runRepo
-			// instance into the ContractClient so tool call
+			// instance into the GeminiCustomerSalesAdapter so tool call
 			// records are persisted during function calling.
 			// Reuses the existing postgres.NewAIRunTraceRepository —
 			// no second repository.
@@ -251,7 +251,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			cc.SetRunRepository(runRepo)
 			cc.SetNewID(uuid.NewString)
 			// Per fix #2: wire the existing AIRunLifecycle
-			// into ContractClient via the ports.AIRunLifecyclePort
+			// into GeminiCustomerSalesAdapter via the ports.AIRunLifecyclePort
 			// abstraction. The lifecycle instance is created
 			// here (same pattern as AutoReplyService which
 			// creates its own via NewAIRunLifecycle(repo)).
@@ -260,7 +260,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		} else {
 			// Fallback for openaicompatible.Client or other AIRuntime
 			// implementations: they do NOT yet implement CustomerSalesDecisionPort.
-			// Production should use gemini.NewContractClient. Until the
+			// Production should use gemini.NewGeminiCustomerSalesAdapter. Until the
 			// OpenAI-compatible adapter implements CustomerSalesDecisionPort, AutoReply
 			// is unavailable for that provider.
 			return nil, errors.New("AutoReply requires a gemini.Client (contract-aligned); OpenAI-compatible provider not yet supported")
@@ -275,7 +275,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			database,
 		)
 		// Per contract ⑧ §5, wire the AI Run trace repository
-		// (reuse the one created above for the ContractClient).
+		// (reuse the one created above for the GeminiCustomerSalesAdapter).
 		if runRepo != nil {
 			service.RunRepository = runRepo
 		} else {
@@ -303,9 +303,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		contextBuilder.Knowledge = postgres.NewKnowledgeDocumentRepository(database)
 		contextBuilder.Policies = postgres.NewBusinessPolicyRepository(database)
 		service.ContextBuilder = contextBuilder
-		// Per ADR-039 + P1-5: summaries use the SAME ContractClient
+		// Per ADR-039 + P1-5: summaries use the SAME GeminiCustomerSalesAdapter
 		// instance as AutoReply. There is no legacy AI fallback.
-		// The ContractClient reads the active AI configuration through
+		// The GeminiCustomerSalesAdapter reads the active AI configuration through
 		// the AIConfigurationCache and provides usage telemetry.
 		service.SummaryService = services.NewConversationSummaryService(
 			postgres.NewConversationStateRepository(database),
