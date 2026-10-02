@@ -39,6 +39,8 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: GEMINI_BASE_URL
+        value: https://generativelanguage.googleapis.com
       - key: GEMINI_MODEL
         value: gemini-3.5-flash-lite
       - key: GEMINI_HTTP_TIMEOUT
@@ -61,25 +63,12 @@ services:
       - key: CHANNEL_PROVISIONING_ENABLED
         value: "false"
 
-      # Customer auto-reply / AI runtime: disabled for first deployment.
+      # Customer auto-reply / Gemini AI runtime.
+      # Gemini is the supported customer-sales provider in the current code.
       - key: AUTOREPLY_ENABLED
-        value: "false"
+        value: "true"
       - key: LLM_ENABLED
         value: "false"
-      - key: LLM_BASE_URL
-        sync: false
-      - key: LLM_API_KEY
-        sync: false
-      - key: LLM_MODEL
-        value: gpt-5-mini
-      - key: LLM_HTTP_TIMEOUT
-        value: 30s
-      - key: LLM_MAX_OUTPUT_TOKENS
-        value: "4096"
-      - key: LLM_MAX_INPUT_CHARACTERS
-        value: "12000"
-      - key: LLM_OUTPUT_TOKENS_FIELD
-        value: max_completion_tokens
 
       # Frontend already deployed on Google AI Studio.
       - key: FRONTEND_URL
