@@ -125,9 +125,9 @@ func TestProposalValidateCreateResolvesNewVariantOffersByRef(t *testing.T) {
 				{Ref: "variant-red", Name: "أحمر"},
 			},
 			Offers: []OfferCreate{
-				{Name: DefaultOfferName, VariantRef: stringPtr("variant-black"), PricingMode: "fixed", Amount: stringPtr("20000"), Currency: stringPtr("YER"), AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"},
-				{Name: DefaultOfferName, VariantRef: stringPtr("variant-yellow"), PricingMode: "fixed", Amount: stringPtr("22000"), Currency: stringPtr("YER"), AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"},
-				{Name: DefaultOfferName, VariantRef: stringPtr("variant-red"), PricingMode: "fixed", Amount: stringPtr("25000"), Currency: stringPtr("YER"), AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"},
+				{Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault, VariantRef: stringPtr("variant-black"), PricingMode: "fixed", Amount: stringPtr("20000"), Currency: stringPtr("YER"), PriceSource: OfferPriceSourceMerchantStated, AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"},
+				{Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault, VariantRef: stringPtr("variant-yellow"), PricingMode: "fixed", Amount: stringPtr("22000"), Currency: stringPtr("YER"), PriceSource: OfferPriceSourceMerchantStated, AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"},
+				{Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault, VariantRef: stringPtr("variant-red"), PricingMode: "fixed", Amount: stringPtr("25000"), Currency: stringPtr("YER"), PriceSource: OfferPriceSourceMerchantStated, AvailabilityMode: "always_available", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"},
 			},
 		},
 	}
