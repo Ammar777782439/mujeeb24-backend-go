@@ -38,26 +38,18 @@ func TestBuildExternalAdaptersKeepsAutoReplyDisabledByDefault(t *testing.T) {
 	}
 }
 
-func TestBuildExternalAdaptersConstructsLLMWithoutCallingNetwork(t *testing.T) {
+func TestBuildExternalAdaptersRejectsUnwiredNonGeminiProvider(t *testing.T) {
 	adapters := BuildExternalAdapters(config.ProcessConfig{
-		LLMEnabled:            true,
-		LLMBaseURL:            "https://example.invalid/v1",
-		LLMAPIKey:             "test-only-key",
-		LLMModel:              "test-model",
-		LLMHTTPTimeout:        2 * time.Second,
-		LLMMaxOutputTokens:    300,
-		LLMMaxInputCharacters: 4000,
-		LLMOutputTokensField:  "max_completion_tokens",
+		LLMEnabled: true,
+		LLMBaseURL: "https://example.invalid/v1",
+		LLMAPIKey:  "test-only-key",
+		LLMModel:  "test-model",
 	})
-	if adapters.LLMConfigError != nil || adapters.OpenAICompatibleClient == nil {
-		t.Fatalf("expected configured LLM runtime without network: %#v", adapters)
+	if adapters.LLMConfigError == nil {
+		t.Fatal("expected unsupported non-Gemini AI provider error")
 	}
-}
-
-func TestBuildExternalAdaptersReportsInvalidLLMConfiguration(t *testing.T) {
-	adapters := BuildExternalAdapters(config.ProcessConfig{LLMEnabled: true, LLMModel: "test-model"})
-	if adapters.LLMConfigError == nil || adapters.OpenAICompatibleClient != nil {
-		t.Fatalf("expected invalid LLM configuration: %#v", adapters)
+	if adapters.GeminiClient != nil {
+		t.Fatal("non-Gemini provider must not construct the Gemini client")
 	}
 }
 
