@@ -13,11 +13,10 @@ import (
 func wireMerchantCatalogAIV2(
 	dashboardServer *handlers.Server,
 	database *postgres.Adapter,
-	aiRuntime ports.AIRuntime,
+	geminiClient *gemini.Client,
 	configProvider ports.AIConfigurationProvider,
 ) (*handlers.Server, error) {
-	geminiClient, ok := aiRuntime.(*gemini.Client)
-	if !ok {
+	if geminiClient == nil {
 		return dashboardServer, nil
 	}
 
