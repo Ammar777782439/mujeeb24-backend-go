@@ -157,7 +157,7 @@ func TestLifecycle_Ordering_WaitingToolBeforeRunning(t *testing.T) {
 // ValidationPipeline, Repository — too many stubs).
 //
 // Verifies the critical link:
-//   CustomerSalesDecisionInput.AIRunID → ContractClient → AIToolCallRecord.AIRunID
+//   CustomerSalesDecisionInput.AIRunID → GeminiCustomerSalesAdapter → AIToolCallRecord.AIRunID
 
 func TestB2B_AIRunID_Path_CustomerSalesDecisionInputToToolCallRecord(t *testing.T) {
 	t.Parallel()
