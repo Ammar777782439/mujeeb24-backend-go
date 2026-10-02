@@ -31,7 +31,7 @@ func derefString(value *string) any {
 	return *value
 }
 
-func logMerchantCatalogProposalDetail(input merchantcatalogai.RuntimeInput, proposal merchantcatalogai.Proposal) {
+func logMerchantCatalogProposalDetail(input merchantcatalogai.MerchantCatalogAuthoringInput, proposal merchantcatalogai.Proposal) {
 	detail := map[string]any{
 		"business":       input.BusinessID,
 		"session":        input.SessionID,
