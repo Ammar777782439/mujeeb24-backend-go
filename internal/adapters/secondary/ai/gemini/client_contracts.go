@@ -13,10 +13,9 @@
 // Structured Output via responseSchema. Per contract ⑧ §8, captures usage
 // telemetry. Per contract ⑧ §9, captures latency.
 //
-// This file REPLACES the legacy Client.Decide method (in client.go) for all
-// new contract-aligned callers (AutoReplyService, MerchantCatalogAIAgent).
-// The legacy Client.Decide is kept only for migration; new code must use
-// ContractClient.
+// This file REPLACES the legacy Client.Decide method (in client.go) for
+// contract-aligned callers. The legacy Client.Decide is kept only for
+// migration; new code must use ContractClient.
 
 package gemini
 
@@ -341,11 +340,7 @@ func parseContractProposal(resp contractGeminiResponse) (ports.AIGeminiProposal,
 // contractProposalResponseSchema is the JSON Schema that enforces the contract
 // ④ §4 output shape via Gemini's responseSchema field.
 //
-// Per ADR-044 layer 2, the schema includes an optional `proposal` field
-// used by the B2B MerchantCatalogAI to return a structured catalog
-// operation payload (create/update/delete with item/variants/offers).
-// B2C CustomerSalesAI leaves this field empty (its proposals are
-// reference-only via selected[]).
+// The contract response schema is shared by contract-aligned AI calls.
 func contractProposalResponseSchema() map[string]any {
         return map[string]any{
                 "type": "object",
@@ -382,10 +377,6 @@ func contractProposalResponseSchema() map[string]any {
                                         "required": []string{"item_id"},
                                 },
                         },
-                        // Per ADR-044 layer 2 — structured catalog operation payload.
-                        // Optional: only B2B MerchantCatalogAI populates this for
-                        // mutations (create/update/delete). B2C leaves it empty.
-
                 },
                 "required": []string{"status", "action", "response_text"},
         }
