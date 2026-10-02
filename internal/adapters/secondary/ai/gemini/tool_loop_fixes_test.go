@@ -63,9 +63,9 @@ func (m *mockServerConfigurable) handle(w http.ResponseWriter, r *http.Request) 
 	w.Write([]byte(response))
 }
 
-// buildContractClientForFixTests builds a ContractClient with tools
+// buildGeminiCustomerSalesAdapterForFixTests builds a GeminiCustomerSalesAdapter with tools
 // + lifecycle stub wired.
-func buildContractClientForFixTests(t *testing.T, mockURL string, dispatcher ports.AICapabilityDispatcher, lc ports.AIRunLifecyclePort) (*ContractClient, *stubRunRepoForTools) {
+func buildGeminiCustomerSalesAdapterForFixTests(t *testing.T, mockURL string, dispatcher ports.AICapabilityDispatcher, lc ports.AIRunLifecyclePort) (*GeminiCustomerSalesAdapter, *stubRunRepoForTools) {
 	client, err := NewClient(Config{
 		BaseURL:        mockURL,
 		APIKey:         "test-key",
@@ -77,7 +77,7 @@ func buildContractClientForFixTests(t *testing.T, mockURL string, dispatcher por
 	if err != nil {
 		t.Fatalf("build client: %v", err)
 	}
-	cc, err := NewContractClient(client)
+	cc, err := NewGeminiCustomerSalesAdapter(client)
 	if err != nil {
 		t.Fatalf("build contract client: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestFix1_NonToolPath_ModelRequestsIs1(t *testing.T) {
 	defer mock.Close()
 
 	dispatcher := makeDispatcher()
-	cc, _ := buildContractClientForFixTests(t, mock.URL(), dispatcher, nil)
+	cc, _ := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, nil)
 
 	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
@@ -144,7 +144,7 @@ func TestFix1_ToolLoop_ModelRequestsIs2_ToolCallsIs1(t *testing.T) {
 	defer mock.Close()
 
 	dispatcher := makeDispatcher()
-	cc, runRepo := buildContractClientForFixTests(t, mock.URL(), dispatcher, nil)
+	cc, runRepo := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, nil)
 
 	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "what products?"},
@@ -174,7 +174,7 @@ func TestFix1_ToolLoop_TwoTools_ModelRequestsIs3_ToolCallsIs2(t *testing.T) {
 	defer mock.Close()
 
 	dispatcher := makeDispatcher()
-	cc, runRepo := buildContractClientForFixTests(t, mock.URL(), dispatcher, nil)
+	cc, runRepo := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, nil)
 
 	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "show me"},
@@ -202,7 +202,7 @@ func TestFix2_Lifecycle_RunningToWaitingToolToRunning(t *testing.T) {
 
 	dispatcher := makeDispatcher()
 	lc := &stubLifecyclePort{}
-	cc, _ := buildContractClientForFixTests(t, mock.URL(), dispatcher, lc)
+	cc, _ := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, lc)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
@@ -221,8 +221,8 @@ func TestFix2_Lifecycle_RunningToWaitingToolToRunning(t *testing.T) {
 }
 
 // Test 5: B2B — AIRunID is saved in AIToolCallRecord.
-// This test uses the same ContractClient + tool loop path as B2B
-// (the B2B agent calls the same ContractClient.Decide).
+// This test uses the same GeminiCustomerSalesAdapter + tool loop path as B2B
+// (the B2B agent calls the same GeminiCustomerSalesAdapter.Decide).
 // The key assertion: when AIRunID is passed in CustomerSalesDecisionInput,
 // it appears in the AIToolCallRecord.
 func TestFix3_B2B_AIRunIDSavedInToolCallRecord(t *testing.T) {
@@ -234,7 +234,7 @@ func TestFix3_B2B_AIRunIDSavedInToolCallRecord(t *testing.T) {
 	defer mock.Close()
 
 	dispatcher := makeDispatcher()
-	cc, runRepo := buildContractClientForFixTests(t, mock.URL(), dispatcher, nil)
+	cc, runRepo := buildGeminiCustomerSalesAdapterForFixTests(t, mock.URL(), dispatcher, nil)
 
 	// Simulate what the MerchantCatalogAIAgent does: it creates a run
 	// (with ID "run-b2b-1") and passes it through BuildForTurn →
@@ -270,7 +270,7 @@ func TestFix6_ToolsShapeArrayAndCamelCase(t *testing.T) {
 	defer server.Close()
 
 	dispatcher := makeDispatcher()
-	cc, _ := buildContractClientForFixTests(t, server.URL, dispatcher, nil)
+	cc, _ := buildGeminiCustomerSalesAdapterForFixTests(t, server.URL, dispatcher, nil)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
