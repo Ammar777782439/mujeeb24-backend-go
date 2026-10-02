@@ -20,11 +20,11 @@ func wireMerchantCatalogAIV2(
 		return dashboardServer, nil
 	}
 
-	b2bRuntime, err := gemini.NewGeminiMerchantCatalogAuthoringAdapter(geminiClient)
+	merchantCatalogAuthoring, err := gemini.NewGeminiMerchantCatalogAuthoringAdapter(geminiClient)
 	if err != nil {
-		return nil, fmt.Errorf("build merchant catalog AI v2 runtime: %w", err)
+		return nil, fmt.Errorf("build Gemini merchant catalog authoring adapter: %w", err)
 	}
-	b2bRuntime.SetConfigurationProvider(configProvider)
+	merchantCatalogAuthoring.SetConfigurationProvider(configProvider)
 
 	catalogRepo := postgres.NewCatalogRepository(database)
 	b2bAgent := &merchantcatalogai.Agent{
@@ -32,7 +32,7 @@ func wireMerchantCatalogAIV2(
 		Selector:       merchantcatalogai.DeterministicCatalogSelector{Repository: catalogRepo},
 		Business:       postgres.NewBusinessRepository(database),
 		EntityContract: merchantcatalogai.CanonicalEntityContractProvider{},
-		Authoring:      b2bRuntime,
+		Authoring:      merchantCatalogAuthoring,
 		CapabilitiesFactory: func(selectedCatalogID string) ports.AICapabilityDispatcher {
 			return merchantcatalogai.NewReadOnlyCapabilityRegistry(catalogRepo, selectedCatalogID)
 		},
