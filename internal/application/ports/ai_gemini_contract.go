@@ -515,10 +515,10 @@ type AICatalogBatchPatch struct {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Contract ④ §8 — ContractRuntime interface (replaces legacy AIRuntime)
+// Contract ④ §8 — CustomerSalesDecisionPort interface (replaces legacy AIRuntime)
 // ════════════════════════════════════════════════════════════════════════════
 
-// ContractRuntime is the contract ④ §8 mapping of Mujeeb Contract to Gemini API.
+// CustomerSalesDecisionPort is the contract ④ §8 mapping of Mujeeb Contract to Gemini API.
 //
 // Per contract ④ §8:
 //
@@ -527,16 +527,16 @@ type AICatalogBatchPatch struct {
 //	Catalog boundary → Function Calling / tool
 //	Mujeeb Output Contract → Structured Output (responseSchema)
 //
-// ContractRuntime replaces the legacy AIRuntime interface. New code MUST
-// use ContractRuntime; the legacy AIRuntime is kept only for migration.
+// CustomerSalesDecisionPort replaces the legacy AIRuntime interface. New code MUST
+// use CustomerSalesDecisionPort; the legacy AIRuntime is kept only for migration.
 //
 // Per contract ③ §4, this interface carries GeminiInteractionContext with
 // previous_interaction_id chaining.
 //
 // Per contract ⑤ §7, the Catalog Entity Contract is sent as part of system
 // instruction; it is passed through as opaque JSON.
-type ContractRuntime interface {
-	DecideContract(ctx context.Context, input ContractRuntimeInput) (ContractRuntimeOutput, error)
+type CustomerSalesDecisionPort interface {
+	DecideContract(ctx context.Context, input CustomerSalesDecisionInput) (CustomerSalesDecisionOutput, error)
 }
 
 // AIRunLifecyclePort is the minimal interface ContractClient needs to
@@ -552,8 +552,8 @@ type AIRunLifecyclePort interface {
 	MarkRunning(ctx context.Context, businessID, runID string) (AIRunRecord, error)
 }
 
-// ContractRuntimeInput is the input to ContractRuntime.DecideContract.
-type ContractRuntimeInput struct {
+// CustomerSalesDecisionInput is the input to CustomerSalesDecisionPort.DecideContract.
+type CustomerSalesDecisionInput struct {
 	// DecisionInput carries business_id, conversation_id, message text, channel,
 	// and the built AIContext (per contract ③ §2).
 	DecisionInput AIDecisionInput
@@ -576,8 +576,8 @@ type ContractRuntimeInput struct {
 	AIRunID string
 }
 
-// ContractRuntimeOutput is the output of ContractRuntime.DecideContract.
-type ContractRuntimeOutput struct {
+// CustomerSalesDecisionOutput is the output of CustomerSalesDecisionPort.DecideContract.
+type CustomerSalesDecisionOutput struct {
 	// Proposal is the contract ④ §4 structured Gemini output.
 	Proposal AIGeminiProposal
 
