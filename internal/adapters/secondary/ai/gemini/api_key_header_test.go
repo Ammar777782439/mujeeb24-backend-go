@@ -21,7 +21,7 @@ import (
 //  1. The URL does NOT contain "?key=" or "apiKey=" or "api_key="
 //  2. The x-goog-api-key header IS present and carries the API key
 //
-// It exercises all 5 production paths: ContractClient, BatchClient
+// It exercises all 5 production paths: GeminiCustomerSalesAdapter, BatchClient
 // (both legacy + dynamic-config), TokenCounter, ModelsClient (both
 // DiscoverModels + TestConnection), and the legacy Client.Decide.
 
@@ -77,8 +77,8 @@ func (h *capturingHandler) assertAPIKeyInHeader(t *testing.T, expected string) {
 	}
 }
 
-// Test P1-8: ContractClient sends API key via header, not URL.
-func TestContractClientSendsAPIKeyInHeaderNotURL(t *testing.T) {
+// Test P1-8: GeminiCustomerSalesAdapter sends API key via header, not URL.
+func TestGeminiCustomerSalesAdapterSendsAPIKeyInHeaderNotURL(t *testing.T) {
 	handler := &capturingHandler{respondWith: "ok"}
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -91,7 +91,7 @@ func TestContractClientSendsAPIKeyInHeaderNotURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build client: %v", err)
 	}
-	cc, err := NewContractClient(client)
+	cc, err := NewGeminiCustomerSalesAdapter(client)
 	if err != nil {
 		t.Fatalf("build contract client: %v", err)
 	}
