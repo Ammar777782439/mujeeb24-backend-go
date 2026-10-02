@@ -3,7 +3,7 @@
 // This file implements the Gemini Function Calling Tool Loop per the
 // user's specification. It does NOT create new architecture — it
 // reuses:
-//   - ports.CustomerSalesToolPort (from gemini.Client.Capabilities())
+//   - ports.CustomerSalesToolPort (from GeminiHTTPClient.Capabilities())
 //   - ports.AIRunRepository (CreateToolCall / UpdateToolCall)
 //   - ports.AIRunLifecycle (MarkWaitingTool / MarkRunning)
 //   - ports.AIToolCallRecord / AIToolCallPatch
@@ -114,7 +114,7 @@ func extractFunctionCalls(resp contractGeminiResponse) []*contractFunctionCall {
 //   - Tool call records are persisted via AIRunRepository.CreateToolCall
 //   - UpdateToolCall.
 //   - The WAITING_TOOL → RUNNING lifecycle transition is handled by
-//     the caller (DecideContract).
+//     the caller (CustomerSalesDecisionPort.Decide).
 func (c *GeminiCustomerSalesAdapter) executeToolCalls(
 	ctx context.Context,
 	resp contractGeminiResponse,
