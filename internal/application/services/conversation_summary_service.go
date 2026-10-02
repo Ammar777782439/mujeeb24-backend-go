@@ -84,18 +84,10 @@ const SlidingWindowSize = 4
 type ConversationSummaryService struct {
         StateRepository ports.ConversationStateRepository
         Messages        ports.MessageRepository
-        // LLM is the legacy AIRuntime (kept for backward compatibility with
-        // environments that don't wire ContractRuntime). When ContractRuntime
-        // is set, LLM is ignored — the contract-aligned path is preferred.
-        LLM ports.AIRuntime
-        // ContractRuntime is the contract ④ §8 path. Per P1-5: when wired
-        // (via SetContractRuntime or the constructor), this is used INSTEAD
-        // of LLM. It reads the dynamic AI configuration via the
-        // AIConfigurationProvider that's already wired into the ContractClient
-        // at bootstrap — so the summary call uses the SAME active model as
-        // the AutoReply path. Without this, summary generation would stay
-        // pinned to the static geminiClient.Model() even after a model
-        // switch via the Platform Admin API.
+        // ContractRuntime is the only AI execution path for summaries.
+        // It reads the active AI configuration through the provider wired
+        // into the ContractClient, so summaries use the same runtime contract
+        // as AutoReply.
         ContractRuntime ports.ContractRuntime
         // AIUsageRepository records per-execution telemetry for the summary
         // call. Per P1-5: summary Gemini calls MUST be metered — they are
@@ -109,7 +101,6 @@ type ConversationSummaryService struct {
         // the summary usage record is associated with the correct
         // subscription (same as AutoReply.recordAIUsage).
         Subscriptions ports.SubscriptionRepository
-        GeminiModel   string
         Now           func() time.Time
         NewID         func() string
         // CostProtection (optional) is the SHARED AI Runtime / Entitlement /
@@ -123,20 +114,17 @@ type ConversationSummaryService struct {
 }
 
 // NewConversationSummaryService constructs a ConversationSummaryService.
-// The LLM is optional — if nil, summarization is skipped (useful for
-// environments without Gemini configured).
+// ContractRuntime is required; there is no legacy AI fallback.
 func NewConversationSummaryService(
         stateRepo ports.ConversationStateRepository,
         messages ports.MessageRepository,
-        llm ports.AIRuntime,
-        geminiModel string,
+        contractRuntime ports.ContractRuntime,
 ) *ConversationSummaryService {
         return &ConversationSummaryService{
-                StateRepository: stateRepo,
-                Messages:        messages,
-                LLM:             llm,
-                GeminiModel:     geminiModel,
-                Now:             func() time.Time { return time.Now().UTC() },
+                StateRepository:  stateRepo,
+                Messages:         messages,
+                ContractRuntime: contractRuntime,
+                Now:              func() time.Time { return time.Now().UTC() },
         }
 }
 
@@ -182,8 +170,8 @@ func (s *ConversationSummaryService) MaybeSummarize(
                 result.SkippedReason = "service_not_configured"
                 return result, nil
         }
-        if s.LLM == nil && s.ContractRuntime == nil {
-                result.SkippedReason = "llm_not_configured"
+        if s.ContractRuntime == nil {
+                result.SkippedReason = "contract_runtime_not_configured"
                 return result, nil
         }
 
@@ -308,61 +296,24 @@ Rules:
 
         userPrompt := fmt.Sprintf("Previous summary:\n%s\n\nConversation transcript to summarize:\n%s", previousSummary, transcript)
 
-        // Per P1-5: prefer ContractRuntime (the contract ④ §8 path that
-        // reads the dynamic AI configuration via the AIConfigurationProvider
-        // wired at bootstrap). When ContractRuntime is NOT wired, fall back
-        // to the legacy LLM.Decide — the legacy path bypasses dynamic
-        // config, so a model switch via the Platform Admin API would NOT
-        // be picked up. Production MUST wire ContractRuntime.
+        // ContractRuntime is the only AI execution path.
         fullPrompt := systemPrompt + "\n\n" + userPrompt
         startedAt := s.now()
-        var (
-                summary       string
-                usageTelemetry ports.ContractUsageTelemetry
-                latencyMs      int64
-        )
-        if s.ContractRuntime != nil {
-                // Contract-aligned path — uses dynamic config + returns
-                // structured usage telemetry that we can record.
-                out, err := s.ContractRuntime.DecideContract(ctx, ports.ContractRuntimeInput{
-                        DecisionInput: ports.AIDecisionInput{
-                                BusinessID:     businessID,
-                                ConversationID: conversationID,
-                                Channel:        "internal",
-                                Text:           fullPrompt,
-                                PolicyVersion:  "summary-v1",
-                        },
-                })
-                if err != nil {
-                        return "", fmt.Errorf("contract runtime decide: %w", err)
-                }
-                // The summary text lives in out.Proposal.ResponseText (the
-                // structured-proposal field — the AIGeminiProposal shape).
-                summary = strings.TrimSpace(out.Proposal.ResponseText)
-                usageTelemetry = out.Usage
-                latencyMs = out.LatencyMs
-        } else if s.LLM != nil {
-                // Legacy fallback — no usage telemetry, no dynamic config.
-                // Deprecated per P1-5; production should wire ContractRuntime.
-                input := ports.AIDecisionInput{
+        out, err := s.ContractRuntime.DecideContract(ctx, ports.ContractRuntimeInput{
+                DecisionInput: ports.AIDecisionInput{
                         BusinessID:     businessID,
                         ConversationID: conversationID,
                         Channel:        "internal",
                         Text:           fullPrompt,
                         PolicyVersion:  "summary-v1",
-                }
-                proposal, err := s.LLM.Decide(ctx, input)
-                if err != nil {
-                        return "", fmt.Errorf("llm decide: %w", err)
-                }
-                summary = strings.TrimSpace(proposal.ResponseText)
-                // Legacy path has no usage telemetry — record zeros with
-                // status="legacy_no_telemetry" so operators see the gap.
-                usageTelemetry = ports.ContractUsageTelemetry{}
-                latencyMs = 0
-        } else {
-                return "", errors.New("no LLM runtime configured for summary generation")
+                },
+        })
+        if err != nil {
+                return "", fmt.Errorf("contract runtime decide: %w", err)
         }
+        summary := strings.TrimSpace(out.Proposal.ResponseText)
+        usageTelemetry := out.Usage
+        latencyMs := out.LatencyMs
 
         // Per P1-5: record usage telemetry for the summary call. This is
         // a real Gemini invocation that consumes tokens — it MUST be
