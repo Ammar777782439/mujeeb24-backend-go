@@ -103,7 +103,7 @@ type ConversationSummaryService struct {
 	Subscriptions ports.SubscriptionRepository
 	Now           func() time.Time
 	NewID         func() string
-	// CostProtection (optional) is the SHARED AI Runtime / Entitlement /
+	// CostProtection (optional) is the shared AI execution gate / Entitlement /
 	// Cost-Budget boundary. Per Item 2: when wired, MaybeSummarize
 	// checks it BEFORE calling Gemini — so the Platform Admin's
 	// platformAIDisable call (Contract §81) blocks this background
@@ -171,7 +171,7 @@ func (s *ConversationSummaryService) MaybeSummarize(
 		return result, nil
 	}
 	if s.CustomerSalesDecisionPort == nil {
-		result.SkippedReason = "contract_runtime_not_configured"
+		result.SkippedReason = "customer_sales_decision_not_configured"
 		return result, nil
 	}
 
@@ -309,7 +309,7 @@ Rules:
 		},
 	})
 	if err != nil {
-		return "", fmt.Errorf("contract runtime decide: %w", err)
+		return "", fmt.Errorf("customer sales decision: %w", err)
 	}
 	summary := strings.TrimSpace(out.Proposal.ResponseText)
 	usageTelemetry := out.Usage
