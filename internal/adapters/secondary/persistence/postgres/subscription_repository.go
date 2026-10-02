@@ -73,26 +73,17 @@ func (r *SubscriptionRepository) Create(ctx context.Context, create ports.Subscr
 	if err != nil {
 		return ports.SubscriptionRecord{}, err
 	}
-	var record ports.SubscriptionRecord
-	err = executor.QueryRow(ctx,
+	_, err = executor.Exec(ctx,
 		`INSERT INTO subscriptions (id, business_id, plan_id, period_start, period_end, status, ai_reply_limit, ai_catalog_limit, channel_limit, internal_ai_cost_budget_yer, created_at, updated_at)
-                 VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, 'PENDING', $6, $7, $8, $9, $10, $10)
-                 RETURNING id::text, business_id::text, plan_id::text, period_start, period_end, status, ai_reply_limit, ai_catalog_limit, channel_limit, internal_ai_cost_budget_yer, cost_budget_override_yer, cost_budget_override_reason, cost_budget_override_by::text, cost_budget_override_at, cancelled_at, cancelled_reason, cancelled_by::text, created_at, updated_at,
+                 VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, 'PENDING', $6, $7, $8, $9, $10, $10)`,
 		create.ID, create.BusinessID, create.PlanID, create.PeriodStart, create.PeriodEnd,
 		create.AIReplyLimit, create.AICatalogLimit, create.ChannelLimit, create.InternalAICostBudgetYER,
 		create.Now,
-	).Scan(
-		&record.ID, &record.BusinessID, &record.PlanID, &record.PlanCode, &record.PlanVersion,
-		&record.PeriodStart, &record.PeriodEnd, &record.Status,
-		&record.AIReplyLimit, &record.AICatalogLimit, &record.ChannelLimit, &record.InternalAICostBudgetYER,
-		&record.CostBudgetOverrideYER, &record.CostBudgetOverrideReason, &record.CostBudgetOverrideBy, &record.CostBudgetOverrideAt,
-		&record.CancelledAt, &record.CancelledReason, &record.CancelledBy,
-		&record.CreatedAt, &record.UpdatedAt,
 	)
 	if err != nil {
 		return ports.SubscriptionRecord{}, classifyRepositoryWriteError("subscription.create", err)
 	}
-	return record, nil
+	return r.GetByID(ctx, create.ID)	return record, nil
 }
 
 func (r *SubscriptionRepository) GetByID(ctx context.Context, subscriptionID string) (ports.SubscriptionRecord, error) {
