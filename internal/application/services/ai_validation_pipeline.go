@@ -118,12 +118,12 @@ func (p *ValidationPipeline) Validate(ctx context.Context, input ValidationInput
 // response_text: non-empty when action != human_request.
 // selected: each SelectedReference has a non-empty item_id (variant_id and
 // offer_id may be nil per contract ④ §4).
-func (p *ValidationPipeline) validateStructural(proposal ports.AIGeminiProposal) *StageFailure {
+func (p *ValidationPipeline) validateStructural(proposal ports.CustomerSalesProposal) *StageFailure {
 	switch proposal.Status {
-	case ports.AIProposalStatusResolved,
-		ports.AIProposalStatusAmbiguous,
-		ports.AIProposalStatusNotFound,
-		ports.AIProposalStatusNeedsMoreData:
+	case ports.CustomerSalesProposalStatusResolved,
+		ports.CustomerSalesProposalStatusAmbiguous,
+		ports.CustomerSalesProposalStatusNotFound,
+		ports.CustomerSalesProposalStatusNeedsMoreData:
 		// allowed
 	default:
 		return &StageFailure{
@@ -133,11 +133,11 @@ func (p *ValidationPipeline) validateStructural(proposal ports.AIGeminiProposal)
 		}
 	}
 	switch proposal.Action {
-	case ports.AIProposalActionAnswer,
-		ports.AIProposalActionClarification,
-		ports.AIProposalActionHumanRequest,
-		ports.AIProposalActionLeadDraft,
-		ports.AIProposalActionOrderDraft:
+	case ports.CustomerSalesProposalActionAnswer,
+		ports.CustomerSalesProposalActionClarification,
+		ports.CustomerSalesProposalActionHumanRequest,
+		ports.CustomerSalesProposalActionLeadDraft,
+		ports.CustomerSalesProposalActionOrderDraft:
 		// allowed
 	default:
 		return &StageFailure{
@@ -146,7 +146,7 @@ func (p *ValidationPipeline) validateStructural(proposal ports.AIGeminiProposal)
 			Reason:   fmt.Sprintf("invalid action %q per contract ④ §4", proposal.Action),
 		}
 	}
-	if proposal.Action != ports.AIProposalActionHumanRequest && strings.TrimSpace(proposal.ResponseText) == "" {
+	if proposal.Action != ports.CustomerSalesProposalActionHumanRequest && strings.TrimSpace(proposal.ResponseText) == "" {
 		return &StageFailure{
 			Stage:    ports.AIRunFailureStageValidation,
 			Category: ports.AIRunFailureCategoryInvalidAIOutput,
@@ -309,7 +309,7 @@ type ValidationInput struct {
 	ConversationID string
 
 	// Proposal is the contract ④ §4 Gemini output.
-	Proposal ports.AIGeminiProposal
+	Proposal ports.CustomerSalesProposal
 
 	// Context is the CustomerSalesContext built by the ContextBuilder.
 	Context *ports.CustomerSalesContext
