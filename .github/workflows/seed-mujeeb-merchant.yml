@@ -1,0 +1,30 @@
+name: Seed Mujeeb merchant
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seed-merchant:
+    name: Create fixed Mujeeb merchant
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.PLATFORM_DATABASE_URL }}
+      GOTOOLCHAIN: local
+    steps:
+      - name: Checkout trusted backend branch
+        uses: actions/checkout@v4
+        with:
+          ref: refactor/merchant-catalog-ai-v2-structure
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+          cache: true
+
+      - name: Run merchant seeder
+        run: go run ./cmd/seed-merchant
