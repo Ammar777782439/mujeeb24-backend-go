@@ -591,33 +591,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		mux.ServeHTTP(writer, request)
 	})
 	// Cross-origin browser access is required because the production frontend is hosted
-	// separately from the Render API. Allow only the configured frontend origin and
-	// allow credentials for the HttpOnly refresh cookie.
-	frontendOrigin := ""
-	if external.FrontendURL != "" {
-		if parsed, err := url.Parse(external.FrontendURL); err == nil && parsed.Scheme != "" && parsed.Host != "" {
-			frontendOrigin = parsed.Scheme + "://" + parsed.Host
-		}
-	}
-	corsMux := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		origin := strings.TrimSpace(request.Header.Get("Origin"))
-		if origin != "" && frontendOrigin != "" && origin == frontendOrigin {
-			writer.Header().Set("Access-Control-Allow-Origin", frontendOrigin)
-			writer.Header().Set("Access-Control-Allow-Credentials", "true")
-			writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			writer.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Authorization, X-Request-ID, Idempotency-Key")
-			writer.Header().Add("Vary", "Origin")
-		}
-		if request.Method == http.MethodOptions {
-			if origin == "" || origin != frontendOrigin {
-				writer.WriteHeader(http.StatusForbidden)
-				return
-			}
-			writer.WriteHeader(http.StatusNoContent)
-			return
-		}
-		wrappedMux.ServeHTTP(writer, request)
-	})
+	// separately from the Render API. CORS is centralized in newCORSMiddleware so the
+	// allowed request headers are covered by a regression-tested contract.
+	corsMux := newCORSMiddleware(wrappedMux, external.FrontendURL)
 	server := &http.Server{Addr: address, Handler: corsMux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	return &APIRuntime{
 		HTTP:                server,
