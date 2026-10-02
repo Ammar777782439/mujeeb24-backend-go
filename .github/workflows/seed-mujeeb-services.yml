@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 10
     env:
       DATABASE_URL: ${{ secrets.PLATFORM_DATABASE_URL }}
-      MERCHANT_SEED_EMAIL: ${{ inputs.owner_email }}
+      MERCHANT_SEED_EMAIL: ${{ inputs.owner_email || secrets.MERCHANT_SEED_EMAIL }}
       MERCHANT_SEED_DISPLAY_NAME: ${{ inputs.owner_display_name }}
       MERCHANT_SEED_PASSWORD: ${{ secrets.MERCHANT_SEED_PASSWORD }}
       GOTOOLCHAIN: local
@@ -47,6 +47,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${DATABASE_URL}" || { echo "PLATFORM_DATABASE_URL is not configured."; exit 1; }
+          test -n "${MERCHANT_SEED_EMAIL}" || { echo "Provide owner_email or configure MERCHANT_SEED_EMAIL."; exit 1; }
           test -n "${MERCHANT_SEED_PASSWORD}" || { echo "MERCHANT_SEED_PASSWORD is not configured."; exit 1; }
 
       - name: Format and verify seed command
