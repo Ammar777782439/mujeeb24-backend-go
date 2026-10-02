@@ -3,7 +3,7 @@
 // This file implements the Gemini Function Calling Tool Loop per the
 // user's specification. It does NOT create new architecture — it
 // reuses:
-//   - ports.AICapabilityDispatcher (from gemini.Client.Capabilities())
+//   - ports.CustomerSalesToolPort (from gemini.Client.Capabilities())
 //   - ports.AIRunRepository (CreateToolCall / UpdateToolCall)
 //   - ports.AIRunLifecycle (MarkWaitingTool / MarkRunning)
 //   - ports.AIToolCallRecord / AIToolCallPatch
@@ -110,7 +110,7 @@ func extractFunctionCalls(resp contractGeminiResponse) []*contractFunctionCall {
 //
 // Per the spec:
 //   - Gemini does NOT set BusinessID. Tenant comes from
-//     AICapabilityExecutionContext.BusinessID (from the trusted caller).
+//     CustomerSalesToolExecutionContext.BusinessID (from the trusted caller).
 //   - Tool call records are persisted via AIRunRepository.CreateToolCall
 //   - UpdateToolCall.
 //   - The WAITING_TOOL → RUNNING lifecycle transition is handled by
@@ -144,7 +144,7 @@ func (c *GeminiCustomerSalesAdapter) executeToolCalls(
 		// Per the spec: "Gemini لا يحدد BusinessID. يتم تجاهله."
 		// The execution context carries the TRUSTED business_id from
 		// Mujeeb's caller — NOT from Gemini's function call args.
-		execCtx := ports.AICapabilityExecutionContext{
+		execCtx := ports.CustomerSalesToolExecutionContext{
 			BusinessID:     businessID,
 			ConversationID: conversationID,
 			RequestID:      input.Request.SourceMessageReference,
