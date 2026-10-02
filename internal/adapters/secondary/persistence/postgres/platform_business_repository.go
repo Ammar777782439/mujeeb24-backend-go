@@ -118,7 +118,7 @@ func (r *PlatformBusinessRepository) List(ctx context.Context, filter ports.Plat
 	items := make([]ports.PlatformBusinessRecord, 0, filter.Limit)
 	for rows.Next() {
 		var record ports.PlatformBusinessRecord
-		if err := rows.Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.CreatedAt, &record.UpdatedAt); err != nil {
+		if err := rows.Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.OwnerIdentitySummary, &record.CreatedAt, &record.UpdatedAt); err != nil {
 			return ports.PlatformBusinessPage{}, &RepositoryError{Operation: "platform_business.list", Kind: RepositoryInvalid, Err: err}
 		}
 		items = append(items, record)
