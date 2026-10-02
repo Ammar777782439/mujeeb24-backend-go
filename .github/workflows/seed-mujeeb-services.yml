@@ -1,6 +1,9 @@
 name: Seed Mujeeb Services Merchant
 
 on:
+  push:
+    branches:
+      - ops/seed-mujeeb-services
   workflow_dispatch:
     inputs:
       owner_email:
