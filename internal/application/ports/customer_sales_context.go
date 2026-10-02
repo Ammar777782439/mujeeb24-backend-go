@@ -28,8 +28,8 @@ type CustomerSalesContextInput struct {
 	RecentMessages         []AIRecentMessageEvidence
 }
 
-type AIContextBuilder interface {
-	Build(context.Context, ContextBuildInput) (AIContext, error)
+type CustomerSalesContextBuilder interface {
+	Build(context.Context, CustomerSalesContextInput) (AIContext, error)
 }
 
 type AIPolicyEvaluator interface {
