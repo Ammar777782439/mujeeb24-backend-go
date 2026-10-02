@@ -551,7 +551,7 @@ type AIRunLifecyclePort interface {
 	MarkRunning(ctx context.Context, businessID, runID string) (AIRunRecord, error)
 }
 
-// CustomerSalesRequest is the input to CustomerSalesDecisionPort.Decide.
+// CustomerSalesDecisionInput is the complete request envelope for CustomerSalesDecisionPort.Decide.
 type CustomerSalesDecisionInput struct {
 	// Request is the customer-facing business request and grounded Mujeeb context.
 	Request CustomerSalesDecisionRequest
@@ -568,17 +568,6 @@ type CustomerSalesDecisionInput struct {
 
 // CustomerSalesDecisionRequest contains the customer-facing input that is
 // safe and authoritative for the customer-sales AI.
-type CustomerSalesDecisionRequest struct {
-	BusinessID             string
-	ConversationID         string
-	SourceMessageReference string
-	Text                   string
-	Channel                string
-	PolicyVersion          string
-	Context                *AIContext
-}
-
-// CustomerSalesDecisionRequest is the customer-side decision data supplied by Mujeeb.
 type CustomerSalesDecisionRequest struct {
 	BusinessID             string
 	ConversationID         string
