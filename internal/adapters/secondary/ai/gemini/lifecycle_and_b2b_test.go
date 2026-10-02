@@ -182,7 +182,7 @@ func TestB2B_AIRunID_Path_CustomerSalesDecisionInputToToolCallRecord(t *testing.
 	if err != nil {
 		t.Fatalf("Decide failed: %v", err)
 	}
-	if out.Proposal.Status != ports.AIProposalStatusResolved {
+	if out.Proposal.Status != ports.CustomerSalesProposalStatusResolved {
 		t.Errorf("expected status=resolved, got %s", out.Proposal.Status)
 	}
 	if len(runRepo.createdToolCalls) != 1 {
