@@ -51,7 +51,7 @@ func (c listItemsCapability) Execute(ctx context.Context, execCtx ports.AICapabi
 
 	now := time.Now().UTC()
 	items := make([]map[string]any, 0, len(page.Items))
-	evidence := make([]ports.AICatalogEvidence, 0, len(page.Items))
+	evidence := make([]ports.CustomerSalesCatalogEvidence, 0, len(page.Items))
 	for _, item := range page.Items {
 		items = append(items, map[string]any{
 			"id":                       item.ID,
@@ -69,7 +69,7 @@ func (c listItemsCapability) Execute(ctx context.Context, execCtx ports.AICapabi
 			"requires_confirmation":    item.RequiresConfirmation,
 			"attributes":               json.RawMessage(item.Attributes),
 		})
-		evidence = append(evidence, ports.AICatalogEvidence{
+		evidence = append(evidence, ports.CustomerSalesCatalogEvidence{
 			Reference:            item.ID,
 			CatalogReference:     item.CatalogID,
 			ItemType:             item.ItemType,
@@ -151,7 +151,7 @@ func (c getItemCapability) Execute(ctx context.Context, execCtx ports.AICapabili
 			"requires_confirmation":    item.RequiresConfirmation,
 			"attributes":               json.RawMessage(item.Attributes),
 		},
-		CatalogEvidence: []ports.AICatalogEvidence{{
+		CatalogEvidence: []ports.CustomerSalesCatalogEvidence{{
 			Reference:        item.ID,
 			CatalogReference: item.CatalogID,
 			ItemType:         item.ItemType,
