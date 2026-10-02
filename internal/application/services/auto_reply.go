@@ -280,7 +280,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		previousInteractionID = *builtContext.Conversation.LastGeminiInteractionID
 	}
 	out, err := s.CustomerSalesDecision.Decide(ctx, ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.AIDecisionInput{
+		DecisionInput: ports.CustomerSalesDecisionRequest{
 			BusinessID:             businessID,
 			ConversationID:         conversationID,
 			SourceMessageReference: sourceMessageRef,
