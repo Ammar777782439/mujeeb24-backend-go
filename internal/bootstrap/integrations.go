@@ -13,7 +13,8 @@ import (
 type ExternalAdapters struct {
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
-	AIRuntime                      ports.AIRuntime
+	GeminiClient                   *gemini.Client
+	OpenAICompatibleClient         *openaicompatible.Client
 	LLMConfigError                 error
 	AutoReplyEnabled               bool
 	ChannelProvisioningSocial      ports.SocialChannelProvisioner
@@ -43,7 +44,7 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 			checks["channel_provisioning"] = "configured"
 		}
 	}
-	if a.AIRuntime != nil {
+	if a.GeminiClient != nil || a.OpenAICompatibleClient != nil {
 		checks["llm_runtime"] = "configured"
 	}
 	return checks
@@ -84,7 +85,7 @@ func BuildExternalAdaptersWithCapabilities(cfg config.ProcessConfig, capabilitie
 		if err != nil {
 			adapters.LLMConfigError = errors.New("Gemini adapter configuration: " + err.Error())
 		} else {
-			adapters.AIRuntime = client
+			adapters.GeminiClient = client
 		}
 	} else if cfg.LLMEnabled {
 		client, err := openaicompatible.NewClient(openaicompatible.Config{
@@ -99,7 +100,7 @@ func BuildExternalAdaptersWithCapabilities(cfg config.ProcessConfig, capabilitie
 		if err != nil {
 			adapters.LLMConfigError = errors.New("LLM adapter configuration: " + err.Error())
 		} else {
-			adapters.AIRuntime = client
+			adapters.OpenAICompatibleClient = client
 		}
 	}
 	adapters.AutoReplyEnabled = cfg.AutoReplyEnabled
