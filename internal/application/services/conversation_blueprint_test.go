@@ -239,7 +239,7 @@ func TestAutoReplyHandoffFarewellOnSubscription(t *testing.T) {
 	// containing "subscribe"/"activat"/"purchase" keywords (the system prompt
 	// instructs Gemini to use those words when handing off a subscription intent).
 	service := NewAutoReplyService(
-		&FakeContractRuntime{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusResolved, Action: ports.AIProposalActionHumanRequest, ResponseText: "model suggests subscribe"}},
+		&FakeCustomerSalesDecisionPort{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusResolved, Action: ports.AIProposalActionHumanRequest, ResponseText: "model suggests subscribe"}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
 		outbound,
@@ -287,7 +287,7 @@ func TestAutoReplyHandoffFarewellOnSubscription(t *testing.T) {
 func TestAutoReplyHandoffFarewellBlockedWhenApprovalRequired(t *testing.T) {
 	outbox := &fakeOutboxStore{}
 	service := NewAutoReplyService(
-		&FakeContractRuntime{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusResolved, Action: ports.AIProposalActionHumanRequest, ResponseText: "model text"}},
+		&FakeCustomerSalesDecisionPort{Proposal: ports.AIGeminiProposal{Status: ports.AIProposalStatusResolved, Action: ports.AIProposalActionHumanRequest, ResponseText: "model text"}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
 		&fakeOutboundRepository{},
