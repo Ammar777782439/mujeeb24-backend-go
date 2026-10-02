@@ -81,7 +81,7 @@ func BuildAPI(ctx context.Context, cfg config.ProcessConfig) (*APIRuntime, error
 		database.Close()
 		return nil, err
 	}
-	runtime, err := newAPIWithExternalAndAuthentication(database, cfg.HTTPAddr, BuildExternalAdapters(cfg, capabilityRegistry), authentication)
+	runtime, err := newAPIWithExternalAndAuthentication(database, cfg.HTTPAddr, BuildExternalAdapters(cfg), authentication)
 	if err != nil {
 		database.Close()
 		return nil, err
@@ -221,7 +221,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		var runRepo ports.AIRunRepository
 		if external.GeminiHTTPClient != nil {
 			geminiClient = external.GeminiHTTPClient
-			customerSalesAdapter, err := gemini.NewGeminiCustomerSalesAdapter(geminiClient)
+			customerSalesAdapter, err := gemini.NewGeminiCustomerSalesAdapter(geminiClient, capabilityRegistry)
 			if err != nil {
 				return nil, fmt.Errorf("build customer sales AI adapter: %w", err)
 			}
