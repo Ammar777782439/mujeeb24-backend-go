@@ -34,7 +34,7 @@ services:
         value: 720h
 
       # Required encrypted AI credential storage at API startup.
-      # Gemini itself stays disabled for the initial smoke test.
+      # Gemini is enabled for production auto-reply.
       - key: AI_CONFIG_ENCRYPTION_KEY
         sync: false
       - key: GEMINI_API_KEY
