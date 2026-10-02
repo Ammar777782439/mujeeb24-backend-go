@@ -48,7 +48,7 @@ type ContractClient struct {
 	apiKey         string
 	model          string
 	requestTimeout time.Duration
-	// configProvider, when set, is called at the start of every DecideContract
+	// configProvider, when set, is called at the start of every Decide
 	// call to get the ACTIVE runtime configuration (API key, model, limits).
 	// Per §2: the runtime gets the active config from Configuration abstraction,
 	// not from static env vars. If nil, falls back to static fields (bootstrap/tests).
@@ -75,7 +75,7 @@ type resolvedAIConfig struct {
 }
 
 // SetConfigurationProvider wires the dynamic AIConfigurationProvider.
-// After this call, every DecideContract resolves the active config from
+// After this call, every Decide resolves the active config from
 // the provider (cache/DB) instead of static struct fields. Per §9:
 // cache invalidation makes new config active without restart.
 func (c *ContractClient) SetConfigurationProvider(provider ports.AIConfigurationProvider) {
@@ -126,7 +126,7 @@ func NewContractClient(base *Client) (*ContractClient, error) {
 	}, nil
 }
 
-// DecideContract is the contract ④ §8 method implementing ports.CustomerSalesDecisionPort.
+// Decide is the contract ④ §8 method implementing ports.CustomerSalesDecisionPort.
 //
 // Per contract ③ §4, it carries previous_interaction_id chaining via input.GeminiInteraction.
 // Per contract ⑤ §7, the Entity Contract is sent as part of system_instruction.
@@ -144,7 +144,7 @@ func NewContractClient(base *Client) (*ContractClient, error) {
 // tool fails non-retryably, or the context deadline expires.
 //
 // This method supersedes the legacy ports.AIRuntime.Decide.
-func (c *ContractClient) DecideContract(ctx context.Context, input ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
+func (c *ContractClient) Decide(ctx context.Context, input ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
 	if err := ctx.Err(); err != nil {
 		return ports.CustomerSalesDecisionOutput{}, err
 	}
