@@ -79,7 +79,7 @@ func NewPostgresPolicyEvaluator(management ports.BusinessManagementRepository) *
 // to 'allowed', 'requires_approval', or 'denied' per the business policy.
 //
 // Per contract ⑥ §20, validation is deterministic — no second LLM is used.
-func (e *PostgresPolicyEvaluator) Evaluate(proposal ports.AIDecisionProposal, contextValue *ports.AIContext) ports.AIDecisionProposal {
+func (e *PostgresPolicyEvaluator) Evaluate(proposal ports.AIDecisionProposal, contextValue *ports.CustomerSalesContext) ports.AIDecisionProposal {
 	if e == nil || e.Management == nil {
 		// No policy evaluator configured — default to allowed per contract ⑥ §12
 		// (conservative default when no policy is registered).
