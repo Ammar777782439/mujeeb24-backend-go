@@ -83,7 +83,7 @@ func TestGeminiCustomerSalesAdapterSendsAPIKeyInHeaderNotURL(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	client, err := NewClient(Config{
+	client, err := NewGeminiHTTPClient(GeminiHTTPClientConfig{
 		BaseURL: server.URL, APIKey: "test-key-abc123",
 		Model: "gemini-3.5-flash", SystemPrompt: "test",
 		RequestTimeout: 5 * time.Second,
