@@ -86,18 +86,8 @@ func (r *ReadOnlyCapabilityRegistry) Execute(ctx context.Context, execCtx Mercha
 }
 
 func (r *ReadOnlyCapabilityRegistry) recordEvidence(result MerchantCatalogDiscoveryResult) {
-	for _, evidence := range result.CatalogEvidence {
-		if ref := strings.TrimSpace(evidence.Reference); ref != "" {
-			r.evidenceReferences[ref] = struct{}{}
-		}
-	}
-	for _, evidence := range result.VariantEvidence {
-		if ref := strings.TrimSpace(evidence.Reference); ref != "" {
-			r.evidenceReferences[ref] = struct{}{}
-		}
-	}
-	for _, evidence := range result.OfferEvidence {
-		if ref := strings.TrimSpace(evidence.Reference); ref != "" {
+	for _, reference := range result.EvidenceReferences {
+		if ref := strings.TrimSpace(reference); ref != "" {
 			r.evidenceReferences[ref] = struct{}{}
 		}
 	}
