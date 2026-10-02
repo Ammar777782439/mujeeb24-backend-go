@@ -26,13 +26,35 @@ fi
 
 printf '%s\n' '[3/6] checking Go formatting and Git whitespace'
 go_files=()
-while IFS= read -r file; do
-  [[ -f "$file" ]] && go_files+=("$file")
-done < <(git ls-files '*.go')
-mapfile -t unformatted < <("$gofmt_bin" -l "${go_files[@]}")
-(( ${#unformatted[@]} == 0 )) || fail "gofmt required: ${unformatted[*]}"
-git diff --check
 
+if [[ "${VERIFY_GOFMT_SCOPE:-all}" == "changed" ]]; then
+  base_ref=""
+  if [[ "${GITHUB_EVENT_NAME:-}" == "pull_request" && -n "${GITHUB_BASE_REF:-}" ]]; then
+    base_ref="$(git merge-base HEAD "origin/${GITHUB_BASE_REF}")"
+  elif [[ -n "${GITHUB_BEFORE:-}" && "${GITHUB_BEFORE}" != "0000000000000000000000000000000000000000" ]]; then
+    base_ref="${GITHUB_BEFORE}"
+  elif git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+    base_ref="$(git rev-parse HEAD^)"
+  fi
+
+  if [[ -n "$base_ref" ]]; then
+    while IFS= read -r file; do
+      [[ -f "$file" ]] && go_files+=("$file")
+    done < <(git diff --name-only "$base_ref" HEAD -- '*.go')
+  fi
+else
+  while IFS= read -r file; do
+    [[ -f "$file" ]] && go_files+=("$file")
+  done < <(git ls-files '*.go')
+fi
+
+if (( ${#go_files[@]} > 0 )); then
+  mapfile -t unformatted < <("$gofmt_bin" -l "${go_files[@]}")
+  (( ${#unformatted[@]} == 0 )) || fail "gofmt required: ${unformatted[*]}"
+else
+  printf '%s\n' 'no Go files in formatting scope'
+fi
+git diff --check
 printf '%s\n' '[4/6] validating generated OpenAPI contract'
 before="$(mktemp)"
 trap 'rm -f "$before"' EXIT
