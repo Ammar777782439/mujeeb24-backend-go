@@ -237,7 +237,7 @@ func TestToolLoop_GeminiRequestsCapability_MujeebExecutes_FinalProposalReturned(
 	cc, runRepo := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.AIDecisionInput{
+		DecisionInput: ports.CustomerSalesDecisionRequest{
 			BusinessID:     "trusted-business-1",
 			ConversationID: "conv-1",
 			Text:           "what products do you have?",
@@ -323,7 +323,7 @@ func TestToolLoop_MultipleToolCallsInOneDecision(t *testing.T) {
 	cc, runRepo := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.AIDecisionInput{
+		DecisionInput: ports.CustomerSalesDecisionRequest{
 			BusinessID:     "b-1",
 			ConversationID: "c-1",
 			Text:           "show me products",
@@ -385,7 +385,7 @@ func TestToolLoop_ToolCallRecordSavedAndUpdated(t *testing.T) {
 	cc, runRepo := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
+		DecisionInput: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-save",
 	})
 	if err != nil {
@@ -447,7 +447,7 @@ func TestToolLoop_ToolFailureReturnsError(t *testing.T) {
 	cc, _ := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
+		DecisionInput: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-fail",
 	})
 	if err == nil {
@@ -489,7 +489,7 @@ func TestToolLoop_TenantIsolation_GeminiBusinessIDIgnored(t *testing.T) {
 	cc, _ := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "trusted-biz", ConversationID: "c-1", Text: "hello"},
+		DecisionInput: ports.CustomerSalesDecisionRequest{BusinessID: "trusted-biz", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-tenant",
 	})
 	if err != nil {
@@ -525,7 +525,7 @@ func TestToolLoop_NoTools_BackwardCompatible(t *testing.T) {
 	cc, _ := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	out, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
+		DecisionInput: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 	})
 	if err != nil {
 		t.Fatalf("Decide failed: %v", err)
@@ -563,7 +563,7 @@ func TestToolLoop_ContextDeadlineStopsLoop(t *testing.T) {
 	defer cancel()
 
 	_, err := cc.Decide(ctx, ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
+		DecisionInput: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-timeout",
 	})
 	if err == nil {
@@ -592,7 +592,7 @@ func TestToolLoop_ToolsExtractedFromCapabilitiesDefinitions(t *testing.T) {
 	cc, _ := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
+		DecisionInput: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 	})
 	if err != nil {
 		t.Fatalf("Decide failed: %v", err)
@@ -661,7 +661,7 @@ func TestToolLoop_FunctionResponseRoleIsUser(t *testing.T) {
 	cc, _ := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
+		DecisionInput: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-role",
 	})
 	if err != nil {
@@ -729,7 +729,7 @@ func TestToolLoop_ThoughtSignaturePreservedInFollowUp(t *testing.T) {
 	cc, _ := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
+		DecisionInput: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-sig",
 	})
 	if err != nil {
@@ -787,7 +787,7 @@ func TestToolLoop_AIRunIDSavedInToolCallRecord(t *testing.T) {
 	cc, runRepo := buildGeminiCustomerSalesAdapterWithTools(t, mock, dispatcher)
 
 	_, err := cc.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		DecisionInput: ports.AIDecisionInput{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
+		DecisionInput: ports.CustomerSalesDecisionRequest{BusinessID: "b-1", ConversationID: "c-1", Text: "hello"},
 		AIRunID:       "run-airunid-test",
 	})
 	if err != nil {
