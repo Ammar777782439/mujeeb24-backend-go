@@ -86,7 +86,7 @@ type ConversationSummaryService struct {
 	Messages        ports.MessageRepository
 	// CustomerSalesDecisionPort is the only AI execution path for summaries.
 	// It reads the active AI configuration through the provider wired
-	// into the ContractClient, so summaries use the same runtime contract
+	// into the GeminiCustomerSalesAdapter, so summaries use the same customer-sales decision port
 	// as AutoReply.
 	CustomerSalesDecisionPort ports.CustomerSalesDecisionPort
 	// AIUsageRepository records per-execution telemetry for the summary
