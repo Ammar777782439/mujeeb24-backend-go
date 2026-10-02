@@ -148,7 +148,7 @@ func (c *GeminiCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cus
 	if err := ctx.Err(); err != nil {
 		return ports.CustomerSalesDecisionOutput{}, err
 	}
-	if strings.TrimSpace(input.DecisionInput.Text) == "" {
+	if strings.TrimSpace(input.Request.Text) == "" {
 		return ports.CustomerSalesDecisionOutput{}, errors.New("AI input text is required")
 	}
 	// Per §1-2: resolve the ACTIVE runtime configuration from cache/DB.
@@ -157,7 +157,7 @@ func (c *GeminiCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cus
 		return ports.CustomerSalesDecisionOutput{}, err
 	}
 	// Per contract ④ §6: enforce LLMMaxInputCharacters on the contract path.
-	if rc.maxInputCharacters > 0 && len([]rune(input.DecisionInput.Text)) > rc.maxInputCharacters {
+	if rc.maxInputCharacters > 0 && len([]rune(input.Request.Text)) > rc.maxInputCharacters {
 		return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("AI input text exceeds %d characters", rc.maxInputCharacters)
 	}
 
@@ -169,7 +169,7 @@ func (c *GeminiCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cus
 		PreviousInteractionID: input.GeminiInteraction.PreviousInteractionID,
 		Store:                 input.GeminiInteraction.Store,
 		SystemInstruction:     c.buildContractSystemInstruction(input.EntityContractPayload),
-		Contents:              c.buildContractContents(input.DecisionInput),
+		Contents:              c.buildContractContents(input.Request),
 		GenerationConfig: contractGenerationConfig{
 			ResponseMimeType: "application/json",
 			ResponseSchema:   contractProposalResponseSchema(),
@@ -190,8 +190,8 @@ func (c *GeminiCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cus
 
 	// If tools are configured, run the tool loop. Otherwise, send a
 	// single request (backward-compatible with the pre-tool-loop path).
-	businessID := input.DecisionInput.BusinessID
-	conversationID := input.DecisionInput.ConversationID
+	businessID := input.Request.BusinessID
+	conversationID := input.Request.ConversationID
 	runID := input.AIRunID
 
 	if len(toolDecls) > 0 {
@@ -257,7 +257,7 @@ func (c *GeminiCustomerSalesAdapter) buildContractSystemInstruction(entityContra
 //
 // Per contract ④ §3, the input includes: business_context, conversation_context,
 // conversation_state, catalog_evidence, user_message.
-func (c *GeminiCustomerSalesAdapter) buildContractContents(input ports.AIDecisionInput) []contractContent {
+func (c *GeminiCustomerSalesAdapter) buildContractContents(input ports.CustomerSalesDecisionRequest) []contractContent {
 	// The existing client.go has buildUserPrompt(input) which encodes the
 	// AIContext (Business, Conversation, Customer, CatalogEvidence, etc.) into
 	// the user-facing prompt text. We reuse it for the contract-aligned path.
