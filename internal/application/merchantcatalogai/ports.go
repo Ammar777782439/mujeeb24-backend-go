@@ -26,6 +26,47 @@ type EntityContractProvider interface {
 	Payload(context.Context) ([]byte, error)
 }
 
+// MerchantCatalogDiscoveryToolDefinition describes a read-only B2B catalog
+// discovery tool exposed to the merchant catalog authoring AI.
+type MerchantCatalogDiscoveryToolDefinition struct {
+	Name        string
+	Description string
+	Parameters  map[string]any
+}
+
+// MerchantCatalogDiscoveryExecutionContext carries trusted server-side scope
+// for a merchant catalog discovery call.
+type MerchantCatalogDiscoveryExecutionContext struct {
+	BusinessID     string
+	ConversationID string
+	PrincipalID    string
+}
+
+// MerchantCatalogDiscoveryResult contains factual read-only data returned by a
+// merchant catalog discovery tool. Evidence is tracked as opaque references;
+// B2C customer-sales evidence types do not cross this boundary.
+type MerchantCatalogDiscoveryResult struct {
+	Data                     any
+	EvidenceReferences       []string
+	AttributeSchemaReferences []string
+	HasMore                  bool
+	NextCursor               string
+	Operation                string
+}
+
+// MerchantCatalogDiscoveryTool is one bounded read-only capability for B2B
+// merchant catalog authoring.
+type MerchantCatalogDiscoveryTool interface {
+	Definition() MerchantCatalogDiscoveryToolDefinition
+	Execute(context.Context, MerchantCatalogDiscoveryExecutionContext, []byte) (MerchantCatalogDiscoveryResult, error)
+}
+
+// MerchantCatalogDiscoveryPort dispatches the read-only tools available to the
+// merchant catalog authoring AI. It is intentionally separate from B2C tools.
+type MerchantCatalogDiscoveryPort interface {
+	Definitions() []MerchantCatalogDiscoveryToolDefinition
+	Execute(context.Context, MerchantCatalogDiscoveryExecutionContext, string, []byte) (MerchantCatalogDiscoveryResult, error)
+}
 type MerchantCatalogAuthoringInput struct {
 	BusinessID      string
 	PrincipalID     string
@@ -35,7 +76,7 @@ type MerchantCatalogAuthoringInput struct {
 	SelectedCatalog ports.CatalogRecord
 	History         []SessionMessage
 	EntityContract  []byte
-	Capabilities    ports.AICapabilityDispatcher
+	Capabilities    MerchantCatalogDiscoveryPort
 }
 
 type MerchantCatalogAuthoringPort interface {
