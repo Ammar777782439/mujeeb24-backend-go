@@ -515,7 +515,7 @@ type AICatalogBatchPatch struct {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Contract ④ §8 — CustomerSalesDecisionPort interface (replaces legacy AIRuntime)
+// Contract ④ §8 — CustomerSalesDecisionPort
 // ════════════════════════════════════════════════════════════════════════════
 
 // CustomerSalesDecisionPort is the contract ④ §8 mapping of Mujeeb Contract to Gemini API.
@@ -538,11 +538,11 @@ type CustomerSalesDecisionPort interface {
 	Decide(ctx context.Context, input CustomerSalesDecisionInput) (CustomerSalesDecisionOutput, error)
 }
 
-// AIRunLifecyclePort is the minimal interface ContractClient needs to
+// AIRunLifecyclePort is the minimal lifecycle interface needed by the Gemini
 // transition the AI Run lifecycle during the Tool Loop. Per fix #2:
-// ContractClient (in gemini package) can't import services.AIRunLifecycle
+// customer-sales adapter (in the Gemini package) cannot import services.AIRunLifecycle
 // (would create a cycle). This abstraction lets the caller wire the
-// existing AIRunLifecycle into ContractClient without a cycle.
+// existing lifecycle implementation without creating an import cycle.
 //
 // Per the spec: "استخدم الموجود: services.AIRunLifecycle"
 // AIRunLifecycle already implements MarkWaitingTool + MarkRunning.
