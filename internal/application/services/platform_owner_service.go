@@ -9,7 +9,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
-	"github.com/golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/bcrypt"
 	"github.com/google/uuid"
 )
 
