@@ -2,6 +2,8 @@
 
 package ports
 
+import "context"
+
 // CustomerSales contract types are B2C-specific. They define the customer-facing
 // proposal, catalog-evaluation results, Gemini conversation continuity, and the
 // application port consumed by Customer Sales AI.
