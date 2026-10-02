@@ -536,7 +536,7 @@ type AICatalogBatchPatch struct {
 // Per contract ⑤ §7, the Catalog Entity Contract is sent as part of system
 // instruction; it is passed through as opaque JSON.
 type CustomerSalesDecisionPort interface {
-	Decide(ctx context.Context, input CustomerSalesRequest) (CustomerSalesDecisionOutput, error)
+	Decide(ctx context.Context, input CustomerSalesDecisionInput) (CustomerSalesDecisionOutput, error)
 }
 
 // AIRunLifecyclePort is the minimal interface ContractClient needs to
@@ -553,27 +553,30 @@ type AIRunLifecyclePort interface {
 }
 
 // CustomerSalesRequest is the input to CustomerSalesDecisionPort.Decide.
-type CustomerSalesRequest struct {
-	// Request carries business_id, conversation_id, message text, channel,
-	// and the built AIContext (per contract ③ §2).
+type CustomerSalesDecisionInput struct {
+	// Request is the customer-facing business request and grounded Mujeeb context.
 	Request CustomerSalesDecisionRequest
 
-	// GeminiInteraction per contract ③ §4. Empty PreviousInteractionID means
-	// this is the first turn (no chaining). ResultingInteractionID is populated
-	// by the runtime after a successful Gemini call.
+	// GeminiInteraction carries the previous interaction identifier for continuity.
 	GeminiInteraction GeminiInteractionContext
 
-	// EntityContractPayload is the JSON-serializable Catalog Entity Contract
-	// payload per contract ⑤ §7. Passed as raw bytes to avoid a circular
-	// dependency between ports and services (where CatalogEntityContractPayload
-	// is defined). The runtime passes it through to Gemini as system_instruction.
+	// EntityContractPayload is the Catalog Entity Contract sent to Gemini.
 	EntityContractPayload []byte
 
-	// AIRunID carries the current AI Run ID for tool call trace persistence.
-	// Per the Tool Loop spec: enables ContractClient to persist
-	// AIToolCallRecord rows linked to the correct run. Empty when
-	// the caller doesn't have a run (tests).
+	// AIRunID links customer-sales tool calls to the current AI Run trace.
 	AIRunID string
+}
+
+// CustomerSalesDecisionRequest contains the customer-facing input that is
+// safe and authoritative for the customer-sales AI.
+type CustomerSalesDecisionRequest struct {
+	BusinessID             string
+	ConversationID         string
+	SourceMessageReference string
+	Text                   string
+	Channel                string
+	PolicyVersion          string
+	Context                *AIContext
 }
 
 // CustomerSalesDecisionOutput is the output of CustomerSalesDecisionPort.Decide.
