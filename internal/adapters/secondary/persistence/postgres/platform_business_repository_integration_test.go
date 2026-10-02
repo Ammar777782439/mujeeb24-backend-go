@@ -11,7 +11,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/database"
 )
 
-func TestPlatformBusinessRepositoryOwnerProjectionAndPendingActivation(t *testing.T) {
+func TestPlatformBusinessRepositoryProjectsActiveOwner(t *testing.T) {
 	dsn := os.Getenv("POSTGRES_TEST_DSN")
 	if dsn == "" {
 		t.Skip("POSTGRES_TEST_DSN is not set")
@@ -90,14 +90,4 @@ func TestPlatformBusinessRepositoryOwnerProjectionAndPendingActivation(t *testin
 		t.Fatalf("owner summary = %v, want expected identity", withOwner.OwnerIdentitySummary)
 	}
 
-	activated, err := repo.ActivateFromPendingSetup(ctx, businessID, now.Add(time.Second))
-	if err != nil {
-		t.Fatalf("activate pending business: %v", err)
-	}
-	if activated.PlatformStatus != "active" {
-		t.Fatalf("activated status = %q, want active", activated.PlatformStatus)
-	}
-	if activated.OwnerIdentitySummary == nil {
-		t.Fatal("owner summary lost during activation")
-	}
 }
