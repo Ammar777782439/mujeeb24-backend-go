@@ -1,10 +1,10 @@
-// Package gemini — JSON serialization contract tests for AIOfferEvidence.
+// Package gemini — JSON serialization contract tests for CustomerSalesOfferEvidence.
 //
 // Per ADR-046: verifies that the JSON sent to Gemini via promptContext
 // uses "availability_status" (snake_case) as the field key — matching
 // the DB column, Catalog Entity Contract, and the prompt references.
 //
-// Before ADR-046, AIOfferEvidence had no JSON tags, so Go's
+// Before ADR-046, CustomerSalesOfferEvidence had no JSON tags, so Go's
 // encoding/json serialized the field as "AvailabilityState" (PascalCase)
 // — mismatching the Contract's "availability_status" and the prompt
 // references "availability_state". This test proves the fix and prevents
@@ -19,7 +19,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
-// TestAIOfferEvidenceJSONSerialization verifies that the AIOfferEvidence
+// TestCustomerSalesOfferEvidenceJSONSerialization verifies that the CustomerSalesOfferEvidence
 // struct serializes with the correct JSON key "availability_status"
 // (snake_case), matching the Catalog Entity Contract and DB column.
 //
@@ -36,11 +36,11 @@ import (
 // This test specifically proves the JSON serialization boundary —
 // it uses the SAME encoding/json path as the production code
 // (buildUserPrompt → promptContextFrom → json.Marshal).
-func TestAIOfferEvidenceJSONSerialization(t *testing.T) {
+func TestCustomerSalesOfferEvidenceJSONSerialization(t *testing.T) {
 	// Build a promptContext with one offer evidence, exactly like
 	// the production code does in promptContextFrom().
 	ctx := promptContext{
-		OfferEvidence: []ports.AIOfferEvidence{{
+		OfferEvidence: []ports.CustomerSalesOfferEvidence{{
 			Reference:          "offer-001",
 			Name:               "Test Offer",
 			PricingMode:        "fixed",
