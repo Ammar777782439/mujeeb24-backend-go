@@ -3,46 +3,48 @@ set -euo pipefail
 
 OUT=".dockhosting.generated.env"
 
-if ! command -v openssl >/dev/null 2>&1; then
-  echo "openssl is required"
+if ! command -v go >/dev/null 2>&1; then
+  echo "Go is required to generate Ed25519 secrets."
   exit 1
 fi
 
 umask 077
-
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
-openssl genpkey -algorithm Ed25519 -out "$tmpdir/private.pem" >/dev/null 2>&1
-openssl pkey -in "$tmpdir/private.pem" -pubout -out "$tmpdir/public.pem" >/dev/null 2>&1
+cat > "$tmpdir/keygen.go" <<'GO'
+package main
 
-private_b64="$(
-  openssl pkey -in "$tmpdir/private.pem" -text -noout 2>/dev/null |
-    awk '/priv:/{flag=1;next} /pub:/{flag=0} flag' |
-    tr -d '[:space:]:' |
-    xxd -r -p |
-    base64 -w0
-)"
+import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
+)
 
-public_b64="$(
-  openssl pkey -in "$tmpdir/public.pem" -pubin -text -noout 2>/dev/null |
-    awk '/pub:/{flag=1;next} flag' |
-    tr -d '[:space:]:' |
-    xxd -r -p |
-    tail -c 32 |
-    base64 -w0
-)"
+func main() {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		panic(err)
+	}
 
-ai_key="$(openssl rand -base64 32 | tr -d '\n')"
+	aiKey := make([]byte, 32)
+	if _, err := rand.Read(aiKey); err != nil {
+		panic(err)
+	}
 
-cat > "$OUT" <<EOF
-APP_ENV=production
-AUTH_ENABLED=true
-JWT_ISSUER=mujeeb24
-JWT_ED25519_PRIVATE_KEY=$private_b64
-JWT_ED25519_PUBLIC_KEY=$public_b64
-AI_CONFIG_ENCRYPTION_KEY=$ai_key
-EOF
+	fmt.Printf("JWT_ED25519_PRIVATE_KEY=%s\n", base64.StdEncoding.EncodeToString(privateKey))
+	fmt.Printf("JWT_ED25519_PUBLIC_KEY=%s\n", base64.StdEncoding.EncodeToString(publicKey))
+	fmt.Printf("AI_CONFIG_ENCRYPTION_KEY=%s\n", base64.StdEncoding.EncodeToString(aiKey))
+}
+GO
+
+{
+  echo "APP_ENV=production"
+  echo "AUTH_ENABLED=true"
+  echo "JWT_ISSUER=mujeeb24"
+  go run "$tmpdir/keygen.go"
+} > "$OUT"
 
 chmod 600 "$OUT"
 echo "Generated $OUT"
