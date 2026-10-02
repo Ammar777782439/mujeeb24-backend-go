@@ -154,15 +154,15 @@ type AutoReplyService struct {
 func NewAutoReplyService(customerSalesDecision ports.CustomerSalesDecisionPort, decisions ports.AIDecisionRepository, references ports.ConversationReferenceRepository, outbound ports.OutboundMessageRepository, outbox ports.OutboxStore, transactions ports.TransactionManager) AutoReplyService {
 	return AutoReplyService{
 		CustomerSalesDecision: customerSalesDecision,
-		DecisionRepository:  decisions,
-		ReferenceRepository: references,
-		OutboundRepository:  outbound,
-		Outbox:              outbox,
-		Transactions:        transactions,
-		Mode:                AutoReplyModeRestrictedAuto,
-		PolicyVersion:       "auto-reply-v1",
-		Now:                 func() time.Time { return time.Now().UTC() },
-		NewID:               uuid.NewString,
+		DecisionRepository:    decisions,
+		ReferenceRepository:   references,
+		OutboundRepository:    outbound,
+		Outbox:                outbox,
+		Transactions:          transactions,
+		Mode:                  AutoReplyModeRestrictedAuto,
+		PolicyVersion:         "auto-reply-v1",
+		Now:                   func() time.Time { return time.Now().UTC() },
+		NewID:                 uuid.NewString,
 	}
 }
 
