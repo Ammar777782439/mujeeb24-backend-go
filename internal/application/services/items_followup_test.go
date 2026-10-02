@@ -50,12 +50,12 @@ func TestPersistenceFailurePropagatesError(t *testing.T) {
 		NewID: func() string { return "test-id" },
 	}
 	out := ports.CustomerSalesDecisionOutput{
-		Proposal: ports.AIGeminiProposal{
+		Proposal: ports.CustomerSalesProposal{
 			Status:       "resolved",
 			Action:       "answer",
 			ResponseText: "test response",
 		},
-		Usage: ports.ContractUsageTelemetry{
+		Usage: ports.CustomerSalesUsageTelemetry{
 			InputTokens:  10,
 			OutputTokens: 5,
 			Model:        "gemini-3.5-flash-lite",
