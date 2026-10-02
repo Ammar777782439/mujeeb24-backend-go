@@ -15,7 +15,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/prompts"
 )
 
-type MerchantCatalogRuntime struct {
+type GeminiMerchantCatalogAuthoringAdapter struct {
 	httpClient     *http.Client
 	apiKey         string
 	model          string
@@ -26,7 +26,7 @@ type MerchantCatalogRuntime struct {
 	configProvider ports.AIConfigurationProvider
 }
 
-func NewMerchantCatalogRuntime(client *Client) (*MerchantCatalogRuntime, error) {
+func NewGeminiMerchantCatalogAuthoringAdapter(client *Client) (*GeminiMerchantCatalogAuthoringAdapter, error) {
 	if client == nil {
 		return nil, errors.New("gemini client is required")
 	}
@@ -34,7 +34,7 @@ func NewMerchantCatalogRuntime(client *Client) (*MerchantCatalogRuntime, error) 
 	if httpClient == nil {
 		httpClient = &http.Client{}
 	}
-	return &MerchantCatalogRuntime{
+	return &GeminiMerchantCatalogAuthoringAdapter{
 		httpClient: httpClient,
 		apiKey:     client.APIKey(),
 		model:      client.Model(),
@@ -45,11 +45,11 @@ func NewMerchantCatalogRuntime(client *Client) (*MerchantCatalogRuntime, error) 
 	}, nil
 }
 
-func (r *MerchantCatalogRuntime) SetConfigurationProvider(provider ports.AIConfigurationProvider) {
+func (r *GeminiMerchantCatalogAuthoringAdapter) SetConfigurationProvider(provider ports.AIConfigurationProvider) {
 	r.configProvider = provider
 }
 
-func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatalogai.RuntimeInput) (merchantcatalogai.Proposal, error) {
+func (r *GeminiMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, input merchantcatalogai.MerchantCatalogAuthoringInput) (merchantcatalogai.Proposal, error) {
 	if strings.TrimSpace(input.Message) == "" {
 		return merchantcatalogai.Proposal{}, errors.New("merchant message is required")
 	}
@@ -179,4 +179,4 @@ func (r *MerchantCatalogRuntime) Decide(ctx context.Context, input merchantcatal
 	}
 }
 
-var _ merchantcatalogai.Runtime = (*MerchantCatalogRuntime)(nil)
+var _ merchantcatalogai.MerchantCatalogAuthoringPort = (*GeminiMerchantCatalogAuthoringAdapter)(nil)
