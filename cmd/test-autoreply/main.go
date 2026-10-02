@@ -151,7 +151,22 @@ func main() {
 		fmt.Printf("  ❌ Gemini client: %v\n", err)
 		os.Exit(1)
 	}
-	contractClient, err := gemini.NewGeminiCustomerSalesAdapter(geminiClient)
+	catalogRepository := postgres.NewCatalogRepository(adapter)
+	capabilityRegistry := services.NewCustomerSalesToolRegistry()
+	catalogCapability := services.NewCustomerSalesCatalogDataTool(
+		services.ListCatalogsQueryService{Repository: catalogRepository},
+		services.ListCatalogItemsQueryService{Repository: catalogRepository},
+		services.GetCatalogItemQueryService{Repository: catalogRepository},
+		services.ListOffersQueryService{Repository: catalogRepository},
+		services.ListVariantsQueryService{Repository: catalogRepository},
+		services.GetAttributeSchemaQueryService{Repository: catalogRepository},
+	)
+	if err := capabilityRegistry.Register(catalogCapability); err != nil {
+		fmt.Printf("  ❌ Customer sales capability registry: %v\n", err)
+		os.Exit(1)
+	}
+
+	contractClient, err := gemini.NewGeminiCustomerSalesAdapter(geminiClient, capabilityRegistry)
 	if err != nil {
 		fmt.Printf("  ❌ GeminiCustomerSalesAdapter: %v\n", err)
 		os.Exit(1)
