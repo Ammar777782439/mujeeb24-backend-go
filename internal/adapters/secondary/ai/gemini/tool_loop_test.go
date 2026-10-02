@@ -168,7 +168,7 @@ var _ ports.AIRunRepository = (*stubRunRepoForTools)(nil)
 // buildGeminiCustomerSalesAdapterWithTools builds a GeminiCustomerSalesAdapter wired with
 // a mock Gemini server + stub capability dispatcher + stub run repo.
 func buildGeminiCustomerSalesAdapterWithTools(t *testing.T, mock *mockGeminiToolServer, dispatcher ports.CustomerSalesToolPort) (*GeminiCustomerSalesAdapter, *stubRunRepoForTools) {
-	client, err := NewClient(Config{
+	client, err := NewGeminiHTTPClient(GeminiHTTPClientConfig{
 		BaseURL:        mock.URL(),
 		APIKey:         "test-key",
 		Model:          "gemini-3.5-flash",
