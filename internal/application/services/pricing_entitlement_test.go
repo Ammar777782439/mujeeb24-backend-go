@@ -76,7 +76,7 @@ func TestPricingFailureDoesNotEraseReplyFromEntitlement(t *testing.T) {
 		NewID: func() string { return "test-id" },
 	}
 	// Simulate a successful Gemini call with replyEnqueued=true.
-	out := ports.ContractRuntimeOutput{
+	out := ports.CustomerSalesDecisionOutput{
 		Proposal: ports.AIGeminiProposal{
 			Status:       "resolved",
 			Action:       "answer",
