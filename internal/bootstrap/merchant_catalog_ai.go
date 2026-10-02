@@ -33,7 +33,7 @@ func wireMerchantCatalogAIV2(
 		Business:       postgres.NewBusinessRepository(database),
 		EntityContract: merchantcatalogai.CanonicalEntityContractProvider{},
 		Authoring:      merchantCatalogAuthoring,
-		CapabilitiesFactory: func(selectedCatalogID string) ports.AICapabilityDispatcher {
+		CapabilitiesFactory: func(selectedCatalogID string) merchantcatalogai.MerchantCatalogDiscoveryPort {
 			return merchantcatalogai.NewReadOnlyCapabilityRegistry(catalogRepo, selectedCatalogID)
 		},
 	}
