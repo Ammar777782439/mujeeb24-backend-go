@@ -12,10 +12,11 @@ import (
 )
 
 type ChannelRuntimeService struct {
-	Reader       ports.ChannelConnectionRepository
-	Runtime      ports.ChannelConnectionRuntimeRepository
-	Transactions ports.TransactionManager
-	Disconnector ports.ChannelAccountDisconnector
+	Reader        ports.ChannelConnectionRepository
+	Runtime       ports.ChannelConnectionRuntimeRepository
+	Transactions  ports.TransactionManager
+	Disconnector  ports.ChannelAccountDisconnector
+	Provisioning  ports.ChannelProvisioningStore
 }
 type ListChannelConnectionsQueryService struct{ ChannelRuntimeService }
 type GetChannelConnectionQueryService struct{ ChannelRuntimeService }
@@ -49,7 +50,71 @@ func (s GetChannelConnectionQueryService) Handle(ctx context.Context, query quer
 }
 
 func (s ReconnectChannelCommandService) Handle(ctx context.Context, command commands.ReconnectChannelCommand) (commands.ChannelConnectionResult, error) {
-	return s.transition(ctx, command.Meta, command.ConnectionID, command.Reason, "reconnect_required", "reconnect_requested")
+	if s.Reader == nil || s.Runtime == nil || s.Transactions == nil || s.Disconnector == nil {
+		return commands.ChannelConnectionResult{}, appErrors.NotImplemented()
+	}
+	reason := strings.TrimSpace(command.Reason)
+	if reason == "" {
+		return commands.ChannelConnectionResult{}, appErrors.New(appErrors.CodeValidation, "connection action reason is required")
+	}
+	expected, err := parseBusinessExpectedVersion(command.Meta.ExpectedVersion)
+	if err != nil {
+		return commands.ChannelConnectionResult{}, err
+	}
+
+	record, err := s.Reader.GetByID(ctx, string(command.Meta.Actor.BusinessID), string(command.ConnectionID))
+	if err != nil {
+		return commands.ChannelConnectionResult{}, err
+	}
+	if record.ResourceVersion != expected {
+		return commands.ChannelConnectionResult{}, appErrors.New(appErrors.CodeConflict, "stale channel connection resource version")
+	}
+	if record.Status == "archived" {
+		return commands.ChannelConnectionResult{}, appErrors.New(appErrors.CodeConflict, "archived channel connection cannot be reconnected")
+	}
+	if record.Status == "reconnect_required" {
+		view := channelConnectionView(record)
+		return commands.ChannelConnectionResult{Connection: view, ResourceVersion: view.ResourceVersion}, nil
+	}
+
+	// Provider side is authoritative for the external connection. When an
+	// active connection is being replaced, disconnect the provider account
+	// before changing the local lifecycle state. A stale If-Match is rejected
+	// above before this external side effect.
+	if record.Status == "active" {
+		if record.ProviderAccountReference == nil || strings.TrimSpace(*record.ProviderAccountReference) == "" {
+			return commands.ChannelConnectionResult{}, appErrors.New(appErrors.CodeConflict, "connected channel has no provider account reference")
+		}
+		if err := s.Disconnector.DisconnectAccount(ctx, strings.TrimSpace(*record.ProviderAccountReference)); err != nil {
+			return commands.ChannelConnectionResult{}, err
+		}
+	}
+
+	if s.Provisioning != nil {
+		if err := s.Provisioning.SupersedeConnectedByChannelConnection(ctx, string(command.Meta.Actor.BusinessID), string(command.ConnectionID)); err != nil {
+			return commands.ChannelConnectionResult{}, err
+		}
+	}
+
+	var result commands.ChannelConnectionResult
+	err = s.Transactions.Within(ctx, func(txCtx context.Context) error {
+		updated, transitionErr := s.Runtime.Transition(txCtx, ports.ChannelConnectionTransition{
+			BusinessID:      string(command.Meta.Actor.BusinessID),
+			ConnectionID:    string(command.ConnectionID),
+			ExpectedVersion: expected,
+			TargetStatus:    "reconnect_required",
+			Action:          "reconnect_requested",
+			Reason:          reason,
+			ActorReference:  string(command.Meta.Actor.PrincipalID),
+		})
+		if transitionErr != nil {
+			return transitionErr
+		}
+		result.Connection = channelConnectionView(updated)
+		result.ResourceVersion = result.Connection.ResourceVersion
+		return nil
+	})
+	return result, err
 }
 func (s DisconnectChannelCommandService) Handle(ctx context.Context, command commands.DisconnectChannelCommand) (commands.ChannelConnectionResult, error) {
 	if s.Reader == nil || s.Runtime == nil || s.Transactions == nil || s.Disconnector == nil {
