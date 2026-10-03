@@ -153,6 +153,7 @@ type Conversation struct {
 	ID              UUID              `json:"id"`
 	BusinessID      UUID              `json:"business_id"`
 	Customer        CustomerSummary   `json:"customer"`
+	Channel         string            `json:"channel"`
 	State           string            `json:"state"`
 	Ownership       string            `json:"ownership"`
 	AIMode          string            `json:"ai_mode"`
