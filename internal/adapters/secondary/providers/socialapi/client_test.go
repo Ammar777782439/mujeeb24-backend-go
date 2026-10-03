@@ -355,7 +355,6 @@ func TestClientVerifiesSocialAPIV1RawBodySignature(t *testing.T) {
 	}
 }
 
-
 func TestClientManagesSocialAPIBrands(t *testing.T) {
 	var createBody string
 	var deletedPath string
