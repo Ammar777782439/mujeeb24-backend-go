@@ -57,11 +57,15 @@ func (s ReconnectChannelCommandService) Handle(ctx context.Context, command comm
 	if err != nil {
 		return commands.ChannelConnectionResult{}, err
 	}
-	if strings.TrimSpace(record.ProviderAccountReference != nil && *record.ProviderAccountReference) != "" && record.Status == "active" {
+	accountRef := ""
+	if record.ProviderAccountReference != nil {
+		accountRef = strings.TrimSpace(*record.ProviderAccountReference)
+	}
+	if accountRef != "" && record.Status == "active" {
 		if s.Provider == nil {
 			return commands.ChannelConnectionResult{}, appErrors.NotImplemented()
 		}
-		if err := s.Provider.DisconnectAccount(ctx, *record.ProviderAccountReference); err != nil {
+		if err := s.Provider.DisconnectAccount(ctx, accountRef); err != nil {
 			return commands.ChannelConnectionResult{}, appErrors.New(appErrors.CodeExternalDependency, "channel provider disconnect failed")
 		}
 	}
