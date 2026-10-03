@@ -93,6 +93,30 @@ func TestChannelProvisioningRepositoriesAgainstPostgres(t *testing.T) {
 	if err != nil || final.Status != ports.ProvisioningConnected || final.ChannelConnectionID != connection.ID || final.ProviderAccountRef != "account-37" {
 		t.Fatalf("final session=%#v err=%v", final, err)
 	}
+
+	// Regression: disconnect the linked channel connection, then start a new
+	// provisioning session for the same business/channel. The historical
+	// connected provisioning session must no longer block the replacement.
+	if _, err := adapter.Pool().Exec(ctx, `UPDATE channel_connections SET status = 'disconnected', updated_at = now() WHERE business_id = $1::uuid AND id = $2::uuid`, businessID, connection.ID); err != nil {
+		t.Fatalf("disconnect connection: %v", err)
+	}
+	replacement := ports.ChannelProvisioningSession{
+		ID:             "00000000-0000-0000-0000-000000000437",
+		BusinessID:     businessID,
+		IdempotencyKey: "connect-3-replacement",
+		ProviderRef:    "socialapi",
+		Channel:        "facebook",
+		DisplayName:    "Provisioning Shop Replacement",
+		Status:         ports.ProvisioningPendingAuthorization,
+	}
+	replacementCreated, err := store.CreateOrGet(ctx, replacement)
+	if err != nil || replacementCreated.ID != replacement.ID || replacementCreated.Status != ports.ProvisioningPendingAuthorization {
+		t.Fatalf("replacement session=%#v err=%v", replacementCreated, err)
+	}
+	staleConnected, err := store.GetByID(ctx, businessID, newSession.ID)
+	if err != nil || staleConnected.Status != ports.ProvisioningFailed || staleConnected.FailureCode != ports.FailureCodeSuperseded {
+		t.Fatalf("expected stale connected session to be superseded, got %#v err=%v", staleConnected, err)
+	}
 }
 
 func stringPtrIntegration(value string) *string { return &value }
