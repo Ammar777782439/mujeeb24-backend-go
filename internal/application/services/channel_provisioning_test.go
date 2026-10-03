@@ -152,10 +152,10 @@ func (s *provisioningSessionStore) MarkProvisioning(_ context.Context, businessI
 }
 
 type provisioningSocial struct {
-	begin       int
-	resolve     int
-	selection   bool
-	brandIDs    []string
+	begin     int
+	resolve   int
+	selection bool
+	brandIDs  []string
 }
 
 func (s *provisioningSocial) BeginAuthorization(_ context.Context, request ports.SocialAuthorizationRequest) (ports.SocialAuthorization, error) {
