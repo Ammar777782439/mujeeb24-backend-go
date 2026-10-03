@@ -200,6 +200,7 @@ type AIDecisionView struct {
 	ReasonCodes        []byte
 	PolicyVersion      string
 	Lifecycle          string
+	DeliveryStatus     string
 	HumanReviewReason  string
 	ResourceVersion    ResourceVersion
 	CreatedAt          time.Time
