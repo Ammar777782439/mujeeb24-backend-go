@@ -1,14 +1,14 @@
 package postgres
 
 import (
-    "context"
-    "errors"
-    "strings"
-    "time"
+	"context"
+	"errors"
+	"strings"
+	"time"
 
-    "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
-    "github.com/google/uuid"
-    "github.com/jackc/pgx/v5"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type ProviderBrandRepository struct {
