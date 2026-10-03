@@ -128,14 +128,17 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	if external.ChannelProvisioningEnabled {
 		if external.ChannelProvisioningError != nil {
 			dependencies.BeginChannelConnection = services.ChannelProvisioningUnavailableService{Cause: external.ChannelProvisioningError}
-		} else if external.ChannelProvisioningSocial == nil {
+		} else if external.ChannelProvisioningSocial == nil || external.ChannelProvisioningBrand == nil {
 			dependencies.BeginChannelConnection = services.ChannelProvisioningUnavailableService{Cause: errors.New("channel provisioning adapters are not configured")}
 		} else {
 			service := services.ChannelProvisioningService{
-				Sessions:    postgres.NewChannelProvisioningStore(database),
-				Social:      external.ChannelProvisioningSocial,
-				Connections: postgres.NewChannelConnectionRepository(database),
-				RedirectURI: external.ChannelProvisioningRedirectURI,
+				Sessions:       postgres.NewChannelProvisioningStore(database),
+				Social:         external.ChannelProvisioningSocial,
+				SocialBrands:   external.ChannelProvisioningBrand,
+				ProviderBrands: postgres.NewProviderBrandRepository(database),
+				Businesses:     postgres.NewBusinessRepository(database),
+				Connections:    postgres.NewChannelConnectionRepository(database),
+				RedirectURI:    external.ChannelProvisioningRedirectURI,
 			}
 			provisioningService = &service
 			dependencies.BeginChannelConnection = &services.BeginChannelConnectionHandler{Provisioning: service}
