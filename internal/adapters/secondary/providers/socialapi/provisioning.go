@@ -33,6 +33,13 @@ func (a *ProvisioningAdapter) BeginAuthorization(ctx context.Context, request po
 	return ports.SocialAuthorization{ProviderAccountRef: response.AccountID, ProviderConnectionRef: response.AccountID, AuthorizationURL: response.AuthURL, State: response.State}, nil
 }
 
+func (a *ProvisioningAdapter) DisconnectAccount(ctx context.Context, accountID string) error {
+	if a == nil || a.Client == nil {
+		return ErrNotConfigured
+	}
+	return a.Client.DisconnectAccount(ctx, accountID)
+}
+
 func (a *ProvisioningAdapter) ResolveAuthorization(ctx context.Context, callback ports.SocialAuthorizationCallback) (ports.SocialAuthorization, error) {
 	if a == nil || a.Client == nil {
 		return ports.SocialAuthorization{}, ErrNotConfigured
