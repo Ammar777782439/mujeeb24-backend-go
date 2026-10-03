@@ -733,7 +733,7 @@ func aiDecisionProjection(v commands.AIDecisionView) contract.AIDecision {
 		id := contract.UUID(*v.ConversationID)
 		conversationID = &id
 	}
-	return contract.AIDecision{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), ConversationID: conversationID, IntentBase: v.IntentBase, Entities: jsonObject(v.Entities), EvidenceReferences: jsonStrings(v.EvidenceReferences), RequestedAction: v.RequestedAction, RequiresHuman: v.RequiresHuman, MissingInformation: jsonStrings(v.MissingInformation), PolicyVersion: v.PolicyVersion, Lifecycle: v.Lifecycle, CreatedAt: v.CreatedAt}
+	return contract.AIDecision{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), ConversationID: conversationID, IntentBase: v.IntentBase, Entities: jsonObject(v.Entities), EvidenceReferences: jsonStrings(v.EvidenceReferences), RequestedAction: v.RequestedAction, RequiresHuman: v.RequiresHuman, MissingInformation: jsonStrings(v.MissingInformation), PolicyVersion: v.PolicyVersion, Lifecycle: v.Lifecycle, DeliveryStatus: v.DeliveryStatus, CreatedAt: v.CreatedAt}
 }
 func aiDecisionList(v commands.ListResult[commands.AIDecisionView]) *contract.List[contract.AIDecision] {
 	items := make([]contract.AIDecision, 0, len(v.Items))
