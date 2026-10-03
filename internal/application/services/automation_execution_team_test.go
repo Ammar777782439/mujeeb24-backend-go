@@ -31,7 +31,7 @@ func TestInboundAutomationAddLabelMatchesAnyKeyword(t *testing.T) {
 		Conversations: conversations,
 		Reader:        conversations,
 		Labels:        labels,
-		Assignees:     automationAssigneeFixture{},
+		Assignees:     &automationAssigneeFixture{},
 		Transactions:  passthroughTransactionManager{},
 		Now:           func() time.Time { return time.Date(2026, 10, 3, 20, 0, 0, 0, time.UTC) },
 		NewID:         func() string { return "execution-label-1" },
