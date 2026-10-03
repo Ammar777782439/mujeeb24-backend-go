@@ -61,7 +61,7 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 	}
 	if cfg.ChannelProvisioningEnabled {
 		adapters.ChannelProvisioningError = cfg.ValidateChannelProvisioning()
-		if adapters.ChannelProvisioningError == nil && adapters.ChannelProvisioningSocial == nil {
+		if adapters.ChannelProvisioningError == nil && (adapters.ChannelProvisioningSocial == nil || adapters.ChannelProvisioningBrand == nil) {
 			adapters.ChannelProvisioningError = errors.New("channel provisioning adapters are not configured")
 		}
 	}
