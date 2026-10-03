@@ -91,6 +91,7 @@ type ConversationRecord struct {
 	BusinessID          string
 	CustomerID          string
 	CustomerDisplayName *string
+	Channel             string
 	State               string
 	Ownership           string
 	AIModeOverride      *string
