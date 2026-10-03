@@ -66,6 +66,7 @@ func conversationView(record ports.ConversationRecord) commands.ConversationView
 		BusinessID:          commands.BusinessID(record.BusinessID),
 		CustomerID:          commands.CustomerID(record.CustomerID),
 		CustomerDisplayName: record.CustomerDisplayName,
+		Channel:             record.Channel,
 		State:               record.State,
 		Ownership:           record.Ownership,
 		AIMode:              aiMode,
