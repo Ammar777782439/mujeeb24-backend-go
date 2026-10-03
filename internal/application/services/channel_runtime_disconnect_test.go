@@ -55,9 +55,9 @@ func (disconnectTxFake) Within(ctx context.Context, fn func(context.Context) err
 }
 
 type disconnectProviderFake struct {
-	calls int
+	calls     int
 	accountID string
-	err error
+	err       error
 }
 
 func (f *disconnectProviderFake) DisconnectAccount(_ context.Context, providerAccountID string) error {
