@@ -320,3 +320,31 @@ func TestChannelProvisioningCreatesOneStableProviderBrandPerBusiness(t *testing.
 		t.Fatalf("local provider brand display name=%q, want Acme", got)
 	}
 }
+
+
+func TestChannelProvisioningRejectsAmbiguousProviderBrandIdentity(t *testing.T) {
+	store := &provisioningSessionStore{}
+	social := &provisioningSocial{}
+	brands := &provisioningBrands{
+		remote: map[string]ports.ProviderBrandRecord{
+			"brand-1": {ProviderRef: "socialapi", ProviderBrandRef: "brand-1", DisplayName: "Mujeeb24 — acme"},
+			"brand-2": {ProviderRef: "socialapi", ProviderBrandRef: "brand-2", DisplayName: "Mujeeb24 — acme"},
+		},
+	}
+	service := ChannelProvisioningService{
+		Sessions:       store,
+		Social:         social,
+		SocialBrands:   brands,
+		ProviderBrands: brands,
+		Businesses:     &provisioningBusinesses{},
+		Connections:    &provisioningConnections{},
+		RedirectURI:    "https://app.example/oauth/callback",
+	}
+
+	if _, err := service.Start(context.Background(), "business-1", "socialapi", "facebook", "Acme", "idem-ambiguous"); err == nil {
+		t.Fatal("expected ambiguous provider brand identity to be rejected")
+	}
+	if brands.createCalls != 0 || len(brands.local) != 0 || len(social.brandIDs) != 0 {
+		t.Fatalf("ambiguous brand handling created state unexpectedly: creates=%d local=%#v brand_ids=%#v", brands.createCalls, brands.local, social.brandIDs)
+	}
+}
