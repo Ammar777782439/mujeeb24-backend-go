@@ -128,3 +128,4 @@ func (a *ProvisioningAdapter) DeleteBrand(ctx context.Context, brandID string) e
 }
 
 var _ ports.SocialChannelProvisioner = (*ProvisioningAdapter)(nil)
+var _ ports.ProviderBrandProvisioner = (*ProvisioningAdapter)(nil)
