@@ -12,9 +12,11 @@ import (
 )
 
 type ChannelRuntimeService struct {
-	Reader       ports.ChannelConnectionRepository
-	Runtime      ports.ChannelConnectionRuntimeRepository
-	Transactions ports.TransactionManager
+	Reader        ports.ChannelConnectionRepository
+	Runtime       ports.ChannelConnectionRuntimeRepository
+	Transactions  ports.TransactionManager
+	Provider      ports.SocialChannelProvisioner
+	Provisioning  ports.ChannelProvisioningStore
 }
 type ListChannelConnectionsQueryService struct{ ChannelRuntimeService }
 type GetChannelConnectionQueryService struct{ ChannelRuntimeService }
@@ -48,9 +50,54 @@ func (s GetChannelConnectionQueryService) Handle(ctx context.Context, query quer
 }
 
 func (s ReconnectChannelCommandService) Handle(ctx context.Context, command commands.ReconnectChannelCommand) (commands.ChannelConnectionResult, error) {
+	if s.Reader == nil {
+		return commands.ChannelConnectionResult{}, appErrors.NotImplemented()
+	}
+	record, err := s.Reader.GetByID(ctx, string(command.Meta.Actor.BusinessID), string(command.ConnectionID))
+	if err != nil {
+		return commands.ChannelConnectionResult{}, err
+	}
+	if strings.TrimSpace(record.ProviderAccountReference != nil && *record.ProviderAccountReference) != "" && record.Status == "active" {
+		if s.Provider == nil {
+			return commands.ChannelConnectionResult{}, appErrors.NotImplemented()
+		}
+		if err := s.Provider.DisconnectAccount(ctx, *record.ProviderAccountReference); err != nil {
+			return commands.ChannelConnectionResult{}, appErrors.New(appErrors.CodeExternalDependency, "channel provider disconnect failed")
+		}
+	}
+	if s.Provisioning != nil {
+		if err := s.Provisioning.SupersedeConnectedByChannelConnection(ctx, string(command.Meta.Actor.BusinessID), string(command.ConnectionID)); err != nil {
+			return commands.ChannelConnectionResult{}, err
+		}
+	}
+	if record.Status == "reconnect_required" {
+		return commands.ChannelConnectionResult{
+			Connection:    channelConnectionView(record),
+			ResourceVersion: channelConnectionView(record).ResourceVersion,
+		}, nil
+	}
 	return s.transition(ctx, command.Meta, command.ConnectionID, command.Reason, "reconnect_required", "reconnect_requested")
 }
 func (s DisconnectChannelCommandService) Handle(ctx context.Context, command commands.DisconnectChannelCommand) (commands.ChannelConnectionResult, error) {
+	if s.Reader == nil {
+		return commands.ChannelConnectionResult{}, appErrors.NotImplemented()
+	}
+	record, err := s.Reader.GetByID(ctx, string(command.Meta.Actor.BusinessID), string(command.ConnectionID))
+	if err != nil {
+		return commands.ChannelConnectionResult{}, err
+	}
+	if record.Status == "disconnected" {
+		view := channelConnectionView(record)
+		return commands.ChannelConnectionResult{Connection: view, ResourceVersion: view.ResourceVersion}, nil
+	}
+	if record.ProviderAccountReference != nil && strings.TrimSpace(*record.ProviderAccountReference) != "" {
+		if s.Provider == nil {
+			return commands.ChannelConnectionResult{}, appErrors.NotImplemented()
+		}
+		if err := s.Provider.DisconnectAccount(ctx, *record.ProviderAccountReference); err != nil {
+			return commands.ChannelConnectionResult{}, appErrors.New(appErrors.CodeExternalDependency, "channel provider disconnect failed")
+		}
+	}
 	return s.transition(ctx, command.Meta, command.ConnectionID, command.Reason, "disconnected", "disconnect_requested")
 }
 
