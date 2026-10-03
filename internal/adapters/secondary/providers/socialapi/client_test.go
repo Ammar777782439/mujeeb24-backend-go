@@ -133,7 +133,8 @@ func TestClientListsAccountsAndBeginsConnection(t *testing.T) {
 			return
 		}
 		if request.URL.Path == "/v1/accounts/connect" && request.Method == http.MethodPost {
-			sawConnectAuth = request.Header.Get("Authorization") == "Bearer sapi_key_test"
+			body, _ := io.ReadAll(request.Body)
+			sawConnectAuth = request.Header.Get("Authorization") == "Bearer sapi_key_test" && strings.Contains(string(body), `"brand_id":"brand-1"`)
 			_, _ = writer.Write([]byte(`{"auth_url":"https://example.test/oauth","state":"state-1","message":"pending"}`))
 			return
 		}
@@ -351,5 +352,48 @@ func TestClientVerifiesSocialAPIV1RawBodySignature(t *testing.T) {
 	body[1] = 'x'
 	if err := client.VerifyWebhook(ctx, headers, body); err == nil {
 		t.Fatal("modified raw body unexpectedly verified")
+	}
+}
+
+
+func TestClientManagesSocialAPIBrands(t *testing.T) {
+	var createBody string
+	var deletedPath string
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == "/v1/brands":
+			if request.Header.Get("Authorization") != "Bearer sapi_key_test" {
+				t.Fatal("missing brands list authorization")
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"data":[{"id":"brand-1","name":"Mujeeb24 — acme","accounts_count":0}]}`))
+		case request.Method == http.MethodPost && request.URL.Path == "/v1/brands":
+			body, _ := io.ReadAll(request.Body)
+			createBody = string(body)
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"id":"brand-2","name":"Mujeeb24 — beta","accounts_count":0}`))
+		case request.Method == http.MethodDelete && request.URL.Path == "/v1/brands/brand-2":
+			deletedPath = request.URL.Path
+			writer.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "sapi_key_test", HTTPClient: server.Client()})
+
+	brands, err := client.ListBrands(httptest.NewRequest(http.MethodGet, "/", nil).Context())
+	if err != nil || len(brands) != 1 || brands[0].ID != "brand-1" || brands[0].Name != "Mujeeb24 — acme" {
+		t.Fatalf("brands=%#v err=%v", brands, err)
+	}
+
+	created, err := client.CreateBrand(httptest.NewRequest(http.MethodPost, "/", nil).Context(), "Mujeeb24 — beta")
+	if err != nil || created.ID != "brand-2" || !strings.Contains(createBody, `"name":"Mujeeb24 — beta"`) {
+		t.Fatalf("created=%#v err=%v body=%s", created, err, createBody)
+	}
+
+	if err := client.DeleteBrand(httptest.NewRequest(http.MethodDelete, "/", nil).Context(), "brand-2"); err != nil || deletedPath != "/v1/brands/brand-2" {
+		t.Fatalf("delete err=%v path=%q", err, deletedPath)
 	}
 }
