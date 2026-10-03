@@ -88,7 +88,7 @@ func TestDisconnectChannelCallsProviderBeforeLocalTransition(t *testing.T) {
 		Disconnector: provider,
 	}}
 
-	result, err := service.Handle(context.Background(), commands.DisconnectChannelCommand{
+	_, err := service.Handle(context.Background(), commands.DisconnectChannelCommand{
 		Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1"}},
 		ConnectionID: "connection-1",
 		Reason:       "merchant request",
