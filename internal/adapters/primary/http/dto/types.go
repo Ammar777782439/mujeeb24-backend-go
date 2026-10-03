@@ -373,6 +373,7 @@ type AIDecision struct {
 	MissingInformation []string       `json:"missing_information"`
 	PolicyVersion      string         `json:"policy_version"`
 	Lifecycle          string         `json:"lifecycle"`
+	DeliveryStatus     string         `json:"delivery_status"`
 	CreatedAt          time.Time      `json:"created_at"`
 }
 type AuditEvent struct {
