@@ -22,6 +22,7 @@ import (
 )
 
 func TestAuthenticationHTTPRuntimeAgainstPostgres(t *testing.T) {
+	t.Setenv("AI_CONFIG_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef")
 	dsn := os.Getenv("POSTGRES_TEST_DSN")
 	if dsn == "" {
 		t.Skip("POSTGRES_TEST_DSN is not set")
