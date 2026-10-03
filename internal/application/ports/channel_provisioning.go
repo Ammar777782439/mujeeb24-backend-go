@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -45,6 +46,8 @@ type ChannelProvisioningStore interface {
 	MarkProvisioning(ctx context.Context, businessID, id string, patch ChannelProvisioningPatch) (ChannelProvisioningSession, error)
 	SupersedeConnectedByChannelConnection(ctx context.Context, businessID, channelConnectionID string) error
 }
+
+var ErrProviderBrandConflict = errors.New("provider brand mapping conflict")
 
 type ProviderBrandRecord struct {
 	ID              string
