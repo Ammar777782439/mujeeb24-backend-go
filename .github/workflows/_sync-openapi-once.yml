@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   sync:
-    if: \${{ !contains(github.event.head_commit.message, 'chore(openapi): regenerate generated contract') }}
+    if: ${{ !contains(github.event.head_commit.message, 'chore(openapi): regenerate generated contract') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
