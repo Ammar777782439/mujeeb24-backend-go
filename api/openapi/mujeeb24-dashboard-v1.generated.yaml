@@ -1028,6 +1028,8 @@ components:
           $ref: "#/components/schemas/CustomerSummary"
         id:
           type: string
+        channel:
+          type: string
         labels:
           items:
             type: string
@@ -1048,6 +1050,7 @@ components:
         - id
         - business_id
         - customer
+        - channel
         - state
         - ownership
         - ai_mode
