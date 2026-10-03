@@ -10,6 +10,57 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
+func TestInboundAutomationAddLabelMatchesAnyKeyword(t *testing.T) {
+	rule := ports.AutomationRuleRecord{
+		ID:            "rule-label",
+		BusinessID:    "business-1",
+		Status:        "active",
+		TriggerKind:   "inbound_message",
+		Conditions:    []byte(`{"keywords":["سعر","عرض","خصم"],"channel":"facebook"}`),
+		ActionKind:    "add_label",
+		ActionPayload: []byte(`{"label":"price-question"}`),
+	}
+	rules := &automationRulesFixture{rule: rule}
+	executions := &automationExecutionsFixture{}
+	labels := &trackingAutomationLabelsFixture{}
+	conversations := &automationConversationFixture{record: ports.ConversationRecord{ResourceVersion: 1}}
+
+	service := InboundAutomationService{
+		Rules:         rules,
+		Executions:    executions,
+		Conversations: conversations,
+		Reader:        conversations,
+		Labels:        labels,
+		Assignees:     automationAssigneeFixture{},
+		Transactions:  passthroughTransactionManager{},
+		Now:           func() time.Time { return time.Date(2026, 10, 3, 20, 0, 0, 0, time.UTC) },
+		NewID:         func() string { return "execution-label-1" },
+	}
+
+	_, err := service.Handle(context.Background(), commands.ApplyInboundAutomationCommand{
+		BusinessID:     "business-1",
+		ConversationID: "conversation-1",
+		InboundEventID: "event-1",
+		Channel:        "facebook",
+		Text:           "هل يوجد خصم على المنتج؟",
+	})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if executions.completion.Result != "executed" || executions.completion.ReasonCode != "applied" {
+		t.Fatalf("expected executed/applied, got result=%q reason=%q", executions.completion.Result, executions.completion.ReasonCode)
+	}
+	if labels.businessID != "business-1" || labels.conversationID != "conversation-1" {
+		t.Fatalf("unexpected label target business=%q conversation=%q", labels.businessID, labels.conversationID)
+	}
+	if len(labels.added) != 1 || labels.added[0] != "price-question" {
+		t.Fatalf("expected price-question label to be applied, got %#v", labels.added)
+	}
+	if len(labels.removed) != 0 {
+		t.Fatalf("automation add_label must not remove labels: %#v", labels.removed)
+	}
+}
+
 func TestInboundAutomationAssignHumanRequiresAssignableActiveMember(t *testing.T) {
 	assigneeID := "00000000-0000-0000-0000-000000000112"
 	for _, testCase := range []struct {
@@ -156,6 +207,25 @@ func (automationLabelsFixture) List(context.Context, string, string) ([]string, 
 }
 
 func (automationLabelsFixture) Apply(context.Context, string, string, []string, []string) error {
+	return nil
+}
+
+type trackingAutomationLabelsFixture struct {
+	businessID     string
+	conversationID string
+	added          []string
+	removed        []string
+}
+
+func (r *trackingAutomationLabelsFixture) List(context.Context, string, string) ([]string, error) {
+	return nil, nil
+}
+
+func (r *trackingAutomationLabelsFixture) Apply(_ context.Context, businessID, conversationID string, add, remove []string) error {
+	r.businessID = businessID
+	r.conversationID = conversationID
+	r.added = append([]string(nil), add...)
+	r.removed = append([]string(nil), remove...)
 	return nil
 }
 
