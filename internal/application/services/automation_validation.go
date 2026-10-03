@@ -60,22 +60,63 @@ func optionalAutomationAction(kind *string, payload []byte) (*string, []byte, er
 	}
 	return &normalizedKind, normalizedPayload, nil
 }
+
 func normalizeAutomationConditions(raw []byte) ([]byte, error) {
 	var conditions struct {
-		Channel      string `json:"channel"`
-		TextContains string `json:"text_contains"`
+		Channel      string   `json:"channel"`
+		Keywords     []string `json:"keywords"`
+		TextContains string   `json:"text_contains"`
 	}
 	if len(raw) == 0 || json.Unmarshal(raw, &conditions) != nil {
 		return nil, appErrors.New(appErrors.CodeValidation, "automation conditions must be a valid JSON object")
 	}
+
 	conditions.Channel = strings.ToLower(strings.TrimSpace(conditions.Channel))
-	conditions.TextContains = strings.ToLower(strings.TrimSpace(conditions.TextContains))
-	if conditions.Channel == "" && conditions.TextContains == "" {
-		return nil, appErrors.New(appErrors.CodeValidation, "automation conditions require channel or text_contains")
+	conditions.Keywords = normalizeAutomationKeywords(conditions.Keywords)
+
+	// Backward compatibility for rules created with the previous
+	// single-keyword text_contains condition. Canonical storage is
+	// always keywords[] going forward.
+	if legacy := strings.ToLower(strings.TrimSpace(conditions.TextContains)); legacy != "" {
+		conditions.Keywords = appendUniqueAutomationKeyword(conditions.Keywords, legacy)
 	}
-	result, _ := json.Marshal(conditions)
+	conditions.TextContains = ""
+
+	if conditions.Channel == "" && len(conditions.Keywords) == 0 {
+		return nil, appErrors.New(appErrors.CodeValidation, "automation conditions require channel or keywords")
+	}
+
+	result, _ := json.Marshal(struct {
+		Channel  string   `json:"channel,omitempty"`
+		Keywords []string `json:"keywords,omitempty"`
+	}{
+		Channel:  conditions.Channel,
+		Keywords: conditions.Keywords,
+	})
 	return result, nil
 }
+
+func normalizeAutomationKeywords(values []string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		normalized := strings.ToLower(strings.TrimSpace(value))
+		if normalized == "" {
+			continue
+		}
+		result = appendUniqueAutomationKeyword(result, normalized)
+	}
+	return result
+}
+
+func appendUniqueAutomationKeyword(values []string, value string) []string {
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
+}
+
 func normalizeAutomationAction(kind string, raw []byte) (string, []byte, error) {
 	kind = strings.ToLower(strings.TrimSpace(kind))
 	if kind != "add_label" && kind != "set_priority" && kind != "assign_human" {
@@ -119,18 +160,40 @@ func normalizeAutomationAction(kind string, raw []byte) (string, []byte, error) 
 	}
 	return kind, normalized, nil
 }
+
 func ruleMatchesInbound(raw []byte, channel, text string) bool {
 	var conditions struct {
-		Channel      string `json:"channel"`
-		TextContains string `json:"text_contains"`
+		Channel      string   `json:"channel"`
+		Keywords     []string `json:"keywords"`
+		TextContains string   `json:"text_contains"`
 	}
 	if json.Unmarshal(raw, &conditions) != nil {
 		return false
 	}
-	channel = strings.ToLower(strings.TrimSpace(channel))
-	text = strings.ToLower(strings.TrimSpace(text))
-	return (conditions.Channel == "" || conditions.Channel == channel) && (conditions.TextContains == "" || strings.Contains(text, conditions.TextContains))
+
+	normalizedChannel := strings.ToLower(strings.TrimSpace(channel))
+	normalizedText := strings.ToLower(strings.TrimSpace(text))
+
+	if conditions.Channel != "" && strings.ToLower(strings.TrimSpace(conditions.Channel)) != normalizedChannel {
+		return false
+	}
+
+	keywords := normalizeAutomationKeywords(conditions.Keywords)
+	if legacy := strings.ToLower(strings.TrimSpace(conditions.TextContains)); legacy != "" {
+		keywords = appendUniqueAutomationKeyword(keywords, legacy)
+	}
+	if len(keywords) == 0 {
+		return false
+	}
+
+	for _, keyword := range keywords {
+		if strings.Contains(normalizedText, keyword) {
+			return true
+		}
+	}
+	return false
 }
+
 func validPriority(value string) bool {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "low", "normal", "high", "urgent":
@@ -139,6 +202,7 @@ func validPriority(value string) bool {
 		return false
 	}
 }
+
 func automationReasonCode(err error) string {
 	var typed *appErrors.Error
 	if errors.As(err, &typed) && typed.Code == appErrors.CodeNotFound {
