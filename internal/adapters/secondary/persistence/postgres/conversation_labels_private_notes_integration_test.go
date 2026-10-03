@@ -52,6 +52,18 @@ func TestConversationLabelsAndPrivateVisibilityAgainstPostgres(t *testing.T) {
 	if _, err := pool.Exec(ctx, `INSERT INTO conversation_references (id,business_id,conversation_id,system,provider_ref,resource_type,resource_id,connection_id,conversation_kind,is_current,mapping_status,created_at,updated_at) VALUES ($1::uuid,$2::uuid,$3::uuid,'provider','socialapi','conversation','provider-conversation-private',$4::uuid,'dm',true,'active',now(),now())`, referenceID, businessID, conversationID, connectionID); err != nil {
 		t.Fatalf("reference: %v", err)
 	}
+
+	conversationRepository := NewConversationRepository(adapter)
+	conversationRecord, err := conversationRepository.GetByID(ctx, businessID, conversationID)
+	if err != nil || conversationRecord.Channel != "whatsapp" {
+		t.Fatalf("conversation channel: got=%q err=%v", conversationRecord.Channel, err)
+	}
+
+	runtimeRepository := &ConversationRepository{adapter: adapter}
+	page, err := runtimeRepository.List(ctx, businessID, "", "", "", nil, 10, "")
+	if err != nil || len(page.Items) != 1 || page.Items[0].Channel != "whatsapp" {
+		t.Fatalf("conversation list channel: got=%#v err=%v", page.Items, err)
+	}
 	labels := NewConversationLabelRepository(adapter)
 	if err := labels.Apply(ctx, businessID, conversationID, []string{" VIP ", "vip", "Follow-Up"}, []string{}); err != nil {
 		t.Fatalf("add labels: %v", err)
