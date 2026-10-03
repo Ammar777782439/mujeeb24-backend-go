@@ -169,3 +169,80 @@ func TestDisconnectChannelReturnsAlreadyDisconnectedWithoutProviderCall(t *testi
 		t.Fatalf("unexpected result: %#v", result)
 	}
 }
+
+func TestReconnectChannelCallsProviderBeforeLocalTransition(t *testing.T) {
+	record := ports.ChannelConnectionRecord{
+		ID:                       "connection-1",
+		BusinessID:               "business-1",
+		ProviderReference:        "socialapi",
+		Channel:                  "facebook",
+		ProviderAccountReference: stringPtr("acc-facebook-1"),
+		Status:                   "active",
+		ResourceVersion:          7,
+		UpdatedAt:                time.Now().UTC(),
+	}
+	runtime := &disconnectRuntimeFake{result: record}
+	provider := &disconnectProviderFake{}
+	service := ReconnectChannelCommandService{ChannelRuntimeService: ChannelRuntimeService{
+		Reader:       disconnectReaderFake{record: record},
+		Runtime:      runtime,
+		Transactions: disconnectTxFake{},
+		Disconnector: provider,
+	}}
+
+	result, err := service.Handle(context.Background(), commands.ReconnectChannelCommand{
+		Meta:         commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1"}, ExpectedVersion: resourceVersion("7")},
+		ConnectionID: "connection-1",
+		Reason:       "merchant reconnect",
+	})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if provider.calls != 1 || provider.accountID != "acc-facebook-1" {
+		t.Fatalf("provider calls=%d account=%q", provider.calls, provider.accountID)
+	}
+	if runtime.transitionCalls != 1 || runtime.expectedVersion != 7 || runtime.targetStatus != "reconnect_required" {
+		t.Fatalf("transition calls=%d expectedVersion=%d target=%q", runtime.transitionCalls, runtime.expectedVersion, runtime.targetStatus)
+	}
+	if result.Connection.Status != "active" {
+		// The fake returns the input record; the production repository returns the transitioned record.
+		t.Fatalf("unexpected fake result: %#v", result.Connection)
+	}
+}
+
+func TestReconnectChannelRejectsStaleVersionBeforeProviderCall(t *testing.T) {
+	record := ports.ChannelConnectionRecord{
+		ID:                       "connection-1",
+		BusinessID:               "business-1",
+		ProviderReference:        "socialapi",
+		Channel:                  "facebook",
+		ProviderAccountReference: stringPtr("acc-facebook-1"),
+		Status:                   "active",
+		ResourceVersion:          7,
+	}
+	runtime := &disconnectRuntimeFake{result: record}
+	provider := &disconnectProviderFake{}
+	service := ReconnectChannelCommandService{ChannelRuntimeService: ChannelRuntimeService{
+		Reader:       disconnectReaderFake{record: record},
+		Runtime:      runtime,
+		Transactions: disconnectTxFake{},
+		Disconnector: provider,
+	}}
+
+	_, err := service.Handle(context.Background(), commands.ReconnectChannelCommand{
+		Meta:         commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1"}, ExpectedVersion: resourceVersion("6")},
+		ConnectionID: "connection-1",
+		Reason:       "stale reconnect",
+	})
+	if err == nil {
+		t.Fatal("expected stale version error")
+	}
+	if provider.calls != 0 || runtime.transitionCalls != 0 {
+		t.Fatalf("provider calls=%d transition calls=%d, want 0/0", provider.calls, runtime.transitionCalls)
+	}
+}
+
+func resourceVersion(value string) *commands.ResourceVersion {
+	v := commands.ResourceVersion(value)
+	return &v
+}
