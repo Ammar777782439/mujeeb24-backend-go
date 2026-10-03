@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/google/uuid"
 )
 
@@ -62,7 +63,7 @@ func (s ChannelProvisioningService) Start(ctx context.Context, businessID, provi
 			log.Printf("[ChannelProvisioning] FAILURE_MARK_FAILED business=%s session=%s err=%v — SESSION STUCK, manual reconciliation needed",
 				businessID, sessionID, markErr)
 		}
-		return ports.ChannelProvisioningSession{}, err
+		return ports.ChannelProvisioningSession{}, appErrors.New(appErrors.CodeExternalDependency, "channel provider authorization failed")
 	}
 	return s.Sessions.MarkProvisioning(ctx, businessID, sessionID, ports.ChannelProvisioningPatch{Status: ports.ProvisioningPendingAuthorization, OAuthState: stringPtr(sessionID), AuthorizationURL: stringPtr(authorization.AuthorizationURL)})
 }
@@ -116,7 +117,12 @@ func (s ChannelProvisioningService) Complete(ctx context.Context, businessID, se
 	}
 	authorization, err := s.Social.ResolveAuthorization(ctx, callback)
 	if err != nil {
-		return s.fail(ctx, session, "social_authorization_resolution_failed", err)
+		log.Printf("ERROR ResolveAuthorization failed for session %s: %v", session.ID, err)
+		updated, updateErr := s.Sessions.MarkProvisioning(ctx, session.BusinessID, session.ID, ports.ChannelProvisioningPatch{Status: ports.ProvisioningFailed, FailureCode: stringPtr("social_authorization_resolution_failed")})
+		if updateErr == nil {
+			session = updated
+		}
+		return session, appErrors.New(appErrors.CodeExternalDependency, "channel provider authorization failed")
 	}
 	if strings.TrimSpace(authorization.ProviderAccountRef) == "" || strings.TrimSpace(authorization.ProviderConnectionRef) == "" {
 		return s.fail(ctx, session, "social_authorization_missing_reference", errors.New("social authorization did not return provider references"))
