@@ -135,6 +135,49 @@ func (c *Client) ListConnectedAccounts(ctx context.Context, brandID string) ([]C
 	return response.Data, err
 }
 
+
+type ProviderBrand struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	AccountsCount int `json:"accounts_count"`
+}
+
+type providerBrandsResponse struct {
+	Data []ProviderBrand `json:"data"`
+}
+
+func (c *Client) ListBrands(ctx context.Context) ([]ProviderBrand, error) {
+	var response providerBrandsResponse
+	_, err := c.doJSON(ctx, http.MethodGet, "/v1/brands", nil, &response)
+	return response.Data, err
+}
+
+func (c *Client) CreateBrand(ctx context.Context, name string) (ProviderBrand, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ProviderBrand{}, fmt.Errorf("%w: brand name is required", ErrInvalidRequest)
+	}
+	var response ProviderBrand
+	_, err := c.doJSON(ctx, http.MethodPost, "/v1/brands", map[string]string{"name": name}, &response)
+	return response, err
+}
+
+func (c *Client) DeleteBrand(ctx context.Context, brandID string) error {
+	brandID = strings.TrimSpace(brandID)
+	if brandID == "" {
+		return fmt.Errorf("%w: brand id is required", ErrInvalidRequest)
+	}
+	_, err := c.doJSON(ctx, http.MethodDelete, "/v1/brands/"+url.PathEscape(brandID), nil, nil)
+	if err == nil {
+		return nil
+	}
+	var providerErr *Error
+	if errors.As(err, &providerErr) && providerErr.StatusCode == http.StatusNotFound {
+		return nil
+	}
+	return err
+}
+
 type ConnectRequest struct {
 	Platform    string         `json:"platform"`
 	RedirectURI string         `json:"redirect_uri"`
