@@ -135,11 +135,10 @@ func (c *Client) ListConnectedAccounts(ctx context.Context, brandID string) ([]C
 	return response.Data, err
 }
 
-
 type ProviderBrand struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	AccountsCount int `json:"accounts_count"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	AccountsCount int    `json:"accounts_count"`
 }
 
 type providerBrandsResponse struct {
