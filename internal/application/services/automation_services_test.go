@@ -23,6 +23,17 @@ func TestAutomationRuleValidation(t *testing.T) {
 		t.Fatal("non-matching text must not trigger automation")
 	}
 
+	channelOnly, err := normalizeAutomationConditions([]byte(`{"channel":"facebook"}`))
+	if err != nil {
+		t.Fatalf("channel-only condition must remain valid: %v", err)
+	}
+	if !ruleMatchesInbound(channelOnly, "facebook", "أي رسالة") {
+		t.Fatal("channel-only rule must match every inbound message on that channel")
+	}
+	if ruleMatchesInbound(channelOnly, "instagram", "أي رسالة") {
+		t.Fatal("channel-only rule must reject other channels")
+	}
+
 	legacy, err := normalizeAutomationConditions([]byte(`{"text_contains":"عرض"}`))
 	if err != nil {
 		t.Fatalf("legacy text_contains must remain readable: %v", err)
