@@ -34,13 +34,31 @@ func (r *ChannelProvisioningStore) CreateOrGet(ctx context.Context, session port
 		if err != nil {
 			return err
 		}
+		// Reconcile stale provisioning sessions before creating the new one.
+		// Pending/provisioning sessions are always superseded because they are
+		// replaced by the new idempotency key. A connected session is only
+		// considered active while its linked ChannelConnection is still active.
+		// This makes disconnect -> reconnect self-healing even when the disconnect
+		// path did not update the historical provisioning session.
 		const supersedeQuery = `
-			UPDATE channel_provisioning_sessions
+			UPDATE channel_provisioning_sessions AS s
 			SET status = 'failed', failure_code = 'superseded', updated_at = $1
-			WHERE business_id = $2::uuid
-			  AND channel = $3
-			  AND status IN ('pending_authorization', 'provisioning')
-			  AND idempotency_key <> $4`
+			WHERE s.business_id = $2::uuid
+			  AND s.channel = $3
+			  AND s.idempotency_key <> $4
+			  AND (
+				  s.status IN ('pending_authorization', 'provisioning')
+				  OR (
+					  s.status = 'connected'
+					  AND NOT EXISTS (
+						  SELECT 1
+						  FROM channel_connections AS c
+						  WHERE c.business_id = s.business_id
+							AND c.id = s.channel_connection_id
+							AND c.status = 'active'
+					  )
+				  )
+			  )`
 		if _, err := txExecutor.Exec(txCtx, supersedeQuery, now, session.BusinessID, session.Channel, session.IdempotencyKey); err != nil {
 			return err
 		}
