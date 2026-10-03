@@ -60,9 +60,9 @@ func TestConversationLabelsAndPrivateVisibilityAgainstPostgres(t *testing.T) {
 	}
 
 	runtimeRepository := &ConversationRepository{adapter: adapter}
-	page, err := runtimeRepository.List(ctx, businessID, "", "", "", nil, 10, "")
-	if err != nil || len(page.Items) != 1 || page.Items[0].Channel != "whatsapp" {
-		t.Fatalf("conversation list channel: got=%#v err=%v", page.Items, err)
+	conversationPage, err := runtimeRepository.List(ctx, businessID, "", "", "", nil, 10, "")
+	if err != nil || len(conversationPage.Items) != 1 || conversationPage.Items[0].Channel != "whatsapp" {
+		t.Fatalf("conversation list channel: got=%#v err=%v", conversationPage.Items, err)
 	}
 	labels := NewConversationLabelRepository(adapter)
 	if err := labels.Apply(ctx, businessID, conversationID, []string{" VIP ", "vip", "Follow-Up"}, []string{}); err != nil {
