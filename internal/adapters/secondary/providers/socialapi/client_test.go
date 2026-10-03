@@ -151,6 +151,39 @@ func TestClientListsAccountsAndBeginsConnection(t *testing.T) {
 	}
 }
 
+func TestClientDisconnectsSocialAccount(t *testing.T) {
+	var gotMethod, gotPath, gotAuthorization string
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		gotMethod = request.Method
+		gotPath = request.URL.Path
+		gotAuthorization = request.Header.Get("Authorization")
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "sapi_key_test", HTTPClient: server.Client()})
+	if err := client.DisconnectAccount(httptest.NewRequest(http.MethodDelete, "/", nil).Context(), "acc_123"); err != nil {
+		t.Fatalf("DisconnectAccount: %v", err)
+	}
+	if gotMethod != http.MethodDelete || gotPath != "/v1/accounts/acc_123" || gotAuthorization != "Bearer sapi_key_test" {
+		t.Fatalf("unexpected disconnect request method=%q path=%q authorization=%q", gotMethod, gotPath, gotAuthorization)
+	}
+}
+
+func TestClientDisconnectTreatsMissingProviderAccountAsAlreadyDisconnected(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusNotFound)
+		_, _ = writer.Write([]byte(`{"error":{"code":"resource.not_found","message":"Account not found"}}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "sapi_key_test", HTTPClient: server.Client()})
+	if err := client.DisconnectAccount(httptest.NewRequest(http.MethodDelete, "/", nil).Context(), "acc_gone"); err != nil {
+		t.Fatalf("DisconnectAccount 404 should converge to disconnected state, got %v", err)
+	}
+}
+
 func TestClientSendsMessageAndMapsDeliveryStatus(t *testing.T) {
 	var sawAuth, sawProviderIdempotencyHeader bool
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
