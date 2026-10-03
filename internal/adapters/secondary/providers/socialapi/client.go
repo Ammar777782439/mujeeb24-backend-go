@@ -143,6 +143,16 @@ func (c *Client) BeginConnection(ctx context.Context, request ConnectRequest) (C
 	return response, err
 }
 
+// DisconnectAccount revokes the SocialAPI connection for one connected account.
+func (c *Client) DisconnectAccount(ctx context.Context, accountID string) error {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return fmt.Errorf("%w: account id is required", ErrInvalidRequest)
+	}
+	_, err := c.doJSON(ctx, http.MethodDelete, "/v1/accounts/"+url.PathEscape(accountID), nil, nil)
+	return err
+}
+
 type InboxPagination struct {
 	HasMore    bool   `json:"has_more"`
 	NextCursor string `json:"next_cursor"`
