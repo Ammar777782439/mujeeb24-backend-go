@@ -70,6 +70,34 @@ func NewClient(cfg Config) *Client {
 
 // HealthCheck verifies SocialAPI authentication/reachability without persisting
 // or returning account data to callers.
+// DisconnectAccount revokes the provider-side connection for a connected
+// SocialAPI account. SocialAPI documents DELETE /v1/accounts/{id} as the
+// canonical disconnect operation and returns 204 on success. A 404 means the
+// provider account is already gone, which is treated as success so retries
+// converge on the desired disconnected state.
+func (c *Client) DisconnectAccount(ctx context.Context, providerAccountID string) error {
+	providerAccountID = strings.TrimSpace(providerAccountID)
+	if providerAccountID == "" {
+		return fmt.Errorf("%w: provider account id is required", ErrInvalidRequest)
+	}
+	return c.disconnectAccount(ctx, providerAccountID)
+}
+
+func (c *Client) disconnectAccount(ctx context.Context, providerAccountID string) error {
+	if c == nil || c.httpClient == nil || strings.TrimSpace(c.apiKey) == "" {
+		return ErrNotConfigured
+	}
+	_, err := c.doJSON(ctx, http.MethodDelete, "/v1/accounts/"+url.PathEscape(providerAccountID), nil, nil)
+	if err == nil {
+		return nil
+	}
+	var providerErr *Error
+	if errors.As(err, &providerErr) && providerErr.StatusCode == http.StatusNotFound {
+		return nil
+	}
+	return err
+}
+
 func (c *Client) HealthCheck(ctx context.Context) error {
 	if c == nil || strings.TrimSpace(c.apiKey) == "" {
 		return ErrNotConfigured
@@ -105,6 +133,48 @@ func (c *Client) ListConnectedAccounts(ctx context.Context, brandID string) ([]C
 	var response connectedAccountsResponse
 	_, err := c.doJSON(ctx, http.MethodGet, path, nil, &response)
 	return response.Data, err
+}
+
+type ProviderBrand struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	AccountsCount int    `json:"accounts_count"`
+}
+
+type providerBrandsResponse struct {
+	Data []ProviderBrand `json:"data"`
+}
+
+func (c *Client) ListBrands(ctx context.Context) ([]ProviderBrand, error) {
+	var response providerBrandsResponse
+	_, err := c.doJSON(ctx, http.MethodGet, "/v1/brands", nil, &response)
+	return response.Data, err
+}
+
+func (c *Client) CreateBrand(ctx context.Context, name string) (ProviderBrand, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ProviderBrand{}, fmt.Errorf("%w: brand name is required", ErrInvalidRequest)
+	}
+	var response ProviderBrand
+	_, err := c.doJSON(ctx, http.MethodPost, "/v1/brands", map[string]string{"name": name}, &response)
+	return response, err
+}
+
+func (c *Client) DeleteBrand(ctx context.Context, brandID string) error {
+	brandID = strings.TrimSpace(brandID)
+	if brandID == "" {
+		return fmt.Errorf("%w: brand id is required", ErrInvalidRequest)
+	}
+	_, err := c.doJSON(ctx, http.MethodDelete, "/v1/brands/"+url.PathEscape(brandID), nil, nil)
+	if err == nil {
+		return nil
+	}
+	var providerErr *Error
+	if errors.As(err, &providerErr) && providerErr.StatusCode == http.StatusNotFound {
+		return nil
+	}
+	return err
 }
 
 type ConnectRequest struct {
@@ -805,5 +875,6 @@ func retryableStatus(statusCode int) bool {
 var ErrTransport = errors.New("socialapi transport error")
 
 var _ ports.ChannelProvider = (*Client)(nil)
+var _ ports.ChannelAccountDisconnector = (*Client)(nil)
 var _ ports.ConversationEnricher = (*Client)(nil)
 var _ ports.WebhookReceiver = (*Client)(nil)

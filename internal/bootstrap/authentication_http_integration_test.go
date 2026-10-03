@@ -22,6 +22,7 @@ import (
 )
 
 func TestAuthenticationHTTPRuntimeAgainstPostgres(t *testing.T) {
+	t.Setenv("AI_CONFIG_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef")
 	dsn := os.Getenv("POSTGRES_TEST_DSN")
 	if dsn == "" {
 		t.Skip("POSTGRES_TEST_DSN is not set")
@@ -82,8 +83,8 @@ func TestAuthenticationHTTPRuntimeAgainstPostgres(t *testing.T) {
 	}
 	defer runtime.Shutdown(context.Background())
 	handler := runtime.HTTP.Handler
-	if response := callAuthRequest(t, handler, http.MethodGet, "/api/v1/metrics", nil, "", ""); response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte("mujeeb_postgres_pool_total_connections")) {
-		t.Fatalf("metrics status=%d body=%s", response.Code, response.Body.String())
+	if response := callAuthRequest(t, handler, http.MethodGet, "/api/v1/metrics", nil, "", ""); response.Code != http.StatusUnauthorized {
+		t.Fatalf("metrics should require authentication: status=%d body=%s", response.Code, response.Body.String())
 	}
 	login := callAuthRequest(t, handler, http.MethodPost, "/api/v1/auth/login", []byte(`{"email":"postman.auth@example.test","password":"local-test-password"}`), "", "")
 	if login.Code != http.StatusOK {

@@ -1,4 +1,4 @@
-﻿-- Merchant AI Sessions and Messages for merchant-to-assistant multi-turn interactions.
+-- Merchant AI Sessions and Messages for merchant-to-assistant multi-turn interactions.
 
 CREATE TABLE merchant_ai_sessions (
     id           UUID NOT NULL,

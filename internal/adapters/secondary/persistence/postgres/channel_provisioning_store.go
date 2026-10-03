@@ -34,13 +34,31 @@ func (r *ChannelProvisioningStore) CreateOrGet(ctx context.Context, session port
 		if err != nil {
 			return err
 		}
+		// Reconcile stale provisioning sessions before creating the new one.
+		// Pending/provisioning sessions are always superseded because they are
+		// replaced by the new idempotency key. A connected session is only
+		// considered active while its linked ChannelConnection is still active.
+		// This makes disconnect -> reconnect self-healing even when the disconnect
+		// path did not update the historical provisioning session.
 		const supersedeQuery = `
-			UPDATE channel_provisioning_sessions
+			UPDATE channel_provisioning_sessions AS s
 			SET status = 'failed', failure_code = 'superseded', updated_at = $1
-			WHERE business_id = $2::uuid
-			  AND channel = $3
-			  AND status IN ('pending_authorization', 'provisioning')
-			  AND idempotency_key <> $4`
+			WHERE s.business_id = $2::uuid
+			  AND s.channel = $3
+			  AND s.idempotency_key <> $4
+			  AND (
+				  s.status IN ('pending_authorization', 'provisioning')
+				  OR (
+					  s.status = 'connected'
+					  AND NOT EXISTS (
+						  SELECT 1
+						  FROM channel_connections AS c
+						  WHERE c.business_id = s.business_id
+							AND c.id = s.channel_connection_id
+							AND c.status = 'active'
+					  )
+				  )
+			  )`
 		if _, err := txExecutor.Exec(txCtx, supersedeQuery, now, session.BusinessID, session.Channel, session.IdempotencyKey); err != nil {
 			return err
 		}
@@ -90,6 +108,35 @@ func (r *ChannelProvisioningStore) GetByOAuthState(ctx context.Context, state st
 	}
 	const query = `SELECT id::text, business_id::text, idempotency_key, provider_ref, channel, display_name, status, COALESCE(oauth_state, ''), COALESCE(authorization_url, ''), COALESCE(provider_account_ref, ''), COALESCE(provider_connection_ref, ''), COALESCE(channel_connection_id::text, ''), COALESCE(failure_code, ''), created_at, updated_at FROM channel_provisioning_sessions WHERE oauth_state = $1 ORDER BY updated_at DESC LIMIT 1`
 	return scanProvisioningSession(executor.QueryRow(ctx, query, state), "channel_provisioning.get_by_oauth_state")
+}
+
+// SupersedeConnectedByChannelConnection marks the provisioning session that produced
+// a connection as superseded before a replacement OAuth flow starts. The old
+// session must leave the active-session partial index so a new provisioning
+// session for the same channel can be created without weakening idempotency.
+func (r *ChannelProvisioningStore) SupersedeConnectedByChannelConnection(ctx context.Context, businessID, channelConnectionID string) error {
+	if r == nil || r.adapter == nil {
+		return ErrPoolClosed
+	}
+	businessID = strings.TrimSpace(businessID)
+	channelConnectionID = strings.TrimSpace(channelConnectionID)
+	if businessID == "" || channelConnectionID == "" {
+		return invalidRepositoryInput("channel_provisioning.supersede_connected", "business and channel connection ids are required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return err
+	}
+	const query = `
+		UPDATE channel_provisioning_sessions
+		SET status = 'failed',
+		    failure_code = 'superseded',
+		    updated_at = $3
+		WHERE business_id = $1::uuid
+		  AND channel_connection_id = $2::uuid
+		  AND status = 'connected'`
+	_, err = executor.Exec(ctx, query, businessID, channelConnectionID, time.Now().UTC())
+	return err
 }
 
 func (r *ChannelProvisioningStore) MarkProvisioning(ctx context.Context, businessID, id string, patch ports.ChannelProvisioningPatch) (ports.ChannelProvisioningSession, error) {

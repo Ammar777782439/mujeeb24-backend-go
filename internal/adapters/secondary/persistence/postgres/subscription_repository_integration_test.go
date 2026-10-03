@@ -55,7 +55,7 @@ func TestSubscriptionRepositoryUsesPlanMetadata(t *testing.T) {
 		PeriodEnd:               now.Add(30 * 24 * time.Hour),
 		AIReplyLimit:            500,
 		AICatalogLimit:          200,
-		ChannelLimit:             1,
+		ChannelLimit:            1,
 		InternalAICostBudgetYER: 1000,
 		Now:                     now,
 	})

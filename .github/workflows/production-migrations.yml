@@ -1,0 +1,55 @@
+name: Apply production database migrations
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows:
+      - Quality gate
+    types:
+      - completed
+    branches:
+      - refactor/merchant-catalog-ai-v2-structure
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-database-migrations
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Run PostgreSQL migrations
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'refactor/merchant-catalog-ai-v2-structure'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.PLATFORM_DATABASE_URL }}
+      GOTOOLCHAIN: local
+
+    steps:
+      - name: Checkout migration source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || 'refactor/merchant-catalog-ai-v2-structure' }}
+
+      - name: Validate database secret is configured
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "::error::PLATFORM_DATABASE_URL GitHub Secret is not configured."
+            exit 1
+          fi
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+          cache: true
+
+      - name: Apply migrations
+        run: go run ./cmd/migrate

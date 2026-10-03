@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/google/uuid"
 )
@@ -18,15 +19,18 @@ const (
 )
 
 type ChannelProvisioningService struct {
-	Sessions    ports.ChannelProvisioningStore
-	Social      ports.SocialChannelProvisioner
-	Connections ports.ChannelConnectionWriter
-	RedirectURI string
-	SecretRef   func(sessionID string) string
+	Sessions       ports.ChannelProvisioningStore
+	Social         ports.SocialChannelProvisioner
+	SocialBrands   ports.ProviderBrandProvisioner
+	ProviderBrands ports.ProviderBrandStore
+	Businesses     ports.BusinessRepository
+	Connections    ports.ChannelConnectionWriter
+	RedirectURI    string
+	SecretRef      func(sessionID string) string
 }
 
 func (s ChannelProvisioningService) Start(ctx context.Context, businessID, provider, channel, displayName, idempotencyKey string) (ports.ChannelProvisioningSession, error) {
-	if s.Sessions == nil || s.Social == nil {
+	if s.Sessions == nil || s.Social == nil || s.SocialBrands == nil || s.ProviderBrands == nil || s.Businesses == nil {
 		return ports.ChannelProvisioningSession{}, errors.New("channel provisioning dependencies are not configured")
 	}
 	businessID = strings.TrimSpace(businessID)
@@ -43,6 +47,10 @@ func (s ChannelProvisioningService) Start(ctx context.Context, businessID, provi
 	if !validProvisioningChannel(channel) {
 		return ports.ChannelProvisioningSession{}, fmt.Errorf("unsupported provisioning channel: %s", channel)
 	}
+	business, err := s.Businesses.GetByID(ctx, businessID)
+	if err != nil {
+		return ports.ChannelProvisioningSession{}, err
+	}
 	sessionID := uuid.NewString()
 	session, err := s.Sessions.CreateOrGet(ctx, ports.ChannelProvisioningSession{ID: sessionID, BusinessID: businessID, IdempotencyKey: idempotencyKey, ProviderRef: provider, Channel: channel, DisplayName: displayName, Status: ports.ProvisioningPendingAuthorization})
 	if err != nil {
@@ -51,7 +59,16 @@ func (s ChannelProvisioningService) Start(ctx context.Context, businessID, provi
 	if session.ID != sessionID {
 		return session, nil
 	}
-	authorization, err := s.Social.BeginAuthorization(ctx, ports.SocialAuthorizationRequest{ProviderRef: provider, Channel: channel, RedirectURI: s.RedirectURI, State: sessionID})
+	providerBrand, err := s.ensureProviderBrand(ctx, businessID, provider, business.Name, business.Slug)
+	if err != nil {
+		log.Printf("ERROR ensure provider brand failed for business %s: %v", businessID, err)
+		if _, markErr := s.Sessions.MarkProvisioning(ctx, businessID, sessionID, ports.ChannelProvisioningPatch{Status: ports.ProvisioningFailed, FailureCode: stringPtr("provider_brand_provisioning_failed")}); markErr != nil {
+			log.Printf("[ChannelProvisioning] FAILURE_MARK_FAILED business=%s session=%s err=%v — SESSION STUCK, manual reconciliation needed",
+				businessID, sessionID, markErr)
+		}
+		return ports.ChannelProvisioningSession{}, appErrors.New(appErrors.CodeExternalDependency, "channel provider brand provisioning failed")
+	}
+	authorization, err := s.Social.BeginAuthorization(ctx, ports.SocialAuthorizationRequest{ProviderRef: provider, Channel: channel, RedirectURI: s.RedirectURI, State: sessionID, BrandID: providerBrand.ProviderBrandRef})
 	if err != nil {
 		log.Printf("ERROR BeginAuthorization failed for channel %q: %v", channel, err)
 		// Per audit B-MED-4: if MarkProvisioning fails here, the session
@@ -62,9 +79,98 @@ func (s ChannelProvisioningService) Start(ctx context.Context, businessID, provi
 			log.Printf("[ChannelProvisioning] FAILURE_MARK_FAILED business=%s session=%s err=%v — SESSION STUCK, manual reconciliation needed",
 				businessID, sessionID, markErr)
 		}
-		return ports.ChannelProvisioningSession{}, err
+		return ports.ChannelProvisioningSession{}, appErrors.New(appErrors.CodeExternalDependency, "channel provider authorization failed")
 	}
 	return s.Sessions.MarkProvisioning(ctx, businessID, sessionID, ports.ChannelProvisioningPatch{Status: ports.ProvisioningPendingAuthorization, OAuthState: stringPtr(sessionID), AuthorizationURL: stringPtr(authorization.AuthorizationURL)})
+}
+
+func (s ChannelProvisioningService) ensureProviderBrand(ctx context.Context, businessID, providerRef, businessName, businessSlug string) (ports.ProviderBrandRecord, error) {
+	if strings.TrimSpace(businessSlug) == "" {
+		return ports.ProviderBrandRecord{}, errors.New("business slug is required for provider brand identity")
+	}
+	brandName := "Mujeeb24 — " + strings.TrimSpace(businessSlug)
+
+	existing, found, err := s.ProviderBrands.Get(ctx, businessID, providerRef)
+	if err != nil {
+		return ports.ProviderBrandRecord{}, err
+	}
+	if found {
+		return existing, nil
+	}
+
+	remoteBrands, err := s.SocialBrands.ListBrands(ctx)
+	if err != nil {
+		return ports.ProviderBrandRecord{}, err
+	}
+	var matches []ports.ProviderBrandRecord
+	for _, remote := range remoteBrands {
+		if strings.TrimSpace(remote.DisplayName) != brandName || strings.TrimSpace(remote.ProviderBrandRef) == "" {
+			continue
+		}
+		remote.DisplayName = strings.TrimSpace(remote.DisplayName)
+		matches = append(matches, remote)
+	}
+	if len(matches) > 1 {
+		return ports.ProviderBrandRecord{}, fmt.Errorf("multiple provider brands match deterministic business identity %q", brandName)
+	}
+	if len(matches) == 1 {
+		return s.persistProviderBrand(ctx, businessID, providerRef, businessName, matches[0], false)
+	}
+
+	created, err := s.SocialBrands.CreateBrand(ctx, brandName)
+	if err != nil {
+		return ports.ProviderBrandRecord{}, err
+	}
+	if strings.TrimSpace(created.ProviderBrandRef) == "" {
+		return ports.ProviderBrandRecord{}, errors.New("provider brand creation returned an empty brand id")
+	}
+	created.DisplayName = brandName
+	persisted, err := s.persistProviderBrand(ctx, businessID, providerRef, businessName, created, true)
+	if err != nil {
+		return ports.ProviderBrandRecord{}, err
+	}
+	return persisted, nil
+}
+
+func (s ChannelProvisioningService) persistProviderBrand(ctx context.Context, businessID, providerRef, displayName string, remote ports.ProviderBrandRecord, newlyCreated bool) (ports.ProviderBrandRecord, error) {
+	remote.ProviderRef = providerRef
+	remote.ProviderBrandRef = strings.TrimSpace(remote.ProviderBrandRef)
+	if remote.ProviderBrandRef == "" {
+		return ports.ProviderBrandRecord{}, errors.New("provider brand id is required")
+	}
+	remote.BusinessID = businessID
+	remote.DisplayName = strings.TrimSpace(displayName)
+	if remote.DisplayName == "" {
+		return ports.ProviderBrandRecord{}, errors.New("business display name is required")
+	}
+	persisted, err := s.ProviderBrands.Create(ctx, remote)
+	if err == nil {
+		return persisted, nil
+	}
+
+	// A concurrent provisioning request may have persisted the same mapping.
+	// Recover it instead of creating a second local binding.
+	existing, found, getErr := s.ProviderBrands.Get(ctx, businessID, providerRef)
+	if getErr == nil && found {
+		if newlyCreated && existing.ProviderBrandRef != remote.ProviderBrandRef {
+			if cleanupErr := s.SocialBrands.DeleteBrand(ctx, remote.ProviderBrandRef); cleanupErr != nil {
+				log.Printf("[ChannelProvisioning] provider brand cleanup failed after mapping race business=%s brand=%s err=%v", businessID, remote.ProviderBrandRef, cleanupErr)
+			}
+		}
+		return existing, nil
+	}
+	if errors.Is(err, ports.ErrProviderBrandConflict) {
+		return ports.ProviderBrandRecord{}, err
+	}
+	if newlyCreated {
+		if cleanupErr := s.SocialBrands.DeleteBrand(ctx, remote.ProviderBrandRef); cleanupErr != nil {
+			log.Printf("[ChannelProvisioning] provider brand cleanup failed business=%s brand=%s err=%v", businessID, remote.ProviderBrandRef, cleanupErr)
+		}
+	}
+	if getErr != nil {
+		return ports.ProviderBrandRecord{}, fmt.Errorf("persist provider brand: %w (lookup existing mapping: %v)", err, getErr)
+	}
+	return ports.ProviderBrandRecord{}, err
 }
 
 func (s ChannelProvisioningService) CompleteOAuthCallback(ctx context.Context, callback ports.SocialAuthorizationCallback) (ports.ChannelProvisioningSession, error) {
@@ -116,7 +222,12 @@ func (s ChannelProvisioningService) Complete(ctx context.Context, businessID, se
 	}
 	authorization, err := s.Social.ResolveAuthorization(ctx, callback)
 	if err != nil {
-		return s.fail(ctx, session, "social_authorization_resolution_failed", err)
+		log.Printf("ERROR ResolveAuthorization failed for session %s: %v", session.ID, err)
+		updated, updateErr := s.Sessions.MarkProvisioning(ctx, session.BusinessID, session.ID, ports.ChannelProvisioningPatch{Status: ports.ProvisioningFailed, FailureCode: stringPtr("social_authorization_resolution_failed")})
+		if updateErr == nil {
+			session = updated
+		}
+		return session, appErrors.New(appErrors.CodeExternalDependency, "channel provider authorization failed")
 	}
 	if strings.TrimSpace(authorization.ProviderAccountRef) == "" || strings.TrimSpace(authorization.ProviderConnectionRef) == "" {
 		return s.fail(ctx, session, "social_authorization_missing_reference", errors.New("social authorization did not return provider references"))

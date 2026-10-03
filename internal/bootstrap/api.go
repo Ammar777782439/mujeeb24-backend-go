@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -101,6 +102,18 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	dependencies.GetReadiness = readinessQueryService{Ping: database.Ping, FeatureChecks: external.ReadinessChecks()}
 	dependencies.BeginChannelConnection = services.ChannelProvisioningDisabledService{}
 	dependencies.IngestSocialAPIWebhook = services.WebhookReceiverDisabledService{Receiver: "SocialAPI"}
+	if disconnector, ok := external.SocialAPI.(ports.ChannelAccountDisconnector); ok {
+		channelConnectionRepository := postgres.NewChannelConnectionRepository(database)
+		channelRuntime := services.ChannelRuntimeService{
+			Reader:       channelConnectionRepository,
+			Runtime:      channelConnectionRepository,
+			Transactions: database,
+			Disconnector: disconnector,
+			Provisioning: postgres.NewChannelProvisioningStore(database),
+		}
+		dependencies.ReconnectChannel = services.ReconnectChannelCommandService{ChannelRuntimeService: channelRuntime}
+		dependencies.DisconnectChannel = services.DisconnectChannelCommandService{ChannelRuntimeService: channelRuntime}
+	}
 	if authentication != nil {
 		dependencies.Scope = handlers.PostgresScopeProvider{Memberships: authentication.Repository}
 		dependencies.PlatformAccess = authentication.PlatformChecker
@@ -115,14 +128,17 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	if external.ChannelProvisioningEnabled {
 		if external.ChannelProvisioningError != nil {
 			dependencies.BeginChannelConnection = services.ChannelProvisioningUnavailableService{Cause: external.ChannelProvisioningError}
-		} else if external.ChannelProvisioningSocial == nil {
+		} else if external.ChannelProvisioningSocial == nil || external.ChannelProvisioningBrand == nil {
 			dependencies.BeginChannelConnection = services.ChannelProvisioningUnavailableService{Cause: errors.New("channel provisioning adapters are not configured")}
 		} else {
 			service := services.ChannelProvisioningService{
-				Sessions:    postgres.NewChannelProvisioningStore(database),
-				Social:      external.ChannelProvisioningSocial,
-				Connections: postgres.NewChannelConnectionRepository(database),
-				RedirectURI: external.ChannelProvisioningRedirectURI,
+				Sessions:       postgres.NewChannelProvisioningStore(database),
+				Social:         external.ChannelProvisioningSocial,
+				SocialBrands:   external.ChannelProvisioningBrand,
+				ProviderBrands: postgres.NewProviderBrandRepository(database),
+				Businesses:     postgres.NewBusinessRepository(database),
+				Connections:    postgres.NewChannelConnectionRepository(database),
+				RedirectURI:    external.ChannelProvisioningRedirectURI,
 			}
 			provisioningService = &service
 			dependencies.BeginChannelConnection = &services.BeginChannelConnectionHandler{Provisioning: service}
@@ -560,7 +576,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 				}
 				var redirectURL string
 				if err != nil {
-					redirectURL = fmt.Sprintf("%s/channels?status=failed&error=%s", strings.TrimRight(frontendRedirectBase, "/"), url.QueryEscape(err.Error()))
+					log.Printf("[ChannelProvisioning] OAuth callback failed: %v", err)
+					redirectURL = fmt.Sprintf("%s/channels?status=failed&error=%s", strings.TrimRight(frontendRedirectBase, "/"), url.QueryEscape("تعذر إكمال ربط القناة. يرجى المحاولة مرة أخرى."))
 				} else {
 					redirectURL = fmt.Sprintf("%s/channels?status=connected&channel=%s&provisioning_id=%s", strings.TrimRight(frontendRedirectBase, "/"), url.QueryEscape(session.Channel), url.QueryEscape(session.ID))
 				}

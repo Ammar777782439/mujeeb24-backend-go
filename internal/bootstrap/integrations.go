@@ -17,6 +17,7 @@ type ExternalAdapters struct {
 	LLMConfigError                 error
 	AutoReplyEnabled               bool
 	ChannelProvisioningSocial      ports.SocialChannelProvisioner
+	ChannelProvisioningBrand       ports.ProviderBrandProvisioner
 	ChannelProvisioningError       error
 	ChannelProvisioningEnabled     bool
 	ChannelProvisioningRedirectURI string
@@ -56,11 +57,13 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 		adapters.SocialAPI = client
 		adapters.SocialWebhook = client
 		adapters.SocialAPIHealthProbe = socialapi.NewHealthCheckProbe(client)
-		adapters.ChannelProvisioningSocial = socialapi.NewProvisioningAdapter(client)
+		provisioning := socialapi.NewProvisioningAdapter(client)
+		adapters.ChannelProvisioningSocial = provisioning
+		adapters.ChannelProvisioningBrand = provisioning
 	}
 	if cfg.ChannelProvisioningEnabled {
 		adapters.ChannelProvisioningError = cfg.ValidateChannelProvisioning()
-		if adapters.ChannelProvisioningError == nil && adapters.ChannelProvisioningSocial == nil {
+		if adapters.ChannelProvisioningError == nil && (adapters.ChannelProvisioningSocial == nil || adapters.ChannelProvisioningBrand == nil) {
 			adapters.ChannelProvisioningError = errors.New("channel provisioning adapters are not configured")
 		}
 	}

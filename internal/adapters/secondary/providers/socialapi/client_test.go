@@ -133,7 +133,8 @@ func TestClientListsAccountsAndBeginsConnection(t *testing.T) {
 			return
 		}
 		if request.URL.Path == "/v1/accounts/connect" && request.Method == http.MethodPost {
-			sawConnectAuth = request.Header.Get("Authorization") == "Bearer sapi_key_test"
+			body, _ := io.ReadAll(request.Body)
+			sawConnectAuth = request.Header.Get("Authorization") == "Bearer sapi_key_test" && strings.Contains(string(body), `"brand_id":"brand-1"`)
 			_, _ = writer.Write([]byte(`{"auth_url":"https://example.test/oauth","state":"state-1","message":"pending"}`))
 			return
 		}
@@ -148,6 +149,39 @@ func TestClientListsAccountsAndBeginsConnection(t *testing.T) {
 	connection, err := client.BeginConnection(httptest.NewRequest(http.MethodPost, "/", nil).Context(), ConnectRequest{Platform: "facebook", RedirectURI: "https://example.test/callback", State: "state-1", BrandID: "brand-1"})
 	if err != nil || connection.AuthURL == "" || connection.State != "state-1" || !sawConnectAuth {
 		t.Fatalf("connection=%#v err=%v auth=%v", connection, err, sawConnectAuth)
+	}
+}
+
+func TestClientDisconnectsSocialAccount(t *testing.T) {
+	var gotMethod, gotPath, gotAuthorization string
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		gotMethod = request.Method
+		gotPath = request.URL.Path
+		gotAuthorization = request.Header.Get("Authorization")
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "sapi_key_test", HTTPClient: server.Client()})
+	if err := client.DisconnectAccount(httptest.NewRequest(http.MethodDelete, "/", nil).Context(), "acc_123"); err != nil {
+		t.Fatalf("DisconnectAccount: %v", err)
+	}
+	if gotMethod != http.MethodDelete || gotPath != "/v1/accounts/acc_123" || gotAuthorization != "Bearer sapi_key_test" {
+		t.Fatalf("unexpected disconnect request method=%q path=%q authorization=%q", gotMethod, gotPath, gotAuthorization)
+	}
+}
+
+func TestClientDisconnectTreatsMissingProviderAccountAsAlreadyDisconnected(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusNotFound)
+		_, _ = writer.Write([]byte(`{"error":{"code":"resource.not_found","message":"Account not found"}}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "sapi_key_test", HTTPClient: server.Client()})
+	if err := client.DisconnectAccount(httptest.NewRequest(http.MethodDelete, "/", nil).Context(), "acc_gone"); err != nil {
+		t.Fatalf("DisconnectAccount 404 should converge to disconnected state, got %v", err)
 	}
 }
 
@@ -318,5 +352,47 @@ func TestClientVerifiesSocialAPIV1RawBodySignature(t *testing.T) {
 	body[1] = 'x'
 	if err := client.VerifyWebhook(ctx, headers, body); err == nil {
 		t.Fatal("modified raw body unexpectedly verified")
+	}
+}
+
+func TestClientManagesSocialAPIBrands(t *testing.T) {
+	var createBody string
+	var deletedPath string
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == "/v1/brands":
+			if request.Header.Get("Authorization") != "Bearer sapi_key_test" {
+				t.Fatal("missing brands list authorization")
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"data":[{"id":"brand-1","name":"Mujeeb24 — acme","accounts_count":0}]}`))
+		case request.Method == http.MethodPost && request.URL.Path == "/v1/brands":
+			body, _ := io.ReadAll(request.Body)
+			createBody = string(body)
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"id":"brand-2","name":"Mujeeb24 — beta","accounts_count":0}`))
+		case request.Method == http.MethodDelete && request.URL.Path == "/v1/brands/brand-2":
+			deletedPath = request.URL.Path
+			writer.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "sapi_key_test", HTTPClient: server.Client()})
+
+	brands, err := client.ListBrands(httptest.NewRequest(http.MethodGet, "/", nil).Context())
+	if err != nil || len(brands) != 1 || brands[0].ID != "brand-1" || brands[0].Name != "Mujeeb24 — acme" {
+		t.Fatalf("brands=%#v err=%v", brands, err)
+	}
+
+	created, err := client.CreateBrand(httptest.NewRequest(http.MethodPost, "/", nil).Context(), "Mujeeb24 — beta")
+	if err != nil || created.ID != "brand-2" || !strings.Contains(createBody, `"name":"Mujeeb24 — beta"`) {
+		t.Fatalf("created=%#v err=%v body=%s", created, err, createBody)
+	}
+
+	if err := client.DeleteBrand(httptest.NewRequest(http.MethodDelete, "/", nil).Context(), "brand-2"); err != nil || deletedPath != "/v1/brands/brand-2" {
+		t.Fatalf("delete err=%v path=%q", err, deletedPath)
 	}
 }

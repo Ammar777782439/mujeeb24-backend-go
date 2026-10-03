@@ -31,6 +31,14 @@ type ChannelProvider interface {
 // Callers MUST verify it matches the webhook's `ExternalUserID` to defend
 // against any cross-merchant contamination (the provider API key is shared
 // across all merchants — the conversation_id is the per-merchant anchor).
+// ChannelAccountDisconnector disconnects the provider account behind a
+// Mujeeb ChannelConnection. The concrete adapter owns provider-specific
+// transport and error semantics; the application layer never calls SocialAPI
+// directly.
+type ChannelAccountDisconnector interface {
+	DisconnectAccount(ctx context.Context, providerAccountID string) error
+}
+
 type ConversationProfile struct {
 	ParticipantID      string
 	ParticipantName    string

@@ -25,18 +25,18 @@ import (
 // handler with Platform Audit logging.
 type PlatformDeps struct {
 	// Lifecycle repositories
-	Plans               ports.PlanRepository
-	PlatformBusiness    ports.PlatformBusinessLifecyclePort
-	PlatformAudit       ports.PlatformAuditRepository
-	Subscriptions       ports.SubscriptionRepository
-	Payments            ports.PaymentRepository
-	Support             ports.SupportRepository
-	AIUsage             ports.AIUsageRepository
-	AIProviderPricing   ports.AIProviderPricingRepository
+	Plans             ports.PlanRepository
+	PlatformBusiness  ports.PlatformBusinessLifecyclePort
+	PlatformAudit     ports.PlatformAuditRepository
+	Subscriptions     ports.SubscriptionRepository
+	Payments          ports.PaymentRepository
+	Support           ports.SupportRepository
+	AIUsage           ports.AIUsageRepository
+	AIProviderPricing ports.AIProviderPricingRepository
 	// Platform Operations (AI kill switch + provider/channel health) — in-memory
-	Operations          ports.PlatformOperationsPort
+	Operations ports.PlatformOperationsPort
 	// Channel Reader — platform-scoped read of channel_connections (no secrets)
-	ChannelReader       ports.PlatformChannelReadPort
+	ChannelReader ports.PlatformChannelReadPort
 	// Per §1-12: AI Provider Configuration management
 	AIConfigRepo        ports.AIProviderConfigService
 	AIConfigCache       *services.AIConfigurationCache
