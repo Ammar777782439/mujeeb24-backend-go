@@ -92,6 +92,35 @@ func (r *ChannelProvisioningStore) GetByOAuthState(ctx context.Context, state st
 	return scanProvisioningSession(executor.QueryRow(ctx, query, state), "channel_provisioning.get_by_oauth_state")
 }
 
+// SupersedeConnectedByChannelConnection marks the provisioning session that produced
+// a connection as superseded before a replacement OAuth flow starts. The old
+// session must leave the active-session partial index so a new provisioning
+// session for the same channel can be created without weakening idempotency.
+func (r *ChannelProvisioningStore) SupersedeConnectedByChannelConnection(ctx context.Context, businessID, channelConnectionID string) error {
+	if r == nil || r.adapter == nil {
+		return ErrPoolClosed
+	}
+	businessID = strings.TrimSpace(businessID)
+	channelConnectionID = strings.TrimSpace(channelConnectionID)
+	if businessID == "" || channelConnectionID == "" {
+		return invalidRepositoryInput("channel_provisioning.supersede_connected", "business and channel connection ids are required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return err
+	}
+	const query = `
+		UPDATE channel_provisioning_sessions
+		SET status = 'failed',
+		    failure_code = 'superseded',
+		    updated_at = $3
+		WHERE business_id = $1::uuid
+		  AND channel_connection_id = $2::uuid
+		  AND status = 'connected'`
+	_, err = executor.Exec(ctx, query, businessID, channelConnectionID, time.Now().UTC())
+	return err
+}
+
 func (r *ChannelProvisioningStore) MarkProvisioning(ctx context.Context, businessID, id string, patch ports.ChannelProvisioningPatch) (ports.ChannelProvisioningSession, error) {
 	if r == nil || r.adapter == nil {
 		return ports.ChannelProvisioningSession{}, ErrPoolClosed
