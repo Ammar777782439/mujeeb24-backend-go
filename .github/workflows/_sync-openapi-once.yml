@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   sync:
-    if: ${{ !contains(github.event.head_commit.message, 'chore(openapi): regenerate generated contract') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -31,7 +30,13 @@ jobs:
         run: go run ./cmd/openapi-gen
 
       - name: Commit generated contract
+        env:
+          HEAD_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
+          if [[ "$HEAD_MESSAGE" == *"chore(openapi): regenerate generated contract"* ]]; then
+            echo "Generated contract commit detected; nothing to sync."
+            exit 0
+          fi
           if git diff --quiet -- api/openapi/mujeeb24-dashboard-v1.generated.yaml; then
             echo "OpenAPI contract is already synchronized."
             exit 0
