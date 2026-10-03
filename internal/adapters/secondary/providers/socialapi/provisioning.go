@@ -23,7 +23,7 @@ func (a *ProvisioningAdapter) BeginAuthorization(ctx context.Context, request po
 	if a == nil || a.Client == nil {
 		return ports.SocialAuthorization{}, ErrNotConfigured
 	}
-	response, err := a.Client.BeginConnection(ctx, ConnectRequest{Platform: request.Channel, RedirectURI: request.RedirectURI, State: request.State})
+	response, err := a.Client.BeginConnection(ctx, ConnectRequest{Platform: request.Channel, RedirectURI: request.RedirectURI, State: request.State, BrandID: request.BrandID})
 	if err != nil {
 		return ports.SocialAuthorization{}, err
 	}
