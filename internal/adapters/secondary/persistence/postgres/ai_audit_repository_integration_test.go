@@ -304,7 +304,7 @@ func TestAutoReplyVerticalSliceAgainstPostgres(t *testing.T) {
 	outboundRepo := NewOutboundMessageRepository(adapter)
 	outboxRepo := NewPostgresOutboxStore(adapter)
 	service := services.NewAutoReplyService(legacyAutoReplyDecisionStub{}, decisionRepo, referenceRepo, outboundRepo, outboxRepo, adapter)
-service.AIUsage = noopAIUsageRepository{}
+	service.AIUsage = noopAIUsageRepository{}
 	service.Subscriptions = activeSubscriptionStub{}
 	result, err := service.Handle(ctx, commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessID)}}, ConversationID: commands.ConversationID(conversationID), SourceMessageReference: "inbound-success", Text: "مرحبا", Channel: "facebook", ProviderRef: "socialapi"})
 	if err != nil {
@@ -328,7 +328,7 @@ service.AIUsage = noopAIUsageRepository{}
 	}
 
 	failingService := services.NewAutoReplyService(legacyAutoReplyDecisionStub{}, decisionRepo, referenceRepo, outboundRepo, failingEnqueueOutbox{OutboxStore: outboxRepo}, adapter)
-failingService.AIUsage = noopAIUsageRepository{}
+	failingService.AIUsage = noopAIUsageRepository{}
 	failingService.Subscriptions = activeSubscriptionStub{}
 	if _, err := failingService.Handle(ctx, commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessID)}}, ConversationID: commands.ConversationID(conversationID), SourceMessageReference: "inbound-rollback", Text: "رسالة ثانية", Channel: "facebook", ProviderRef: "socialapi"}); err == nil {
 		t.Fatal("expected forced outbox failure")
