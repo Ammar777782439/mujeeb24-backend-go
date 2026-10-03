@@ -1024,11 +1024,11 @@ components:
           type: object
         business_id:
           type: string
+        channel:
+          type: string
         customer:
           $ref: "#/components/schemas/CustomerSummary"
         id:
-          type: string
-        channel:
           type: string
         labels:
           items:
