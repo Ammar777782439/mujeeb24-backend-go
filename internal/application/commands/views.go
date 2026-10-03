@@ -47,6 +47,7 @@ type ConversationView struct {
 	BusinessID          BusinessID
 	CustomerID          CustomerID
 	CustomerDisplayName *string
+	Channel             string
 	State               string
 	Ownership           string
 	AIMode              string
