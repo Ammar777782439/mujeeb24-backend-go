@@ -48,7 +48,7 @@ func (r *ConversationRepository) List(ctx context.Context, businessID, state, ow
 		cursorAt, cursorID = decoded.LastActivityAt, decoded.ID
 	}
 	// Per migration 000057: include last_gemini_interaction_id per contract ③ §4.
-	const query = `SELECT c.id::text,c.business_id::text,c.customer_id::text,cu.profile->>'display_name',c.state,c.ownership,c.ai_mode_override,c.priority,c.assignment_reference,c.resource_version,c.last_activity_at,c.last_gemini_interaction_id FROM conversations AS c LEFT JOIN customers AS cu ON cu.business_id = c.business_id AND cu.id = c.customer_id WHERE c.business_id=$1::uuid AND ($2='' OR c.state=$2) AND ($3='' OR c.ownership=$3) AND ($4::uuid IS NULL OR c.customer_id=$4::uuid) AND ($5='' OR EXISTS (SELECT 1 FROM conversation_references r JOIN channel_connections cc ON cc.business_id=r.business_id AND cc.id=r.connection_id WHERE r.business_id=c.business_id AND r.conversation_id=c.id AND r.is_current AND cc.channel=$5)) AND ($6::timestamptz IS NULL OR (c.last_activity_at,c.id)<($6::timestamptz,$7::uuid)) ORDER BY c.last_activity_at DESC,c.id DESC LIMIT $8`
+	const query = `SELECT c.id::text,c.business_id::text,c.customer_id::text,cu.profile->>'display_name',COALESCE((SELECT cc.channel FROM conversation_references r JOIN channel_connections cc ON cc.business_id=r.business_id AND cc.id=r.connection_id WHERE r.business_id=c.business_id AND r.conversation_id=c.id AND r.system='provider' AND r.is_current AND r.mapping_status='active' LIMIT 1),''),c.state,c.ownership,c.ai_mode_override,c.priority,c.assignment_reference,c.resource_version,c.last_activity_at,c.last_gemini_interaction_id FROM conversations AS c LEFT JOIN customers AS cu ON cu.business_id = c.business_id AND cu.id = c.customer_id WHERE c.business_id=$1::uuid AND ($2='' OR c.state=$2) AND ($3='' OR c.ownership=$3) AND ($4::uuid IS NULL OR c.customer_id=$4::uuid) AND ($5='' OR EXISTS (SELECT 1 FROM conversation_references r JOIN channel_connections cc ON cc.business_id=r.business_id AND cc.id=r.connection_id WHERE r.business_id=c.business_id AND r.conversation_id=c.id AND r.system='provider' AND r.is_current AND r.mapping_status='active' AND cc.channel=$5)) AND ($6::timestamptz IS NULL OR (c.last_activity_at,c.id)<($6::timestamptz,$7::uuid)) ORDER BY c.last_activity_at DESC,c.id DESC LIMIT $8`
 	rows, err := executor.Query(ctx, query, businessID, strings.TrimSpace(state), strings.TrimSpace(ownership), customer, strings.TrimSpace(channel), cursorAt, cursorID, limit+1)
 	if err != nil {
 		return ports.ConversationPage{}, &RepositoryError{Operation: "conversation.list", Kind: RepositoryInvalid, Err: err}
@@ -57,7 +57,7 @@ func (r *ConversationRepository) List(ctx context.Context, businessID, state, ow
 	items := make([]ports.ConversationRecord, 0, limit)
 	for rows.Next() {
 		var item ports.ConversationRecord
-		if err := rows.Scan(&item.ID, &item.BusinessID, &item.CustomerID, &item.CustomerDisplayName, &item.State, &item.Ownership, &item.AIModeOverride, &item.Priority, &item.AssignmentReference, &item.ResourceVersion, &item.LastActivityAt, &item.LastGeminiInteractionID); err != nil {
+		if err := rows.Scan(&item.ID, &item.BusinessID, &item.CustomerID, &item.CustomerDisplayName, &item.Channel, &item.State, &item.Ownership, &item.AIModeOverride, &item.Priority, &item.AssignmentReference, &item.ResourceVersion, &item.LastActivityAt, &item.LastGeminiInteractionID); err != nil {
 			return ports.ConversationPage{}, &RepositoryError{Operation: "conversation.list", Kind: RepositoryInvalid, Err: err}
 		}
 		items = append(items, item)
@@ -88,9 +88,9 @@ func (r *ConversationRepository) Update(ctx context.Context, update ports.Conver
 	if err != nil {
 		return ports.ConversationRecord{}, err
 	}
-	const query = `UPDATE conversations SET state=COALESCE($4,state),ownership=COALESCE($5,ownership),ai_mode_override=COALESCE($6,ai_mode_override),priority=COALESCE($7,priority),assignment_reference=COALESCE($8,assignment_reference),resource_version=resource_version+1,updated_at=now() WHERE business_id=$1::uuid AND id=$2::uuid AND resource_version=$3 RETURNING id::text,business_id::text,customer_id::text,state,ownership,ai_mode_override,priority,assignment_reference,resource_version,last_activity_at`
+	const query = `UPDATE conversations SET state=COALESCE($4,state),ownership=COALESCE($5,ownership),ai_mode_override=COALESCE($6,ai_mode_override),priority=COALESCE($7,priority),assignment_reference=COALESCE($8,assignment_reference),resource_version=resource_version+1,updated_at=now() WHERE business_id=$1::uuid AND id=$2::uuid AND resource_version=$3 RETURNING id::text,business_id::text,customer_id::text,(SELECT cc.channel FROM conversation_references r JOIN channel_connections cc ON cc.business_id=r.business_id AND cc.id=r.connection_id WHERE r.business_id=business_id AND r.conversation_id=id AND r.system='provider' AND r.is_current AND r.mapping_status='active' LIMIT 1),state,ownership,ai_mode_override,priority,assignment_reference,resource_version,last_activity_at`
 	var record ports.ConversationRecord
-	err = executor.QueryRow(ctx, query, update.BusinessID, update.ConversationID, update.ExpectedVersion, nilIfBlank(update.State), nilIfBlank(update.Ownership), nilIfBlank(update.AIModeOverride), nilIfBlank(update.Priority), nilIfBlank(update.AssignmentReference)).Scan(&record.ID, &record.BusinessID, &record.CustomerID, &record.State, &record.Ownership, &record.AIModeOverride, &record.Priority, &record.AssignmentReference, &record.ResourceVersion, &record.LastActivityAt)
+	err = executor.QueryRow(ctx, query, update.BusinessID, update.ConversationID, update.ExpectedVersion, nilIfBlank(update.State), nilIfBlank(update.Ownership), nilIfBlank(update.AIModeOverride), nilIfBlank(update.Priority), nilIfBlank(update.AssignmentReference)).Scan(&record.ID, &record.BusinessID, &record.CustomerID, &record.Channel, &record.State, &record.Ownership, &record.AIModeOverride, &record.Priority, &record.AssignmentReference, &record.ResourceVersion, &record.LastActivityAt)
 	if err == nil {
 		return record, nil
 	}
@@ -108,9 +108,9 @@ func (r *ConversationRepository) AdvanceVersion(ctx context.Context, businessID,
 	if err != nil {
 		return ports.ConversationRecord{}, err
 	}
-	const query = `UPDATE conversations SET resource_version=resource_version+1,updated_at=now() WHERE business_id=$1::uuid AND id=$2::uuid AND resource_version=$3 RETURNING id::text,business_id::text,customer_id::text,state,ownership,ai_mode_override,priority,assignment_reference,resource_version,last_activity_at`
+	const query = `UPDATE conversations SET resource_version=resource_version+1,updated_at=now() WHERE business_id=$1::uuid AND id=$2::uuid AND resource_version=$3 RETURNING id::text,business_id::text,customer_id::text,(SELECT cc.channel FROM conversation_references r JOIN channel_connections cc ON cc.business_id=r.business_id AND cc.id=r.connection_id WHERE r.business_id=business_id AND r.conversation_id=id AND r.system='provider' AND r.is_current AND r.mapping_status='active' LIMIT 1),state,ownership,ai_mode_override,priority,assignment_reference,resource_version,last_activity_at`
 	var record ports.ConversationRecord
-	err = executor.QueryRow(ctx, query, businessID, conversationID, expectedVersion).Scan(&record.ID, &record.BusinessID, &record.CustomerID, &record.State, &record.Ownership, &record.AIModeOverride, &record.Priority, &record.AssignmentReference, &record.ResourceVersion, &record.LastActivityAt)
+	err = executor.QueryRow(ctx, query, businessID, conversationID, expectedVersion).Scan(&record.ID, &record.BusinessID, &record.CustomerID, &record.Channel, &record.State, &record.Ownership, &record.AIModeOverride, &record.Priority, &record.AssignmentReference, &record.ResourceVersion, &record.LastActivityAt)
 	if err == nil {
 		return record, nil
 	}
@@ -131,9 +131,9 @@ func (r *ConversationRepository) TransitionLifecycle(ctx context.Context, transi
 	if err != nil {
 		return ports.ConversationRecord{}, err
 	}
-	const query = `UPDATE conversations SET state=COALESCE($3,state),ownership=COALESCE($4,ownership),priority=COALESCE($5,priority),last_activity_at=COALESCE($6,last_activity_at),resource_version=resource_version+1,updated_at=now() WHERE business_id=$1::uuid AND id=$2::uuid RETURNING id::text,business_id::text,customer_id::text,state,ownership,ai_mode_override,priority,assignment_reference,resource_version,last_activity_at`
+	const query = `UPDATE conversations SET state=COALESCE($3,state),ownership=COALESCE($4,ownership),priority=COALESCE($5,priority),last_activity_at=COALESCE($6,last_activity_at),resource_version=resource_version+1,updated_at=now() WHERE business_id=$1::uuid AND id=$2::uuid RETURNING id::text,business_id::text,customer_id::text,(SELECT cc.channel FROM conversation_references r JOIN channel_connections cc ON cc.business_id=r.business_id AND cc.id=r.connection_id WHERE r.business_id=business_id AND r.conversation_id=id AND r.system='provider' AND r.is_current AND r.mapping_status='active' LIMIT 1),state,ownership,ai_mode_override,priority,assignment_reference,resource_version,last_activity_at`
 	var record ports.ConversationRecord
-	err = executor.QueryRow(ctx, query, transition.BusinessID, transition.ConversationID, nilIfBlank(transition.State), nilIfBlank(transition.Ownership), nilIfBlank(transition.Priority), transition.LastActivityAt).Scan(&record.ID, &record.BusinessID, &record.CustomerID, &record.State, &record.Ownership, &record.AIModeOverride, &record.Priority, &record.AssignmentReference, &record.ResourceVersion, &record.LastActivityAt)
+	err = executor.QueryRow(ctx, query, transition.BusinessID, transition.ConversationID, nilIfBlank(transition.State), nilIfBlank(transition.Ownership), nilIfBlank(transition.Priority), transition.LastActivityAt).Scan(&record.ID, &record.BusinessID, &record.CustomerID, &record.Channel, &record.State, &record.Ownership, &record.AIModeOverride, &record.Priority, &record.AssignmentReference, &record.ResourceVersion, &record.LastActivityAt)
 	if err == nil {
 		return record, nil
 	}
