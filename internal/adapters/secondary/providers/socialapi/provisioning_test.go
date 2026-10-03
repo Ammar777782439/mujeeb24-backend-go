@@ -61,7 +61,6 @@ func TestProvisioningAdapterRejectsInvalidCallback(t *testing.T) {
 	}
 }
 
-
 func TestProvisioningAdapterManagesProviderBrands(t *testing.T) {
 	var createBody string
 	var deletedID string
