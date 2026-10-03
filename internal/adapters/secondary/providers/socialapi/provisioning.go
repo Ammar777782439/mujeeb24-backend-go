@@ -95,7 +95,7 @@ func (a *ProvisioningAdapter) ListBrands(ctx context.Context) ([]ports.ProviderB
 		result = append(result, ports.ProviderBrandRecord{
 			ProviderRef:      "socialapi",
 			ProviderBrandRef: brand.ID,
-			DisplayName:     brand.Name,
+			DisplayName:      brand.Name,
 		})
 	}
 	return result, nil
