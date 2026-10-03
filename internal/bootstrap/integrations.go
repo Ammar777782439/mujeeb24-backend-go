@@ -17,6 +17,7 @@ type ExternalAdapters struct {
 	LLMConfigError                 error
 	AutoReplyEnabled               bool
 	ChannelProvisioningSocial      ports.SocialChannelProvisioner
+	ChannelProvisioningBrand       ports.ProviderBrandProvisioner
 	ChannelProvisioningError       error
 	ChannelProvisioningEnabled     bool
 	ChannelProvisioningRedirectURI string
