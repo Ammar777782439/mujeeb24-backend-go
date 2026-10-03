@@ -33,6 +33,7 @@ type AIDecisionDraft struct {
 	ModelReference         *string
 	SchemaVersion          int
 	Lifecycle              string
+	DeliveryStatus         string
 	PolicyDecision         *string
 	Outcome                *string
 	ExecutionReference     *string
