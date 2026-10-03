@@ -300,6 +300,7 @@ func conversationProjection(v commands.ConversationView) contract.Conversation {
 		ID:              contract.UUID(v.ID),
 		BusinessID:      contract.UUID(v.BusinessID),
 		Customer:        contract.CustomerSummary{ID: contract.UUID(v.CustomerID), DisplayName: v.CustomerDisplayName},
+		Channel:         v.Channel,
 		State:           v.State,
 		Ownership:       v.Ownership,
 		AIMode:          v.AIMode,
