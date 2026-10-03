@@ -108,7 +108,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			Runtime:      channelConnectionRepository,
 			Transactions: database,
 			Disconnector: disconnector,
+			Provisioning: postgres.NewChannelProvisioningStore(database),
 		}
+		dependencies.ReconnectChannel = services.ReconnectChannelCommandService{ChannelRuntimeService: channelRuntime}
 		dependencies.DisconnectChannel = services.DisconnectChannelCommandService{ChannelRuntimeService: channelRuntime}
 	}
 	if authentication != nil {
@@ -570,7 +572,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 				}
 				var redirectURL string
 				if err != nil {
-					redirectURL = fmt.Sprintf("%s/channels?status=failed&error=%s", strings.TrimRight(frontendRedirectBase, "/"), url.QueryEscape(err.Error()))
+					log.Printf("[ChannelProvisioning] OAuth callback failed: %v", err)
+					redirectURL = fmt.Sprintf("%s/channels?status=failed&error=%s", strings.TrimRight(frontendRedirectBase, "/"), url.QueryEscape("تعذر إكمال ربط القناة. يرجى المحاولة مرة أخرى."))
 				} else {
 					redirectURL = fmt.Sprintf("%s/channels?status=connected&channel=%s&provisioning_id=%s", strings.TrimRight(frontendRedirectBase, "/"), url.QueryEscape(session.Channel), url.QueryEscape(session.ID))
 				}
