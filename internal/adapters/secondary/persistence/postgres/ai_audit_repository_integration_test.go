@@ -359,6 +359,14 @@ func (noopAIUsageRepository) RefreshAggregate(context.Context, string, time.Time
 	return ports.SubscriptionAIUsageAggregate{}, nil
 }
 
+func (noopAIUsageRepository) GetPlatformAIUsageOverview(context.Context) (ports.SubscriptionAIUsageAggregate, error) {
+	return ports.SubscriptionAIUsageAggregate{}, nil
+}
+
+func (noopAIUsageRepository) GetAIUsageByBusiness(context.Context, int) ([]ports.SubscriptionAIUsageAggregate, error) {
+	return nil, nil
+}
+
 var _ ports.AIUsageRepository = noopAIUsageRepository{}
 
 type activeSubscriptionStub struct{}
