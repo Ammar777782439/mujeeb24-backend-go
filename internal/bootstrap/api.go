@@ -101,6 +101,19 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	dependencies.GetReadiness = readinessQueryService{Ping: database.Ping, FeatureChecks: external.ReadinessChecks()}
 	dependencies.BeginChannelConnection = services.ChannelProvisioningDisabledService{}
 	dependencies.IngestSocialAPIWebhook = services.WebhookReceiverDisabledService{Receiver: "SocialAPI"}
+	// Channel lifecycle commands must always use the real provider state.
+	// They never fall back to a local-only status transition when a provider
+	// account reference exists.
+	channelConnectionRepository := postgres.NewChannelConnectionRepository(database)
+	channelRuntime := services.ChannelRuntimeService{
+		Reader:       channelConnectionRepository,
+		Runtime:      channelConnectionRepository,
+		Transactions: database,
+		Provider:     external.ChannelProvisioningSocial,
+		Provisioning: postgres.NewChannelProvisioningStore(database),
+	}
+	dependencies.ReconnectChannel = services.ReconnectChannelCommandService{ChannelRuntimeService: channelRuntime}
+	dependencies.DisconnectChannel = services.DisconnectChannelCommandService{ChannelRuntimeService: channelRuntime}
 	if authentication != nil {
 		dependencies.Scope = handlers.PostgresScopeProvider{Memberships: authentication.Repository}
 		dependencies.PlatformAccess = authentication.PlatformChecker
