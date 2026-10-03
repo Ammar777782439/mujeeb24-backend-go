@@ -12,11 +12,11 @@ import (
 )
 
 type ChannelRuntimeService struct {
-	Reader        ports.ChannelConnectionRepository
-	Runtime       ports.ChannelConnectionRuntimeRepository
-	Transactions  ports.TransactionManager
-	Disconnector  ports.ChannelAccountDisconnector
-	Provisioning  ports.ChannelProvisioningStore
+	Reader       ports.ChannelConnectionRepository
+	Runtime      ports.ChannelConnectionRuntimeRepository
+	Transactions ports.TransactionManager
+	Disconnector ports.ChannelAccountDisconnector
+	Provisioning ports.ChannelProvisioningStore
 }
 type ListChannelConnectionsQueryService struct{ ChannelRuntimeService }
 type GetChannelConnectionQueryService struct{ ChannelRuntimeService }
