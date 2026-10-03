@@ -95,7 +95,11 @@ func (r *ProviderBrandRepository) Create(ctx context.Context, brand ports.Provid
         &record.CreatedAt,
         &record.UpdatedAt,
     ); err != nil {
-        return ports.ProviderBrandRecord{}, classifyRepositoryWriteError("provider_brand.create", err)
+        classified := classifyRepositoryWriteError("provider_brand.create", err)
+        if IsRepositoryKind(classified, RepositoryConflict) {
+            return ports.ProviderBrandRecord{}, errors.Join(ports.ErrProviderBrandConflict, classified)
+        }
+        return ports.ProviderBrandRecord{}, classified
     }
     return record, nil
 }
