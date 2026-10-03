@@ -304,6 +304,8 @@ func TestAutoReplyVerticalSliceAgainstPostgres(t *testing.T) {
 	outboundRepo := NewOutboundMessageRepository(adapter)
 	outboxRepo := NewPostgresOutboxStore(adapter)
 	service := services.NewAutoReplyService(legacyAutoReplyDecisionStub{}, decisionRepo, referenceRepo, outboundRepo, outboxRepo, adapter)
+service.AIUsage = noopAIUsageRepository{}
+	service.Subscriptions = activeSubscriptionStub{}
 	result, err := service.Handle(ctx, commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessID)}}, ConversationID: commands.ConversationID(conversationID), SourceMessageReference: "inbound-success", Text: "مرحبا", Channel: "facebook", ProviderRef: "socialapi"})
 	if err != nil {
 		t.Fatalf("auto reply success: %v", err)
@@ -326,6 +328,8 @@ func TestAutoReplyVerticalSliceAgainstPostgres(t *testing.T) {
 	}
 
 	failingService := services.NewAutoReplyService(legacyAutoReplyDecisionStub{}, decisionRepo, referenceRepo, outboundRepo, failingEnqueueOutbox{OutboxStore: outboxRepo}, adapter)
+failingService.AIUsage = noopAIUsageRepository{}
+	failingService.Subscriptions = activeSubscriptionStub{}
 	if _, err := failingService.Handle(ctx, commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessID)}}, ConversationID: commands.ConversationID(conversationID), SourceMessageReference: "inbound-rollback", Text: "رسالة ثانية", Channel: "facebook", ProviderRef: "socialapi"}); err == nil {
 		t.Fatal("expected forced outbox failure")
 	}
@@ -340,6 +344,60 @@ func TestAutoReplyVerticalSliceAgainstPostgres(t *testing.T) {
 		t.Fatalf("transaction leaked after outbox failure decisions=%d outbound=%d", rollbackDecisions, rollbackOutbound)
 	}
 }
+
+type noopAIUsageRepository struct{}
+
+func (noopAIUsageRepository) AppendRecord(context.Context, ports.AIUsageAppend) (ports.AIUsageRecord, error) {
+	return ports.AIUsageRecord{}, nil
+}
+
+func (noopAIUsageRepository) GetSubscriptionAIUsage(context.Context, string) (ports.SubscriptionAIUsageAggregate, error) {
+	return ports.SubscriptionAIUsageAggregate{}, nil
+}
+
+func (noopAIUsageRepository) RefreshAggregate(context.Context, string, time.Time) (ports.SubscriptionAIUsageAggregate, error) {
+	return ports.SubscriptionAIUsageAggregate{}, nil
+}
+
+var _ ports.AIUsageRepository = noopAIUsageRepository{}
+
+type activeSubscriptionStub struct{}
+
+func (activeSubscriptionStub) Create(context.Context, ports.SubscriptionCreate) (ports.SubscriptionRecord, error) {
+	return ports.SubscriptionRecord{}, errors.New("not used")
+}
+
+func (activeSubscriptionStub) GetByID(context.Context, string) (ports.SubscriptionRecord, error) {
+	return ports.SubscriptionRecord{}, errors.New("not used")
+}
+
+func (activeSubscriptionStub) List(context.Context, ports.SubscriptionListFilter) (ports.SubscriptionPage, error) {
+	return ports.SubscriptionPage{
+		Items: []ports.SubscriptionRecord{{ID: "subscription-test", Status: "ACTIVE"}},
+	}, nil
+}
+
+func (activeSubscriptionStub) Activate(context.Context, string, time.Time) (ports.SubscriptionRecord, error) {
+	return ports.SubscriptionRecord{}, errors.New("not used")
+}
+
+func (activeSubscriptionStub) Cancel(context.Context, string, string, string, time.Time) (ports.SubscriptionRecord, error) {
+	return ports.SubscriptionRecord{}, errors.New("not used")
+}
+
+func (activeSubscriptionStub) MarkExpired(context.Context, string, time.Time) (ports.SubscriptionRecord, error) {
+	return ports.SubscriptionRecord{}, errors.New("not used")
+}
+
+func (activeSubscriptionStub) ApplyCostBudgetOverride(context.Context, string, int, string, string, time.Time) (ports.SubscriptionRecord, error) {
+	return ports.SubscriptionRecord{}, errors.New("not used")
+}
+
+func (activeSubscriptionStub) CheckEntitlements(context.Context, string, int, int) error {
+	return nil
+}
+
+var _ ports.SubscriptionRepository = activeSubscriptionStub{}
 
 type failingEnqueueOutbox struct{ ports.OutboxStore }
 
