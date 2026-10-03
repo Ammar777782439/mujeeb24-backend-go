@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+      DATABASE_URL: ${{ secrets.PLATFORM_DATABASE_URL }}
       GOTOOLCHAIN: local
 
     steps:
@@ -41,7 +41,7 @@ jobs:
       - name: Validate database secret is configured
         run: |
           if [ -z "${DATABASE_URL}" ]; then
-            echo "::error::PRODUCTION_DATABASE_URL GitHub Secret is not configured."
+            echo "::error::PLATFORM_DATABASE_URL GitHub Secret is not configured."
             exit 1
           fi
 
