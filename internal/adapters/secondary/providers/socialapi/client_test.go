@@ -320,3 +320,25 @@ func TestClientVerifiesSocialAPIV1RawBodySignature(t *testing.T) {
 		t.Fatal("modified raw body unexpectedly verified")
 	}
 }
+
+
+func TestClientDisconnectsAccount(t *testing.T) {
+	var sawAuth bool
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodDelete || request.URL.Path != "/v1/accounts/account-123" {
+			http.NotFound(writer, request)
+			return
+		}
+		sawAuth = request.Header.Get("Authorization") == "Bearer sapi_key_test"
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "sapi_key_test", HTTPClient: server.Client()})
+	if err := client.DisconnectAccount(context.Background(), "account-123"); err != nil {
+		t.Fatalf("disconnect: %v", err)
+	}
+	if !sawAuth {
+		t.Fatal("expected bearer authorization header")
+	}
+}
