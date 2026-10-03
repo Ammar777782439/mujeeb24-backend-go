@@ -46,6 +46,27 @@ type ChannelProvisioningStore interface {
 	SupersedeConnectedByChannelConnection(ctx context.Context, businessID, channelConnectionID string) error
 }
 
+type ProviderBrandRecord struct {
+	ID              string
+	BusinessID      string
+	ProviderRef     string
+	ProviderBrandRef string
+	DisplayName     string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+type ProviderBrandStore interface {
+	Get(ctx context.Context, businessID, providerRef string) (ProviderBrandRecord, bool, error)
+	Create(ctx context.Context, brand ProviderBrandRecord) (ProviderBrandRecord, error)
+}
+
+type ProviderBrandProvisioner interface {
+	ListBrands(ctx context.Context) ([]ProviderBrandRecord, error)
+	CreateBrand(ctx context.Context, name string) (ProviderBrandRecord, error)
+	DeleteBrand(ctx context.Context, brandID string) error
+}
+
 type ChannelProvisioningPatch struct {
 	Status                ChannelProvisioningStatus
 	OAuthState            *string
@@ -61,6 +82,7 @@ type SocialAuthorizationRequest struct {
 	Channel     string
 	RedirectURI string
 	State       string
+	BrandID     string
 }
 
 type SocialAuthorization struct {
