@@ -148,6 +148,12 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		external.GeminiHTTPClient != nil && external.LLMConfigError == nil,
 		external.SocialAPI != nil,
 	)
+	if external.GeminiHTTPClient != nil && external.LLMConfigError == nil {
+		platformOperations.RegisterProbe("google_gemini", gemini.NewHealthCheckProbe(external.GeminiHTTPClient))
+	}
+	if external.SocialAPIHealthProbe != nil {
+		platformOperations.RegisterProbe("socialapi", external.SocialAPIHealthProbe)
+	}
 
 	// Customer-sales capabilities are owned by the application layer.
 	// The Gemini adapter receives only the narrow CustomerSalesToolPort.
@@ -468,21 +474,30 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		autoReplyPool = webhookService.AutoReplyWorkerPool
 		dependencies.IngestSocialAPIWebhook = webhookService
 	}
+	var assignBusinessOwner *services.AssignBusinessOwnerService
+	if authentication != nil {
+		assignBusinessOwner = &services.AssignBusinessOwnerService{
+			Transactions:       database,
+			PrincipalBootstrap: authentication.Repository,
+			Business:           postgres.NewPlatformBusinessRepository(database),
+		}
+	}
 	dashboardServer := handlers.NewServer(dependencies)
 	dashboardServer = dashboardServer.WithPlatformDeps(handlers.PlatformDeps{
-		Plans:             postgres.NewPlanRepository(database),
-		PlatformBusiness:  postgres.NewPlatformBusinessRepository(database),
-		PlatformAudit:     postgres.NewPlatformAuditRepository(database),
-		Subscriptions:     postgres.NewSubscriptionRepository(database),
-		Payments:          postgres.NewPaymentRepository(database),
-		Support:           postgres.NewSupportRepository(database),
-		AIUsage:           postgres.NewAIUsageRepository(database),
-		AIProviderPricing: postgres.NewAIProviderPricingRepository(database),
-		Operations:        platformOperations,
-		ChannelReader:     postgres.NewPlatformChannelReadRepository(database),
-		AIConfigRepo:      aiConfigRepo,
-		AIConfigCache:     aiConfigCache,
-		ModelDiscovery:    gemini.NewModelsClient(),
+		Plans:               postgres.NewPlanRepository(database),
+		PlatformBusiness:    postgres.NewPlatformBusinessRepository(database),
+		PlatformAudit:       postgres.NewPlatformAuditRepository(database),
+		Subscriptions:       postgres.NewSubscriptionRepository(database),
+		Payments:            postgres.NewPaymentRepository(database),
+		Support:             postgres.NewSupportRepository(database),
+		AIUsage:             postgres.NewAIUsageRepository(database),
+		AIProviderPricing:   postgres.NewAIProviderPricingRepository(database),
+		Operations:          platformOperations,
+		ChannelReader:       postgres.NewPlatformChannelReadRepository(database),
+		AIConfigRepo:        aiConfigRepo,
+		AIConfigCache:       aiConfigCache,
+		ModelDiscovery:      gemini.NewModelsClient(),
+		AssignBusinessOwner: assignBusinessOwner,
 	})
 
 	var merchantCatalogErr error
@@ -535,11 +550,19 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			}
 			session, err := provisioningService.CompleteOAuthCallback(request.Context(), callback)
 			if external.FrontendURL != "" {
+				// FRONTEND_URL may include a UI route such as /landing. The
+				// merchant dashboard lives at /channels, so appending /channels
+				// to FRONTEND_URL directly would produce /landing/channels.
+				// Redirect to the configured frontend origin instead.
+				frontendRedirectBase := external.FrontendURL
+				if parsed, parseErr := url.Parse(external.FrontendURL); parseErr == nil && parsed.Scheme != "" && parsed.Host != "" {
+					frontendRedirectBase = parsed.Scheme + "://" + parsed.Host
+				}
 				var redirectURL string
 				if err != nil {
-					redirectURL = fmt.Sprintf("%s/channels?status=failed&error=%s", external.FrontendURL, url.QueryEscape(err.Error()))
+					redirectURL = fmt.Sprintf("%s/channels?status=failed&error=%s", strings.TrimRight(frontendRedirectBase, "/"), url.QueryEscape(err.Error()))
 				} else {
-					redirectURL = fmt.Sprintf("%s/channels?status=connected&channel=%s&provisioning_id=%s", external.FrontendURL, url.QueryEscape(session.Channel), url.QueryEscape(session.ID))
+					redirectURL = fmt.Sprintf("%s/channels?status=connected&channel=%s&provisioning_id=%s", strings.TrimRight(frontendRedirectBase, "/"), url.QueryEscape(session.Channel), url.QueryEscape(session.ID))
 				}
 				http.Redirect(writer, request, redirectURL, http.StatusFound)
 				return
@@ -583,33 +606,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		mux.ServeHTTP(writer, request)
 	})
 	// Cross-origin browser access is required because the production frontend is hosted
-	// separately from the Render API. Allow only the configured frontend origin and
-	// allow credentials for the HttpOnly refresh cookie.
-	frontendOrigin := ""
-	if external.FrontendURL != "" {
-		if parsed, err := url.Parse(external.FrontendURL); err == nil && parsed.Scheme != "" && parsed.Host != "" {
-			frontendOrigin = parsed.Scheme + "://" + parsed.Host
-		}
-	}
-	corsMux := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		origin := strings.TrimSpace(request.Header.Get("Origin"))
-		if origin != "" && frontendOrigin != "" && origin == frontendOrigin {
-			writer.Header().Set("Access-Control-Allow-Origin", frontendOrigin)
-			writer.Header().Set("Access-Control-Allow-Credentials", "true")
-			writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			writer.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Authorization, X-Request-ID")
-			writer.Header().Add("Vary", "Origin")
-		}
-		if request.Method == http.MethodOptions {
-			if origin == "" || origin != frontendOrigin {
-				writer.WriteHeader(http.StatusForbidden)
-				return
-			}
-			writer.WriteHeader(http.StatusNoContent)
-			return
-		}
-		wrappedMux.ServeHTTP(writer, request)
-	})
+	// separately from the Render API. CORS is centralized in newCORSMiddleware so the
+	// allowed request headers are covered by a regression-tested contract.
+	corsMux := newCORSMiddleware(wrappedMux, external.FrontendURL)
 	server := &http.Server{Addr: address, Handler: corsMux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	return &APIRuntime{
 		HTTP:                server,

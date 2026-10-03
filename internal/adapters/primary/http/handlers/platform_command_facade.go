@@ -25,22 +25,23 @@ import (
 // handler with Platform Audit logging.
 type PlatformDeps struct {
 	// Lifecycle repositories
-	Plans             ports.PlanRepository
-	PlatformBusiness  ports.PlatformBusinessLifecyclePort
-	PlatformAudit     ports.PlatformAuditRepository
-	Subscriptions     ports.SubscriptionRepository
-	Payments          ports.PaymentRepository
-	Support           ports.SupportRepository
-	AIUsage           ports.AIUsageRepository
-	AIProviderPricing ports.AIProviderPricingRepository
+	Plans               ports.PlanRepository
+	PlatformBusiness    ports.PlatformBusinessLifecyclePort
+	PlatformAudit       ports.PlatformAuditRepository
+	Subscriptions       ports.SubscriptionRepository
+	Payments            ports.PaymentRepository
+	Support             ports.SupportRepository
+	AIUsage             ports.AIUsageRepository
+	AIProviderPricing   ports.AIProviderPricingRepository
 	// Platform Operations (AI kill switch + provider/channel health) — in-memory
-	Operations ports.PlatformOperationsPort
+	Operations          ports.PlatformOperationsPort
 	// Channel Reader — platform-scoped read of channel_connections (no secrets)
-	ChannelReader ports.PlatformChannelReadPort
+	ChannelReader       ports.PlatformChannelReadPort
 	// Per §1-12: AI Provider Configuration management
-	AIConfigRepo   ports.AIProviderConfigService
-	AIConfigCache  *services.AIConfigurationCache
-	ModelDiscovery ports.ModelDiscoveryClient
+	AIConfigRepo        ports.AIProviderConfigService
+	AIConfigCache       *services.AIConfigurationCache
+	ModelDiscovery      ports.ModelDiscoveryClient
+	AssignBusinessOwner *services.AssignBusinessOwnerService
 }
 
 // WithPlatformDeps is the explicit setter for Platform-side dependencies.
@@ -118,6 +119,10 @@ func extractIdempotencyKey(operationID string, input any) string {
 		if in, ok := input.(*dto.CreateBusinessInput); ok {
 			return in.IdempotencyKey
 		}
+	case "platformAssignBusinessOwner":
+		if in, ok := input.(*dto.AssignBusinessOwnerInput); ok {
+			return in.IdempotencyKey
+		}
 	case "platformCreateSubscription":
 		if in, ok := input.(*dto.CreateSubscriptionInput); ok {
 			return in.IdempotencyKey
@@ -155,6 +160,8 @@ func (s *Server) dispatchPlatformCommandInner(ctx context.Context, operationID s
 	// ---- Business Management (Contract §13-14) ----
 	case "platformCreateBusiness":
 		return s.platformCreateBusiness(ctx, input.(*dto.CreateBusinessInput))
+	case "platformAssignBusinessOwner":
+		return s.platformAssignBusinessOwner(ctx, input.(*dto.AssignBusinessOwnerInput))
 	case "platformListBusinesses":
 		return s.platformListBusinesses(ctx, input.(*dto.PlatformBusinessListInput))
 	case "platformGetBusiness":
@@ -326,7 +333,7 @@ func platformBusinessProjection(b ports.PlatformBusinessRecord) dto.PlatformBusi
 		ID:                   b.ID,
 		Name:                 b.Name,
 		Slug:                 b.Slug,
-		PlatformStatus:       b.PlatformStatus,
+		PlatformStatus:       strings.ToUpper(b.PlatformStatus),
 		OwnerIdentitySummary: b.OwnerIdentitySummary,
 		SubscriptionSummary:  b.SubscriptionSummary,
 		CreatedAt:            b.CreatedAt.UTC().Format(time.RFC3339),
@@ -548,6 +555,35 @@ func (s *Server) platformCreatePlanVersion(ctx context.Context, in *dto.CreatePl
 }
 
 // ----------------------------------------------------------------------------
+func (s *Server) platformAssignBusinessOwner(ctx context.Context, in *dto.AssignBusinessOwnerInput) (any, bool) {
+	if s.platformDeps.AssignBusinessOwner == nil {
+		return mapApplicationError(appErrors.NotImplemented()), true
+	}
+	result, err := s.platformDeps.AssignBusinessOwner.Handle(ctx, services.AssignBusinessOwnerInput{
+		BusinessID:  string(in.BusinessID),
+		Email:       in.Body.Email,
+		DisplayName: in.Body.DisplayName,
+		Password:    in.Body.Password,
+		Now:         time.Now().UTC(),
+	})
+	if err != nil {
+		return mapApplicationError(err), true
+	}
+	s.appendPlatformAudit(ctx, "business.owner_assigned", "business", &result.BusinessID, &result.BusinessID, "SUCCESS", "", map[string]any{
+		"principal_id": result.PrincipalID,
+		"role":         result.Role,
+	})
+	out := &contract.Single[dto.AssignBusinessOwnerView]{}
+	out.Body.Data = dto.AssignBusinessOwnerView{
+		PrincipalID:    result.PrincipalID,
+		Email:          result.Email,
+		DisplayName:    result.DisplayName,
+		Role:           result.Role,
+		BusinessStatus: result.BusinessStatus,
+	}
+	return out, true
+}
+
 // Business lifecycle façades
 // ----------------------------------------------------------------------------
 

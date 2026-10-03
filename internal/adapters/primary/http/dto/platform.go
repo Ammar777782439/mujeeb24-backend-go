@@ -15,6 +15,26 @@ package dto
 //   - docs/architecture/AIUsageTokenTelemetry.md
 // ============================================================================
 
+type AssignBusinessOwnerRequest struct {
+	Email       string `json:"email" minLength:"3" maxLength:"320"`
+	DisplayName string `json:"display_name" minLength:"1" maxLength:"200"`
+	Password    string `json:"password" minLength:"12" maxLength:"256"`
+}
+
+type AssignBusinessOwnerView struct {
+	PrincipalID    string `json:"principal_id"`
+	Email          string `json:"email"`
+	DisplayName    string `json:"display_name"`
+	Role           string `json:"role"`
+	BusinessStatus string `json:"business_status"`
+}
+
+type AssignBusinessOwnerInput struct {
+	PlatformBusinessPath
+	PlatformCommandHeaders
+	Body AssignBusinessOwnerRequest
+}
+
 // ----------------------------------------------------------------------------
 // Shared path/header inputs
 // ----------------------------------------------------------------------------

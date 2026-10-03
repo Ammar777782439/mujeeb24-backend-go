@@ -313,6 +313,26 @@ components:
         - version
         - definitions
       type: object
+    AssignBusinessOwnerView:
+      additionalProperties: false
+      properties:
+        business_status:
+          type: string
+        display_name:
+          type: string
+        email:
+          type: string
+        principal_id:
+          type: string
+        role:
+          type: string
+      required:
+        - principal_id
+        - email
+        - display_name
+        - role
+        - business_status
+      type: object
     AuditEvent:
       additionalProperties: false
       properties:
@@ -1129,6 +1149,32 @@ components:
         - conditions
         - action_kind
         - action_payload
+      type: object
+    AssignBusinessOwnerRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/AssignBusinessOwnerRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        display_name:
+          maxLength: 200
+          minLength: 1
+          type: string
+        email:
+          maxLength: 320
+          minLength: 3
+          type: string
+        password:
+          maxLength: 256
+          minLength: 12
+          type: string
+      required:
+        - email
+        - display_name
+        - password
       type: object
     CreateBusinessRequest:
       additionalProperties: false
@@ -3453,6 +3499,23 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/AttributeSchema"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleAssignBusinessOwnerViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleAssignBusinessOwnerViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/AssignBusinessOwnerView"
         request_id:
           type: string
       required:
@@ -13046,9 +13109,9 @@ paths:
       summary: Get a business.
       tags:
         - Platform.Businesses
-  /platform/businesses/{business_id}/archive:
+  /platform/businesses/{business_id}/owner:
     post:
-      operationId: platformArchiveBusiness
+      operationId: platformAssignBusinessOwner
       parameters:
         - in: path
           name: business_id
@@ -13072,12 +13135,18 @@ paths:
           name: X-Correlation-ID,omitempty
           schema:
             type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignBusinessOwnerRequest"
+        required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SinglePlatformBusinessViewBody"
+                $ref: "#/components/schemas/SingleAssignBusinessOwnerViewBody"
           description: OK
         "400":
           content:
@@ -13117,7 +13186,7 @@ paths:
           description: Internal Server Error
       security:
         - bearerAuth: []
-      summary: Archive a business.
+      summary: Assign the business owner and activate a pending business.
       tags:
         - Platform.Businesses
   /platform/businesses/{business_id}/reactivate:

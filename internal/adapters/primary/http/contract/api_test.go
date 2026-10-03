@@ -61,9 +61,10 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
 	// 3 channel + 3 provider + 3 AI usage). Total was 133.
 	// Gap fix: POST /platform/businesses (create business) added. Total = 134.
 	// AI Provider Configuration: 6 endpoints added. Total = 140.
+	// Business owner assignment adds 1 platform business lifecycle endpoint. Total = 141.
 	operationIDs := regexp.MustCompile(`(?m)^\s+operationId: ([A-Za-z0-9_]+)$`).FindAllSubmatch(document, -1)
-	if len(operationIDs) != 140 {
-		t.Fatalf("generated %d operations, want 140", len(operationIDs))
+	if len(operationIDs) != 141 {
+		t.Fatalf("generated %d operations, want 141", len(operationIDs))
 	}
 	seen := make(map[string]struct{}, len(operationIDs))
 	for _, match := range operationIDs {
