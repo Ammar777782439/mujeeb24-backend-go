@@ -51,6 +51,11 @@ func (m *mockGeminiToolServer) handle(w http.ResponseWriter, r *http.Request) {
 	m.capturedAPIKey = r.Header.Get("x-goog-api-key")
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		// The deadline test intentionally cancels the client request. The
+		// server may observe EOF/UnexpectedEOF while reading the closed body.
+		if r.Context().Err() != nil {
+			return
+		}
 		m.t.Fatalf("read request body: %v", err)
 	}
 	m.capturedBody = body
