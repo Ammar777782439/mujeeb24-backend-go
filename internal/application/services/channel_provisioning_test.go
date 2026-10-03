@@ -220,6 +220,7 @@ func TestChannelProvisioningStartIsIdempotentAndCompleteConnects(t *testing.T) {
 func TestChannelProvisioningCompletesSelectionRequiredSocialCallback(t *testing.T) {
 	store := &provisioningSessionStore{}
 	social := &provisioningSocial{}
+	brands := &provisioningBrands{}
 	connections := &provisioningConnections{}
 	service := ChannelProvisioningService{Sessions: store, Social: social, SocialBrands: brands, ProviderBrands: brands, Businesses: &provisioningBusinesses{}, Connections: connections, RedirectURI: "https://app.example/oauth/callback"}
 	started, err := service.Start(context.Background(), "business-1", "socialapi", "facebook", "Acme", "idem-selection")
@@ -235,6 +236,7 @@ func TestChannelProvisioningCompletesSelectionRequiredSocialCallback(t *testing.
 func TestChannelProvisioningRecordsActivationFailureWithoutConnection(t *testing.T) {
 	store := &provisioningSessionStore{}
 	social := &provisioningSocial{}
+	brands := &provisioningBrands{}
 	connections := &provisioningConnections{activateErr: errors.New("connection activation unavailable")}
 	service := ChannelProvisioningService{Sessions: store, Social: social, SocialBrands: brands, ProviderBrands: brands, Businesses: &provisioningBusinesses{}, Connections: connections, RedirectURI: "https://app.example/oauth/callback"}
 	started, err := service.Start(context.Background(), "business-1", "socialapi", "whatsapp", "Acme", "idem-2")
@@ -249,7 +251,8 @@ func TestChannelProvisioningRecordsActivationFailureWithoutConnection(t *testing
 
 func TestChannelProvisioningRejectsMismatchedOAuthState(t *testing.T) {
 	store := &provisioningSessionStore{}
-	service := ChannelProvisioningService{Sessions: store, Social: &provisioningSocial{}, Connections: &provisioningConnections{}, RedirectURI: "https://app.example/oauth/callback"}
+	brands := &provisioningBrands{}
+	service := ChannelProvisioningService{Sessions: store, Social: &provisioningSocial{}, SocialBrands: brands, ProviderBrands: brands, Businesses: &provisioningBusinesses{}, Connections: &provisioningConnections{}, RedirectURI: "https://app.example/oauth/callback"}
 	started, err := service.Start(context.Background(), "business-1", "socialapi", "instagram", "Acme", "idem-state")
 	if err != nil {
 		t.Fatalf("start: %v", err)
@@ -273,13 +276,13 @@ func TestChannelProvisioningRejectsExpiredSession(t *testing.T) {
 			},
 		},
 	}
-	service := ChannelProvisioningService{Sessions: store, Social: &provisioningSocial{}, Connections: &provisioningConnections{}, RedirectURI: "https://app.example/oauth/callback"}
+	brands := &provisioningBrands{}
+	service := ChannelProvisioningService{Sessions: store, Social: &provisioningSocial{}, SocialBrands: brands, ProviderBrands: brands, Businesses: &provisioningBusinesses{}, Connections: &provisioningConnections{}, RedirectURI: "https://app.example/oauth/callback"}
 	failed, err := service.Complete(context.Background(), "business-1", "session-expired", ports.SocialAuthorizationCallback{State: "state-expired", Status: "success", Platform: "instagram"})
 	if err == nil || failed.Status != ports.ProvisioningFailed || failed.FailureCode != ports.FailureCodeExpired {
 		t.Fatalf("expected session to fail with expired code, got session=%#v err=%v", failed, err)
 	}
 }
-
 
 func TestChannelProvisioningCreatesOneStableProviderBrandPerBusiness(t *testing.T) {
 	store := &provisioningSessionStore{}
@@ -308,7 +311,7 @@ func TestChannelProvisioningCreatesOneStableProviderBrandPerBusiness(t *testing.
 		t.Fatal("different idempotency keys unexpectedly returned the same session")
 	}
 	if brands.createCalls != 1 || brands.listCalls != 1 {
-		t.Fatalf("provider brand lifecycle calls=%d creates=%d lists=%d; want one create and one discovery list", brands.createCalls, brands.createCalls, brands.listCalls)
+		t.Fatalf("provider brand lifecycle creates=%d lists=%d; want one create and one discovery list", brands.createCalls, brands.listCalls)
 	}
 	if len(social.brandIDs) != 2 || social.brandIDs[0] != "brand-1" || social.brandIDs[1] != "brand-1" {
 		t.Fatalf("OAuth did not receive the same provider brand: %#v", social.brandIDs)
