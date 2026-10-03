@@ -41,6 +41,18 @@ func (s *provisioningSessionStore) GetByOAuthState(_ context.Context, state stri
 	}
 	return ports.ChannelProvisioningSession{}, errors.New("session not found")
 }
+func (s *provisioningSessionStore) SupersedeConnectedByChannelConnection(_ context.Context, businessID, channelConnectionID string) error {
+	for key, session := range s.sessions {
+		if session.BusinessID != businessID || session.ChannelConnectionID != channelConnectionID || session.Status != ports.ProvisioningConnected {
+			continue
+		}
+		session.Status = ports.ProvisioningFailed
+		session.FailureCode = ports.FailureCodeSuperseded
+		s.sessions[key] = session
+	}
+	return nil
+}
+
 func (s *provisioningSessionStore) MarkProvisioning(_ context.Context, businessID, id string, patch ports.ChannelProvisioningPatch) (ports.ChannelProvisioningSession, error) {
 	for key, session := range s.sessions {
 		if session.BusinessID != businessID || session.ID != id {
