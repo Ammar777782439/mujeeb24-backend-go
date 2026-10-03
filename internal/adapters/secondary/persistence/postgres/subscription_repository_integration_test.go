@@ -48,16 +48,16 @@ func TestSubscriptionRepositoryUsesPlanMetadata(t *testing.T) {
 	repo := NewSubscriptionRepository(adapter)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	record, err := repo.Create(ctx, ports.SubscriptionCreate{
-		ID:                     subscriptionID,
-		BusinessID:             businessID,
-		PlanID:                 planID,
-		PeriodStart:            now,
-		PeriodEnd:              now.Add(30 * 24 * time.Hour),
-		AIReplyLimit:           500,
-		AICatalogLimit:         200,
-		ChannelLimit:           1,
+		ID:                      subscriptionID,
+		BusinessID:              businessID,
+		PlanID:                  planID,
+		PeriodStart:             now,
+		PeriodEnd:               now.Add(30 * 24 * time.Hour),
+		AIReplyLimit:            500,
+		AICatalogLimit:          200,
+		ChannelLimit:            1,
 		InternalAICostBudgetYER: 1000,
-		Now:                    now,
+		Now:                     now,
 	})
 	if err != nil {
 		t.Fatalf("create subscription: %v", err)

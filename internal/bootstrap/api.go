@@ -101,7 +101,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	dependencies.GetReadiness = readinessQueryService{Ping: database.Ping, FeatureChecks: external.ReadinessChecks()}
 	dependencies.BeginChannelConnection = services.ChannelProvisioningDisabledService{}
 	dependencies.IngestSocialAPIWebhook = services.WebhookReceiverDisabledService{Receiver: "SocialAPI"}
-if disconnector, ok := external.SocialAPI.(ports.ChannelAccountDisconnector); ok {
+	if disconnector, ok := external.SocialAPI.(ports.ChannelAccountDisconnector); ok {
 		channelConnectionRepository := postgres.NewChannelConnectionRepository(database)
 		channelRuntime := services.ChannelRuntimeService{
 			Reader:       channelConnectionRepository,

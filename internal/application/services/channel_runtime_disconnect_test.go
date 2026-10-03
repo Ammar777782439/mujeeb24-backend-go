@@ -68,14 +68,14 @@ func (f *disconnectProviderFake) DisconnectAccount(_ context.Context, providerAc
 
 func TestDisconnectChannelCallsProviderBeforeLocalTransition(t *testing.T) {
 	record := ports.ChannelConnectionRecord{
-		ID:                        "connection-1",
-		BusinessID:                "business-1",
-		ProviderReference:         "socialapi",
-		Channel:                   "facebook",
-		ProviderAccountReference:  stringPtr("acc-facebook-1"),
-		Status:                    "active",
-		ResourceVersion:           7,
-		UpdatedAt:                 time.Now().UTC(),
+		ID:                       "connection-1",
+		BusinessID:               "business-1",
+		ProviderReference:        "socialapi",
+		Channel:                  "facebook",
+		ProviderAccountReference: stringPtr("acc-facebook-1"),
+		Status:                   "active",
+		ResourceVersion:          7,
+		UpdatedAt:                time.Now().UTC(),
 	}
 	runtime := &disconnectRuntimeFake{
 		result: record,
@@ -89,7 +89,7 @@ func TestDisconnectChannelCallsProviderBeforeLocalTransition(t *testing.T) {
 	}}
 
 	_, err := service.Handle(context.Background(), commands.DisconnectChannelCommand{
-		Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1"}},
+		Meta:         commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1"}},
 		ConnectionID: "connection-1",
 		Reason:       "merchant request",
 	})
@@ -112,7 +112,7 @@ func TestDisconnectChannelDoesNotChangeLocalStateWhenProviderDisconnectFails(t *
 		Channel:                  "whatsapp",
 		ProviderAccountReference: stringPtr("acc-whatsapp-1"),
 		Status:                   "active",
-		ResourceVersion:         3,
+		ResourceVersion:          3,
 	}
 	runtime := &disconnectRuntimeFake{result: record}
 	provider := &disconnectProviderFake{err: errors.New("provider unavailable")}
@@ -124,7 +124,7 @@ func TestDisconnectChannelDoesNotChangeLocalStateWhenProviderDisconnectFails(t *
 	}}
 
 	if _, err := service.Handle(context.Background(), commands.DisconnectChannelCommand{
-		Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1"}},
+		Meta:         commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1"}},
 		ConnectionID: "connection-1",
 		Reason:       "merchant request",
 	}); err == nil {
@@ -143,7 +143,7 @@ func TestDisconnectChannelReturnsAlreadyDisconnectedWithoutProviderCall(t *testi
 		Channel:                  "instagram",
 		ProviderAccountReference: stringPtr("acc-instagram-1"),
 		Status:                   "disconnected",
-		ResourceVersion:         9,
+		ResourceVersion:          9,
 	}
 	runtime := &disconnectRuntimeFake{result: record}
 	provider := &disconnectProviderFake{}
@@ -155,7 +155,7 @@ func TestDisconnectChannelReturnsAlreadyDisconnectedWithoutProviderCall(t *testi
 	}}
 
 	result, err := service.Handle(context.Background(), commands.DisconnectChannelCommand{
-		Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1"}},
+		Meta:         commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1"}},
 		ConnectionID: "connection-1",
 		Reason:       "retry",
 	})
