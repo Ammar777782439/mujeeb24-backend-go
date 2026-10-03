@@ -3,10 +3,37 @@ package services
 import "testing"
 
 func TestAutomationRuleValidation(t *testing.T) {
-	conditions, err := normalizeAutomationConditions([]byte(`{"channel":" WhatsApp ","text_contains":"عرض"}`))
-	if err != nil || !ruleMatchesInbound(conditions, "whatsapp", "هل يوجد عرض اليوم؟") || ruleMatchesInbound(conditions, "instagram", "هل يوجد عرض اليوم؟") || ruleMatchesInbound(conditions, "whatsapp", "مرحبا") {
-		t.Fatalf("unexpected normalized/matched conditions=%s err=%v", conditions, err)
+	conditions, err := normalizeAutomationConditions([]byte(`{"channel":" WhatsApp ","keywords":[" عرض ","خصم","عرض",""]}`))
+	if err != nil {
+		t.Fatalf("normalize keyword conditions: %v", err)
 	}
+	if string(conditions) != `{"channel":"whatsapp","keywords":["عرض","خصم"]}` {
+		t.Fatalf("unexpected normalized conditions=%s", conditions)
+	}
+	if !ruleMatchesInbound(conditions, "whatsapp", "هل يوجد عرض اليوم؟") {
+		t.Fatal("expected first keyword to match")
+	}
+	if !ruleMatchesInbound(conditions, "whatsapp", "هل يوجد خصم اليوم؟") {
+		t.Fatal("expected second keyword to match")
+	}
+	if ruleMatchesInbound(conditions, "instagram", "هل يوجد عرض اليوم؟") {
+		t.Fatal("channel filter must reject other channels")
+	}
+	if ruleMatchesInbound(conditions, "whatsapp", "مرحبا") {
+		t.Fatal("non-matching text must not trigger automation")
+	}
+
+	legacy, err := normalizeAutomationConditions([]byte(`{"text_contains":"عرض"}`))
+	if err != nil {
+		t.Fatalf("legacy text_contains must remain readable: %v", err)
+	}
+	if string(legacy) != `{"keywords":["عرض"]}` {
+		t.Fatalf("legacy condition was not canonicalized: %s", legacy)
+	}
+	if !ruleMatchesInbound(legacy, "whatsapp", "هل يوجد عرض اليوم؟") {
+		t.Fatal("legacy text_contains condition must still match")
+	}
+
 	if _, err := normalizeAutomationConditions([]byte(`{}`)); err == nil {
 		t.Fatal("empty automation conditions must be rejected")
 	}
@@ -32,16 +59,13 @@ func TestNormalizeAutomationActionAssignHumanWhitespaceHandling(t *testing.T) {
 	if string(payload) != `{"assignee_principal_id":"`+validUUID+`"}` {
 		t.Fatalf("payload not normalized trimmed: %s", payload)
 	}
-	// Without whitespace should also work
 	kind2, payload2, err := normalizeAutomationAction("assign_human", []byte(`{"assignee_principal_id":"`+validUUID+`"}`))
 	if err != nil || kind2 != "assign_human" || string(payload2) != `{"assignee_principal_id":"`+validUUID+`"}` {
 		t.Fatalf("plain UUID failed: kind=%s payload=%s err=%v", kind2, payload2, err)
 	}
-	// Invalid JSON must be rejected
 	if _, _, err := normalizeAutomationAction("assign_human", []byte(`{invalid}`)); err == nil {
 		t.Fatal("invalid JSON must be rejected")
 	}
-	// Empty/whitespace input must be rejected
 	if _, _, err := normalizeAutomationAction("assign_human", []byte(``)); err == nil {
 		t.Fatal("empty payload must be rejected")
 	}
