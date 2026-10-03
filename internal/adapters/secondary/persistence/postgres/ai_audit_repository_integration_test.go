@@ -19,6 +19,20 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/database"
 )
 
+type legacyAutoReplyDecisionStub struct{}
+
+func (legacyAutoReplyDecisionStub) Decide(context.Context, ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
+	return ports.CustomerSalesDecisionOutput{
+		Proposal: ports.CustomerSalesProposal{
+			Status:       ports.CustomerSalesProposalStatusResolved,
+			Action:       ports.CustomerSalesProposalActionAnswer,
+			ResponseText: "ok",
+		},
+	}, nil
+}
+
+var _ ports.CustomerSalesDecisionPort = legacyAutoReplyDecisionStub{}
+
 func TestAIAuditRepositoriesAgainstPostgres(t *testing.T) {
 	dsn := os.Getenv("POSTGRES_TEST_DSN")
 	if dsn == "" {
@@ -289,7 +303,7 @@ func TestAutoReplyVerticalSliceAgainstPostgres(t *testing.T) {
 	referenceRepo := NewConversationReferenceRepository(adapter)
 	outboundRepo := NewOutboundMessageRepository(adapter)
 	outboxRepo := NewPostgresOutboxStore(adapter)
-	service := services.NewAutoReplyService(services.FakeContractRuntimeForLegacyTests{}, decisionRepo, referenceRepo, outboundRepo, outboxRepo, adapter)
+	service := services.NewAutoReplyService(legacyAutoReplyDecisionStub{}, decisionRepo, referenceRepo, outboundRepo, outboxRepo, adapter)
 	result, err := service.Handle(ctx, commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessID)}}, ConversationID: commands.ConversationID(conversationID), SourceMessageReference: "inbound-success", Text: "مرحبا", Channel: "facebook", ProviderRef: "socialapi"})
 	if err != nil {
 		t.Fatalf("auto reply success: %v", err)
