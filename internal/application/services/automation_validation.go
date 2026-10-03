@@ -183,7 +183,9 @@ func ruleMatchesInbound(raw []byte, channel, text string) bool {
 		keywords = appendUniqueAutomationKeyword(keywords, legacy)
 	}
 	if len(keywords) == 0 {
-		return false
+		// A channel-only rule is valid and applies to every inbound
+		// message on that channel.
+		return conditions.Channel != ""
 	}
 
 	for _, keyword := range keywords {
