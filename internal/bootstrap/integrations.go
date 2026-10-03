@@ -57,7 +57,9 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 		adapters.SocialAPI = client
 		adapters.SocialWebhook = client
 		adapters.SocialAPIHealthProbe = socialapi.NewHealthCheckProbe(client)
-		adapters.ChannelProvisioningSocial = socialapi.NewProvisioningAdapter(client)
+		provisioning := socialapi.NewProvisioningAdapter(client)
+		adapters.ChannelProvisioningSocial = provisioning
+		adapters.ChannelProvisioningBrand = provisioning
 	}
 	if cfg.ChannelProvisioningEnabled {
 		adapters.ChannelProvisioningError = cfg.ValidateChannelProvisioning()
