@@ -79,4 +79,52 @@ func (a *ProvisioningAdapter) ResolveAuthorization(ctx context.Context, callback
 	return ports.SocialAuthorization{ProviderAccountRef: selection.AccountID, ProviderConnectionRef: selection.AccountID, State: callback.State}, nil
 }
 
+
+func (a *ProvisioningAdapter) ListBrands(ctx context.Context) ([]ports.ProviderBrandRecord, error) {
+	if a == nil || a.Client == nil {
+		return nil, ErrNotConfigured
+	}
+	brands, err := a.Client.ListBrands(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]ports.ProviderBrandRecord, 0, len(brands))
+	for _, brand := range brands {
+		if strings.TrimSpace(brand.ID) == "" {
+			continue
+		}
+		result = append(result, ports.ProviderBrandRecord{
+			ProviderRef:     "socialapi",
+			ProviderBrandRef: brand.ID,
+			DisplayName:     brand.Name,
+		})
+	}
+	return result, nil
+}
+
+func (a *ProvisioningAdapter) CreateBrand(ctx context.Context, name string) (ports.ProviderBrandRecord, error) {
+	if a == nil || a.Client == nil {
+		return ports.ProviderBrandRecord{}, ErrNotConfigured
+	}
+	brand, err := a.Client.CreateBrand(ctx, name)
+	if err != nil {
+		return ports.ProviderBrandRecord{}, err
+	}
+	if strings.TrimSpace(brand.ID) == "" {
+		return ports.ProviderBrandRecord{}, fmt.Errorf("%w: create brand response has no id", ErrInvalidResponse)
+	}
+	return ports.ProviderBrandRecord{
+		ProviderRef:      "socialapi",
+		ProviderBrandRef: brand.ID,
+		DisplayName:      brand.Name,
+	}, nil
+}
+
+func (a *ProvisioningAdapter) DeleteBrand(ctx context.Context, brandID string) error {
+	if a == nil || a.Client == nil {
+		return ErrNotConfigured
+	}
+	return a.Client.DeleteBrand(ctx, brandID)
+}
+
 var _ ports.SocialChannelProvisioner = (*ProvisioningAdapter)(nil)
