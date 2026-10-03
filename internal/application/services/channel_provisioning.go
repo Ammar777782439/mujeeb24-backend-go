@@ -102,12 +102,19 @@ func (s ChannelProvisioningService) ensureProviderBrand(ctx context.Context, bus
 	if err != nil {
 		return ports.ProviderBrandRecord{}, err
 	}
+	var matches []ports.ProviderBrandRecord
 	for _, remote := range remoteBrands {
 		if strings.TrimSpace(remote.DisplayName) != brandName || strings.TrimSpace(remote.ProviderBrandRef) == "" {
 			continue
 		}
 		remote.DisplayName = strings.TrimSpace(remote.DisplayName)
-		return s.persistProviderBrand(ctx, businessID, providerRef, businessName, remote, false)
+		matches = append(matches, remote)
+	}
+	if len(matches) > 1 {
+		return ports.ProviderBrandRecord{}, fmt.Errorf("multiple provider brands match deterministic business identity %q", brandName)
+	}
+	if len(matches) == 1 {
+		return s.persistProviderBrand(ctx, businessID, providerRef, businessName, matches[0], false)
 	}
 
 	created, err := s.SocialBrands.CreateBrand(ctx, brandName)
