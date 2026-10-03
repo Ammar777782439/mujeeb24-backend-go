@@ -119,7 +119,7 @@ func TestAutoReplyContextBuilderGroundsCatalogAgainstPostgres(t *testing.T) {
 	if len(contextValue.RecentMessages) != 1 || contextValue.RecentMessages[0].Text != "أريد هاتفًا" {
 		t.Fatalf("history mismatch: %#v", contextValue.RecentMessages)
 	}
-	if contextValue.KnowledgeState != services.AIContextGrounded || contextValue.Freshness != services.AIContextFresh || len(contextValue.KnowledgeEvidence) != 1 || contextValue.KnowledgeEvidence[0].Reference != knowledgeID || len(contextValue.BusinessPolicyEvidence) != 1 || contextValue.BusinessPolicyEvidence[0].Reference != policyID || contextValue.PolicyEvidence.State != "published" {
+	if contextValue.KnowledgeState != services.CustomerSalesContextGrounded || contextValue.Freshness != services.CustomerSalesContextFresh || len(contextValue.KnowledgeEvidence) != 1 || contextValue.KnowledgeEvidence[0].Reference != knowledgeID || len(contextValue.BusinessPolicyEvidence) != 1 || contextValue.BusinessPolicyEvidence[0].Reference != policyID || contextValue.PolicyEvidence.State != "published" {
 		t.Fatalf("unexpected knowledge state: %#v", contextValue)
 	}
 	otherContext, err := builder.Build(ctx, ports.CustomerSalesContextInput{BusinessID: otherBusinessID, ConversationID: conversationID, Text: "iPhone"})
