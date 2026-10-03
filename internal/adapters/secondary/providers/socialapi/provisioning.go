@@ -79,7 +79,6 @@ func (a *ProvisioningAdapter) ResolveAuthorization(ctx context.Context, callback
 	return ports.SocialAuthorization{ProviderAccountRef: selection.AccountID, ProviderConnectionRef: selection.AccountID, State: callback.State}, nil
 }
 
-
 func (a *ProvisioningAdapter) ListBrands(ctx context.Context) ([]ports.ProviderBrandRecord, error) {
 	if a == nil || a.Client == nil {
 		return nil, ErrNotConfigured
@@ -94,7 +93,7 @@ func (a *ProvisioningAdapter) ListBrands(ctx context.Context) ([]ports.ProviderB
 			continue
 		}
 		result = append(result, ports.ProviderBrandRecord{
-			ProviderRef:     "socialapi",
+			ProviderRef:      "socialapi",
 			ProviderBrandRef: brand.ID,
 			DisplayName:     brand.Name,
 		})
