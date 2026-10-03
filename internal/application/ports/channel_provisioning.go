@@ -50,13 +50,13 @@ type ChannelProvisioningStore interface {
 var ErrProviderBrandConflict = errors.New("provider brand mapping conflict")
 
 type ProviderBrandRecord struct {
-	ID              string
-	BusinessID      string
-	ProviderRef     string
+	ID               string
+	BusinessID       string
+	ProviderRef      string
 	ProviderBrandRef string
-	DisplayName     string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	DisplayName      string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 type ProviderBrandStore interface {
