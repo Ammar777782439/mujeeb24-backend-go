@@ -91,6 +91,8 @@ components:
           type: string
         lifecycle:
           type: string
+        delivery_status:
+          type: string
         missing_information:
           items:
             type: string
@@ -113,6 +115,7 @@ components:
         - missing_information
         - policy_version
         - lifecycle
+        - delivery_status
         - created_at
       type: object
     AIHumanRequest:
