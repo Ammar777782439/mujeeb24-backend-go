@@ -1,0 +1,43 @@
+name: Sync generated OpenAPI contract
+
+on:
+  push:
+    branches:
+      - refactor/merchant-catalog-ai-v2-structure
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: \${{ !contains(github.event.head_commit.message, 'chore(openapi): regenerate generated contract') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: refactor/merchant-catalog-ai-v2-structure
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+          cache: true
+
+      - name: Regenerate OpenAPI
+        run: go run ./cmd/openapi-gen
+
+      - name: Commit generated contract
+        run: |
+          if git diff --quiet -- api/openapi/mujeeb24-dashboard-v1.generated.yaml; then
+            echo "OpenAPI contract is already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add api/openapi/mujeeb24-dashboard-v1.generated.yaml
+          git commit -m "chore(openapi): regenerate generated contract"
+          git push origin HEAD:refactor/merchant-catalog-ai-v2-structure
