@@ -74,7 +74,9 @@ func (s ReconnectChannelCommandService) Handle(ctx context.Context, command comm
 	}
 	if record.Status == "reconnect_required" {
 		view := channelConnectionView(record)
-		return commands.ChannelConnectionResult{Connection: view, ResourceVersion: view.ResourceVersion}, nil
+		result := commands.ChannelConnectionResult{Connection: view}
+		result.ResourceVersion = view.ResourceVersion
+		return result, nil
 	}
 
 	// Provider side is authoritative for the external connection. When an
