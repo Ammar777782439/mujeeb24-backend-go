@@ -43,6 +43,7 @@ type ChannelProvisioningStore interface {
 	GetByID(ctx context.Context, businessID, id string) (ChannelProvisioningSession, error)
 	GetByOAuthState(ctx context.Context, state string) (ChannelProvisioningSession, error)
 	MarkProvisioning(ctx context.Context, businessID, id string, patch ChannelProvisioningPatch) (ChannelProvisioningSession, error)
+	SupersedeConnectedByChannelConnection(ctx context.Context, businessID, channelConnectionID string) error
 }
 
 type ChannelProvisioningPatch struct {
