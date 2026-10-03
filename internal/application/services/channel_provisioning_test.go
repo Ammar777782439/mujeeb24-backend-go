@@ -321,7 +321,6 @@ func TestChannelProvisioningCreatesOneStableProviderBrandPerBusiness(t *testing.
 	}
 }
 
-
 func TestChannelProvisioningRejectsAmbiguousProviderBrandIdentity(t *testing.T) {
 	store := &provisioningSessionStore{}
 	social := &provisioningSocial{}
