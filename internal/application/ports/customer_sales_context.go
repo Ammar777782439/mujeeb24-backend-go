@@ -75,12 +75,6 @@ type CustomerSalesContext struct {
 	// RecentMessages so it can understand long conversation context
 	// without us sending the full history verbatim.
 	ConversationSummary string
-	// CatalogNames per ADR-048 — list of catalog (category) names only.
-	// Sent to Gemini in the B2C flow so it can respond to "what do you have?"
-	// with a hierarchical listing: "We have: Perfumes, Electronics, Packages"
-	// without loading all item details. Names only — no IDs, no counts,
-	// no merchant data. Gemini decides when to list categories vs. products.
-	CatalogNames []string
 }
 
 type CustomerSalesStateProposal struct {
