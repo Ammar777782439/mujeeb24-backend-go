@@ -97,6 +97,11 @@ type BatchGeminiClient interface {
 	FinalEvaluateWithDetails(ctx context.Context, input FinalEvaluationInput, userPrompt string) (ports.CustomerSalesProposal, ports.CustomerSalesUsageTelemetry, error)
 }
 
+type ExactBatchTokenCounter interface {
+	CountBatchTokens(ctx context.Context, input BatchEvaluationInput) (int, error)
+}
+
+
 // BatchEvaluationInput is one batch's input to Gemini.
 type BatchEvaluationInput struct {
 	AIRunID             string
@@ -166,7 +171,7 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 	}
 
 	// Step 2: Token-count and split. Per contract ② §2, token-based not item-count.
-	batches, err := c.splitIntoBatches(ctx, projection, input.EntityContract)
+	batches, err := c.splitIntoBatches(ctx, projection, input)
 	if err != nil {
 		return CatalogEvaluationResult{}, fmt.Errorf("split batches: %w", err)
 	}
@@ -530,55 +535,89 @@ func formatTimePtr(t *time.Time) *string {
 // Per contract ② §2, we do NOT say "100 products = batch" or "50 = batch".
 // We serialize the projection, count tokens, and split when the running
 // total exceeds TokenBudget.
-func (c *CatalogBatchController) splitIntoBatches(ctx context.Context, projection CatalogAIProjection, entityContract CatalogEntityContractPayload) ([]CatalogAIBatchPayload, error) {
+func (c *CatalogBatchController) splitIntoBatches(ctx context.Context, projection CatalogAIProjection, input CatalogEvaluationInput) ([]CatalogAIBatchPayload, error) {
 	if len(projection.Items) == 0 {
 		return nil, nil
 	}
 	budget := c.TokenBudget
 	if budget <= 0 {
-		budget = 8000 // sensible default per runtime config
+		budget = 8000
 	}
 
-	batches := make([]CatalogAIBatchPayload, 0)
-	currentBatch := CatalogAIBatchPayload{BatchNumber: 1}
-	currentSchemas := make(map[string]CatalogAIAttributeSchema)
-	currentTokenCount := 0
+	exactCounter, hasExactCounter := c.Gemini.(ExactBatchTokenCounter)
+	if !hasExactCounter && c.TokenCounter == nil {
+		return nil, errors.New("batch token counter is not configured")
+	}
 
-	// Per contract ② §4, each batch carries the schemas its items use.
-	for _, item := range projection.Items {
-		// Serialize the item (and its variants+offers) and count tokens.
-		itemTokens, err := c.TokenCounter.CountTokens(ctx, item)
-		if err != nil {
-			return nil, fmt.Errorf("count tokens for item %s: %w", item.ID, err)
-		}
-		if currentTokenCount+itemTokens > budget && len(currentBatch.Items) > 0 {
-			// Flush current batch with its schemas.
-			currentBatch.AttributeSchemas = collectSchemas(currentSchemas)
-			currentBatch.Catalogs = collectCatalogsForItems(currentBatch.Items, projection.Catalogs)
-			batches = append(batches, currentBatch)
-			// Start a new batch.
-			currentBatch = CatalogAIBatchPayload{BatchNumber: currentBatch.BatchNumber + 1}
-			currentSchemas = make(map[string]CatalogAIAttributeSchema)
-			currentTokenCount = 0
-		}
-		// Add item to current batch.
-		currentBatch.Items = append(currentBatch.Items, item)
-		currentTokenCount += itemTokens
-		// Collect schemas this item uses per contract ② §4.
-		if item.AttributeSchemaID != nil {
-			for _, sch := range projection.AttributeSchemas {
-				if sch.ID == *item.AttributeSchemaID {
-					currentSchemas[sch.ID] = sch
+	buildBatch := func(items []CatalogAIItem, batchNumber int) CatalogAIBatchPayload {
+		schemaByID := make(map[string]CatalogAIAttributeSchema)
+		for _, item := range items {
+			if item.AttributeSchemaID == nil {
+				continue
+			}
+			for _, schema := range projection.AttributeSchemas {
+				if schema.ID == *item.AttributeSchemaID {
+					schemaByID[schema.ID] = schema
 					break
 				}
 			}
 		}
+		return CatalogAIBatchPayload{
+			BatchNumber:      batchNumber,
+			Catalogs:         collectCatalogsForItems(items, projection.Catalogs),
+			AttributeSchemas: collectSchemas(schemaByID),
+			Items:            append([]CatalogAIItem(nil), items...),
+		}
 	}
-	// Flush the final batch.
-	if len(currentBatch.Items) > 0 {
-		currentBatch.AttributeSchemas = collectSchemas(currentSchemas)
-		currentBatch.Catalogs = collectCatalogsForItems(currentBatch.Items, projection.Catalogs)
-		batches = append(batches, currentBatch)
+
+	nextBatchNumber := 1
+	batches := make([]CatalogAIBatchPayload, 0)
+	countBatch := func(batch CatalogAIBatchPayload) (int, error) {
+		if hasExactCounter {
+			return exactCounter.CountBatchTokens(ctx, BatchEvaluationInput{
+				AIRunID:             input.AIRunID,
+				AttemptID:           input.AttemptID,
+				BatchNumber:         batch.BatchNumber,
+				BusinessID:          input.BusinessID,
+				ConversationID:      input.ConversationID,
+				CustomerMessage:     input.CustomerMessage,
+				ConversationContext: input.ConversationContext,
+				EntityContract:      input.EntityContract,
+				Batch:               batch,
+			})
+		}
+		// Compatibility fallback for unit tests. Production BatchClient
+		// implements ExactBatchTokenCounter.
+		return c.TokenCounter.CountTokens(ctx, batch)
+	}
+
+	var split func([]CatalogAIItem) error
+	split = func(items []CatalogAIItem) error {
+		if len(items) == 0 {
+			return nil
+		}
+		batch := buildBatch(items, nextBatchNumber)
+		tokens, err := countBatch(batch)
+		if err != nil {
+			return fmt.Errorf("count tokens for batch %d: %w", nextBatchNumber, err)
+		}
+		if tokens <= budget {
+			batches = append(batches, batch)
+			nextBatchNumber++
+			return nil
+		}
+		if len(items) == 1 {
+			return fmt.Errorf("catalog item %s exceeds token budget %d with exact request size %d", items[0].ID, budget, tokens)
+		}
+		mid := len(items) / 2
+		if err := split(items[:mid]); err != nil {
+			return err
+		}
+		return split(items[mid:])
+	}
+
+	if err := split(projection.Items); err != nil {
+		return nil, err
 	}
 	return batches, nil
 }
