@@ -177,7 +177,6 @@ func (b AutoReplyContextBuilder) retrieveScopedCatalog(ctx context.Context, busi
 	}
 	var catalogEvidence []ports.CustomerSalesCatalogEvidence
 	// For an explicit catalog focus, include a bounded prefix in storage order.
-	// This is direct scoped reading, not query matching.
 	count := 0
 	for _, item := range items.Items {
 		if item.BusinessID != businessID || item.CatalogID != catalog.ID {
@@ -426,9 +425,8 @@ func (e *scopedNotFoundError) Error() string     { return "scoped retrieval not 
 func (e *scopedNotFoundError) ErrorKind() string { return "not_found" }
 
 func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports.CustomerSalesContext, input ports.CustomerSalesContextInput, now time.Time) (ports.CustomerSalesContext, error) {
-	// No item discovery, ranking, matching or catalog search occurs here.
 	// The manifest describes catalog shape only. Item-level evaluation is
-	// delegated to the full catalog paging/batching path when required.
+	// delegated to the complete catalog paging/batching path when required.
 	if b.CatalogAI != nil && base.CatalogManifest == nil {
 		manifest, manifestErr := b.CatalogAI.GetManifest(ctx, input.BusinessID)
 		if manifestErr != nil {
