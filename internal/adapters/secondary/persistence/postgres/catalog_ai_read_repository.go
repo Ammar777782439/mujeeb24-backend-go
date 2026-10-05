@@ -96,8 +96,6 @@ func (r *CatalogAIReadRepository) GetManifest(ctx context.Context, businessID st
 	if err != nil {
 		return ports.CatalogAIManifest{}, catalogRepositoryError("catalog_ai.manifest", err)
 	}
-	defer rows.Close()
-
 	for rows.Next() {
 		var catalog ports.CatalogAIManifestCatalog
 		var totalTypes int
@@ -115,8 +113,10 @@ func (r *CatalogAIReadRepository) GetManifest(ctx context.Context, businessID st
 		manifest.Catalogs = append(manifest.Catalogs, catalog)
 	}
 	if err := rows.Err(); err != nil {
+		rows.Close()
 		return ports.CatalogAIManifest{}, catalogRepositoryError("catalog_ai.manifest", err)
 	}
+	rows.Close()
 	manifest.CatalogsTruncated = manifest.TotalCatalogs > len(manifest.Catalogs)
 
 	sRows, err := executor.Query(ctx, `
