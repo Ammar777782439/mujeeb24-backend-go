@@ -120,3 +120,23 @@ func catalogItemEvidence(item ports.CatalogItemRecord, now time.Time) ports.Cust
 		FulfillmentMode: item.FulfillmentMode, RequiresConfirmation: item.RequiresConfirmation,
 	}
 }
+
+
+func appendCatalogRecordsToProjection(projection *CatalogAIProjection, catalogs []ports.CatalogRecord) {
+	if projection == nil || len(catalogs) == 0 {
+		return
+	}
+	seen := make(map[string]struct{}, len(projection.Catalogs))
+	for _, catalog := range projection.Catalogs {
+		seen[catalog.ID] = struct{}{}
+	}
+	for _, catalog := range catalogs {
+		if _, ok := seen[catalog.ID]; ok {
+			continue
+		}
+		projection.Catalogs = append(projection.Catalogs, CatalogAICatalog{
+			ID: catalog.ID, Name: catalog.Name, Description: catalog.Description,
+		})
+		seen[catalog.ID] = struct{}{}
+	}
+}
