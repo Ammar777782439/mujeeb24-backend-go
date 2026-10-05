@@ -394,6 +394,28 @@ func (b AutoReplyContextBuilder) findOfferByIDWithinBusiness(ctx context.Context
 	return ports.CatalogRecord{}, ports.CatalogItemRecord{}, ports.OfferRecord{}, &scopedNotFoundError{msg: "offer not found within business"}
 }
 
+func customerSalesSchemaEvidence(schema ports.AttributeSchemaRecord) ports.CustomerSalesCatalogSchemaEvidence {
+	out := ports.CustomerSalesCatalogSchemaEvidence{
+		ID: schema.ID,
+		Name: schema.Name,
+		Version: schema.Version,
+		Definitions: make([]ports.CustomerSalesAttributeDefinitionEvidence, 0, len(schema.Definitions)),
+	}
+	for _, def := range schema.Definitions {
+		out.Definitions = append(out.Definitions, ports.CustomerSalesAttributeDefinitionEvidence{
+			ID:              def.ID,
+			SchemaID:        schema.ID,
+			AttributeKey:    def.Key,
+			Label:           def.Label,
+			DataType:        def.DataType,
+			IsRequired:      def.Required,
+			ValidationRules: parseJSONAttributes(def.ValidationRules),
+			DisplayOrder:    def.DisplayOrder,
+		})
+	}
+	return out
+}
+
 func offerEvidenceState(availabilityStatus string) string {
 	if strings.EqualFold(strings.TrimSpace(availabilityStatus), "unknown") || strings.EqualFold(strings.TrimSpace(availabilityStatus), "stale") {
 		return CustomerSalesContextStale
@@ -419,6 +441,25 @@ func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports
 			for _, catalog := range manifest.Catalogs {
 				base.CatalogNames = append(base.CatalogNames, catalog.Name)
 			}
+		}
+	}
+
+	if len(base.CatalogEvidence) > 0 && len(base.CatalogSchemaEvidence) == 0 {
+		seenSchemas := make(map[string]struct{})
+		for _, item := range base.CatalogEvidence {
+			if item.AttributeSchemaReference == nil || strings.TrimSpace(*item.AttributeSchemaReference) == "" {
+				continue
+			}
+			schemaID := strings.TrimSpace(*item.AttributeSchemaReference)
+			if _, ok := seenSchemas[schemaID]; ok {
+				continue
+			}
+			schema, schemaErr := b.Catalogs.GetAttributeSchema(ctx, input.BusinessID, schemaID)
+			if schemaErr != nil {
+				return ports.CustomerSalesContext{}, schemaErr
+			}
+			base.CatalogSchemaEvidence = append(base.CatalogSchemaEvidence, customerSalesSchemaEvidence(schema))
+			seenSchemas[schemaID] = struct{}{}
 		}
 	}
 
