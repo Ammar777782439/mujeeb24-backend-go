@@ -189,9 +189,45 @@ func (r *CatalogAIReadRepository) ListProjectionPage(ctx context.Context, reques
 		page.NextCursor = items[len(items)-1].ID
 	}
 	ids := make([]string, 0, len(items))
+	catalogIDs := make([]string, 0)
+	seenCatalogs := map[string]bool{}
 	for _, item := range items {
 		ids = append(ids, item.ID)
+		if !seenCatalogs[item.CatalogID] {
+			seenCatalogs[item.CatalogID] = true
+			catalogIDs = append(catalogIDs, item.CatalogID)
+		}
 	}
+
+	if len(catalogIDs) > 0 {
+		catRows, catErr := executor.Query(ctx, `
+			SELECT id::text, business_id::text, name, description, status, resource_version, created_at, updated_at
+			FROM catalogs
+			WHERE business_id = $1::uuid
+			  AND status = 'active'
+			  AND id = ANY($2::uuid[])
+			ORDER BY id`, request.BusinessID, catalogIDs)
+		if catErr != nil {
+			return ports.CatalogAIProjectionPage{}, catalogRepositoryError("catalog_ai.page.catalogs", catErr)
+		}
+		for catRows.Next() {
+			var catalog ports.CatalogRecord
+			if scanErr := catRows.Scan(
+				&catalog.ID, &catalog.BusinessID, &catalog.Name, &catalog.Description,
+				&catalog.Status, &catalog.ResourceVersion, &catalog.CreatedAt, &catalog.UpdatedAt,
+			); scanErr != nil {
+				catRows.Close()
+				return ports.CatalogAIProjectionPage{}, catalogRepositoryError("catalog_ai.page.catalogs", scanErr)
+			}
+			page.Catalogs = append(page.Catalogs, catalog)
+		}
+		if rowsErr := catRows.Err(); rowsErr != nil {
+			catRows.Close()
+			return ports.CatalogAIProjectionPage{}, catalogRepositoryError("catalog_ai.page.catalogs", rowsErr)
+		}
+		catRows.Close()
+	}
+
 	bundles, err := r.hydrate(ctx, executor, request.BusinessID, items, ids)
 	if err != nil {
 		return ports.CatalogAIProjectionPage{}, err
