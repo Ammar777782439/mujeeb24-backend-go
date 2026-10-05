@@ -171,32 +171,42 @@ func (p *ValidationPipeline) validateStructural(proposal ports.CustomerSalesProp
 // if it wasn't in the evidence sent.
 func (p *ValidationPipeline) validateReferences(ctx context.Context, input ValidationInput) *StageFailure {
 	if p.ReferenceValidator == nil {
-		return nil
-	}
-	for i, ref := range input.Proposal.Selected {
-		if err := p.ReferenceValidator.ValidateItemReference(ctx, input.BusinessID, ref.ItemID, input.EvidenceItemIDs); err != nil {
-			return &StageFailure{
-				Stage:    ports.AIRunFailureStageValidation,
-				Category: ports.AIRunFailureCategoryInvalidReference,
-				Reason:   fmt.Sprintf("selected[%d].item_id %s: %s per contract ⑥ §6", i, ref.ItemID, err.Error()),
-			}
+		return &StageFailure{
+			Stage:    ports.AIRunFailureStageValidation,
+			Category: ports.AIRunFailureCategoryInvalidReference,
+			Reason:   "reference validator is required; validation fails closed",
 		}
-		if ref.VariantID != nil && *ref.VariantID != "" {
-			if err := p.ReferenceValidator.ValidateVariantReference(ctx, input.BusinessID, *ref.VariantID, input.EvidenceVariantIDs); err != nil {
+	}
+
+	// Universal Catalog AI v3 validates the complete item -> variant -> offer
+	// relationship against the exact evidence exposed to the model.
+	if relational, ok := p.ReferenceValidator.(RelationalReferenceValidator); ok {
+		for i, ref := range input.Proposal.Selected {
+			if err := relational.ValidateSelection(ctx, input.BusinessID, ref, input.Evidence); err != nil {
 				return &StageFailure{
 					Stage:    ports.AIRunFailureStageValidation,
 					Category: ports.AIRunFailureCategoryInvalidReference,
-					Reason:   fmt.Sprintf("selected[%d].variant_id %s: %s", i, *ref.VariantID, err.Error()),
+					Reason:   fmt.Sprintf("selected[%d]: %s", i, err.Error()),
 				}
+			}
+		}
+		return nil
+	}
+
+	// Compatibility path for older validators/tests. Production Postgres
+	// implements RelationalReferenceValidator and never reaches this path.
+	for i, ref := range input.Proposal.Selected {
+		if err := p.ReferenceValidator.ValidateItemReference(ctx, input.BusinessID, ref.ItemID, input.EvidenceItemIDs); err != nil {
+			return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidReference, Reason: fmt.Sprintf("selected[%d].item_id %s: %s", i, ref.ItemID, err.Error())}
+		}
+		if ref.VariantID != nil && *ref.VariantID != "" {
+			if err := p.ReferenceValidator.ValidateVariantReference(ctx, input.BusinessID, *ref.VariantID, input.EvidenceVariantIDs); err != nil {
+				return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidReference, Reason: fmt.Sprintf("selected[%d].variant_id %s: %s", i, *ref.VariantID, err.Error())}
 			}
 		}
 		if ref.OfferID != nil && *ref.OfferID != "" {
 			if err := p.ReferenceValidator.ValidateOfferReference(ctx, input.BusinessID, *ref.OfferID, input.EvidenceOfferIDs); err != nil {
-				return &StageFailure{
-					Stage:    ports.AIRunFailureStageValidation,
-					Category: ports.AIRunFailureCategoryInvalidReference,
-					Reason:   fmt.Sprintf("selected[%d].offer_id %s: %s", i, *ref.OfferID, err.Error()),
-				}
+				return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidReference, Reason: fmt.Sprintf("selected[%d].offer_id %s: %s", i, *ref.OfferID, err.Error())}
 			}
 		}
 	}
@@ -314,6 +324,9 @@ type ValidationInput struct {
 	// Context is the CustomerSalesContext built by the ContextBuilder.
 	Context *ports.CustomerSalesContext
 
+	// Evidence is the exact relational catalog evidence exposed to Gemini.
+	Evidence ports.CatalogAIEvidenceSet
+
 	// EvidenceItemIDs is the set of item IDs that were actually sent to
 	// Gemini as evidence. Used by ReferenceValidator per contract ⑥ §10.
 	EvidenceItemIDs []string
@@ -331,6 +344,10 @@ type ReferenceValidator interface {
 	ValidateItemReference(ctx context.Context, businessID, itemID string, evidenceItemIDs []string) error
 	ValidateVariantReference(ctx context.Context, businessID, variantID string, evidenceVariantIDs []string) error
 	ValidateOfferReference(ctx context.Context, businessID, offerID string, evidenceOfferIDs []string) error
+}
+
+type RelationalReferenceValidator interface {
+	ValidateSelection(ctx context.Context, businessID string, selected ports.SelectedReference, evidence ports.CatalogAIEvidenceSet) error
 }
 
 // TenantValidator is the contract ⑥ §8 ownership check.
