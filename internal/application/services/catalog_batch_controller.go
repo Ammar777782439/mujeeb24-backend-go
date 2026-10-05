@@ -133,6 +133,7 @@ type CatalogEvaluationResult struct {
 // are NOT repeated globally across batches.
 type CatalogAIBatchPayload struct {
 	BatchNumber      int                        `json:"batch_number"`
+	Catalogs         []CatalogAICatalog         `json:"catalogs,omitempty"`
 	AttributeSchemas []CatalogAIAttributeSchema `json:"attribute_schemas,omitempty"`
 	Items            []CatalogAIItem            `json:"items,omitempty"`
 }
@@ -286,6 +287,7 @@ func (c *CatalogBatchController) buildProjection(ctx context.Context, businessID
 				return CatalogAIProjection{}, fmt.Errorf("list bulk catalog projection page: %w", err)
 			}
 			part := ProjectionFromBundles(page.Items)
+			appendCatalogRecordsToProjection(&projection, page.Catalogs)
 			projection.Items = append(projection.Items, part.Items...)
 			for _, schema := range part.AttributeSchemas {
 				schemaByID[schema.ID] = schema
@@ -315,6 +317,7 @@ func (c *CatalogBatchController) buildProjection(ctx context.Context, businessID
 	// is the catalog_id; if empty, we list all catalogs for the business and
 	// iterate items across all of them.
 	catalogIDs := make([]string, 0)
+	projectionCatalogs := make([]CatalogAICatalog, 0)
 	if strings.TrimSpace(catalogScope) != "" {
 		catalogIDs = append(catalogIDs, catalogScope)
 	} else {
@@ -325,10 +328,12 @@ func (c *CatalogBatchController) buildProjection(ctx context.Context, businessID
 		}
 		for _, cat := range catPage.Items {
 			catalogIDs = append(catalogIDs, cat.ID)
+			projectionCatalogs = append(projectionCatalogs, CatalogAICatalog{ID: cat.ID, Name: cat.Name, Description: cat.Description})
 		}
 	}
 
 	projection := CatalogAIProjection{
+		Catalogs:         projectionCatalogs,
 		Items:            make([]CatalogAIItem, 0),
 		AttributeSchemas: make([]CatalogAIAttributeSchema, 0),
 	}
@@ -549,6 +554,7 @@ func (c *CatalogBatchController) splitIntoBatches(ctx context.Context, projectio
 		if currentTokenCount+itemTokens > budget && len(currentBatch.Items) > 0 {
 			// Flush current batch with its schemas.
 			currentBatch.AttributeSchemas = collectSchemas(currentSchemas)
+			currentBatch.Catalogs = collectCatalogsForItems(currentBatch.Items, projection.Catalogs)
 			batches = append(batches, currentBatch)
 			// Start a new batch.
 			currentBatch = CatalogAIBatchPayload{BatchNumber: currentBatch.BatchNumber + 1}
@@ -571,9 +577,27 @@ func (c *CatalogBatchController) splitIntoBatches(ctx context.Context, projectio
 	// Flush the final batch.
 	if len(currentBatch.Items) > 0 {
 		currentBatch.AttributeSchemas = collectSchemas(currentSchemas)
+		currentBatch.Catalogs = collectCatalogsForItems(currentBatch.Items, projection.Catalogs)
 		batches = append(batches, currentBatch)
 	}
 	return batches, nil
+}
+
+func collectCatalogsForItems(items []CatalogAIItem, catalogs []CatalogAICatalog) []CatalogAICatalog {
+	if len(items) == 0 || len(catalogs) == 0 {
+		return nil
+	}
+	needed := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		needed[item.CatalogID] = struct{}{}
+	}
+	out := make([]CatalogAICatalog, 0, len(needed))
+	for _, catalog := range catalogs {
+		if _, ok := needed[catalog.ID]; ok {
+			out = append(out, catalog)
+		}
+	}
+	return out
 }
 
 // collectSchemas converts a schema map to a slice.
