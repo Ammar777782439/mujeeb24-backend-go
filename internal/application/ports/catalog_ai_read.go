@@ -8,18 +8,15 @@ import "context"
 type CatalogAIManifest struct {
 	TotalActiveItems  int                         `json:"total_active_items"`
 	TotalCatalogs     int                         `json:"total_catalogs"`
-	TotalSchemas      int                         `json:"total_schemas"`
 	CatalogsTruncated bool                        `json:"catalogs_truncated,omitempty"`
-	SchemasTruncated  bool                        `json:"schemas_truncated,omitempty"`
 	Catalogs          []CatalogAIManifestCatalog `json:"catalogs"`
-	Schemas           []CatalogAIManifestSchema  `json:"schemas,omitempty"`
 }
 
 type CatalogAIManifestCatalog struct {
-	ID          string   `json:"-"`
-	Name        string   `json:"name"`
-	Description *string  `json:"-"`
-	ItemCount   int      `json:"item_count"`
+	ID                 string   `json:"-"`
+	Name               string   `json:"name"`
+	Description        *string  `json:"-"`
+	ItemCount          int      `json:"item_count"`
 	ItemTypes          []string `json:"item_types,omitempty"`
 	ItemTypesTruncated bool     `json:"item_types_truncated,omitempty"`
 }
