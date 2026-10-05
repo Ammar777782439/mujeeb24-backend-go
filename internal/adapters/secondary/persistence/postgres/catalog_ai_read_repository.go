@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
@@ -100,28 +99,23 @@ func (r *CatalogAIReadRepository) GetManifest(ctx context.Context, businessID st
 	}
 
 	dRows, err := executor.Query(ctx, `
-		SELECT d.schema_id::text, d.attribute_key, d.label, d.data_type,
-		       d.is_required, d.validation_rules, d.display_order
+		SELECT d.schema_id::text, d.attribute_key
 		FROM attribute_definitions d
 		JOIN attribute_schemas s ON s.id = d.schema_id
-		WHERE s.business_id = $1::uuid AND d.schema_id = ANY($2::uuid[])
+		WHERE s.business_id = $1::uuid
+		  AND d.schema_id::text = ANY($2::text[])
 		ORDER BY d.schema_id, d.display_order, d.id`, businessID, schemaIDs)
 	if err != nil {
 		return ports.CatalogAIManifest{}, catalogRepositoryError("catalog_ai.manifest.definitions", err)
 	}
 	for dRows.Next() {
-		var schemaID string
-		var d ports.CatalogAIManifestAttributeDefinition
-		var rules []byte
-		if err := dRows.Scan(&schemaID, &d.Key, &d.Label, &d.DataType, &d.Required, &rules, &d.DisplayOrder); err != nil {
+		var schemaID, key string
+		if err := dRows.Scan(&schemaID, &key); err != nil {
 			dRows.Close()
 			return ports.CatalogAIManifest{}, catalogRepositoryError("catalog_ai.manifest.definitions", err)
 		}
-		if len(rules) > 0 {
-			_ = json.Unmarshal(rules, &d.ValidationRules)
-		}
 		if idx, ok := schemaIndex[schemaID]; ok {
-			manifest.Schemas[idx].Definitions = append(manifest.Schemas[idx].Definitions, d)
+			manifest.Schemas[idx].AttributeKeys = append(manifest.Schemas[idx].AttributeKeys, key)
 		}
 	}
 	if err := dRows.Err(); err != nil {
@@ -205,7 +199,7 @@ func (r *CatalogAIReadRepository) ListProjectionPage(ctx context.Context, reques
 			FROM catalogs
 			WHERE business_id = $1::uuid
 			  AND status = 'active'
-			  AND id = ANY($2::uuid[])
+			  AND id::text = ANY($2::text[])
 			ORDER BY id`, request.BusinessID, catalogIDs)
 		if catErr != nil {
 			return ports.CatalogAIProjectionPage{}, catalogRepositoryError("catalog_ai.page.catalogs", catErr)
@@ -253,7 +247,7 @@ func (r *CatalogAIReadRepository) hydrate(ctx context.Context, executor SQLExecu
 	vRows, err := executor.Query(ctx, `
 		SELECT id::text,business_id::text,catalog_item_id::text,name,attributes,status,resource_version,created_at,updated_at
 		FROM variants
-		WHERE business_id=$1::uuid AND catalog_item_id=ANY($2::uuid[]) AND status='active'
+		WHERE business_id=$1::uuid AND catalog_item_id::text=ANY($2::text[]) AND status='active'
 		ORDER BY catalog_item_id,id`, businessID, ids)
 	if err != nil {
 		return nil, catalogRepositoryError("catalog_ai.variants", err)
@@ -280,7 +274,7 @@ func (r *CatalogAIReadRepository) hydrate(ctx context.Context, executor SQLExecu
 		       availability_checked_at,availability_valid_until,availability_evidence_ref,fulfillment_mode,validity_from,
 		       validity_until,availability_status,status,resource_version,created_at,updated_at
 		FROM offers
-		WHERE business_id=$1::uuid AND catalog_item_id=ANY($2::uuid[]) AND status='active'
+		WHERE business_id=$1::uuid AND catalog_item_id::text=ANY($2::text[]) AND status='active'
 		ORDER BY catalog_item_id,id`, businessID, ids)
 	if err != nil {
 		return nil, catalogRepositoryError("catalog_ai.offers", err)
@@ -334,7 +328,7 @@ func (r *CatalogAIReadRepository) hydrate(ctx context.Context, executor SQLExecu
 		SELECT d.schema_id::text,d.id::text,d.attribute_key,d.label,d.data_type,d.is_required,d.validation_rules,d.display_order
 		FROM attribute_definitions d
 		JOIN attribute_schemas s ON s.id=d.schema_id
-		WHERE s.business_id=$1::uuid AND d.schema_id=ANY($2::uuid[])
+		WHERE s.business_id=$1::uuid AND d.schema_id::text=ANY($2::text[])
 		ORDER BY d.schema_id,d.display_order,d.id`, businessID, schemaIDs)
 	if err != nil {
 		return nil, catalogRepositoryError("catalog_ai.definitions", err)
