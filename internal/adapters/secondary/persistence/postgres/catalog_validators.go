@@ -101,14 +101,20 @@ func (v *PostgresReferenceValidator) ValidateSelection(ctx context.Context, busi
 		SELECT EXISTS (
 			SELECT 1
 			FROM catalog_items i
+			JOIN catalogs c
+			  ON c.business_id = i.business_id
+			 AND c.id = i.catalog_id
+			 AND c.status = 'active'
 			WHERE i.business_id::text = $1
 			  AND i.id::text = $2
+			  AND i.status = 'active'
 			  AND (
 			    $3 = '' OR EXISTS (
 			      SELECT 1 FROM variants v
 			      WHERE v.business_id = i.business_id
 			        AND v.catalog_item_id = i.id
 			        AND v.id::text = $3
+			        AND v.status = 'active'
 			    )
 			  )
 			  AND (
@@ -117,6 +123,7 @@ func (v *PostgresReferenceValidator) ValidateSelection(ctx context.Context, busi
 			      WHERE o.business_id = i.business_id
 			        AND o.catalog_item_id = i.id
 			        AND o.id::text = $4
+			        AND o.status = 'active'
 			        AND (
 			          $3 = '' OR o.variant_id IS NULL OR o.variant_id::text = $3
 			        )
