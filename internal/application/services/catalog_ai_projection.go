@@ -88,8 +88,9 @@ type CatalogAIItem struct {
 
 // CatalogAIVariant is contract ① §1 — one variant under a CatalogAIItem.
 type CatalogAIVariant struct {
-	ID         string         `json:"id"`
-	Name       string         `json:"name"`
+	ID            string         `json:"id"`
+	CatalogItemID string         `json:"catalog_item_id"`
+	Name          string         `json:"name"`
 	Attributes map[string]any `json:"attributes,omitempty"`
 	Status     string         `json:"status"`
 }
@@ -100,6 +101,7 @@ type CatalogAIVariant struct {
 // fields so Gemini can understand the commercial truth without guessing.
 type CatalogAIOffer struct {
 	ID                      string  `json:"id"`
+	CatalogItemID           string  `json:"catalog_item_id"`
 	VariantID               *string `json:"variant_id,omitempty"`
 	Name                    string  `json:"name"`
 	PricingMode             string  `json:"pricing_mode"`
