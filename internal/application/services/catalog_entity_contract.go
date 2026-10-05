@@ -35,6 +35,7 @@ type CatalogEntityDefinition struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	Status      string `json:"status"`
 }
 
 // CatalogItemEntityDefinition is the CatalogItem entity per contract ⑤ §2.
@@ -131,6 +132,7 @@ type VariantEntityDefinition struct {
 //     as confirmed availability.
 type OfferEntityDefinition struct {
 	ID                      string  `json:"id"`
+	CatalogItemID           string  `json:"catalog_item_id"`
 	VariantID               *string `json:"variant_id,omitempty"`
 	Name                    string  `json:"name"`
 	PricingMode             string  `json:"pricing_mode"`
@@ -167,7 +169,10 @@ type CatalogEntityContractDescriptor struct {
 	FulfillmentModes          map[string]string `json:"fulfillment_modes"`
 	// ItemStatuses is the CatalogItem status set from migration 000016.
 	// CatalogItem does NOT allow expired; expired belongs to Offer status in migration 000018.
-	ItemStatuses map[string]string `json:"item_statuses"`
+	CatalogStatuses map[string]string `json:"catalog_statuses"`
+	ItemStatuses    map[string]string `json:"item_statuses"`
+	VariantStatuses map[string]string `json:"variant_statuses"`
+	OfferStatuses   map[string]string `json:"offer_statuses"`
 	// NOTE: ItemTypes is intentionally ABSENT. Per SQL migration 000016,
 	// item_type is TEXT (non-empty), NOT an enum. Per Catalog Contract
 	// §"Vertical Templates", item_type is vertical-specific and the merchant
@@ -263,10 +268,27 @@ func DefaultCatalogEntityContractDescriptor() CatalogEntityContractDescriptor {
 		// values (draft, active, inactive, archived, expired). We expose
 		// them as a single ItemStatuses map for the frontend's item-status
 		// badges (and the archived-state restore flow).
+		CatalogStatuses: map[string]string{
+			"draft":    "مسودة",
+			"active":   "نشط",
+			"archived": "مؤرشف",
+		},
 		ItemStatuses: map[string]string{
 			"draft":    "مسودة",
 			"active":   "نشط",
 			"inactive": "غير نشط",
+			"archived": "مؤرشف",
+		},
+		VariantStatuses: map[string]string{
+			"active":   "نشط",
+			"inactive": "غير نشط",
+			"archived": "مؤرشف",
+		},
+		OfferStatuses: map[string]string{
+			"draft":    "مسودة",
+			"active":   "نشط",
+			"inactive": "غير نشط",
+			"expired":  "منتهي",
 			"archived": "مؤرشف",
 		},
 		Relationships: []EntityRelationship{
@@ -305,6 +327,7 @@ func BuildCatalogEntityContractPayload() CatalogEntityContractPayload {
 				ID:          "UUID",
 				Name:        "TEXT",
 				Description: "TEXT?",
+				Status:      "draft|active|archived",
 			},
 			CatalogItem: CatalogItemEntityDefinition{
 				ID:                     "UUID",
@@ -361,6 +384,7 @@ func BuildCatalogEntityContractPayload() CatalogEntityContractPayload {
 			//   CHECK (status IN ('draft', 'active', 'inactive', 'expired', 'archived'))
 			Offer: OfferEntityDefinition{
 				ID:                      "UUID",
+				CatalogItemID:           "UUID",
 				VariantID:               entityContractStrPtr("UUID?"),
 				Name:                    "TEXT",
 				PricingMode:             "fixed|starting_from|per_unit|per_person|per_day|quote_required|dynamic",
