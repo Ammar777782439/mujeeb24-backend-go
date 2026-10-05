@@ -9,8 +9,9 @@ import (
 )
 
 type exactTokenBatchGeminiStub struct {
-	countFn func(BatchEvaluationInput) (int, error)
-	seen    []BatchEvaluationInput
+	countFn       func(BatchEvaluationInput) (int, error)
+	seen          []BatchEvaluationInput
+	finalProposal ports.CustomerSalesProposal
 }
 
 func (s *exactTokenBatchGeminiStub) CountBatchTokens(_ context.Context, input BatchEvaluationInput) (int, error) {
@@ -26,7 +27,7 @@ func (s *exactTokenBatchGeminiStub) EvaluateBatch(_ context.Context, input Batch
 }
 
 func (s *exactTokenBatchGeminiStub) FinalEvaluateWithDetails(_ context.Context, _ FinalEvaluationInput, _ string) (ports.CustomerSalesProposal, ports.CustomerSalesUsageTelemetry, error) {
-	return ports.CustomerSalesProposal{}, ports.CustomerSalesUsageTelemetry{}, nil
+	return s.finalProposal, ports.CustomerSalesUsageTelemetry{}, nil
 }
 
 func TestSplitIntoBatchesUsesExactRequestTokensAndSequentialNumbers(t *testing.T) {
@@ -221,3 +222,115 @@ func TestAppendCandidateProjectionPrunesUnselectedNestedEvidence(t *testing.T) {
 	}
 }
 
+
+func TestSplitIntoBatchesFragmentsOversizedItemWithoutLosingNestedEvidence(t *testing.T) {
+	v1, v2 := "variant-1", "variant-2"
+	gemini := &exactTokenBatchGeminiStub{
+		countFn: func(input BatchEvaluationInput) (int, error) {
+			if len(input.Batch.Items) == 0 {
+				return 0, nil
+			}
+			item := input.Batch.Items[0]
+			return 200 + 100*(len(item.Variants)+len(item.Offers)), nil
+		},
+	}
+	controller := &CatalogBatchController{Gemini: gemini, TokenBudget: 450}
+	projection := CatalogAIProjection{
+		Catalogs: []CatalogAICatalog{{ID: "catalog-1", Name: "Main", Status: "active"}},
+		Items: []CatalogAIItem{{
+			ID: "item-1", CatalogID: "catalog-1",
+			Variants: []CatalogAIVariant{
+				{ID: v1, CatalogItemID: "item-1"},
+				{ID: v2, CatalogItemID: "item-1"},
+			},
+			Offers: []CatalogAIOffer{
+				{ID: "offer-1", CatalogItemID: "item-1", VariantID: &v1},
+				{ID: "offer-2", CatalogItemID: "item-1", VariantID: &v2},
+			},
+		}},
+	}
+
+	batches, err := controller.splitIntoBatches(context.Background(), projection, CatalogEvaluationInput{
+		AIRunID: "run-1", BusinessID: "business-1", CustomerMessage: "test",
+	}, 1)
+	if err != nil {
+		t.Fatalf("split oversized item: %v", err)
+	}
+	if len(batches) != 2 {
+		t.Fatalf("expected 2 item fragments, got %d", len(batches))
+	}
+	variantSeen := map[string]bool{}
+	offerSeen := map[string]bool{}
+	for _, batch := range batches {
+		if len(batch.Items) != 1 || batch.Items[0].ID != "item-1" {
+			t.Fatalf("fragment lost item identity: %+v", batch.Items)
+		}
+		for _, variant := range batch.Items[0].Variants {
+			variantSeen[variant.ID] = true
+		}
+		for _, offer := range batch.Items[0].Offers {
+			offerSeen[offer.ID] = true
+		}
+	}
+	for _, id := range []string{v1, v2} {
+		if !variantSeen[id] {
+			t.Fatalf("variant %s was not covered by fragments", id)
+		}
+	}
+	for _, id := range []string{"offer-1", "offer-2"} {
+		if !offerSeen[id] {
+			t.Fatalf("offer %s was not covered by fragments", id)
+		}
+	}
+}
+
+func TestAppendCandidateProjectionMergesSameItemFragments(t *testing.T) {
+	v1, v2 := "variant-1", "variant-2"
+	target := CatalogAIProjection{}
+	seen := map[string]struct{}{}
+
+	batch1 := CatalogAIBatchPayload{Items: []CatalogAIItem{{
+		ID: "item-1", CatalogID: "catalog-1",
+		Variants: []CatalogAIVariant{{ID: v1, CatalogItemID: "item-1"}},
+		Offers: []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1", VariantID: &v1}},
+	}}}
+	batch2 := CatalogAIBatchPayload{Items: []CatalogAIItem{{
+		ID: "item-1", CatalogID: "catalog-1",
+		Variants: []CatalogAIVariant{{ID: v2, CatalogItemID: "item-1"}},
+		Offers: []CatalogAIOffer{{ID: "offer-2", CatalogItemID: "item-1", VariantID: &v2}},
+	}}}
+
+	appendCandidateProjection(&target, batch1, []ports.CatalogBatchCandidate{{
+		ItemID: "item-1", VariantIDs: []string{v1}, OfferIDs: []string{"offer-1"},
+	}}, seen)
+	appendCandidateProjection(&target, batch2, []ports.CatalogBatchCandidate{{
+		ItemID: "item-1", VariantIDs: []string{v2}, OfferIDs: []string{"offer-2"},
+	}}, seen)
+
+	if len(target.Items) != 1 {
+		t.Fatalf("expected one merged item, got %d", len(target.Items))
+	}
+	if len(target.Items[0].Variants) != 2 || len(target.Items[0].Offers) != 2 {
+		t.Fatalf("fragment evidence was not merged: variants=%d offers=%d", len(target.Items[0].Variants), len(target.Items[0].Offers))
+	}
+}
+
+func TestFinalEvaluationRejectsNeedsMoreDataAfterCoverage(t *testing.T) {
+	gemini := &exactTokenBatchGeminiStub{
+		finalProposal: ports.CustomerSalesProposal{
+			Status: ports.CustomerSalesProposalStatusNeedsMoreData,
+			Action: ports.CustomerSalesProposalActionClarification,
+			ResponseText: "أحتاج بيانات إضافية",
+		},
+	}
+	controller := &CatalogBatchController{Gemini: gemini, TokenBudget: 8000}
+	_, _, err := controller.runFinalEvaluation(context.Background(), CatalogEvaluationInput{
+		AIRunID: "run-1", BusinessID: "business-1", CustomerMessage: "test",
+	}, nil, CatalogAIProjection{}, 1)
+	if err == nil {
+		t.Fatal("expected final needs_more_data to fail after complete catalog coverage")
+	}
+	if !strings.Contains(err.Error(), "complete catalog coverage") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
