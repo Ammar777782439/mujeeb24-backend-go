@@ -392,6 +392,16 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		}
 	}
 
+	// needs_more_data is an internal retrieval signal, never an executable
+	// customer-facing decision. By this point the catalog path has either run
+	// to complete coverage or failed above; allowing this status to continue
+	// could turn an unresolved model response into an outbound message.
+	if proposal.Status == ports.CustomerSalesProposalStatusNeedsMoreData {
+		err := errors.New("AI proposal remained needs_more_data after catalog evaluation")
+		s.markFailedSafe(ctx, run, ports.AIRunFailureStageValidation, string(ports.AIRunFailureCategoryInvalidAIOutput), err.Error())
+		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
+	}
+
 	// Per contract ⑨ §3, mark VALIDATING.
 	s.markValidatingSafe(ctx, run)
 	log.Printf("[AutoReply] STATE→VALIDATING run=%s", run.ID)
