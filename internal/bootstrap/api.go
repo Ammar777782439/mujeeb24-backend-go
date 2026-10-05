@@ -308,6 +308,11 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			postgres.NewCatalogRepository(database),
 			postgres.NewMessageRepository(database),
 		)
+		// Universal Catalog AI v3: shared read-optimized catalog boundary.
+		// It supplies the bounded manifest, cross-catalog retrieval, and
+		// bulk projection pages without per-item N+1 reads.
+		contextBuilder.CatalogAI = postgres.NewCatalogAIReadRepository(database)
+		contextBuilder.MaxSearchItems = 12
 		contextBuilder.Knowledge = postgres.NewKnowledgeDocumentRepository(database)
 		contextBuilder.Policies = postgres.NewBusinessPolicyRepository(database)
 		service.CustomerSalesContextBuilder = contextBuilder
