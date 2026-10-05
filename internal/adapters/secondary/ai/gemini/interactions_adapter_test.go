@@ -158,3 +158,32 @@ func TestCustomerSalesEnforcesMaxInputOnSerializedInteraction(t *testing.T) {
 		t.Fatal("HTTP request must not be sent when serialized interaction exceeds the configured input limit")
 	}
 }
+
+
+func TestStrictCustomerProposalRejectsUnknownFields(t *testing.T) {
+	var proposal ports.CustomerSalesProposal
+	err := decodeStrictStructuredJSON([]byte(`{"status":"resolved","action":"answer","response_text":"ok","authorized":true}`), &proposal)
+	if err == nil {
+		t.Fatal("unknown top-level proposal field must be rejected")
+	}
+}
+
+func TestStrictCustomerProposalRejectsUnknownSelectedFields(t *testing.T) {
+	var proposal ports.CustomerSalesProposal
+	err := decodeStrictStructuredJSON([]byte(`{"status":"resolved","action":"answer","response_text":"ok","selected":[{"item_id":"item-1","payment_confirmed":true}]}`), &proposal)
+	if err == nil {
+		t.Fatal("unknown selected[] field must be rejected")
+	}
+}
+
+func TestCustomerProposalSchemaDisallowsAdditionalProperties(t *testing.T) {
+	schema := contractProposalResponseSchema()
+	if schema["additionalProperties"] != false {
+		t.Fatalf("proposal schema must close top-level properties: %#v", schema["additionalProperties"])
+	}
+	selected := schema["properties"].(map[string]any)["selected"].(map[string]any)
+	item := selected["items"].(map[string]any)
+	if item["additionalProperties"] != false {
+		t.Fatalf("selected item schema must close additional properties: %#v", item["additionalProperties"])
+	}
+}
