@@ -313,7 +313,8 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	// Per contract ② "ما أغلقناه": no semantic search, no product matching
 	// inside Mujeeb. Mujeeb only builds the projection and counts tokens.
 	fullCatalogRequired := proposal.Status == ports.CustomerSalesProposalStatusNeedsMoreData ||
-		proposal.Status == ports.CustomerSalesProposalStatusNotFound
+		proposal.Status == ports.CustomerSalesProposalStatusNotFound ||
+		proposalReferencesOutsideEvidence(proposal, catalogEvidence)
 	if fullCatalogRequired && s.CatalogBatch == nil {
 		err := errors.New("full catalog evaluation is required before needs_more_data/not_found can be finalized, but CatalogBatchController is not configured")
 		s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), err.Error())
@@ -956,6 +957,15 @@ func encodeProposalSelectedAsJSON(selected []ports.SelectedReference) []byte {
 // derefCustomerSalesContext safely dereferences a *ports.CustomerSalesContext, returning a zero
 // value if nil. Used when passing the context to CatalogBatchController
 // which expects a value (not a pointer).
+func proposalReferencesOutsideEvidence(proposal ports.CustomerSalesProposal, evidence ports.CatalogAIEvidenceSet) bool {
+	for _, ref := range proposal.Selected {
+		if !evidence.ContainsSelection(ref) {
+			return true
+		}
+	}
+	return false
+}
+
 func derefCustomerSalesContext(ctx *ports.CustomerSalesContext) ports.CustomerSalesContext {
 	if ctx == nil {
 		return ports.CustomerSalesContext{}
