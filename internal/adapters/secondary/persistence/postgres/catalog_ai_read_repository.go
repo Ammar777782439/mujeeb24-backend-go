@@ -304,7 +304,7 @@ func (r *CatalogAIReadRepository) hydrate(ctx context.Context, executor SQLExecu
 	sRows, err := executor.Query(ctx, `
 		SELECT id::text,business_id::text,name,version
 		FROM attribute_schemas
-		WHERE business_id=$1::uuid AND id=ANY($2::uuid[])`, businessID, schemaIDs)
+		WHERE business_id=$1::uuid AND id::text=ANY($2::text[])`, businessID, schemaIDs)
 	if err != nil {
 		return nil, catalogRepositoryError("catalog_ai.schemas", err)
 	}
