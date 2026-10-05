@@ -82,4 +82,13 @@ func TestOfferEvidenceMarksUnverifiedOrExpiredFactsStale(t *testing.T) {
 	if got := toOfferEvidence(expiredAvailability, now); got.EvidenceState != CustomerSalesContextStale {
 		t.Fatalf("expired availability validity must be stale evidence, got %q", got.EvidenceState)
 	}
+
+	future := now.Add(time.Hour)
+	notStarted := unverified
+	notStarted.ID = "offer-3"
+	notStarted.PriceVerificationStatus = "verified"
+	notStarted.ValidityFrom = &future
+	if got := toOfferEvidence(notStarted, now); got.EvidenceState != CustomerSalesContextStale {
+		t.Fatalf("future offer validity must not be fresh evidence, got %q", got.EvidenceState)
+	}
 }
