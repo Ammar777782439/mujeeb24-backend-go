@@ -346,11 +346,16 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	//
 	// Per contract ② "ما أغلقناه": no semantic search, no product matching
 	// inside Mujeeb. Mujeeb only builds the projection and counts tokens.
+	if proposal.Status == ports.CustomerSalesProposalStatusNeedsMoreData && s.CatalogBatch == nil {
+		err := errors.New("catalog evaluation is required for needs_more_data but CatalogBatchController is not configured")
+		s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), err.Error())
+		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
+	}
 	if s.CatalogBatch != nil && proposal.Status == ports.CustomerSalesProposalStatusNeedsMoreData {
 		// Per contract ② §9, invoke catalog evaluation whenever Gemini
 		// says it needs more data — regardless of whether some evidence
 		// already exists. The fact that Gemini returned needs_more_data
-		// means the 5-item context summary was insufficient; the batch
+		// means the current context was insufficient; the batch
 		// evaluation will provide the FULL catalog for Gemini to reason over.
 		//
 		// Previous condition `len(builtContext.CatalogEvidence) == 0` was
@@ -379,6 +384,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		if err != nil {
 			log.Printf("[AutoReply] CATALOG_EVAL_FAILED run=%s err=%v", run.ID, err)
 			s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), "catalog evaluation: "+err.Error())
+			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, fmt.Errorf("catalog evaluation failed: %w", err)
 		} else {
 			log.Printf("[AutoReply] CATALOG_EVAL_OK run=%s final_status=%s final_action=%s response=%q", run.ID, catalogResult.Proposal.Status, catalogResult.Proposal.Action, truncate(catalogResult.Proposal.ResponseText, 200))
 			proposal = catalogResult.Proposal
@@ -394,7 +400,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	// Per contract ⑥ §10, evidence IDs = what was actually sent to Gemini.
 	// When the CatalogBatchController ran, it sent the FULL catalog projection
 	// (items + variants + offers) to Gemini. The evidence set must include
-	// ALL of those — not just the 5 items from the initial context.
+	// ALL of those — not only the initial context evidence.
 	var effective ports.EffectiveDecision
 	if s.Validation != nil {
 		// Universal Catalog AI v3: evidence contains only entities that Mujeeb
@@ -450,11 +456,9 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		}
 		effective = ed
 	} else {
-		// No validation configured — default to allowed (test convenience).
-		effective = ports.EffectiveDecision{
-			EffectiveAction: string(proposal.Action),
-			PolicyDecision:  "allowed",
-		}
+		err := errors.New("validation pipeline is required for AutoReply")
+		s.markFailedSafe(ctx, run, ports.AIRunFailureStageValidation, string(ports.AIRunFailureCategoryInvalidAIOutput), err.Error())
+		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
 	}
 
 	// Per contract ⑥ §14, handoff for subscription/activation requests uses
