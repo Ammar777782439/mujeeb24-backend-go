@@ -121,6 +121,11 @@ type FinalEvaluationInput struct {
 	CandidateResults    []ports.CatalogBatchCandidate
 }
 
+type CatalogEvaluationResult struct {
+	Proposal ports.CustomerSalesProposal
+	Evidence ports.CatalogAIEvidenceSet
+}
+
 // CatalogAIBatchPayload is one batch's content.
 //
 // Per contract ② §4, each batch carries the schemas its items use — schemas
@@ -144,28 +149,29 @@ type TokenCounter interface {
 //
 // Returns the final CustomerSalesProposal (post-Final-Evaluation) on success.
 // On failure, returns the failure stage + category for ai_runs.failure_*.
-func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input CatalogEvaluationInput) (ports.CustomerSalesProposal, error) {
+func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input CatalogEvaluationInput) (CatalogEvaluationResult, error) {
 	if c.ProjectionBuilder == nil || c.TokenCounter == nil || c.Gemini == nil || c.RunRepo == nil {
-		return ports.CustomerSalesProposal{}, errors.New("CatalogBatchController is not fully wired per contract ② §1")
+		return CatalogEvaluationResult{}, errors.New("CatalogBatchController is not fully wired per contract ② §1")
 	}
 	if strings.TrimSpace(input.BusinessID) == "" || strings.TrimSpace(input.AIRunID) == "" {
-		return ports.CustomerSalesProposal{}, errors.New("business_id and ai_run_id are required for Catalog Evaluation per contract ② §1")
+		return CatalogEvaluationResult{}, errors.New("business_id and ai_run_id are required for Catalog Evaluation per contract ② §1")
 	}
 
 	// Step 1: Build the Projection. Per contract ① §6, Mujeeb builds it.
 	projection, err := c.buildProjection(ctx, input.BusinessID, input.CatalogScope)
 	if err != nil {
-		return ports.CustomerSalesProposal{}, fmt.Errorf("build projection: %w", err)
+		return CatalogEvaluationResult{}, fmt.Errorf("build projection: %w", err)
 	}
 
 	// Step 2: Token-count and split. Per contract ② §2, token-based not item-count.
 	batches, err := c.splitIntoBatches(ctx, projection, input.EntityContract)
 	if err != nil {
-		return ports.CustomerSalesProposal{}, fmt.Errorf("split batches: %w", err)
+		return CatalogEvaluationResult{}, fmt.Errorf("split batches: %w", err)
 	}
 	if len(batches) == 0 {
 		// No items in scope — Final Evaluation with empty candidate set.
-		return c.runFinalEvaluation(ctx, input, nil, CatalogAIProjection{})
+		proposal, finalErr := c.runFinalEvaluation(ctx, input, nil, CatalogAIProjection{})
+		return CatalogEvaluationResult{Proposal: proposal, Evidence: ports.NewCatalogAIEvidenceSet()}, finalErr
 	}
 
 	// Step 3: Register each batch in ai_catalog_batches per contract ⑨ §22.
@@ -173,7 +179,7 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 	for _, b := range batches {
 		rec, err := c.createBatchRecord(ctx, input.AIRunID, b)
 		if err != nil {
-			return ports.CustomerSalesProposal{}, fmt.Errorf("create batch %d record: %w", b.BatchNumber, err)
+			return CatalogEvaluationResult{}, fmt.Errorf("create batch %d record: %w", b.BatchNumber, err)
 		}
 		batchRecords = append(batchRecords, rec)
 	}
@@ -184,7 +190,7 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 	for i, b := range batches {
 		// Per contract ⑨ §22, mark batch RUNNING.
 		if err := c.markBatchRunning(ctx, batchRecords[i].ID); err != nil {
-			return ports.CustomerSalesProposal{}, err
+			return CatalogEvaluationResult{}, err
 		}
 		result, err := c.Gemini.EvaluateBatch(ctx, BatchEvaluationInput{
 			AIRunID:             input.AIRunID,
@@ -200,11 +206,11 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 		if err != nil {
 			// Per contract ⑨ §22, mark batch FAILED; per ⑨ §21 do NOT re-run other batches.
 			_ = c.markBatchFailed(ctx, batchRecords[i].ID, err.Error())
-			return ports.CustomerSalesProposal{}, fmt.Errorf("batch %d evaluation: %w", b.BatchNumber, err)
+			return CatalogEvaluationResult{}, fmt.Errorf("batch %d evaluation: %w", b.BatchNumber, err)
 		}
 		// Per contract ⑨ §22, mark batch COMPLETED — update the in-memory record too.
 		if err := c.markBatchCompleted(ctx, batchRecords[i].ID, len(result.Candidates)); err != nil {
-			return ports.CustomerSalesProposal{}, err
+			return CatalogEvaluationResult{}, err
 		}
 		batchRecords[i].Status = "completed"
 		candidateSet = append(candidateSet, result.Candidates...)
@@ -217,7 +223,7 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 	// Coverage is complete when all batches are COMPLETED.
 	log.Printf("[CatalogBatch] COVERAGE total=%d completed=%d", len(batchRecords), countCompleted(batchRecords))
 	if !c.coverageComplete(batchRecords) {
-		return ports.CustomerSalesProposal{}, fmt.Errorf("coverage incomplete per contract ② §3 — %d/%d batches completed", countCompleted(batchRecords), len(batchRecords))
+		return CatalogEvaluationResult{}, fmt.Errorf("coverage incomplete per contract ② §3 — %d/%d batches completed", countCompleted(batchRecords), len(batchRecords))
 	}
 
 	// Step 6: Final Gemini Evaluation per contract ② §6.
@@ -226,7 +232,14 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 	// The "الدليل التجاري المرتبط بالمرشحين" = full product details for
 	// each candidate item. Without this, Gemini only sees IDs and can't
 	// compose a proper response with names, prices, descriptions.
-	return c.runFinalEvaluation(ctx, input, candidateSet, projection)
+	proposal, finalErr := c.runFinalEvaluation(ctx, input, candidateSet, projection)
+	if finalErr != nil {
+		return CatalogEvaluationResult{}, finalErr
+	}
+	return CatalogEvaluationResult{
+		Proposal: proposal,
+		Evidence: EvidenceFromProjection(projection),
+	}, nil
 }
 
 // buildProjection builds the contract ① Catalog AI Projection from the
