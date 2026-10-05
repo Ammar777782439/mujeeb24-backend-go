@@ -431,14 +431,6 @@ func customerSalesSchemaEvidence(schema ports.AttributeSchemaRecord) ports.Custo
 	}
 	return out
 }
-
-func offerEvidenceState(availabilityStatus string) string {
-	if strings.EqualFold(strings.TrimSpace(availabilityStatus), "unknown") || strings.EqualFold(strings.TrimSpace(availabilityStatus), "stale") {
-		return CustomerSalesContextStale
-	}
-	return CustomerSalesContextFresh
-}
-
 type scopedNotFoundError struct{ msg string }
 
 func (e *scopedNotFoundError) Error() string     { return "scoped retrieval not found: " + e.msg }
