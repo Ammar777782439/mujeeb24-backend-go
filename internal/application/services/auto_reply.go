@@ -253,7 +253,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			return commands.AutoReplyResult{}, contextErr
 		}
 		log.Printf("[AutoReply] CONTEXT_BUILT business=%s ownership=%s state=%s", businessID, bc.Conversation.Ownership, bc.Conversation.State)
-		log.Printf("[AutoReply] CONTEXT_DEBUG catalog_names=%v catalog_evidence_count=%d", bc.CatalogNames, len(bc.CatalogEvidence))
+		log.Printf("[AutoReply] CONTEXT_DEBUG catalog_manifest_items=%d catalog_evidence_count=%d", catalogManifestItemCount(bc.CatalogManifest), len(bc.CatalogEvidence))
 		// Per contract ③ §1, if conversation is owned by human or waiting for human,
 		// AI does not respond.
 		if strings.EqualFold(bc.Conversation.Ownership, "human") || strings.EqualFold(bc.Conversation.State, "waiting_human") {
@@ -1019,6 +1019,13 @@ func uuidStringPointer(value string) *string {
 func pointerTo(value time.Time) *time.Time { return &value }
 
 // truncate shortens a string for logging, appending "..." if truncated.
+func catalogManifestItemCount(manifest *ports.CatalogAIManifest) int {
+	if manifest == nil {
+		return 0
+	}
+	return manifest.TotalActiveItems
+}
+
 func truncate(s string, max int) string {
 	if len(s) <= max {
 		return s
