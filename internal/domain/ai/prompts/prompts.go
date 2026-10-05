@@ -107,6 +107,16 @@ const BatchEvaluationSystemPromptVersion = "batch-evaluation-v2"
 // defers to Contract as the source of truth for catalog enum values.
 // v4 (ADR-038): anti-repetition + alternative-product-with-respect +
 // assistant-vs-customer message distinction rules.
+const CandidateReductionSystemPromptSuffix = `
+
+CANDIDATE REDUCTION:
+هذه العناصر مرشحة خرجت من تغطية كتالوج مكتملة، لكن حجمها أكبر من ميزانية الـFinal Evaluation.
+
+قلّص المرشحين فقط بقدر ما يسمح طلب العميل وسياقه، واحتفظ بالأقوى والأكثر صلة.
+إذا كان طلب العميل يتطلب فعلاً كل العناصر، فلا تحذفها فقط لتقليل الحجم.
+لا تخترع IDs ولا تُدخل عنصرًا خارج هذه الدفعة.
+أعد candidates فقط؛ لا تكتب الرد النهائي للعميل.`
+
 const FinalEvaluationSystemPromptSuffix = `
 
 FINAL EVALUATION:
