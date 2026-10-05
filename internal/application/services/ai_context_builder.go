@@ -161,9 +161,6 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 			return ports.CustomerSalesContext{}, manifestErr
 		}
 		context.CatalogManifest = &manifest
-		for _, catalog := range manifest.Catalogs {
-			context.CatalogNames = append(context.CatalogNames, catalog.Name)
-		}
 	}
 
 	mode, focus, comparison := resolveRetrievalMode(input.ConversationState)
