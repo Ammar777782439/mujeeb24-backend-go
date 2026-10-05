@@ -56,9 +56,9 @@ type ValidationPipeline struct {
 }
 
 // NewValidationPipeline wires the pipeline dependencies. Each may be nil if
-// the deployment does not yet implement that stage; the pipeline will treat a
-// nil stage as "always passes" with a logged warning, allowing incremental
-// rollout per contract ⑥.
+// Reference, tenant and policy stages are mandatory for Customer Sales.
+// Missing mandatory stages fail closed. AuthorizationService may remain nil
+// only when the merchant policy decision is intentionally the final authority.
 func NewValidationPipeline(
 	rv ReferenceValidator,
 	tv TenantValidator,
@@ -222,7 +222,11 @@ func (p *ValidationPipeline) validateReferences(ctx context.Context, input Valid
 // leak its existence).
 func (p *ValidationPipeline) validateTenant(ctx context.Context, input ValidationInput) *StageFailure {
 	if p.TenantValidator == nil {
-		return nil
+		return &StageFailure{
+			Stage:    ports.AIRunFailureStageValidation,
+			Category: ports.AIRunFailureCategoryTenantViolation,
+			Reason:   "tenant validator is required; validation fails closed",
+		}
 	}
 	for i, ref := range input.Proposal.Selected {
 		if err := p.TenantValidator.ValidateItemOwnership(ctx, input.BusinessID, ref.ItemID); err != nil {
@@ -259,12 +263,11 @@ func (p *ValidationPipeline) validateTenant(ctx context.Context, input Validatio
 // Gemini only proposes; policy never re-interprets customer intent.
 func (p *ValidationPipeline) evaluateCustomerSalesPolicy(ctx context.Context, input ValidationInput) (ports.EffectiveDecision, *StageFailure) {
 	if p.CustomerSalesPolicy == nil {
-		return ports.EffectiveDecision{
-			DecisionID:      input.DecisionID,
-			EffectiveAction: string(input.Proposal.Action),
-			PolicyDecision:  "allowed",
-			Reason:          "no customer sales policy configured; defaulting to allowed per contract ⑥ §12",
-		}, nil
+		return ports.EffectiveDecision{}, &StageFailure{
+			Stage:    ports.AIRunFailureStagePolicy,
+			Category: ports.AIRunFailureCategoryPolicyDenial,
+			Reason:   "customer sales policy evaluator is required; policy fails closed",
+		}
 	}
 
 	result := p.CustomerSalesPolicy.Evaluate(ctx, input.Proposal, input.Context)
