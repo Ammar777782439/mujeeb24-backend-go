@@ -14,6 +14,8 @@
 
 package services
 
+import "sort"
+
 // CatalogEntityContract is the canonical definition of the six catalog entities
 // per contract ⑤ §2. It is sent to Gemini as part of the system context.
 //
@@ -307,9 +309,28 @@ func DefaultCatalogEntityContractDescriptor() CatalogEntityContractDescriptor {
 // across all batches and is sent once per AI Runtime invocation.
 //
 // The payload contains ONLY definitions and descriptors; no merchant data.
+type CatalogAIEntityContractDescriptor struct {
+	PricingModes              []string                    `json:"pricing_modes"`
+	AvailabilityModes         []string                    `json:"availability_modes"`
+	AvailabilityStatuses      []string                    `json:"availability_statuses"`
+	PriceVerificationStatuses []string                    `json:"price_verification_statuses"`
+	FulfillmentModes          []string                    `json:"fulfillment_modes"`
+	CatalogStatuses           []string                    `json:"catalog_statuses"`
+	ItemStatuses              []string                    `json:"item_statuses"`
+	VariantStatuses           []string                    `json:"variant_statuses"`
+	OfferStatuses             []string                    `json:"offer_statuses"`
+	Relationships             []CatalogAIEntityRelationship `json:"relationships"`
+}
+
+type CatalogAIEntityRelationship struct {
+	From        string `json:"from"`
+	To          string `json:"to"`
+	Cardinality string `json:"cardinality"`
+}
+
 type CatalogEntityContractPayload struct {
-	Contract   CatalogEntityContract           `json:"entity_contract"`
-	Descriptor CatalogEntityContractDescriptor `json:"descriptor"`
+	Contract   CatalogEntityContract             `json:"entity_contract"`
+	Descriptor CatalogAIEntityContractDescriptor `json:"descriptor"`
 }
 
 // BuildCatalogEntityContractPayload returns the canonical payload to send to
@@ -406,8 +427,38 @@ func BuildCatalogEntityContractPayload() CatalogEntityContractPayload {
 				Status:                  "draft|active|inactive|expired|archived",
 			},
 		},
-		Descriptor: DefaultCatalogEntityContractDescriptor(),
+		Descriptor: compactCatalogEntityContractDescriptor(DefaultCatalogEntityContractDescriptor()),
 	}
+}
+
+func compactCatalogEntityContractDescriptor(rich CatalogEntityContractDescriptor) CatalogAIEntityContractDescriptor {
+	relationships := make([]CatalogAIEntityRelationship, 0, len(rich.Relationships))
+	for _, rel := range rich.Relationships {
+		relationships = append(relationships, CatalogAIEntityRelationship{
+			From: rel.From, To: rel.To, Cardinality: rel.Cardinality,
+		})
+	}
+	return CatalogAIEntityContractDescriptor{
+		PricingModes:              sortedContractKeys(rich.PricingModes),
+		AvailabilityModes:         sortedContractKeys(rich.AvailabilityModes),
+		AvailabilityStatuses:      sortedContractKeys(rich.AvailabilityStatuses),
+		PriceVerificationStatuses: sortedContractKeys(rich.PriceVerificationStatuses),
+		FulfillmentModes:          sortedContractKeys(rich.FulfillmentModes),
+		CatalogStatuses:           sortedContractKeys(rich.CatalogStatuses),
+		ItemStatuses:              sortedContractKeys(rich.ItemStatuses),
+		VariantStatuses:           sortedContractKeys(rich.VariantStatuses),
+		OfferStatuses:             sortedContractKeys(rich.OfferStatuses),
+		Relationships:             relationships,
+	}
+}
+
+func sortedContractKeys(values map[string]string) []string {
+	out := make([]string, 0, len(values))
+	for key := range values {
+		out = append(out, key)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func entityContractStrPtr(s string) *string { return &s }
