@@ -50,10 +50,9 @@ type AICostProtectionService struct {
 // "ai_cost_budget_exceeded") so the caller can log it precisely and
 // the platform audit trail can distinguish the cause.
 //
-// When any of the underlying repositories is nil or returns an error,
-// the checker fails OPEN (returns true). This preserves operability
-// during outages — but the platform admin should ensure the
-// dependencies are wired so the checks actually run.
+// If a protection dependency is missing or errors, Auto AI fails closed.
+// Channel ingestion and human workflows continue; only provider execution
+// is blocked until the protection state can be verified.
 func (s *AICostProtectionService) IsAIExecutionAllowed(ctx context.Context, businessID string) (bool, string) {
 	if s == nil {
 		return true, ""
@@ -63,17 +62,19 @@ func (s *AICostProtectionService) IsAIExecutionAllowed(ctx context.Context, busi
 	// Per Contract §81: when AdminState=DISABLED, ALL Auto AI Execution
 	// is blocked. This is the master switch the platform admin toggles
 	// via platformAIDisable / platformAIEnable.
-	if s.PlatformOperations != nil {
-		state, err := s.PlatformOperations.GetRuntimeState(ctx)
-		if err == nil && state.AdminState == ports.ProviderAdminDisabled {
-			return false, "ai_runtime_disabled"
-		}
-		// On error: fail-open (operability). The platform admin can
-		// monitor for the missing state via the AI Overview endpoint.
+	if s.PlatformOperations == nil {
+		return false, "ai_runtime_state_unavailable"
+	}
+	state, err := s.PlatformOperations.GetRuntimeState(ctx)
+	if err != nil {
+		return false, "ai_runtime_state_unavailable"
+	}
+	if state.AdminState == ports.ProviderAdminDisabled {
+		return false, "ai_runtime_disabled"
 	}
 
 	if s.Subscriptions == nil || s.AIUsage == nil {
-		return true, "" // not wired → allow (fail-open for operability)
+		return false, "ai_cost_protection_unavailable"
 	}
 
 	// Find the business's active subscription.
@@ -82,13 +83,18 @@ func (s *AICostProtectionService) IsAIExecutionAllowed(ctx context.Context, busi
 		Status:     "ACTIVE",
 		Limit:      1,
 	})
-	if err != nil || len(page.Items) == 0 {
-		return true, "" // no active subscription → allow (entitlement check handles this separately)
+	if err != nil {
+		return false, "subscription_check_unavailable"
+	}
+	if len(page.Items) == 0 {
+		// Existing product policy: subscription provisioning is handled
+		// elsewhere. Do not change that commercial behavior in this safety fix.
+		return true, ""
 	}
 	sub := page.Items[0]
 	agg, err := s.AIUsage.GetSubscriptionAIUsage(ctx, sub.ID)
 	if err != nil {
-		return true, "" // can't check → allow (fail-open)
+		return false, "ai_usage_check_unavailable"
 	}
 
 	// Check 2: Merchant AI Reply Entitlement (P0-3).
