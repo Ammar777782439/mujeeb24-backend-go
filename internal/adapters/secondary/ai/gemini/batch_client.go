@@ -186,7 +186,6 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
 	userPrompt := fmt.Sprintf("Customer message: %s\n\nCatalog batch %d data:\n%s",
 		input.CustomerMessage, input.BatchNumber, string(batchJSON))
 	reqBody := batchGeminiRequest{
-		Model:             rc.model,
 		SystemInstruction: c.buildBatchSystemInstruction(input.EntityContract),
 		Contents: []batchContent{
 			{Role: "user", Parts: []batchPart{{Text: userPrompt}}},
@@ -253,7 +252,6 @@ func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input servic
 		return ports.CustomerSalesProposal{}, ports.CustomerSalesUsageTelemetry{}, err
 	}
 	reqBody := batchGeminiRequest{
-		Model: rc.model,
 		SystemInstruction: c.buildBatchSystemInstructionWithSuffix(input.EntityContract,
 			"\n\nYou are now in FINAL EVALUATION mode. You have received the full product details for each candidate. Compose a complete Arabic response with product names, prices, descriptions, and availability. Do NOT invent item_ids that were not in the candidate set."),
 		Contents: []batchContent{
@@ -495,7 +493,6 @@ func finalProposalResponseSchema() map[string]any {
 
 // batchGeminiRequest is the generateContent request body.
 type batchGeminiRequest struct {
-	Model             string                `json:"model"`
 	SystemInstruction *batchContent         `json:"systemInstruction,omitempty"`
 	Contents          []batchContent        `json:"contents"`
 	GenerationConfig  batchGenerationConfig `json:"generationConfig"`
