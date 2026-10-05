@@ -376,18 +376,29 @@ func validateBatchCandidates(batch CatalogAIBatchPayload, candidates []ports.Cat
 		for _, variant := range item.Variants {
 			variants[variant.ID] = struct{}{}
 		}
-		offers := make(map[string]struct{}, len(item.Offers))
+		offers := make(map[string]CatalogAIOffer, len(item.Offers))
 		for _, offer := range item.Offers {
-			offers[offer.ID] = struct{}{}
+			offers[offer.ID] = offer
 		}
+		selectedVariants := make(map[string]struct{}, len(candidate.VariantIDs))
 		for _, variantID := range candidate.VariantIDs {
 			if _, ok := variants[variantID]; !ok {
 				return fmt.Errorf("candidate variant_id %s was not present under item %s", variantID, candidate.ItemID)
 			}
+			selectedVariants[variantID] = struct{}{}
 		}
 		for _, offerID := range candidate.OfferIDs {
-			if _, ok := offers[offerID]; !ok {
+			offer, ok := offers[offerID]
+			if !ok {
 				return fmt.Errorf("candidate offer_id %s was not present under item %s", offerID, candidate.ItemID)
+			}
+			if len(selectedVariants) > 0 && offer.VariantID != nil && *offer.VariantID != "" {
+				if _, ok := selectedVariants[*offer.VariantID]; !ok {
+					return fmt.Errorf(
+						"candidate offer_id %s belongs to variant %s, not one of the selected variants for item %s",
+						offerID, *offer.VariantID, candidate.ItemID,
+					)
+				}
 			}
 		}
 	}
