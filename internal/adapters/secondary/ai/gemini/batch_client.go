@@ -309,6 +309,66 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
 // The "الدليل التجاري المرتبط بالمرشحين" = full product details for each
 // candidate item. Without this, Gemini only sees IDs and can't compose
 // a response with product names, prices, descriptions.
+func (c *BatchClient) buildFinalEvaluateRequest(input services.FinalEvaluationInput, userPrompt string, rc *resolvedAIConfig) batchGeminiRequest {
+	return batchGeminiRequest{
+		SystemInstruction: c.buildBatchSystemInstructionWithSuffix(input.EntityContract, prompts.FinalEvaluationSystemPromptSuffix),
+		Contents: []batchContent{
+			{Role: "user", Parts: []batchPart{{Text: userPrompt}}},
+		},
+		GenerationConfig: batchGenerationConfig{
+			ResponseMimeType: "application/json",
+			ResponseSchema:   finalProposalResponseSchema(),
+			MaxOutputTokens:  rc.maxOutputTokens,
+		},
+	}
+}
+
+func (c *BatchClient) CountFinalTokens(ctx context.Context, input services.FinalEvaluationInput, userPrompt string) (int, error) {
+	if c == nil {
+		return 0, errors.New("batch client is not configured")
+	}
+	rc, err := c.resolveConfig(ctx)
+	if err != nil {
+		return 0, err
+	}
+	reqBody := c.buildFinalEvaluateRequest(input, userPrompt, rc)
+	wrapper := struct {
+		GenerateContentRequest batchGeminiRequest `json:"generateContentRequest"`
+	}{GenerateContentRequest: reqBody}
+	buf, err := json.Marshal(wrapper)
+	if err != nil {
+		return 0, fmt.Errorf("marshal final countTokens request: %w", err)
+	}
+	url := fmt.Sprintf("%s/v1beta/models/%s:countTokens", rc.baseURL, rc.model)
+	reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
+	defer cancel()
+	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(buf))
+	if err != nil {
+		return 0, fmt.Errorf("build final countTokens request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("x-goog-api-key", rc.apiKey)
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return 0, fmt.Errorf("send final countTokens request: %w", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	if err != nil {
+		return 0, fmt.Errorf("read final countTokens response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return 0, fmt.Errorf("final countTokens status %d: %s", resp.StatusCode, string(body))
+	}
+	var out struct {
+		TotalTokens int `json:"totalTokens"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return 0, fmt.Errorf("unmarshal final countTokens response: %w", err)
+	}
+	return out.TotalTokens, nil
+}
+
 func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input services.FinalEvaluationInput, userPrompt string) (ports.CustomerSalesProposal, ports.CustomerSalesUsageTelemetry, error) {
 	if c == nil {
 		return ports.CustomerSalesProposal{}, ports.CustomerSalesUsageTelemetry{}, errors.New("batch client is not configured")
@@ -317,19 +377,8 @@ func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input servic
 	if err != nil {
 		return ports.CustomerSalesProposal{}, ports.CustomerSalesUsageTelemetry{}, err
 	}
-	reqBody := batchGeminiRequest{
-		SystemInstruction: c.buildBatchSystemInstructionWithSuffix(input.EntityContract,
-			"\n\nYou are now in FINAL EVALUATION mode. You have received the full product details for each candidate. Compose a complete Arabic response with product names, prices, descriptions, and availability. Do NOT invent item_ids that were not in the candidate set."),
-		Contents: []batchContent{
-			{Role: "user", Parts: []batchPart{{Text: userPrompt}}},
-		},
-		GenerationConfig: batchGenerationConfig{
-			ResponseMimeType: "application/json",
-			ResponseSchema:   finalProposalResponseSchema(),
-		},
-	}
-	// Per P2-13: measure the wall-clock duration of the final
-	// evaluation Gemini call so the usage record carries a real latency.
+	reqBody := c.buildFinalEvaluateRequest(input, userPrompt, rc)
+
 	finalStart := time.Now()
 	resp, err := c.sendRequestWithConfig(ctx, reqBody, rc)
 	finalEnd := time.Now()
