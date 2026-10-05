@@ -284,10 +284,8 @@ func TestAICostProtectionRuntimeCheckBeatsAllOtherChecks(t *testing.T) {
 	}
 }
 
-// Test P0-3: when no active subscription, fail-open (entitlement not yet
-// enforceable — e.g., a brand-new business without a subscription). The
-// backend's subscription creation flow handles this elsewhere.
-func TestAICostProtectionAllowsWhenNoActiveSubscription(t *testing.T) {
+// Contract §29: without an ACTIVE subscription, merchant AI entitlements stop.
+func TestAICostProtectionBlocksWhenNoActiveSubscription(t *testing.T) {
 	t.Parallel()
 	svc := &AICostProtectionService{
 		Subscriptions: &stubSubscriptionsRepo{
@@ -296,9 +294,23 @@ func TestAICostProtectionAllowsWhenNoActiveSubscription(t *testing.T) {
 		AIUsage:            &stubAIUsageRepo{},
 		PlatformOperations: &stubPlatformOperationsRepo{state: ports.AIRuntimeState{AdminState: ports.ProviderAdminEnabled}},
 	}
-	allowed, _ := svc.IsAIExecutionAllowed(context.Background(), "b-1")
-	if !allowed {
-		t.Errorf("expected allowed=true when no active subscription (fail-open), got false")
+	allowed, reason := svc.IsAIExecutionAllowed(context.Background(), "b-1")
+	if allowed {
+		t.Errorf("expected allowed=false when no active subscription")
+	}
+	if reason != "active_subscription_required" {
+		t.Errorf("expected active_subscription_required, got %q", reason)
+	}
+}
+
+func TestAICostProtectionNilServiceFailsClosed(t *testing.T) {
+	var svc *AICostProtectionService
+	allowed, reason := svc.IsAIExecutionAllowed(context.Background(), "b-1")
+	if allowed {
+		t.Fatal("nil cost protection service must not allow AI execution")
+	}
+	if reason != "ai_cost_protection_unavailable" {
+		t.Fatalf("unexpected reason: %q", reason)
 	}
 }
 
