@@ -20,20 +20,11 @@ type CatalogAIManifestCatalog struct {
 }
 
 type CatalogAIManifestSchema struct {
-	ID          string                                  `json:"id"`
-	Name        string                                  `json:"name"`
-	Version     int                                     `json:"version"`
-	UsageCount  int                                     `json:"usage_count"`
-	Definitions []CatalogAIManifestAttributeDefinition `json:"definitions"`
-}
-
-type CatalogAIManifestAttributeDefinition struct {
-	Key             string         `json:"key"`
-	Label           string         `json:"label"`
-	DataType        string         `json:"data_type"`
-	Required        bool           `json:"required"`
-	ValidationRules map[string]any `json:"validation_rules,omitempty"`
-	DisplayOrder    int            `json:"display_order"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	Version       int      `json:"version"`
+	UsageCount    int      `json:"usage_count"`
+	AttributeKeys []string `json:"attribute_keys,omitempty"`
 }
 
 // CatalogAIProjectionBundle is one fully-hydrated catalog item.
