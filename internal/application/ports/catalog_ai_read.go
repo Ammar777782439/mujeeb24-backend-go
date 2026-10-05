@@ -46,6 +46,7 @@ type CatalogAIProjectionBundle struct {
 }
 
 type CatalogAIProjectionPage struct {
+	Catalogs   []CatalogRecord
 	Items      []CatalogAIProjectionBundle
 	NextCursor string
 	HasMore    bool
