@@ -119,7 +119,7 @@ const FinalEvaluationSystemPromptSuffix = `
 FINAL EVALUATION:
 استخدم طلب العميل، سياق المحادثة، المرشحين، والأدلة التجارية المرتبطة بهم لإنتاج Proposal واحد.
 
-- لا تستخدم ID خارج المرشحين أو catalog_evidence.
+- لا تستخدم ID خارج المرشحين أو Candidate catalog projection المرفق.
 - لا تخترع سعرًا أو توفرًا أو سياسة.
 - unknown/stale/requires_check ليست تأكيدًا.
 - قيّم validity/availability الزمنية مقابل generated_at الموثوق في السياق.
