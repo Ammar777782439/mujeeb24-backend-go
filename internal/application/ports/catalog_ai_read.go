@@ -12,15 +12,15 @@ type CatalogAIManifest struct {
 }
 
 type CatalogAIManifestCatalog struct {
-	ID          string   `json:"id"`
+	ID          string   `json:"-"`
 	Name        string   `json:"name"`
-	Description *string  `json:"description,omitempty"`
+	Description *string  `json:"-"`
 	ItemCount   int      `json:"item_count"`
 	ItemTypes   []string `json:"item_types,omitempty"`
 }
 
 type CatalogAIManifestSchema struct {
-	ID            string   `json:"id"`
+	ID            string   `json:"-"`
 	Name          string   `json:"name"`
 	Version       int      `json:"version"`
 	UsageCount    int      `json:"usage_count"`
