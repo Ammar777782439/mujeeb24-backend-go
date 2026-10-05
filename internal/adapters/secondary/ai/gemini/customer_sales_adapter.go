@@ -475,6 +475,14 @@ func contractProposalResponseSchema() map[string]any {
 				},
 			},
 			"response_text": map[string]any{"type": "string"},
+			"routing_reason": map[string]any{
+				"type": "string",
+				"enum": []string{
+					string(ports.CustomerSalesRoutingReasonSubscriptionActivation),
+					string(ports.CustomerSalesRoutingReasonCustomerRequestedHuman),
+					string(ports.CustomerSalesRoutingReasonOther),
+				},
+			},
 			"selected": map[string]any{
 				"type": "array",
 				"items": map[string]any{
