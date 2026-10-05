@@ -32,6 +32,7 @@ type customerSalesPromptContext struct {
 	Conversation           ports.CustomerSalesContextConversation      `json:"conversation"`
 	Customer               customerSalesPromptCustomer                 `json:"customer"`
 	CatalogEvidence        []ports.CustomerSalesCatalogEvidence        `json:"catalog_evidence"`
+	CatalogManifest        *ports.CatalogAIManifest                     `json:"catalog_manifest,omitempty"`
 	CatalogSummary         []ports.CustomerSalesCatalogSummaryEntry    `json:"catalog_summary,omitempty"`
 	OfferEvidence          []ports.CustomerSalesOfferEvidence          `json:"offer_evidence"`
 	VariantEvidence        []ports.CustomerSalesVariantEvidence        `json:"variant_evidence"`
@@ -65,7 +66,8 @@ func customerSalesPromptContextFrom(value *ports.CustomerSalesContext) customerS
 			Status:           value.Customer.Status,
 		},
 		CatalogEvidence:        value.CatalogEvidence,
-		CatalogSummary:         value.CatalogSummary,
+		CatalogManifest:        value.CatalogManifest,
+		CatalogSummary:         nil,
 		OfferEvidence:          value.OfferEvidence,
 		VariantEvidence:        value.VariantEvidence,
 		KnowledgeEvidence:      value.KnowledgeEvidence,
