@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 )
 
 // buildUserPrompt encodes the customer-facing context and message for Gemini.
@@ -32,6 +33,7 @@ type customerSalesPromptContext struct {
 	Conversation           ports.CustomerSalesContextConversation      `json:"conversation"`
 	Customer               customerSalesPromptCustomer                 `json:"customer"`
 	CatalogEvidence        []ports.CustomerSalesCatalogEvidence        `json:"catalog_evidence"`
+	CatalogSchemaEvidence  []services.CatalogAIAttributeSchema         `json:"catalog_schema_evidence,omitempty"`
 	CatalogManifest        *ports.CatalogAIManifest                     `json:"catalog_manifest,omitempty"`
 	OfferEvidence          []ports.CustomerSalesOfferEvidence          `json:"offer_evidence"`
 	VariantEvidence        []ports.CustomerSalesVariantEvidence        `json:"variant_evidence"`
@@ -64,6 +66,7 @@ func customerSalesPromptContextFrom(value *ports.CustomerSalesContext) customerS
 			Status:           value.Customer.Status,
 		},
 		CatalogEvidence:        value.CatalogEvidence,
+		CatalogSchemaEvidence:  value.CatalogSchemaEvidence,
 		CatalogManifest:        value.CatalogManifest,
 		OfferEvidence:          value.OfferEvidence,
 		VariantEvidence:        value.VariantEvidence,
