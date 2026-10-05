@@ -44,6 +44,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -63,6 +64,74 @@ type PostgresReferenceValidator struct{ adapter *Adapter }
 // NewPostgresReferenceValidator wires the validator to a Postgres Adapter.
 func NewPostgresReferenceValidator(adapter *Adapter) *PostgresReferenceValidator {
 	return &PostgresReferenceValidator{adapter: adapter}
+}
+
+// ValidateSelection validates the complete item -> variant -> offer tuple.
+// It first checks the exact relational evidence exposed to Gemini, then checks
+// the same relationship in PostgreSQL under the trusted business scope.
+func (v *PostgresReferenceValidator) ValidateSelection(ctx context.Context, businessID string, selected ports.SelectedReference, evidence ports.CatalogAIEvidenceSet) error {
+	if v == nil || v.adapter == nil {
+		return ErrPoolClosed
+	}
+	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(selected.ItemID) == "" {
+		return &RepositoryError{Operation: "validator.reference.selection", Kind: RepositoryInvalid, Err: errors.New("business_id and item_id are required")}
+	}
+	if !evidence.ContainsSelection(selected) {
+		return &RepositoryError{
+			Operation: "validator.reference.selection",
+			Kind:      RepositoryInvalid,
+			Err:       errors.New("selected catalog relationship was not in the evidence sent to Gemini"),
+		}
+	}
+
+	var variantID, offerID string
+	if selected.VariantID != nil {
+		variantID = strings.TrimSpace(*selected.VariantID)
+	}
+	if selected.OfferID != nil {
+		offerID = strings.TrimSpace(*selected.OfferID)
+	}
+
+	executor, err := v.adapter.Executor(ctx)
+	if err != nil {
+		return &RepositoryError{Operation: "validator.reference.selection", Kind: RepositoryInvalid, Err: err}
+	}
+	var valid bool
+	const query = `
+		SELECT EXISTS (
+			SELECT 1
+			FROM catalog_items i
+			WHERE i.business_id::text = $1
+			  AND i.id::text = $2
+			  AND (
+			    $3 = '' OR EXISTS (
+			      SELECT 1 FROM variants v
+			      WHERE v.business_id = i.business_id
+			        AND v.catalog_item_id = i.id
+			        AND v.id::text = $3
+			    )
+			  )
+			  AND (
+			    $4 = '' OR EXISTS (
+			      SELECT 1 FROM offers o
+			      WHERE o.business_id = i.business_id
+			        AND o.catalog_item_id = i.id
+			        AND o.id::text = $4
+			        AND (
+			          $3 = '' OR o.variant_id IS NULL OR o.variant_id::text = $3
+			        )
+			    )
+			  )
+		)`
+	if err := executor.QueryRow(ctx, query, businessID, selected.ItemID, variantID, offerID).Scan(&valid); err != nil {
+		return &RepositoryError{Operation: "validator.reference.selection", Kind: RepositoryInvalid, Err: fmt.Errorf("query selected catalog relationship: %w", err)}
+	}
+	if !valid {
+		// Deliberately generic: do not disclose whether another tenant owns
+		// any of the supplied identifiers.
+		return &RepositoryError{Operation: "validator.reference.selection", Kind: RepositoryNotFound, Err: errors.New("selected catalog relationship is not valid in the current business")}
+	}
+	return nil
 }
 
 // ValidateItemReference per contract ⑥ §6-7 + §10.
