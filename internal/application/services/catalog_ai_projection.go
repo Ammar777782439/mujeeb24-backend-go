@@ -4,7 +4,7 @@
 //
 // Per contract ① §1, the Projection is a Read Model for AI ONLY, built 100%
 // on the Catalog Contract (⑤). It is NOT a Domain Entity, NOT a Catalog
-// Contract replacement, NOT a Search Index.
+// Contract replacement. It is only a provider-facing read model.
 //
 // Per contract ① §2, only the AttributeSchemas USED by the Items in the
 // Projection are sent. We do NOT send unused schemas.
@@ -13,8 +13,8 @@
 // items[] reference it by (attribute_schema_id, attribute_schema_version).
 //
 // Per contract ① §5, the Projection does NOT contain: business_id, SQL,
-// database metadata, created_at, updated_at, search_query, semantic_search,
-// matching logic, or ranking logic.
+// database metadata, created_at, or updated_at. The projection contains only
+// catalog facts and relationships needed by the model.
 //
 // Per contract ① §6:
 //   Mujeeb reads the real Catalog → builds Projection → enforces Tenant
