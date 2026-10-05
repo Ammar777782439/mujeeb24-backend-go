@@ -49,22 +49,6 @@ const (
 // RequiresHuman=true so the dashboard hands the conversation to staff.
 const HandoffFarewellMessage = "يسعدنا اختيارك! تم استلام طلبك، وسيقوم أحد ممثلي المبيعات بالتواصل معك فوراً لإتمام خطوات التفعيل والربط."
 
-// isSubscriptionHandoffIntent reports whether the model's intent asks to
-// subscribe, activate, or purchase. This is product routing (which farewell
-// flow applies), not reference resolution: it never selects catalog entities.
-func isSubscriptionHandoffIntent(intent string) bool {
-	value := strings.ToLower(strings.TrimSpace(intent))
-	if value == "" {
-		return false
-	}
-	for _, keyword := range []string{"subscri", "activat", "purchase", "اشتراك", "تفعيل", "فعّل", "شراء"} {
-		if strings.Contains(value, keyword) {
-			return true
-		}
-	}
-	return false
-}
-
 // AutoReplyService drives the contract ⑥ post-Gemini flow for one customer turn.
 //
 // Per contract ⑨ §1, each Handle() call is one AI Run.
@@ -464,16 +448,13 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	// fixed Mujeeb-owned farewell (never model text). This is product routing,
 	// not reference resolution.
 	//
-	// Per contract ④ §4, the model returns one of the closed status values
-	// (resolved/ambiguous/not_found/needs_more_data). None of these directly
-	// convey "subscription" intent, so we infer it from ResponseText (which
-	// the model produces per its system prompt). This is product routing,
-	// not reference resolution.
+	// Subscription/activation routing is structured model output. Mujeeb
+	// never infers it from response_text, avoiding text-based false positives.
 	farewellHandoff := false
 	var farewellReasonCodes []string
 	if proposal.Action == ports.CustomerSalesProposalActionHumanRequest &&
 		effective.PolicyDecision == "allowed" &&
-		isSubscriptionHandoffIntent(proposal.ResponseText) {
+		proposal.RoutingReason == ports.CustomerSalesRoutingReasonSubscriptionActivation {
 		farewellHandoff = true
 		// Override the proposal's response text with the fixed farewell and
 		// the action to "answer" so the sendable check enqueues the message.
