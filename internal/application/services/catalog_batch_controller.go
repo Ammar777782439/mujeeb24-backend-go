@@ -1096,6 +1096,9 @@ func (c *CatalogBatchController) runFinalEvaluation(
 		if err != nil {
 			return ports.CustomerSalesProposal{}, CatalogAIProjection{}, err
 		}
+		if proposal.Status == ports.CustomerSalesProposalStatusNeedsMoreData {
+			return ports.CustomerSalesProposal{}, CatalogAIProjection{}, errors.New("final catalog evaluation returned needs_more_data after complete catalog coverage")
+		}
 		c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, usage, "final_evaluation")
 		return proposal, candidateProjection, nil
 	}
