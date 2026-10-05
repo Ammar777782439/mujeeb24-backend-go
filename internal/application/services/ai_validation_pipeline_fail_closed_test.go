@@ -46,3 +46,21 @@ func TestPolicyDecisionUnknownRequiresApproval(t *testing.T) {
 		t.Fatalf("PolicyDecision=%q, want requires_approval", decision.PolicyDecision)
 	}
 }
+
+func TestStructuredRoutingReasonValidation(t *testing.T) {
+	pipeline := &ValidationPipeline{}
+	valid := ports.CustomerSalesProposal{
+		Status:        ports.CustomerSalesProposalStatusResolved,
+		Action:        ports.CustomerSalesProposalActionHumanRequest,
+		RoutingReason: ports.CustomerSalesRoutingReasonSubscriptionActivation,
+	}
+	if failure := pipeline.validateStructural(valid); failure != nil {
+		t.Fatalf("valid routing reason rejected: %v", failure)
+	}
+
+	invalid := valid
+	invalid.RoutingReason = ports.CustomerSalesRoutingReason("invented_reason")
+	if failure := pipeline.validateStructural(invalid); failure == nil {
+		t.Fatal("unknown routing reason must be rejected")
+	}
+}
