@@ -312,12 +312,14 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	//
 	// Per contract ② "ما أغلقناه": no semantic search, no product matching
 	// inside Mujeeb. Mujeeb only builds the projection and counts tokens.
-	if proposal.Status == ports.CustomerSalesProposalStatusNeedsMoreData && s.CatalogBatch == nil {
-		err := errors.New("catalog evaluation is required for needs_more_data but CatalogBatchController is not configured")
+	fullCatalogRequired := proposal.Status == ports.CustomerSalesProposalStatusNeedsMoreData ||
+		proposal.Status == ports.CustomerSalesProposalStatusNotFound
+	if fullCatalogRequired && s.CatalogBatch == nil {
+		err := errors.New("full catalog evaluation is required before needs_more_data/not_found can be finalized, but CatalogBatchController is not configured")
 		s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), err.Error())
 		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
 	}
-	if s.CatalogBatch != nil && proposal.Status == ports.CustomerSalesProposalStatusNeedsMoreData {
+	if s.CatalogBatch != nil && fullCatalogRequired {
 		resetGeminiInteraction = true
 		// Per contract ② §9, invoke catalog evaluation whenever Gemini
 		// says it needs more data — regardless of whether some evidence
@@ -328,7 +330,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		// Previous condition `len(builtContext.CatalogEvidence) == 0` was
 		// wrong: the ContextBuilder always puts 5 items in the evidence,
 		// so the condition was never true, and the batch evaluation never ran.
-		log.Printf("[AutoReply] CATALOG_EVAL_TRIGGER run=%s reason=needs_more_data current_evidence=%d", run.ID, len(builtContext.CatalogEvidence))
+		log.Printf("[AutoReply] CATALOG_EVAL_TRIGGER run=%s reason=%s current_evidence=%d", run.ID, proposal.Status, len(builtContext.CatalogEvidence))
 		// Per contract ⑨ §3, mark RUNNING again (back from VALIDATING
 		// to RUNNING for the batch evaluation loop).
 		s.markRunningSafe(ctx, run)
