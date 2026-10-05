@@ -146,6 +146,20 @@ func (p *ValidationPipeline) validateStructural(proposal ports.CustomerSalesProp
 			Reason:   fmt.Sprintf("invalid action %q per contract ④ §4", proposal.Action),
 		}
 	}
+	if proposal.RoutingReason != "" {
+		switch proposal.RoutingReason {
+		case ports.CustomerSalesRoutingReasonSubscriptionActivation,
+			ports.CustomerSalesRoutingReasonCustomerRequestedHuman,
+			ports.CustomerSalesRoutingReasonOther:
+			// allowed
+		default:
+			return &StageFailure{
+				Stage:    ports.AIRunFailureStageValidation,
+				Category: ports.AIRunFailureCategoryInvalidAIOutput,
+				Reason:   fmt.Sprintf("invalid routing_reason %q", proposal.RoutingReason),
+			}
+		}
+	}
 	if proposal.Action != ports.CustomerSalesProposalActionHumanRequest && strings.TrimSpace(proposal.ResponseText) == "" {
 		return &StageFailure{
 			Stage:    ports.AIRunFailureStageValidation,
