@@ -53,7 +53,6 @@ type CatalogAIAttributeDefinition struct {
 	Label           string         `json:"label"`
 	DataType        string         `json:"data_type"`
 	IsRequired      bool           `json:"is_required"`
-	IsSearchable    bool           `json:"is_searchable"`
 	ValidationRules map[string]any `json:"validation_rules,omitempty"`
 	DisplayOrder    int            `json:"display_order"`
 }
