@@ -179,7 +179,13 @@ func (v *PostgresReferenceValidator) ValidateItemReference(ctx context.Context, 
 		return &RepositoryError{Operation: "validator.reference.item", Kind: RepositoryInvalid, Err: err}
 	}
 	var exists bool
-	const query = `SELECT EXISTS(SELECT 1 FROM catalog_items WHERE id::text = $1 AND business_id::text = $2)`
+	const query = `SELECT EXISTS(
+		SELECT 1
+		FROM catalog_items i
+		JOIN catalogs c ON c.business_id=i.business_id AND c.id=i.catalog_id
+		WHERE i.id::text=$1 AND i.business_id::text=$2
+		  AND i.status='active' AND c.status='active'
+	)`
 	if err := executor.QueryRow(ctx, query, itemID, businessID).Scan(&exists); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return &RepositoryError{Operation: "validator.reference.item", Kind: RepositoryNotFound, Err: fmt.Errorf("item_id %s not found in business %s per contract ⑥ §6", itemID, businessID)}
@@ -225,7 +231,14 @@ func (v *PostgresReferenceValidator) ValidateVariantReference(ctx context.Contex
 		return &RepositoryError{Operation: "validator.reference.variant", Kind: RepositoryInvalid, Err: err}
 	}
 	var exists bool
-	const query = `SELECT EXISTS(SELECT 1 FROM variants WHERE id::text = $1 AND business_id::text = $2)`
+	const query = `SELECT EXISTS(
+		SELECT 1
+		FROM variants v
+		JOIN catalog_items i ON i.business_id=v.business_id AND i.id=v.catalog_item_id
+		JOIN catalogs c ON c.business_id=i.business_id AND c.id=i.catalog_id
+		WHERE v.id::text=$1 AND v.business_id::text=$2
+		  AND v.status='active' AND i.status='active' AND c.status='active'
+	)`
 	if err := executor.QueryRow(ctx, query, variantID, businessID).Scan(&exists); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return &RepositoryError{Operation: "validator.reference.variant", Kind: RepositoryNotFound, Err: fmt.Errorf("variant_id %s not found in business %s per contract ⑥ §6", variantID, businessID)}
@@ -269,7 +282,14 @@ func (v *PostgresReferenceValidator) ValidateOfferReference(ctx context.Context,
 		return &RepositoryError{Operation: "validator.reference.offer", Kind: RepositoryInvalid, Err: err}
 	}
 	var exists bool
-	const query = `SELECT EXISTS(SELECT 1 FROM offers WHERE id::text = $1 AND business_id::text = $2)`
+	const query = `SELECT EXISTS(
+		SELECT 1
+		FROM offers o
+		JOIN catalog_items i ON i.business_id=o.business_id AND i.id=o.catalog_item_id
+		JOIN catalogs c ON c.business_id=i.business_id AND c.id=i.catalog_id
+		WHERE o.id::text=$1 AND o.business_id::text=$2
+		  AND o.status='active' AND i.status='active' AND c.status='active'
+	)`
 	if err := executor.QueryRow(ctx, query, offerID, businessID).Scan(&exists); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return &RepositoryError{Operation: "validator.reference.offer", Kind: RepositoryNotFound, Err: fmt.Errorf("offer_id %s not found in business %s per contract ⑥ §6", offerID, businessID)}
