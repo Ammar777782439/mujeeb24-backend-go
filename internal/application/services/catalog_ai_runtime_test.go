@@ -60,3 +60,26 @@ func TestCustomerSalesSchemaEvidencePreservesDefinitionsAndRules(t *testing.T) {
 		t.Fatalf("validation rules not preserved: %+v", def.ValidationRules)
 	}
 }
+
+func TestOfferEvidenceMarksUnverifiedOrExpiredFactsStale(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0).UTC()
+	past := now.Add(-time.Minute)
+
+	unverified := ports.OfferRecord{
+		ID: "offer-1", BusinessID: "business-1", CatalogItemID: "item-1",
+		Name: "Offer", PricingMode: "fixed", PriceVerificationStatus: "unverified",
+		AvailabilityMode: "always_available", AvailabilityStatus: "available",
+		FulfillmentMode: "manual", Status: "active",
+	}
+	if got := toOfferEvidence(unverified, now); got.EvidenceState != CustomerSalesContextStale {
+		t.Fatalf("unverified price must be stale evidence, got %q", got.EvidenceState)
+	}
+
+	expiredAvailability := unverified
+	expiredAvailability.ID = "offer-2"
+	expiredAvailability.PriceVerificationStatus = "verified"
+	expiredAvailability.AvailabilityValidUntil = &past
+	if got := toOfferEvidence(expiredAvailability, now); got.EvidenceState != CustomerSalesContextStale {
+		t.Fatalf("expired availability validity must be stale evidence, got %q", got.EvidenceState)
+	}
+}
