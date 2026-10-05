@@ -897,6 +897,93 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 		return c.TokenCounter.CountTokens(ctx, batch)
 	}
 
+	type itemFragmentUnit struct {
+		variant *CatalogAIVariant
+		offer   *CatalogAIOffer
+	}
+
+	buildFragmentItem := func(item CatalogAIItem, units []itemFragmentUnit) CatalogAIItem {
+		fragment := item
+		fragment.Variants = nil
+		fragment.Offers = nil
+		variantSeen := make(map[string]struct{})
+		offerSeen := make(map[string]struct{})
+		for _, unit := range units {
+			if unit.variant != nil {
+				if _, ok := variantSeen[unit.variant.ID]; !ok {
+					fragment.Variants = append(fragment.Variants, *unit.variant)
+					variantSeen[unit.variant.ID] = struct{}{}
+				}
+			}
+			if unit.offer != nil {
+				if _, ok := offerSeen[unit.offer.ID]; !ok {
+					fragment.Offers = append(fragment.Offers, *unit.offer)
+					offerSeen[unit.offer.ID] = struct{}{}
+				}
+			}
+		}
+		return fragment
+	}
+
+	var splitOversizedItem func(CatalogAIItem) error
+	splitOversizedItem = func(item CatalogAIItem) error {
+		variantByID := make(map[string]CatalogAIVariant, len(item.Variants))
+		for _, variant := range item.Variants {
+			variantByID[variant.ID] = variant
+		}
+		variantUsedByOffer := make(map[string]struct{})
+		units := make([]itemFragmentUnit, 0, len(item.Offers)+len(item.Variants))
+		for i := range item.Offers {
+			offer := item.Offers[i]
+			unit := itemFragmentUnit{offer: &offer}
+			if offer.VariantID != nil && *offer.VariantID != "" {
+				if variant, ok := variantByID[*offer.VariantID]; ok {
+					variantCopy := variant
+					unit.variant = &variantCopy
+					variantUsedByOffer[variant.ID] = struct{}{}
+				}
+			}
+			offerCopy := offer
+			unit.offer = &offerCopy
+			units = append(units, unit)
+		}
+		for i := range item.Variants {
+			variant := item.Variants[i]
+			if _, used := variantUsedByOffer[variant.ID]; used {
+				continue
+			}
+			variantCopy := variant
+			units = append(units, itemFragmentUnit{variant: &variantCopy})
+		}
+		if len(units) == 0 {
+			return fmt.Errorf("catalog item %s exceeds token budget %d and has no splittable variants/offers", item.ID, budget)
+		}
+
+		var splitUnits func([]itemFragmentUnit) error
+		splitUnits = func(part []itemFragmentUnit) error {
+			fragment := buildFragmentItem(item, part)
+			batch := buildBatch([]CatalogAIItem{fragment}, nextBatchNumber)
+			tokens, err := countBatch(batch)
+			if err != nil {
+				return fmt.Errorf("count tokens for item %s fragment batch %d: %w", item.ID, nextBatchNumber, err)
+			}
+			if tokens <= budget {
+				batches = append(batches, batch)
+				nextBatchNumber++
+				return nil
+			}
+			if len(part) == 1 {
+				return fmt.Errorf("catalog item %s contains a single commercial fragment exceeding token budget %d with exact request size %d", item.ID, budget, tokens)
+			}
+			mid := len(part) / 2
+			if err := splitUnits(part[:mid]); err != nil {
+				return err
+			}
+			return splitUnits(part[mid:])
+		}
+		return splitUnits(units)
+	}
+
 	var split func([]CatalogAIItem) error
 	split = func(items []CatalogAIItem) error {
 		if len(items) == 0 {
@@ -913,7 +1000,7 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 			return nil
 		}
 		if len(items) == 1 {
-			return fmt.Errorf("catalog item %s exceeds token budget %d with exact request size %d", items[0].ID, budget, tokens)
+			return splitOversizedItem(items[0])
 		}
 		mid := len(items) / 2
 		if err := split(items[:mid]); err != nil {
