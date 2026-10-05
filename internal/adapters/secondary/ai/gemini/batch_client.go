@@ -514,8 +514,8 @@ func parseBatchCandidates(resp batchGeminiResponse) ([]ports.CatalogBatchCandida
 	var wrapper struct {
 		Candidates []ports.CatalogBatchCandidate `json:"candidates"`
 	}
-	if err := json.Unmarshal([]byte(raw), &wrapper); err != nil {
-		return nil, fmt.Errorf("unmarshal candidates wrapper: %w", err)
+	if err := decodeStrictStructuredJSON([]byte(raw), &wrapper); err != nil {
+		return nil, fmt.Errorf("decode candidates wrapper: %w", err)
 	}
 	return wrapper.Candidates, nil
 }
@@ -535,8 +535,8 @@ func parseFinalProposal(resp batchGeminiResponse) (ports.CustomerSalesProposal, 
 		return ports.CustomerSalesProposal{}, errors.New("empty structured output text per contract ④ §4")
 	}
 	var proposal ports.CustomerSalesProposal
-	if err := json.Unmarshal([]byte(raw), &proposal); err != nil {
-		return ports.CustomerSalesProposal{}, fmt.Errorf("unmarshal final proposal: %w", err)
+	if err := decodeStrictStructuredJSON([]byte(raw), &proposal); err != nil {
+		return ports.CustomerSalesProposal{}, fmt.Errorf("decode final proposal: %w", err)
 	}
 	return proposal, nil
 }
@@ -549,12 +549,14 @@ func parseFinalProposal(resp batchGeminiResponse) (ports.CustomerSalesProposal, 
 // offer_ids (array of string), reason (string).
 func batchCandidateResponseSchema() map[string]any {
 	return map[string]any{
-		"type": "object",
+		"type":                 "object",
+		"additionalProperties": false,
 		"properties": map[string]any{
 			"candidates": map[string]any{
 				"type": "array",
 				"items": map[string]any{
-					"type": "object",
+					"type":                 "object",
+					"additionalProperties": false,
 					"properties": map[string]any{
 						"item_id":     map[string]any{"type": "string"},
 						"variant_ids": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
