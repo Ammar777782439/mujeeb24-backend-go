@@ -33,7 +33,6 @@ type customerSalesPromptContext struct {
 	Customer               customerSalesPromptCustomer                 `json:"customer"`
 	CatalogEvidence        []ports.CustomerSalesCatalogEvidence        `json:"catalog_evidence"`
 	CatalogManifest        *ports.CatalogAIManifest                     `json:"catalog_manifest,omitempty"`
-	CatalogSummary         []ports.CustomerSalesCatalogSummaryEntry    `json:"catalog_summary,omitempty"`
 	OfferEvidence          []ports.CustomerSalesOfferEvidence          `json:"offer_evidence"`
 	VariantEvidence        []ports.CustomerSalesVariantEvidence        `json:"variant_evidence"`
 	KnowledgeEvidence      []ports.CustomerSalesKnowledgeEvidence      `json:"knowledge_evidence"`
@@ -43,7 +42,6 @@ type customerSalesPromptContext struct {
 	KnowledgeState         string                                      `json:"knowledge_state"`
 	ConversationState      *ports.ConversationStateRecord              `json:"conversation_state,omitempty"`
 	ConversationSummary    string                                      `json:"conversation_summary,omitempty"`
-	CatalogNames           []string                                    `json:"catalog_names,omitempty"`
 	GeneratedAt            time.Time                                   `json:"generated_at"`
 	ExpiresAt              time.Time                                   `json:"expires_at"`
 }
@@ -67,7 +65,6 @@ func customerSalesPromptContextFrom(value *ports.CustomerSalesContext) customerS
 		},
 		CatalogEvidence:        value.CatalogEvidence,
 		CatalogManifest:        value.CatalogManifest,
-		CatalogSummary:         nil,
 		OfferEvidence:          value.OfferEvidence,
 		VariantEvidence:        value.VariantEvidence,
 		KnowledgeEvidence:      value.KnowledgeEvidence,
@@ -77,7 +74,6 @@ func customerSalesPromptContextFrom(value *ports.CustomerSalesContext) customerS
 		KnowledgeState:         value.KnowledgeState,
 		ConversationState:      value.ConversationState,
 		ConversationSummary:    value.ConversationSummary,
-		CatalogNames:           value.CatalogNames,
 		GeneratedAt:            value.GeneratedAt,
 		ExpiresAt:              value.ExpiresAt,
 	}
