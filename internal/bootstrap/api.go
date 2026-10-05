@@ -171,21 +171,10 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		platformOperations.RegisterProbe("socialapi", external.SocialAPIHealthProbe)
 	}
 
-	// Customer-sales capabilities are owned by the application layer.
-	// The Gemini adapter receives only the narrow CustomerSalesToolPort.
-	catalogRepository := postgres.NewCatalogRepository(database)
-	capabilityRegistry := services.NewCustomerSalesToolRegistry()
-	catalogCapability := services.NewCustomerSalesCatalogDataTool(
-		services.ListCatalogsQueryService{Repository: catalogRepository},
-		services.ListCatalogItemsQueryService{Repository: catalogRepository},
-		services.GetCatalogItemQueryService{Repository: catalogRepository},
-		services.ListOffersQueryService{Repository: catalogRepository},
-		services.ListVariantsQueryService{Repository: catalogRepository},
-		services.GetAttributeSchemaQueryService{Repository: catalogRepository},
-	)
-	if err := capabilityRegistry.Register(catalogCapability); err != nil {
-		return nil, fmt.Errorf("register customer sales catalog capability: %w", err)
-	}
+	// Customer Sales deliberately has no catalog tool registry. The catalog has
+	// one authoritative AI path: bounded manifest on the initial turn, then
+	// complete catalog paging/batching when Gemini returns needs_more_data.
+	// This prevents competing catalog-read paths and keeps evidence deterministic.
 	// Per §1-2: create the AIConfigurationCache + AIProviderConfigRepository
 	// unconditionally — the Platform Admin can manage credentials and models
 	// even when AutoReply is disabled. The cache seeds from env on first
@@ -246,7 +235,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		var runRepo ports.AIRunRepository
 		if external.GeminiHTTPClient != nil {
 			geminiClient = external.GeminiHTTPClient
-			customerSalesAdapter, err := gemini.NewGeminiCustomerSalesAdapter(geminiClient, capabilityRegistry)
+			customerSalesAdapter, err := gemini.NewGeminiCustomerSalesAdapter(geminiClient, nil)
 			if err != nil {
 				return nil, fmt.Errorf("build customer sales AI adapter: %w", err)
 			}
@@ -298,9 +287,11 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// Per contract ⑤ §7, build the Catalog Entity Contract payload
 		// once and reuse for every call.
 		entityContract := services.BuildCatalogEntityContractPayload()
-		if payloadBytes, err := json.Marshal(entityContract); err == nil {
-			service.EntityContractPayload = payloadBytes
+		payloadBytes, err := json.Marshal(entityContract)
+		if err != nil {
+			return nil, fmt.Errorf("marshal catalog entity contract: %w", err)
 		}
+		service.EntityContractPayload = payloadBytes
 		contextBuilder := services.NewAutoReplyContextBuilder(
 			postgres.NewBusinessRepository(database),
 			postgres.NewConversationRepository(database),
@@ -376,16 +367,22 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// Per contract ② §2, TokenBudget is token-based (no hardcoded
 		// item count). 8000 is a sensible default per runtime config.
 		if geminiClient := external.GeminiHTTPClient; geminiClient != nil {
-			batchTokenCounter, _ := gemini.NewTokenCounter(gemini.TokenCounterConfig{
+			batchTokenCounter, err := gemini.NewTokenCounter(gemini.TokenCounterConfig{
 				BaseURL: geminiClient.BaseURL(),
 				APIKey:  geminiClient.APIKey(),
 				Model:   geminiClient.Model(),
 			})
-			batchClient, _ := gemini.NewBatchClient(gemini.BatchClientConfig{
+			if err != nil {
+				return nil, fmt.Errorf("build Gemini token counter: %w", err)
+			}
+			batchClient, err := gemini.NewBatchClient(gemini.BatchClientConfig{
 				BaseURL: geminiClient.BaseURL(),
 				APIKey:  geminiClient.APIKey(),
 				Model:   geminiClient.Model(),
 			})
+			if err != nil {
+				return nil, fmt.Errorf("build Gemini catalog batch client: %w", err)
+			}
 			service.CatalogBatch = &services.CatalogBatchController{
 				Catalogs:          postgres.NewCatalogRepository(database),
 				CatalogAI:         postgres.NewCatalogAIReadRepository(database),
