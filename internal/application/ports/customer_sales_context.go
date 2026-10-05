@@ -53,6 +53,7 @@ type CustomerSalesContext struct {
 	Conversation           CustomerSalesContextConversation
 	Customer               CustomerSalesContextCustomer
 	CatalogEvidence        []CustomerSalesCatalogEvidence
+	CatalogSchemaEvidence  []CatalogAIAttributeSchema
 	OfferEvidence          []CustomerSalesOfferEvidence
 	VariantEvidence        []CustomerSalesVariantEvidence
 	KnowledgeEvidence      []CustomerSalesKnowledgeEvidence
@@ -128,9 +129,11 @@ type CustomerSalesContextCustomer struct {
 }
 
 type CustomerSalesCatalogEvidence struct {
-	Reference        string
-	CatalogReference string
-	ItemType         string
+	Reference                string
+	CatalogReference         string
+	AttributeSchemaReference *string
+	AttributeSchemaVersion   *int
+	ItemType                 string
 	Name             string
 	Status           string
 	Attributes       []byte
