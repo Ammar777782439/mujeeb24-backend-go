@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
@@ -405,6 +406,12 @@ func (r *CatalogAIReadRepository) ListProjectionPage(ctx context.Context, reques
 			return ports.CatalogAIProjectionPage{}, catalogRepositoryError("catalog_ai.page.catalogs", rowsErr)
 		}
 		catRows.Close()
+		if len(page.Catalogs) != len(catalogIDs) {
+			return ports.CatalogAIProjectionPage{}, catalogRepositoryError(
+				"catalog_ai.page.catalogs",
+				fmt.Errorf("catalog projection parent mismatch: expected %d active catalogs, loaded %d", len(catalogIDs), len(page.Catalogs)),
+			)
+		}
 	}
 
 	bundles, err := r.hydrate(ctx, executor, request.BusinessID, items, ids)
@@ -508,6 +515,27 @@ func (r *CatalogAIReadRepository) hydrate(ctx context.Context, executor SQLExecu
 		return nil, catalogRepositoryError("catalog_ai.schemas", err)
 	}
 	sRows.Close()
+	if len(schemas) != len(schemaIDs) {
+		return nil, catalogRepositoryError(
+			"catalog_ai.schemas",
+			fmt.Errorf("catalog projection schema mismatch: expected %d schemas, loaded %d", len(schemaIDs), len(schemas)),
+		)
+	}
+	for _, item := range items {
+		if item.AttributeSchemaID == nil {
+			continue
+		}
+		schema := schemas[*item.AttributeSchemaID]
+		if schema == nil {
+			return nil, catalogRepositoryError("catalog_ai.schemas", fmt.Errorf("schema %s referenced by item %s is missing", *item.AttributeSchemaID, item.ID))
+		}
+		if item.AttributeSchemaVersion == nil || *item.AttributeSchemaVersion != schema.Version {
+			return nil, catalogRepositoryError(
+				"catalog_ai.schemas",
+				fmt.Errorf("schema version mismatch for item %s: item=%v schema=%d", item.ID, item.AttributeSchemaVersion, schema.Version),
+			)
+		}
+	}
 
 	dRows, err := executor.Query(ctx, `
 		SELECT d.schema_id::text,d.id::text,d.attribute_key,d.label,d.data_type,d.is_required,d.validation_rules,d.display_order
