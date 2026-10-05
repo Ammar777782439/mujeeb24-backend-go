@@ -473,7 +473,6 @@ func mapAttributeSchemaRecordToProjection(r ports.AttributeSchemaRecord) Catalog
 			Label:        d.Label,
 			DataType:     d.DataType,
 			IsRequired:   d.Required,
-			IsSearchable: d.Searchable,
 			DisplayOrder: d.DisplayOrder,
 		})
 	}
