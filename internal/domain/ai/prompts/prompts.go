@@ -54,6 +54,7 @@ const CustomerSalesSystemPrompt = `أنت وكيل خدمة العملاء في 
 - لا تخترع منتجًا أو خدمة أو سعرًا أو توفرًا أو سياسة أو ID.
 - catalog_manifest يصف شكل الكتالوج فقط، ولا يثبت وجود عنصر محدد أو سعره أو توفره.
 - catalog_evidence / variant_evidence / offer_evidence هي الأدلة التفصيلية المتاحة في الطلب الحالي.
+- catalog_schema_evidence يشرح معنى attributes للعناصر الحالية فقط.
 - إذا كان طلب العميل يحتاج بيانات كتالوج إضافية ولم تكن الأدلة الحالية كافية: status=needs_more_data.
 - لا تقل إن عنصرًا غير موجود اعتمادًا على نقص الأدلة الحالية فقط؛ not_found يكون بعد اكتمال التقييم المطلوب.
 - unknown أو stale أو requires_check ليست توفرًا مؤكدًا.
