@@ -98,3 +98,27 @@ func TestCatalogAIManifestJSONIsCompactAndNonEvidentiary(t *testing.T) {
 		}
 	}
 }
+
+func TestCatalogAIManifestSignalsTruncation(t *testing.T) {
+	manifest := CatalogAIManifest{
+		TotalActiveItems: 1000,
+		TotalCatalogs: 100,
+		CatalogsTruncated: true,
+		Catalogs: []CatalogAIManifestCatalog{{
+			Name: "Catalog A",
+			ItemCount: 100,
+			ItemTypes: []string{"service"},
+			ItemTypesTruncated: true,
+		}},
+	}
+	raw, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatalf("marshal manifest: %v", err)
+	}
+	got := string(raw)
+	for _, required := range []string{"catalogs_truncated", "item_types_truncated", "total_catalogs"} {
+		if !strings.Contains(got, required) {
+			t.Fatalf("manifest must expose %q when incomplete: %s", required, got)
+		}
+	}
+}
