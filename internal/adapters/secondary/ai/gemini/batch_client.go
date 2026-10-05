@@ -161,8 +161,12 @@ func (c *BatchClient) buildEvaluateBatchRequest(input services.BatchEvaluationIn
 	if err != nil {
 		return batchGeminiRequest{}, fmt.Errorf("marshal batch payload: %w", err)
 	}
-	userPrompt := fmt.Sprintf("Customer message: %s\n\nCatalog batch %d data:\n%s",
-		input.CustomerMessage, input.BatchNumber, string(batchJSON))
+	contextJSON, err := json.Marshal(customerSalesPromptContextFrom(&input.ConversationContext))
+	if err != nil {
+		return batchGeminiRequest{}, fmt.Errorf("marshal conversation context for batch: %w", err)
+	}
+	userPrompt := fmt.Sprintf("Customer message: %s\n\nVerified conversation context:\n%s\n\nCatalog batch %d data:\n%s",
+		input.CustomerMessage, string(contextJSON), input.BatchNumber, string(batchJSON))
 	return batchGeminiRequest{
 		SystemInstruction: c.buildBatchSystemInstruction(input.EntityContract),
 		Contents: []batchContent{
