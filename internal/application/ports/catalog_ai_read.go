@@ -2,9 +2,9 @@ package ports
 
 import "context"
 
-// CatalogAIManifest is the bounded, whole-catalog map sent to the AI on normal
-// turns. It describes the merchant's active catalog shape without serializing
-// every item.
+// CatalogAIManifest is a bounded catalog-shape map sent on normal turns.
+// It may intentionally truncate names/types/keys; truncation flags are explicit.
+// Item-level truth comes only from detailed evidence or complete catalog evaluation.
 type CatalogAIManifest struct {
 	TotalActiveItems  int                         `json:"total_active_items"`
 	TotalCatalogs     int                         `json:"total_catalogs"`
