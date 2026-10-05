@@ -572,44 +572,7 @@ func batchCandidateResponseSchema() map[string]any {
 // finalProposalResponseSchema is the JSON Schema that enforces the contract
 // ④ §4 final proposal output shape (same as the regular proposal schema).
 func finalProposalResponseSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"status": map[string]any{
-				"type": "string",
-				"enum": []string{
-					string(ports.CustomerSalesProposalStatusResolved),
-					string(ports.CustomerSalesProposalStatusAmbiguous),
-					string(ports.CustomerSalesProposalStatusNotFound),
-					string(ports.CustomerSalesProposalStatusNeedsMoreData),
-				},
-			},
-			"action": map[string]any{
-				"type": "string",
-				"enum": []string{
-					string(ports.CustomerSalesProposalActionAnswer),
-					string(ports.CustomerSalesProposalActionClarification),
-					string(ports.CustomerSalesProposalActionHumanRequest),
-					string(ports.CustomerSalesProposalActionLeadDraft),
-					string(ports.CustomerSalesProposalActionOrderDraft),
-				},
-			},
-			"response_text": map[string]any{"type": "string"},
-			"selected": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"item_id":    map[string]any{"type": "string"},
-						"variant_id": map[string]any{"type": "string"},
-						"offer_id":   map[string]any{"type": "string"},
-					},
-					"required": []string{"item_id"},
-				},
-			},
-		},
-		"required": []string{"status", "action", "response_text"},
-	}
+	return contractProposalResponseSchema()
 }
 
 // batchGeminiRequest is the generateContent request body.
