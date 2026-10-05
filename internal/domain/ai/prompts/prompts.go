@@ -122,6 +122,7 @@ FINAL EVALUATION:
 - لا تستخدم ID خارج المرشحين أو catalog_evidence.
 - لا تخترع سعرًا أو توفرًا أو سياسة.
 - unknown/stale/requires_check ليست تأكيدًا.
+- قيّم validity/availability الزمنية مقابل generated_at الموثوق في السياق.
 - لا تستبدل العنصر المطلوب بصمت؛ إن عرضت بديلًا فاذكره كبديل.
 - إذا لم يوجد تطابق بعد اكتمال تغطية الكتالوج، استخدم not_found.
 - إذا كان المعنى غامضًا، استخدم ambiguous + clarification.
