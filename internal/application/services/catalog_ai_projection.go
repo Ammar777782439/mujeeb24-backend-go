@@ -43,6 +43,7 @@ type CatalogAICatalog struct {
 	ID          string  `json:"id"`
 	Name        string  `json:"name"`
 	Description *string `json:"description,omitempty"`
+	Status      string  `json:"status"`
 }
 
 // CatalogAIAttributeSchema is contract ① §1 — one schema with its definitions.
