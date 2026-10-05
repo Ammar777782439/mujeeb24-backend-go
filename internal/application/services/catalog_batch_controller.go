@@ -63,6 +63,7 @@ type CatalogBatchController struct {
 	// Per contract ⑤ §13, the data access boundary is Read Only, Tenant
 	// Scoped, Structured, No SQL.
 	Catalogs          ports.CatalogRepository
+	CatalogAI         ports.CatalogAIReadRepository
 	ProjectionBuilder *CatalogAIProjectionBuilder
 	TokenCounter      TokenCounter
 	Gemini            BatchGeminiClient
@@ -150,7 +151,7 @@ type TokenCounter interface {
 // Returns the final CustomerSalesProposal (post-Final-Evaluation) on success.
 // On failure, returns the failure stage + category for ai_runs.failure_*.
 func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input CatalogEvaluationInput) (CatalogEvaluationResult, error) {
-	if c.ProjectionBuilder == nil || c.TokenCounter == nil || c.Gemini == nil || c.RunRepo == nil {
+	if c.TokenCounter == nil || c.Gemini == nil || c.RunRepo == nil || (c.CatalogAI == nil && c.Catalogs == nil) {
 		return CatalogEvaluationResult{}, errors.New("CatalogBatchController is not fully wired per contract ② §1")
 	}
 	if strings.TrimSpace(input.BusinessID) == "" || strings.TrimSpace(input.AIRunID) == "" {
@@ -270,6 +271,39 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 // Per contract ⑧ §17, every read is tenant-scoped via business_id. A
 // cross-tenant read returns empty (per contract ⑥ §8: do not leak existence).
 func (c *CatalogBatchController) buildProjection(ctx context.Context, businessID, catalogScope string) (CatalogAIProjection, error) {
+	if c.CatalogAI != nil {
+		projection := CatalogAIProjection{}
+		schemaByID := map[string]CatalogAIAttributeSchema{}
+		cursor := ""
+		for {
+			page, err := c.CatalogAI.ListProjectionPage(ctx, ports.CatalogAIProjectionRequest{
+				BusinessID: businessID,
+				CatalogID:  catalogScope,
+				Limit:      200,
+				Cursor:     cursor,
+			})
+			if err != nil {
+				return CatalogAIProjection{}, fmt.Errorf("list bulk catalog projection page: %w", err)
+			}
+			part := ProjectionFromBundles(page.Items)
+			projection.Items = append(projection.Items, part.Items...)
+			for _, schema := range part.AttributeSchemas {
+				schemaByID[schema.ID] = schema
+			}
+			if !page.HasMore {
+				break
+			}
+			if strings.TrimSpace(page.NextCursor) == "" || page.NextCursor == cursor {
+				return CatalogAIProjection{}, errors.New("catalog AI projection cursor did not advance")
+			}
+			cursor = page.NextCursor
+		}
+		for _, schema := range schemaByID {
+			projection.AttributeSchemas = append(projection.AttributeSchemas, schema)
+		}
+		return projection, nil
+	}
+
 	if c.Catalogs == nil {
 		return CatalogAIProjection{}, errors.New("catalog repository is not wired on CatalogBatchController per contract ① §6")
 	}
