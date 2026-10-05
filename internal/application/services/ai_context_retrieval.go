@@ -176,14 +176,8 @@ func (b AutoReplyContextBuilder) retrieveScopedCatalog(ctx context.Context, busi
 		return nil, nil, nil, err
 	}
 	var catalogEvidence []ports.CustomerSalesCatalogEvidence
-	// Rank only within this catalog.
-	for _, item := range rankCatalogItems(items.Items, "") {
-		// Empty text means keep order; rank returns all with score 0 sorted by ID.
-		// Instead, take first N active items without lexical filter for catalog focus.
-		_ = item
-		break
-	}
-	// For catalog focus, include up to maxItems without lexical filtering.
+	// For an explicit catalog focus, include a bounded prefix in storage order.
+	// This is direct scoped reading, not query matching.
 	count := 0
 	for _, item := range items.Items {
 		if item.BusinessID != businessID || item.CatalogID != catalog.ID {
@@ -431,178 +425,23 @@ type scopedNotFoundError struct{ msg string }
 func (e *scopedNotFoundError) Error() string     { return "scoped retrieval not found: " + e.msg }
 func (e *scopedNotFoundError) ErrorKind() string { return "not_found" }
 
-// augmentScopedWithCandidates appends bounded alternatives so AI can resolve
-// topic switches to a new entity. Focused evidence stays first. Total
-// CatalogEvidence never exceeds maxItems. Candidates are siblings from the
-// focused catalog plus lexical matches (score>0) from other catalogs.
-func (b AutoReplyContextBuilder) augmentScopedWithCandidates(ctx context.Context, businessID, text string, focusedItems []ports.CustomerSalesCatalogEvidence, now time.Time) ([]ports.CustomerSalesCatalogEvidence, []ports.CustomerSalesOfferEvidence, []ports.CustomerSalesVariantEvidence, error) {
-	exclude := make(map[string]struct{}, len(focusedItems))
-	focusedCatalogs := make(map[string]struct{})
-	for _, item := range focusedItems {
-		exclude[item.Reference] = struct{}{}
-		_ = item
-		if item.CatalogReference != "" {
-			focusedCatalogs[item.CatalogReference] = struct{}{}
-		}
-	}
-	remaining := b.maxItems() - len(focusedItems)
-	if remaining <= 0 {
-		return nil, nil, nil, nil
-	}
-	catalogs, err := b.Catalogs.ListCatalogs(ctx, businessID, "active", b.maxCatalogs(), "")
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	var candidates []ports.CatalogItemRecord
-	// Siblings from focused catalogs first (bounded, no lexical filter).
-	for _, catalog := range catalogs.Items {
-		if _, ok := focusedCatalogs[catalog.ID]; !ok {
-			continue
-		}
-		items, err := b.Catalogs.ListCatalogItems(ctx, businessID, catalog.ID, "", "active", b.maxItems()*3, "")
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		for _, item := range items.Items {
-			if _, skip := exclude[item.ID]; skip {
-				continue
-			}
-			candidates = append(candidates, item)
-			exclude[item.ID] = struct{}{}
-			if len(candidates) >= remaining {
-				break
-			}
-		}
-		if len(candidates) >= remaining {
-			break
-		}
-	}
-	// Lexical matches from other catalogs (score>0 only).
-	if len(candidates) < remaining {
-		for _, catalog := range catalogs.Items {
-			if _, ok := focusedCatalogs[catalog.ID]; ok {
-				continue
-			}
-			items, err := b.Catalogs.ListCatalogItems(ctx, businessID, catalog.ID, "", "active", b.maxItems()*3, "")
-			if err != nil {
-				return nil, nil, nil, err
-			}
-			for _, item := range rankPositive(items.Items, text) {
-				if _, skip := exclude[item.ID]; skip {
-					continue
-				}
-				candidates = append(candidates, item)
-				exclude[item.ID] = struct{}{}
-				if len(candidates) >= remaining {
-					break
-				}
-			}
-			if len(candidates) >= remaining {
-				break
-			}
-		}
-	}
-	var addItems []ports.CustomerSalesCatalogEvidence
-	var addOffers []ports.CustomerSalesOfferEvidence
-	var addVariants []ports.CustomerSalesVariantEvidence
-	for _, item := range candidates {
-		if item.BusinessID != businessID {
-			return nil, nil, nil, errors.New("AI context candidate scope mismatch")
-		}
-		addItems = append(addItems, ports.CustomerSalesCatalogEvidence{
-			Reference: item.ID, CatalogReference: item.CatalogID, ItemType: item.ItemType, Name: item.Name, Status: item.Status,
-			Attributes: safeJSONObject(item.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
-		})
-		offers, err := b.Catalogs.ListOffers(ctx, businessID, item.ID, "active", b.maxOffers(), "")
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		for _, offer := range offers.Items {
-			if offer.BusinessID != businessID || offer.CatalogItemID != item.ID {
-				return nil, nil, nil, errors.New("AI context candidate offer scope mismatch")
-			}
-			addOffers = append(addOffers, ports.CustomerSalesOfferEvidence{
-				Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
-				Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-				AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
-				RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
-			})
-		}
-	}
-	return addItems, addOffers, addVariants, nil
-}
-
-// rankPositive returns only items with a positive lexical score, preserving rank order.
-func rankPositive(items []ports.CatalogItemRecord, text string) []ports.CatalogItemRecord {
-	ranked := rankCatalogItems(items, text)
-	tokens := tokenize(text)
-	if len(tokens) == 0 {
-		return nil
-	}
-	var out []ports.CatalogItemRecord
-	for _, item := range ranked {
-		searchable := normalizeArabic(strings.ToLower(item.Name + " " + item.ItemType + " " + string(item.Attributes)))
-		score := 0
-		for _, token := range tokens {
-			if strings.Contains(searchable, token) {
-				score++
-			}
-		}
-		if score > 0 {
-			out = append(out, item)
-		}
-	}
-	return out
-}
-
 func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports.CustomerSalesContext, input ports.CustomerSalesContextInput, now time.Time) (ports.CustomerSalesContext, error) {
-	// Per ADR-048: Always populate catalog_names + catalog_summary
-	// regardless of retrieval mode. In scoped mode, the catalog loop
-	// in Build() is skipped (early return), so catalog_names and
-	// catalog_summary were empty. This ensures Gemini always sees
-	// category names for hierarchical navigation ("what do you have?").
-	if b.Catalogs != nil && len(base.CatalogNames) == 0 {
-		catalogPage, catalogErr := b.Catalogs.ListCatalogs(ctx, input.BusinessID, "active", b.maxCatalogs(), "")
-		if catalogErr == nil {
-			// Check ONCE before the loop — not inside it.
-			// Before this fix, the guard was inside the per-catalog loop,
-			// so after the first catalog populated catalog_summary, all
-			// subsequent catalogs were SKIPPED — losing items from other
-			// catalogs (e.g., iPhone in catalog 2 was invisible to Gemini).
-			populateSummary := len(base.CatalogSummary) == 0
-			for _, catalog := range catalogPage.Items {
+	// No item discovery, ranking, matching or catalog search occurs here.
+	// The manifest describes catalog shape only. Item-level evaluation is
+	// delegated to the full catalog paging/batching path when required.
+	if b.CatalogAI != nil && base.CatalogManifest == nil {
+		manifest, manifestErr := b.CatalogAI.GetManifest(ctx, input.BusinessID)
+		if manifestErr != nil {
+			return ports.CustomerSalesContext{}, manifestErr
+		}
+		base.CatalogManifest = &manifest
+		if len(base.CatalogNames) == 0 {
+			for _, catalog := range manifest.Catalogs {
 				base.CatalogNames = append(base.CatalogNames, catalog.Name)
-				if populateSummary {
-					summaryCursor := ""
-					for {
-						summaryItems, summaryErr := b.Catalogs.ListCatalogItems(ctx, input.BusinessID, catalog.ID, "", "active", 500, summaryCursor)
-						if summaryErr != nil {
-							break
-						}
-						for _, item := range summaryItems.Items {
-							entry := ports.CustomerSalesCatalogSummaryEntry{
-								ID:          item.ID,
-								Name:        item.Name,
-								CatalogName: catalog.Name,
-							}
-							// Per ADR-050: fetch first active offer for price + availability
-							offers, offerErr := b.Catalogs.ListOffers(ctx, input.BusinessID, item.ID, "active", 1, "")
-							if offerErr == nil && len(offers.Items) > 0 {
-								entry.Price = formatPrice(stringValue(offers.Items[0].Amount))
-								entry.Currency = formatCurrency(stringValue(offers.Items[0].Currency))
-								entry.AvailabilityStatus = offers.Items[0].AvailabilityStatus
-							}
-							base.CatalogSummary = append(base.CatalogSummary, entry)
-						}
-						if !summaryItems.HasMore {
-							break
-						}
-						summaryCursor = summaryItems.NextCursor
-					}
-				}
 			}
 		}
 	}
+
 	if b.Knowledge != nil {
 		knowledgeRecords, listErr := b.Knowledge.ListPublished(ctx, input.BusinessID, "", now, b.maxKnowledge()*3)
 		if listErr != nil {
