@@ -173,19 +173,19 @@ type CustomerSalesOfferEvidence struct {
 	PricingMode                 string
 	Amount                      string
 	Currency                    string
-	PricingUnit                 string
-	PriceSource                 string
-	PriceVerificationStatus     string
-	PriceCheckedAt              *time.Time
-	AvailabilityMode            string
+	PricingUnit                 string     `json:"pricing_unit,omitempty"`
+	PriceSource                 string     `json:"price_source,omitempty"`
+	PriceVerificationStatus     string     `json:"price_verification_status,omitempty"`
+	PriceCheckedAt              *time.Time `json:"price_checked_at,omitempty"`
+	AvailabilityMode            string     `json:"availability_mode,omitempty"`
 	AvailabilityStatus          string `json:"availability_status"`
-	AvailabilitySource          string
-	AvailabilityCheckedAt       *time.Time
-	AvailabilityValidUntil      *time.Time
-	AvailabilityEvidenceRef     string
-	FulfillmentMode             string
-	ValidityFrom                *time.Time
-	ValidityUntil               *time.Time
+	AvailabilitySource          string     `json:"availability_source,omitempty"`
+	AvailabilityCheckedAt       *time.Time `json:"availability_checked_at,omitempty"`
+	AvailabilityValidUntil      *time.Time `json:"availability_valid_until,omitempty"`
+	AvailabilityEvidenceRef     string     `json:"availability_evidence_ref,omitempty"`
+	FulfillmentMode             string     `json:"fulfillment_mode,omitempty"`
+	ValidityFrom                *time.Time `json:"validity_from,omitempty"`
+	ValidityUntil               *time.Time `json:"validity_until,omitempty"`
 	Status                      string
 	EvidenceState               string
 	RetrievedAt                 time.Time
