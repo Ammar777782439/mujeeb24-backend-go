@@ -157,11 +157,18 @@ type TokenCounter interface {
 // Returns the final CustomerSalesProposal (post-Final-Evaluation) on success.
 // On failure, returns the failure stage + category for ai_runs.failure_*.
 func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input CatalogEvaluationInput) (CatalogEvaluationResult, error) {
-	if c.TokenCounter == nil || c.Gemini == nil || c.RunRepo == nil || (c.CatalogAI == nil && c.Catalogs == nil) {
+	if c.Gemini == nil || c.RunRepo == nil || (c.CatalogAI == nil && c.Catalogs == nil) {
 		return CatalogEvaluationResult{}, errors.New("CatalogBatchController is not fully wired per contract ② §1")
+	}
+	if _, ok := c.Gemini.(ExactBatchTokenCounter); !ok && c.TokenCounter == nil {
+		return CatalogEvaluationResult{}, errors.New("CatalogBatchController requires an exact or compatibility token counter")
 	}
 	if strings.TrimSpace(input.BusinessID) == "" || strings.TrimSpace(input.AIRunID) == "" {
 		return CatalogEvaluationResult{}, errors.New("business_id and ai_run_id are required for Catalog Evaluation per contract ② §1")
+	}
+
+	if c.CatalogAI != nil {
+		return c.runPagedCatalogEvaluation(ctx, input)
 	}
 
 	// Step 1: Build the Projection. Per contract ① §6, Mujeeb builds it.
@@ -171,7 +178,7 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 	}
 
 	// Step 2: Token-count and split. Per contract ② §2, token-based not item-count.
-	batches, err := c.splitIntoBatches(ctx, projection, input)
+	batches, err := c.splitIntoBatches(ctx, projection, input, 1)
 	if err != nil {
 		return CatalogEvaluationResult{}, fmt.Errorf("split batches: %w", err)
 	}
@@ -247,6 +254,189 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 		Proposal: proposal,
 		Evidence: EvidenceFromProjection(projection),
 	}, nil
+}
+
+func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, input CatalogEvaluationInput) (CatalogEvaluationResult, error) {
+	cursor := ""
+	nextBatchNumber := 1
+	batchRecords := make([]ports.AICatalogBatchRecord, 0)
+	candidateSet := make([]ports.CatalogBatchCandidate, 0)
+	candidateProjection := CatalogAIProjection{}
+	candidateItemsSeen := make(map[string]struct{})
+
+	for {
+		page, err := c.CatalogAI.ListProjectionPage(ctx, ports.CatalogAIProjectionRequest{
+			BusinessID: input.BusinessID,
+			CatalogID:  input.CatalogScope,
+			Limit:      200,
+			Cursor:     cursor,
+		})
+		if err != nil {
+			return CatalogEvaluationResult{}, fmt.Errorf("list catalog projection page: %w", err)
+		}
+
+		if len(page.Items) > 0 {
+			pageProjection := ProjectionFromBundles(page.Items)
+			appendCatalogRecordsToProjection(&pageProjection, page.Catalogs)
+			batches, err := c.splitIntoBatches(ctx, pageProjection, input, nextBatchNumber)
+			if err != nil {
+				return CatalogEvaluationResult{}, fmt.Errorf("split catalog page into exact-token batches: %w", err)
+			}
+
+			for _, batch := range batches {
+				rec, err := c.createBatchRecord(ctx, input.AIRunID, batch)
+				if err != nil {
+					return CatalogEvaluationResult{}, fmt.Errorf("create batch %d record: %w", batch.BatchNumber, err)
+				}
+				batchRecords = append(batchRecords, rec)
+				recordIndex := len(batchRecords) - 1
+
+				if err := c.markBatchRunning(ctx, rec.ID); err != nil {
+					return CatalogEvaluationResult{}, err
+				}
+				result, err := c.Gemini.EvaluateBatch(ctx, BatchEvaluationInput{
+					AIRunID:             input.AIRunID,
+					AttemptID:           input.AttemptID,
+					BatchNumber:         batch.BatchNumber,
+					BusinessID:          input.BusinessID,
+					ConversationID:      input.ConversationID,
+					CustomerMessage:     input.CustomerMessage,
+					ConversationContext: input.ConversationContext,
+					EntityContract:      input.EntityContract,
+					Batch:               batch,
+				})
+				if err != nil {
+					_ = c.markBatchFailed(ctx, rec.ID, err.Error())
+					return CatalogEvaluationResult{}, fmt.Errorf("batch %d evaluation: %w", batch.BatchNumber, err)
+				}
+				if err := validateBatchCandidates(batch, result.Candidates); err != nil {
+					_ = c.markBatchFailed(ctx, rec.ID, err.Error())
+					return CatalogEvaluationResult{}, fmt.Errorf("batch %d returned invalid candidate evidence: %w", batch.BatchNumber, err)
+				}
+				if err := c.markBatchCompleted(ctx, rec.ID, len(result.Candidates)); err != nil {
+					return CatalogEvaluationResult{}, err
+				}
+				batchRecords[recordIndex].Status = "completed"
+				c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, result.Usage, fmt.Sprintf("batch_%d", batch.BatchNumber))
+				candidateSet = append(candidateSet, result.Candidates...)
+				appendCandidateProjection(&candidateProjection, batch, result.Candidates, candidateItemsSeen)
+				log.Printf("[CatalogBatch] BATCH_DONE batch=%d items=%d candidates=%d", batch.BatchNumber, len(batch.Items), len(result.Candidates))
+			}
+			nextBatchNumber += len(batches)
+		}
+
+		if !page.HasMore {
+			break
+		}
+		if strings.TrimSpace(page.NextCursor) == "" || page.NextCursor == cursor {
+			return CatalogEvaluationResult{}, errors.New("catalog projection cursor did not advance")
+		}
+		cursor = page.NextCursor
+	}
+
+	log.Printf("[CatalogBatch] COVERAGE total=%d completed=%d", len(batchRecords), countCompleted(batchRecords))
+	if !c.coverageComplete(batchRecords) {
+		return CatalogEvaluationResult{}, fmt.Errorf("coverage incomplete per contract ② §3 — %d/%d batches completed", countCompleted(batchRecords), len(batchRecords))
+	}
+
+	proposal, err := c.runFinalEvaluation(ctx, input, candidateSet, candidateProjection)
+	if err != nil {
+		return CatalogEvaluationResult{}, err
+	}
+	return CatalogEvaluationResult{
+		Proposal: proposal,
+		// The final model only receives candidateProjection; validation trusts
+		// exactly that final decision evidence, not every discarded page.
+		Evidence: EvidenceFromProjection(candidateProjection),
+	}, nil
+}
+
+func validateBatchCandidates(batch CatalogAIBatchPayload, candidates []ports.CatalogBatchCandidate) error {
+	items := make(map[string]CatalogAIItem, len(batch.Items))
+	for _, item := range batch.Items {
+		items[item.ID] = item
+	}
+	for _, candidate := range candidates {
+		item, ok := items[candidate.ItemID]
+		if !ok {
+			return fmt.Errorf("candidate item_id %s was not present in batch", candidate.ItemID)
+		}
+		variants := make(map[string]struct{}, len(item.Variants))
+		for _, variant := range item.Variants {
+			variants[variant.ID] = struct{}{}
+		}
+		offers := make(map[string]struct{}, len(item.Offers))
+		for _, offer := range item.Offers {
+			offers[offer.ID] = struct{}{}
+		}
+		for _, variantID := range candidate.VariantIDs {
+			if _, ok := variants[variantID]; !ok {
+				return fmt.Errorf("candidate variant_id %s was not present under item %s", variantID, candidate.ItemID)
+			}
+		}
+		for _, offerID := range candidate.OfferIDs {
+			if _, ok := offers[offerID]; !ok {
+				return fmt.Errorf("candidate offer_id %s was not present under item %s", offerID, candidate.ItemID)
+			}
+		}
+	}
+	return nil
+}
+
+func appendCandidateProjection(target *CatalogAIProjection, batch CatalogAIBatchPayload, candidates []ports.CatalogBatchCandidate, seen map[string]struct{}) {
+	if target == nil {
+		return
+	}
+	needed := make(map[string]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		needed[candidate.ItemID] = struct{}{}
+	}
+	for _, item := range batch.Items {
+		if _, ok := needed[item.ID]; !ok {
+			continue
+		}
+		if _, exists := seen[item.ID]; exists {
+			continue
+		}
+		target.Items = append(target.Items, item)
+		seen[item.ID] = struct{}{}
+	}
+	appendCatalogs := func(catalogs []CatalogAICatalog) {
+		known := make(map[string]struct{}, len(target.Catalogs))
+		for _, catalog := range target.Catalogs {
+			known[catalog.ID] = struct{}{}
+		}
+		for _, catalog := range catalogs {
+			if _, ok := known[catalog.ID]; ok {
+				continue
+			}
+			for _, item := range target.Items {
+				if item.CatalogID == catalog.ID {
+					target.Catalogs = append(target.Catalogs, catalog)
+					known[catalog.ID] = struct{}{}
+					break
+				}
+			}
+		}
+	}
+	appendCatalogs(batch.Catalogs)
+
+	knownSchemas := make(map[string]struct{}, len(target.AttributeSchemas))
+	for _, schema := range target.AttributeSchemas {
+		knownSchemas[schema.ID] = struct{}{}
+	}
+	for _, schema := range batch.AttributeSchemas {
+		if _, ok := knownSchemas[schema.ID]; ok {
+			continue
+		}
+		for _, item := range target.Items {
+			if item.AttributeSchemaID != nil && *item.AttributeSchemaID == schema.ID {
+				target.AttributeSchemas = append(target.AttributeSchemas, schema)
+				knownSchemas[schema.ID] = struct{}{}
+				break
+			}
+		}
+	}
 }
 
 // buildProjection builds the contract ① Catalog AI Projection from the
@@ -535,7 +725,7 @@ func formatTimePtr(t *time.Time) *string {
 // Per contract ② §2, we do NOT say "100 products = batch" or "50 = batch".
 // We serialize the projection, count tokens, and split when the running
 // total exceeds TokenBudget.
-func (c *CatalogBatchController) splitIntoBatches(ctx context.Context, projection CatalogAIProjection, input CatalogEvaluationInput) ([]CatalogAIBatchPayload, error) {
+func (c *CatalogBatchController) splitIntoBatches(ctx context.Context, projection CatalogAIProjection, input CatalogEvaluationInput, startBatchNumber int) ([]CatalogAIBatchPayload, error) {
 	if len(projection.Items) == 0 {
 		return nil, nil
 	}
@@ -570,7 +760,10 @@ func (c *CatalogBatchController) splitIntoBatches(ctx context.Context, projectio
 		}
 	}
 
-	nextBatchNumber := 1
+	nextBatchNumber := startBatchNumber
+	if nextBatchNumber <= 0 {
+		nextBatchNumber = 1
+	}
 	batches := make([]CatalogAIBatchPayload, 0)
 	countBatch := func(batch CatalogAIBatchPayload) (int, error) {
 		if hasExactCounter {
