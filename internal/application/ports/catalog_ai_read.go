@@ -24,15 +24,6 @@ type CatalogAIManifestCatalog struct {
 	ItemTypesTruncated bool     `json:"item_types_truncated,omitempty"`
 }
 
-type CatalogAIManifestSchema struct {
-	ID            string   `json:"-"`
-	Name          string   `json:"name"`
-	Version       int      `json:"version"`
-	UsageCount    int      `json:"usage_count"`
-	AttributeKeys          []string `json:"attribute_keys,omitempty"`
-	AttributeKeysTruncated bool     `json:"attribute_keys_truncated,omitempty"`
-}
-
 // CatalogAIProjectionBundle is one fully-hydrated catalog item.
 // All nested records belong to Item and the same business.
 type CatalogAIProjectionBundle struct {
