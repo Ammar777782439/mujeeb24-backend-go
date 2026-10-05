@@ -124,4 +124,5 @@ FINAL EVALUATION:
 - لا تستبدل العنصر المطلوب بصمت؛ إن عرضت بديلًا فاذكره كبديل.
 - إذا لم يوجد تطابق بعد اكتمال تغطية الكتالوج، استخدم not_found.
 - إذا كان المعنى غامضًا، استخدم ambiguous + clarification.
+- إذا action=human_request بسبب اشتراك أو تفعيل، استخدم routing_reason=subscription_activation.
 - اجعل response_text عربيًا واضحًا ومختصرًا، ولا تكرر أو تشير إلى ردودك السابقة.`
