@@ -80,8 +80,8 @@ status + action + response_text + selected[].
 // alternative-product-with-respect rule, assistant-vs-customer message
 // distinction. Implements best-practice research findings from Microsoft
 // Learn + getmaxim.ai + IrisAgent on conversation context management.
-// v6 (ADR-039): conversation_summary field handling (Summary + Sliding
-// Window hybrid context strategy).
+// v10: Universal Catalog manifest/full-evaluation flow with compact
+// customer-facing rules; catalog semantics live in the Entity Contract.
 const CustomerSalesSystemPromptVersion = "customer-sales-v10"
 
 const BatchEvaluationSystemPrompt = `قيّم عناصر هذه الدفعة فقط مقابل طلب العميل.
@@ -97,16 +97,8 @@ Catalog Entity Contract يعرّف بنية الكتالوج وكياناته و
 // BatchEvaluationSystemPromptVersion is the version tag for the prompt above.
 const BatchEvaluationSystemPromptVersion = "batch-evaluation-v2"
 
-// FinalEvaluationSystemPromptSuffix is appended to the BatchEvaluationSystemPrompt
-// when running the Final Evaluation per contract ② §6. Per contract ② §6,
-// the Final Gemini does NOT see the full catalog again — it sees only the
-// aggregated candidate set + customer message + conversation context.
-//
-// Version: v5 — ADR-045: Catalog Entity Contract Authority — removed
-// conflicting pricing_mode examples (rental_per_day, subscription) and
-// defers to Contract as the source of truth for catalog enum values.
-// v4 (ADR-038): anti-repetition + alternative-product-with-respect +
-// assistant-vs-customer message distinction rules.
+// CandidateReductionSystemPromptSuffix is used only when the aggregated
+// candidate evidence is too large for the final token budget.
 const CandidateReductionSystemPromptSuffix = `
 
 CANDIDATE REDUCTION:
@@ -117,6 +109,8 @@ CANDIDATE REDUCTION:
 لا تخترع IDs ولا تُدخل عنصرًا خارج هذه الدفعة.
 أعد candidates فقط؛ لا تكتب الرد النهائي للعميل.`
 
+// FinalEvaluationSystemPromptSuffix is appended for the final customer-facing
+// decision after complete catalog coverage and any required candidate reduction.
 const FinalEvaluationSystemPromptSuffix = `
 
 FINAL EVALUATION:
