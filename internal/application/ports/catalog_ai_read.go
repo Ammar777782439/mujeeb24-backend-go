@@ -6,9 +6,13 @@ import "context"
 // turns. It describes the merchant's active catalog shape without serializing
 // every item.
 type CatalogAIManifest struct {
-	TotalActiveItems int                         `json:"total_active_items"`
-	Catalogs         []CatalogAIManifestCatalog `json:"catalogs"`
-	Schemas          []CatalogAIManifestSchema  `json:"schemas,omitempty"`
+	TotalActiveItems  int                         `json:"total_active_items"`
+	TotalCatalogs     int                         `json:"total_catalogs"`
+	TotalSchemas      int                         `json:"total_schemas"`
+	CatalogsTruncated bool                        `json:"catalogs_truncated,omitempty"`
+	SchemasTruncated  bool                        `json:"schemas_truncated,omitempty"`
+	Catalogs          []CatalogAIManifestCatalog `json:"catalogs"`
+	Schemas           []CatalogAIManifestSchema  `json:"schemas,omitempty"`
 }
 
 type CatalogAIManifestCatalog struct {
@@ -16,7 +20,8 @@ type CatalogAIManifestCatalog struct {
 	Name        string   `json:"name"`
 	Description *string  `json:"-"`
 	ItemCount   int      `json:"item_count"`
-	ItemTypes   []string `json:"item_types,omitempty"`
+	ItemTypes          []string `json:"item_types,omitempty"`
+	ItemTypesTruncated bool     `json:"item_types_truncated,omitempty"`
 }
 
 type CatalogAIManifestSchema struct {
@@ -24,7 +29,8 @@ type CatalogAIManifestSchema struct {
 	Name          string   `json:"name"`
 	Version       int      `json:"version"`
 	UsageCount    int      `json:"usage_count"`
-	AttributeKeys []string `json:"attribute_keys,omitempty"`
+	AttributeKeys          []string `json:"attribute_keys,omitempty"`
+	AttributeKeysTruncated bool     `json:"attribute_keys_truncated,omitempty"`
 }
 
 // CatalogAIProjectionBundle is one fully-hydrated catalog item.
