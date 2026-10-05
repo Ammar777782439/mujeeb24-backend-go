@@ -207,10 +207,23 @@ func (c *GeminiCustomerSalesAdapter) decideInteraction(
 		previousID = ""
 	}
 
+	interactionInput := buildUserPrompt(input.Request)
+	systemInstruction := c.buildContractSystemInstructionText(input.EntityContractPayload)
+	if rc.maxInputCharacters > 0 {
+		totalChars := len([]rune(interactionInput)) + len([]rune(systemInstruction))
+		if totalChars > rc.maxInputCharacters {
+			return ports.CustomerSalesDecisionOutput{}, fmt.Errorf(
+				"customer sales interaction input exceeds %d characters after context and system instruction serialization: %d",
+				rc.maxInputCharacters,
+				totalChars,
+			)
+		}
+	}
+
 	reqBody := interactionRequest{
 		Model:                 rc.model,
-		Input:                 buildUserPrompt(input.Request),
-		SystemInstruction:     c.buildContractSystemInstructionText(input.EntityContractPayload),
+		Input:                 interactionInput,
+		SystemInstruction:     systemInstruction,
 		PreviousInteractionID: previousID,
 		Store:                 input.GeminiInteraction.Store,
 		ResponseFormat: interactionResponseFormat{
