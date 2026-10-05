@@ -359,10 +359,10 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		service.Realtime = realtimeBroker
 
 		// Per contract ② §9, wire the CatalogBatchController into the
-		// AutoReply flow. When Gemini's first response indicates
-		// needs_more_data AND the context lacks catalog evidence, the
-		// controller is invoked: build projection → token-count → batch
-		// → evaluate → aggregate candidates → final evaluate.
+		// AutoReply flow. Full catalog evaluation is invoked when the
+		// initial proposal needs more data, returns not_found before
+		// complete coverage, or selects references outside current evidence:
+		// page catalog → exact-token batches → evaluate → aggregate → final.
 		//
 		// Per contract ② §2, TokenBudget is token-based (no hardcoded
 		// item count). 8000 is a sensible default per runtime config.
