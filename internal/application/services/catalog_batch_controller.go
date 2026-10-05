@@ -774,13 +774,14 @@ func mapAttributeSchemaRecordToProjection(r ports.AttributeSchemaRecord) Catalog
 	defs := make([]CatalogAIAttributeDefinition, 0, len(r.Definitions))
 	for _, d := range r.Definitions {
 		defs = append(defs, CatalogAIAttributeDefinition{
-			ID:           d.ID,
-			SchemaID:     r.ID,
-			AttributeKey: d.Key,
-			Label:        d.Label,
-			DataType:     d.DataType,
-			IsRequired:   d.Required,
-			DisplayOrder: d.DisplayOrder,
+			ID:              d.ID,
+			SchemaID:        r.ID,
+			AttributeKey:    d.Key,
+			Label:           d.Label,
+			DataType:        d.DataType,
+			IsRequired:      d.Required,
+			ValidationRules: parseJSONAttributes(d.ValidationRules),
+			DisplayOrder:    d.DisplayOrder,
 		})
 	}
 	return CatalogAIAttributeSchema{
