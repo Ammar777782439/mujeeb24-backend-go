@@ -253,8 +253,8 @@ func (c *GeminiCustomerSalesAdapter) decideInteraction(
 		return ports.CustomerSalesDecisionOutput{}, err
 	}
 	var proposal ports.CustomerSalesProposal
-	if err := json.Unmarshal([]byte(raw), &proposal); err != nil {
-		return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("unmarshal interaction structured output: %w", err)
+	if err := decodeStrictStructuredJSON([]byte(raw), &proposal); err != nil {
+		return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("decode interaction structured output: %w", err)
 	}
 
 	latencyMs := time.Since(startedAt).Milliseconds()
@@ -326,6 +326,22 @@ func (c *GeminiCustomerSalesAdapter) sendInteractionRequest(
 		return interactionResponse{}, fmt.Errorf("unmarshal interaction response: %w", err)
 	}
 	return out, nil
+}
+
+func decodeStrictStructuredJSON(raw []byte, target any) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return errors.New("structured output contains multiple JSON values")
+		}
+		return fmt.Errorf("decode trailing structured output: %w", err)
+	}
+	return nil
 }
 
 func interactionOutputText(resp interactionResponse) (string, error) {
@@ -441,8 +457,8 @@ func parseContractProposal(resp contractGeminiResponse) (ports.CustomerSalesProp
 		return ports.CustomerSalesProposal{}, errors.New("empty structured output text per contract ④ §4")
 	}
 	var proposal ports.CustomerSalesProposal
-	if err := json.Unmarshal([]byte(raw), &proposal); err != nil {
-		return ports.CustomerSalesProposal{}, fmt.Errorf("unmarshal structured output: %w", err)
+	if err := decodeStrictStructuredJSON([]byte(raw), &proposal); err != nil {
+		return ports.CustomerSalesProposal{}, fmt.Errorf("decode structured output: %w", err)
 	}
 	return proposal, nil
 }
@@ -453,7 +469,8 @@ func parseContractProposal(resp contractGeminiResponse) (ports.CustomerSalesProp
 // The contract response schema is shared by contract-aligned AI calls.
 func contractProposalResponseSchema() map[string]any {
 	return map[string]any{
-		"type": "object",
+		"type":                 "object",
+		"additionalProperties": false,
 		"properties": map[string]any{
 			"status": map[string]any{
 				"type": "string",
@@ -486,7 +503,8 @@ func contractProposalResponseSchema() map[string]any {
 			"selected": map[string]any{
 				"type": "array",
 				"items": map[string]any{
-					"type": "object",
+					"type":                 "object",
+					"additionalProperties": false,
 					"properties": map[string]any{
 						"item_id":    map[string]any{"type": "string"},
 						"variant_id": map[string]any{"type": "string"},
