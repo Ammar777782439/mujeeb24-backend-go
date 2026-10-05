@@ -112,7 +112,10 @@ func appendCatalogAIBundlesToContext(ctx *ports.CustomerSalesContext, bundles []
 
 func catalogItemEvidence(item ports.CatalogItemRecord, now time.Time) ports.CustomerSalesCatalogEvidence {
 	return ports.CustomerSalesCatalogEvidence{
-		Reference: item.ID, CatalogReference: item.CatalogID, ItemType: item.ItemType,
+		Reference: item.ID, CatalogReference: item.CatalogID,
+		AttributeSchemaReference: item.AttributeSchemaID,
+		AttributeSchemaVersion: item.AttributeSchemaVersion,
+		ItemType: item.ItemType,
 		Name: item.Name, Status: item.Status, Attributes: safeJSONObject(item.Attributes),
 		EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 		ShortDescription: item.ShortDescription, LongDescription: item.LongDescription,
