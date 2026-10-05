@@ -141,3 +141,63 @@ func TestValidateBatchCandidatesEnforcesItemVariantOfferRelationships(t *testing
 		t.Fatal("expected cross-item offer candidate to be rejected")
 	}
 }
+
+func TestReductionSplitUsesReductionRequestShape(t *testing.T) {
+	gemini := &exactTokenBatchGeminiStub{
+		countFn: func(input BatchEvaluationInput) (int, error) {
+			return 100, nil
+		},
+	}
+	controller := &CatalogBatchController{Gemini: gemini, TokenBudget: 500}
+	projection := CatalogAIProjection{
+		Items: []CatalogAIItem{{ID: "item-1", CatalogID: "catalog-1"}},
+	}
+	_, err := controller.splitIntoBatchesMode(context.Background(), projection, CatalogEvaluationInput{
+		AIRunID: "run-1", BusinessID: "business-1", CustomerMessage: "test",
+	}, 4, true)
+	if err != nil {
+		t.Fatalf("splitIntoBatchesMode: %v", err)
+	}
+	if len(gemini.seen) == 0 || !gemini.seen[0].Reduction {
+		t.Fatal("exact token counter must count the reduction request shape, not the normal batch prompt")
+	}
+	if gemini.seen[0].BatchNumber != 4 {
+		t.Fatalf("reduction batch number=%d, want 4", gemini.seen[0].BatchNumber)
+	}
+}
+
+func TestAppendCandidateProjectionPrunesUnselectedNestedEvidence(t *testing.T) {
+	variantA := "variant-a"
+	variantB := "variant-b"
+	offerA := "offer-a"
+	offerB := "offer-b"
+	batch := CatalogAIBatchPayload{
+		Items: []CatalogAIItem{{
+			ID: "item-1", CatalogID: "catalog-1",
+			Variants: []CatalogAIVariant{
+				{ID: variantA, CatalogItemID: "item-1"},
+				{ID: variantB, CatalogItemID: "item-1"},
+			},
+			Offers: []CatalogAIOffer{
+				{ID: offerA, CatalogItemID: "item-1", VariantID: &variantA},
+				{ID: offerB, CatalogItemID: "item-1", VariantID: &variantB},
+			},
+		}},
+	}
+	target := CatalogAIProjection{}
+	appendCandidateProjection(&target, batch, []ports.CatalogBatchCandidate{{
+		ItemID: "item-1", VariantIDs: []string{variantA}, OfferIDs: []string{offerA},
+	}}, map[string]struct{}{})
+
+	if len(target.Items) != 1 {
+		t.Fatalf("expected one candidate item, got %d", len(target.Items))
+	}
+	item := target.Items[0]
+	if len(item.Variants) != 1 || item.Variants[0].ID != variantA {
+		t.Fatalf("unexpected final variants: %+v", item.Variants)
+	}
+	if len(item.Offers) != 1 || item.Offers[0].ID != offerA {
+		t.Fatalf("unexpected final offers: %+v", item.Offers)
+	}
+}
+
