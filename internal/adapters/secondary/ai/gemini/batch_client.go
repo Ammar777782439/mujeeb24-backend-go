@@ -165,10 +165,16 @@ func (c *BatchClient) buildEvaluateBatchRequest(input services.BatchEvaluationIn
 	if err != nil {
 		return batchGeminiRequest{}, fmt.Errorf("marshal conversation context for batch: %w", err)
 	}
-	userPrompt := fmt.Sprintf("Customer message: %s\n\nVerified conversation context:\n%s\n\nCatalog batch %d data:\n%s",
-		input.CustomerMessage, string(contextJSON), input.BatchNumber, string(batchJSON))
+	phaseLabel := "Catalog batch"
+	systemInstruction := c.buildBatchSystemInstruction(input.EntityContract)
+	if input.Reduction {
+		phaseLabel = "Candidate reduction batch"
+		systemInstruction = c.buildBatchSystemInstructionWithSuffix(input.EntityContract, prompts.CandidateReductionSystemPromptSuffix)
+	}
+	userPrompt := fmt.Sprintf("Customer message: %s\n\nVerified conversation context:\n%s\n\n%s %d data:\n%s",
+		input.CustomerMessage, string(contextJSON), phaseLabel, input.BatchNumber, string(batchJSON))
 	return batchGeminiRequest{
-		SystemInstruction: c.buildBatchSystemInstruction(input.EntityContract),
+		SystemInstruction: systemInstruction,
 		Contents: []batchContent{
 			{Role: "user", Parts: []batchPart{{Text: userPrompt}}},
 		},
