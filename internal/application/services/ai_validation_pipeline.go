@@ -160,6 +160,20 @@ func (p *ValidationPipeline) validateStructural(proposal ports.CustomerSalesProp
 			}
 		}
 	}
+	if proposal.RoutingReason != "" && proposal.Action != ports.CustomerSalesProposalActionHumanRequest {
+		return &StageFailure{
+			Stage:    ports.AIRunFailureStageValidation,
+			Category: ports.AIRunFailureCategoryInvalidAIOutput,
+			Reason:   "routing_reason is only valid with action=human_request",
+		}
+	}
+	if proposal.Status == ports.CustomerSalesProposalStatusNotFound && len(proposal.Selected) > 0 {
+		return &StageFailure{
+			Stage:    ports.AIRunFailureStageValidation,
+			Category: ports.AIRunFailureCategoryInvalidAIOutput,
+			Reason:   "not_found proposal must not contain selected catalog references",
+		}
+	}
 	if proposal.Action != ports.CustomerSalesProposalActionHumanRequest && strings.TrimSpace(proposal.ResponseText) == "" {
 		return &StageFailure{
 			Stage:    ports.AIRunFailureStageValidation,
