@@ -16,13 +16,13 @@ func ProjectionFromBundles(bundles []ports.CatalogAIProjectionBundle) CatalogAIP
 		item := mapCatalogItemRecordToProjection(bundle.Item)
 		for _, variant := range bundle.Variants {
 			item.Variants = append(item.Variants, CatalogAIVariant{
-				ID: variant.ID, Name: variant.Name,
+				ID: variant.ID, CatalogItemID: variant.CatalogItemID, Name: variant.Name,
 				Attributes: parseJSONAttributes(variant.Attributes), Status: variant.Status,
 			})
 		}
 		for _, offer := range bundle.Offers {
 			item.Offers = append(item.Offers, CatalogAIOffer{
-				ID: offer.ID, VariantID: offer.VariantID, Name: offer.Name,
+				ID: offer.ID, CatalogItemID: offer.CatalogItemID, VariantID: offer.VariantID, Name: offer.Name,
 				PricingMode: offer.PricingMode, Amount: offer.Amount, Currency: offer.Currency,
 				PricingUnit: offer.PricingUnit, PriceSource: offer.PriceSource,
 				PriceVerificationStatus: stringPtrOrNil(offer.PriceVerificationStatus),
