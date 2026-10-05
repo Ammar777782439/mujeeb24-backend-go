@@ -41,9 +41,9 @@ package prompts
 //	response_text (string)
 //	selected[] (array of {item_id, variant_id?, offer_id?})
 //
-// Version: v6 — adds conversation_summary field handling (ADR-039:
-// Summary + Sliding Window hybrid context strategy). Adds new context
-// field conversation_summary and explicit rule for using it.
+// Version: v10 — Universal Catalog flow. Catalog semantics live in the
+// machine-readable Entity Contract; the prompt carries only behavioral rules,
+// bounded-manifest semantics, grounding requirements, and output obligations.
 const CustomerSalesSystemPrompt = `أنت وكيل خدمة العملاء في مجيب 24.
 
 افهم طلب العميل من الرسالة الحالية وسياق المحادثة، واستخدم فقط البيانات الموثوقة التي يرسلها مجيب.
