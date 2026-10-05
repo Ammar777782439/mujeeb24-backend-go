@@ -1242,6 +1242,8 @@ func buildFinalEvaluationPayload(
 		RecentMessages         []ports.CustomerSalesRecentMessageEvidence  `json:"recent_messages,omitempty"`
 		ConversationState      *ports.ConversationStateRecord              `json:"conversation_state,omitempty"`
 		ConversationSummary    string                                      `json:"conversation_summary,omitempty"`
+		GeneratedAt            time.Time                                   `json:"generated_at"`
+		ExpiresAt              time.Time                                   `json:"expires_at"`
 	}{
 		Business:               input.ConversationContext.Business,
 		Conversation:           input.ConversationContext.Conversation,
@@ -1251,6 +1253,8 @@ func buildFinalEvaluationPayload(
 		RecentMessages:         input.ConversationContext.RecentMessages,
 		ConversationState:      input.ConversationContext.ConversationState,
 		ConversationSummary:    input.ConversationContext.ConversationSummary,
+		GeneratedAt:            input.ConversationContext.GeneratedAt,
+		ExpiresAt:              input.ConversationContext.ExpiresAt,
 	}
 
 	userPrompt := fmt.Sprintf(
