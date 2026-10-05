@@ -92,7 +92,6 @@ type AttributeDefinitionEntityDefinition struct {
 	Label           string         `json:"label"`
 	DataType        string         `json:"data_type"`
 	IsRequired      bool           `json:"is_required"`
-	IsSearchable    bool           `json:"is_searchable"`
 	ValidationRules map[string]any `json:"validation_rules,omitempty"`
 	DisplayOrder    int            `json:"display_order"`
 }
@@ -334,7 +333,6 @@ func BuildCatalogEntityContractPayload() CatalogEntityContractPayload {
 					Label:           "TEXT (display)",
 					DataType:        "text|number|boolean|date|datetime|select|multi_select|location|money",
 					IsRequired:      false,
-					IsSearchable:    false,
 					ValidationRules: map[string]any{"rule_key": "rule_value"},
 					DisplayOrder:    0,
 				}},
@@ -346,7 +344,6 @@ func BuildCatalogEntityContractPayload() CatalogEntityContractPayload {
 				Label:           "TEXT (display)",
 				DataType:        "text|number|boolean|date|datetime|select|multi_select|location|money",
 				IsRequired:      false,
-				IsSearchable:    false,
 				ValidationRules: map[string]any{"rule_key": "rule_value"},
 				DisplayOrder:    0,
 			},
