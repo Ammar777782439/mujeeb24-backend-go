@@ -93,12 +93,7 @@ func (b AutoReplyContextBuilder) retrieveScopedOffer(ctx context.Context, busine
 		return nil, nil, nil, errors.New("AI context offer scope mismatch")
 	}
 	catalogEvidence := []ports.CustomerSalesCatalogEvidence{catalogItemEvidence(item, now)}
-	offerEvidence := []ports.CustomerSalesOfferEvidence{{
-		Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
-		Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-		AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
-		RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
-	}}
+	offerEvidence := []ports.CustomerSalesOfferEvidence{toOfferEvidence(offer, now)}
 	var variantEvidence []ports.CustomerSalesVariantEvidence
 	if offer.VariantID != nil && strings.TrimSpace(*offer.VariantID) != "" {
 		variants, listErr := b.Catalogs.ListVariants(ctx, businessID, item.ID, "active", b.maxVariants(), "")
@@ -133,12 +128,7 @@ func (b AutoReplyContextBuilder) retrieveScopedItem(ctx context.Context, busines
 		if offer.BusinessID != businessID || offer.CatalogItemID != item.ID {
 			return nil, nil, nil, errors.New("AI context offer scope mismatch")
 		}
-		offerEvidence = append(offerEvidence, ports.CustomerSalesOfferEvidence{
-			Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
-			Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-			AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
-			RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
-		})
+		offerEvidence = append(offerEvidence, toOfferEvidence(offer, now))
 	}
 	variants, err := b.Catalogs.ListVariants(ctx, businessID, item.ID, "active", b.maxVariants(), "")
 	if err != nil {
@@ -193,12 +183,7 @@ func (b AutoReplyContextBuilder) retrieveScopedCatalog(ctx context.Context, busi
 			return nil, nil, nil, err
 		}
 		for _, offer := range offers.Items {
-			offerEvidence = append(offerEvidence, ports.CustomerSalesOfferEvidence{
-				Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
-				Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-				AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
-				RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
-			})
+			offerEvidence = append(offerEvidence, toOfferEvidence(offer, now))
 		}
 	}
 	_ = variantEvidence
@@ -239,12 +224,7 @@ func (b AutoReplyContextBuilder) retrieveScopedVariant(ctx context.Context, busi
 	var offerEvidence []ports.CustomerSalesOfferEvidence
 	for _, offer := range offers.Items {
 		if offer.VariantID != nil && *offer.VariantID == matched.ID {
-			offerEvidence = append(offerEvidence, ports.CustomerSalesOfferEvidence{
-				Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
-				Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-				AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
-				RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
-			})
+			offerEvidence = append(offerEvidence, toOfferEvidence(offer, now))
 		}
 	}
 	return catalogEvidence, offerEvidence, variantEvidence, nil
