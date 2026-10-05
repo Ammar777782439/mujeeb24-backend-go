@@ -272,8 +272,16 @@ func (p *ValidationPipeline) evaluateCustomerSalesPolicy(ctx context.Context, in
 
 	result := p.CustomerSalesPolicy.Evaluate(ctx, input.Proposal, input.Context)
 	policyDecision := strings.TrimSpace(result.Decision)
-	if policyDecision == "" {
-		policyDecision = "allowed"
+	switch policyDecision {
+	case "allowed", "requires_approval", "denied":
+		// closed policy decision set
+	default:
+		// A broken/missing policy decision must never become implicit execution.
+		// Route to human review instead of failing open.
+		policyDecision = "requires_approval"
+		if strings.TrimSpace(result.Reason) == "" {
+			result.Reason = "policy evaluator returned an empty or unsupported decision; requiring human approval"
+		}
 	}
 
 	return ports.EffectiveDecision{
