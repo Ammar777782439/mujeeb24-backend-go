@@ -35,7 +35,6 @@ func TestGeminiLiveSmoke(t *testing.T) {
 		BaseURL:        "https://generativelanguage.googleapis.com",
 		APIKey:         apiKey,
 		Model:          "gemini-3.5-flash",
-		SystemPrompt:   "You are a test assistant. Reply with a simple answer.",
 		RequestTimeout: 30 * time.Second,
 	})
 	if err != nil {
