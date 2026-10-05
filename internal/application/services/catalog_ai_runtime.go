@@ -227,3 +227,26 @@ func catalogItemEvidence(item ports.CatalogItemRecord, now time.Time) ports.Cust
 		RequiresConfirmation: item.RequiresConfirmation,
 	}
 }
+
+
+func EvidenceFromProjection(projection CatalogAIProjection) ports.CatalogAIEvidenceSet {
+	evidence := ports.NewCatalogAIEvidenceSet()
+	for _, item := range projection.Items {
+		entry := ports.CatalogAIEvidenceItem{
+			Variants: make(map[string]struct{}),
+			Offers:   make(map[string]ports.CatalogAIEvidenceOffer),
+		}
+		for _, variant := range item.Variants {
+			entry.Variants[variant.ID] = struct{}{}
+		}
+		for _, offer := range item.Offers {
+			var variantID string
+			if offer.VariantID != nil {
+				variantID = *offer.VariantID
+			}
+			entry.Offers[offer.ID] = ports.CatalogAIEvidenceOffer{VariantID: variantID}
+		}
+		evidence.Items[item.ID] = entry
+	}
+	return evidence
+}
