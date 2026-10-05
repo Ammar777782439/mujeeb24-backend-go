@@ -12,7 +12,7 @@
 // runs over the candidate set + customer message + context.
 // Per contract ② §7, candidates are split by token budget, not by count.
 // Per contract ② §8, batches are NOT chained via previous_interaction_id;
-// they are independent Interactions on the same Conversation Context.
+// they are independent stateless Gemini requests over the same verified Conversation Context.
 //
 // Per contract ⑨ §22, each batch has state PENDING/RUNNING/COMPLETED/FAILED
 // so the Controller can resume from where it left off after partial failure.
@@ -38,7 +38,7 @@ import (
 //  1. Builds the Catalog AI Projection (per contract ①) for the business scope.
 //  2. Token-counts the serialized Projection.
 //  3. Splits into batches by token budget.
-//  4. Sends each batch as an independent Gemini Interaction.
+//  4. Sends each batch as an independent stateless Gemini request.
 //  5. Collects candidates per batch.
 //  6. Enforces coverage (Total == Sent == Completed).
 //  7. Hands the candidate set to the Final Gemini Evaluation.
@@ -84,7 +84,7 @@ type CatalogBatchController struct {
 }
 
 // BatchGeminiClient is the per-batch Gemini interaction contract.
-// Each batch is one independent Interaction per contract ② §8 — no
+// Each batch is one independent stateless Gemini request per contract ② §8 — no
 // previous_interaction_id chaining between batches.
 type BatchGeminiClient interface {
 	// EvaluateBatch sends one batch to Gemini and returns the candidate set.
