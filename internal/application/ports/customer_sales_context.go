@@ -68,9 +68,6 @@ type CustomerSalesContext struct {
 	// without serializing every item on every turn. Specific commercial claims
 	// still require detailed Catalog/Variant/Offer evidence.
 	CatalogManifest *CatalogAIManifest
-	// CatalogSummary is deprecated. Universal Catalog AI v3 uses
-	// CatalogManifest + bounded retrieval + full-coverage batching instead.
-	CatalogSummary []CustomerSalesCatalogSummaryEntry
 	// ConversationSummary is the LLM-generated running summary of older
 	// conversation turns (everything older than the sliding window of
 	// recent messages). Per ADR-039, this is sent to Gemini alongside
@@ -83,18 +80,6 @@ type CustomerSalesContext struct {
 	// without loading all item details. Names only — no IDs, no counts,
 	// no merchant data. Gemini decides when to list categories vs. products.
 	CatalogNames []string
-}
-
-// CustomerSalesCatalogSummaryEntry is a lightweight catalog item reference — just
-// enough for Gemini to know the product exists without loading full
-// evidence for every item (which would exceed token limits).
-type CustomerSalesCatalogSummaryEntry struct {
-	ID                 string `json:"id"`
-	Name               string `json:"name"`
-	CatalogName        string `json:"catalog_name,omitempty"`
-	Price              string `json:"price,omitempty"`
-	Currency           string `json:"currency,omitempty"`
-	AvailabilityStatus string `json:"availability_status,omitempty"`
 }
 
 type CustomerSalesStateProposal struct {
