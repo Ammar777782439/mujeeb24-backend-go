@@ -91,7 +91,7 @@ func NewGeminiHTTPClient(cfg GeminiHTTPClientConfig) (*GeminiHTTPClient, error) 
 	}
 	maxInputCharacters := cfg.MaxInputCharacters
 	if maxInputCharacters <= 0 {
-		maxInputCharacters = 12000
+		maxInputCharacters = 48000
 	}
 	client := cfg.HTTPClient
 	if client == nil {
