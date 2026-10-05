@@ -71,6 +71,10 @@ func (r *CatalogAIReadRepository) GetManifest(ctx context.Context, businessID st
 		  ON ci.business_id = s.business_id
 		 AND ci.attribute_schema_id = s.id
 		 AND ci.status = 'active'
+		JOIN catalogs c
+		  ON c.business_id = ci.business_id
+		 AND c.id = ci.catalog_id
+		 AND c.status = 'active'
 		WHERE s.business_id = $1::uuid
 		GROUP BY s.id, s.name, s.version
 		ORDER BY s.name, s.version, s.id`, businessID)
@@ -142,16 +146,20 @@ func (r *CatalogAIReadRepository) ListProjectionPage(ctx context.Context, reques
 		return ports.CatalogAIProjectionPage{}, err
 	}
 	rows, err := executor.Query(ctx, `
-		SELECT id::text, business_id::text, catalog_id::text,
-		       attribute_schema_id::text, attribute_schema_version,
-		       item_type, name, short_description, long_description,
-		       status, pricing_mode, availability_mode, fulfillment_mode,
-		       requires_confirmation, attributes, resource_version, created_at, updated_at
-		FROM catalog_items
-		WHERE business_id=$1::uuid AND status='active'
-		  AND (NULLIF($2,'')::uuid IS NULL OR catalog_id=NULLIF($2,'')::uuid)
-		  AND (NULLIF($3,'')::uuid IS NULL OR id>NULLIF($3,'')::uuid)
-		ORDER BY id
+		SELECT ci.id::text, ci.business_id::text, ci.catalog_id::text,
+		       ci.attribute_schema_id::text, ci.attribute_schema_version,
+		       ci.item_type, ci.name, ci.short_description, ci.long_description,
+		       ci.status, ci.pricing_mode, ci.availability_mode, ci.fulfillment_mode,
+		       ci.requires_confirmation, ci.attributes, ci.resource_version, ci.created_at, ci.updated_at
+		FROM catalog_items ci
+		JOIN catalogs c
+		  ON c.business_id = ci.business_id
+		 AND c.id = ci.catalog_id
+		 AND c.status = 'active'
+		WHERE ci.business_id=$1::uuid AND ci.status='active'
+		  AND (NULLIF($2,'')::uuid IS NULL OR ci.catalog_id=NULLIF($2,'')::uuid)
+		  AND (NULLIF($3,'')::uuid IS NULL OR ci.id>NULLIF($3,'')::uuid)
+		ORDER BY ci.id
 		LIMIT $4`, request.BusinessID, request.CatalogID, request.Cursor, limit+1)
 	if err != nil {
 		return ports.CatalogAIProjectionPage{}, catalogRepositoryError("catalog_ai.page", err)
