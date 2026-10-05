@@ -32,7 +32,6 @@ type CatalogAIManifestAttributeDefinition struct {
 	Label           string         `json:"label"`
 	DataType        string         `json:"data_type"`
 	Required        bool           `json:"required"`
-	Searchable      bool           `json:"searchable"`
 	ValidationRules map[string]any `json:"validation_rules,omitempty"`
 	DisplayOrder    int            `json:"display_order"`
 }
@@ -51,13 +50,6 @@ type CatalogAIProjectionPage struct {
 	NextCursor string
 	HasMore    bool
 }
-
-type CatalogAISearchRequest struct {
-	BusinessID string
-	Query      string
-	Limit      int
-}
-
 type CatalogAIProjectionRequest struct {
 	BusinessID string
 	CatalogID  string
@@ -69,7 +61,6 @@ type CatalogAIProjectionRequest struct {
 // It is read-only, tenant-scoped and returns structured records only.
 type CatalogAIReadRepository interface {
 	GetManifest(ctx context.Context, businessID string) (CatalogAIManifest, error)
-	SearchProjection(ctx context.Context, request CatalogAISearchRequest) ([]CatalogAIProjectionBundle, error)
 	ListProjectionPage(ctx context.Context, request CatalogAIProjectionRequest) (CatalogAIProjectionPage, error)
 }
 
