@@ -13,6 +13,13 @@ type CatalogAIReadRepository struct {
 	adapter *Adapter
 }
 
+const (
+	catalogAIManifestCatalogLimit       = 40
+	catalogAIManifestSchemaLimit        = 40
+	catalogAIManifestItemTypeLimit      = 12
+	catalogAIManifestAttributeKeyLimit  = 24
+)
+
 func NewCatalogAIReadRepository(adapter *Adapter) *CatalogAIReadRepository {
 	return &CatalogAIReadRepository{adapter: adapter}
 }
@@ -34,6 +41,18 @@ func (r *CatalogAIReadRepository) GetManifest(ctx context.Context, businessID st
 	}
 
 	var manifest ports.CatalogAIManifest
+	if err := executor.QueryRow(ctx, `
+		SELECT COUNT(DISTINCT c.id)::int, COUNT(ci.id)::int
+		FROM catalogs c
+		LEFT JOIN catalog_items ci
+		  ON ci.business_id = c.business_id
+		 AND ci.catalog_id = c.id
+		 AND ci.status = 'active'
+		WHERE c.business_id = $1::uuid
+		  AND c.status = 'active'`, businessID).Scan(&manifest.TotalCatalogs, &manifest.TotalActiveItems); err != nil {
+		return ports.CatalogAIManifest{}, catalogRepositoryError("catalog_ai.manifest.totals", err)
+	}
+
 	rows, err := executor.Query(ctx, `
 		SELECT c.id::text, c.name, c.description, COUNT(ci.id)::int,
 		       COALESCE(array_agg(DISTINCT ci.item_type ORDER BY ci.item_type)
@@ -45,81 +64,106 @@ func (r *CatalogAIReadRepository) GetManifest(ctx context.Context, businessID st
 		 AND ci.status = 'active'
 		WHERE c.business_id = $1::uuid AND c.status = 'active'
 		GROUP BY c.id, c.name, c.description
-		ORDER BY c.name, c.id`, businessID)
+		ORDER BY c.name, c.id
+		LIMIT $2`, businessID, catalogAIManifestCatalogLimit)
 	if err != nil {
 		return ports.CatalogAIManifest{}, catalogRepositoryError("catalog_ai.manifest", err)
 	}
 	for rows.Next() {
-		var c ports.CatalogAIManifestCatalog
-		if err := rows.Scan(&c.ID, &c.Name, &c.Description, &c.ItemCount, &c.ItemTypes); err != nil {
+		var catalog ports.CatalogAIManifestCatalog
+		if err := rows.Scan(&catalog.ID, &catalog.Name, &catalog.Description, &catalog.ItemCount, &catalog.ItemTypes); err != nil {
 			rows.Close()
 			return ports.CatalogAIManifest{}, catalogRepositoryError("catalog_ai.manifest", err)
 		}
-		manifest.TotalActiveItems += c.ItemCount
-		manifest.Catalogs = append(manifest.Catalogs, c)
+		if len(catalog.ItemTypes) > catalogAIManifestItemTypeLimit {
+			catalog.ItemTypes = append([]string(nil), catalog.ItemTypes[:catalogAIManifestItemTypeLimit]...)
+			catalog.ItemTypesTruncated = true
+		}
+		manifest.Catalogs = append(manifest.Catalogs, catalog)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
 		return ports.CatalogAIManifest{}, catalogRepositoryError("catalog_ai.manifest", err)
 	}
 	rows.Close()
+	manifest.CatalogsTruncated = manifest.TotalCatalogs > len(manifest.Catalogs)
 
 	sRows, err := executor.Query(ctx, `
-		SELECT s.id::text, s.name, s.version, COUNT(ci.id)::int
-		FROM attribute_schemas s
-		JOIN catalog_items ci
-		  ON ci.business_id = s.business_id
-		 AND ci.attribute_schema_id = s.id
-		 AND ci.status = 'active'
-		JOIN catalogs c
-		  ON c.business_id = ci.business_id
-		 AND c.id = ci.catalog_id
-		 AND c.status = 'active'
-		WHERE s.business_id = $1::uuid
-		GROUP BY s.id, s.name, s.version
-		ORDER BY s.name, s.version, s.id`, businessID)
+		WITH used AS (
+			SELECT s.id, s.name, s.version, COUNT(ci.id)::int AS usage_count
+			FROM attribute_schemas s
+			JOIN catalog_items ci
+			  ON ci.business_id = s.business_id
+			 AND ci.attribute_schema_id = s.id
+			 AND ci.status = 'active'
+			JOIN catalogs c
+			  ON c.business_id = ci.business_id
+			 AND c.id = ci.catalog_id
+			 AND c.status = 'active'
+			WHERE s.business_id = $1::uuid
+			GROUP BY s.id, s.name, s.version
+		)
+		SELECT id::text, name, version, usage_count, COUNT(*) OVER()::int
+		FROM used
+		ORDER BY name, version, id
+		LIMIT $2`, businessID, catalogAIManifestSchemaLimit)
 	if err != nil {
 		return ports.CatalogAIManifest{}, catalogRepositoryError("catalog_ai.manifest.schemas", err)
 	}
 	schemaIndex := map[string]int{}
 	var schemaIDs []string
 	for sRows.Next() {
-		var s ports.CatalogAIManifestSchema
-		if err := sRows.Scan(&s.ID, &s.Name, &s.Version, &s.UsageCount); err != nil {
+		var schema ports.CatalogAIManifestSchema
+		var totalSchemas int
+		if err := sRows.Scan(&schema.ID, &schema.Name, &schema.Version, &schema.UsageCount, &totalSchemas); err != nil {
 			sRows.Close()
 			return ports.CatalogAIManifest{}, catalogRepositoryError("catalog_ai.manifest.schemas", err)
 		}
-		schemaIndex[s.ID] = len(manifest.Schemas)
-		schemaIDs = append(schemaIDs, s.ID)
-		manifest.Schemas = append(manifest.Schemas, s)
+		manifest.TotalSchemas = totalSchemas
+		schemaIndex[schema.ID] = len(manifest.Schemas)
+		schemaIDs = append(schemaIDs, schema.ID)
+		manifest.Schemas = append(manifest.Schemas, schema)
 	}
 	if err := sRows.Err(); err != nil {
 		sRows.Close()
 		return ports.CatalogAIManifest{}, catalogRepositoryError("catalog_ai.manifest.schemas", err)
 	}
 	sRows.Close()
+	manifest.SchemasTruncated = manifest.TotalSchemas > len(manifest.Schemas)
 	if len(schemaIDs) == 0 {
 		return manifest, nil
 	}
 
 	dRows, err := executor.Query(ctx, `
-		SELECT d.schema_id::text, d.attribute_key
-		FROM attribute_definitions d
-		JOIN attribute_schemas s ON s.id = d.schema_id
-		WHERE s.business_id = $1::uuid
-		  AND d.schema_id::text = ANY($2::text[])
-		ORDER BY d.schema_id, d.display_order, d.id`, businessID, schemaIDs)
+		WITH ranked AS (
+			SELECT d.schema_id::text AS schema_id,
+			       d.attribute_key,
+			       ROW_NUMBER() OVER (PARTITION BY d.schema_id ORDER BY d.display_order, d.id) AS rn,
+			       COUNT(*) OVER (PARTITION BY d.schema_id) AS total_keys
+			FROM attribute_definitions d
+			JOIN attribute_schemas s ON s.id = d.schema_id
+			WHERE s.business_id = $1::uuid
+			  AND d.schema_id::text = ANY($2::text[])
+		)
+		SELECT schema_id, attribute_key, total_keys
+		FROM ranked
+		WHERE rn <= $3
+		ORDER BY schema_id, rn`, businessID, schemaIDs, catalogAIManifestAttributeKeyLimit)
 	if err != nil {
 		return ports.CatalogAIManifest{}, catalogRepositoryError("catalog_ai.manifest.definitions", err)
 	}
 	for dRows.Next() {
 		var schemaID, key string
-		if err := dRows.Scan(&schemaID, &key); err != nil {
+		var totalKeys int64
+		if err := dRows.Scan(&schemaID, &key, &totalKeys); err != nil {
 			dRows.Close()
 			return ports.CatalogAIManifest{}, catalogRepositoryError("catalog_ai.manifest.definitions", err)
 		}
 		if idx, ok := schemaIndex[schemaID]; ok {
 			manifest.Schemas[idx].AttributeKeys = append(manifest.Schemas[idx].AttributeKeys, key)
+			if totalKeys > int64(catalogAIManifestAttributeKeyLimit) {
+				manifest.Schemas[idx].AttributeKeysTruncated = true
+			}
 		}
 	}
 	if err := dRows.Err(); err != nil {
