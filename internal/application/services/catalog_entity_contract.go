@@ -318,7 +318,8 @@ type CatalogAIEntityContractDescriptor struct {
 	CatalogStatuses           []string                    `json:"catalog_statuses"`
 	ItemStatuses              []string                    `json:"item_statuses"`
 	VariantStatuses           []string                    `json:"variant_statuses"`
-	OfferStatuses             []string                    `json:"offer_statuses"`
+	OfferStatuses             []string                      `json:"offer_statuses"`
+	SemanticRules             []string                      `json:"semantic_rules"`
 	Relationships             []CatalogAIEntityRelationship `json:"relationships"`
 }
 
@@ -448,7 +449,15 @@ func compactCatalogEntityContractDescriptor(rich CatalogEntityContractDescriptor
 		ItemStatuses:              sortedContractKeys(rich.ItemStatuses),
 		VariantStatuses:           sortedContractKeys(rich.VariantStatuses),
 		OfferStatuses:             sortedContractKeys(rich.OfferStatuses),
-		Relationships:             relationships,
+		SemanticRules: []string{
+			"starting_from amount is a lower bound, not a final price",
+			"quote_required has no confirmed numeric price",
+			"dynamic price requires current verification before presenting it as confirmed",
+			"price_verification rejected is unusable; stale or unverified is not confirmed",
+			"availability unknown, stale, or requires_check is not confirmed available",
+			"fulfillment_mode is a default mode, not a fulfillment promise",
+		},
+		Relationships: relationships,
 	}
 }
 
