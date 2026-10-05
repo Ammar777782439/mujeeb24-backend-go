@@ -47,6 +47,7 @@ type CatalogAIProjectionRequest struct {
 // It is read-only, tenant-scoped and returns structured records only.
 type CatalogAIReadRepository interface {
 	GetManifest(ctx context.Context, businessID string) (CatalogAIManifest, error)
+	GetRevision(ctx context.Context, businessID string) (string, error)
 	ListProjectionPage(ctx context.Context, request CatalogAIProjectionRequest) (CatalogAIProjectionPage, error)
 }
 
