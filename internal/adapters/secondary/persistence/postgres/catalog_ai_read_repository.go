@@ -295,7 +295,7 @@ func (r *CatalogAIReadRepository) hydrate(ctx context.Context, executor SQLExecu
 	sRows.Close()
 
 	dRows, err := executor.Query(ctx, `
-		SELECT d.schema_id::text,d.id::text,d.attribute_key,d.label,d.data_type,d.is_required,d.is_searchable,d.validation_rules,d.display_order
+		SELECT d.schema_id::text,d.id::text,d.attribute_key,d.label,d.data_type,d.is_required,d.validation_rules,d.display_order
 		FROM attribute_definitions d
 		JOIN attribute_schemas s ON s.id=d.schema_id
 		WHERE s.business_id=$1::uuid AND d.schema_id=ANY($2::uuid[])
@@ -306,7 +306,7 @@ func (r *CatalogAIReadRepository) hydrate(ctx context.Context, executor SQLExecu
 	for dRows.Next() {
 		var schemaID string
 		var d ports.AttributeDefinitionRecord
-		if err := dRows.Scan(&schemaID,&d.ID,&d.Key,&d.Label,&d.DataType,&d.Required,&d.Searchable,&d.ValidationRules,&d.DisplayOrder); err != nil {
+		if err := dRows.Scan(&schemaID,&d.ID,&d.Key,&d.Label,&d.DataType,&d.Required,&d.ValidationRules,&d.DisplayOrder); err != nil {
 			dRows.Close()
 			return nil, catalogRepositoryError("catalog_ai.definitions", err)
 		}
