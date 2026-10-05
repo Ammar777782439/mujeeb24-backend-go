@@ -227,14 +227,6 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		if st, err := s.StateRepository.Get(ctx, businessID, conversationID); err == nil {
 			loadedState = &st
 		}
-		// Per ADR-051: clear stale focus to prevent scoped retrieval from
-		// loading frozen old product data. The focus was set on Sep 13 and
-		// never updated, causing Gemini to jump to "عطر عمار" when the
-		// customer said "نعم". Clearing it forces broader retrieval mode
-		// (all catalogs) and lets recent_messages provide context instead.
-		if loadedState != nil && loadedState.Focus != nil {
-			loadedState.Focus = nil
-		}
 	}
 	var builtContext *ports.CustomerSalesContext
 	if s.CustomerSalesContextBuilder != nil {
@@ -321,8 +313,8 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 
 	// Per contract ② §9 — Catalog Evaluation flow.
 	//
-	// When Gemini's first response indicates it needs catalog data
-	// (status=needs_more_data AND the context lacks catalog evidence),
+	// When Gemini's first response indicates it needs more catalog data
+	// (status=needs_more_data),
 	// invoke the CatalogBatchController to:
 	//   1. Build the Catalog AI Projection from PostgreSQL (contract ① §6)
 	//   2. Token-count and split into batches (contract ② §2)
@@ -359,8 +351,14 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 
 		// Per contract ② §9, run the full catalog evaluation pipeline.
 		entityContract := CatalogEntityContractPayload{}
-		if len(s.EntityContractPayload) > 0 {
-			_ = json.Unmarshal(s.EntityContractPayload, &entityContract)
+		if len(s.EntityContractPayload) == 0 {
+			err := errors.New("catalog entity contract payload is required for full catalog evaluation")
+			s.markFailedSafe(ctx, run, ports.AIRunFailureStageContextBuild, string(ports.AIRunFailureCategoryInfrastructure), err.Error())
+			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
+		}
+		if err := json.Unmarshal(s.EntityContractPayload, &entityContract); err != nil {
+			s.markFailedSafe(ctx, run, ports.AIRunFailureStageContextBuild, string(ports.AIRunFailureCategoryInfrastructure), "decode catalog entity contract: "+err.Error())
+			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, fmt.Errorf("decode catalog entity contract: %w", err)
 		}
 		catalogResult, err := s.CatalogBatch.RunCatalogEvaluation(ctx, CatalogEvaluationInput{
 			AIRunID:             run.ID,
