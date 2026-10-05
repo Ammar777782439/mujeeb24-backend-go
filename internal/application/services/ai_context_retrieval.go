@@ -437,11 +437,6 @@ func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports
 			return ports.CustomerSalesContext{}, manifestErr
 		}
 		base.CatalogManifest = &manifest
-		if len(base.CatalogNames) == 0 {
-			for _, catalog := range manifest.Catalogs {
-				base.CatalogNames = append(base.CatalogNames, catalog.Name)
-			}
-		}
 	}
 
 	if len(base.CatalogEvidence) > 0 && len(base.CatalogSchemaEvidence) == 0 {
