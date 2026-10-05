@@ -80,3 +80,37 @@ func customerSalesPromptContextFrom(value *ports.CustomerSalesContext) customerS
 		ExpiresAt:              value.ExpiresAt,
 	}
 }
+
+
+type catalogBatchPromptContext struct {
+	Business               ports.CustomerSalesContextBusiness          `json:"business"`
+	Conversation           ports.CustomerSalesContextConversation      `json:"conversation"`
+	Customer               customerSalesPromptCustomer                 `json:"customer"`
+	KnowledgeEvidence      []ports.CustomerSalesKnowledgeEvidence      `json:"knowledge_evidence,omitempty"`
+	BusinessPolicyEvidence []ports.CustomerSalesBusinessPolicyEvidence `json:"business_policy_evidence,omitempty"`
+	RecentMessages         []ports.CustomerSalesRecentMessageEvidence  `json:"recent_messages,omitempty"`
+	PolicyEvidence         ports.CustomerSalesPolicyEvidence           `json:"policy_evidence"`
+	ConversationState      *ports.ConversationStateRecord              `json:"conversation_state,omitempty"`
+	ConversationSummary    string                                      `json:"conversation_summary,omitempty"`
+}
+
+func catalogBatchPromptContextFrom(value *ports.CustomerSalesContext) catalogBatchPromptContext {
+	if value == nil {
+		return catalogBatchPromptContext{}
+	}
+	return catalogBatchPromptContext{
+		Business:      value.Business,
+		Conversation:  value.Conversation,
+		Customer: customerSalesPromptCustomer{
+			Reference:        value.Customer.Reference,
+			LocalePreference: value.Customer.LocalePreference,
+			Status:           value.Customer.Status,
+		},
+		KnowledgeEvidence:      value.KnowledgeEvidence,
+		BusinessPolicyEvidence: value.BusinessPolicyEvidence,
+		RecentMessages:         value.RecentMessages,
+		PolicyEvidence:         value.PolicyEvidence,
+		ConversationState:      value.ConversationState,
+		ConversationSummary:    value.ConversationSummary,
+	}
+}
