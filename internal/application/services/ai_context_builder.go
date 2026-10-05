@@ -249,25 +249,7 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 			if offer.BusinessID != input.BusinessID || offer.CatalogItemID != item.Reference {
 				return ports.CustomerSalesContext{}, errors.New("AI context offer scope mismatch")
 			}
-			evidenceState := CustomerSalesContextFresh
-			if strings.EqualFold(strings.TrimSpace(offer.AvailabilityStatus), "unknown") || strings.EqualFold(strings.TrimSpace(offer.AvailabilityStatus), "stale") {
-				evidenceState = CustomerSalesContextStale
-			}
-			context.OfferEvidence = append(context.OfferEvidence, ports.CustomerSalesOfferEvidence{
-				Reference:            offer.ID,
-				CatalogItemReference: offer.CatalogItemID,
-				VariantReference:     stringValue(offer.VariantID),
-				Name:                 offer.Name,
-				PricingMode:          offer.PricingMode,
-				Amount:               stringValue(offer.Amount),
-				Currency:             stringValue(offer.Currency),
-				AvailabilityStatus:   offer.AvailabilityStatus,
-				Status:               offer.Status,
-				EvidenceState:        evidenceState,
-				RetrievedAt:          now,
-
-				SchemaVersion: AIEvidenceSchemaVersion,
-			})
+			context.OfferEvidence = append(context.OfferEvidence, toOfferEvidence(offer, now))
 		}
 		variants, listErr := b.Catalogs.ListVariants(ctx, input.BusinessID, item.Reference, "active", b.maxVariants(), "")
 		if listErr != nil {
