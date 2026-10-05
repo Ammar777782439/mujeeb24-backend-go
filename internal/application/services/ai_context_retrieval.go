@@ -322,6 +322,9 @@ func offerEvidenceStateForRecord(offer ports.OfferRecord, now time.Time) string 
 	if offer.AvailabilityValidUntil != nil && now.After(*offer.AvailabilityValidUntil) {
 		return CustomerSalesContextStale
 	}
+	if offer.ValidityFrom != nil && now.Before(*offer.ValidityFrom) {
+		return CustomerSalesContextStale
+	}
 	if offer.ValidityUntil != nil && now.After(*offer.ValidityUntil) {
 		return CustomerSalesContextStale
 	}
