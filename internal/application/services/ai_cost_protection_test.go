@@ -302,7 +302,6 @@ func TestAICostProtectionAllowsWhenNoActiveSubscription(t *testing.T) {
 	}
 }
 
-
 func TestAICostProtectionFailsClosedOnUsageLookupError(t *testing.T) {
 	t.Parallel()
 	svc := &AICostProtectionService{
