@@ -70,8 +70,8 @@ type AutoReplyService struct {
 	// ContextBuilder per contract ③ §2 builds the CustomerSalesContext.
 	CustomerSalesContextBuilder ports.CustomerSalesContextBuilder
 
-	// Validation is the contract ⑥ §2 pipeline. If nil, validation is
-	// skipped (defaulting to "allowed"); production deployments MUST wire it.
+	// Validation is the contract ⑥ §2 pipeline. It is mandatory for any
+	// executable AI proposal; nil fails closed before persistence/execution.
 	Validation *ValidationPipeline
 
 	// RunRepository persists AI Run trace per contract ⑧ §5. If nil, the
