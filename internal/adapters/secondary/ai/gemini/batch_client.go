@@ -156,6 +156,80 @@ func (c *BatchClient) buildBatchSystemInstructionWithSuffix(entityContract servi
 // defaultBatchSystemPrompt moved to internal/domain/ai/prompts/prompts.go
 // (Day 5 Gap #13 — versioned system prompts as reviewable assets).
 
+func (c *BatchClient) buildEvaluateBatchRequest(input services.BatchEvaluationInput, rc *resolvedAIConfig) (batchGeminiRequest, error) {
+	batchJSON, err := json.Marshal(input.Batch)
+	if err != nil {
+		return batchGeminiRequest{}, fmt.Errorf("marshal batch payload: %w", err)
+	}
+	userPrompt := fmt.Sprintf("Customer message: %s\n\nCatalog batch %d data:\n%s",
+		input.CustomerMessage, input.BatchNumber, string(batchJSON))
+	return batchGeminiRequest{
+		SystemInstruction: c.buildBatchSystemInstruction(input.EntityContract),
+		Contents: []batchContent{
+			{Role: "user", Parts: []batchPart{{Text: userPrompt}}},
+		},
+		GenerationConfig: batchGenerationConfig{
+			ResponseMimeType: "application/json",
+			ResponseSchema:   batchCandidateResponseSchema(),
+			MaxOutputTokens:  rc.maxOutputTokens,
+		},
+	}, nil
+}
+
+// CountBatchTokens counts the exact generateContent request that EvaluateBatch
+// will send. Google countTokens accepts generateContentRequest, so system
+// instructions, entity contract, batch JSON and response configuration stay
+// aligned with the real provider request.
+func (c *BatchClient) CountBatchTokens(ctx context.Context, input services.BatchEvaluationInput) (int, error) {
+	if c == nil {
+		return 0, errors.New("batch client is not configured")
+	}
+	rc, err := c.resolveConfig(ctx)
+	if err != nil {
+		return 0, err
+	}
+	reqBody, err := c.buildEvaluateBatchRequest(input, rc)
+	if err != nil {
+		return 0, err
+	}
+	wrapper := struct {
+		GenerateContentRequest batchGeminiRequest `json:"generateContentRequest"`
+	}{GenerateContentRequest: reqBody}
+	buf, err := json.Marshal(wrapper)
+	if err != nil {
+		return 0, fmt.Errorf("marshal exact countTokens request: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/v1beta/models/%s:countTokens", rc.baseURL, rc.model)
+	reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
+	defer cancel()
+	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(buf))
+	if err != nil {
+		return 0, fmt.Errorf("build exact countTokens request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("x-goog-api-key", rc.apiKey)
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return 0, fmt.Errorf("send exact countTokens request: %w", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	if err != nil {
+		return 0, fmt.Errorf("read exact countTokens response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return 0, fmt.Errorf("exact countTokens status %d: %s", resp.StatusCode, string(body))
+	}
+	var out struct {
+		TotalTokens int `json:"totalTokens"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return 0, fmt.Errorf("unmarshal exact countTokens response: %w", err)
+	}
+	return out.TotalTokens, nil
+}
+
 // EvaluateBatch implements services.BatchGeminiClient.EvaluateBatch per
 // contract ② §5. Sends one batch to Gemini and returns the candidate set.
 //
@@ -179,21 +253,9 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
 		return ports.CatalogBatchResult{}, err
 	}
 
-	batchJSON, err := json.Marshal(input.Batch)
+	reqBody, err := c.buildEvaluateBatchRequest(input, rc)
 	if err != nil {
-		return ports.CatalogBatchResult{}, fmt.Errorf("marshal batch payload: %w", err)
-	}
-	userPrompt := fmt.Sprintf("Customer message: %s\n\nCatalog batch %d data:\n%s",
-		input.CustomerMessage, input.BatchNumber, string(batchJSON))
-	reqBody := batchGeminiRequest{
-		SystemInstruction: c.buildBatchSystemInstruction(input.EntityContract),
-		Contents: []batchContent{
-			{Role: "user", Parts: []batchPart{{Text: userPrompt}}},
-		},
-		GenerationConfig: batchGenerationConfig{
-			ResponseMimeType: "application/json",
-			ResponseSchema:   batchCandidateResponseSchema(),
-		},
+		return ports.CatalogBatchResult{}, err
 	}
 	// Per P2-13: measure the wall-clock duration of the Gemini batch
 	// call so the usage record carries a real latency (instead of
@@ -501,6 +563,7 @@ type batchGeminiRequest struct {
 type batchGenerationConfig struct {
 	ResponseMimeType string         `json:"responseMimeType,omitempty"`
 	ResponseSchema   map[string]any `json:"responseSchema,omitempty"`
+	MaxOutputTokens  int            `json:"maxOutputTokens,omitempty"`
 }
 
 type batchContent struct {
