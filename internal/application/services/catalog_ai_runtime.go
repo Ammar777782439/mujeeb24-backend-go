@@ -135,7 +135,7 @@ func appendCatalogRecordsToProjection(projection *CatalogAIProjection, catalogs 
 			continue
 		}
 		projection.Catalogs = append(projection.Catalogs, CatalogAICatalog{
-			ID: catalog.ID, Name: catalog.Name, Description: catalog.Description,
+			ID: catalog.ID, Name: catalog.Name, Description: catalog.Description, Status: catalog.Status,
 		})
 		seen[catalog.ID] = struct{}{}
 	}
