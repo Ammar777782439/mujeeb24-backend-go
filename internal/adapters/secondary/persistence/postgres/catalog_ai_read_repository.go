@@ -88,6 +88,45 @@ func (r *CatalogAIReadRepository) GetManifest(ctx context.Context, businessID st
 	return manifest, nil
 }
 
+func (r *CatalogAIReadRepository) GetRevision(ctx context.Context, businessID string) (string, error) {
+	if strings.TrimSpace(businessID) == "" {
+		return "", invalidRepositoryInput("catalog_ai.revision", "business id is required")
+	}
+	executor, err := r.executor(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	var revision string
+	err = executor.QueryRow(ctx, `
+		SELECT concat_ws('|',
+			(SELECT COUNT(*)::text FROM catalogs c WHERE c.business_id = $1::uuid),
+			COALESCE((SELECT MAX(c.updated_at)::text FROM catalogs c WHERE c.business_id = $1::uuid), ''),
+			(SELECT COUNT(*)::text FROM catalog_items i WHERE i.business_id = $1::uuid),
+			COALESCE((SELECT MAX(i.updated_at)::text FROM catalog_items i WHERE i.business_id = $1::uuid), ''),
+			(SELECT COUNT(*)::text FROM attribute_schemas s WHERE s.business_id = $1::uuid),
+			COALESCE((SELECT MAX(s.updated_at)::text FROM attribute_schemas s WHERE s.business_id = $1::uuid), ''),
+			(SELECT COUNT(*)::text
+			 FROM attribute_definitions d
+			 JOIN attribute_schemas s ON s.id = d.schema_id
+			 WHERE s.business_id = $1::uuid),
+			COALESCE((
+				SELECT MAX(d.updated_at)::text
+				FROM attribute_definitions d
+				JOIN attribute_schemas s ON s.id = d.schema_id
+				WHERE s.business_id = $1::uuid
+			), ''),
+			(SELECT COUNT(*)::text FROM variants v WHERE v.business_id = $1::uuid),
+			COALESCE((SELECT MAX(v.updated_at)::text FROM variants v WHERE v.business_id = $1::uuid), ''),
+			(SELECT COUNT(*)::text FROM offers o WHERE o.business_id = $1::uuid),
+			COALESCE((SELECT MAX(o.updated_at)::text FROM offers o WHERE o.business_id = $1::uuid), '')
+		)`, businessID).Scan(&revision)
+	if err != nil {
+		return "", catalogRepositoryError("catalog_ai.revision", err)
+	}
+	return revision, nil
+}
+
 func (r *CatalogAIReadRepository) ListProjectionPage(ctx context.Context, request ports.CatalogAIProjectionRequest) (ports.CatalogAIProjectionPage, error) {
 	if strings.TrimSpace(request.BusinessID) == "" {
 		return ports.CatalogAIProjectionPage{}, invalidRepositoryInput("catalog_ai.page", "business id is required")
