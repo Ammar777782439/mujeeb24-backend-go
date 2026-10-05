@@ -325,6 +325,10 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		}
 	}
 
+	// Exact relational evidence exposed in the normal customer-sales context.
+	// Batch evaluation evidence is merged only after complete batch coverage.
+	catalogEvidence := EvidenceFromCustomerSalesContext(builtContext)
+
 	// Per contract ② §9 — Catalog Evaluation flow.
 	//
 	// When Gemini's first response indicates it needs catalog data
@@ -362,7 +366,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		if len(s.EntityContractPayload) > 0 {
 			_ = json.Unmarshal(s.EntityContractPayload, &entityContract)
 		}
-		finalProposal, err := s.CatalogBatch.RunCatalogEvaluation(ctx, CatalogEvaluationInput{
+		catalogResult, err := s.CatalogBatch.RunCatalogEvaluation(ctx, CatalogEvaluationInput{
 			AIRunID:             run.ID,
 			AttemptID:           "", // no separate attempt tracking in this path
 			BusinessID:          businessID,
@@ -376,8 +380,9 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			log.Printf("[AutoReply] CATALOG_EVAL_FAILED run=%s err=%v", run.ID, err)
 			s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), "catalog evaluation: "+err.Error())
 		} else {
-			log.Printf("[AutoReply] CATALOG_EVAL_OK run=%s final_status=%s final_action=%s response=%q", run.ID, finalProposal.Status, finalProposal.Action, truncate(finalProposal.ResponseText, 200))
-			proposal = finalProposal
+			log.Printf("[AutoReply] CATALOG_EVAL_OK run=%s final_status=%s final_action=%s response=%q", run.ID, catalogResult.Proposal.Status, catalogResult.Proposal.Action, truncate(catalogResult.Proposal.ResponseText, 200))
+			proposal = catalogResult.Proposal
+			catalogEvidence.Merge(catalogResult.Evidence)
 		}
 	}
 
@@ -392,33 +397,17 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	// ALL of those — not just the 5 items from the initial context.
 	var effective ports.EffectiveDecision
 	if s.Validation != nil {
-		// Start with the context evidence (5 items from ContextBuilder).
-		evidenceItemIDs := extractItemIDs(builtContext)
-		evidenceVariantIDs := extractVariantIDs(builtContext)
-		evidenceOfferIDs := extractOfferIDs(builtContext)
-		// If catalog batch evaluation ran, add ALL items from the projection
-		// to the evidence set. The batch controller sent all items to Gemini
-		// via EvaluateBatch; those are now valid references.
-		// We also add the selected item IDs from the proposal — if Gemini
-		// selected them, they were in the batch data it received.
-		for _, ref := range proposal.Selected {
-			evidenceItemIDs = appendUniqueString(evidenceItemIDs, ref.ItemID)
-			if ref.VariantID != nil && *ref.VariantID != "" {
-				evidenceVariantIDs = appendUniqueString(evidenceVariantIDs, *ref.VariantID)
-			}
-			if ref.OfferID != nil && *ref.OfferID != "" {
-				evidenceOfferIDs = appendUniqueString(evidenceOfferIDs, *ref.OfferID)
-			}
-		}
+		// Universal Catalog AI v3: evidence contains only entities that Mujeeb
+		// actually serialized into the normal context or completed catalog batches.
+		// AI output never expands this trust boundary.
+
 		ed, failure := s.Validation.Validate(ctx, ValidationInput{
 			DecisionID:         "", // linked later when ai_decisions is created
 			BusinessID:         businessID,
 			ConversationID:     conversationID,
 			Proposal:           proposal,
 			Context:            builtContext,
-			EvidenceItemIDs:    evidenceItemIDs,
-			EvidenceVariantIDs: evidenceVariantIDs,
-			EvidenceOfferIDs:   evidenceOfferIDs,
+			Evidence:           catalogEvidence,
 		})
 		if failure != nil {
 			log.Printf("[AutoReply] VALIDATION_FAILED run=%s stage=%s category=%s reason=%s", run.ID, failure.Stage, failure.Category, failure.Reason)
