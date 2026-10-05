@@ -600,8 +600,9 @@ func (c *CatalogBatchController) fetchVariants(ctx context.Context, businessID, 
 	out := make([]CatalogAIVariant, 0, len(page.Items))
 	for _, v := range page.Items {
 		out = append(out, CatalogAIVariant{
-			ID:         v.ID,
-			Name:       v.Name,
+			ID:            v.ID,
+			CatalogItemID: v.CatalogItemID,
+			Name:          v.Name,
 			Attributes: parseJSONAttributes(v.Attributes),
 			Status:     v.Status,
 		})
@@ -620,6 +621,7 @@ func (c *CatalogBatchController) fetchOffers(ctx context.Context, businessID, it
 	for _, o := range page.Items {
 		out = append(out, CatalogAIOffer{
 			ID:                      o.ID,
+			CatalogItemID:           o.CatalogItemID,
 			VariantID:               o.VariantID,
 			Name:                    o.Name,
 			PricingMode:             o.PricingMode,
