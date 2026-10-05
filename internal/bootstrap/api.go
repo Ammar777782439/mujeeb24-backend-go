@@ -390,6 +390,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			})
 			service.CatalogBatch = &services.CatalogBatchController{
 				Catalogs:          postgres.NewCatalogRepository(database),
+				CatalogAI:         postgres.NewCatalogAIReadRepository(database),
 				ProjectionBuilder: &services.CatalogAIProjectionBuilder{},
 				TokenCounter:      batchTokenCounter,
 				Gemini:            batchClient,
