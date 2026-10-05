@@ -63,11 +63,13 @@ type CustomerSalesContext struct {
 	ConversationState      *ConversationStateRecord
 	GeneratedAt            time.Time
 	ExpiresAt              time.Time
-	// CatalogSummary is a lightweight list of ALL active catalog items
-	// (just ID + name) so Gemini knows the full catalog exists, even
-	// though only MaxItems have full evidence. When a customer asks
-	// about a product that's in the summary but not in the detailed
-	// evidence, Gemini returns needs_more_data → triggers batch evaluation.
+	// CatalogManifest is a bounded map of the complete active catalog shape.
+	// It tells the model which catalogs, item types and dynamic schemas exist
+	// without serializing every item on every turn. Specific commercial claims
+	// still require detailed Catalog/Variant/Offer evidence.
+	CatalogManifest *CatalogAIManifest
+	// CatalogSummary is deprecated. Universal Catalog AI v3 uses
+	// CatalogManifest + bounded retrieval + full-coverage batching instead.
 	CatalogSummary []CustomerSalesCatalogSummaryEntry
 	// ConversationSummary is the LLM-generated running summary of older
 	// conversation turns (everything older than the sliding window of
