@@ -214,12 +214,12 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		func() string {
 			m := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 			if m == "" {
-				m = "gemini-3.5-flash-lite"
+				m = "gemini-3.8-flash"
 			}
 			return m
 		}(),
 		"https://generativelanguage.googleapis.com",
-		700,   // LLMMaxOutputTokens default
+		4096,  // LLMMaxOutputTokens default
 		12000, // LLMMaxInputCharacters default
 		"",
 	)
