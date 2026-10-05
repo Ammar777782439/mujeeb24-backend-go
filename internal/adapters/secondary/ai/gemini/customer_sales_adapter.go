@@ -135,15 +135,10 @@ func NewGeminiCustomerSalesAdapter(base *GeminiHTTPClient, capabilities ports.Cu
 // Per contract ④ §4, Structured Output enforces the CustomerSalesProposal shape.
 // Per contract ⑧ §8, usage telemetry is captured for AI Trace.
 //
-// Per the Tool Loop spec: when the base Client has a configured
-// AICapabilityDispatcher, tool declarations are extracted from
-// Definitions() and attached to the Gemini request. If Gemini
-// responds with functionCall parts, the loop executes the capability
-// through the dispatcher (with tenant isolation — BusinessID comes
-// from the trusted caller, NOT from Gemini's args), appends the
-// functionResponse, and sends a follow-up request. The loop
-// continues until Gemini returns a final structured proposal, a
-// tool fails non-retryably, or the context deadline expires.
+// Production Customer Sales uses the Interactions API without catalog tools.
+// A generateContent function-calling compatibility path remains only for
+// isolated legacy/tool-loop tests and non-production callers that explicitly
+// inject a capability dispatcher.
 //
 // This method is the Customer Sales decision adapter; no generic AI runtime is used.
 func (c *GeminiCustomerSalesAdapter) Decide(ctx context.Context, input ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
