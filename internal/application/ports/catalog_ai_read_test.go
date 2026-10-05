@@ -1,6 +1,10 @@
 package ports
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 func TestCatalogAIEvidenceSetContainsSelection(t *testing.T) {
 	variantA := "variant-a"
@@ -60,5 +64,41 @@ func TestCatalogAIEvidenceSetMerge(t *testing.T) {
 	first.Merge(second)
 	if !first.ContainsSelection(SelectedReference{ItemID: "item-a", VariantID: &v}) {
 		t.Fatal("merged evidence must retain relational children")
+	}
+}
+
+func TestCatalogAIManifestJSONIsCompactAndNonEvidentiary(t *testing.T) {
+	description := "long internal description"
+	manifest := CatalogAIManifest{
+		TotalActiveItems: 2,
+		Catalogs: []CatalogAIManifestCatalog{{
+			ID: "catalog-secret-id",
+			Name: "Services",
+			Description: &description,
+			ItemCount: 2,
+			ItemTypes: []string{"appointment", "service"},
+		}},
+		Schemas: []CatalogAIManifestSchema{{
+			ID: "schema-secret-id",
+			Name: "Appointment",
+			Version: 1,
+			UsageCount: 2,
+			AttributeKeys: []string{"doctor", "duration"},
+		}},
+	}
+	raw, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatalf("marshal manifest: %v", err)
+	}
+	got := string(raw)
+	for _, forbidden := range []string{"catalog-secret-id", "schema-secret-id", "long internal description"} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("compact manifest leaked %q: %s", forbidden, got)
+		}
+	}
+	for _, required := range []string{"Services", "appointment", "Appointment", "doctor"} {
+		if !strings.Contains(got, required) {
+			t.Fatalf("compact manifest lost %q: %s", required, got)
+		}
 	}
 }
