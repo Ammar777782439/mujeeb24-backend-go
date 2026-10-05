@@ -140,6 +140,26 @@ func TestValidateBatchCandidatesEnforcesItemVariantOfferRelationships(t *testing
 	}}); err == nil {
 		t.Fatal("expected cross-item offer candidate to be rejected")
 	}
+
+	linkedVariantA := "variant-a"
+	linkedVariantB := "variant-b"
+	sameItemBatch := CatalogAIBatchPayload{
+		Items: []CatalogAIItem{{
+			ID: "item-3",
+			Variants: []CatalogAIVariant{
+				{ID: linkedVariantA, CatalogItemID: "item-3"},
+				{ID: linkedVariantB, CatalogItemID: "item-3"},
+			},
+			Offers: []CatalogAIOffer{{
+				ID: "offer-3", CatalogItemID: "item-3", VariantID: &linkedVariantB,
+			}},
+		}},
+	}
+	if err := validateBatchCandidates(sameItemBatch, []ports.CatalogBatchCandidate{{
+		ItemID: "item-3", VariantIDs: []string{linkedVariantA}, OfferIDs: []string{"offer-3"},
+	}}); err == nil {
+		t.Fatal("expected offer linked to a different selected variant to be rejected")
+	}
 }
 
 func TestReductionSplitUsesReductionRequestShape(t *testing.T) {
