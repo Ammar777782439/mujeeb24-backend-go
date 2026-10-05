@@ -186,3 +186,42 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+
+func TestBatchCandidateParserRejectsUnknownFields(t *testing.T) {
+	resp := batchGeminiResponse{
+		Candidates: []batchCandidate{{
+			Content: batchContent{Parts: []batchPart{{
+				Text: `{"candidates":[{"item_id":"item-1","authorized":true}]}`,
+			}}},
+		}},
+	}
+	if _, err := parseBatchCandidates(resp); err == nil {
+		t.Fatal("unknown batch candidate field must be rejected")
+	}
+}
+
+func TestFinalProposalParserRejectsUnknownFields(t *testing.T) {
+	resp := batchGeminiResponse{
+		Candidates: []batchCandidate{{
+			Content: batchContent{Parts: []batchPart{{
+				Text: `{"status":"resolved","action":"answer","response_text":"ok","requires_approval":true}`,
+			}}},
+		}},
+	}
+	if _, err := parseFinalProposal(resp); err == nil {
+		t.Fatal("unknown final proposal field must be rejected")
+	}
+}
+
+func TestBatchCandidateSchemaDisallowsAdditionalProperties(t *testing.T) {
+	schema := batchCandidateResponseSchema()
+	if schema["additionalProperties"] != false {
+		t.Fatalf("batch schema must close top-level properties: %#v", schema["additionalProperties"])
+	}
+	candidates := schema["properties"].(map[string]any)["candidates"].(map[string]any)
+	item := candidates["items"].(map[string]any)
+	if item["additionalProperties"] != false {
+		t.Fatalf("candidate schema must close additional properties: %#v", item["additionalProperties"])
+	}
+}
