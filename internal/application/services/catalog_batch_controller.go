@@ -328,7 +328,7 @@ func (c *CatalogBatchController) buildProjection(ctx context.Context, businessID
 		}
 		for _, cat := range catPage.Items {
 			catalogIDs = append(catalogIDs, cat.ID)
-			projectionCatalogs = append(projectionCatalogs, CatalogAICatalog{ID: cat.ID, Name: cat.Name, Description: cat.Description})
+			projectionCatalogs = append(projectionCatalogs, CatalogAICatalog{ID: cat.ID, Name: cat.Name, Description: cat.Description, Status: cat.Status})
 		}
 	}
 
