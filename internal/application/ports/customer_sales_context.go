@@ -53,7 +53,7 @@ type CustomerSalesContext struct {
 	Conversation           CustomerSalesContextConversation
 	Customer               CustomerSalesContextCustomer
 	CatalogEvidence        []CustomerSalesCatalogEvidence
-	CatalogSchemaEvidence  []CatalogAIAttributeSchema
+	CatalogSchemaEvidence  []CustomerSalesCatalogSchemaEvidence
 	OfferEvidence          []CustomerSalesOfferEvidence
 	VariantEvidence        []CustomerSalesVariantEvidence
 	KnowledgeEvidence      []CustomerSalesKnowledgeEvidence
@@ -151,6 +151,24 @@ type CustomerSalesCatalogEvidence struct {
 	AvailabilityMode     string
 	FulfillmentMode      string
 	RequiresConfirmation bool
+}
+
+type CustomerSalesCatalogSchemaEvidence struct {
+	ID          string                                           `json:"id"`
+	Name        string                                           `json:"name"`
+	Version     int                                              `json:"version"`
+	Definitions []CustomerSalesAttributeDefinitionEvidence       `json:"definitions"`
+}
+
+type CustomerSalesAttributeDefinitionEvidence struct {
+	ID              string         `json:"id"`
+	SchemaID        string         `json:"schema_id"`
+	AttributeKey    string         `json:"attribute_key"`
+	Label           string         `json:"label"`
+	DataType        string         `json:"data_type"`
+	IsRequired      bool           `json:"is_required"`
+	ValidationRules map[string]any `json:"validation_rules,omitempty"`
+	DisplayOrder    int            `json:"display_order"`
 }
 
 type CustomerSalesOfferEvidence struct {
