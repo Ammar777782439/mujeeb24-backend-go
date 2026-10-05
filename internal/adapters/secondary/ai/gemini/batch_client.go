@@ -10,7 +10,7 @@
 // runs over the aggregated candidate set + customer message + context.
 //
 // Per contract ② §8, batches are NOT chained via previous_interaction_id;
-// each batch is an independent Interaction.
+// each batch is an independent stateless generateContent request.
 //
 // Per contract ④ §8, Structured Outputs enforces the JSON shape via
 // responseSchema; Mujeeb additionally validates the values per contract ⑥ §3.
@@ -243,7 +243,7 @@ func (c *BatchClient) CountBatchTokens(ctx context.Context, input services.Batch
 // EvaluateBatch implements services.BatchGeminiClient.EvaluateBatch per
 // contract ② §5. Sends one batch to Gemini and returns the candidate set.
 //
-// Per contract ② §8, each batch is an independent Interaction — no
+// Per contract ② §8, each batch is an independent stateless generateContent request — no
 // previous_interaction_id chaining.
 //
 // Per contract ④ §8, Structured Outputs enforces the response shape via
