@@ -55,7 +55,7 @@ type AICostProtectionService struct {
 // is blocked until the protection state can be verified.
 func (s *AICostProtectionService) IsAIExecutionAllowed(ctx context.Context, businessID string) (bool, string) {
 	if s == nil {
-		return true, ""
+		return false, "ai_cost_protection_unavailable"
 	}
 
 	// Check 1: Platform-level AI Runtime Kill Switch (P0-2).
@@ -87,9 +87,8 @@ func (s *AICostProtectionService) IsAIExecutionAllowed(ctx context.Context, busi
 		return false, "subscription_check_unavailable"
 	}
 	if len(page.Items) == 0 {
-		// Existing product policy: subscription provisioning is handled
-		// elsewhere. Do not change that commercial behavior in this safety fix.
-		return true, ""
+		// Contract §29: when there is no ACTIVE subscription, entitlements stop.
+		return false, "active_subscription_required"
 	}
 	sub := page.Items[0]
 	agg, err := s.AIUsage.GetSubscriptionAIUsage(ctx, sub.ID)
