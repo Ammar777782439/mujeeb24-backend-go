@@ -166,18 +166,30 @@ type CustomerSalesAttributeDefinitionEvidence struct {
 }
 
 type CustomerSalesOfferEvidence struct {
-	Reference            string
-	CatalogItemReference string
-	VariantReference     string
-	Name                 string
-	PricingMode          string
-	Amount               string
-	Currency             string
-	AvailabilityStatus   string `json:"availability_status"`
-	Status               string
-	EvidenceState        string
-	RetrievedAt          time.Time
-	SchemaVersion        int
+	Reference                   string
+	CatalogItemReference        string
+	VariantReference            string
+	Name                        string
+	PricingMode                 string
+	Amount                      string
+	Currency                    string
+	PricingUnit                 string
+	PriceSource                 string
+	PriceVerificationStatus     string
+	PriceCheckedAt              *time.Time
+	AvailabilityMode            string
+	AvailabilityStatus          string `json:"availability_status"`
+	AvailabilitySource          string
+	AvailabilityCheckedAt       *time.Time
+	AvailabilityValidUntil      *time.Time
+	AvailabilityEvidenceRef     string
+	FulfillmentMode             string
+	ValidityFrom                *time.Time
+	ValidityUntil               *time.Time
+	Status                      string
+	EvidenceState               string
+	RetrievedAt                 time.Time
+	SchemaVersion               int
 }
 
 type CustomerSalesKnowledgeEvidence struct {
