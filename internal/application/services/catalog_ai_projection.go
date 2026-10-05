@@ -26,15 +26,23 @@ package services
 
 // CatalogAIProjection is the contract ① §1 Read Model sent to Gemini.
 //
-// The Projection contains exactly two top-level arrays:
+// The Projection contains three top-level arrays:
 //
-//	attribute_schemas[] — the schemas actually used by items[] (contract ① §2)
-//	items[]              — the actual catalog items with nested variants + offers
+//	catalogs[]           — catalog identity/meaning for catalog_id references
+//	attribute_schemas[]  — schemas actually used by items[]
+//	items[]              — actual catalog items with nested variants + offers
 //
 // The Projection is NOT a Domain Entity. It is a transport shape.
 type CatalogAIProjection struct {
+	Catalogs         []CatalogAICatalog         `json:"catalogs,omitempty"`
 	AttributeSchemas []CatalogAIAttributeSchema `json:"attribute_schemas,omitempty"`
 	Items            []CatalogAIItem            `json:"items,omitempty"`
+}
+
+type CatalogAICatalog struct {
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
 }
 
 // CatalogAIAttributeSchema is contract ① §1 — one schema with its definitions.
