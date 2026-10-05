@@ -42,7 +42,6 @@ type AutoReplyContextBuilder struct {
 	MaxMessages   int
 	MaxKnowledge  int
 	MaxPolicies   int
-	MaxSearchItems int
 }
 
 func NewAutoReplyContextBuilder(businesses ports.BusinessRepository, conversations ports.ConversationRepository, customers ports.CustomerRepository, catalogs ports.CatalogRepository, messages ports.MessageRepository) AutoReplyContextBuilder {
@@ -61,7 +60,6 @@ func NewAutoReplyContextBuilder(businesses ports.BusinessRepository, conversatio
 		MaxMessages:   4, // Per ADR-038: reduced from 8 to 6 per IrisAgent/Microsoft Learn best-practice research (sliding window threshold).
 		MaxKnowledge:  10,
 		MaxPolicies:   10,
-		MaxSearchItems: 12,
 	}
 }
 
@@ -183,15 +181,6 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 			context.CatalogEvidence = scopedItems
 			context.OfferEvidence = scopedOffers
 			context.VariantEvidence = scopedVariants
-			// Candidates let AI resolve a switch to a new entity. Focused
-			// evidence stays first; validation still rejects mixing.
-			if addItems, addOffers, addVariants, err := b.augmentScopedWithCandidates(ctx, input.BusinessID, input.Text, scopedItems, now); err != nil {
-				return ports.CustomerSalesContext{}, err
-			} else {
-				context.CatalogEvidence = append(context.CatalogEvidence, addItems...)
-				context.OfferEvidence = append(context.OfferEvidence, addOffers...)
-				context.VariantEvidence = append(context.VariantEvidence, addVariants...)
-			}
 			return b.finalizeContext(ctx, context, input, now)
 		}
 	case retrievalScopedComparison:
@@ -204,83 +193,13 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 			context.CatalogEvidence = scopedItems
 			context.OfferEvidence = scopedOffers
 			context.VariantEvidence = scopedVariants
-			// Same candidate augmentation as scoped mode, so the AI can leave
-			// the comparison cleanly when the customer asks something new.
-			if addItems, addOffers, addVariants, err := b.augmentScopedWithCandidates(ctx, input.BusinessID, input.Text, scopedItems, now); err != nil {
-				return ports.CustomerSalesContext{}, err
-			} else {
-				context.CatalogEvidence = append(context.CatalogEvidence, addItems...)
-				context.OfferEvidence = append(context.OfferEvidence, addOffers...)
-				context.VariantEvidence = append(context.VariantEvidence, addVariants...)
-			}
 			return b.finalizeContext(ctx, context, input, now)
 		}
 	}
-	// Broader retrieval. v3 searches the whole business catalog in Postgres
-	// and bulk-hydrates matching items, variants, offers and schemas. The
-	// legacy bounded lexical path remains only as a rollout fallback.
-	if b.CatalogAI != nil {
-		limit := b.MaxSearchItems
-		if limit <= 0 {
-			limit = 12
-		}
-		bundles, searchErr := b.CatalogAI.SearchProjection(ctx, ports.CatalogAISearchRequest{
-			BusinessID: input.BusinessID,
-			Query:      input.Text,
-			Limit:      limit,
-		})
-		if searchErr != nil {
-			return ports.CustomerSalesContext{}, searchErr
-		}
-		appendCatalogAIBundlesToContext(&context, bundles, now)
-	} else {
-		catalogPage, listErr := b.Catalogs.ListCatalogs(ctx, input.BusinessID, "active", b.maxCatalogs(), "")
-		if listErr != nil {
-			return ports.CustomerSalesContext{}, listErr
-		}
-		for _, catalog := range catalogPage.Items {
-			if catalog.BusinessID != input.BusinessID {
-				return ports.CustomerSalesContext{}, errors.New("AI context catalog scope mismatch")
-			}
-			context.CatalogNames = append(context.CatalogNames, catalog.Name)
-			items, itemErr := b.Catalogs.ListCatalogItems(ctx, input.BusinessID, catalog.ID, "", "active", b.maxItems()*3, "")
-			if itemErr != nil {
-				return ports.CustomerSalesContext{}, itemErr
-			}
-			for _, item := range rankCatalogItems(items.Items, input.Text) {
-				if item.BusinessID != input.BusinessID || item.CatalogID != catalog.ID {
-					return ports.CustomerSalesContext{}, errors.New("AI context catalog item scope mismatch")
-				}
-				context.CatalogEvidence = append(context.CatalogEvidence, catalogItemEvidence(item, now))
-				if len(context.CatalogEvidence) >= b.maxItems() {
-					break
-				}
-			}
-			if len(context.CatalogEvidence) >= b.maxItems() {
-				break
-			}
-		}
-		for _, item := range context.CatalogEvidence {
-			offers, offerErr := b.Catalogs.ListOffers(ctx, input.BusinessID, item.Reference, "active", b.maxOffers(), "")
-			if offerErr != nil {
-				return ports.CustomerSalesContext{}, offerErr
-			}
-			for _, offer := range offers.Items {
-				context.OfferEvidence = append(context.OfferEvidence, toOfferEvidence(offer, now))
-			}
-			variants, variantErr := b.Catalogs.ListVariants(ctx, input.BusinessID, item.Reference, "active", b.maxVariants(), "")
-			if variantErr != nil {
-				return ports.CustomerSalesContext{}, variantErr
-			}
-			for _, variant := range variants.Items {
-				context.VariantEvidence = append(context.VariantEvidence, ports.CustomerSalesVariantEvidence{
-					Reference: variant.ID, CatalogItemReference: variant.CatalogItemID,
-					Name: variant.Name, Status: variant.Status, Attributes: safeJSONObject(variant.Attributes),
-					EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
-				})
-			}
-		}
-	}
+	// No backend catalog search or matching occurs here. When there is no
+	// validated conversation focus, the model receives only the bounded catalog
+	// manifest. If item-level data is required, it must request more data and
+	// the full catalog evaluation path will page through the authoritative catalog.
 
 	if b.Knowledge != nil {
 		knowledgeRecords, listErr := b.Knowledge.ListPublished(ctx, input.BusinessID, "", now, b.maxKnowledge()*3)
