@@ -216,27 +216,90 @@ func (r *CatalogAIReadRepository) GetRevision(ctx context.Context, businessID st
 
 	var revision string
 	err = executor.QueryRow(ctx, `
+		WITH active_items AS (
+			SELECT i.*
+			FROM catalog_items i
+			JOIN catalogs c
+			  ON c.business_id = i.business_id
+			 AND c.id = i.catalog_id
+			 AND c.status = 'active'
+			WHERE i.business_id = $1::uuid
+			  AND i.status = 'active'
+		),
+		used_schemas AS (
+			SELECT DISTINCT attribute_schema_id AS id
+			FROM active_items
+			WHERE attribute_schema_id IS NOT NULL
+		)
 		SELECT concat_ws('|',
-			(SELECT COUNT(*)::text FROM catalogs c WHERE c.business_id = $1::uuid),
-			COALESCE((SELECT MAX(c.updated_at)::text FROM catalogs c WHERE c.business_id = $1::uuid), ''),
-			(SELECT COUNT(*)::text FROM catalog_items i WHERE i.business_id = $1::uuid),
-			COALESCE((SELECT MAX(i.updated_at)::text FROM catalog_items i WHERE i.business_id = $1::uuid), ''),
-			(SELECT COUNT(*)::text FROM attribute_schemas s WHERE s.business_id = $1::uuid),
-			COALESCE((SELECT MAX(s.updated_at)::text FROM attribute_schemas s WHERE s.business_id = $1::uuid), ''),
-			(SELECT COUNT(*)::text
-			 FROM attribute_definitions d
-			 JOIN attribute_schemas s ON s.id = d.schema_id
-			 WHERE s.business_id = $1::uuid),
+			(
+				SELECT COUNT(*)::text
+				FROM catalogs c
+				WHERE c.business_id = $1::uuid
+				  AND c.status = 'active'
+			),
+			COALESCE((
+				SELECT MAX(c.updated_at)::text
+				FROM catalogs c
+				WHERE c.business_id = $1::uuid
+				  AND c.status = 'active'
+			), ''),
+			(SELECT COUNT(*)::text FROM active_items),
+			COALESCE((SELECT MAX(updated_at)::text FROM active_items), ''),
+			(
+				SELECT COUNT(*)::text
+				FROM attribute_schemas s
+				JOIN used_schemas u ON u.id = s.id
+				WHERE s.business_id = $1::uuid
+			),
+			COALESCE((
+				SELECT MAX(s.updated_at)::text
+				FROM attribute_schemas s
+				JOIN used_schemas u ON u.id = s.id
+				WHERE s.business_id = $1::uuid
+			), ''),
+			(
+				SELECT COUNT(*)::text
+				FROM attribute_definitions d
+				JOIN attribute_schemas s ON s.id = d.schema_id
+				JOIN used_schemas u ON u.id = s.id
+				WHERE s.business_id = $1::uuid
+			),
 			COALESCE((
 				SELECT MAX(d.updated_at)::text
 				FROM attribute_definitions d
 				JOIN attribute_schemas s ON s.id = d.schema_id
+				JOIN used_schemas u ON u.id = s.id
 				WHERE s.business_id = $1::uuid
 			), ''),
-			(SELECT COUNT(*)::text FROM variants v WHERE v.business_id = $1::uuid),
-			COALESCE((SELECT MAX(v.updated_at)::text FROM variants v WHERE v.business_id = $1::uuid), ''),
-			(SELECT COUNT(*)::text FROM offers o WHERE o.business_id = $1::uuid),
-			COALESCE((SELECT MAX(o.updated_at)::text FROM offers o WHERE o.business_id = $1::uuid), '')
+			(
+				SELECT COUNT(*)::text
+				FROM variants v
+				JOIN active_items i ON i.id = v.catalog_item_id AND i.business_id = v.business_id
+				WHERE v.business_id = $1::uuid
+				  AND v.status = 'active'
+			),
+			COALESCE((
+				SELECT MAX(v.updated_at)::text
+				FROM variants v
+				JOIN active_items i ON i.id = v.catalog_item_id AND i.business_id = v.business_id
+				WHERE v.business_id = $1::uuid
+				  AND v.status = 'active'
+			), ''),
+			(
+				SELECT COUNT(*)::text
+				FROM offers o
+				JOIN active_items i ON i.id = o.catalog_item_id AND i.business_id = o.business_id
+				WHERE o.business_id = $1::uuid
+				  AND o.status = 'active'
+			),
+			COALESCE((
+				SELECT MAX(o.updated_at)::text
+				FROM offers o
+				JOIN active_items i ON i.id = o.catalog_item_id AND i.business_id = o.business_id
+				WHERE o.business_id = $1::uuid
+				  AND o.status = 'active'
+			), '')
 		)`, businessID).Scan(&revision)
 	if err != nil {
 		return "", catalogRepositoryError("catalog_ai.revision", err)
