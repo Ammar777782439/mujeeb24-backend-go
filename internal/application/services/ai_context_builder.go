@@ -196,10 +196,9 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 			return b.finalizeContext(ctx, context, input, now)
 		}
 	}
-	// No backend catalog search or matching occurs here. When there is no
-	// validated conversation focus, the model receives only the bounded catalog
-	// manifest. If item-level data is required, it must request more data and
-	// the full catalog evaluation path will page through the authoritative catalog.
+	// Without a validated conversation focus, only the bounded catalog manifest
+	// is attached here. Item-level catalog data is handled by the complete
+	// catalog evaluation path when the model requests additional data.
 
 	if b.Knowledge != nil {
 		knowledgeRecords, listErr := b.Knowledge.ListPublished(ctx, input.BusinessID, "", now, b.maxKnowledge()*3)
@@ -359,106 +358,6 @@ func buildRecentMessageEvidence(records []ports.CommunicationMessageRecord, sour
 		return items[i].Reference < items[j].Reference
 	})
 	return items
-}
-
-func rankCatalogItems(items []ports.CatalogItemRecord, text string) []ports.CatalogItemRecord {
-	queryTokens := tokenize(text)
-	type scored struct {
-		item  ports.CatalogItemRecord
-		score int
-	}
-	scoredItems := make([]scored, 0, len(items))
-	for _, item := range items {
-		searchable := normalizeArabic(strings.ToLower(item.Name + " " + item.ItemType + " " + string(item.Attributes)))
-		score := 0
-		for _, token := range queryTokens {
-			if strings.Contains(searchable, token) {
-				score++
-			}
-		}
-		scoredItems = append(scoredItems, scored{item: item, score: score})
-	}
-	sort.SliceStable(scoredItems, func(i, j int) bool {
-		if scoredItems[i].score != scoredItems[j].score {
-			return scoredItems[i].score > scoredItems[j].score
-		}
-		return scoredItems[i].item.ID < scoredItems[j].item.ID
-	})
-	result := make([]ports.CatalogItemRecord, 0, len(scoredItems))
-	for _, value := range scoredItems {
-		result = append(result, value.item)
-	}
-	return result
-}
-
-func normalizeArabic(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		switch r {
-		case 'أ', 'إ', 'آ', 'ٱ':
-			b.WriteRune('ا')
-		case 'ة':
-			b.WriteRune('ه')
-		case 'ى':
-			b.WriteRune('ي')
-		case 'ؤ':
-			b.WriteRune('و')
-		case 'ئ':
-			b.WriteRune('ي')
-		default:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
-
-func tokenize(text string) []string {
-	normalized := normalizeArabic(strings.ToLower(text))
-	fields := strings.Fields(normalized)
-	result := make([]string, 0, len(fields))
-	for _, field := range fields {
-		field = strings.Trim(field, ".,!?؟:;()[]{}\"'")
-		if len([]rune(field)) >= 2 {
-			result = append(result, field)
-		}
-	}
-	return result
-}
-
-func safeJSONObject(value []byte) []byte {
-	if len(value) == 0 {
-		return []byte(`{}`)
-	}
-	var object map[string]json.RawMessage
-	if json.Unmarshal(value, &object) != nil {
-		return []byte(`{}`)
-	}
-	encoded, err := json.Marshal(object)
-	if err != nil {
-		return []byte(`{}`)
-	}
-	return encoded
-}
-
-func safeJSONDocument(value []byte) []byte {
-	if len(value) == 0 || !json.Valid(value) {
-		return []byte(`{}`)
-	}
-	return append([]byte(nil), value...)
-}
-
-func evidenceStateForValidity(now, validFrom time.Time, validUntil *time.Time) string {
-	if now.Before(validFrom) {
-		return CustomerSalesContextMissing
-	}
-	if validUntil != nil && !now.Before(*validUntil) {
-		return CustomerSalesContextStale
-	}
-	return CustomerSalesContextFresh
-}
-
-func formatInt(value int) string {
-	return strconv.Itoa(value)
 }
 
 func rankKnowledgeRecords(records []ports.KnowledgeDocumentRecord, text string) []ports.KnowledgeDocumentRecord {
