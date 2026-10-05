@@ -334,7 +334,13 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 				batchRecords[recordIndex].Status = "completed"
 				c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, result.Usage, fmt.Sprintf("batch_%d", batch.BatchNumber))
 				candidateSet = append(candidateSet, result.Candidates...)
-				appendCandidateProjection(&candidateProjection, batch, result.Candidates, candidateItemsSeen)
+				// If an oversized item spans multiple batches, once any fragment
+				// establishes that item as a candidate, retain later fragments of
+				// the same item as supporting evidence even when those fragments
+				// do not independently repeat the candidate. This preserves the
+				// complete nested commercial evidence for the final evaluation.
+				projectionCandidates := includeKnownCandidateFragments(batch, result.Candidates, candidateItemsSeen)
+				appendCandidateProjection(&candidateProjection, batch, projectionCandidates, candidateItemsSeen)
 				log.Printf("[CatalogBatch] BATCH_DONE batch=%d items=%d candidates=%d", batch.BatchNumber, len(batch.Items), len(result.Candidates))
 			}
 			nextBatchNumber += len(batches)
@@ -415,6 +421,28 @@ func validateBatchCandidates(batch CatalogAIBatchPayload, candidates []ports.Cat
 		}
 	}
 	return nil
+}
+
+func includeKnownCandidateFragments(
+	batch CatalogAIBatchPayload,
+	candidates []ports.CatalogBatchCandidate,
+	known map[string]struct{},
+) []ports.CatalogBatchCandidate {
+	out := append([]ports.CatalogBatchCandidate(nil), candidates...)
+	present := make(map[string]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		present[candidate.ItemID] = struct{}{}
+	}
+	for _, item := range batch.Items {
+		if _, alreadyPresent := present[item.ID]; alreadyPresent {
+			continue
+		}
+		if _, wasCandidate := known[item.ID]; !wasCandidate {
+			continue
+		}
+		out = append(out, ports.CatalogBatchCandidate{ItemID: item.ID})
+	}
+	return out
 }
 
 func appendCandidateProjection(target *CatalogAIProjection, batch CatalogAIBatchPayload, candidates []ports.CatalogBatchCandidate, seen map[string]struct{}) {
