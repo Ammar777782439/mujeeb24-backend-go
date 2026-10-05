@@ -268,6 +268,10 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 }
 
 func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, input CatalogEvaluationInput) (CatalogEvaluationResult, error) {
+	revisionStart, err := c.CatalogAI.GetRevision(ctx, input.BusinessID)
+	if err != nil {
+		return CatalogEvaluationResult{}, fmt.Errorf("read catalog revision before evaluation: %w", err)
+	}
 	cursor := ""
 	nextBatchNumber := 1
 	batchRecords := make([]ports.AICatalogBatchRecord, 0)
@@ -348,6 +352,14 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 	log.Printf("[CatalogBatch] COVERAGE total=%d completed=%d", len(batchRecords), countCompleted(batchRecords))
 	if !c.coverageComplete(batchRecords) {
 		return CatalogEvaluationResult{}, fmt.Errorf("coverage incomplete per contract ② §3 — %d/%d batches completed", countCompleted(batchRecords), len(batchRecords))
+	}
+
+	revisionEnd, err := c.CatalogAI.GetRevision(ctx, input.BusinessID)
+	if err != nil {
+		return CatalogEvaluationResult{}, fmt.Errorf("read catalog revision after evaluation: %w", err)
+	}
+	if revisionEnd != revisionStart {
+		return CatalogEvaluationResult{}, errors.New("catalog changed during full evaluation; refusing mixed-snapshot AI result")
 	}
 
 	proposal, finalProjection, err := c.runFinalEvaluation(ctx, input, candidateSet, candidateProjection, nextBatchNumber)
