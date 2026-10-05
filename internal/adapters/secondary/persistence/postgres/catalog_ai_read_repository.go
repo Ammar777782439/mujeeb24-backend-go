@@ -101,7 +101,7 @@ func (r *CatalogAIReadRepository) GetManifest(ctx context.Context, businessID st
 
 	dRows, err := executor.Query(ctx, `
 		SELECT d.schema_id::text, d.attribute_key, d.label, d.data_type,
-		       d.is_required, d.is_searchable, d.validation_rules, d.display_order
+		       d.is_required, d.validation_rules, d.display_order
 		FROM attribute_definitions d
 		JOIN attribute_schemas s ON s.id = d.schema_id
 		WHERE s.business_id = $1::uuid AND d.schema_id = ANY($2::uuid[])
@@ -113,7 +113,7 @@ func (r *CatalogAIReadRepository) GetManifest(ctx context.Context, businessID st
 		var schemaID string
 		var d ports.CatalogAIManifestAttributeDefinition
 		var rules []byte
-		if err := dRows.Scan(&schemaID, &d.Key, &d.Label, &d.DataType, &d.Required, &d.Searchable, &rules, &d.DisplayOrder); err != nil {
+		if err := dRows.Scan(&schemaID, &d.Key, &d.Label, &d.DataType, &d.Required, &rules, &d.DisplayOrder); err != nil {
 			dRows.Close()
 			return ports.CatalogAIManifest{}, catalogRepositoryError("catalog_ai.manifest.definitions", err)
 		}
@@ -130,70 +130,6 @@ func (r *CatalogAIReadRepository) GetManifest(ctx context.Context, businessID st
 	}
 	dRows.Close()
 	return manifest, nil
-}
-
-func (r *CatalogAIReadRepository) SearchProjection(ctx context.Context, request ports.CatalogAISearchRequest) ([]ports.CatalogAIProjectionBundle, error) {
-	if strings.TrimSpace(request.BusinessID) == "" {
-		return nil, invalidRepositoryInput("catalog_ai.search", "business id is required")
-	}
-	query := strings.TrimSpace(request.Query)
-	if query == "" {
-		return nil, nil
-	}
-	limit := request.Limit
-	if limit <= 0 {
-		limit = 12
-	}
-	if limit > 50 {
-		limit = 50
-	}
-	executor, err := r.executor(ctx)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := executor.Query(ctx, `
-		WITH q AS (SELECT websearch_to_tsquery('simple'::regconfig, $2) query),
-		hits AS (
-		  SELECT ci.id item_id, ts_rank_cd(ci.ai_search_document, q.query) score
-		  FROM catalog_items ci, q
-		  WHERE ci.business_id = $1::uuid AND ci.status = 'active'
-		    AND ci.ai_search_document @@ q.query
-		  UNION ALL
-		  SELECT v.catalog_item_id, ts_rank_cd(v.ai_search_document, q.query)
-		  FROM variants v
-		  JOIN catalog_items ci ON ci.business_id=v.business_id AND ci.id=v.catalog_item_id AND ci.status='active'
-		  CROSS JOIN q
-		  WHERE v.business_id=$1::uuid AND v.status='active' AND v.ai_search_document @@ q.query
-		  UNION ALL
-		  SELECT o.catalog_item_id, ts_rank_cd(o.ai_search_document, q.query)
-		  FROM offers o
-		  JOIN catalog_items ci ON ci.business_id=o.business_id AND ci.id=o.catalog_item_id AND ci.status='active'
-		  CROSS JOIN q
-		  WHERE o.business_id=$1::uuid AND o.status='active' AND o.ai_search_document @@ q.query
-		)
-		SELECT item_id::text
-		FROM hits
-		GROUP BY item_id
-		ORDER BY MAX(score) DESC, item_id
-		LIMIT $3`, request.BusinessID, query, limit)
-	if err != nil {
-		return nil, catalogRepositoryError("catalog_ai.search", err)
-	}
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return nil, catalogRepositoryError("catalog_ai.search", err)
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return nil, catalogRepositoryError("catalog_ai.search", err)
-	}
-	rows.Close()
-	return r.loadBundles(ctx, executor, request.BusinessID, ids)
 }
 
 func (r *CatalogAIReadRepository) ListProjectionPage(ctx context.Context, request ports.CatalogAIProjectionRequest) (ports.CatalogAIProjectionPage, error) {
@@ -262,44 +198,6 @@ func (r *CatalogAIReadRepository) ListProjectionPage(ctx context.Context, reques
 	}
 	page.Items = bundles
 	return page, nil
-}
-
-func (r *CatalogAIReadRepository) loadBundles(ctx context.Context, executor SQLExecutor, businessID string, ids []string) ([]ports.CatalogAIProjectionBundle, error) {
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	rows, err := executor.Query(ctx, `
-		SELECT id::text, business_id::text, catalog_id::text,
-		       attribute_schema_id::text, attribute_schema_version,
-		       item_type, name, short_description, long_description,
-		       status, pricing_mode, availability_mode, fulfillment_mode,
-		       requires_confirmation, attributes, resource_version, created_at, updated_at
-		FROM catalog_items
-		WHERE business_id=$1::uuid AND status='active' AND id=ANY($2::uuid[])`, businessID, ids)
-	if err != nil {
-		return nil, catalogRepositoryError("catalog_ai.load", err)
-	}
-	byID := map[string]ports.CatalogItemRecord{}
-	for rows.Next() {
-		item, err := scanCatalogItem(rows)
-		if err != nil {
-			rows.Close()
-			return nil, catalogRepositoryError("catalog_ai.load", err)
-		}
-		byID[item.ID] = item
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return nil, catalogRepositoryError("catalog_ai.load", err)
-	}
-	rows.Close()
-	items := make([]ports.CatalogItemRecord, 0, len(ids))
-	for _, id := range ids {
-		if item, ok := byID[id]; ok {
-			items = append(items, item)
-		}
-	}
-	return r.hydrate(ctx, executor, businessID, items, ids)
 }
 
 func (r *CatalogAIReadRepository) hydrate(ctx context.Context, executor SQLExecutor, businessID string, items []ports.CatalogItemRecord, ids []string) ([]ports.CatalogAIProjectionBundle, error) {
