@@ -220,7 +220,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		}(),
 		"https://generativelanguage.googleapis.com",
 		4096,  // LLMMaxOutputTokens default
-		12000, // LLMMaxInputCharacters default
+		48000, // LLMMaxInputCharacters default; bounded app guard below Gemini 3.8 context capacity
 		"",
 	)
 
