@@ -101,6 +101,10 @@ type ExactBatchTokenCounter interface {
 	CountBatchTokens(ctx context.Context, input BatchEvaluationInput) (int, error)
 }
 
+type ExactFinalTokenCounter interface {
+	CountFinalTokens(ctx context.Context, input FinalEvaluationInput, userPrompt string) (int, error)
+}
+
 
 // BatchEvaluationInput is one batch's input to Gemini.
 type BatchEvaluationInput struct {
@@ -910,26 +914,47 @@ func (c *CatalogBatchController) coverageComplete(records []ports.AICatalogBatch
 // Without the full product details, Gemini only sees IDs and cannot
 // compose a response with names, prices, descriptions.
 func (c *CatalogBatchController) runFinalEvaluation(ctx context.Context, input CatalogEvaluationInput, candidates []ports.CatalogBatchCandidate, projection CatalogAIProjection) (ports.CustomerSalesProposal, error) {
-	// Build the candidate evidence: full item details for each candidate.
-	// Look up each candidate item_id in the projection.
-	var candidateItems []CatalogAIItem
-	for _, candidate := range candidates {
-		for _, item := range projection.Items {
-			if item.ID == candidate.ItemID {
-				candidateItems = append(candidateItems, item)
-				break
-			}
-		}
+	candidateProjection := CatalogAIProjection{}
+	appendCandidateProjection(
+		&candidateProjection,
+		CatalogAIBatchPayload{
+			Catalogs:         projection.Catalogs,
+			AttributeSchemas: projection.AttributeSchemas,
+			Items:            projection.Items,
+		},
+		candidates,
+		make(map[string]struct{}),
+	)
+
+	contextPayload := struct {
+		Business               ports.CustomerSalesContextBusiness          `json:"business"`
+		Conversation           ports.CustomerSalesContextConversation      `json:"conversation"`
+		Customer               ports.CustomerSalesContextCustomer          `json:"customer"`
+		KnowledgeEvidence      []ports.CustomerSalesKnowledgeEvidence      `json:"knowledge_evidence,omitempty"`
+		BusinessPolicyEvidence []ports.CustomerSalesBusinessPolicyEvidence `json:"business_policy_evidence,omitempty"`
+		RecentMessages         []ports.CustomerSalesRecentMessageEvidence  `json:"recent_messages,omitempty"`
+		ConversationState      *ports.ConversationStateRecord              `json:"conversation_state,omitempty"`
+		ConversationSummary    string                                      `json:"conversation_summary,omitempty"`
+	}{
+		Business: input.ConversationContext.Business,
+		Conversation: input.ConversationContext.Conversation,
+		Customer: input.ConversationContext.Customer,
+		KnowledgeEvidence: input.ConversationContext.KnowledgeEvidence,
+		BusinessPolicyEvidence: input.ConversationContext.BusinessPolicyEvidence,
+		RecentMessages: input.ConversationContext.RecentMessages,
+		ConversationState: input.ConversationContext.ConversationState,
+		ConversationSummary: input.ConversationContext.ConversationSummary,
 	}
-	candidateItemsJSON, _ := json.Marshal(candidateItems)
 
-	// Build the user prompt with BOTH candidate IDs AND full product details.
-	userPrompt := fmt.Sprintf("Customer message: %s\n\nAggregated candidates from catalog evaluation:\n%s\n\nFull product details for each candidate:\n%s\n\nBased on the candidates and their full details above, compose a complete Arabic response to the customer. Include product names, prices, descriptions, and availability.",
+	userPrompt := fmt.Sprintf(
+		"Customer message: %s\n\nVerified conversation context:\n%s\n\nAggregated candidates:\n%s\n\nCandidate catalog projection:\n%s",
 		input.CustomerMessage,
+		string(mustMarshal(contextPayload)),
 		string(mustMarshal(candidates)),
-		string(candidateItemsJSON))
+		string(mustMarshal(candidateProjection)),
+	)
 
-	proposal, usage, err := c.Gemini.FinalEvaluateWithDetails(ctx, FinalEvaluationInput{
+	finalInput := FinalEvaluationInput{
 		AIRunID:             input.AIRunID,
 		AttemptID:           input.AttemptID,
 		BusinessID:          input.BusinessID,
@@ -938,12 +963,26 @@ func (c *CatalogBatchController) runFinalEvaluation(ctx context.Context, input C
 		ConversationContext: input.ConversationContext,
 		EntityContract:      input.EntityContract,
 		CandidateResults:    candidates,
-	}, userPrompt)
+	}
+
+	if exact, ok := c.Gemini.(ExactFinalTokenCounter); ok {
+		tokens, err := exact.CountFinalTokens(ctx, finalInput, userPrompt)
+		if err != nil {
+			return ports.CustomerSalesProposal{}, fmt.Errorf("count final evaluation tokens: %w", err)
+		}
+		budget := c.TokenBudget
+		if budget <= 0 {
+			budget = 8000
+		}
+		if tokens > budget {
+			return ports.CustomerSalesProposal{}, fmt.Errorf("final evaluation exceeds token budget %d with exact request size %d", budget, tokens)
+		}
+	}
+
+	proposal, usage, err := c.Gemini.FinalEvaluateWithDetails(ctx, finalInput, userPrompt)
 	if err != nil {
 		return ports.CustomerSalesProposal{}, err
 	}
-	// Record the final evaluation call's usage (final_ai_replies=0 —
-	// the final reply is counted by AutoReply.recordAIUsage, not here).
 	c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, usage, "final_evaluation")
 	return proposal, nil
 }
