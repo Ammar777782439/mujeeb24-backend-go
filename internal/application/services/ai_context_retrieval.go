@@ -305,11 +305,47 @@ func (b AutoReplyContextBuilder) retrieveComparison(ctx context.Context, busines
 // drift apart.
 func toOfferEvidence(offer ports.OfferRecord, now time.Time) ports.CustomerSalesOfferEvidence {
 	return ports.CustomerSalesOfferEvidence{
-		Reference: offer.ID, CatalogItemReference: offer.CatalogItemID, VariantReference: stringValue(offer.VariantID),
-		Name: offer.Name, PricingMode: offer.PricingMode, Amount: stringValue(offer.Amount), Currency: stringValue(offer.Currency),
-		AvailabilityStatus: offer.AvailabilityStatus, Status: offer.Status, EvidenceState: offerEvidenceState(offer.AvailabilityStatus),
-		RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+		Reference:               offer.ID,
+		CatalogItemReference:    offer.CatalogItemID,
+		VariantReference:        stringValue(offer.VariantID),
+		Name:                    offer.Name,
+		PricingMode:             offer.PricingMode,
+		Amount:                  stringValue(offer.Amount),
+		Currency:                stringValue(offer.Currency),
+		PricingUnit:             stringValue(offer.PricingUnit),
+		PriceSource:             stringValue(offer.PriceSource),
+		PriceVerificationStatus: offer.PriceVerificationStatus,
+		PriceCheckedAt:          offer.PriceCheckedAt,
+		AvailabilityMode:        offer.AvailabilityMode,
+		AvailabilityStatus:      offer.AvailabilityStatus,
+		AvailabilitySource:      stringValue(offer.AvailabilitySource),
+		AvailabilityCheckedAt:   offer.AvailabilityCheckedAt,
+		AvailabilityValidUntil:  offer.AvailabilityValidUntil,
+		AvailabilityEvidenceRef: stringValue(offer.AvailabilityEvidenceRef),
+		FulfillmentMode:         offer.FulfillmentMode,
+		ValidityFrom:            offer.ValidityFrom,
+		ValidityUntil:           offer.ValidityUntil,
+		Status:                  offer.Status,
+		EvidenceState:           offerEvidenceStateForRecord(offer, now),
+		RetrievedAt:             now,
+		SchemaVersion:           AIEvidenceSchemaVersion,
 	}
+}
+
+func offerEvidenceStateForRecord(offer ports.OfferRecord, now time.Time) string {
+	status := strings.ToLower(strings.TrimSpace(offer.AvailabilityStatus))
+	verification := strings.ToLower(strings.TrimSpace(offer.PriceVerificationStatus))
+	if status == "unknown" || status == "stale" || status == "requires_check" ||
+		verification == "stale" || verification == "unverified" || verification == "rejected" {
+		return CustomerSalesContextStale
+	}
+	if offer.AvailabilityValidUntil != nil && now.After(*offer.AvailabilityValidUntil) {
+		return CustomerSalesContextStale
+	}
+	if offer.ValidityUntil != nil && now.After(*offer.ValidityUntil) {
+		return CustomerSalesContextStale
+	}
+	return CustomerSalesContextFresh
 }
 
 func (b AutoReplyContextBuilder) findItemByIDWithinBusiness(ctx context.Context, businessID, itemID string, catalogID *string) (ports.CatalogItemRecord, error) {
