@@ -119,3 +119,42 @@ func TestCustomerSalesDropsPreviousInteractionWhenStoreDisabled(t *testing.T) {
 		t.Fatal("previous_interaction_id must be omitted when store=false")
 	}
 }
+
+func TestCustomerSalesEnforcesMaxInputOnSerializedInteraction(t *testing.T) {
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client, err := NewGeminiHTTPClient(GeminiHTTPClientConfig{
+		BaseURL: server.URL,
+		APIKey: "test-key",
+		Model: "gemini-test",
+		MaxInputCharacters: 80,
+		RequestTimeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("build client: %v", err)
+	}
+	adapter, err := NewGeminiCustomerSalesAdapter(client, nil)
+	if err != nil {
+		t.Fatalf("build adapter: %v", err)
+	}
+
+	_, err = adapter.Decide(context.Background(), ports.CustomerSalesDecisionInput{
+		Request: ports.CustomerSalesDecisionRequest{
+			BusinessID: "business-1",
+			ConversationID: "conversation-1",
+			Text: "hi",
+		},
+		EntityContractPayload: []byte(`{"entity_contract":{"catalog":{"description":"this makes the serialized system instruction intentionally larger than the configured limit"}}}`),
+	})
+	if err == nil {
+		t.Fatal("expected serialized interaction input limit error")
+	}
+	if called {
+		t.Fatal("HTTP request must not be sent when serialized interaction exceeds the configured input limit")
+	}
+}
