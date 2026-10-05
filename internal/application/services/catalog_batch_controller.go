@@ -558,8 +558,8 @@ func normalizeBatchCandidates(candidates []ports.CatalogBatchCandidate) []ports.
 // projection are sent. We do NOT send unused schemas.
 //
 // Per contract ① §5, the Projection does NOT contain: business_id, SQL,
-// database metadata, created_at, updated_at, search_query, semantic_search,
-// matching logic, or ranking logic.
+// database metadata, created_at, or updated_at. The projection contains only
+// catalog facts and relationships needed by the model.
 //
 // Flow:
 //  1. List catalog_items for the given (businessID, catalogScope) with
