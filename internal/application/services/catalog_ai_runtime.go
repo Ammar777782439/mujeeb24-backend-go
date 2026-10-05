@@ -182,3 +182,48 @@ func formatTimePtr(value *time.Time) *string {
 	v := value.UTC().Format(time.RFC3339Nano)
 	return &v
 }
+
+
+func appendCatalogAIBundlesToContext(ctx *ports.CustomerSalesContext, bundles []ports.CatalogAIProjectionBundle, now time.Time) {
+	if ctx == nil {
+		return
+	}
+	for _, bundle := range bundles {
+		ctx.CatalogEvidence = append(ctx.CatalogEvidence, catalogItemEvidence(bundle.Item, now))
+		for _, offer := range bundle.Offers {
+			ctx.OfferEvidence = append(ctx.OfferEvidence, toOfferEvidence(offer, now))
+		}
+		for _, variant := range bundle.Variants {
+			ctx.VariantEvidence = append(ctx.VariantEvidence, ports.CustomerSalesVariantEvidence{
+				Reference:            variant.ID,
+				CatalogItemReference: variant.CatalogItemID,
+				Name:                 variant.Name,
+				Status:               variant.Status,
+				Attributes:           safeJSONObject(variant.Attributes),
+				EvidenceState:        CustomerSalesContextFresh,
+				RetrievedAt:          now,
+				SchemaVersion:        AIEvidenceSchemaVersion,
+			})
+		}
+	}
+}
+
+func catalogItemEvidence(item ports.CatalogItemRecord, now time.Time) ports.CustomerSalesCatalogEvidence {
+	return ports.CustomerSalesCatalogEvidence{
+		Reference:            item.ID,
+		CatalogReference:     item.CatalogID,
+		ItemType:             item.ItemType,
+		Name:                 item.Name,
+		Status:               item.Status,
+		Attributes:           safeJSONObject(item.Attributes),
+		EvidenceState:        CustomerSalesContextFresh,
+		RetrievedAt:          now,
+		SchemaVersion:        AIEvidenceSchemaVersion,
+		ShortDescription:     item.ShortDescription,
+		LongDescription:      item.LongDescription,
+		PricingMode:          item.PricingMode,
+		AvailabilityMode:     item.AvailabilityMode,
+		FulfillmentMode:      item.FulfillmentMode,
+		RequiresConfirmation: item.RequiresConfirmation,
+	}
+}
