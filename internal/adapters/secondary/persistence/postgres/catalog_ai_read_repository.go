@@ -54,19 +54,45 @@ func (r *CatalogAIReadRepository) GetManifest(ctx context.Context, businessID st
 	}
 
 	rows, err := executor.Query(ctx, `
-		SELECT c.id::text, c.name, c.description, COUNT(ci.id)::int,
-		       COALESCE(array_agg(DISTINCT ci.item_type ORDER BY ci.item_type)
-		         FILTER (WHERE ci.id IS NOT NULL), ARRAY[]::text[])
+		SELECT
+			c.id::text,
+			c.name,
+			c.description,
+			COALESCE(stats.item_count, 0)::int,
+			COALESCE(types.item_types, ARRAY[]::text[]),
+			COALESCE(types.total_types, 0)::int
 		FROM catalogs c
-		LEFT JOIN catalog_items ci
-		  ON ci.business_id = c.business_id
-		 AND ci.catalog_id = c.id
-		 AND ci.status = 'active'
+		LEFT JOIN LATERAL (
+			SELECT COUNT(*) AS item_count
+			FROM catalog_items ci
+			WHERE ci.business_id = c.business_id
+			  AND ci.catalog_id = c.id
+			  AND ci.status = 'active'
+		) stats ON true
+		LEFT JOIN LATERAL (
+			SELECT
+				ARRAY_AGG(limited.item_type ORDER BY limited.item_type) AS item_types,
+				(
+					SELECT COUNT(DISTINCT ci_all.item_type)
+					FROM catalog_items ci_all
+					WHERE ci_all.business_id = c.business_id
+					  AND ci_all.catalog_id = c.id
+					  AND ci_all.status = 'active'
+				) AS total_types
+			FROM (
+				SELECT DISTINCT ci_type.item_type
+				FROM catalog_items ci_type
+				WHERE ci_type.business_id = c.business_id
+				  AND ci_type.catalog_id = c.id
+				  AND ci_type.status = 'active'
+				ORDER BY ci_type.item_type
+				LIMIT $3
+			) limited
+		) types ON true
 		WHERE c.business_id = $1::uuid
 		  AND c.status = 'active'
-		GROUP BY c.id, c.name, c.description
 		ORDER BY c.name, c.id
-		LIMIT $2`, businessID, catalogAIManifestCatalogLimit)
+		LIMIT $2`, businessID, catalogAIManifestCatalogLimit, catalogAIManifestItemTypeLimit)
 	if err != nil {
 		return ports.CatalogAIManifest{}, catalogRepositoryError("catalog_ai.manifest", err)
 	}
@@ -74,13 +100,18 @@ func (r *CatalogAIReadRepository) GetManifest(ctx context.Context, businessID st
 
 	for rows.Next() {
 		var catalog ports.CatalogAIManifestCatalog
-		if err := rows.Scan(&catalog.ID, &catalog.Name, &catalog.Description, &catalog.ItemCount, &catalog.ItemTypes); err != nil {
+		var totalTypes int
+		if err := rows.Scan(
+			&catalog.ID,
+			&catalog.Name,
+			&catalog.Description,
+			&catalog.ItemCount,
+			&catalog.ItemTypes,
+			&totalTypes,
+		); err != nil {
 			return ports.CatalogAIManifest{}, catalogRepositoryError("catalog_ai.manifest", err)
 		}
-		if len(catalog.ItemTypes) > catalogAIManifestItemTypeLimit {
-			catalog.ItemTypes = append([]string(nil), catalog.ItemTypes[:catalogAIManifestItemTypeLimit]...)
-			catalog.ItemTypesTruncated = true
-		}
+		catalog.ItemTypesTruncated = totalTypes > len(catalog.ItemTypes)
 		manifest.Catalogs = append(manifest.Catalogs, catalog)
 	}
 	if err := rows.Err(); err != nil {
