@@ -29,6 +29,7 @@ type AutoReplyContextBuilder struct {
 	Conversations ports.ConversationRepository
 	Customers     ports.CustomerRepository
 	Catalogs      ports.CatalogRepository
+	CatalogAI     ports.CatalogAIReadRepository
 	Messages      ports.MessageRepository
 	Knowledge     ports.KnowledgeDocumentRepository
 	Policies      ports.BusinessPolicyRepository
@@ -41,6 +42,7 @@ type AutoReplyContextBuilder struct {
 	MaxMessages   int
 	MaxKnowledge  int
 	MaxPolicies   int
+	MaxSearchItems int
 }
 
 func NewAutoReplyContextBuilder(businesses ports.BusinessRepository, conversations ports.ConversationRepository, customers ports.CustomerRepository, catalogs ports.CatalogRepository, messages ports.MessageRepository) AutoReplyContextBuilder {
@@ -59,6 +61,7 @@ func NewAutoReplyContextBuilder(businesses ports.BusinessRepository, conversatio
 		MaxMessages:   4, // Per ADR-038: reduced from 8 to 6 per IrisAgent/Microsoft Learn best-practice research (sliding window threshold).
 		MaxKnowledge:  10,
 		MaxPolicies:   10,
+		MaxSearchItems: 12,
 	}
 }
 
@@ -154,6 +157,19 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 	}
 	context.RecentMessages = buildRecentMessageEvidence(messagePage.Items, input.SourceMessageReference, now)
 
+	// Universal Catalog AI v3: every turn gets a bounded map of the whole
+	// active catalog. This is discovery metadata, not executable evidence.
+	if b.CatalogAI != nil {
+		manifest, manifestErr := b.CatalogAI.GetManifest(ctx, input.BusinessID)
+		if manifestErr != nil {
+			return ports.CustomerSalesContext{}, manifestErr
+		}
+		context.CatalogManifest = &manifest
+		for _, catalog := range manifest.Catalogs {
+			context.CatalogNames = append(context.CatalogNames, catalog.Name)
+		}
+	}
+
 	mode, focus, comparison := resolveRetrievalMode(input.ConversationState)
 	switch mode {
 	case retrievalScopedOffer, retrievalScopedItem, retrievalScopedCatalog, retrievalScopedVariant:
@@ -200,87 +216,70 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 			return b.finalizeContext(ctx, context, input, now)
 		}
 	}
-	// Broader retrieval: active catalogs, active items, lexical rank.
-	catalogPage, err := b.Catalogs.ListCatalogs(ctx, input.BusinessID, "active", b.maxCatalogs(), "")
-	if err != nil {
-		return ports.CustomerSalesContext{}, err
-	}
-	for _, catalog := range catalogPage.Items {
-		if catalog.BusinessID != input.BusinessID {
-			return ports.CustomerSalesContext{}, errors.New("AI context catalog scope mismatch")
+	// Broader retrieval. v3 searches the whole business catalog in Postgres
+	// and bulk-hydrates matching items, variants, offers and schemas. The
+	// legacy bounded lexical path remains only as a rollout fallback.
+	if b.CatalogAI != nil {
+		limit := b.MaxSearchItems
+		if limit <= 0 {
+			limit = 12
 		}
-		items, listErr := b.Catalogs.ListCatalogItems(ctx, input.BusinessID, catalog.ID, "", "active", b.maxItems()*3, "")
+		bundles, searchErr := b.CatalogAI.SearchProjection(ctx, ports.CatalogAISearchRequest{
+			BusinessID: input.BusinessID,
+			Query:      input.Text,
+			Limit:      limit,
+		})
+		if searchErr != nil {
+			return ports.CustomerSalesContext{}, searchErr
+		}
+		appendCatalogAIBundlesToContext(&context, bundles, now)
+	} else {
+		catalogPage, listErr := b.Catalogs.ListCatalogs(ctx, input.BusinessID, "active", b.maxCatalogs(), "")
 		if listErr != nil {
 			return ports.CustomerSalesContext{}, listErr
 		}
-		for _, item := range rankCatalogItems(items.Items, input.Text) {
-			if item.BusinessID != input.BusinessID || item.CatalogID != catalog.ID {
-				return ports.CustomerSalesContext{}, errors.New("AI context catalog item scope mismatch")
+		for _, catalog := range catalogPage.Items {
+			if catalog.BusinessID != input.BusinessID {
+				return ports.CustomerSalesContext{}, errors.New("AI context catalog scope mismatch")
 			}
-			context.CatalogEvidence = append(context.CatalogEvidence, ports.CustomerSalesCatalogEvidence{
-				Reference:            item.ID,
-				CatalogReference:     item.CatalogID,
-				ItemType:             item.ItemType,
-				Name:                 item.Name,
-				Status:               item.Status,
-				Attributes:           safeJSONObject(item.Attributes),
-				EvidenceState:        CustomerSalesContextFresh,
-				RetrievedAt:          now,
-				SchemaVersion:        AIEvidenceSchemaVersion,
-				ShortDescription:     item.ShortDescription,
-				LongDescription:      item.LongDescription,
-				PricingMode:          item.PricingMode,
-				AvailabilityMode:     item.AvailabilityMode,
-				FulfillmentMode:      item.FulfillmentMode,
-				RequiresConfirmation: item.RequiresConfirmation,
-			})
+			context.CatalogNames = append(context.CatalogNames, catalog.Name)
+			items, itemErr := b.Catalogs.ListCatalogItems(ctx, input.BusinessID, catalog.ID, "", "active", b.maxItems()*3, "")
+			if itemErr != nil {
+				return ports.CustomerSalesContext{}, itemErr
+			}
+			for _, item := range rankCatalogItems(items.Items, input.Text) {
+				if item.BusinessID != input.BusinessID || item.CatalogID != catalog.ID {
+					return ports.CustomerSalesContext{}, errors.New("AI context catalog item scope mismatch")
+				}
+				context.CatalogEvidence = append(context.CatalogEvidence, catalogItemEvidence(item, now))
+				if len(context.CatalogEvidence) >= b.maxItems() {
+					break
+				}
+			}
 			if len(context.CatalogEvidence) >= b.maxItems() {
 				break
 			}
 		}
-		if len(context.CatalogEvidence) >= b.maxItems() {
-			break
+		for _, item := range context.CatalogEvidence {
+			offers, offerErr := b.Catalogs.ListOffers(ctx, input.BusinessID, item.Reference, "active", b.maxOffers(), "")
+			if offerErr != nil {
+				return ports.CustomerSalesContext{}, offerErr
+			}
+			for _, offer := range offers.Items {
+				context.OfferEvidence = append(context.OfferEvidence, toOfferEvidence(offer, now))
+			}
+			variants, variantErr := b.Catalogs.ListVariants(ctx, input.BusinessID, item.Reference, "active", b.maxVariants(), "")
+			if variantErr != nil {
+				return ports.CustomerSalesContext{}, variantErr
+			}
+			for _, variant := range variants.Items {
+				context.VariantEvidence = append(context.VariantEvidence, ports.CustomerSalesVariantEvidence{
+					Reference: variant.ID, CatalogItemReference: variant.CatalogItemID,
+					Name: variant.Name, Status: variant.Status, Attributes: safeJSONObject(variant.Attributes),
+					EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+				})
+			}
 		}
-	}
-
-	// Build the catalog summary: fetch ALL active item names (lightweight)
-	// so Gemini knows the full catalog exists even though only MaxItems
-	// have detailed evidence. This prevents Gemini from saying "we don't
-	// have this product" for products that exist but weren't in the 5-item
-	// detailed sample.
-	for _, catalog := range catalogPage.Items {
-		summaryCursor := ""
-		for {
-			summaryItems, summaryErr := b.Catalogs.ListCatalogItems(ctx, input.BusinessID, catalog.ID, "", "active", 500, summaryCursor)
-			if summaryErr != nil {
-				break
-			}
-			for _, item := range summaryItems.Items {
-				entry := ports.CustomerSalesCatalogSummaryEntry{
-					ID:          item.ID,
-					Name:        item.Name,
-					CatalogName: catalog.Name,
-				}
-				offers, offerErr := b.Catalogs.ListOffers(ctx, input.BusinessID, item.ID, "active", 1, "")
-				if offerErr == nil && len(offers.Items) > 0 {
-					entry.Price = formatPrice(stringValue(offers.Items[0].Amount))
-					entry.Currency = formatCurrency(stringValue(offers.Items[0].Currency))
-					entry.AvailabilityStatus = offers.Items[0].AvailabilityStatus
-				}
-				context.CatalogSummary = append(context.CatalogSummary, entry)
-			}
-			if !summaryItems.HasMore {
-				break
-			}
-			summaryCursor = summaryItems.NextCursor
-		}
-	}
-
-	// Per ADR-048: populate CatalogNames (category names only) for
-	// hierarchical navigation. Gemini uses this to respond to "what do
-	// you have?" with a category listing instead of dumping all items.
-	for _, catalog := range catalogPage.Items {
-		context.CatalogNames = append(context.CatalogNames, catalog.Name)
 	}
 
 	if b.Knowledge != nil {
