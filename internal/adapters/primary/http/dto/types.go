@@ -126,6 +126,13 @@ type DashboardOverview struct {
 	Connections               map[string]int `json:"connections,omitempty"`
 }
 
+type ChannelHistorySummary struct {
+    BusinessID UUID `json:"business_id"`
+    ConnectionID UUID `json:"connection_id"`
+    Conversations int64 `json:"conversations"`
+    Messages int64 `json:"messages"`
+    PurgedAt *string `json:"purged_at,omitempty"`
+}
 type ChannelConnection struct {
 	ID                       UUID         `json:"id"`
 	BusinessID               UUID         `json:"business_id"`
