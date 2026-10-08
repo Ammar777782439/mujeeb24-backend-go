@@ -1,6 +1,6 @@
 # قرار التصميم: Mujeeb بلا Chatwoot
 
-**الحالة:** مقترح منفذ على الفرع `feat/chatwoot-free` فقط. لا يغير `main` ولا يرسل أو يحذف أي بيانات خارجية.
+**الحالة:** مقترح منفذ على الفرع `feat/universal-catalog-ai-v3` فقط. لا يغير `main` ولا يرسل أو يحذف أي بيانات خارجية.
 
 ## القرار
 
@@ -37,7 +37,7 @@ Dashboard Mujeeb
 
 ## خطة الإزالة
 
-1. يحذف فرع `feat/chatwoot-free` جميع متغيرات Chatwoot وadapters والـroutes والـworkers وCompose services.
+1. يحذف فرع `feat/universal-catalog-ai-v3` جميع متغيرات Chatwoot وadapters والـroutes والـworkers وCompose services.
 2. يتحول Merchant Channel Provisioning إلى SocialAPI-only: ينشئ ChannelConnection بعد OAuth ولا ينشئ Chatwoot Account أو Inbox أو binding.
 3. يحذف مسار mirror فقط؛ لا يتغير SocialAPI webhook materialization إلى Customer/Conversation/CommunicationMessage.
 4. تبقى migrations `000001`–`000045` كما هي. لا تُضاف في هذه الدفعة migration إسقاط للحقول أو الجداول التاريخية، لأن ذلك تغيير بيانات مدمر ويستلزم backup وموافقة صريحة مستقلة.

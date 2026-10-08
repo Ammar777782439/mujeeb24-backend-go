@@ -8,14 +8,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
-// TestAutoReplyUsesStructuredLLMProposalBeforeEnqueue was the legacy test that
-// used openaicompatible.Client directly. Per contract ④ §8, the AutoReplyService
-// now uses ports.CustomerSalesDecisionPort (implemented by GeminiCustomerSalesAdapter). The
-// OpenAI-compatible adapter does not yet implement ContractRuntime.
-//
-// The contract-aligned test that replaces this one is TestAutoReplyServicePersistsDecisionAndEnqueuesAnswerAtomically
-// in auto_reply_test.go, which uses FakeCustomerSalesDecisionPort.
-
+// Verifies that a structured customer-sales proposal passes validation before enqueue.
 func TestAutoReplyUsesContractRuntimeProposalBeforeEnqueue(t *testing.T) {
 	decisions := &fakeDecisionRepository{}
 	outbound := &fakeOutboundRepository{}

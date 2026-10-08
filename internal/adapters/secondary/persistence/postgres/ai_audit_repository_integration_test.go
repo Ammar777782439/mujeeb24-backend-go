@@ -19,9 +19,9 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/database"
 )
 
-type legacyAutoReplyDecisionStub struct{}
+type customerSalesDecisionStub struct{}
 
-func (legacyAutoReplyDecisionStub) Decide(context.Context, ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
+func (customerSalesDecisionStub) Decide(context.Context, ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
 	return ports.CustomerSalesDecisionOutput{
 		Proposal: ports.CustomerSalesProposal{
 			Status:       ports.CustomerSalesProposalStatusResolved,
@@ -31,7 +31,7 @@ func (legacyAutoReplyDecisionStub) Decide(context.Context, ports.CustomerSalesDe
 	}, nil
 }
 
-var _ ports.CustomerSalesDecisionPort = legacyAutoReplyDecisionStub{}
+var _ ports.CustomerSalesDecisionPort = customerSalesDecisionStub{}
 
 func TestAIAuditRepositoriesAgainstPostgres(t *testing.T) {
 	dsn := os.Getenv("POSTGRES_TEST_DSN")
@@ -314,7 +314,7 @@ func TestAutoReplyVerticalSliceAgainstPostgres(t *testing.T) {
 	referenceRepo := NewConversationReferenceRepository(adapter)
 	outboundRepo := NewOutboundMessageRepository(adapter)
 	outboxRepo := NewPostgresOutboxStore(adapter)
-	service := services.NewAutoReplyService(legacyAutoReplyDecisionStub{}, decisionRepo, referenceRepo, outboundRepo, outboxRepo, adapter)
+	service := services.NewAutoReplyService(customerSalesDecisionStub{}, decisionRepo, referenceRepo, outboundRepo, outboxRepo, adapter)
 	service.Validation = services.NewValidationPipeline(
 		NewPostgresReferenceValidator(adapter),
 		NewPostgresTenantValidator(adapter),
@@ -351,7 +351,7 @@ func TestAutoReplyVerticalSliceAgainstPostgres(t *testing.T) {
 		t.Fatalf("auto reply persistence counts decision=%d outbound=%d outbox=%d", decisionCount, outboundCount, outboxCount)
 	}
 
-	failingService := services.NewAutoReplyService(legacyAutoReplyDecisionStub{}, decisionRepo, referenceRepo, outboundRepo, failingEnqueueOutbox{OutboxStore: outboxRepo}, adapter)
+	failingService := services.NewAutoReplyService(customerSalesDecisionStub{}, decisionRepo, referenceRepo, outboundRepo, failingEnqueueOutbox{OutboxStore: outboxRepo}, adapter)
 	failingService.Validation = services.NewValidationPipeline(
 		NewPostgresReferenceValidator(adapter),
 		NewPostgresTenantValidator(adapter),
