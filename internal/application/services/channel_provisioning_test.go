@@ -314,8 +314,8 @@ func TestChannelProvisioningCreatesOneStableProviderBrandPerBusiness(t *testing.
 	if first.ID == second.ID {
 		t.Fatal("different idempotency keys unexpectedly returned the same session")
 	}
-	if brands.createCalls != 1 || brands.listCalls != 1 {
-		t.Fatalf("provider brand lifecycle creates=%d lists=%d; want one create and one discovery list", brands.createCalls, brands.listCalls)
+	if brands.createCalls != 1 || brands.listCalls != 2 {
+		t.Fatalf("provider brand lifecycle creates=%d lists=%d; want one create and verification on each connection", brands.createCalls, brands.listCalls)
 	}
 	if len(social.brandIDs) != 2 || social.brandIDs[0] != "brand-1" || social.brandIDs[1] != "brand-1" {
 		t.Fatalf("OAuth did not receive the same provider brand: %#v", social.brandIDs)
@@ -349,6 +349,31 @@ func TestChannelProvisioningRejectsAmbiguousProviderBrandIdentity(t *testing.T) 
 	}
 	if brands.createCalls != 0 || len(brands.local) != 0 || len(social.brandIDs) != 0 {
 		t.Fatalf("ambiguous brand handling created state unexpectedly: creates=%d local=%#v brand_ids=%#v", brands.createCalls, brands.local, social.brandIDs)
+	}
+}
+
+func TestChannelProvisioningRejectsOrphanedCachedBrandBeforeOAuth(t *testing.T) {
+	brands := &provisioningBrands{
+		local: map[string]ports.ProviderBrandRecord{
+			"business-1/socialapi": {BusinessID: "business-1", ProviderRef: "socialapi", ProviderBrandRef: "stale-brand-id", DisplayName: "Acme"},
+		},
+		remote: map[string]ports.ProviderBrandRecord{},
+	}
+	social := &provisioningSocial{}
+	service := ChannelProvisioningService{
+		Sessions:       &provisioningSessionStore{},
+		Social:         social,
+		SocialBrands:   brands,
+		ProviderBrands: brands,
+		Businesses:     &provisioningBusinesses{},
+		Connections:    &provisioningConnections{},
+		RedirectURI:    "https://app.example/oauth/callback",
+	}
+	if _, err := service.Start(context.Background(), "business-1", "socialapi", "facebook", "Facebook Page", "stale-brand-test"); err == nil {
+		t.Fatal("expected provider verification error for stale saved brand")
+	}
+	if brands.listCalls != 1 || brands.createCalls != 0 || len(social.brandIDs) != 0 {
+		t.Fatalf("stale brand was used to authorize or duplicated: lists=%d creates=%d auth=%v", brands.listCalls, brands.createCalls, social.brandIDs)
 	}
 }
 
