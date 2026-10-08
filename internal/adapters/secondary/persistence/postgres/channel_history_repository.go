@@ -212,7 +212,16 @@ func (r *ChannelHistoryRepository) Purge(ctx context.Context, businessID, connec
                 AND id IN (SELECT id FROM purge_conversations)`,
 		}
 		for index, query := range queries {
-			if _, err := executor.Exec(txCtx, query, businessID, connectionID); err != nil {
+			// The fixed statements have different parameter arities. pgx
+			// rejects unused arguments, even for DELETE without placeholders.
+			var args []any
+			if strings.Contains(query, "$1") {
+				args = append(args, businessID)
+			}
+			if strings.Contains(query, "$2") {
+				args = append(args, connectionID)
+			}
+			if _, err := executor.Exec(txCtx, query, args...); err != nil {
 				return classifyRepositoryWriteError(fmt.Sprintf("channel_history.purge_step_%d", index), err)
 			}
 		}
