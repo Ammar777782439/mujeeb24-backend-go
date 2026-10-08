@@ -120,6 +120,10 @@ func merchantCatalogProposalSchema() map[string]any {
 			"item_id": stringField(),
 			"changes": map[string]any{"type": "object", "properties": map[string]any{
 				"name": optionalString(), "status": optionalString(), "attributes": attributeObjectField(),
+				"item_type":         optionalString(),
+				"short_description": optionalString(), "long_description": optionalString(),
+				"pricing_mode": optionalString(), "availability_mode": optionalString(),
+				"fulfillment_mode":      optionalString(),
 				"requires_confirmation": map[string]any{"type": "boolean"},
 			}},
 			"existing_variants": map[string]any{"type": "array", "items": map[string]any{
@@ -139,14 +143,15 @@ func merchantCatalogProposalSchema() map[string]any {
 					"required": []string{"ref", "name"},
 				},
 			},
-			"existing_offers": map[string]any{"type": "array", "items": map[string]any{
+			"existing_offers": map[string]any{"type": "array", "description": "Modify existing offers using IDs returned by read tools. To change an existing offer price, set amount here; do not create a new offer to replace its price. Omit unchanged fields.", "items": map[string]any{
 				"type": "object", "properties": map[string]any{
 					"id": stringField(), "name": optionalString(), "amount": optionalString(),
 					"availability_status": optionalString(), "status": optionalString(),
 				}, "required": []string{"id"},
 			}},
 			"new_offers": map[string]any{
-				"type": "array",
+				"description": "Create additional offers only when the merchant requests a new offer. Existing offer price changes belong in existing_offers, not here.",
+				"type":        "array",
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -189,7 +194,7 @@ func merchantCatalogProposalSchema() map[string]any {
 			"schema_version":      map[string]any{"type": "integer", "enum": []int{merchantcatalogai.ProposalSchemaVersion}, "description": "Merchant Catalog AI Proposal Contract version."},
 			"status":              map[string]any{"type": "string", "enum": []string{"resolved", "ambiguous", "not_found", "needs_more_data"}},
 			"operation":           map[string]any{"type": "string", "enum": []string{"create", "update", "delete", "ask_merchant"}},
-			"response_text":       stringField(),
+			"response_text":       map[string]any{"type": "string", "description": "Describe only changes actually represented in the proposal payload. Do not claim a description or price change unless its corresponding field is present. A proposal is not proof of execution."},
 			"evidence_references": map[string]any{"type": "array", "items": stringField()},
 			"missing_information": map[string]any{"type": "array", "items": missingField},
 			"create": map[string]any{
