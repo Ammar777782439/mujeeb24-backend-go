@@ -98,13 +98,21 @@ func (s ChannelProvisioningService) ensureProviderBrand(ctx context.Context, bus
 	if err != nil {
 		return ports.ProviderBrandRecord{}, err
 	}
-	if found {
-		return existing, nil
-	}
-
+	// Verify even a cached mapping against SocialAPI before invoking OAuth.
+	// An orphaned local brand ID must never be sent to /v1/accounts/connect.
 	remoteBrands, err := s.SocialBrands.ListBrands(ctx)
 	if err != nil {
 		return ports.ProviderBrandRecord{}, err
+	}
+	if found {
+		for _, remote := range remoteBrands {
+			if strings.TrimSpace(remote.ProviderBrandRef) == strings.TrimSpace(existing.ProviderBrandRef) {
+				return existing, nil
+			}
+		}
+		// A scoped provider key may hide remote brands. Fail closed instead
+		// of blindly creating a duplicate (or deleting a still-used brand).
+		return ports.ProviderBrandRecord{}, fmt.Errorf("saved provider brand is not visible at SocialAPI; verify management key and reconcile brand mapping for business %s", businessID)
 	}
 	var matches []ports.ProviderBrandRecord
 	for _, remote := range remoteBrands {
