@@ -14,8 +14,8 @@ import (
 func TestCustomerSalesUsesInteractionsAPIAndChainsState(t *testing.T) {
 	var captured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1beta/interactions" {
-			t.Fatalf("expected /v1beta/interactions, got %s", r.URL.Path)
+		if r.URL.Path != "/v1/interactions" {
+			t.Fatalf("expected /v1/interactions, got %s", r.URL.Path)
 		}
 		if r.Header.Get("x-goog-api-key") != "test-key" {
 			t.Fatalf("missing x-goog-api-key header")

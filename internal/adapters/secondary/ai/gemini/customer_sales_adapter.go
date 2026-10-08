@@ -249,7 +249,7 @@ func (c *GeminiCustomerSalesAdapter) sendInteractionRequest(
 	reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
 
-	url := strings.TrimRight(rc.baseURL, "/") + "/v1beta/interactions"
+	url := strings.TrimRight(rc.baseURL, "/") + "/v1/interactions"
 	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(buf))
 	if err != nil {
 		return interactionResponse{}, fmt.Errorf("build interaction request: %w", err)

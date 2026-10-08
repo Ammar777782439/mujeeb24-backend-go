@@ -91,7 +91,7 @@ func (r *GeminiMerchantCatalogAuthoringAdapter) sendInteraction(ctx context.Cont
 	requestCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	url := fmt.Sprintf("%s/v1beta/interactions", strings.TrimRight(baseURL, "/"))
+	url := fmt.Sprintf("%s/v1/interactions", strings.TrimRight(baseURL, "/"))
 
 	const maxAttempts = 4
 	var lastErr error

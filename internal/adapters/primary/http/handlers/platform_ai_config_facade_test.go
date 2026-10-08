@@ -87,7 +87,7 @@ func (m *mockGeminiServer) handle(w http.ResponseWriter, r *http.Request) {
 			_, _ = io.WriteString(w, m.modelsResp)
 			return
 		}
-		if r.Method == http.MethodPost && strings.Contains(r.URL.Path, ":generateContent") {
+		if r.Method == http.MethodPost && (r.URL.Path == "/v1/interactions" || strings.Contains(r.URL.Path, ":generateContent")) {
 			m.probeCalls++
 			w.WriteHeader(m.probeCode)
 			_, _ = io.WriteString(w, m.probeResp)

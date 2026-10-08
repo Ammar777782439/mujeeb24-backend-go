@@ -58,6 +58,15 @@ Write-Host " Port: http://127.0.0.1:3001" -ForegroundColor Green
 Write-Host " DB:   127.0.0.1:5433 ($dbName)" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 
+# Apply pending local schema changes before accepting API requests.
+Set-Location $repoRoot
+$env:APP_ENV = "development"
+Write-Host "Applying pending database migrations..." -ForegroundColor Cyan
+& go run ./cmd/migrate
+if ($LASTEXITCODE -ne 0) {
+    throw "Database migration failed. API startup stopped; inspect the migration error above."
+}
+
 # 5. Run air if available, else go run
 $airPath = Get-Command air -ErrorAction SilentlyContinue
 if ($airPath -and (-not $NoAir)) {

@@ -1,7 +1,7 @@
 // Package gemini — Batch Gemini Client implementation (contract ② §5-6).
 //
 // Implements the services.BatchGeminiClient interface against the Gemini
-// generateContent API with Structured Outputs (responseSchema) enforcement.
+// Interactions v1 API with Structured Outputs (response_format.schema) enforcement.
 //
 // Per contract ② §5, Gemini returns ONLY candidates (item_id, variant_ids,
 // offer_ids, reason) — not the items back. Mujeeb already knows what it sent.
@@ -10,10 +10,10 @@
 // runs over the aggregated candidate set + customer message + context.
 //
 // Per contract ② §8, batches are NOT chained via previous_interaction_id;
-// each batch is an independent stateless generateContent request.
+// each batch is an independent stateless Interactions request.
 //
 // Per contract ④ §8, Structured Outputs enforces the JSON shape via
-// responseSchema; Mujeeb additionally validates the values per contract ⑥ §3.
+// response_format.schema; Mujeeb additionally validates the values per contract ⑥ §3.
 
 package gemini
 
@@ -44,7 +44,7 @@ type BatchClientConfig struct {
 }
 
 // BatchClient implements services.BatchGeminiClient via the Gemini
-// generateContent API with Structured Outputs.
+// Interactions v1 API with Structured Outputs.
 type BatchClient struct {
 	baseURL        string
 	apiKey         string
@@ -174,6 +174,7 @@ func (c *BatchClient) buildEvaluateBatchRequest(input services.BatchEvaluationIn
 	userPrompt := fmt.Sprintf("Customer message: %s\n\nVerified conversation context:\n%s\n\n%s %d data:\n%s",
 		input.CustomerMessage, string(contextJSON), phaseLabel, input.BatchNumber, string(batchJSON))
 	return batchGeminiRequest{
+		Model:             "models/" + strings.TrimPrefix(rc.model, "models/"),
 		SystemInstruction: systemInstruction,
 		Contents: []batchContent{
 			{Role: "user", Parts: []batchPart{{Text: userPrompt}}},
@@ -186,10 +187,9 @@ func (c *BatchClient) buildEvaluateBatchRequest(input services.BatchEvaluationIn
 	}, nil
 }
 
-// CountBatchTokens counts the exact generateContent request that EvaluateBatch
-// will send. Google countTokens accepts generateContentRequest, so system
-// instructions, entity contract, batch JSON and response configuration stay
-// aligned with the real provider request.
+// CountBatchTokens uses the provider tokenizer with the batch prompt and JSON
+// schema. The countTokens compatibility envelope is not a generation call;
+// Interactions usage remains authoritative for billing.
 func (c *BatchClient) CountBatchTokens(ctx context.Context, input services.BatchEvaluationInput) (int, error) {
 	if c == nil {
 		return 0, errors.New("batch client is not configured")
@@ -243,11 +243,11 @@ func (c *BatchClient) CountBatchTokens(ctx context.Context, input services.Batch
 // EvaluateBatch implements services.BatchGeminiClient.EvaluateBatch per
 // contract ② §5. Sends one batch to Gemini and returns the candidate set.
 //
-// Per contract ② §8, each batch is an independent stateless generateContent request — no
+// Per contract ② §8, each batch is an independent stateless Interactions request — no
 // previous_interaction_id chaining.
 //
 // Per contract ④ §8, Structured Outputs enforces the response shape via
-// responseSchema. Per contract ⑥ §3, Mujeeb additionally validates the
+// response_format.schema. Per contract ⑥ §3, Mujeeb additionally validates the
 // returned IDs against the actual batch items (the caller does this via
 // PostgresReferenceValidator).
 func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEvaluationInput) (ports.CatalogBatchResult, error) {
@@ -317,6 +317,7 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
 // a response with product names, prices, descriptions.
 func (c *BatchClient) buildFinalEvaluateRequest(input services.FinalEvaluationInput, userPrompt string, rc *resolvedAIConfig) batchGeminiRequest {
 	return batchGeminiRequest{
+		Model:             "models/" + strings.TrimPrefix(rc.model, "models/"),
 		SystemInstruction: c.buildBatchSystemInstructionWithSuffix(input.EntityContract, prompts.FinalEvaluationSystemPromptSuffix),
 		Contents: []batchContent{
 			{Role: "user", Parts: []batchPart{{Text: userPrompt}}},
@@ -405,16 +406,16 @@ func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input servic
 	return proposal, usage, nil
 }
 
-// sendRequestWithConfig calls the Gemini generateContent API.
+// sendRequestWithConfig calls Gemini Interactions v1.
 // Per §1-2: uses the resolved config (apiKey, model, baseURL) from the
 // AIConfigurationProvider instead of static struct fields.
 func (c *BatchClient) sendRequestWithConfig(ctx context.Context, reqBody batchGeminiRequest, rc *resolvedAIConfig) (batchGeminiResponse, error) {
-	buf, err := json.Marshal(reqBody)
+	buf, err := json.Marshal(batchInteractionRequest(reqBody, rc.model))
 	if err != nil {
 		return batchGeminiResponse{}, fmt.Errorf("marshal request: %w", err)
 	}
 	// P1-8: API key sent via x-goog-api-key header only — never in URL.
-	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent", rc.baseURL, rc.model)
+	url := strings.TrimRight(rc.baseURL, "/") + "/v1/interactions"
 	reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
 	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(buf))
@@ -435,11 +436,18 @@ func (c *BatchClient) sendRequestWithConfig(ctx context.Context, reqBody batchGe
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return batchGeminiResponse{}, fmt.Errorf("gemini api status %d: %s", resp.StatusCode, string(body))
 	}
-	var geminiResp batchGeminiResponse
-	if err := json.Unmarshal(body, &geminiResp); err != nil {
-		return batchGeminiResponse{}, fmt.Errorf("unmarshal response: %w", err)
+	var interaction interactionResponse
+	if err := json.Unmarshal(body, &interaction); err != nil {
+		return batchGeminiResponse{}, fmt.Errorf("decode batch interaction: %w", err)
 	}
-	return geminiResp, nil
+	if interaction.Status != "completed" {
+		return batchGeminiResponse{}, fmt.Errorf("batch interaction did not complete: %s", interaction.Status)
+	}
+	raw, err := interactionOutputText(interaction)
+	if err != nil {
+		return batchGeminiResponse{}, err
+	}
+	return batchGeminiResponse{Candidates: []batchCandidate{{Content: batchContent{Parts: []batchPart{{Text: raw}}}}}, UsageMetadata: batchUsageMetadata{PromptTokenCount: interaction.Usage.TotalInputTokens, CandidatesTokenCount: interaction.Usage.TotalOutputTokens, CachedContentTokenCount: interaction.Usage.TotalCachedTokens, TotalTokenCount: interaction.Usage.TotalTokens}}, nil
 }
 
 // parseBatchCandidates extracts the candidates array from the structured
@@ -489,7 +497,7 @@ func parseFinalProposal(resp batchGeminiResponse) (ports.CustomerSalesProposal, 
 }
 
 // batchCandidateResponseSchema is the JSON Schema that enforces the contract
-// ② §5 batch evaluation output shape via Gemini's responseSchema field.
+// ② §5 batch evaluation output shape via response_format.schema.
 //
 // Per contract ② §5, the output is an object with a "candidates" array.
 // Each candidate has: item_id (string), variant_ids (array of string),
@@ -524,8 +532,9 @@ func finalProposalResponseSchema() map[string]any {
 	return contractProposalResponseSchema()
 }
 
-// batchGeminiRequest is the generateContent request body.
+// batchGeminiRequest is the countTokens compatibility representation of a batch.
 type batchGeminiRequest struct {
+	Model             string                `json:"model,omitempty"`
 	SystemInstruction *batchContent         `json:"systemInstruction,omitempty"`
 	Contents          []batchContent        `json:"contents"`
 	GenerationConfig  batchGenerationConfig `json:"generationConfig"`
@@ -533,7 +542,7 @@ type batchGeminiRequest struct {
 
 type batchGenerationConfig struct {
 	ResponseMimeType string         `json:"responseMimeType,omitempty"`
-	ResponseSchema   map[string]any `json:"responseSchema,omitempty"`
+	ResponseSchema   map[string]any `json:"responseJsonSchema,omitempty"`
 	MaxOutputTokens  int            `json:"maxOutputTokens,omitempty"`
 }
 
@@ -564,3 +573,20 @@ type batchUsageMetadata struct {
 
 // Compile-time assertion: BatchClient implements services.BatchGeminiClient.
 var _ services.BatchGeminiClient = (*BatchClient)(nil)
+
+// The same prompt parts and JSON schema feed generation and the countTokens
+// compatibility request. Batches deliberately do not retain interaction state.
+func batchInteractionRequest(request batchGeminiRequest, model string) interactionRequest {
+	var system, input []string
+	if request.SystemInstruction != nil {
+		for _, part := range request.SystemInstruction.Parts {
+			system = append(system, part.Text)
+		}
+	}
+	for _, content := range request.Contents {
+		for _, part := range content.Parts {
+			input = append(input, part.Text)
+		}
+	}
+	return interactionRequest{Model: model, Store: false, Input: strings.Join(input, "\n\n"), SystemInstruction: strings.Join(system, "\n\n"), ResponseFormat: interactionResponseFormat{Type: "text", MimeType: "application/json", Schema: request.GenerationConfig.ResponseSchema}, GenerationConfig: interactionGenerationConfig{MaxOutputTokens: request.GenerationConfig.MaxOutputTokens}}
+}

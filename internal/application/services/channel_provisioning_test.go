@@ -65,6 +65,7 @@ func (b *provisioningBusinesses) GetByID(_ context.Context, businessID string) (
 var _ ports.BusinessRepository = (*provisioningBusinesses)(nil)
 
 type provisioningBrands struct {
+	getErr      error
 	local       map[string]ports.ProviderBrandRecord
 	remote      map[string]ports.ProviderBrandRecord
 	createCalls int
@@ -73,6 +74,9 @@ type provisioningBrands struct {
 }
 
 func (b *provisioningBrands) Get(_ context.Context, businessID, providerRef string) (ports.ProviderBrandRecord, bool, error) {
+	if b.getErr != nil {
+		return ports.ProviderBrandRecord{}, false, b.getErr
+	}
 	if b.local == nil {
 		b.local = map[string]ports.ProviderBrandRecord{}
 	}
@@ -345,5 +349,19 @@ func TestChannelProvisioningRejectsAmbiguousProviderBrandIdentity(t *testing.T) 
 	}
 	if brands.createCalls != 0 || len(brands.local) != 0 || len(social.brandIDs) != 0 {
 		t.Fatalf("ambiguous brand handling created state unexpectedly: creates=%d local=%#v brand_ids=%#v", brands.createCalls, brands.local, social.brandIDs)
+	}
+}
+
+func TestChannelProvisioningPreservesStorageFailureWithoutCallingProvider(t *testing.T) {
+	storageErr := repositoryKindError("invalid")
+	brands := &provisioningBrands{getErr: storageErr}
+	social := &provisioningSocial{}
+	service := ChannelProvisioningService{Sessions: &provisioningSessionStore{}, Social: social, SocialBrands: brands, ProviderBrands: brands, Businesses: &provisioningBusinesses{}, Connections: &provisioningConnections{}}
+	_, err := service.Start(context.Background(), "business-1", "socialapi", "facebook", "Acme", "storage-failure")
+	if !errors.Is(err, storageErr) {
+		t.Fatalf("storage failure misclassified: %v", err)
+	}
+	if social.begin != 0 || brands.listCalls != 0 || brands.createCalls != 0 {
+		t.Fatal("provider called despite storage failure")
 	}
 }

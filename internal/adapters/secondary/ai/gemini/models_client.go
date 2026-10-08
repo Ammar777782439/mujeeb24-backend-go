@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
@@ -173,7 +174,7 @@ func (c *ModelsClient) DiscoverModels(ctx context.Context, apiKey, baseURL strin
 	return items, nil
 }
 
-// TestConnection makes a minimal Gemini generateContent call to verify
+// TestConnection makes a minimal Gemini Interactions v1 call to verify
 // that the credential + model are valid. Per §6: must be a real request
 // to Gemini, not a config validity check.
 //
@@ -195,17 +196,14 @@ func (c *ModelsClient) TestConnection(ctx context.Context, apiKey, model, baseUR
 
 	started := time.Now()
 
-	// Minimal probe: generateContent with "Hello" input.
+	// Minimal probe: Interactions with "Hello" input.
 	// Per §84: uses a standalone prompt — no merchant_id, business_id,
 	// customer data, or merchant catalog.
 	// P1-8: API key sent via x-goog-api-key header only — never in URL.
-	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent", baseURL, model)
+	url := strings.TrimRight(baseURL, "/") + "/v1/interactions"
 
-	reqBody := map[string]any{
-		"contents": []map[string]any{
-			{"role": "user", "parts": []map[string]any{{"text": "Hello"}}},
-		},
-	}
+	reqBody := map[string]any{"model": model, "input": "Hello", "store": false}
+
 	buf, _ := json.Marshal(reqBody)
 
 	reqCtx, cancel := context.WithTimeout(ctx, c.timeout)

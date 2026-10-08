@@ -332,9 +332,8 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		// wrong: the ContextBuilder always puts 5 items in the evidence,
 		// so the condition was never true, and the batch evaluation never ran.
 		log.Printf("[AutoReply] CATALOG_EVAL_TRIGGER run=%s reason=%s current_evidence=%d", run.ID, proposal.Status, len(builtContext.CatalogEvidence))
-		// Per contract ⑨ §3, mark RUNNING again (back from VALIDATING
-		// to RUNNING for the batch evaluation loop).
-		s.markRunningSafe(ctx, run)
+		// Catalog evaluation continues the current RUNNING phase. Validation
+		// happens after the final proposal; do not repeat RUNNING -> RUNNING.
 
 		// Per contract ② §9, run the full catalog evaluation pipeline.
 		entityContract := CatalogEntityContractPayload{}

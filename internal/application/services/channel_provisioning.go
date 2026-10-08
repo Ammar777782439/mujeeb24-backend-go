@@ -66,6 +66,10 @@ func (s ChannelProvisioningService) Start(ctx context.Context, businessID, provi
 			log.Printf("[ChannelProvisioning] FAILURE_MARK_FAILED business=%s session=%s err=%v — SESSION STUCK, manual reconciliation needed",
 				businessID, sessionID, markErr)
 		}
+		var storageFailure interface{ ErrorKind() string }
+		if errors.As(err, &storageFailure) {
+			return ports.ChannelProvisioningSession{}, fmt.Errorf("channel provider brand storage failed: %w", err)
+		}
 		return ports.ChannelProvisioningSession{}, appErrors.New(appErrors.CodeExternalDependency, "channel provider brand provisioning failed")
 	}
 	authorization, err := s.Social.BeginAuthorization(ctx, ports.SocialAuthorizationRequest{ProviderRef: provider, Channel: channel, RedirectURI: s.RedirectURI, State: sessionID, BrandID: providerBrand.ProviderBrandRef})
