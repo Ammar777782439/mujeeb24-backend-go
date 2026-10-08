@@ -125,7 +125,8 @@ func (r *ChannelHistoryRepository) Purge(ctx context.Context, businessID, connec
 		var sharedPayload bool
 		err = executor.QueryRow(txCtx, `SELECT EXISTS(SELECT 1 FROM purge_events p
             JOIN inbound_event_ledger e ON e.raw_payload_reference=p.raw_payload_reference
-            WHERE NOT EXISTS(SELECT 1 FROM purge_events own WHERE own.id=e.id))`).Scan(&sharedPayload)
+            WHERE p.raw_payload_reference LIKE 'db://inbound_webhook_payloads/%'
+              AND NOT EXISTS(SELECT 1 FROM purge_events own WHERE own.id=e.id))`).Scan(&sharedPayload)
 		if err != nil {
 			return classifyRepositoryGetError("channel_history.shared_payload", err)
 		}
