@@ -54,6 +54,7 @@ type ProviderBrandRecord struct {
 	BusinessID       string
 	ProviderRef      string
 	ProviderBrandRef string
+    LifecycleState  string
 	DisplayName      string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
@@ -62,6 +63,15 @@ type ProviderBrandRecord struct {
 type ProviderBrandStore interface {
 	Get(ctx context.Context, businessID, providerRef string) (ProviderBrandRecord, bool, error)
 	Create(ctx context.Context, brand ProviderBrandRecord) (ProviderBrandRecord, error)
+}
+
+// ProviderBrandCleanupStore reserves one merchant Brand for deletion only if
+// no other connection or live OAuth session still depends on that Brand.
+// Reserve and Complete must be separate database calls: SocialAPI must never
+// be invoked inside a database transaction.
+type ProviderBrandCleanupStore interface {
+    ReserveUnused(ctx context.Context, businessID, providerRef string) (providerBrandRef string, reserved bool, err error)
+    CompleteDeletion(ctx context.Context, businessID, providerRef, providerBrandRef string) error
 }
 
 type ProviderBrandProvisioner interface {
