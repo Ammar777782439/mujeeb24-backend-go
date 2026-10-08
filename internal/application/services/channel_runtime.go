@@ -17,6 +17,8 @@ type ChannelRuntimeService struct {
 	Transactions ports.TransactionManager
 	Disconnector ports.ChannelAccountDisconnector
 	Provisioning ports.ChannelProvisioningStore
+    BrandCleanup ports.ProviderBrandCleanupStore
+    BrandProvider ports.ProviderBrandProvisioner
 }
 type ListChannelConnectionsQueryService struct{ ChannelRuntimeService }
 type GetChannelConnectionQueryService struct{ ChannelRuntimeService }
@@ -132,6 +134,9 @@ func (s DisconnectChannelCommandService) Handle(ctx context.Context, command com
 		return commands.ChannelConnectionResult{}, err
 	}
 	if record.Status == "disconnected" {
+        if err := s.deleteProviderBrandIfUnused(ctx, record.BusinessID, record.ProviderReference); err != nil {
+            return commands.ChannelConnectionResult{}, appErrors.New(appErrors.CodeExternalDependency, "channel was disconnected but provider Brand cleanup remains incomplete; retry disconnect")
+        }
 		result := commands.ChannelConnectionResult{Connection: channelConnectionView(record)}
 		result.ResourceVersion = result.Connection.ResourceVersion
 		return result, nil
@@ -174,7 +179,27 @@ func (s DisconnectChannelCommandService) Handle(ctx context.Context, command com
 		result.ResourceVersion = result.Connection.ResourceVersion
 		return nil
 	})
-	return result, err
+    if err != nil { return result, err }
+    if cleanupErr := s.deleteProviderBrandIfUnused(ctx, record.BusinessID, record.ProviderReference); cleanupErr != nil {
+        return result, appErrors.New(appErrors.CodeExternalDependency, "channel disconnected, provider Brand cleanup incomplete; retry disconnect")
+    }
+    return result, nil
+}
+
+// deleteProviderBrandIfUnused never calls SocialAPI within a database transaction.
+func (s ChannelRuntimeService) deleteProviderBrandIfUnused(ctx context.Context, businessID, providerRef string) error {
+    if s.BrandCleanup == nil || s.BrandProvider == nil || providerRef != "socialapi" {
+        return nil
+    }
+    brandID, reserved, err := s.BrandCleanup.ReserveUnused(ctx, businessID, providerRef)
+    if err != nil { return err }
+    if !reserved { return nil }
+    if err := s.BrandProvider.DeleteBrand(ctx, brandID); err != nil {
+        // The persistent 'deleting' state prevents any new OAuth session from
+        // reusing the Brand. Retrying disconnect resumes cleanup idempotently.
+        return err
+    }
+    return s.BrandCleanup.CompleteDeletion(ctx, businessID, providerRef, brandID)
 }
 
 func channelConnectionView(record ports.ChannelConnectionRecord) commands.ChannelConnectionView {
