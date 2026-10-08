@@ -106,17 +106,20 @@ func (r *ProviderBrandRepository) Create(ctx context.Context, brand ports.Provid
 	return record, nil
 }
 
-
 func (r *ProviderBrandRepository) ReserveUnused(ctx context.Context, businessID, providerRef string) (string, bool, error) {
-    if r == nil || r.adapter == nil { return "", false, ErrPoolClosed }
-    if strings.TrimSpace(businessID) == "" || strings.TrimSpace(providerRef) == "" {
-        return "", false, invalidRepositoryInput("provider_brand.reserve", "business and provider are required")
-    }
-    executor, err := r.adapter.Executor(ctx)
-    if err != nil { return "", false, err }
-    // Account-level disconnections are completed before this reservation.
-    // No SocialAPI request is made while a database transaction is held.
-    const query = `UPDATE channel_provider_brands b
+	if r == nil || r.adapter == nil {
+		return "", false, ErrPoolClosed
+	}
+	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(providerRef) == "" {
+		return "", false, invalidRepositoryInput("provider_brand.reserve", "business and provider are required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	// Account-level disconnections are completed before this reservation.
+	// No SocialAPI request is made while a database transaction is held.
+	const query = `UPDATE channel_provider_brands b
         SET lifecycle_state='deleting', updated_at=now()
         WHERE b.business_id=$1::uuid AND b.provider_ref=$2
           AND NOT EXISTS (
@@ -131,27 +134,35 @@ func (r *ProviderBrandRepository) ReserveUnused(ctx context.Context, businessID,
               AND s.created_at > now() - interval '15 minutes'
           )
         RETURNING provider_brand_ref`
-    var brandRef string
-    if err := executor.QueryRow(ctx, query, businessID, providerRef).Scan(&brandRef); err != nil {
-        if errors.Is(err, pgx.ErrNoRows) { return "", false, nil }
-        return "", false, classifyRepositoryWriteError("provider_brand.reserve", err)
-    }
-    return brandRef, true, nil
+	var brandRef string
+	if err := executor.QueryRow(ctx, query, businessID, providerRef).Scan(&brandRef); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", false, nil
+		}
+		return "", false, classifyRepositoryWriteError("provider_brand.reserve", err)
+	}
+	return brandRef, true, nil
 }
 
 // Only remove the local mapping after the provider confirms the deletion.
-func (r *ProviderBrandRepository) CompleteDeletion(ctx context.Context,businessID,providerRef,brandRef string) error {
-    if r == nil || r.adapter == nil { return ErrPoolClosed }
-    if strings.TrimSpace(businessID)=="" || strings.TrimSpace(providerRef)=="" || strings.TrimSpace(brandRef)=="" {
-        return invalidRepositoryInput("provider_brand.complete_delete","business, provider and brand id are required")
-    }
-    executor,err:=r.adapter.Executor(ctx)
-    if err!=nil { return err }
-    _,err=executor.Exec(ctx,`DELETE FROM channel_provider_brands
+func (r *ProviderBrandRepository) CompleteDeletion(ctx context.Context, businessID, providerRef, brandRef string) error {
+	if r == nil || r.adapter == nil {
+		return ErrPoolClosed
+	}
+	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(providerRef) == "" || strings.TrimSpace(brandRef) == "" {
+		return invalidRepositoryInput("provider_brand.complete_delete", "business, provider and brand id are required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = executor.Exec(ctx, `DELETE FROM channel_provider_brands
         WHERE business_id=$1::uuid AND provider_ref=$2
-          AND provider_brand_ref=$3 AND lifecycle_state='deleting'`,businessID,providerRef,brandRef)
-    if err!=nil { return classifyRepositoryWriteError("provider_brand.complete_delete",err) }
-    return nil
+          AND provider_brand_ref=$3 AND lifecycle_state='deleting'`, businessID, providerRef, brandRef)
+	if err != nil {
+		return classifyRepositoryWriteError("provider_brand.complete_delete", err)
+	}
+	return nil
 }
 
 var _ ports.ProviderBrandStore = (*ProviderBrandRepository)(nil)

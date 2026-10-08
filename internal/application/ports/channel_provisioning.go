@@ -54,7 +54,7 @@ type ProviderBrandRecord struct {
 	BusinessID       string
 	ProviderRef      string
 	ProviderBrandRef string
-    LifecycleState  string
+	LifecycleState   string
 	DisplayName      string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
@@ -70,8 +70,8 @@ type ProviderBrandStore interface {
 // Reserve and Complete must be separate database calls: SocialAPI must never
 // be invoked inside a database transaction.
 type ProviderBrandCleanupStore interface {
-    ReserveUnused(ctx context.Context, businessID, providerRef string) (providerBrandRef string, reserved bool, err error)
-    CompleteDeletion(ctx context.Context, businessID, providerRef, providerBrandRef string) error
+	ReserveUnused(ctx context.Context, businessID, providerRef string) (providerBrandRef string, reserved bool, err error)
+	CompleteDeletion(ctx context.Context, businessID, providerRef, providerBrandRef string) error
 }
 
 type ProviderBrandProvisioner interface {

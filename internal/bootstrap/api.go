@@ -103,10 +103,10 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			Disconnector: disconnector,
 			Provisioning: postgres.NewChannelProvisioningStore(database),
 		}
-        if external.ChannelProvisioningBrand != nil {
-            channelRuntime.BrandCleanup = postgres.NewProviderBrandRepository(database)
-            channelRuntime.BrandProvider = external.ChannelProvisioningBrand
-        }
+		if external.ChannelProvisioningBrand != nil {
+			channelRuntime.BrandCleanup = postgres.NewProviderBrandRepository(database)
+			channelRuntime.BrandProvider = external.ChannelProvisioningBrand
+		}
 		dependencies.ReconnectChannel = services.ReconnectChannelCommandService{ChannelRuntimeService: channelRuntime}
 		dependencies.DisconnectChannel = services.DisconnectChannelCommandService{ChannelRuntimeService: channelRuntime}
 	}
