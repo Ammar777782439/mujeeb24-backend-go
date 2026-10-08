@@ -233,10 +233,10 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 				result.Duplicate = true
 				continue
 			}
-            if materialized.Ignored {
-                result.Ignored = true
-                continue
-            }
+			if materialized.Ignored {
+				result.Ignored = true
+				continue
+			}
 			// Per the SocialAPI docs (verified against docs.social-api.ai/guides/webhooks):
 			// DM webhook payloads carry only `author.id` (WhatsApp wa_id /
 			// Facebook PSID / Instagram IGSID). The customer's display_name and
