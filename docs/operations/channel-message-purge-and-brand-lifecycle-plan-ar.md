@@ -1,6 +1,6 @@
 # Mujeeb 24 — Channel history purge & SocialAPI brand lifecycle (implementation gate)
 
-Status: DESIGN ONLY / NOT IMPLEMENTED. Target branch: `feat/universal-catalog-ai-v3`. Do not merge or deploy until all gates pass.
+Status: IMPLEMENTED ON FEATURE BRANCH; PRODUCTION NOT VERIFIED. Target branch: `feat/universal-catalog-ai-v3`. Do not merge or deploy until all gates pass.
 
 ## Verified provider contract (2026-10-08)
 - `GET /v1/brands` lists **visible** brands; a brand-scoped API key hides out-of-scope brands and a 404 does NOT prove a brand was deleted. Only an authorized full-access management key may create/delete brands.
@@ -38,7 +38,7 @@ G. Tests: tenant isolation (two merchants + two channels), only one channel affe
 H. Shipping gate: no production deployment until PostgreSQL integration tests and DTO-contract tests pass; the repository alone cannot verify live SocialAPI credentials or production data.
 
 ## Known partial work on this feature branch
-Three earlier preparatory commits introduced `ProviderBrandStore.Replace`, `ProviderBrandCleanupStore`, a PostgreSQL implementation and an OAuth locking change, but did **not** wire those capabilities into the application lifecycle or test them. Treat as unfinished scaffolding: integrate with tests or revert before merge. Do not leave unused ports/methods in a shippable branch.
+The earlier unfinished provider-brand persistence scaffolding was reverted. The feature branch currently implements one-connection history preview and explicit purge with scoped DTO/OpenAPI, PostgreSQL FK-aware cleanup, old-webhook replay guards and regression tests. Cached provider Brand IDs are now checked against provider visibility before OAuth. Automatic remote Brand deletion after the final channel disconnect and stale Brand remapping are **not yet implemented**: do not claim they are complete. The full quality gate currently has unrelated pre-existing catalog integration failures and is not green. Do not deploy until those are evaluated separately and channel purge race/privacy audit is complete.
 
 ## Confirmed merchant requirement
 Delete the full local conversation history for one channel connection, including customer messages, merchant replies and AI replies; do not disconnect the channel or alter subscription, business, catalog, leads or commercial transactions.
