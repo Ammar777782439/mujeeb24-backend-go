@@ -14,7 +14,7 @@ type ChannelHistoryStore interface {
 
 // ChannelHistoryGuard prevents replay of events that preceded a channel purge.
 type ChannelHistoryGuard interface {
-	ShouldIgnore(ctx context.Context, businessID, connectionID string, occurredAt *time.Time) (bool, error)
+	ShouldIgnore(ctx context.Context, businessID, connectionID, providerEventID string, occurredAt *time.Time) (bool, error)
 }
 
 type ChannelHistorySummary struct {
