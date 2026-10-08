@@ -104,7 +104,7 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 			if occurredAt == nil {
 				occurredAt = &event.ReceivedAt
 			}
-			ignore, guardErr := s.History.ShouldIgnore(ctx, connection.BusinessID, connection.ID, occurredAt)
+			ignore, guardErr := s.History.ShouldIgnore(ctx, connection.BusinessID, connection.ID, event.ProviderEventID, occurredAt)
 			if guardErr != nil {
 				return commands.WebhookAcceptedResult{}, externalDependencyError("channel history replay guard failed", guardErr)
 			}
