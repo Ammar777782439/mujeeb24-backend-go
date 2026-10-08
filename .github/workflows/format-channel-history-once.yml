@@ -1,0 +1,50 @@
+name: Format channel-history changes once
+on:
+  push:
+    branches:
+      - feat/universal-catalog-ai-v3
+    paths:
+      - .github/workflows/format-channel-history-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+          cache: true
+      - name: Format changed Go files and generate contract
+        run: |
+          gofmt -w internal/application/ports/channel_history.go
+          gofmt -w internal/application/commands/channel_history.go
+          gofmt -w internal/application/services/channel_history.go
+          gofmt -w internal/application/services/channel_history_test.go
+          gofmt -w internal/adapters/secondary/persistence/postgres/channel_history_repository.go
+          gofmt -w internal/adapters/secondary/persistence/postgres/provider_inbound_store.go
+          gofmt -w internal/adapters/primary/http/dto/inputs.go
+          gofmt -w internal/adapters/primary/http/dto/types.go
+          gofmt -w internal/adapters/primary/http/contract/api.go
+          gofmt -w internal/adapters/primary/http/contract/api_test.go
+          gofmt -w internal/adapters/primary/http/handlers/core.go
+          gofmt -w internal/adapters/primary/http/handlers/command_facades.go
+          gofmt -w internal/application/services/webhook_ingestion.go
+          gofmt -w internal/bootstrap/api.go
+          gofmt -w internal/bootstrap/dependencies.go
+          go run ./cmd/openapi-gen
+      - name: Commit branch-only formatted changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add internal api/openapi/mujeeb24-dashboard-v1.generated.yaml
+          if ! git diff --cached --quiet; then
+            git commit -m "style: format channel history changes and regenerate OpenAPI"
+            git push origin HEAD:feat/universal-catalog-ai-v3
+          fi
