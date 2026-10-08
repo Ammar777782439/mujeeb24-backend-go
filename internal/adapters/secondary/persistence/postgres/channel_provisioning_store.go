@@ -34,12 +34,6 @@ func (r *ChannelProvisioningStore) CreateOrGet(ctx context.Context, session port
 		if err != nil {
 			return err
 		}
-		// Serialize creation of an in-flight OAuth session against the
-		// last-channel brand cleanup for this tenant (not all merchants).
-		var lockedBusinessID string
-		if err := txExecutor.QueryRow(txCtx, `SELECT id::text FROM businesses WHERE id=$1::uuid FOR UPDATE`, session.BusinessID).Scan(&lockedBusinessID); err != nil {
-			return classifyRepositoryWriteError("channel_provisioning.lock_business", err)
-		}
 		// Reconcile stale provisioning sessions before creating the new one.
 		// Pending/provisioning sessions are always superseded because they are
 		// replaced by the new idempotency key. A connected session is only
