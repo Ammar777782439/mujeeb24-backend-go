@@ -321,16 +321,3 @@ type AICatalogBatchPatch struct {
 	StartedAt      *time.Time
 	CompletedAt    *time.Time
 }
-
-// AIRunLifecyclePort is the minimal lifecycle interface needed by the Gemini
-// transition the AI Run lifecycle during the Tool Loop. Per fix #2:
-// customer-sales adapter (in the Gemini package) cannot import services.AIRunLifecycle
-// (would create a cycle). This abstraction lets the caller wire the
-// existing lifecycle implementation without creating an import cycle.
-//
-// Per the spec: "استخدم الموجود: services.AIRunLifecycle"
-// AIRunLifecycle already implements MarkWaitingTool + MarkRunning.
-type AIRunLifecyclePort interface {
-	MarkWaitingTool(ctx context.Context, businessID, runID string) (AIRunRecord, error)
-	MarkRunning(ctx context.Context, businessID, runID string) (AIRunRecord, error)
-}

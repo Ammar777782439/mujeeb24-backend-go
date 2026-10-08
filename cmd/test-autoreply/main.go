@@ -153,7 +153,7 @@ func main() {
 		os.Exit(1)
 	}
 	catalogRepository := postgres.NewCatalogRepository(adapter)
-	contractClient, err := gemini.NewGeminiCustomerSalesAdapter(geminiClient, nil)
+	contractClient, err := gemini.NewGeminiCustomerSalesAdapter(geminiClient)
 	if err != nil {
 		fmt.Printf("  ❌ GeminiCustomerSalesAdapter: %v\n", err)
 		os.Exit(1)
@@ -217,9 +217,7 @@ func main() {
 		os.Exit(1)
 	}
 	service.CatalogBatch = &services.CatalogBatchController{
-		Catalogs:          catalogRepository,
 		CatalogAI:         postgres.NewCatalogAIReadRepository(adapter),
-		ProjectionBuilder: &services.CatalogAIProjectionBuilder{},
 		TokenCounter:      batchTokenCounter,
 		Gemini:            batchClient,
 		RunRepo:           postgres.NewAIRunTraceRepository(adapter),

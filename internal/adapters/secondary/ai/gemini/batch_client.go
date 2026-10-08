@@ -405,18 +405,7 @@ func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input servic
 	return proposal, usage, nil
 }
 
-// FinalEvaluate is kept for backward compatibility but delegates to
-// FinalEvaluateWithDetails with a basic prompt.
-func (c *BatchClient) FinalEvaluate(ctx context.Context, input services.FinalEvaluationInput) (ports.CustomerSalesProposal, error) {
-	candidatesJSON, _ := json.Marshal(input.CandidateResults)
-	userPrompt := fmt.Sprintf("Customer message: %s\n\nAggregated candidate set from catalog evaluation:\n%s\n\nBased on the candidates above, produce your final proposal.",
-		input.CustomerMessage, string(candidatesJSON))
-	proposal, _, err := c.FinalEvaluateWithDetails(ctx, input, userPrompt)
-	return proposal, err
-}
-
-// sendRequest is the HTTP call to the Gemini generateContent API.
-// sendRequestWithConfig is the dynamic-config version of sendRequest.
+// sendRequestWithConfig calls the Gemini generateContent API.
 // Per §1-2: uses the resolved config (apiKey, model, baseURL) from the
 // AIConfigurationProvider instead of static struct fields.
 func (c *BatchClient) sendRequestWithConfig(ctx context.Context, reqBody batchGeminiRequest, rc *resolvedAIConfig) (batchGeminiResponse, error) {
@@ -451,48 +440,6 @@ func (c *BatchClient) sendRequestWithConfig(ctx context.Context, reqBody batchGe
 		return batchGeminiResponse{}, fmt.Errorf("unmarshal response: %w", err)
 	}
 	return geminiResp, nil
-}
-
-// sendRequest is the legacy version that uses static struct fields.
-// Kept for backward compatibility with tests that don't wire a configProvider.
-func (c *BatchClient) sendRequest(ctx context.Context, reqBody batchGeminiRequest) (batchGeminiResponse, error) {
-	buf, err := json.Marshal(reqBody)
-	if err != nil {
-		return batchGeminiResponse{}, fmt.Errorf("marshal request: %w", err)
-	}
-
-	// P1-8: API key sent via x-goog-api-key header only — never in URL.
-	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent", c.baseURL, c.model)
-
-	reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
-	defer cancel()
-
-	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(buf))
-	if err != nil {
-		return batchGeminiResponse{}, fmt.Errorf("build request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-goog-api-key", c.apiKey)
-
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return batchGeminiResponse{}, fmt.Errorf("send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return batchGeminiResponse{}, fmt.Errorf("read response: %w", err)
-	}
-	if resp.StatusCode >= 400 {
-		return batchGeminiResponse{}, fmt.Errorf("gemini http %d: %s", resp.StatusCode, string(body))
-	}
-
-	var out batchGeminiResponse
-	if err := json.Unmarshal(body, &out); err != nil {
-		return batchGeminiResponse{}, fmt.Errorf("unmarshal response: %w", err)
-	}
-	return out, nil
 }
 
 // parseBatchCandidates extracts the candidates array from the structured

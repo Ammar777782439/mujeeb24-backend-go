@@ -235,27 +235,14 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		var runRepo ports.AIRunRepository
 		if external.GeminiHTTPClient != nil {
 			geminiClient = external.GeminiHTTPClient
-			customerSalesAdapter, err := gemini.NewGeminiCustomerSalesAdapter(geminiClient, nil)
+			customerSalesAdapter, err := gemini.NewGeminiCustomerSalesAdapter(geminiClient)
 			if err != nil {
 				return nil, fmt.Errorf("build customer sales AI adapter: %w", err)
 			}
 			// Per §1: wire the dynamic config provider so every customer-sales Decide
 			// call reads the ACTIVE config from cache/DB.
 			customerSalesAdapter.SetConfigurationProvider(aiConfigCache)
-			// Per the Tool Loop spec: wire the SAME runRepo
-			// instance into the GeminiCustomerSalesAdapter so tool call
-			// records are persisted during function calling.
-			// Reuses the existing postgres.NewAIRunTraceRepository —
-			// no second repository.
 			runRepo = postgres.NewAIRunTraceRepository(database)
-			customerSalesAdapter.SetRunRepository(runRepo)
-			customerSalesAdapter.SetNewID(uuid.NewString)
-			// Per fix #2: wire the existing AIRunLifecycle
-			// into GeminiCustomerSalesAdapter via the ports.AIRunLifecyclePort
-			// abstraction. The lifecycle instance is created
-			// here (same pattern as AutoReplyService which
-			// creates its own via NewAIRunLifecycle(repo)).
-			customerSalesAdapter.SetLifecycle(services.NewAIRunLifecycle(runRepo))
 			customerSalesDecision = customerSalesAdapter
 		} else {
 			// OpenAI-compatible providers do not implement the Customer Sales decision port yet.
@@ -384,9 +371,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 				return nil, fmt.Errorf("build Gemini catalog batch client: %w", err)
 			}
 			service.CatalogBatch = &services.CatalogBatchController{
-				Catalogs:          postgres.NewCatalogRepository(database),
 				CatalogAI:         postgres.NewCatalogAIReadRepository(database),
-				ProjectionBuilder: &services.CatalogAIProjectionBuilder{},
 				TokenCounter:      batchTokenCounter,
 				Gemini:            batchClient,
 				RunRepo:           postgres.NewAIRunTraceRepository(database),

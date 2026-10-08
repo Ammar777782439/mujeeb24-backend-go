@@ -435,7 +435,7 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 		t.Fatalf("expected stale catalog update, got %v", err)
 	}
 	createSchemaService := services.CreateAttributeSchemaVersionCommandService{CatalogCommandServices: commandServices}
-	createdSchema, err := createSchemaService.Handle(ctx, commands.CreateAttributeSchemaVersionCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, Name: "Write schema", Definitions: []commands.AttributeDefinition{{Key: "brand", Label: "Brand", DataType: "text", Required: true, Searchable: true, DisplayOrder: 0}}})
+	createdSchema, err := createSchemaService.Handle(ctx, commands.CreateAttributeSchemaVersionCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, Name: "Write schema", Definitions: []commands.AttributeDefinition{{Key: "brand", Label: "Brand", DataType: "text", Required: true, DisplayOrder: 0}}})
 	if err != nil || createdSchema.Schema.ID != commands.AttributeSchemaID(schemaWrite) || createdSchema.Schema.Version != 1 || len(createdSchema.Schema.Definitions) != 1 {
 		t.Fatalf("schema command create: %#v err=%v", createdSchema, err)
 	}

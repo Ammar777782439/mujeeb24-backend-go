@@ -40,7 +40,7 @@ func TestGeminiLiveSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build client: %v", err)
 	}
-	cc, err := NewGeminiCustomerSalesAdapter(client, nil)
+	cc, err := NewGeminiCustomerSalesAdapter(client)
 	if err != nil {
 		t.Fatalf("build contract client: %v", err)
 	}

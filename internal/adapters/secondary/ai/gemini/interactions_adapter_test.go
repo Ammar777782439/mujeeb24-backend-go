@@ -42,7 +42,7 @@ func TestCustomerSalesUsesInteractionsAPIAndChainsState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build client: %v", err)
 	}
-	adapter, err := NewGeminiCustomerSalesAdapter(client, nil)
+	adapter, err := NewGeminiCustomerSalesAdapter(client)
 	if err != nil {
 		t.Fatalf("build adapter: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestCustomerSalesDropsPreviousInteractionWhenStoreDisabled(t *testing.T) {
 	defer server.Close()
 
 	client, _ := NewGeminiHTTPClient(GeminiHTTPClientConfig{BaseURL: server.URL, APIKey: "k", Model: "m"})
-	adapter, _ := NewGeminiCustomerSalesAdapter(client, nil)
+	adapter, _ := NewGeminiCustomerSalesAdapter(client)
 	_, err := adapter.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b", ConversationID: "c", Text: "hello"},
 		GeminiInteraction: ports.GeminiInteractionContext{PreviousInteractionID: "must-not-send", Store: false},
@@ -138,7 +138,7 @@ func TestCustomerSalesEnforcesMaxInputOnSerializedInteraction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build client: %v", err)
 	}
-	adapter, err := NewGeminiCustomerSalesAdapter(client, nil)
+	adapter, err := NewGeminiCustomerSalesAdapter(client)
 	if err != nil {
 		t.Fatalf("build adapter: %v", err)
 	}

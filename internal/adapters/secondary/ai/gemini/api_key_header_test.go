@@ -22,7 +22,7 @@ import (
 //  2. The x-goog-api-key header IS present and carries the API key
 //
 // It exercises the production paths: GeminiCustomerSalesAdapter, BatchClient
-// (both legacy + dynamic-config), TokenCounter, and ModelsClient
+// (dynamic configuration), TokenCounter, and ModelsClient
 // (both DiscoverModels + TestConnection).
 
 // capturingHandler records the URL path + query + x-goog-api-key header
@@ -94,7 +94,7 @@ func TestGeminiCustomerSalesAdapterSendsAPIKeyInHeaderNotURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build client: %v", err)
 	}
-	cc, err := NewGeminiCustomerSalesAdapter(client, nil)
+	cc, err := NewGeminiCustomerSalesAdapter(client)
 	if err != nil {
 		t.Fatalf("build contract client: %v", err)
 	}
