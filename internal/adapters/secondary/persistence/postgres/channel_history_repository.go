@@ -144,9 +144,9 @@ func (r *ChannelHistoryRepository) Purge(ctx context.Context, businessID, connec
 		err = executor.QueryRow(txCtx, `SELECT
             EXISTS(SELECT 1 FROM outbox_entries o JOIN outbound_messages m
                 ON m.business_id=o.business_id AND m.id=o.outbound_message_id
-                WHERE m.business_id=$1::uuid AND m.connection_id=$2::uuid AND o.status='processing')
+                WHERE m.business_id=$1::uuid AND m.connection_id=$2::uuid AND o.status='processing' AND o.updated_at > now() - interval '15 minutes')
             OR EXISTS(SELECT 1 FROM ai_runs a JOIN purge_runs r ON a.id=r.id
-                WHERE a.status NOT IN ('completed','failed','cancelled'))`, businessID, connectionID).Scan(&busy)
+                WHERE a.status NOT IN ('completed','failed','cancelled') AND a.created_at > now() - interval '15 minutes')`, businessID, connectionID).Scan(&busy)
 		if err != nil {
 			return classifyRepositoryGetError("channel_history.busy", err)
 		}

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -43,7 +44,7 @@ func (s PreviewChannelHistoryService) Handle(ctx context.Context, q commands.Pre
 	}
 	summary, err := s.Store.Preview(ctx, string(q.Meta.Actor.BusinessID), string(q.ConnectionID))
 	if err != nil {
-		return commands.ChannelHistoryResult{}, mapAIRepositoryError(err)
+		return commands.ChannelHistoryResult{}, mapChannelHistoryRepositoryError(err)
 	}
 	return channelHistoryResult(summary), nil
 }
@@ -71,7 +72,29 @@ func (s PurgeChannelHistoryService) Handle(ctx context.Context, cmd commands.Pur
 	}
 	summary, err := s.Store.Purge(ctx, string(cmd.Meta.Actor.BusinessID), string(cmd.ConnectionID), key, expected)
 	if err != nil {
-		return commands.ChannelHistoryResult{}, mapAIRepositoryError(err)
+		return commands.ChannelHistoryResult{}, mapChannelHistoryRepositoryError(err)
 	}
 	return channelHistoryResult(summary), nil
+}
+
+func mapChannelHistoryRepositoryError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var kinded interface{ ErrorKind() string }
+	if !errors.As(err, &kinded) {
+		return err
+	}
+	switch kinded.ErrorKind() {
+	case "not_found":
+		return appErrors.New(appErrors.CodeNotFound, "channel connection not found")
+	case "stale":
+		return appErrors.New(appErrors.CodeStaleResource, "channel connection version changed; please refresh and retry")
+	case "conflict":
+		return appErrors.New(appErrors.CodeInvalidState, err.Error())
+	case "invalid":
+		return appErrors.New(appErrors.CodeValidation, err.Error())
+	default:
+		return err
+	}
 }
