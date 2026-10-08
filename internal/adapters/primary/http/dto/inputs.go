@@ -377,6 +377,16 @@ type BeginChannelConnectionRequest struct {
 	Channel     string `json:"channel"`
 	DisplayName string `json:"display_name,omitempty"`
 }
+// Requires an explicit acknowledgement; it never disconnects the account.
+type PurgeChannelHistoryRequest struct {
+    Confirmation string `json:"confirmation" enum:"DELETE_ALL_CHANNEL_HISTORY"`
+    ExpectedVersion string `json:"expected_version" minLength:"1"`
+}
+type PurgeChannelHistoryInput struct {
+    ConnectionPath
+    CommandHeaders
+    Body PurgeChannelHistoryRequest
+}
 type ConnectionActionRequest struct {
 	Reason string `json:"reason" minLength:"1" maxLength:"500"`
 }
