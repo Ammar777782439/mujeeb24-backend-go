@@ -1,0 +1,35 @@
+name: Format brand lifecycle code once
+on:
+  push:
+    branches: [feat/universal-catalog-ai-v3]
+    paths: [.github/workflows/format-brand-lifecycle-once.yml]
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply gofmt to feature Go files
+        run: |
+          gofmt -w internal/application/ports/channel_provisioning.go
+          gofmt -w internal/adapters/secondary/persistence/postgres/provider_brand_repository.go
+          gofmt -w internal/application/services/channel_runtime.go
+          gofmt -w internal/application/services/channel_provisioning.go
+          gofmt -w internal/bootstrap/api.go
+          gofmt -w internal/application/services/channel_brand_cleanup_test.go
+          gofmt -w internal/adapters/secondary/persistence/postgres/provider_brand_cleanup_integration_test.go
+          gofmt -w internal/application/ports/channel_history.go
+          gofmt -w internal/application/services/webhook_ingestion.go
+          gofmt -w internal/application/services/webhook_history_purge_test.go
+          gofmt -w internal/adapters/secondary/persistence/postgres/channel_history_repository.go
+          gofmt -w internal/adapters/secondary/persistence/postgres/channel_history_repository_integration_test.go
+      - name: Commit normalized Go formatting
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add internal
+          if ! git diff --cached --quiet; then
+            git commit -m 'style: gofmt brand lifecycle and replay protection'
+            git push origin HEAD:feat/universal-catalog-ai-v3
+          fi
