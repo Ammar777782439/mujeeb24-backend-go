@@ -179,7 +179,7 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 		t.Fatalf("insert attribute schemas: %v", err)
 	}
 	defer pool.Exec(context.Background(), `DELETE FROM attribute_schemas WHERE id IN ($1::uuid, $2::uuid)`, schemaA, schemaB)
-	_, err = pool.Exec(ctx, `INSERT INTO attribute_definitions (id, schema_id, attribute_key, label, data_type, is_required, is_searchable, validation_rules, display_order, created_at, updated_at) VALUES ($1::uuid, $2::uuid, 'color', 'Color', 'text', true, true, '{}'::jsonb, 0, '2025-01-01T09:02:01Z', '2025-01-01T09:02:01Z'), ($3::uuid, $4::uuid, 'capacity', 'Capacity', 'number', false, true, '{"min":1}'::jsonb, 1, '2025-01-01T09:02:02Z', '2025-01-01T09:02:02Z')`, definitionA, schemaA, definitionB, schemaB)
+	_, err = pool.Exec(ctx, `INSERT INTO attribute_definitions (id, schema_id, attribute_key, label, data_type, is_required, validation_rules, display_order, created_at, updated_at) VALUES ($1::uuid, $2::uuid, 'color', 'Color', 'text', true, '{}'::jsonb, 0, '2025-01-01T09:02:01Z', '2025-01-01T09:02:01Z'), ($3::uuid, $4::uuid, 'capacity', 'Capacity', 'number', false, '{"min":1}'::jsonb, 1, '2025-01-01T09:02:02Z', '2025-01-01T09:02:02Z')`, definitionA, schemaA, definitionB, schemaB)
 	if err != nil {
 		t.Fatalf("insert attribute definitions: %v", err)
 	}
