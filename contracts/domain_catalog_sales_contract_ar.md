@@ -264,7 +264,6 @@ AttributeDefinition
 ├── label
 ├── data_type
 ├── required
-├── searchable
 ├── validation_rules
 ├── display_order
 └── version

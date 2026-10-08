@@ -76,14 +76,6 @@ func BuildAPI(ctx context.Context, cfg config.ProcessConfig) (*APIRuntime, error
 	return runtime, nil
 }
 
-func NewAPI(database *postgres.Adapter, address string) (*APIRuntime, error) {
-	return NewAPIWithExternal(database, address, ExternalAdapters{})
-}
-
-func NewAPIWithExternal(database *postgres.Adapter, address string, external ExternalAdapters) (*APIRuntime, error) {
-	return newAPIWithExternalAndAuthentication(database, address, external, nil)
-}
-
 func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address string, external ExternalAdapters, authentication *authenticationRuntime) (*APIRuntime, error) {
 	if database == nil {
 		return nil, errors.New("postgres adapter is required")

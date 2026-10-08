@@ -590,13 +590,7 @@ func capabilityList(v commands.ListResult[queries.ConnectionCapabilityView]) *co
 	}
 	return listPage(items, v.NextCursor, v.HasMore)
 }
-func customerList(v commands.ListResult[commands.CustomerView]) *contract.List[contract.Customer] {
-	items := make([]contract.Customer, 0, len(v.Items))
-	for _, item := range v.Items {
-		items = append(items, customerProjection(item))
-	}
-	return listPage(items, v.NextCursor, v.HasMore)
-}
+
 func catalogProjection(v commands.CatalogView) contract.Catalog {
 	return contract.Catalog{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), Name: v.Name, Description: v.Description, Status: v.Status, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt, ResourceVersion: string(v.ResourceVersion)}
 }

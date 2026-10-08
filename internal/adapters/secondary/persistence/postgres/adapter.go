@@ -177,10 +177,6 @@ func transactionFromContext(ctx context.Context) (tx, bool) {
 	value, ok := ctx.Value(txContextKey{}).(tx)
 	return value, ok
 }
-func TransactionFromContext(ctx context.Context) (any, bool) {
-	value, ok := transactionFromContext(ctx)
-	return value, ok
-}
 
 var _ interface {
 	Within(context.Context, func(context.Context) error) error

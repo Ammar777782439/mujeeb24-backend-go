@@ -31,7 +31,7 @@ func TestWithinCommitsSuccessfulUnit(t *testing.T) {
 	called := false
 	if err := adapter.Within(context.Background(), func(ctx context.Context) error {
 		called = true
-		if _, ok := TransactionFromContext(ctx); !ok {
+		if _, ok := transactionFromContext(ctx); !ok {
 			t.Fatal("transaction missing from callback context")
 		}
 		return nil

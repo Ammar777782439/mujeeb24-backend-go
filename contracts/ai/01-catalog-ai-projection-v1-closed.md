@@ -20,7 +20,6 @@ Catalog AI Projection
 │           ├── label
 │           ├── data_type
 │           ├── is_required
-│           ├── is_searchable
 │           ├── validation_rules
 │           └── display_order
 │

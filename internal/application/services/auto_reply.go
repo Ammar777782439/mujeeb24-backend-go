@@ -973,39 +973,6 @@ func derefCustomerSalesContext(ctx *ports.CustomerSalesContext) ports.CustomerSa
 	return *ctx
 }
 
-// extractItemIDs/extractVariantIDs/extractOfferIDs pull the evidence IDs from
-// the CustomerSalesContext so the ValidationPipeline can verify per contract ⑥ §10.
-func extractItemIDs(ctx *ports.CustomerSalesContext) []string {
-	if ctx == nil {
-		return nil
-	}
-	out := make([]string, 0, len(ctx.CatalogEvidence))
-	for _, e := range ctx.CatalogEvidence {
-		out = append(out, e.Reference)
-	}
-	return out
-}
-func extractVariantIDs(ctx *ports.CustomerSalesContext) []string {
-	if ctx == nil {
-		return nil
-	}
-	out := make([]string, 0, len(ctx.VariantEvidence))
-	for _, e := range ctx.VariantEvidence {
-		out = append(out, e.Reference)
-	}
-	return out
-}
-func extractOfferIDs(ctx *ports.CustomerSalesContext) []string {
-	if ctx == nil {
-		return nil
-	}
-	out := make([]string, 0, len(ctx.OfferEvidence))
-	for _, e := range ctx.OfferEvidence {
-		out = append(out, e.Reference)
-	}
-	return out
-}
-
 func uuidStringPointer(value string) *string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -1019,7 +986,6 @@ func uuidStringPointer(value string) *string {
 
 func pointerTo(value time.Time) *time.Time { return &value }
 
-// truncate shortens a string for logging, appending "..." if truncated.
 func (s *AutoReplyService) persistValidatedProposalState(
 	ctx context.Context,
 	current *ports.ConversationStateRecord,
@@ -1122,19 +1088,6 @@ func truncate(s string, max int) string {
 }
 
 var _ commands.AutoReplyHandler = AutoReplyService{}
-
-// appendUniqueString adds s to slice if not already present.
-func appendUniqueString(slice []string, s string) []string {
-	if s == "" {
-		return slice
-	}
-	for _, existing := range slice {
-		if existing == s {
-			return slice
-		}
-	}
-	return append(slice, s)
-}
 
 // recordAIUsage persists per-execution telemetry to ai_usage_records.
 //

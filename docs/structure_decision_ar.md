@@ -1,137 +1,41 @@
-# Baseline النهائي لـ Mujeeb 24 Backend Go
+# هيكلة Mujeeb 24 Backend الحالية
 
-## قرار المدير
+هذه الوثيقة تصف التنفيذ الحالي على `feat/universal-catalog-ai-v3`. ليست خطة لإنشاء مجلدات أو خدمات إضافية. لا دمج إلى main أو فرع الإنتاج ضمن أعمال التنظيف.
 
-الرد الأخير هو **الأدق تنظيميًا** لمجيب 24. سنعتمد بنيته الأساسية، وليس Hybrid Architecture السابقة التي وسعت الطبقات أكثر من اللازم.
+## حدود المسؤولية
 
-السبب أن المشروع Modular Monolith في مرحلته الحالية، ويحتاج وضوحًا لا عددًا كبيرًا من الحدود المتداخلة.
+| المسار | المسؤولية |
+| --- | --- |
+| cmd | نقاط تشغيل API وworker وmigrations والأدوات التشغيلية الموجودة |
+| internal/bootstrap | تركيب الاعتماديات ودورة التشغيل |
+| internal/application/commands | أوامر الأعمال وعقود نتائجها |
+| internal/application/queries | عقود القراءة |
+| internal/application/ports | واجهات التخزين والمزودين وعقود السياق |
+| internal/application/services | تنسيق التدفقات والتحقق والسياسات |
+| internal/application/merchantcatalogai | تنسيق تأليف الكتالوج للتاجر |
+| internal/domain | منطق المجال المنفذ فعليًا |
+| internal/adapters/primary/http | تسجيل API وDTOs وhandlers وmiddleware |
+| internal/adapters/secondary/persistence/postgres | التخزين والمعاملات |
+| internal/adapters/secondary/providers/socialapi | نقل القنوات والأحداث والرسائل |
+| internal/adapters/secondary/ai | مهايئات مزودي AI الحالية |
+| internal/adapters/secondary/realtime | نشر أحداث المحادثات |
+| internal/platform | المكونات التقنية المشتركة المنفذة |
+| migrations | الترحيلات التراكمية المحفوظة |
+| deploy | إعدادات التشغيل الفعلية |
+| scripts | أدوات التحقق والتشغيل |
+| api/openapi | عقد HTTP المولد من Go |
+| contracts وdocs | العقود ومراجع التشغيل والتصميم |
 
-```text
-adapters/primary/http
-          ↓
-application/{ports,commands,queries,services,workers}
-          ↓
-domain
-          ↑
-adapters/secondary/{providers,workspaces,persistence,queue,ai}
-```
+## تدفق التشغيل
 
-`bootstrap` يركب الاعتماديات، و`platform` يحتوي المكونات التقنية المشتركة. لا نحتاج الآن إلى طبقة مستقلة باسم `transport` وطبقة مستقلة باسم `infrastructure` وطبقة مستقلة باسم `jobs` إذا كانت ستكرر نفس المسؤوليات.
+SocialAPI webhook → التحقق وتسجيل الحدث → حفظ العميل والمحادثة والرسالة → AutoReply الاختياري عبر بوابة التكلفة وWorker Pool → اقتراح AI → Validation والسياسة → OutboundMessage وOutbox → worker → SocialAPI.
 
-## الهيكل المعتمد
+PostgreSQL مصدر الحقيقة. لا شبكة داخل معاملات قاعدة البيانات، ولا إعادة إرسال تلقائية عند نتيجة مزود مجهولة. Gemini يقترح ولا يملك SQL أو الإرسال المباشر.
 
-```text
-mujeeb24-backend-go/
-├── cmd/
-│   ├── api/main.go
-│   ├── worker/main.go
-│   └── migrate/main.go
-│
-├── internal/
-│   ├── bootstrap/
-│   │   ├── dependencies.go
-│   │   ├── api.go
-│   │   └── worker.go
-│   │
-│   ├── domain/
-│   │   ├── shared/
-│   │   ├── business/
-│   │   ├── channel/
-│   │   ├── identity/
-│   │   ├── communication/
-│   │   ├── catalog/
-│   │   ├── sales/
-│   │   ├── ai/
-│   │   └── audit/
-│   │
-│   ├── application/
-│   │   ├── ports/
-│   │   ├── commands/
-│   │   ├── queries/
-│   │   ├── services/
-│   │   └── workers/
-│   │
-│   ├── adapters/
-│   │   ├── primary/
-│   │   │   └── http/
-│   │   │       ├── contract/   # Huma operation registration + HTTP metadata
-│   │   │       ├── dto/        # HTTP request/response DTOs
-│   │   │       ├── handlers/   # DTO → Application Command/Query mapping
-│   │   │       └── middleware/ # Auth, request, scope and error boundaries
-│   │   └── secondary/
-│   │       ├── providers/socialapi/
-│   │       ├── workspaces/chatwoot/
-│   │       ├── persistence/postgres/
-│   │       ├── queue/asynq/
-│   │       ├── ai/
-│   │       ├── storage/
-│   │       ├── secrets/
-│   │       └── observability/
-│   │
-│   └── platform/
-│       ├── config/
-│       ├── database/
-│       ├── httpserver/
-│       └── lifecycle/
-│
-├── migrations/
-├── contracts/
-├── api/openapi/
-├── tests/
-├── docs/
-├── scripts/
-├── Dockerfile
-├── docker-compose.local.yaml
-├── Makefile
-├── README.md
-├── go.mod
-└── go.sum
-```
+B2B يستخدم تأليف الكتالوج للتاجر عبر MerchantCatalogAuthoringAdapter. B2C يستخدم CustomerSalesDecisionPort عبر Gemini Interactions مع التقييم الكامل للكتالوج بالدفعات عند الحاجة. Intent وKnowledgeContext وAIDecision تبقى ضمن البنية الحالية.
 
-## التعديلات الستة المعتمدة
+## قواعد صيانة الشجرة
 
-أولًا، تبقى Ports تحت `application/ports`؛ لأن Use Cases هي التي تحدد العقود التي تحتاجها. لا نحتفظ بمجلد `internal/ports` بالتوازي.
+لا توجد Chatwoot أو Asynq ضمن الهيكلة الحالية. لا تحفظ ملفات placeholders أو مجلدات فارغة، ولا تنشئ طبقات قبل وجود تنفيذ يستخدمها. إضافة طبقة أو مجلد تحتاج مسؤولية فعلية واستخدامًا واضحًا.
 
-ثانيًا، يبقى `adapters/primary` لكل ما يدخل إلى النظام، مثل Dashboard HTTP وWebhook HTTP. ويبقى `adapters/secondary` لكل ما يعتمد عليه النظام، مثل SocialAPI وChatwoot وPostgreSQL وAsynq وAI.
-
-ثالثًا، `domain/communication` لا يمثل Chatwoot كاملًا. يحتوي فقط على `ConversationReference` و`SalesContext` وربما `CommunicationMessage` كمرجع داخلي محدود. لا ننشئ Team أو Label أو Inbox كـSales Entities.
-
-رابعًا، `assignment` في Domain لا يمثل Team في Chatwoot؛ إن احتجناه فهو `AssignmentReference` أو `OwnershipState` فقط.
-
-خامسًا، `application/services` مسموح فقط لخدمات Orchestration واضحة. لا نضع Service عملاقًا يفعل كل شيء؛ فـ`InboundIngestionService` يستقبل ويحفظ، و`InboundProcessingService` يعالج، و`IdempotencyService` يملك سياسة التكرار، و`OutboxService` يملك إنشاء وإدارة أوامر الخروج.
-
-سادسًا، Workers ليست مكان Business Logic. Worker يستلم Job ويستدعي Application Service. نضع reconciliation داخل worker في البداية، ونفصل `cmd/reconciler` لاحقًا فقط إذا احتاج التشغيل ذلك فعليًا.
-
-## ملكية الأنظمة
-
-| المكوّن | الملكية |
-|---|---|
-| Mujeeb Domain | Business، Customer Context، Catalog، Intent، AI Decision، Lead، Transactions، Automation، Subscription |
-| Chatwoot Adapter | Contacts/Conversations/Messages/Assignments كمراجع وعمليات Workspace فقط |
-| SocialAPI Adapter | الاتصال بالقنوات، Webhooks، الإرسال الخارجي، حالات التسليم |
-| PostgreSQL Adapter | التخزين الدائم والمعاملات وEvent Ledger وOutbox |
-| Asynq Adapter | تشغيل Jobs وإعادة المحاولة المسرّعة، وليس مصدر الحقيقة الوحيد |
-| Dashboard API | الواجهة الوحيدة للتاجر عبر Mujeeb API |
-
-## ترتيب التنفيذ
-
-```text
-1. domain + application/ports
-2. bootstrap + config
-3. SQL migrations
-4. Event Ledger + Idempotency + Outbox
-5. SocialAPI Adapter + Provider Simulator
-6. Chatwoot Adapter
-7. Primary HTTP/Webhook handlers
-8. Vertical Slice inbound → mirror → outbound → status
-9. AI Context + Intent + Decision
-10. Catalog / Lead / Commercial Transactions
-```
-
-## ما لا نعتمده
-
-لا نعود إلى `yemen-social-reply-engine` القديم كقاعدة كود. لا ننقل Facebook/Meta Prototype إلى النواة. لا ننشئ `internal/ports` بجانب `application/ports`. لا ننشئ `transport` بجانب `adapters/primary/http` لنفس HTTP. لا ننشئ `infrastructure` بجانب `adapters/secondary` لنفس PostgreSQL وRedis. ولا ننشئ عشرات الملفات البرمجية الفارغة. لا تُحفظ مجلدات تأسيسية فارغة أو ملفات `.gitkeep` بلا تنفيذ. يجب أن تعكس الشجرة المسؤوليات الفعلية فقط: `contract` للتسجيل والـmetadata، `dto` لأشكال HTTP، `handlers` للتحويل إلى Application، و`middleware` للحدود المشتركة.
-
-## القرار النهائي
-
-هذا هو **Baseline المعتمد**. بعده لا نغيّر الشجرة بسبب اقتراحات عامة؛ أي تعديل يجب أن يحل مشكلة حقيقية ظهرت من كود أو اختبار أو تشغيل. الخطوة التالية هي فحص Domain ملفًا ملفًا، ثم كتابة عقود Ports وMigrations وProvider Simulator قبل إضافة AI أو واجهات تجميلية.
+لا تحذف واجهة أو حقلًا أو حالة مخزنة لمجرد وجود اسم قديم؛ تتبع المستدعين وHTTP والتخزين والمهاجرات والاختبارات أولًا. حذف الكود غير المستخدم يتبعه gofmt وبوابة التحقق وOpenAPI drift. تبقى migrations التاريخية لحماية قواعد البيانات القائمة.

@@ -96,10 +96,3 @@ func (c listOffersCapability) Execute(ctx context.Context, execCtx MerchantCatal
 		Operation:          "merchant_catalog_list_offers",
 	}, nil
 }
-
-func dereferenceString(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}

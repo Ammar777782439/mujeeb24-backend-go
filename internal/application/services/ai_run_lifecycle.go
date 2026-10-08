@@ -129,18 +129,6 @@ func (l *AIRunLifecycle) MarkRunning(ctx context.Context, businessID, runID stri
 	return l.transition(ctx, businessID, runID, patch, []string{ports.AIRunStatusContextBuilt, ports.AIRunStatusWaitingTool})
 }
 
-// MarkWaitingTool transitions RUNNING → WAITING_TOOL.
-// Per contract ⑨ §4, this happens when Gemini invoked a tool and Mujeeb must
-// execute the tool and return its result before continuing.
-func (l *AIRunLifecycle) MarkWaitingTool(ctx context.Context, businessID, runID string) (ports.AIRunRecord, error) {
-	now := l.Now()
-	patch := ports.AIRunStatusPatch{
-		Status:        ports.AIRunStatusWaitingTool,
-		WaitingToolAt: &now,
-	}
-	return l.transition(ctx, businessID, runID, patch, []string{ports.AIRunStatusRunning})
-}
-
 // MarkValidating transitions RUNNING → VALIDATING.
 // Per contract ⑨ §3, the moment Gemini's Proposal reaches Mujeeb, validation begins.
 func (l *AIRunLifecycle) MarkValidating(ctx context.Context, businessID, runID string) (ports.AIRunRecord, error) {
@@ -150,19 +138,6 @@ func (l *AIRunLifecycle) MarkValidating(ctx context.Context, businessID, runID s
 		ValidatingAt: &now,
 	}
 	return l.transition(ctx, businessID, runID, patch, []string{ports.AIRunStatusRunning})
-}
-
-// MarkAuthorized transitions VALIDATING → AUTHORIZED.
-// Per contract ⑥ §17, this means Structural + Reference + Tenant + Ownership
-// + Policy + Authorization all passed and an Effective Decision exists.
-// Execution may now begin.
-func (l *AIRunLifecycle) MarkAuthorized(ctx context.Context, businessID, runID string) (ports.AIRunRecord, error) {
-	now := l.Now()
-	patch := ports.AIRunStatusPatch{
-		Status:       ports.AIRunStatusAuthorized,
-		AuthorizedAt: &now,
-	}
-	return l.transition(ctx, businessID, runID, patch, []string{ports.AIRunStatusValidating})
 }
 
 // MarkExecuting transitions AUTHORIZED → EXECUTING.
@@ -219,27 +194,6 @@ func (l *AIRunLifecycle) MarkFailed(ctx context.Context, businessID, runID, stag
 		FailedAt:        &now,
 	}
 	// Per contract ⑨ §26, FAILED can be reached from any non-terminal state.
-	return l.transition(ctx, businessID, runID, patch, []string{
-		ports.AIRunStatusReceived,
-		ports.AIRunStatusContextBuilt,
-		ports.AIRunStatusRunning,
-		ports.AIRunStatusWaitingTool,
-		ports.AIRunStatusValidating,
-		ports.AIRunStatusAuthorized,
-		ports.AIRunStatusExecuting,
-	})
-}
-
-// MarkCancelled transitions any non-terminal state → CANCELLED.
-// Per contract ⑨ §24-25, Cancellation may happen before or during Execution.
-// When cancelled during Execution, the external action may or may not have
-// rolled back; that is the Action's responsibility, not the Run's.
-func (l *AIRunLifecycle) MarkCancelled(ctx context.Context, businessID, runID string) (ports.AIRunRecord, error) {
-	now := l.Now()
-	patch := ports.AIRunStatusPatch{
-		Status:      ports.AIRunStatusCancelled,
-		CancelledAt: &now,
-	}
 	return l.transition(ctx, businessID, runID, patch, []string{
 		ports.AIRunStatusReceived,
 		ports.AIRunStatusContextBuilt,

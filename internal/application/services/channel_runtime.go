@@ -177,31 +177,6 @@ func (s DisconnectChannelCommandService) Handle(ctx context.Context, command com
 	return result, err
 }
 
-func (s ChannelRuntimeService) transition(ctx context.Context, meta commands.CommandMeta, connectionID commands.ConnectionID, reason, targetStatus, action string) (commands.ChannelConnectionResult, error) {
-	if s.Runtime == nil || s.Transactions == nil {
-		return commands.ChannelConnectionResult{}, appErrors.NotImplemented()
-	}
-	expected, err := parseBusinessExpectedVersion(meta.ExpectedVersion)
-	if err != nil {
-		return commands.ChannelConnectionResult{}, err
-	}
-	reason = strings.TrimSpace(reason)
-	if reason == "" {
-		return commands.ChannelConnectionResult{}, appErrors.New(appErrors.CodeValidation, "connection action reason is required")
-	}
-	var result commands.ChannelConnectionResult
-	err = s.Transactions.Within(ctx, func(txCtx context.Context) error {
-		record, transitionErr := s.Runtime.Transition(txCtx, ports.ChannelConnectionTransition{BusinessID: string(meta.Actor.BusinessID), ConnectionID: string(connectionID), ExpectedVersion: expected, TargetStatus: targetStatus, Action: action, Reason: reason, ActorReference: string(meta.Actor.PrincipalID)})
-		if transitionErr != nil {
-			return transitionErr
-		}
-		result.Connection = channelConnectionView(record)
-		result.ResourceVersion = result.Connection.ResourceVersion
-		return nil
-	})
-	return result, err
-}
-
 func channelConnectionView(record ports.ChannelConnectionRecord) commands.ChannelConnectionView {
 	account := ""
 	if record.ProviderAccountReference != nil {

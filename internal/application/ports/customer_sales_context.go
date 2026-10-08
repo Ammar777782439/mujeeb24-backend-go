@@ -259,7 +259,7 @@ type CustomerSalesPolicyEvidence struct {
 // now lives in the ai_runs + ai_catalog_batches tables, NOT in the AI Proposal.
 // Per contract ⑥ §20, validation is deterministic — no semantic re-matching.
 // Contract ② §3 Coverage enforcement is handled by CatalogBatchController
-// in services/catalog_batch_controller.go (using PartialProgressPolicy).
+// in services/catalog_batch_controller.go.
 
 // AIDecisionProposal is the LEGACY proposal shape used only by ai_decisions row.
 //

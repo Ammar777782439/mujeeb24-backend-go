@@ -3,7 +3,6 @@ package services
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
@@ -62,111 +61,6 @@ var legalTransitions = map[string][]string{
 		ports.AIRunStatusValidating,
 		ports.AIRunStatusAuthorized,
 	},
-}
-
-// TestRetryPolicyRetryable verifies contract ⑨ §6: retryable categories retry
-// until MaxAttempts is exhausted.
-func TestRetryPolicyRetryable(t *testing.T) {
-	policy := NewRetryPolicy(RetryConfig{
-		MaxAttempts:       3,
-		InitialBackoff:    10 * time.Millisecond,
-		MaxBackoff:        100 * time.Millisecond,
-		BackoffMultiplier: 2.0,
-		JitterFraction:    0.0,
-	})
-	cases := []struct {
-		attempt  int
-		category ports.AIRunFailureCategory
-		retry    bool
-	}{
-		{1, ports.AIRunFailureCategoryProviderTemporary, true},
-		{2, ports.AIRunFailureCategoryProviderTemporary, true},
-		{3, ports.AIRunFailureCategoryProviderTemporary, false}, // exhausted
-		{1, ports.AIRunFailureCategoryNetwork, true},
-		{1, ports.AIRunFailureCategoryTimeout, true},
-		{1, ports.AIRunFailureCategoryRateLimit, true},
-		{1, ports.AIRunFailureCategoryInvalidAIOutput, false}, // non-retryable
-		{1, ports.AIRunFailureCategoryTenantViolation, false},
-		{1, ports.AIRunFailureCategoryPolicyDenial, false},
-		{1, ports.AIRunFailureCategoryAuthorizationDenial, false},
-	}
-	for _, c := range cases {
-		d := policy.DecideForFailure(c.attempt, c.category)
-		if d.ShouldRetry != c.retry {
-			t.Errorf("attempt=%d category=%s: expected retry=%v, got %v (reason: %s)",
-				c.attempt, c.category, c.retry, d.ShouldRetry, d.Reason)
-		}
-	}
-}
-
-// TestPartialProgressCoverage verifies contract ⑨ §22-23: batches must all
-// be COMPLETED before Final Evaluation may run.
-func TestPartialProgressCoverage(t *testing.T) {
-	policy := NewPartialProgressPolicy()
-	cases := []struct {
-		name    string
-		batches []ports.AICatalogBatchRecord
-		want    bool
-	}{
-		{
-			name:    "empty",
-			batches: nil,
-			want:    true,
-		},
-		{
-			name: "all completed",
-			batches: []ports.AICatalogBatchRecord{
-				{Status: "completed"},
-				{Status: "completed"},
-				{Status: "completed"},
-			},
-			want: true,
-		},
-		{
-			name: "one pending",
-			batches: []ports.AICatalogBatchRecord{
-				{Status: "completed"},
-				{Status: "pending"},
-				{Status: "completed"},
-			},
-			want: false,
-		},
-		{
-			name: "one failed",
-			batches: []ports.AICatalogBatchRecord{
-				{Status: "completed"},
-				{Status: "failed"},
-			},
-			want: false,
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got := policy.CoverageComplete(c.batches)
-			if got != c.want {
-				t.Errorf("CoverageComplete: expected %v, got %v", c.want, got)
-			}
-		})
-	}
-}
-
-// TestBatchesToRetry verifies contract ⑨ §21: only FAILED and PENDING batches
-// are retried; COMPLETED batches are not re-run.
-func TestBatchesToRetry(t *testing.T) {
-	policy := NewPartialProgressPolicy()
-	batches := []ports.AICatalogBatchRecord{
-		{ID: "b1", Status: "completed"},
-		{ID: "b2", Status: "completed"},
-		{ID: "b3", Status: "failed"},
-		{ID: "b4", Status: "pending"},
-	}
-	retry := policy.BatchesToRetry(batches)
-	if len(retry) != 2 {
-		t.Fatalf("expected 2 batches to retry, got %d", len(retry))
-	}
-	if retry[0] != "b3" || retry[1] != "b4" {
-		t.Errorf("expected [b3, b4], got %v", retry)
-	}
 }
 
 // TestValidateStructural verifies contract ⑥ §3-5: only the closed status

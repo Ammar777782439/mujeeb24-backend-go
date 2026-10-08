@@ -54,14 +54,6 @@ func ProjectionFromBundles(bundles []ports.CatalogAIProjectionBundle) CatalogAIP
 	return projection
 }
 
-func EvidenceFromBundles(bundles []ports.CatalogAIProjectionBundle) ports.CatalogAIEvidenceSet {
-	evidence := ports.NewCatalogAIEvidenceSet()
-	for _, bundle := range bundles {
-		evidence.AddBundle(bundle)
-	}
-	return evidence
-}
-
 func EvidenceFromProjection(projection CatalogAIProjection) ports.CatalogAIEvidenceSet {
 	evidence := ports.NewCatalogAIEvidenceSet()
 	for _, item := range projection.Items {
@@ -111,25 +103,6 @@ func EvidenceFromCustomerSalesContext(ctx *ports.CustomerSalesContext) ports.Cat
 		evidence.Items[offer.CatalogItemReference] = item
 	}
 	return evidence
-}
-
-func appendCatalogAIBundlesToContext(ctx *ports.CustomerSalesContext, bundles []ports.CatalogAIProjectionBundle, now time.Time) {
-	if ctx == nil {
-		return
-	}
-	for _, bundle := range bundles {
-		ctx.CatalogEvidence = append(ctx.CatalogEvidence, catalogItemEvidence(bundle.Item, now))
-		for _, offer := range bundle.Offers {
-			ctx.OfferEvidence = append(ctx.OfferEvidence, toOfferEvidence(offer, now))
-		}
-		for _, variant := range bundle.Variants {
-			ctx.VariantEvidence = append(ctx.VariantEvidence, ports.CustomerSalesVariantEvidence{
-				Reference: variant.ID, CatalogItemReference: variant.CatalogItemID,
-				Name: variant.Name, Status: variant.Status, Attributes: safeJSONObject(variant.Attributes),
-				EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
-			})
-		}
-	}
 }
 
 func catalogItemEvidence(item ports.CatalogItemRecord, now time.Time) ports.CustomerSalesCatalogEvidence {

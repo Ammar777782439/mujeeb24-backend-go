@@ -198,14 +198,6 @@ func inboundEventScanArgs(record *ports.InboundEventRecord) []any {
 	return []any{&record.ID, &record.ProviderRef, &record.ProviderConnectionRef, &record.ProviderEventID, &record.DedupeStrategy, &record.BusinessID, &record.ConnectionID, &record.EventType, &record.InteractionKind, &record.ProviderMessageID, &record.ProviderConversationID, &record.ExternalUserID, &record.ContentReference, &record.ExternalCreatedAt, &record.ReceivedAt, &record.RawPayloadReference, &record.PayloadHash, &record.SignatureVerified, &record.ProcessingState, &record.ProcessingOwner, &record.ProcessingLeaseToken, &record.LeaseExpiresAt, &record.AttemptCount, &record.LastErrorCode, &record.NextAttemptAt, &record.ProcessingResultCode, &record.ProcessedAt, &record.CreatedAt, &record.UpdatedAt}
 }
 
-func scanInboundEvent(row interface{ Scan(...any) error }) (ports.InboundEventRecord, error) {
-	var record ports.InboundEventRecord
-	if err := row.Scan(inboundEventScanArgs(&record)...); err != nil {
-		return ports.InboundEventRecord{}, classifyRepositoryGetError("inbound_event.scan", err)
-	}
-	return record, nil
-}
-
 func classifyLeaseMutationMiss(ctx context.Context, executor SQLExecutor, operation, eventID, owner, token string) error {
 	var state string
 	var currentOwner *string

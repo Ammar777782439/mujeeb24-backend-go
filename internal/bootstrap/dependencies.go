@@ -7,10 +7,6 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 )
 
-func BuildDependencies(adapter *postgres.Adapter) handlers.Dependencies {
-	return BuildDependenciesWithRealtime(adapter, nil)
-}
-
 func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.RealtimePublisher) handlers.Dependencies {
 	businessRepository := postgres.NewBusinessRepository(adapter)
 	businessManagement := services.BusinessManagementService{Repository: businessRepository, Transactions: adapter}

@@ -170,51 +170,6 @@ func TestRetrieveComparisonDoesNotBackendMatchSiblingCandidates(t *testing.T) {
 }
 
 // Explicit NO_REFERENCE resets a stale comparison but preserves focus/history.
-func TestBuildValidatedStateNoReferenceResetsComparison(t *testing.T) {
-	focus := &ports.ConversationFocus{Type: "item", ID: "item-a"}
-	current := &ports.ConversationStateRecord{
-		BusinessID: "b1", ConversationID: "c1", Focus: focus,
-		Previous:   []ports.ConversationFocus{{Type: "item", ID: "item-b"}},
-		Comparison: &ports.ConversationComparison{Type: "offer_set", IDs: []string{"item-a", "item-b"}},
-	}
-	next := buildValidatedState(current, "b1", "c1", ports.AIDecisionProposal{
-		StateProposal: &ports.CustomerSalesStateProposal{Kind: "NO_REFERENCE"},
-	})
-	if next == nil {
-		t.Fatal("expected state update resetting comparison")
-	}
-	if next.Comparison != nil {
-		t.Fatalf("comparison must be reset, got %#v", next.Comparison)
-	}
-	if next.Focus == nil || next.Focus.ID != "item-a" {
-		t.Fatalf("focus must be preserved, got %#v", next.Focus)
-	}
-	if len(next.Previous) != 1 || next.Previous[0].ID != "item-b" {
-		t.Fatalf("previous must be preserved, got %#v", next.Previous)
-	}
-}
-
-func TestBuildValidatedStateAmbiguousKeepsState(t *testing.T) {
-	current := &ports.ConversationStateRecord{
-		BusinessID: "b1", ConversationID: "c1",
-		Focus:      &ports.ConversationFocus{Type: "item", ID: "item-a"},
-		Comparison: &ports.ConversationComparison{Type: "offer_set", IDs: []string{"item-a", "item-b"}},
-	}
-	next := buildValidatedState(current, "b1", "c1", ports.AIDecisionProposal{
-		StateProposal: &ports.CustomerSalesStateProposal{Kind: "AMBIGUOUS"},
-	})
-	if next != nil {
-		t.Fatalf("ambiguous must not mutate state, got %#v", next)
-	}
-}
-
-// TestAutoReplyHandoffFarewellOnSubscription verifies per contract ⑥ §14 that
-// when Gemini requests human handoff AND the conversation intent is a
-// subscription/activation request, Mujeeb sends the fixed farewell message
-// (HandoffFarewellMessage — never model text) and keeps RequiresHuman=true.
-//
-// Per contract ④ §4, Gemini returns action=human_request. Per contract ⑥ §14,
-// the farewell is product routing decided by Mujeeb, not by Gemini prompt text.
 func TestAutoReplyHandoffFarewellOnSubscription(t *testing.T) {
 	outbound := &fakeOutboundRepository{}
 	outbox := &fakeOutboxStore{}
