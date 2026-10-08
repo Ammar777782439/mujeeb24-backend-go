@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+    "crypto/sha256"
+    "encoding/hex"
 	"encoding/json"
 	"errors"
 	"log"
@@ -18,6 +20,7 @@ import (
 type SocialAPIWebhookService struct {
 	Receiver         ports.WebhookReceiver
 	RawPayloads      ports.RawPayloadStore
+    History          ports.ChannelHistoryGuard
 	Connections      ports.ChannelConnectionRepository
 	Events           ports.EventStore
 	Inbound          ports.ProviderInboundStore
@@ -71,28 +74,70 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 	if s.Now == nil {
 		s.Now = time.Now
 	}
-	stored, err := s.RawPayloads.Put(ctx, "socialapi", command.DeliveryID, command.RawPayload)
-	if err != nil {
-		return commands.WebhookAcceptedResult{}, externalDependencyError("raw webhook payload could not be stored", err)
-	}
-	result := commands.WebhookAcceptedResult{Accepted: true, RequestID: command.RequestID}
-	for _, event := range events {
-		if event.Provider != channel.ProviderSocialAPI || strings.TrimSpace(event.ProviderConnectionID) == "" {
-			return commands.WebhookAcceptedResult{}, appErrors.New(appErrors.CodeValidation, "verified SocialAPI webhook has no provider account reference")
-		}
-		connection, resolveErr := s.Connections.GetByProviderReferences(ctx, string(channel.ProviderSocialAPI), event.ProviderConnectionID, "")
-		var businessID, connectionID *string
-		if resolveErr == nil {
-			businessIDValue, connectionIDValue := connection.BusinessID, connection.ID
-			businessID, connectionID = &businessIDValue, &connectionIDValue
-			result.Resolved = true
-		} else if repositoryErrorKind(resolveErr) == "not_found" {
-			result.Resolved = false
-		} else if repositoryErrorKind(resolveErr) == "conflict" {
-			return commands.WebhookAcceptedResult{}, appErrors.New(appErrors.CodeConflict, "provider account maps to multiple channel connections")
-		} else {
-			return commands.WebhookAcceptedResult{}, externalDependencyError("channel connection lookup failed", resolveErr)
-		}
+    // Resolve and suppress old events BEFORE persisting the webhook body.
+    // On a mixed delivery retain new events, but never persist the original
+    // payload because it contains data belonging to the deleted history.
+    type resolvedEvent struct {
+        event channel.InboundEvent
+        connection ports.ChannelConnectionRecord
+        resolutionErr error
+    }
+    retained := make([]resolvedEvent, 0, len(events))
+    removedFromDelivery := false
+    for _, event := range events {
+        if event.Provider != channel.ProviderSocialAPI || strings.TrimSpace(event.ProviderConnectionID) == "" {
+            return commands.WebhookAcceptedResult{}, appErrors.New(appErrors.CodeValidation, "verified SocialAPI webhook has no provider account reference")
+        }
+        connection, resolveErr := s.Connections.GetByProviderReferences(ctx, string(channel.ProviderSocialAPI), event.ProviderConnectionID, "")
+        switch repositoryErrorKind(resolveErr) {
+        case "", "not_found":
+            if resolveErr != nil && repositoryErrorKind(resolveErr) != "not_found" {
+                return commands.WebhookAcceptedResult{}, externalDependencyError("channel connection lookup failed", resolveErr)
+            }
+        case "conflict":
+            return commands.WebhookAcceptedResult{}, appErrors.New(appErrors.CodeConflict, "provider account maps to multiple channel connections")
+        default:
+            return commands.WebhookAcceptedResult{}, externalDependencyError("channel connection lookup failed", resolveErr)
+        }
+        if resolveErr == nil && s.History != nil {
+            occurredAt := event.ExternalCreatedAt
+            if occurredAt == nil {
+                occurredAt = &event.ReceivedAt
+            }
+            ignore, guardErr := s.History.ShouldIgnore(ctx, connection.BusinessID, connection.ID, occurredAt)
+            if guardErr != nil {
+                return commands.WebhookAcceptedResult{}, externalDependencyError("channel history replay guard failed", guardErr)
+            }
+            if ignore {
+                removedFromDelivery = true
+                continue
+            }
+        }
+        retained = append(retained, resolvedEvent{event: event, connection: connection, resolutionErr: resolveErr})
+    }
+    if len(retained) == 0 {
+        return commands.WebhookAcceptedResult{Accepted: true, Ignored: true, RequestID: command.RequestID}, nil
+    }
+    bodyToStore := command.RawPayload
+    if removedFromDelivery {
+        digest := sha256.Sum256(command.RawPayload)
+        bodyToStore = []byte("mixed-delivery-redacted-sha256:" + hex.EncodeToString(digest[:]))
+    }
+    stored, err := s.RawPayloads.Put(ctx, "socialapi", command.DeliveryID, bodyToStore)
+    if err != nil {
+        return commands.WebhookAcceptedResult{}, externalDependencyError("raw webhook payload could not be stored", err)
+    }
+    result := commands.WebhookAcceptedResult{Accepted: true, RequestID: command.RequestID}
+    for _, resolved := range retained {
+        event, connection, resolveErr := resolved.event, resolved.connection, resolved.resolutionErr
+        var businessID, connectionID *string
+        if resolveErr == nil {
+            businessIDValue, connectionIDValue := connection.BusinessID, connection.ID
+            businessID, connectionID = &businessIDValue, &connectionIDValue
+            result.Resolved = true
+        } else {
+            result.Resolved = false
+        }
 		created, record, recordErr := s.Events.RecordIfAbsent(ctx, ports.InboundEventDraft{
 			ID:                     event.ID,
 			ProviderRef:            string(event.Provider),
