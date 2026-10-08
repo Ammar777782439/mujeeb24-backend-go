@@ -21,7 +21,7 @@ jobs:
         with:
           go-version: "1.22.2"
           cache: true
-      - name: Format changed Go files and generate contract
+      - name: Format verified channel history source and regenerate contract
         run: |
           gofmt -w internal/application/ports/channel_history.go
           gofmt -w internal/application/commands/channel_history.go
