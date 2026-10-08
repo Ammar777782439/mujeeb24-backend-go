@@ -107,8 +107,9 @@ func (r *GeminiMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 			Schema:   merchantCatalogProposalSchema(),
 		},
 		GenerationConfig: &merchantCatalogGenerationConfig{
-			MaxOutputTokens: maxOutput,
-			ThinkingLevel:   merchantCatalogThinkingLevel(model),
+			MaxOutputTokens:   maxOutput,
+			ThinkingLevel:     merchantCatalogThinkingLevel(model),
+			ThinkingSummaries: "auto",
 		},
 	}
 
@@ -128,10 +129,11 @@ func (r *GeminiMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 			return merchantcatalogai.Proposal{}, err
 		}
 
-		log.Printf("[MerchantCatalogAI] INTERACTION business=%s session=%s id=%s status=%s steps=%d input_tokens=%d output_tokens=%d",
-			input.BusinessID, input.SessionID, resp.ID, resp.Status, len(resp.Steps), resp.Usage.InputTokens, resp.Usage.OutputTokens)
+		log.Printf("[MerchantCatalogAI] INTERACTION business=%s session=%s id=%s status=%s steps=%d input_tokens=%d output_tokens=%d thought_tokens=%d",
+			input.BusinessID, input.SessionID, resp.ID, resp.Status, len(resp.Steps), resp.Usage.InputTokens, resp.Usage.OutputTokens, resp.Usage.ThoughtTokens)
 		log.Printf("[MerchantCatalogAI][INTERACTION_DETAIL] business=%s session=%s step_types=%v output_chars=%d",
-			input.BusinessID, input.SessionID, merchantCatalogStepTypes(resp), len([]rune(strings.TrimSpace(resp.OutputText))))
+			input.BusinessID, input.SessionID, merchantCatalogStepTypes(resp), len([]rune(merchantCatalogOutputText(resp))))
+		logMerchantCatalogInteractionContent(resp)
 
 		calls := extractMerchantCatalogFunctionCalls(resp)
 		if len(calls) > 0 {
