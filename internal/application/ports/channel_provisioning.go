@@ -62,6 +62,16 @@ type ProviderBrandRecord struct {
 type ProviderBrandStore interface {
 	Get(ctx context.Context, businessID, providerRef string) (ProviderBrandRecord, bool, error)
 	Create(ctx context.Context, brand ProviderBrandRecord) (ProviderBrandRecord, error)
+	// Replace atomically swaps a stale provider brand id for a verified remote id.
+	// It returns false if the stored reference changed during reconciliation.
+	Replace(ctx context.Context, businessID, providerRef, expectedBrandRef, nextBrandRef string) (bool, error)
+}
+
+// ProviderBrandCleanupStore coordinates last-channel cleanup with new OAuth
+// sessions under a per-business database lock. The callback is only executed
+// when there are no usable connections or in-flight authorizations.
+type ProviderBrandCleanupStore interface {
+	CleanupIfUnused(ctx context.Context, businessID, providerRef string, deleteRemote func(context.Context, string) error) error
 }
 
 type ProviderBrandProvisioner interface {
