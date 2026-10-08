@@ -66,11 +66,11 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
 	if len(operationIDs) != 144 {
 		t.Fatalf("generated %d operations, want 144", len(operationIDs))
 	}
-    for _, op := range []string{"previewChannelHistoryPurge", "purgeChannelHistory"} {
-        if !bytes.Contains(document, []byte("operationId: "+op)) {
-            t.Fatalf("missing channel history operation: %s", op)
-        }
-    }
+	for _, op := range []string{"previewChannelHistoryPurge", "purgeChannelHistory"} {
+		if !bytes.Contains(document, []byte("operationId: "+op)) {
+			t.Fatalf("missing channel history operation: %s", op)
+		}
+	}
 	seen := make(map[string]struct{}, len(operationIDs))
 	for _, match := range operationIDs {
 		id := string(match[1])

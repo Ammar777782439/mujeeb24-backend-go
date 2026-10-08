@@ -41,8 +41,8 @@ type Dependencies struct {
 	BeginChannelConnection       commands.BeginChannelConnectionHandler
 	ReconnectChannel             commands.ReconnectChannelHandler
 	DisconnectChannel            commands.DisconnectChannelHandler
-    PreviewChannelHistory commands.PreviewChannelHistoryHandler
-    PurgeChannelHistory commands.PurgeChannelHistoryHandler
+	PreviewChannelHistory        commands.PreviewChannelHistoryHandler
+	PurgeChannelHistory          commands.PurgeChannelHistoryHandler
 	UpdateConversation           commands.UpdateConversationHandler
 	AssignConversation           commands.AssignConversationHandler
 	UpdateConversationLabels     commands.UpdateConversationLabelsHandler

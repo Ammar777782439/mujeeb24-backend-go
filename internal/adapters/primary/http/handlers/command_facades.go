@@ -58,29 +58,41 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 		out.Body.Data = businessPolicyProjection(result.Policy)
 		return out, true
 	case "previewChannelHistoryPurge":
-        in := input.(*contract.ConnectionPath)
-        actor, err := s.requireScope(ctx, in.BusinessID)
-        if err != nil { return mapApplicationError(err), true }
-        if s.deps.PreviewChannelHistory == nil { return mapApplicationError(appErrors.NotImplemented()), true }
-        result, err := s.deps.PreviewChannelHistory.Handle(ctx, commands.PreviewChannelHistoryQuery{
-            Meta: commands.QueryMeta{Actor: actor}, ConnectionID: commands.ConnectionID(in.ConnectionID),
-        })
-        if err != nil { return mapApplicationError(err), true }
-        return singleChannelHistory(result), true
-    case "purgeChannelHistory":
-        in := input.(*contract.PurgeChannelHistoryInput)
-        actor, err := s.requireScope(ctx, in.BusinessID)
-        if err != nil { return mapApplicationError(err), true }
-        if s.deps.PurgeChannelHistory == nil { return mapApplicationError(appErrors.NotImplemented()), true }
-        result, err := s.deps.PurgeChannelHistory.Handle(ctx, commands.PurgeChannelHistoryCommand{
-            Meta: commandMeta(ctx, actor, in.CommandHeaders),
-            ConnectionID: commands.ConnectionID(in.ConnectionID),
-            Confirmation: in.Body.Confirmation,
-            ExpectedVersion: commands.ResourceVersion(in.Body.ExpectedVersion),
-        })
-        if err != nil { return mapApplicationError(err), true }
-        return singleChannelHistory(result), true
-    	case "beginChannelConnection":
+		in := input.(*contract.ConnectionPath)
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		if s.deps.PreviewChannelHistory == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		result, err := s.deps.PreviewChannelHistory.Handle(ctx, commands.PreviewChannelHistoryQuery{
+			Meta: commands.QueryMeta{Actor: actor}, ConnectionID: commands.ConnectionID(in.ConnectionID),
+		})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		return singleChannelHistory(result), true
+	case "purgeChannelHistory":
+		in := input.(*contract.PurgeChannelHistoryInput)
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		if s.deps.PurgeChannelHistory == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		result, err := s.deps.PurgeChannelHistory.Handle(ctx, commands.PurgeChannelHistoryCommand{
+			Meta:            commandMeta(ctx, actor, in.CommandHeaders),
+			ConnectionID:    commands.ConnectionID(in.ConnectionID),
+			Confirmation:    in.Body.Confirmation,
+			ExpectedVersion: commands.ResourceVersion(in.Body.ExpectedVersion),
+		})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		return singleChannelHistory(result), true
+	case "beginChannelConnection":
 		in := input.(*contract.ConnectionCreateInput)
 		actor, err := s.requireScope(ctx, in.BusinessID)
 		if err != nil {
@@ -607,13 +619,15 @@ func attributeDefinitions(values []contract.AttributeDefinitionInput) []commands
 }
 
 func singleChannelHistory(result commands.ChannelHistoryResult) *contract.Single[contract.ChannelHistorySummary] {
-    out := &contract.Single[contract.ChannelHistorySummary]{}
-    out.Body.Data = contract.ChannelHistorySummary{
-        BusinessID: contract.UUID(result.BusinessID),
-        ConnectionID: contract.UUID(result.ConnectionID),
-        Conversations: result.Conversations,
-        Messages: result.Messages,
-    }
-    if result.PurgedAt != "" { out.Body.Data.PurgedAt = &result.PurgedAt }
-    return out
+	out := &contract.Single[contract.ChannelHistorySummary]{}
+	out.Body.Data = contract.ChannelHistorySummary{
+		BusinessID:    contract.UUID(result.BusinessID),
+		ConnectionID:  contract.UUID(result.ConnectionID),
+		Conversations: result.Conversations,
+		Messages:      result.Messages,
+	}
+	if result.PurgedAt != "" {
+		out.Body.Data.PurgedAt = &result.PurgedAt
+	}
+	return out
 }

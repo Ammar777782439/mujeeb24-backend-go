@@ -893,6 +893,27 @@ components:
         - updated_at
         - resource_version
       type: object
+    ChannelHistorySummary:
+      additionalProperties: false
+      properties:
+        business_id:
+          type: string
+        connection_id:
+          type: string
+        conversations:
+          format: int64
+          type: integer
+        messages:
+          format: int64
+          type: integer
+        purged_at:
+          type: string
+      required:
+        - business_id
+        - connection_id
+        - conversations
+        - messages
+      type: object
     ChannelProvisioning:
       additionalProperties: false
       properties:
@@ -1098,12 +1119,8 @@ components:
           type: integer
         Name:
           type: string
-        Partitioned:
-          type: boolean
         Path:
           type: string
-        Quoted:
-          type: boolean
         Raw:
           type: string
         RawExpires:
@@ -1123,7 +1140,6 @@ components:
       required:
         - Name
         - Value
-        - Quoted
         - Path
         - Domain
         - Expires
@@ -1132,7 +1148,6 @@ components:
         - Secure
         - HttpOnly
         - SameSite
-        - Partitioned
         - Raw
         - Unparsed
       type: object
@@ -3438,6 +3453,26 @@ components:
         - operation
         - response_text
       type: object
+    PurgeChannelHistoryRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/PurgeChannelHistoryRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        confirmation:
+          enum:
+            - DELETE_ALL_CHANNEL_HISTORY
+          type: string
+        expected_version:
+          minLength: 1
+          type: string
+      required:
+        - confirmation
+        - expected_version
+      type: object
     RecordPaymentRequest:
       additionalProperties: false
       properties:
@@ -3735,6 +3770,23 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/ChannelConnection"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleChannelHistorySummaryBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleChannelHistorySummaryBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/ChannelHistorySummary"
         request_id:
           type: string
       required:
@@ -8030,6 +8082,167 @@ paths:
       security:
         - bearerAuth: []
       summary: Disconnect channel
+      tags:
+        - Connections
+  /businesses/{business_id}/channel-connections/{connection_id}/history-purge:
+    get:
+      operationId: previewChannelHistoryPurge
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: connection_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleChannelHistorySummaryBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Preview irreversible local channel history deletion
+      tags:
+        - Connections
+    post:
+      operationId: purgeChannelHistory
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: connection_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurgeChannelHistoryRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleChannelHistorySummaryBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Irreversibly delete entire local conversation history for one connection without disconnecting
       tags:
         - Connections
   /businesses/{business_id}/channel-connections/{connection_id}/reconnect:

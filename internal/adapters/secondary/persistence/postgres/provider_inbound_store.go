@@ -42,14 +42,14 @@ func (s *ProviderInboundStore) Materialize(ctx context.Context, draft ports.Prov
 		if err != nil {
 			return err
 		}
-        // Serialize materialization with an explicit history purge. A
-        // transaction that began before a purge must complete before cleanup.
-        var lockedConnection string
-        if err := executor.QueryRow(txCtx, `SELECT id::text FROM channel_connections
+		// Serialize materialization with an explicit history purge. A
+		// transaction that began before a purge must complete before cleanup.
+		var lockedConnection string
+		if err := executor.QueryRow(txCtx, `SELECT id::text FROM channel_connections
             WHERE business_id=$1::uuid AND id=$2::uuid FOR SHARE`,
-            draft.BusinessID, draft.ConnectionID).Scan(&lockedConnection); err != nil {
-            return classifyRepositoryGetError("provider_inbound.history_lock", err)
-        }
+			draft.BusinessID, draft.ConnectionID).Scan(&lockedConnection); err != nil {
+			return classifyRepositoryGetError("provider_inbound.history_lock", err)
+		}
 		state, businessID, connectionID, providerRef, providerAccountRef, providerEventID, providerMessageID, providerConversationID, externalUserID, err := getProviderInboundLedger(txCtx, executor, draft.InboundEventID)
 		if err != nil {
 			return err
@@ -66,20 +66,20 @@ func (s *ProviderInboundStore) Materialize(ctx context.Context, draft ports.Prov
 		if state != "received" {
 			return &RepositoryError{Operation: "provider_inbound.materialize", Kind: RepositoryConflict, Err: fmt.Errorf("inbound event state %s is not materializable", state)}
 		}
-        result.BusinessID = businessID
-        result.InboundEventID = draft.InboundEventID
-        // This guard is inside the same database transaction as materialize.
-        // Never re-create a deleted conversation from an old or retried event.
-        var cutoff time.Time
-        cutoffErr := executor.QueryRow(txCtx, `SELECT cutoff FROM channel_history_purges
+		result.BusinessID = businessID
+		result.InboundEventID = draft.InboundEventID
+		// This guard is inside the same database transaction as materialize.
+		// Never re-create a deleted conversation from an old or retried event.
+		var cutoff time.Time
+		cutoffErr := executor.QueryRow(txCtx, `SELECT cutoff FROM channel_history_purges
             WHERE business_id=$1::uuid AND connection_id=$2::uuid`,
-            draft.BusinessID, draft.ConnectionID).Scan(&cutoff)
-        if cutoffErr != nil && !errors.Is(cutoffErr, pgx.ErrNoRows) {
-            return classifyRepositoryGetError("provider_inbound.history_cutoff", cutoffErr)
-        }
-        if cutoffErr == nil && !eventOccurredAt(draft).After(cutoff) {
-            return markProviderInboundProcessed(txCtx, executor, draft.InboundEventID, "socialapi_history_purged", &result)
-        }
+			draft.BusinessID, draft.ConnectionID).Scan(&cutoff)
+		if cutoffErr != nil && !errors.Is(cutoffErr, pgx.ErrNoRows) {
+			return classifyRepositoryGetError("provider_inbound.history_cutoff", cutoffErr)
+		}
+		if cutoffErr == nil && !eventOccurredAt(draft).After(cutoff) {
+			return markProviderInboundProcessed(txCtx, executor, draft.InboundEventID, "socialapi_history_purged", &result)
+		}
 		if draft.EventType != "interaction_received" || draft.ProviderConversationID == "" || draft.ExternalUserID == "" || draft.ProviderMessageID == "" {
 			return markProviderInboundProcessed(txCtx, executor, draft.InboundEventID, "socialapi_ignored_event", &result)
 		}

@@ -82,8 +82,8 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 		GetChannelConnection:   services.GetChannelConnectionQueryService{ChannelRuntimeService: channelRuntime},
 		ReconnectChannel:       services.ReconnectChannelCommandService{ChannelRuntimeService: channelRuntime},
 		DisconnectChannel:      services.DisconnectChannelCommandService{ChannelRuntimeService: channelRuntime},
-        PreviewChannelHistory: services.PreviewChannelHistoryService{Store: postgres.NewChannelHistoryRepository(adapter)},
-        PurgeChannelHistory: services.PurgeChannelHistoryService{Store: postgres.NewChannelHistoryRepository(adapter)},
+		PreviewChannelHistory:  services.PreviewChannelHistoryService{Store: postgres.NewChannelHistoryRepository(adapter)},
+		PurgeChannelHistory:    services.PurgeChannelHistoryService{Store: postgres.NewChannelHistoryRepository(adapter)},
 
 		CreateCatalog:                services.CreateCatalogCommandService{CatalogCommandServices: catalogCommands},
 		UpdateCatalog:                services.UpdateCatalogCommandService{CatalogCommandServices: catalogCommands},
