@@ -262,7 +262,7 @@ func markProviderInboundProcessed(ctx context.Context, executor SQLExecutor, eve
 	if commandTag.RowsAffected() == 0 {
 		result.Duplicate = true
 	}
-	if resultCode == "socialapi_ignored_event" {
+	if resultCode == "socialapi_ignored_event" || resultCode == "socialapi_history_purged" {
 		result.Ignored = true
 	}
 	return nil
