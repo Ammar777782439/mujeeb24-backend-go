@@ -103,10 +103,15 @@ func TestAutoReplyContextBuilderGroundsCatalogAgainstPostgres(t *testing.T) {
 		NewCatalogRepository(adapter),
 		NewMessageRepository(adapter),
 	)
+	builder.CatalogAI = NewCatalogAIReadRepository(adapter)
 	builder.Knowledge = NewKnowledgeDocumentRepository(adapter)
 	builder.Policies = NewBusinessPolicyRepository(adapter)
 	builder.Now = func() time.Time { return base }
-	contextValue, err := builder.Build(ctx, ports.CustomerSalesContextInput{BusinessID: businessID, ConversationID: conversationID, SourceMessageReference: "incoming-current", Text: "هل iPhone 15 الأسود 256GB متوفر؟", Channel: "whatsapp", PolicyVersion: "auto-reply-v1"})
+	contextValue, err := builder.Build(ctx, ports.CustomerSalesContextInput{BusinessID: businessID, ConversationID: conversationID, SourceMessageReference: "incoming-current", Text: "هل iPhone 15 الأسود 256GB متوفر؟", Channel: "whatsapp", PolicyVersion: "auto-reply-v1",
+        // Item-level evidence must be driven by a validated conversation focus,
+        // not implicit text search across the merchant's catalog.
+        ConversationState: &ports.ConversationStateRecord{BusinessID: businessID, ConversationID: conversationID,
+            Focus: &ports.ConversationFocus{Type: "item", ID: itemID, CatalogID: &catalogID}}})
 	if err != nil {
 		t.Fatalf("build grounded context: %v", err)
 	}
@@ -122,6 +127,20 @@ func TestAutoReplyContextBuilderGroundsCatalogAgainstPostgres(t *testing.T) {
 	if contextValue.KnowledgeState != services.CustomerSalesContextGrounded || contextValue.Freshness != services.CustomerSalesContextFresh || len(contextValue.KnowledgeEvidence) != 1 || contextValue.KnowledgeEvidence[0].Reference != knowledgeID || len(contextValue.BusinessPolicyEvidence) != 1 || contextValue.BusinessPolicyEvidence[0].Reference != policyID || contextValue.PolicyEvidence.State != "published" {
 		t.Fatalf("unexpected knowledge state: %#v", contextValue)
 	}
+
+    if contextValue.CatalogManifest == nil || contextValue.CatalogManifest.TotalCatalogs != 1 ||
+        contextValue.CatalogManifest.TotalActiveItems != 1 {
+        t.Fatalf("missing merchant-scoped catalog manifest: %#v", contextValue.CatalogManifest)
+    }
+    // A new conversation without a focus must not use keyword search or
+    // silently attach a product based on the incoming message alone.
+    unfocused, unfocusedErr := builder.Build(ctx, ports.CustomerSalesContextInput{
+        BusinessID: businessID, ConversationID: conversationID, Text: "iPhone 15", Channel: "whatsapp",
+    })
+    if unfocusedErr != nil || len(unfocused.CatalogEvidence) != 0 || len(unfocused.OfferEvidence) != 0 ||
+        unfocused.CatalogManifest == nil || unfocused.CatalogManifest.TotalActiveItems != 1 {
+        t.Fatalf("unfocused retrieval leaked item-level evidence: %#v err=%v", unfocused, unfocusedErr)
+    }
 	otherContext, err := builder.Build(ctx, ports.CustomerSalesContextInput{BusinessID: otherBusinessID, ConversationID: conversationID, Text: "iPhone"})
 	if err == nil || otherContext.Business.Reference != "" {
 		t.Fatalf("cross-tenant conversation was accepted: context=%#v err=%v", otherContext, err)
