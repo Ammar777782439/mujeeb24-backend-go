@@ -210,6 +210,9 @@ func (s GetCatalogEntityContractQueryService) Handle(ctx context.Context, query 
 		PriceVerificationStatuses: d.PriceVerificationStatuses,
 		FulfillmentModes:          d.FulfillmentModes,
 		ItemStatuses:              d.ItemStatuses,
+		CatalogStatuses:           d.CatalogStatuses,
+		VariantStatuses:           d.VariantStatuses,
+		OfferStatuses:             d.OfferStatuses,
 	}, nil
 }
 

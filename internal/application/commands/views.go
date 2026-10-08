@@ -241,5 +241,8 @@ type CatalogEntityContractView struct {
 	// ItemStatuses per migration 000016 catalog_items_status_chk: draft, active, inactive, archived.
 	// Offer status is separate and additionally allows expired. Sourced from the
 	// descriptor's ItemStatuses field (no inline hardcoding here).
-	ItemStatuses map[string]string
+	ItemStatuses    map[string]string
+	CatalogStatuses map[string]string
+	VariantStatuses map[string]string
+	OfferStatuses   map[string]string
 }

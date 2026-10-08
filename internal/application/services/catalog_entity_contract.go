@@ -229,7 +229,7 @@ func DefaultCatalogEntityContractDescriptor() CatalogEntityContractDescriptor {
 		// Per Catalog Contract §4: "stock_quantity يمكن أن يظهر داخل Inventory
 		// Adapter عندما يكون mode هو Stock، لكنه ليس حقلًا عالميًا."
 		AvailabilityModes: map[string]string{
-			"stock":            "التوفر يعتمد على مخزون فعلي (Inventory Adapter)",
+			"stock":            "التوفر يعتمد على المخزون الفعلي",
 			"schedule":         "التوفر يعتمد على جدول زمني (مثل المواعيد)",
 			"supplier_check":   "التوفر يتطلب فحص المزود الفعلي (مثل السفر)",
 			"always_available": "متاح دائمًا ضمن نطاق العرض",
@@ -241,7 +241,7 @@ func DefaultCatalogEntityContractDescriptor() CatalogEntityContractDescriptor {
 		//   stale ≠ confirmed
 		//   requires_check ≠ confirmed
 		AvailabilityStatuses: map[string]string{
-			"available":      "متاح للبيع/الإستخدام الآن",
+			"available":      "متاح حاليًا من ناحية التوفر",
 			"unavailable":    "غير متاح حاليًا",
 			"unknown":        "الحالة غير معروفة؛ لا يجوز اعتباره متاحًا (≠ available)",
 			"requires_check": "يتطلب فحصًا إضافيًا؛ ليس مؤكدًا (≠ confirmed)",

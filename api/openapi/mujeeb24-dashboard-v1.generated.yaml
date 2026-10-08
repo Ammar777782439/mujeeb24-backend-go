@@ -765,11 +765,19 @@ components:
           additionalProperties:
             type: string
           type: object
+        catalog_statuses:
+          additionalProperties:
+            type: string
+          type: object
         fulfillment_modes:
           additionalProperties:
             type: string
           type: object
         item_statuses:
+          additionalProperties:
+            type: string
+          type: object
+        offer_statuses:
           additionalProperties:
             type: string
           type: object
@@ -781,6 +789,10 @@ components:
           additionalProperties:
             type: string
           type: object
+        variant_statuses:
+          additionalProperties:
+            type: string
+          type: object
       required:
         - pricing_modes
         - availability_modes
@@ -788,6 +800,9 @@ components:
         - price_verification_statuses
         - fulfillment_modes
         - item_statuses
+        - catalog_statuses
+        - variant_statuses
+        - offer_statuses
       type: object
     CatalogItem:
       additionalProperties: false

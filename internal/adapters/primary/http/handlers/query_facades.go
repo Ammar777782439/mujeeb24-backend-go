@@ -233,6 +233,9 @@ func (s *Server) dispatchAdditionalQuery(ctx context.Context, operationID string
 			PriceVerificationStatuses: view.PriceVerificationStatuses,
 			FulfillmentModes:          view.FulfillmentModes,
 			ItemStatuses:              view.ItemStatuses,
+			CatalogStatuses:           view.CatalogStatuses,
+			VariantStatuses:           view.VariantStatuses,
+			OfferStatuses:             view.OfferStatuses,
 		}
 		return out, true
 	case "listCatalogItems":

@@ -429,5 +429,8 @@ type CatalogEntityContract struct {
 	// ItemStatuses maps catalog_items.status values to their Arabic description.
 	// Per migration 000016, CatalogItem allows: draft, active, inactive, archived.
 	// Offer status is separate and additionally allows expired.
-	ItemStatuses map[string]string `json:"item_statuses"`
+	ItemStatuses    map[string]string `json:"item_statuses"`
+	CatalogStatuses map[string]string `json:"catalog_statuses"`
+	VariantStatuses map[string]string `json:"variant_statuses"`
+	OfferStatuses   map[string]string `json:"offer_statuses"`
 }
