@@ -39,3 +39,6 @@ H. Shipping gate: no production deployment until PostgreSQL integration tests an
 
 ## Known partial work on this feature branch
 Three earlier preparatory commits introduced `ProviderBrandStore.Replace`, `ProviderBrandCleanupStore`, a PostgreSQL implementation and an OAuth locking change, but did **not** wire those capabilities into the application lifecycle or test them. Treat as unfinished scaffolding: integrate with tests or revert before merge. Do not leave unused ports/methods in a shippable branch.
+
+## Confirmed merchant requirement
+Delete the full local conversation history for one channel connection, including customer messages, merchant replies and AI replies; do not disconnect the channel or alter subscription, business, catalog, leads or commercial transactions.
