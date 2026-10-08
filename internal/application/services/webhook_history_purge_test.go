@@ -16,7 +16,7 @@ type webhookHistoryGuardFake struct {
 	occurredAt   *time.Time
 }
 
-func (f *webhookHistoryGuardFake) ShouldIgnore(_ context.Context, businessID, connectionID string, occurredAt *time.Time) (bool, error) {
+func (f *webhookHistoryGuardFake) ShouldIgnore(_ context.Context, businessID, connectionID, providerEventID string, occurredAt *time.Time) (bool, error) {
 	f.calls++
 	f.businessID, f.connectionID, f.occurredAt = businessID, connectionID, occurredAt
 	return f.ignore, nil
