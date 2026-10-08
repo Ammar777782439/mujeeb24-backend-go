@@ -1760,6 +1760,26 @@ components:
         - error
         - request_id
       type: object
+    ExecutionResult:
+      additionalProperties: false
+      properties:
+        item_id:
+          type: string
+        offer_ids:
+          items:
+            type: string
+          nullable: true
+          type: array
+        variant_ids:
+          items:
+            type: string
+          nullable: true
+          type: array
+      required:
+        - item_id
+        - variant_ids
+        - offer_ids
+      type: object
     Health:
       additionalProperties: false
       properties:
@@ -2722,6 +2742,35 @@ components:
       required:
         - lost_reason
       type: object
+    MerchantAIExecuteInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/MerchantAIExecuteInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        proposal_id:
+          format: uuid
+          type: string
+      required:
+        - proposal_id
+      type: object
+    MerchantAIExecutionResponse:
+      additionalProperties: false
+      properties:
+        proposal_id:
+          type: string
+        result:
+          $ref: "#/components/schemas/ExecutionResult"
+        status:
+          type: string
+      required:
+        - proposal_id
+        - status
+        - result
+      type: object
     MerchantCatalogAIResponse:
       additionalProperties: false
       properties:
@@ -2731,6 +2780,8 @@ components:
           type: string
         proposal:
           $ref: "#/components/schemas/Proposal"
+        proposal_id:
+          type: string
         session_id:
           type: string
       required:
@@ -3814,6 +3865,23 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/Lead"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleMerchantAIExecutionResponseBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleMerchantAIExecutionResponseBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/MerchantAIExecutionResponse"
         request_id:
           type: string
       required:
@@ -10307,6 +10375,76 @@ paths:
       summary: List lead scores
       tags:
         - Leads
+  /businesses/{business_id}/merchant-ai/executions:
+    post:
+      operationId: merchantAIExecute
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MerchantAIExecuteInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleMerchantAIExecutionResponseBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Approve and atomically execute a stored catalog proposal
+      tags:
+        - MerchantCatalogAI
   /businesses/{business_id}/merchant-ai/turns:
     post:
       operationId: merchantAIChat

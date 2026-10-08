@@ -51,6 +51,13 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 		}
 	}
 
+	if ownership, ok := a.Sessions.(interface {
+		VerifyOwnership(context.Context, string, string, string) error
+	}); ok {
+		if err := ownership.VerifyOwnership(ctx, in.BusinessID, in.PrincipalID, sessionID); err != nil {
+			return TurnResult{}, err
+		}
+	}
 	if _, err := a.Sessions.AppendMessage(ctx, in.BusinessID, sessionID, "merchant", in.Message); err != nil {
 		return TurnResult{}, err
 	}
@@ -120,6 +127,11 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 	})
 	if err != nil {
 		return TurnResult{}, err
+	}
+	if validator, ok := capabilities.(interface{ ValidateProposalReferences(Proposal) error }); ok {
+		if err := validator.ValidateProposalReferences(proposal); err != nil {
+			return TurnResult{}, err
+		}
 	}
 	if err := proposal.Validate(); err != nil {
 		return TurnResult{}, err

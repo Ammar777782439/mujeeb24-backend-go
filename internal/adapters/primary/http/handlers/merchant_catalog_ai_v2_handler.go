@@ -12,7 +12,8 @@ import (
 )
 
 type MerchantCatalogAIV2Handler struct {
-	Agent *merchantcatalogai.Agent
+	Agent     *merchantcatalogai.Agent
+	Execution *merchantcatalogai.ExecutionService
 }
 
 func NewMerchantCatalogAIV2Handler(agent *merchantcatalogai.Agent) *MerchantCatalogAIV2Handler {
@@ -39,12 +40,38 @@ func (h *MerchantCatalogAIV2Handler) HandleTurn(ctx context.Context, in *contrac
 		return nil, mapApplicationError(err)
 	}
 
+	proposalID := ""
+	if h.Execution != nil {
+		proposalID, err = h.Execution.Prepare(ctx, merchantcatalogai.ExecutionInput{BusinessID: string(actor.BusinessID), PrincipalID: string(actor.PrincipalID), SessionID: result.SessionID, SelectedCatalog: result.SelectedCatalog, Proposal: result.Proposal})
+		if err != nil {
+			return nil, mapApplicationError(err)
+		}
+	}
 	out := &contract.Single[contract.MerchantCatalogAIResponse]{}
 	out.Body.Data = contract.MerchantCatalogAIResponse{
 		SessionID:   result.SessionID,
+		ProposalID:  proposalID,
 		CatalogID:   result.SelectedCatalog.ID,
 		CatalogName: result.SelectedCatalog.Name,
 		Proposal:    result.Proposal,
 	}
+	return out, nil
+}
+
+func (h *MerchantCatalogAIV2Handler) HandleExecute(ctx context.Context, in *contract.MerchantAIExecuteInput, actor commands.ActorContext) (*contract.Single[contract.MerchantAIExecutionResponse], error) {
+	if h == nil || h.Execution == nil {
+		return nil, appErrors.NotImplemented()
+	}
+	switch actor.Role {
+	case "owner", "admin":
+	default:
+		return nil, appErrors.New(appErrors.CodeForbidden, "catalog write permission is required")
+	}
+	result, err := h.Execution.ExecuteApproved(ctx, string(actor.BusinessID), string(actor.PrincipalID), in.Body.ProposalID)
+	if err != nil {
+		return nil, mapApplicationError(err)
+	}
+	out := &contract.Single[contract.MerchantAIExecutionResponse]{}
+	out.Body.Data = contract.MerchantAIExecutionResponse{ProposalID: in.Body.ProposalID, Status: "committed", Result: result}
 	return out, nil
 }

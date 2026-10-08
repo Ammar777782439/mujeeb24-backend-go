@@ -349,6 +349,16 @@ func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (a
 		return s.CreateOutboundMessage(ctx, input.(*contract.ConversationMessageInput))
 	case "listCustomers":
 		return s.ListCustomers(ctx, input.(*contract.CustomerListInput))
+	case "merchantAIExecute":
+		in := input.(*contract.MerchantAIExecuteInput)
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return nil, mapApplicationError(err)
+		}
+		if s.merchantCatalogAIV2.Handler == nil {
+			return nil, mapApplicationError(appErrors.NotImplemented())
+		}
+		return s.merchantCatalogAIV2.Handler.HandleExecute(ctx, in, actor)
 	case "merchantAIChat":
 		in := input.(*contract.MerchantCatalogAIV2Input)
 		actor, err := s.requireScope(ctx, in.BusinessID)

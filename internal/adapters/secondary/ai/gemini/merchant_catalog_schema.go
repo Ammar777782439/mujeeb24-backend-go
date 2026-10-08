@@ -18,7 +18,7 @@ func merchantCatalogProposalSchema() map[string]any {
 				"pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
 			},
 			"additionalProperties": true,
-			"description":          "Dynamic attribute object. Keys are English snake_case; values may be any valid JSON value. Keys do not need to exist in the database.",
+			"description":          "Dynamic descriptive attributes at the containing entity scope. For updates, preserve the scope of existing attributes from actual evidence; do not move item attributes into a newly created variant. Variant attributes describe only that variant. Keys are English snake_case; values may be any valid JSON value. Keys do not need to exist in the database.",
 		}
 	}
 
@@ -125,8 +125,8 @@ func merchantCatalogProposalSchema() map[string]any {
 		"properties": map[string]any{
 			"item_id": stringField(),
 			"changes": map[string]any{"type": "object", "properties": map[string]any{
-				"name": optionalString(), "status": optionalString(), "attributes": attributeObjectField(),
-				"item_type":         optionalString(),
+				"name": optionalString(), "status": map[string]any{"type": "string", "description": "Commercial lifecycle state. Omit unless merchant explicitly requested a lifecycle change. Do not reset an existing item to draft during an ordinary edit."}, "attributes": attributeObjectField(),
+				"item_type":         map[string]any{"type": "string", "description": "Entity kind from the canonical contract, not a variant name, audience, category or specification. Omit unless the merchant explicitly requested changing the entity kind."},
 				"short_description": optionalString(), "long_description": optionalString(),
 				"pricing_mode": optionalString(), "availability_mode": optionalString(),
 				"fulfillment_mode":      optionalString(),
@@ -267,7 +267,9 @@ func constrainMerchantCatalogSchemaValues(schema map[string]any) {
 		properties["availability_mode"] = enum(d.AvailabilityModes)
 		properties["fulfillment_mode"] = enum(d.FulfillmentModes)
 	}
+	statusDescription := changes["status"].(map[string]any)["description"]
 	changes["status"] = enum(d.ItemStatuses)
+	changes["status"].(map[string]any)["description"] = statusDescription
 	for _, offers := range []map[string]any{create["offers"].(map[string]any), update["new_offers"].(map[string]any)} {
 		props := offers["items"].(map[string]any)["properties"].(map[string]any)
 		props["availability_mode"] = enum(d.AvailabilityModes)

@@ -218,3 +218,6 @@ type ErrorResponse struct{ Body ErrorEnvelope }
 type MerchantCatalogAIV2Input = dto.MerchantCatalogAIV2Input
 type MerchantCatalogAITurnRequest = dto.MerchantCatalogAITurnRequest
 type MerchantCatalogAIResponse = dto.MerchantCatalogAIResponse
+
+type MerchantAIExecuteInput = dto.MerchantAIExecuteInput
+type MerchantAIExecutionResponse = dto.MerchantAIExecutionResponse

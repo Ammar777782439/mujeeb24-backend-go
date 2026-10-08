@@ -96,9 +96,9 @@ type ProposalExecutor interface {
 }
 
 type ExecutionResult struct {
-	ItemID     string
-	VariantIDs []string
-	OfferIDs   []string
+	ItemID     string   `json:"item_id"`
+	VariantIDs []string `json:"variant_ids"`
+	OfferIDs   []string `json:"offer_ids"`
 }
 
 type CatalogSelection struct {

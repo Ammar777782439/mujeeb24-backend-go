@@ -212,6 +212,8 @@ type CatalogItemPatch struct {
 }
 
 type OfferDraft struct {
+	PriceSource        *string
+	AmountDecimal      *string // Validated exact NUMERIC(20,4); used by catalog proposal execution.
 	ID                 string
 	BusinessID         string
 	CatalogItemID      string
@@ -230,6 +232,7 @@ type OfferDraft struct {
 }
 
 type OfferPatch struct {
+	AmountDecimal      *string // Takes precedence over the legacy minor-unit adapter.
 	ID                 string
 	BusinessID         string
 	Name               *string

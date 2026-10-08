@@ -215,6 +215,7 @@ func registerRemainingDashboardOperations(api huma.API, dispatcher DashboardOper
 	// B2B Merchant Catalog AI v2 keeps the external route stable while
 	// using an independent handler, DTOs, Proposal Contract, and execution path.
 	register(api, dispatcher, huma.Operation{OperationID: "merchantAIChat", Method: http.MethodPost, Path: "/businesses/{business_id}/merchant-ai/turns", Tags: []string{"MerchantCatalogAI"}, Summary: "Process one Merchant Catalog AI turn", Security: dashboardSecurity, DefaultStatus: http.StatusOK}, MerchantCatalogAIV2Input{}, Single[MerchantCatalogAIResponse]{})
+	register(api, dispatcher, huma.Operation{OperationID: "merchantAIExecute", Method: http.MethodPost, Path: "/businesses/{business_id}/merchant-ai/executions", Tags: []string{"MerchantCatalogAI"}, Summary: "Approve and atomically execute a stored catalog proposal", Security: dashboardSecurity, DefaultStatus: http.StatusOK}, MerchantAIExecuteInput{}, Single[MerchantAIExecutionResponse]{})
 }
 
 func init() { _ = registerRemainingDashboardOperations }

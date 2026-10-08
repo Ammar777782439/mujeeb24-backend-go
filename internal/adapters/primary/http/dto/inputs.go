@@ -784,6 +784,7 @@ type MerchantCatalogAITurnRequest struct {
 }
 
 type MerchantCatalogAIResponse struct {
+	ProposalID  string                     `json:"proposal_id,omitempty"`
 	SessionID   string                     `json:"session_id"`
 	CatalogID   string                     `json:"catalog_id"`
 	CatalogName string                     `json:"catalog_name"`
@@ -792,4 +793,17 @@ type MerchantCatalogAIResponse struct {
 
 type CatalogEntityContractPath struct {
 	BusinessID UUID `path:"business_id" format:"uuid"`
+}
+
+// Approval identifies a server-stored proposal; clients cannot supply mutation data.
+type MerchantAIExecuteInput struct {
+	BusinessID UUID `path:"business_id" format:"uuid"`
+	Body       struct {
+		ProposalID string `json:"proposal_id" format:"uuid"`
+	}
+}
+type MerchantAIExecutionResponse struct {
+	ProposalID string                            `json:"proposal_id"`
+	Status     string                            `json:"status"`
+	Result     merchantcatalogai.ExecutionResult `json:"result"`
 }

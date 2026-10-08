@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
 )
 
@@ -171,3 +172,18 @@ func (r *MerchantCatalogAISessionStore) SetStickyCatalogID(ctx context.Context, 
 }
 
 var _ merchantcatalogai.SessionStore = (*MerchantCatalogAISessionStore)(nil)
+
+func (r *MerchantCatalogAISessionStore) VerifyOwnership(ctx context.Context, businessID, principalID, sessionID string) error {
+	exec, err := r.Adapter.Executor(ctx)
+	if err != nil {
+		return err
+	}
+	var ok bool
+	if err = exec.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM merchant_ai_sessions WHERE business_id=$1::uuid AND principal_id=$2::uuid AND id=$3::uuid)`, businessID, principalID, sessionID).Scan(&ok); err != nil {
+		return err
+	}
+	if !ok {
+		return appErrors.New(appErrors.CodeForbidden, "merchant AI session ownership mismatch")
+	}
+	return nil
+}
