@@ -149,11 +149,11 @@ func TestChannelHistoryPurgePreservesOtherChannelsTenantsAndLeads(t *testing.T) 
 		t.Errorf("lead reference not detached: %v / %v", leadReference, err)
 	}
 	old := base
-	if skipped, err := history.ShouldIgnore(ctx, businessA, channelA, &old); err != nil || !skipped {
+	if skipped, err := history.ShouldIgnore(ctx, businessA, channelA, eventID, &old); err != nil || !skipped {
 		t.Errorf("old event restored, ignored=%v err=%v", skipped, err)
 	}
 	newTime := time.Now().Add(time.Minute)
-	if skipped, err := history.ShouldIgnore(ctx, businessA, channelA, &newTime); err != nil || skipped {
+	if skipped, err := history.ShouldIgnore(ctx, businessA, channelA, uuid.NewString(), &newTime); err != nil || skipped {
 		t.Errorf("new event blocked, ignored=%v err=%v", skipped, err)
 	}
 }
