@@ -152,7 +152,6 @@ func main() {
 		fmt.Printf("  ❌ Gemini client: %v\n", err)
 		os.Exit(1)
 	}
-	catalogRepository := postgres.NewCatalogRepository(adapter)
 	contractClient, err := gemini.NewGeminiCustomerSalesAdapter(geminiClient)
 	if err != nil {
 		fmt.Printf("  ❌ GeminiCustomerSalesAdapter: %v\n", err)
@@ -217,13 +216,13 @@ func main() {
 		os.Exit(1)
 	}
 	service.CatalogBatch = &services.CatalogBatchController{
-		CatalogAI:         postgres.NewCatalogAIReadRepository(adapter),
-		TokenCounter:      batchTokenCounter,
-		Gemini:            batchClient,
-		RunRepo:           postgres.NewAIRunTraceRepository(adapter),
-		TokenBudget:       8000,
-		Now:               func() time.Time { return time.Now().UTC() },
-		NewID:             uuid.NewString,
+		CatalogAI:    postgres.NewCatalogAIReadRepository(adapter),
+		TokenCounter: batchTokenCounter,
+		Gemini:       batchClient,
+		RunRepo:      postgres.NewAIRunTraceRepository(adapter),
+		TokenBudget:  8000,
+		Now:          func() time.Time { return time.Now().UTC() },
+		NewID:        uuid.NewString,
 	}
 	fmt.Println("  ✅ AutoReplyService fully wired")
 

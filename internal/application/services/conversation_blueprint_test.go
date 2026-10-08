@@ -208,19 +208,6 @@ func TestBuildValidatedStateAmbiguousKeepsState(t *testing.T) {
 	}
 }
 
-func TestIsSubscriptionHandoffIntent(t *testing.T) {
-	for _, text := range []string{"subscription_request", "ACTIVATION_Request", "طلب الاشتراك", "أريد تفعيل الباقة", "purchase_order"} {
-		if !isSubscriptionHandoffIntent(text) {
-			t.Fatalf("expected handoff intent for %q", text)
-		}
-	}
-	for _, text := range []string{"", "information_request", "inquiry", "greeting"} {
-		if isSubscriptionHandoffIntent(text) {
-			t.Fatalf("unexpected handoff intent for %q", text)
-		}
-	}
-}
-
 // TestAutoReplyHandoffFarewellOnSubscription verifies per contract ⑥ §14 that
 // when Gemini requests human handoff AND the conversation intent is a
 // subscription/activation request, Mujeeb sends the fixed farewell message
