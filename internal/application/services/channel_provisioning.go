@@ -105,6 +105,9 @@ func (s ChannelProvisioningService) ensureProviderBrand(ctx context.Context, bus
 		return ports.ProviderBrandRecord{}, err
 	}
 	if found {
+        if existing.LifecycleState == "deleting" {
+            return ports.ProviderBrandRecord{}, errors.New("provider brand is being deleted; retry authorization after cleanup completes")
+        }
 		for _, remote := range remoteBrands {
 			if strings.TrimSpace(remote.ProviderBrandRef) == strings.TrimSpace(existing.ProviderBrandRef) {
 				return existing, nil
