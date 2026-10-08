@@ -68,7 +68,7 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 	if err != nil {
 		if errors.Is(err, ErrCatalogSelectionRequired) {
 			return TurnResult{SessionID: sessionID, Proposal: Proposal{
-				SchemaVersion: 1,
+				SchemaVersion: ProposalSchemaVersion,
 				Status:        StatusNeedsMoreData,
 				Operation:     OperationAskMerchant,
 				ResponseText:  "حدّد الكتالوج الذي تريد إدارة بياناته أولًا.",

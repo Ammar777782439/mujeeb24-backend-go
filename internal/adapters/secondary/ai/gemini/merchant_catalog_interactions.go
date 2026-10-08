@@ -233,8 +233,13 @@ func parseMerchantCatalogProposal(resp merchantCatalogInteractionResponse) (merc
 	}
 
 	var proposal merchantcatalogai.Proposal
-	if err := json.Unmarshal([]byte(raw), &proposal); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&proposal); err != nil {
 		return merchantcatalogai.Proposal{}, fmt.Errorf("decode merchant catalog proposal: %w", err)
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return merchantcatalogai.Proposal{}, errors.New("Gemini returned trailing data after merchant catalog proposal")
 	}
 	return proposal, nil
 }

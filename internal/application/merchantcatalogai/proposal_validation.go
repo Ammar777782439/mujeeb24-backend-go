@@ -108,6 +108,9 @@ func (p Proposal) Validate() error {
 		return errors.New("merchant catalog proposal operation is invalid")
 	}
 	if p.Status != StatusResolved {
+		if p.Create != nil || p.Update != nil || p.Delete != nil {
+			return errors.New("non-resolved proposal cannot contain mutation data")
+		}
 		if p.IsMutation() {
 			return errors.New("non-resolved proposal cannot contain a mutation operation")
 		}
@@ -195,5 +198,5 @@ func (p Proposal) Validate() error {
 			return errors.New("ask_merchant proposal cannot contain mutation data")
 		}
 	}
-	return nil
+	return validateProposalValues(p)
 }
