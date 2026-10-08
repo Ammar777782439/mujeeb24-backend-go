@@ -429,6 +429,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		webhookService := services.SocialAPIWebhookService{
 			Receiver:         external.SocialWebhook,
 			RawPayloads:      postgres.NewRawPayloadStore(database),
+            History:          postgres.NewChannelHistoryRepository(database),
 			Connections:      postgres.NewChannelConnectionRepository(database),
 			Events:           eventStore,
 			Inbound:          postgres.NewProviderInboundStore(database),
