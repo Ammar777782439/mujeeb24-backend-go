@@ -243,14 +243,22 @@ func (r *ChannelHistoryRepository) Purge(ctx context.Context, businessID, connec
 	return result, err
 }
 
-func (r *ChannelHistoryRepository) ShouldIgnore(ctx context.Context, businessID, connectionID string, occurredAt *time.Time) (bool, error) {
+func (r *ChannelHistoryRepository) ShouldIgnore(ctx context.Context, businessID, connectionID, providerEventID string, occurredAt *time.Time) (bool, error) {
 	executor, err := r.executor(ctx)
 	if err != nil {
 		return false, err
 	}
 	var cutoff time.Time
-	err = executor.QueryRow(ctx, `SELECT cutoff FROM channel_history_purges
-        WHERE business_id=$1::uuid AND connection_id=$2::uuid`, businessID, connectionID).Scan(&cutoff)
+	// The provider event ID is a stable dedupe key even when the provider
+    // omits a message timestamp. This also avoids persisting the raw replay.
+    var previouslyPurged bool
+    err = executor.QueryRow(ctx, `SELECT p.cutoff,
+        EXISTS (SELECT 1 FROM inbound_event_ledger e
+            WHERE e.business_id=p.business_id AND e.connection_id=p.connection_id
+              AND e.provider_event_id=$3 AND e.processing_result_code='history_purged')
+        FROM channel_history_purges p
+        WHERE p.business_id=$1::uuid AND p.connection_id=$2::uuid`,
+        businessID, connectionID, providerEventID).Scan(&cutoff, &previouslyPurged)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -258,7 +266,7 @@ func (r *ChannelHistoryRepository) ShouldIgnore(ctx context.Context, businessID,
 		return false, classifyRepositoryGetError("channel_history.guard", err)
 	}
 	// Unknown timestamps must not resurrect purged history.
-	return occurredAt == nil || !occurredAt.After(cutoff), nil
+	return previouslyPurged || occurredAt == nil || !occurredAt.After(cutoff), nil
 }
 
 var _ ports.ChannelHistoryStore = (*ChannelHistoryRepository)(nil)
