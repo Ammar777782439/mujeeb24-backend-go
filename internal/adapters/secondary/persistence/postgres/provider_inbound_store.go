@@ -42,6 +42,13 @@ func (s *ProviderInboundStore) Materialize(ctx context.Context, draft ports.Prov
 		if err != nil {
 			return err
 		}
+		state, businessID, connectionID, providerRef, providerAccountRef, providerEventID, providerMessageID, providerConversationID, externalUserID, err := getProviderInboundLedger(txCtx, executor, draft.InboundEventID)
+		if err != nil {
+			return err
+		}
+		if businessID != draft.BusinessID || connectionID != draft.ConnectionID || providerRef != draft.ProviderRef || providerAccountRef != draft.ProviderAccountRef || providerEventID != draft.ProviderEventID || providerMessageID != draft.ProviderMessageID || providerConversationID != draft.ProviderConversationID || externalUserID != draft.ExternalUserID {
+			return &RepositoryError{Operation: "provider_inbound.materialize", Kind: RepositoryConflict, Err: errors.New("inbound event tenant or connection does not match draft")}
+		}
 		// Serialize materialization with an explicit history purge. A
 		// transaction that began before a purge must complete before cleanup.
 		var lockedConnection string
@@ -49,13 +56,6 @@ func (s *ProviderInboundStore) Materialize(ctx context.Context, draft ports.Prov
             WHERE business_id=$1::uuid AND id=$2::uuid FOR SHARE`,
 			draft.BusinessID, draft.ConnectionID).Scan(&lockedConnection); err != nil {
 			return classifyRepositoryGetError("provider_inbound.history_lock", err)
-		}
-		state, businessID, connectionID, providerRef, providerAccountRef, providerEventID, providerMessageID, providerConversationID, externalUserID, err := getProviderInboundLedger(txCtx, executor, draft.InboundEventID)
-		if err != nil {
-			return err
-		}
-		if businessID != draft.BusinessID || connectionID != draft.ConnectionID || providerRef != draft.ProviderRef || providerAccountRef != draft.ProviderAccountRef || providerEventID != draft.ProviderEventID || providerMessageID != draft.ProviderMessageID || providerConversationID != draft.ProviderConversationID || externalUserID != draft.ExternalUserID {
-			return &RepositoryError{Operation: "provider_inbound.materialize", Kind: RepositoryConflict, Err: errors.New("inbound event tenant or connection does not match draft")}
 		}
 		if state == "processed" {
 			result = findProviderMaterialization(txCtx, executor, businessID, draft)
