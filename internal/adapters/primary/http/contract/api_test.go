@@ -63,9 +63,14 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
 	// AI Provider Configuration: 6 endpoints added. Total = 140.
 	// Business owner assignment adds 1 platform business lifecycle endpoint. Total = 141.
 	operationIDs := regexp.MustCompile(`(?m)^\s+operationId: ([A-Za-z0-9_]+)$`).FindAllSubmatch(document, -1)
-	if len(operationIDs) != 142 {
-		t.Fatalf("generated %d operations, want 142", len(operationIDs))
+	if len(operationIDs) != 144 {
+		t.Fatalf("generated %d operations, want 144", len(operationIDs))
 	}
+    for _, op := range []string{"previewChannelHistoryPurge", "purgeChannelHistory"} {
+        if !bytes.Contains(document, []byte("operationId: "+op)) {
+            t.Fatalf("missing channel history operation: %s", op)
+        }
+    }
 	seen := make(map[string]struct{}, len(operationIDs))
 	for _, match := range operationIDs {
 		id := string(match[1])
