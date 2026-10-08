@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -39,8 +40,9 @@ type merchantCatalogInteractionFormat struct {
 }
 
 type merchantCatalogGenerationConfig struct {
-	MaxOutputTokens int    `json:"max_output_tokens,omitempty"`
-	ThinkingLevel   string `json:"thinking_level,omitempty"`
+	MaxOutputTokens   int    `json:"max_output_tokens,omitempty"`
+	ThinkingLevel     string `json:"thinking_level,omitempty"`
+	ThinkingSummaries string `json:"thinking_summaries,omitempty"`
 }
 
 type merchantCatalogInteractionResponse struct {
@@ -58,6 +60,7 @@ type merchantCatalogInteractionStep struct {
 	Arguments json.RawMessage             `json:"arguments,omitempty"`
 	Result    json.RawMessage             `json:"result,omitempty"`
 	Content   []merchantCatalogOutputPart `json:"content,omitempty"`
+	Summary   []merchantCatalogOutputPart `json:"summary,omitempty"`
 }
 
 type merchantCatalogOutputPart struct {
@@ -66,8 +69,9 @@ type merchantCatalogOutputPart struct {
 }
 
 type merchantCatalogUsage struct {
-	InputTokens  int `json:"total_input_tokens,omitempty"`
-	OutputTokens int `json:"total_output_tokens,omitempty"`
+	InputTokens   int `json:"total_input_tokens,omitempty"`
+	OutputTokens  int `json:"total_output_tokens,omitempty"`
+	ThoughtTokens int `json:"total_thought_tokens,omitempty"`
 }
 
 type merchantCatalogFunctionCall struct {
@@ -81,6 +85,8 @@ func (r *GeminiMerchantCatalogAuthoringAdapter) sendInteraction(ctx context.Cont
 	if err != nil {
 		return merchantCatalogInteractionResponse{}, fmt.Errorf("encode Gemini interaction request: %w", err)
 	}
+
+	log.Printf("[MerchantCatalogAI][INTERACTION_REQUEST] json=%s", payload)
 
 	requestCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
@@ -107,6 +113,8 @@ func (r *GeminiMerchantCatalogAuthoringAdapter) sendInteraction(ctx context.Cont
 		if readErr != nil {
 			return merchantCatalogInteractionResponse{}, fmt.Errorf("read Gemini interaction response: %w", readErr)
 		}
+
+		log.Printf("[MerchantCatalogAI][INTERACTION_RESPONSE] status=%d json=%s", resp.StatusCode, body)
 
 		if resp.StatusCode >= 400 {
 			lastErr = fmt.Errorf("merchant catalog Gemini HTTP %d: %s", resp.StatusCode, string(body))
@@ -168,29 +176,58 @@ func incompleteMerchantCatalogInteractionError(resp merchantCatalogInteractionRe
 		"Gemini merchant catalog interaction incomplete before structured proposal: status=%s steps=%d output_chars=%d max_output_tokens=%d; increase the active AI output-token limit",
 		resp.Status,
 		len(resp.Steps),
-		len([]rune(strings.TrimSpace(resp.OutputText))),
+		len([]rune(merchantCatalogOutputText(resp))),
 		maxOutput,
 	)
 }
 
-func parseMerchantCatalogProposal(resp merchantCatalogInteractionResponse) (merchantcatalogai.Proposal, error) {
-	raw := strings.TrimSpace(resp.OutputText)
-	if raw == "" {
-		for i := len(resp.Steps) - 1; i >= 0; i-- {
-			if resp.Steps[i].Type != "model_output" {
-				continue
+func merchantCatalogOutputText(resp merchantCatalogInteractionResponse) string {
+	if raw := strings.TrimSpace(resp.OutputText); raw != "" {
+		return raw
+	}
+	for i := len(resp.Steps) - 1; i >= 0; i-- {
+		if resp.Steps[i].Type != "model_output" {
+			continue
+		}
+		var output strings.Builder
+		for _, part := range resp.Steps[i].Content {
+			if part.Type == "text" {
+				output.WriteString(part.Text)
 			}
-			for _, part := range resp.Steps[i].Content {
-				if strings.TrimSpace(part.Text) != "" {
-					raw = strings.TrimSpace(part.Text)
-					break
-				}
-			}
-			if raw != "" {
-				break
+		}
+		if raw := strings.TrimSpace(output.String()); raw != "" {
+			return raw
+		}
+	}
+	return ""
+}
+
+// logMerchantCatalogInteractionContent logs the provider's exposed summary,
+// not encrypted signatures or private internal reasoning.
+func logMerchantCatalogInteractionContent(resp merchantCatalogInteractionResponse) {
+	for i, step := range resp.Steps {
+		if step.Type != "thought" {
+			continue
+		}
+		for _, part := range step.Summary {
+			if part.Type == "text" && strings.TrimSpace(part.Text) != "" {
+				log.Printf("[MerchantCatalogAI][THOUGHT_SUMMARY] interaction=%s step=%d text=%s", resp.ID, i, part.Text)
 			}
 		}
 	}
+	raw := merchantCatalogOutputText(resp)
+	if raw == "" {
+		return
+	}
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, []byte(raw), "", "  "); err == nil {
+		raw = pretty.String()
+	}
+	log.Printf("[MerchantCatalogAI][MODEL_OUTPUT] interaction=%s json=%s", resp.ID, raw)
+}
+
+func parseMerchantCatalogProposal(resp merchantCatalogInteractionResponse) (merchantcatalogai.Proposal, error) {
+	raw := merchantCatalogOutputText(resp)
 	if raw == "" {
 		return merchantcatalogai.Proposal{}, errors.New("Gemini returned no merchant catalog proposal")
 	}
