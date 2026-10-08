@@ -63,6 +63,7 @@ type ProviderBrandRecord struct {
 type ProviderBrandStore interface {
 	Get(ctx context.Context, businessID, providerRef string) (ProviderBrandRecord, bool, error)
 	Create(ctx context.Context, brand ProviderBrandRecord) (ProviderBrandRecord, error)
+	Upsert(ctx context.Context, brand ProviderBrandRecord) (ProviderBrandRecord, error)
 }
 
 // ProviderBrandCleanupStore reserves one merchant Brand for deletion only if

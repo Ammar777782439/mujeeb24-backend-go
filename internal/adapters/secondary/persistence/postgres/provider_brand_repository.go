@@ -106,6 +106,56 @@ func (r *ProviderBrandRepository) Create(ctx context.Context, brand ports.Provid
 	return record, nil
 }
 
+func (r *ProviderBrandRepository) Upsert(ctx context.Context, brand ports.ProviderBrandRecord) (ports.ProviderBrandRecord, error) {
+	if r == nil || r.adapter == nil {
+		return ports.ProviderBrandRecord{}, ErrPoolClosed
+	}
+	brand.BusinessID = strings.TrimSpace(brand.BusinessID)
+	brand.ProviderRef = strings.TrimSpace(brand.ProviderRef)
+	brand.ProviderBrandRef = strings.TrimSpace(brand.ProviderBrandRef)
+	brand.DisplayName = strings.TrimSpace(brand.DisplayName)
+	if brand.ID == "" {
+		brand.ID = uuid.NewString()
+	}
+	if brand.BusinessID == "" || brand.ProviderRef == "" || brand.ProviderBrandRef == "" || brand.DisplayName == "" {
+		return ports.ProviderBrandRecord{}, invalidRepositoryInput("provider_brand.upsert", "id, business, provider, provider brand, and display name are required")
+	}
+	now := time.Now().UTC()
+
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.ProviderBrandRecord{}, err
+	}
+
+	const query = `
+        INSERT INTO channel_provider_brands (
+            id, business_id, provider_ref, provider_brand_ref, display_name, created_at, updated_at
+        )
+        VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $6)
+        ON CONFLICT (business_id, provider_ref)
+        DO UPDATE SET
+            provider_brand_ref = EXCLUDED.provider_brand_ref,
+            display_name = EXCLUDED.display_name,
+            lifecycle_state = 'active',
+            updated_at = EXCLUDED.updated_at
+        RETURNING id::text, business_id::text, provider_ref, provider_brand_ref, display_name, lifecycle_state, created_at, updated_at
+    `
+	var record ports.ProviderBrandRecord
+	if err := executor.QueryRow(ctx, query, brand.ID, brand.BusinessID, brand.ProviderRef, brand.ProviderBrandRef, brand.DisplayName, now).Scan(
+		&record.ID,
+		&record.BusinessID,
+		&record.ProviderRef,
+		&record.ProviderBrandRef,
+		&record.DisplayName,
+		&record.LifecycleState,
+		&record.CreatedAt,
+		&record.UpdatedAt,
+	); err != nil {
+		return ports.ProviderBrandRecord{}, classifyRepositoryWriteError("provider_brand.upsert", err)
+	}
+	return record, nil
+}
+
 func (r *ProviderBrandRepository) ReserveUnused(ctx context.Context, businessID, providerRef string) (string, bool, error) {
 	if r == nil || r.adapter == nil {
 		return "", false, ErrPoolClosed

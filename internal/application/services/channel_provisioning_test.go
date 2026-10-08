@@ -96,6 +96,15 @@ func (b *provisioningBrands) Create(_ context.Context, brand ports.ProviderBrand
 	return brand, nil
 }
 
+func (b *provisioningBrands) Upsert(_ context.Context, brand ports.ProviderBrandRecord) (ports.ProviderBrandRecord, error) {
+	if b.local == nil {
+		b.local = map[string]ports.ProviderBrandRecord{}
+	}
+	key := brand.BusinessID + "/" + brand.ProviderRef
+	b.local[key] = brand
+	return brand, nil
+}
+
 func (b *provisioningBrands) ListBrands(_ context.Context) ([]ports.ProviderBrandRecord, error) {
 	b.listCalls++
 	result := make([]ports.ProviderBrandRecord, 0, len(b.remote))
@@ -352,7 +361,7 @@ func TestChannelProvisioningRejectsAmbiguousProviderBrandIdentity(t *testing.T) 
 	}
 }
 
-func TestChannelProvisioningRejectsOrphanedCachedBrandBeforeOAuth(t *testing.T) {
+func TestChannelProvisioningAutoReconcilesOrphanedCachedBrandBeforeOAuth(t *testing.T) {
 	brands := &provisioningBrands{
 		local: map[string]ports.ProviderBrandRecord{
 			"business-1/socialapi": {BusinessID: "business-1", ProviderRef: "socialapi", ProviderBrandRef: "stale-brand-id", DisplayName: "Acme"},
@@ -369,11 +378,12 @@ func TestChannelProvisioningRejectsOrphanedCachedBrandBeforeOAuth(t *testing.T) 
 		Connections:    &provisioningConnections{},
 		RedirectURI:    "https://app.example/oauth/callback",
 	}
-	if _, err := service.Start(context.Background(), "business-1", "socialapi", "facebook", "Facebook Page", "stale-brand-test"); err == nil {
-		t.Fatal("expected provider verification error for stale saved brand")
+	started, err := service.Start(context.Background(), "business-1", "socialapi", "facebook", "Facebook Page", "stale-brand-test")
+	if err != nil {
+		t.Fatalf("expected auto-reconciliation of stale brand, got err: %v", err)
 	}
-	if brands.listCalls != 1 || brands.createCalls != 0 || len(social.brandIDs) != 0 {
-		t.Fatalf("stale brand was used to authorize or duplicated: lists=%d creates=%d auth=%v", brands.listCalls, brands.createCalls, social.brandIDs)
+	if started.Status != ports.ProvisioningPendingAuthorization || brands.createCalls != 1 || len(social.brandIDs) != 1 || social.brandIDs[0] != "brand-1" {
+		t.Fatalf("auto-reconciliation failed: session=%#v creates=%d auth_brands=%v", started, brands.createCalls, social.brandIDs)
 	}
 }
 

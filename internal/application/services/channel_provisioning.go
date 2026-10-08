@@ -113,9 +113,9 @@ func (s ChannelProvisioningService) ensureProviderBrand(ctx context.Context, bus
 				return existing, nil
 			}
 		}
-		// A scoped provider key may hide remote brands. Fail closed instead
-		// of blindly creating a duplicate (or deleting a still-used brand).
-		return ports.ProviderBrandRecord{}, fmt.Errorf("saved provider brand is not visible at SocialAPI; verify management key and reconcile brand mapping for business %s", businessID)
+		// The saved local brand was deleted or is not visible remotely.
+		// Auto-reconcile by provisioning a fresh brand instead of failing closed.
+		log.Printf("[ChannelProvisioning] saved provider brand %s for business %s is missing remotely at SocialAPI; auto-reconciling", existing.ProviderBrandRef, businessID)
 	}
 	var matches []ports.ProviderBrandRecord
 	for _, remote := range remoteBrands {
@@ -158,34 +158,16 @@ func (s ChannelProvisioningService) persistProviderBrand(ctx context.Context, bu
 	if remote.DisplayName == "" {
 		return ports.ProviderBrandRecord{}, errors.New("business display name is required")
 	}
-	persisted, err := s.ProviderBrands.Create(ctx, remote)
-	if err == nil {
-		return persisted, nil
-	}
-
-	// A concurrent provisioning request may have persisted the same mapping.
-	// Recover it instead of creating a second local binding.
-	existing, found, getErr := s.ProviderBrands.Get(ctx, businessID, providerRef)
-	if getErr == nil && found {
-		if newlyCreated && existing.ProviderBrandRef != remote.ProviderBrandRef {
+	persisted, err := s.ProviderBrands.Upsert(ctx, remote)
+	if err != nil {
+		if newlyCreated {
 			if cleanupErr := s.SocialBrands.DeleteBrand(ctx, remote.ProviderBrandRef); cleanupErr != nil {
-				log.Printf("[ChannelProvisioning] provider brand cleanup failed after mapping race business=%s brand=%s err=%v", businessID, remote.ProviderBrandRef, cleanupErr)
+				log.Printf("[ChannelProvisioning] provider brand cleanup failed business=%s brand=%s err=%v", businessID, remote.ProviderBrandRef, cleanupErr)
 			}
 		}
-		return existing, nil
-	}
-	if errors.Is(err, ports.ErrProviderBrandConflict) {
 		return ports.ProviderBrandRecord{}, err
 	}
-	if newlyCreated {
-		if cleanupErr := s.SocialBrands.DeleteBrand(ctx, remote.ProviderBrandRef); cleanupErr != nil {
-			log.Printf("[ChannelProvisioning] provider brand cleanup failed business=%s brand=%s err=%v", businessID, remote.ProviderBrandRef, cleanupErr)
-		}
-	}
-	if getErr != nil {
-		return ports.ProviderBrandRecord{}, fmt.Errorf("persist provider brand: %w (lookup existing mapping: %v)", err, getErr)
-	}
-	return ports.ProviderBrandRecord{}, err
+	return persisted, nil
 }
 
 func (s ChannelProvisioningService) CompleteOAuthCallback(ctx context.Context, callback ports.SocialAuthorizationCallback) (ports.ChannelProvisioningSession, error) {
