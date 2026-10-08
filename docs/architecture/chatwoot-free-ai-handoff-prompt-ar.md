@@ -253,7 +253,7 @@ git diff --check
 git log -3 --oneline --decorate
 ```
 
-الفرع المخصص للعمل هو `feat/chatwoot-free`. لا تعتبر وجود commit على GitHub دليلًا على أن كل التكاملات الخارجية أو كل اختبارات live ناجحة.
+الفرع المخصص للعمل هو `feat/universal-catalog-ai-v3`. لا تعتبر وجود commit على GitHub دليلًا على أن كل التكاملات الخارجية أو كل اختبارات live ناجحة.
 
 ## قاعدة القرار عند الشك
 

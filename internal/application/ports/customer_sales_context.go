@@ -128,12 +128,12 @@ type CustomerSalesCatalogEvidence struct {
 	AttributeSchemaReference *string
 	AttributeSchemaVersion   *int
 	ItemType                 string
-	Name             string
-	Status           string
-	Attributes       []byte
-	EvidenceState    string
-	RetrievedAt      time.Time
-	SchemaVersion    int
+	Name                     string
+	Status                   string
+	Attributes               []byte
+	EvidenceState            string
+	RetrievedAt              time.Time
+	SchemaVersion            int
 	// Per contract ① §1 + migration 000016 — the following fields are NOT NULL
 	// in the DB and MUST be included in the evidence sent to Gemini.
 	// Without them, Gemini can see the product exists but cannot answer
@@ -148,10 +148,10 @@ type CustomerSalesCatalogEvidence struct {
 }
 
 type CustomerSalesCatalogSchemaEvidence struct {
-	ID          string                                           `json:"id"`
-	Name        string                                           `json:"name"`
-	Version     int                                              `json:"version"`
-	Definitions []CustomerSalesAttributeDefinitionEvidence       `json:"definitions"`
+	ID          string                                     `json:"id"`
+	Name        string                                     `json:"name"`
+	Version     int                                        `json:"version"`
+	Definitions []CustomerSalesAttributeDefinitionEvidence `json:"definitions"`
 }
 
 type CustomerSalesAttributeDefinitionEvidence struct {
@@ -166,30 +166,30 @@ type CustomerSalesAttributeDefinitionEvidence struct {
 }
 
 type CustomerSalesOfferEvidence struct {
-	Reference                   string
-	CatalogItemReference        string
-	VariantReference            string
-	Name                        string
-	PricingMode                 string
-	Amount                      string
-	Currency                    string
-	PricingUnit                 string     `json:"pricing_unit,omitempty"`
-	PriceSource                 string     `json:"price_source,omitempty"`
-	PriceVerificationStatus     string     `json:"price_verification_status,omitempty"`
-	PriceCheckedAt              *time.Time `json:"price_checked_at,omitempty"`
-	AvailabilityMode            string     `json:"availability_mode,omitempty"`
-	AvailabilityStatus          string `json:"availability_status"`
-	AvailabilitySource          string     `json:"availability_source,omitempty"`
-	AvailabilityCheckedAt       *time.Time `json:"availability_checked_at,omitempty"`
-	AvailabilityValidUntil      *time.Time `json:"availability_valid_until,omitempty"`
-	AvailabilityEvidenceRef     string     `json:"availability_evidence_ref,omitempty"`
-	FulfillmentMode             string     `json:"fulfillment_mode,omitempty"`
-	ValidityFrom                *time.Time `json:"validity_from,omitempty"`
-	ValidityUntil               *time.Time `json:"validity_until,omitempty"`
-	Status                      string
-	EvidenceState               string
-	RetrievedAt                 time.Time
-	SchemaVersion               int
+	Reference               string
+	CatalogItemReference    string
+	VariantReference        string
+	Name                    string
+	PricingMode             string
+	Amount                  string
+	Currency                string
+	PricingUnit             string     `json:"pricing_unit,omitempty"`
+	PriceSource             string     `json:"price_source,omitempty"`
+	PriceVerificationStatus string     `json:"price_verification_status,omitempty"`
+	PriceCheckedAt          *time.Time `json:"price_checked_at,omitempty"`
+	AvailabilityMode        string     `json:"availability_mode,omitempty"`
+	AvailabilityStatus      string     `json:"availability_status"`
+	AvailabilitySource      string     `json:"availability_source,omitempty"`
+	AvailabilityCheckedAt   *time.Time `json:"availability_checked_at,omitempty"`
+	AvailabilityValidUntil  *time.Time `json:"availability_valid_until,omitempty"`
+	AvailabilityEvidenceRef string     `json:"availability_evidence_ref,omitempty"`
+	FulfillmentMode         string     `json:"fulfillment_mode,omitempty"`
+	ValidityFrom            *time.Time `json:"validity_from,omitempty"`
+	ValidityUntil           *time.Time `json:"validity_until,omitempty"`
+	Status                  string
+	EvidenceState           string
+	RetrievedAt             time.Time
+	SchemaVersion           int
 }
 
 type CustomerSalesKnowledgeEvidence struct {

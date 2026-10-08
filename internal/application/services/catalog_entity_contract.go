@@ -310,14 +310,14 @@ func DefaultCatalogEntityContractDescriptor() CatalogEntityContractDescriptor {
 //
 // The payload contains ONLY definitions and descriptors; no merchant data.
 type CatalogAIEntityContractDescriptor struct {
-	PricingModes              []string                    `json:"pricing_modes"`
-	AvailabilityModes         []string                    `json:"availability_modes"`
-	AvailabilityStatuses      []string                    `json:"availability_statuses"`
-	PriceVerificationStatuses []string                    `json:"price_verification_statuses"`
-	FulfillmentModes          []string                    `json:"fulfillment_modes"`
-	CatalogStatuses           []string                    `json:"catalog_statuses"`
-	ItemStatuses              []string                    `json:"item_statuses"`
-	VariantStatuses           []string                    `json:"variant_statuses"`
+	PricingModes              []string                      `json:"pricing_modes"`
+	AvailabilityModes         []string                      `json:"availability_modes"`
+	AvailabilityStatuses      []string                      `json:"availability_statuses"`
+	PriceVerificationStatuses []string                      `json:"price_verification_statuses"`
+	FulfillmentModes          []string                      `json:"fulfillment_modes"`
+	CatalogStatuses           []string                      `json:"catalog_statuses"`
+	ItemStatuses              []string                      `json:"item_statuses"`
+	VariantStatuses           []string                      `json:"variant_statuses"`
 	OfferStatuses             []string                      `json:"offer_statuses"`
 	SemanticRules             []string                      `json:"semantic_rules"`
 	Relationships             []CatalogAIEntityRelationship `json:"relationships"`

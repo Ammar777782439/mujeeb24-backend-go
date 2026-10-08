@@ -6,11 +6,11 @@ import "context"
 // It may intentionally truncate names/types/keys; truncation flags are explicit.
 // Item-level truth comes only from detailed evidence or complete catalog evaluation.
 type CatalogAIManifest struct {
-	TotalActiveItems  int                         `json:"total_active_items"`
-	TotalCatalogs     int                         `json:"total_catalogs"`
-	TotalSchemas      int                         `json:"total_schemas"`
-	CatalogsTruncated bool                        `json:"catalogs_truncated,omitempty"`
-	SchemasTruncated  bool                        `json:"schemas_truncated,omitempty"`
+	TotalActiveItems  int                        `json:"total_active_items"`
+	TotalCatalogs     int                        `json:"total_catalogs"`
+	TotalSchemas      int                        `json:"total_schemas"`
+	CatalogsTruncated bool                       `json:"catalogs_truncated,omitempty"`
+	SchemasTruncated  bool                       `json:"schemas_truncated,omitempty"`
 	Catalogs          []CatalogAIManifestCatalog `json:"catalogs"`
 	Schemas           []CatalogAIManifestSchema  `json:"schemas,omitempty"`
 }

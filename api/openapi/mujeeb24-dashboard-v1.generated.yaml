@@ -300,15 +300,15 @@ components:
           type: string
         required:
           type: boolean
-        searchable:
-          type: boolean
+        validation_rules:
+          additionalProperties: {}
+          type: object
       required:
         - id
         - key
         - label
         - data_type
         - required
-        - searchable
         - display_order
       type: object
     AttributeDefinitionInput:
@@ -325,14 +325,14 @@ components:
           type: string
         required:
           type: boolean
-        searchable:
-          type: boolean
+        validation_rules:
+          additionalProperties: {}
+          type: object
       required:
         - key
         - label
         - data_type
         - required
-        - searchable
         - display_order
       type: object
     AttributeSchema:

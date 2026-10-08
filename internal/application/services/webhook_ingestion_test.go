@@ -128,7 +128,11 @@ func (s *autoReplyHandler) wait() {
 	done := s.done
 	s.mu.Unlock()
 	if done != nil {
-		<-done
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			panic("AutoReply test handler did not complete")
+		}
 	}
 }
 
@@ -198,6 +202,9 @@ func TestSocialAPIWebhookServiceRunsAutoReplyOnlyForNewInboundMessage(t *testing
 	autoReply := newAutoReplyHandler()
 	service := resolvedSocialWebhookService(&providerInboundStore{result: ports.ProviderInboundResult{BusinessID: "business-1", ConversationID: "conversation-1", CommunicationMessageID: "message-1"}})
 	service.AutoReply = autoReply
+	service.AICostProtectionChecker = &stubChecker{allowed: true}
+	service.AutoReplyWorkerPool = NewAutoReplyWorkerPool(1, 1)
+	defer service.AutoReplyWorkerPool.Stop()
 	if _, err := service.Handle(context.Background(), signedSocialCommand(t, body)); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
@@ -264,3 +271,20 @@ var _ ports.EventStore = (*webhookEventStore)(nil)
 var _ ports.ProviderInboundStore = (*providerInboundStore)(nil)
 var _ ports.DeliveryStatusStore = (*deliveryStatusStore)(nil)
 var _ commands.AutoReplyHandler = (*autoReplyHandler)(nil)
+
+func TestWebhookWithoutWorkerPoolAcceptsInboundWithoutStartingAI(t *testing.T) {
+	body := []byte(`{"event":"dm.received","data":{"id":"event-1","type":"dm","platform":"instagram","account_id":"account-1","conversation_id":"conversation-1","author":{"id":"customer-1"},"content":{"text":"hello"}}}`)
+	autoReply := newAutoReplyHandler()
+	service := resolvedSocialWebhookService(&providerInboundStore{result: ports.ProviderInboundResult{BusinessID: "business-1", ConversationID: "conversation-1", CommunicationMessageID: "message-1"}})
+	service.AutoReply = autoReply
+	service.AICostProtectionChecker = &stubChecker{allowed: true}
+	result, err := service.Handle(context.Background(), signedSocialCommand(t, body))
+	if err != nil || !result.Accepted {
+		t.Fatalf("inbound must still be accepted: %#v %v", result, err)
+	}
+	select {
+	case <-autoReply.done:
+		t.Fatal("missing worker pool must not launch an unbounded AI goroutine")
+	case <-time.After(20 * time.Millisecond):
+	}
+}

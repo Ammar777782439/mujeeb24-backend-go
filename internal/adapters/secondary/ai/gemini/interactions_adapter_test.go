@@ -34,9 +34,9 @@ func TestCustomerSalesUsesInteractionsAPIAndChainsState(t *testing.T) {
 	defer server.Close()
 
 	client, err := NewGeminiHTTPClient(GeminiHTTPClientConfig{
-		BaseURL: server.URL,
-		APIKey: "test-key",
-		Model: "gemini-test",
+		BaseURL:        server.URL,
+		APIKey:         "test-key",
+		Model:          "gemini-test",
 		RequestTimeout: 5 * time.Second,
 	})
 	if err != nil {
@@ -49,13 +49,13 @@ func TestCustomerSalesUsesInteractionsAPIAndChainsState(t *testing.T) {
 
 	out, err := adapter.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{
-			BusinessID: "business-1",
+			BusinessID:     "business-1",
 			ConversationID: "conversation-1",
-			Text: "مرحبا",
+			Text:           "مرحبا",
 		},
 		GeminiInteraction: ports.GeminiInteractionContext{
 			PreviousInteractionID: "int-1",
-			Store: true,
+			Store:                 true,
 		},
 		EntityContractPayload: []byte(`{"entity_contract":{"catalog":{"id":"UUID"}}}`),
 	})
@@ -109,7 +109,7 @@ func TestCustomerSalesDropsPreviousInteractionWhenStoreDisabled(t *testing.T) {
 	client, _ := NewGeminiHTTPClient(GeminiHTTPClientConfig{BaseURL: server.URL, APIKey: "k", Model: "m"})
 	adapter, _ := NewGeminiCustomerSalesAdapter(client)
 	_, err := adapter.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		Request: ports.CustomerSalesDecisionRequest{BusinessID: "b", ConversationID: "c", Text: "hello"},
+		Request:           ports.CustomerSalesDecisionRequest{BusinessID: "b", ConversationID: "c", Text: "hello"},
 		GeminiInteraction: ports.GeminiInteractionContext{PreviousInteractionID: "must-not-send", Store: false},
 	})
 	if err != nil {
@@ -129,11 +129,11 @@ func TestCustomerSalesEnforcesMaxInputOnSerializedInteraction(t *testing.T) {
 	defer server.Close()
 
 	client, err := NewGeminiHTTPClient(GeminiHTTPClientConfig{
-		BaseURL: server.URL,
-		APIKey: "test-key",
-		Model: "gemini-test",
+		BaseURL:            server.URL,
+		APIKey:             "test-key",
+		Model:              "gemini-test",
 		MaxInputCharacters: 80,
-		RequestTimeout: 5 * time.Second,
+		RequestTimeout:     5 * time.Second,
 	})
 	if err != nil {
 		t.Fatalf("build client: %v", err)
@@ -145,9 +145,9 @@ func TestCustomerSalesEnforcesMaxInputOnSerializedInteraction(t *testing.T) {
 
 	_, err = adapter.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{
-			BusinessID: "business-1",
+			BusinessID:     "business-1",
 			ConversationID: "conversation-1",
-			Text: "hi",
+			Text:           "hi",
 		},
 		EntityContractPayload: []byte(`{"entity_contract":{"catalog":{"description":"this makes the serialized system instruction intentionally larger than the configured limit"}}}`),
 	})
@@ -158,7 +158,6 @@ func TestCustomerSalesEnforcesMaxInputOnSerializedInteraction(t *testing.T) {
 		t.Fatal("HTTP request must not be sent when serialized interaction exceeds the configured input limit")
 	}
 }
-
 
 func TestStrictCustomerProposalRejectsUnknownFields(t *testing.T) {
 	var proposal ports.CustomerSalesProposal

@@ -352,7 +352,7 @@ func TestAutoReplyServiceEnqueuesGeneralAnswerAfterFocus(t *testing.T) {
 	}}
 	outbox := &fakeOutboxStore{}
 	service := NewAutoReplyService(
-		&FakeCustomerSalesDecisionPort{Proposal: ports.CustomerSalesProposal{Status: ports.CustomerSalesProposalStatusResolved, Action: ports.CustomerSalesProposalActionAnswer, ResponseText: "الباقات: الأساسية والاحترافية", Selected: []ports.SelectedReference{{ItemID: "offer-basic"}, {ItemID: "offer-pro"}}}},
+		&FakeCustomerSalesDecisionPort{Proposal: ports.CustomerSalesProposal{Status: ports.CustomerSalesProposalStatusResolved, Action: ports.CustomerSalesProposalActionAnswer, ResponseText: "الباقات: الأساسية والاحترافية", Selected: []ports.SelectedReference{{ItemID: "item-basic", OfferID: stringPtr("offer-basic")}, {ItemID: "item-pro", OfferID: stringPtr("offer-pro")}}}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
 		&fakeOutboundRepository{},

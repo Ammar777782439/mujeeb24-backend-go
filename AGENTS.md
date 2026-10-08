@@ -10,9 +10,9 @@
 قبل أي قراءة تحليلية أو تعديل أو تنفيذ لأي مهمة، التزم بالخطوات العشر الآتية بالترتيب:
 
 1. **اقرأ هذا الملف (`AGENTS.md`) بالكامل.**
-2. **اقرأ الوثيقة المرجعية الشاملة:** [docs/architecture/chatwoot-free-ai-handoff-prompt-ar.md](file:///D:/mujeeb24/mujeeb24-backend-go/docs/architecture/chatwoot-free-ai-handoff-prompt-ar.md).
-3. **اقرأ وثائق البدء وحالة العمل إن وجدت:** `docs/engineering/START_HERE.md` و`docs/engineering/WORK_IN_PROGRESS.md` ومستند [todo.md](file:///D:/mujeeb24/mujeeb24-backend-go/todo.md).
-4. **افحص حالة Git الحالية:** تأكد من أنك على الفرع المعتمد `feat/chatwoot-free` وأن شجرة العمل نظيفة (`git status --short`).
+2. **اقرأ الوثيقة المرجعية الشاملة:** [docs/architecture/chatwoot-free-ai-handoff-prompt-ar.md](docs/architecture/chatwoot-free-ai-handoff-prompt-ar.md).
+3. **اقرأ وثائق البدء وحالة العمل إن وجدت:** `docs/engineering/START_HERE.md` و`docs/engineering/WORK_IN_PROGRESS.md` ومستند [todo.md](todo.md).
+4. **افحص حالة Git الحالية:** تأكد من أنك على الفرع المعتمد `feat/universal-catalog-ai-v3` وأن شجرة العمل نظيفة (`git status --short`).
 5. **حدد نطاق المهمة (Task Scope):** تأكد من أن المطلوب يخص الـBackend فقط، ولا تلمس الـFrontend أو أنظمة الدفع أو الشحن.
 6. **حدد العقود المتأثرة:** راجع العقود المغلقة في هذا الملف وتأكد من عدم كسر أي قيد ثابت.
 7. **استخدم الأدوات المخصصة فعلياً:**
@@ -49,9 +49,9 @@
    - حفظ الـPayload الخام في `inbound_webhook_payloads`، ومنع التكرار (Deduplication) عبر قيد `provider_event_id` في `inbound_event_ledger`.
 3. **Outbox & Background Worker:**
    - الـAPI ينشئ `outbound_messages` و`outbox_entries` محلياً داخل معاملة PostgreSQL.
-   - المشغل الخلفي [cmd/worker](file:///D:/mujeeb24/mujeeb24-backend-go/cmd/worker/main.go) يسحب السجلات بشكل غير متزامن بنظام الـLease ويستدعي SocialAPI.
+   - المشغل الخلفي [cmd/worker](cmd/worker/main.go) يسحب السجلات بشكل غير متزامن بنظام الـLease ويستدعي SocialAPI.
 4. **Tenant Isolation & Scope Provider:**
-   - التحقق من هوية المستخدم `PrincipalID` وعضويته في `business_id` عبر [PostgresScopeProvider](file:///D:/mujeeb24/mujeeb24-backend-go/internal/adapters/primary/http/handlers/postgres_scope.go).
+   - التحقق من هوية المستخدم `PrincipalID` وعضويته في `business_id` عبر [PostgresScopeProvider](internal/adapters/primary/http/handlers/postgres_scope.go).
    - حماية الجداول بمفاتيح أجنبية مركبة (`business_id, id`).
 5. **Team Invitations & Role Governance:**
    - إنشاء الدعوة يولد رمزاً عشوائياً ويخزن `SHA-256(token)` فقط؛ ويعود الرمز لمرة واحدة للمرسل.
@@ -59,7 +59,7 @@
    - الأدوار المعتمدة: `owner`, `admin`, `manager`, `agent`, `analyst`, `viewer`.
 6. **Restricted AI Context & Grounded Policy Engine:**
    - الـLLM (Gemini / OpenAI Compatible) يقترح قراراً هيكلياً (`AIDecisionProposal`) بناءً على سياق مقيد ومبني من الكتالوج والسياسات.
-   - [GroundedPolicyEngine](file:///D:/mujeeb24/mujeeb24-backend-go/internal/application/services/policy_engine.go) يفحص القرار؛ ولا يملك النموذج صلاحية تنفيذ SQL أو إرسال مباشر.
+   - [GroundedPolicyEngine](internal/application/services/policy_engine.go) يفحص القرار؛ ولا يملك النموذج صلاحية تنفيذ SQL أو إرسال مباشر.
 7. **Worker Lifecycle & Resilience:**
    - المشغل يدعم الإيقاف السلس (Graceful Shutdown) عبر `SIGINT/SIGTERM`.
    - عزل حالات الفشل غير المعروفة فوراً إلى `dead_letter` مع حفظ سبب الخطأ.
@@ -80,7 +80,7 @@ Domain Layer & Application Ports (Interfaces)
 Secondary Adapters (Postgres Persistence / SocialAPI / AI / Ed25519 JWT)
 ```
 
-- **مسؤولية Bootstrap:** حزمة [internal/bootstrap](file:///D:/mujeeb24/mujeeb24-backend-go/internal/bootstrap) هي المسؤولة الوحيدة عن تركيب وحقن الاعتماديات (Wiring).
+- **مسؤولية Bootstrap:** حزمة [internal/bootstrap](internal/bootstrap) هي المسؤولة الوحيدة عن تركيب وحقن الاعتماديات (Wiring).
 - **فصل المسؤوليات (Single Responsibility):** لا تجمع دالة واحدة بين معالجة HTTP، والتحقق، والمنطق الدوميني، واستعلامات SQL، والاتصال بالشبكة.
 
 ---
@@ -149,7 +149,7 @@ Secondary Adapters (Postgres Persistence / SocialAPI / AI / Ed25519 JWT)
 
 ## 10. سياسة Git والتسليم (Git Policy)
 
-- **الفرع المعتمد:** العمل يجري حصراً على الفرع `feat/chatwoot-free`.
+- **الفرع المعتمد:** العمل يجري حصراً على الفرع `feat/universal-catalog-ai-v3`.
 - **الحظر الصريح:** يُمنع منعاً باتاً إنشاء `commit`، أو `push`، أو `merge` إلى `main` دون إذن صريح ومباشر من المستخدم.
 - **نظافة شجرة العمل:** قبل طلب الموافقة، راجع `git status --short` و`git diff --check` وتأكد من خلو العمل من أي أسرار أو تغييرات خارج نطاق المهمة.
 

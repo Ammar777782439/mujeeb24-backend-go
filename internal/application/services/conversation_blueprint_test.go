@@ -222,7 +222,7 @@ func TestAutoReplyHandoffFarewellOnSubscription(t *testing.T) {
 	// containing "subscribe"/"activat"/"purchase" keywords (the system prompt
 	// instructs Gemini to use those words when handing off a subscription intent).
 	service := NewAutoReplyService(
-		&FakeCustomerSalesDecisionPort{Proposal: ports.CustomerSalesProposal{Status: ports.CustomerSalesProposalStatusResolved, Action: ports.CustomerSalesProposalActionHumanRequest, ResponseText: "model suggests subscribe"}},
+		&FakeCustomerSalesDecisionPort{Proposal: ports.CustomerSalesProposal{Status: ports.CustomerSalesProposalStatusResolved, Action: ports.CustomerSalesProposalActionHumanRequest, ResponseText: "model suggests subscribe", RoutingReason: ports.CustomerSalesRoutingReasonSubscriptionActivation}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
 		outbound,

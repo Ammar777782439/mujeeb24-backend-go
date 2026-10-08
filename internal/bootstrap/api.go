@@ -371,16 +371,16 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 				return nil, fmt.Errorf("build Gemini catalog batch client: %w", err)
 			}
 			service.CatalogBatch = &services.CatalogBatchController{
-				CatalogAI:         postgres.NewCatalogAIReadRepository(database),
-				TokenCounter:      batchTokenCounter,
-				Gemini:            batchClient,
-				RunRepo:           postgres.NewAIRunTraceRepository(database),
-				TokenBudget:       8000,
-				Now:               func() time.Time { return time.Now().UTC() },
-				NewID:             uuid.NewString,
-				AIUsage:           postgres.NewAIUsageRepository(database),
-				AIPricing:         postgres.NewAIProviderPricingRepository(database),
-				Subscriptions:     postgres.NewSubscriptionRepository(database),
+				CatalogAI:     postgres.NewCatalogAIReadRepository(database),
+				TokenCounter:  batchTokenCounter,
+				Gemini:        batchClient,
+				RunRepo:       postgres.NewAIRunTraceRepository(database),
+				TokenBudget:   8000,
+				Now:           func() time.Time { return time.Now().UTC() },
+				NewID:         uuid.NewString,
+				AIUsage:       postgres.NewAIUsageRepository(database),
+				AIPricing:     postgres.NewAIProviderPricingRepository(database),
+				Subscriptions: postgres.NewSubscriptionRepository(database),
 			}
 			// Per §1: wire the dynamic config provider into BatchClient.
 			batchClient.SetConfigurationProvider(aiConfigCache)

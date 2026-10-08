@@ -112,14 +112,14 @@ func TestValidateBatchCandidatesEnforcesItemVariantOfferRelationships(t *testing
 	batch := CatalogAIBatchPayload{
 		Items: []CatalogAIItem{
 			{
-				ID: "item-1",
+				ID:       "item-1",
 				Variants: []CatalogAIVariant{{ID: "variant-1", CatalogItemID: "item-1"}},
-				Offers: []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1"}},
+				Offers:   []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1"}},
 			},
 			{
-				ID: "item-2",
+				ID:       "item-2",
 				Variants: []CatalogAIVariant{{ID: "variant-2", CatalogItemID: "item-2"}},
-				Offers: []CatalogAIOffer{{ID: "offer-2", CatalogItemID: "item-2"}},
+				Offers:   []CatalogAIOffer{{ID: "offer-2", CatalogItemID: "item-2"}},
 			},
 		},
 	}
@@ -222,7 +222,6 @@ func TestAppendCandidateProjectionPrunesUnselectedNestedEvidence(t *testing.T) {
 	}
 }
 
-
 func TestSplitIntoBatchesFragmentsOversizedItemWithoutLosingNestedEvidence(t *testing.T) {
 	v1, v2 := "variant-1", "variant-2"
 	gemini := &exactTokenBatchGeminiStub{
@@ -292,12 +291,12 @@ func TestAppendCandidateProjectionMergesSameItemFragments(t *testing.T) {
 	batch1 := CatalogAIBatchPayload{Items: []CatalogAIItem{{
 		ID: "item-1", CatalogID: "catalog-1",
 		Variants: []CatalogAIVariant{{ID: v1, CatalogItemID: "item-1"}},
-		Offers: []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1", VariantID: &v1}},
+		Offers:   []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1", VariantID: &v1}},
 	}}}
 	batch2 := CatalogAIBatchPayload{Items: []CatalogAIItem{{
 		ID: "item-1", CatalogID: "catalog-1",
 		Variants: []CatalogAIVariant{{ID: v2, CatalogItemID: "item-1"}},
-		Offers: []CatalogAIOffer{{ID: "offer-2", CatalogItemID: "item-1", VariantID: &v2}},
+		Offers:   []CatalogAIOffer{{ID: "offer-2", CatalogItemID: "item-1", VariantID: &v2}},
 	}}}
 
 	appendCandidateProjection(&target, batch1, []ports.CatalogBatchCandidate{{
@@ -318,8 +317,8 @@ func TestAppendCandidateProjectionMergesSameItemFragments(t *testing.T) {
 func TestFinalEvaluationRejectsNeedsMoreDataAfterCoverage(t *testing.T) {
 	gemini := &exactTokenBatchGeminiStub{
 		finalProposal: ports.CustomerSalesProposal{
-			Status: ports.CustomerSalesProposalStatusNeedsMoreData,
-			Action: ports.CustomerSalesProposalActionClarification,
+			Status:       ports.CustomerSalesProposalStatusNeedsMoreData,
+			Action:       ports.CustomerSalesProposalActionClarification,
 			ResponseText: "أحتاج بيانات إضافية",
 		},
 	}

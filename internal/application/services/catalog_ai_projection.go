@@ -91,8 +91,8 @@ type CatalogAIVariant struct {
 	ID            string         `json:"id"`
 	CatalogItemID string         `json:"catalog_item_id"`
 	Name          string         `json:"name"`
-	Attributes map[string]any `json:"attributes,omitempty"`
-	Status     string         `json:"status"`
+	Attributes    map[string]any `json:"attributes,omitempty"`
+	Status        string         `json:"status"`
 }
 
 // CatalogAIOffer is contract ① §1 — one offer under a CatalogAIItem.

@@ -58,7 +58,7 @@ func TestCatalogAIEvidenceSetMerge(t *testing.T) {
 	})
 	second := NewCatalogAIEvidenceSet()
 	second.AddBundle(CatalogAIProjectionBundle{
-		Item: CatalogItemRecord{ID: "item-a"},
+		Item:     CatalogItemRecord{ID: "item-a"},
 		Variants: []VariantRecord{{ID: v, CatalogItemID: "item-a"}},
 	})
 	first.Merge(second)
@@ -101,13 +101,13 @@ func TestCatalogAIManifestJSONIsCompactAndNonEvidentiary(t *testing.T) {
 
 func TestCatalogAIManifestSignalsTruncation(t *testing.T) {
 	manifest := CatalogAIManifest{
-		TotalActiveItems: 1000,
-		TotalCatalogs: 100,
+		TotalActiveItems:  1000,
+		TotalCatalogs:     100,
 		CatalogsTruncated: true,
 		Catalogs: []CatalogAIManifestCatalog{{
-			Name: "Catalog A",
-			ItemCount: 100,
-			ItemTypes: []string{"service"},
+			Name:               "Catalog A",
+			ItemCount:          100,
+			ItemTypes:          []string{"service"},
 			ItemTypesTruncated: true,
 		}},
 	}

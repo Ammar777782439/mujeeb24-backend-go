@@ -128,16 +128,13 @@ func TestAutoReplyContextBuilderBuildsBoundedGroundedContext(t *testing.T) {
 	if contextValue.SchemaVersion != CustomerSalesContextSchemaVersion || contextValue.Business.Reference != "business-1" || contextValue.Conversation.CustomerReference != "customer-1" || contextValue.Customer.Reference != "customer-1" {
 		t.Fatalf("unexpected base context: %#v", contextValue)
 	}
-	if len(contextValue.CatalogEvidence) != 1 || contextValue.CatalogEvidence[0].Reference != "item-iphone" || len(contextValue.OfferEvidence) != 1 || len(contextValue.VariantEvidence) != 1 {
-		t.Fatalf("unexpected grounded evidence: %#v", contextValue)
-	}
-	if contextValue.OfferEvidence[0].AvailabilityStatus != "available" || contextValue.OfferEvidence[0].Amount != "250000" || contextValue.OfferEvidence[0].Currency != "YER" {
-		t.Fatalf("offer evidence lost commercial fields: %#v", contextValue.OfferEvidence[0])
+	if len(contextValue.CatalogEvidence) != 0 || len(contextValue.OfferEvidence) != 0 || len(contextValue.VariantEvidence) != 0 {
+		t.Fatal("unfocused context must not select products from customer text")
 	}
 	if len(contextValue.RecentMessages) != 2 || contextValue.RecentMessages[0].Reference != "message-older" || contextValue.RecentMessages[1].Reference != "message-newer" {
 		t.Fatalf("unexpected ordered history: %#v", contextValue.RecentMessages)
 	}
-	if contextValue.KnowledgeState != CustomerSalesContextPartial || contextValue.Freshness != CustomerSalesContextFresh || !contextValue.ExpiresAt.After(now) || contextValue.PolicyEvidence.State != "application_policy_only" {
+	if contextValue.KnowledgeState != CustomerSalesContextMissing || contextValue.Freshness != CustomerSalesContextPartial || !contextValue.ExpiresAt.After(now) || contextValue.PolicyEvidence.State != "application_policy_only" {
 		t.Fatalf("unexpected freshness/policy state: %#v", contextValue)
 	}
 	if string(contextValue.Customer.Profile) != `{"name":"عميل"}` || string(contextValue.Customer.ContactPoints) != `{"phone":"redacted-in-test"}` {
@@ -158,25 +155,9 @@ func TestAutoReplyContextBuilderRejectsTenantMismatch(t *testing.T) {
 
 func contextStringPtr(value string) *string { return &value }
 
-func TestAutoReplyContextBuilderMarksUnknownAvailabilityStale(t *testing.T) {
-	builder := NewAutoReplyContextBuilder(
-		contextBusinessRepository{record: ports.BusinessRecord{ID: "business-1"}},
-		contextConversationRepository{record: ports.ConversationRecord{ID: "conversation-1", BusinessID: "business-1", CustomerID: "customer-1"}},
-		contextCustomerRepository{record: ports.CustomerRecord{ID: "customer-1", BusinessID: "business-1"}},
-		contextCatalogRepository{
-			catalogs: ports.CatalogPage{Items: []ports.CatalogRecord{{ID: "catalog-1", BusinessID: "business-1"}}},
-			items:    map[string]ports.CatalogItemPage{"catalog-1": {Items: []ports.CatalogItemRecord{{ID: "item-1", BusinessID: "business-1", CatalogID: "catalog-1", Name: "خدمة"}}}},
-			offers:   map[string]ports.OfferPage{"item-1": {Items: []ports.OfferRecord{{ID: "offer-1", BusinessID: "business-1", CatalogItemID: "item-1", AvailabilityStatus: "unknown", Status: "active"}}}},
-			variants: map[string]ports.VariantPage{},
-		},
-		contextMessageRepository{},
-	)
-	contextValue, err := builder.Build(context.Background(), ports.CustomerSalesContextInput{BusinessID: "business-1", ConversationID: "conversation-1", Text: "خدمة متوفرة؟"})
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	if len(contextValue.OfferEvidence) != 1 || contextValue.OfferEvidence[0].EvidenceState != CustomerSalesContextStale || contextValue.Freshness != CustomerSalesContextStale || contextValue.KnowledgeState != CustomerSalesContextPartial {
-		t.Fatalf("unknown availability was not marked stale: %#v", contextValue)
+func TestUnknownOfferAvailabilityIsStale(t *testing.T) {
+	if offerEvidenceStateForRecord(ports.OfferRecord{AvailabilityStatus: "unknown"}, time.Now()) != CustomerSalesContextStale {
+		t.Fatal("unknown availability must remain stale")
 	}
 }
 

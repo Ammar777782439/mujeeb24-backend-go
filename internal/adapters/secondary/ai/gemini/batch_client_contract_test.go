@@ -187,7 +187,6 @@ func min(a, b int) int {
 	return b
 }
 
-
 func TestBatchCandidateParserRejectsUnknownFields(t *testing.T) {
 	resp := batchGeminiResponse{
 		Candidates: []batchCandidate{{

@@ -299,13 +299,6 @@ func TestBuildValidatedState_NoReferenceResetsComparison(t *testing.T) {
 
 func strPtr(s string) *string { return &s }
 
-// Fake runtime counting calls to prove ONE AI call per turn.
-// Per contract ④ §4, the new flow uses CustomerSalesProposal. FakeCustomerSalesDecisionPort
-// tracks LastInput which can be inspected to count calls.
-type countingRuntime struct {
-	Fake *FakeCustomerSalesDecisionPort
-}
-
 func TestAutoReply_OneAICallPerTurn(t *testing.T) {
 	rt := &FakeCustomerSalesDecisionPort{
 		Proposal: ports.CustomerSalesProposal{
@@ -330,6 +323,7 @@ func TestAutoReply_OneAICallPerTurn(t *testing.T) {
 		AIPricing:     &stubPricingRepoAlwaysFail{},
 		NewID:         func() string { return "test-id" },
 	}
+	svc.Validation = allowAllValidationPipeline()
 	_, err := svc.Handle(context.Background(), commands.AutoReplyCommand{
 		Meta:           commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "b1"}},
 		ConversationID: "c1", SourceMessageReference: "m1", Text: "hello", Channel: "whatsapp", ProviderRef: "socialapi",

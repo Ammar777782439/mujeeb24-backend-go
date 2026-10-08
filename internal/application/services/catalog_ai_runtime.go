@@ -26,15 +26,15 @@ func ProjectionFromBundles(bundles []ports.CatalogAIProjectionBundle) CatalogAIP
 				PricingMode: offer.PricingMode, Amount: offer.Amount, Currency: offer.Currency,
 				PricingUnit: offer.PricingUnit, PriceSource: offer.PriceSource,
 				PriceVerificationStatus: stringPtrOrNil(offer.PriceVerificationStatus),
-				PriceCheckedAt: formatTimePtr(offer.PriceCheckedAt),
-				AvailabilityMode: stringPtrOrNil(offer.AvailabilityMode),
-				AvailabilityStatus: stringPtrOrNil(offer.AvailabilityStatus),
-				AvailabilitySource: offer.AvailabilitySource,
-				AvailabilityCheckedAt: formatTimePtr(offer.AvailabilityCheckedAt),
-				AvailabilityValidUntil: formatTimePtr(offer.AvailabilityValidUntil),
+				PriceCheckedAt:          formatTimePtr(offer.PriceCheckedAt),
+				AvailabilityMode:        stringPtrOrNil(offer.AvailabilityMode),
+				AvailabilityStatus:      stringPtrOrNil(offer.AvailabilityStatus),
+				AvailabilitySource:      offer.AvailabilitySource,
+				AvailabilityCheckedAt:   formatTimePtr(offer.AvailabilityCheckedAt),
+				AvailabilityValidUntil:  formatTimePtr(offer.AvailabilityValidUntil),
 				AvailabilityEvidenceRef: offer.AvailabilityEvidenceRef,
-				FulfillmentMode: stringPtrOrNil(offer.FulfillmentMode),
-				ValidityFrom: formatTimePtr(offer.ValidityFrom), ValidityUntil: formatTimePtr(offer.ValidityUntil),
+				FulfillmentMode:         stringPtrOrNil(offer.FulfillmentMode),
+				ValidityFrom:            formatTimePtr(offer.ValidityFrom), ValidityUntil: formatTimePtr(offer.ValidityUntil),
 				Status: offer.Status,
 			})
 		}
@@ -44,15 +44,21 @@ func ProjectionFromBundles(bundles []ports.CatalogAIProjectionBundle) CatalogAIP
 		}
 	}
 	ids := make([]string, 0, len(schemas))
-	for id := range schemas { ids = append(ids, id) }
+	for id := range schemas {
+		ids = append(ids, id)
+	}
 	sort.Strings(ids)
-	for _, id := range ids { projection.AttributeSchemas = append(projection.AttributeSchemas, schemas[id]) }
+	for _, id := range ids {
+		projection.AttributeSchemas = append(projection.AttributeSchemas, schemas[id])
+	}
 	return projection
 }
 
 func EvidenceFromBundles(bundles []ports.CatalogAIProjectionBundle) ports.CatalogAIEvidenceSet {
 	evidence := ports.NewCatalogAIEvidenceSet()
-	for _, bundle := range bundles { evidence.AddBundle(bundle) }
+	for _, bundle := range bundles {
+		evidence.AddBundle(bundle)
+	}
 	return evidence
 }
 
@@ -61,12 +67,16 @@ func EvidenceFromProjection(projection CatalogAIProjection) ports.CatalogAIEvide
 	for _, item := range projection.Items {
 		entry := ports.CatalogAIEvidenceItem{
 			Variants: make(map[string]struct{}),
-			Offers: make(map[string]ports.CatalogAIEvidenceOffer),
+			Offers:   make(map[string]ports.CatalogAIEvidenceOffer),
 		}
-		for _, variant := range item.Variants { entry.Variants[variant.ID] = struct{}{} }
+		for _, variant := range item.Variants {
+			entry.Variants[variant.ID] = struct{}{}
+		}
 		for _, offer := range item.Offers {
 			var variantID string
-			if offer.VariantID != nil { variantID = *offer.VariantID }
+			if offer.VariantID != nil {
+				variantID = *offer.VariantID
+			}
 			entry.Offers[offer.ID] = ports.CatalogAIEvidenceOffer{VariantID: variantID}
 		}
 		evidence.Items[item.ID] = entry
@@ -76,19 +86,27 @@ func EvidenceFromProjection(projection CatalogAIProjection) ports.CatalogAIEvide
 
 func EvidenceFromCustomerSalesContext(ctx *ports.CustomerSalesContext) ports.CatalogAIEvidenceSet {
 	evidence := ports.NewCatalogAIEvidenceSet()
-	if ctx == nil { return evidence }
+	if ctx == nil {
+		return evidence
+	}
 	for _, item := range ctx.CatalogEvidence {
 		evidence.Items[item.Reference] = ports.CatalogAIEvidenceItem{
 			Variants: map[string]struct{}{}, Offers: map[string]ports.CatalogAIEvidenceOffer{},
 		}
 	}
 	for _, variant := range ctx.VariantEvidence {
-		item, ok := evidence.Items[variant.CatalogItemReference]; if !ok { continue }
+		item, ok := evidence.Items[variant.CatalogItemReference]
+		if !ok {
+			continue
+		}
 		item.Variants[variant.Reference] = struct{}{}
 		evidence.Items[variant.CatalogItemReference] = item
 	}
 	for _, offer := range ctx.OfferEvidence {
-		item, ok := evidence.Items[offer.CatalogItemReference]; if !ok { continue }
+		item, ok := evidence.Items[offer.CatalogItemReference]
+		if !ok {
+			continue
+		}
 		item.Offers[offer.Reference] = ports.CatalogAIEvidenceOffer{VariantID: offer.VariantReference}
 		evidence.Items[offer.CatalogItemReference] = item
 	}
@@ -96,10 +114,14 @@ func EvidenceFromCustomerSalesContext(ctx *ports.CustomerSalesContext) ports.Cat
 }
 
 func appendCatalogAIBundlesToContext(ctx *ports.CustomerSalesContext, bundles []ports.CatalogAIProjectionBundle, now time.Time) {
-	if ctx == nil { return }
+	if ctx == nil {
+		return
+	}
 	for _, bundle := range bundles {
 		ctx.CatalogEvidence = append(ctx.CatalogEvidence, catalogItemEvidence(bundle.Item, now))
-		for _, offer := range bundle.Offers { ctx.OfferEvidence = append(ctx.OfferEvidence, toOfferEvidence(offer, now)) }
+		for _, offer := range bundle.Offers {
+			ctx.OfferEvidence = append(ctx.OfferEvidence, toOfferEvidence(offer, now))
+		}
 		for _, variant := range bundle.Variants {
 			ctx.VariantEvidence = append(ctx.VariantEvidence, ports.CustomerSalesVariantEvidence{
 				Reference: variant.ID, CatalogItemReference: variant.CatalogItemID,
@@ -114,16 +136,15 @@ func catalogItemEvidence(item ports.CatalogItemRecord, now time.Time) ports.Cust
 	return ports.CustomerSalesCatalogEvidence{
 		Reference: item.ID, CatalogReference: item.CatalogID,
 		AttributeSchemaReference: item.AttributeSchemaID,
-		AttributeSchemaVersion: item.AttributeSchemaVersion,
-		ItemType: item.ItemType,
-		Name: item.Name, Status: item.Status, Attributes: safeJSONObject(item.Attributes),
+		AttributeSchemaVersion:   item.AttributeSchemaVersion,
+		ItemType:                 item.ItemType,
+		Name:                     item.Name, Status: item.Status, Attributes: safeJSONObject(item.Attributes),
 		EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
 		ShortDescription: item.ShortDescription, LongDescription: item.LongDescription,
 		PricingMode: item.PricingMode, AvailabilityMode: item.AvailabilityMode,
 		FulfillmentMode: item.FulfillmentMode, RequiresConfirmation: item.RequiresConfirmation,
 	}
 }
-
 
 func appendCatalogRecordsToProjection(projection *CatalogAIProjection, catalogs []ports.CatalogRecord) {
 	if projection == nil || len(catalogs) == 0 {

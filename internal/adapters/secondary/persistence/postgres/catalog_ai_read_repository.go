@@ -446,7 +446,7 @@ func (r *CatalogAIReadRepository) hydrate(ctx context.Context, executor SQLExecu
 	}
 	for vRows.Next() {
 		var v ports.VariantRecord
-		if err := vRows.Scan(&v.ID,&v.BusinessID,&v.CatalogItemID,&v.Name,&v.Attributes,&v.Status,&v.ResourceVersion,&v.CreatedAt,&v.UpdatedAt); err != nil {
+		if err := vRows.Scan(&v.ID, &v.BusinessID, &v.CatalogItemID, &v.Name, &v.Attributes, &v.Status, &v.ResourceVersion, &v.CreatedAt, &v.UpdatedAt); err != nil {
 			vRows.Close()
 			return nil, catalogRepositoryError("catalog_ai.variants", err)
 		}
@@ -473,10 +473,10 @@ func (r *CatalogAIReadRepository) hydrate(ctx context.Context, executor SQLExecu
 	}
 	for oRows.Next() {
 		var o ports.OfferRecord
-		if err := oRows.Scan(&o.ID,&o.BusinessID,&o.CatalogItemID,&o.VariantID,&o.Name,&o.PricingMode,&o.Amount,&o.Currency,
-			&o.PricingUnit,&o.PriceSource,&o.PriceVerificationStatus,&o.PriceCheckedAt,&o.AvailabilityMode,&o.AvailabilitySource,
-			&o.AvailabilityCheckedAt,&o.AvailabilityValidUntil,&o.AvailabilityEvidenceRef,&o.FulfillmentMode,&o.ValidityFrom,
-			&o.ValidityUntil,&o.AvailabilityStatus,&o.Status,&o.ResourceVersion,&o.CreatedAt,&o.UpdatedAt); err != nil {
+		if err := oRows.Scan(&o.ID, &o.BusinessID, &o.CatalogItemID, &o.VariantID, &o.Name, &o.PricingMode, &o.Amount, &o.Currency,
+			&o.PricingUnit, &o.PriceSource, &o.PriceVerificationStatus, &o.PriceCheckedAt, &o.AvailabilityMode, &o.AvailabilitySource,
+			&o.AvailabilityCheckedAt, &o.AvailabilityValidUntil, &o.AvailabilityEvidenceRef, &o.FulfillmentMode, &o.ValidityFrom,
+			&o.ValidityUntil, &o.AvailabilityStatus, &o.Status, &o.ResourceVersion, &o.CreatedAt, &o.UpdatedAt); err != nil {
 			oRows.Close()
 			return nil, catalogRepositoryError("catalog_ai.offers", err)
 		}
@@ -503,7 +503,7 @@ func (r *CatalogAIReadRepository) hydrate(ctx context.Context, executor SQLExecu
 	schemas := map[string]*ports.AttributeSchemaRecord{}
 	for sRows.Next() {
 		var s ports.AttributeSchemaRecord
-		if err := sRows.Scan(&s.ID,&s.BusinessID,&s.Name,&s.Version); err != nil {
+		if err := sRows.Scan(&s.ID, &s.BusinessID, &s.Name, &s.Version); err != nil {
 			sRows.Close()
 			return nil, catalogRepositoryError("catalog_ai.schemas", err)
 		}
@@ -549,7 +549,7 @@ func (r *CatalogAIReadRepository) hydrate(ctx context.Context, executor SQLExecu
 	for dRows.Next() {
 		var schemaID string
 		var d ports.AttributeDefinitionRecord
-		if err := dRows.Scan(&schemaID,&d.ID,&d.Key,&d.Label,&d.DataType,&d.Required,&d.ValidationRules,&d.DisplayOrder); err != nil {
+		if err := dRows.Scan(&schemaID, &d.ID, &d.Key, &d.Label, &d.DataType, &d.Required, &d.ValidationRules, &d.DisplayOrder); err != nil {
 			dRows.Close()
 			return nil, catalogRepositoryError("catalog_ai.definitions", err)
 		}

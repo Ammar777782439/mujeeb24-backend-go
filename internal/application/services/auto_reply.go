@@ -394,12 +394,12 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		// AI output never expands this trust boundary.
 
 		ed, failure := s.Validation.Validate(ctx, ValidationInput{
-			DecisionID:         "", // linked later when ai_decisions is created
-			BusinessID:         businessID,
-			ConversationID:     conversationID,
-			Proposal:           proposal,
-			Context:            builtContext,
-			Evidence:           catalogEvidence,
+			DecisionID:     "", // linked later when ai_decisions is created
+			BusinessID:     businessID,
+			ConversationID: conversationID,
+			Proposal:       proposal,
+			Context:        builtContext,
+			Evidence:       catalogEvidence,
 		})
 		if failure != nil {
 			log.Printf("[AutoReply] VALIDATION_FAILED run=%s stage=%s category=%s reason=%s", run.ID, failure.Stage, failure.Category, failure.Reason)

@@ -32,8 +32,8 @@ type customerSalesPromptContext struct {
 	Conversation           ports.CustomerSalesContextConversation      `json:"conversation"`
 	Customer               customerSalesPromptCustomer                 `json:"customer"`
 	CatalogEvidence        []ports.CustomerSalesCatalogEvidence        `json:"catalog_evidence"`
-	CatalogSchemaEvidence  []ports.CustomerSalesCatalogSchemaEvidence `json:"catalog_schema_evidence,omitempty"`
-	CatalogManifest        *ports.CatalogAIManifest                     `json:"catalog_manifest,omitempty"`
+	CatalogSchemaEvidence  []ports.CustomerSalesCatalogSchemaEvidence  `json:"catalog_schema_evidence,omitempty"`
+	CatalogManifest        *ports.CatalogAIManifest                    `json:"catalog_manifest,omitempty"`
 	OfferEvidence          []ports.CustomerSalesOfferEvidence          `json:"offer_evidence"`
 	VariantEvidence        []ports.CustomerSalesVariantEvidence        `json:"variant_evidence"`
 	KnowledgeEvidence      []ports.CustomerSalesKnowledgeEvidence      `json:"knowledge_evidence"`
@@ -81,7 +81,6 @@ func customerSalesPromptContextFrom(value *ports.CustomerSalesContext) customerS
 	}
 }
 
-
 type catalogBatchPromptContext struct {
 	Business               ports.CustomerSalesContextBusiness          `json:"business"`
 	Conversation           ports.CustomerSalesContextConversation      `json:"conversation"`
@@ -99,8 +98,8 @@ func catalogBatchPromptContextFrom(value *ports.CustomerSalesContext) catalogBat
 		return catalogBatchPromptContext{}
 	}
 	return catalogBatchPromptContext{
-		Business:      value.Business,
-		Conversation:  value.Conversation,
+		Business:     value.Business,
+		Conversation: value.Conversation,
 		Customer: customerSalesPromptCustomer{
 			Reference:        value.Customer.Reference,
 			LocalePreference: value.Customer.LocalePreference,

@@ -49,6 +49,8 @@ func TestAICostProtectionAllowsAutoReplyWhenNormal(t *testing.T) {
 	autoReply := newAutoReplyHandler()
 	service := resolvedSocialWebhookService(&providerInboundStore{result: ports.ProviderInboundResult{BusinessID: "business-1", CustomerID: "customer-1", ConversationID: "conversation-2", CommunicationMessageID: "message-2"}})
 	service.AutoReply = autoReply
+	service.AutoReplyWorkerPool = NewAutoReplyWorkerPool(1, 1)
+	defer service.AutoReplyWorkerPool.Stop()
 	service.AICostProtectionChecker = &stubAICostProtectionChecker{allowed: true, reason: ""}
 
 	body := []byte(`{"event":"dm.received","data":{"id":"event-cost-2","type":"dm","platform":"instagram","account_id":"account-1","conversation_id":"conversation-2","author":{"id":"customer-1"},"content":{"text":"hello"}}}`)

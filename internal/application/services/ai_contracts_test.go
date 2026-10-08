@@ -297,7 +297,6 @@ func TestCatalogEntityContractDescriptor(t *testing.T) {
 	}
 }
 
-
 func TestValidateStructuralRejectsRoutingReasonOutsideHumanRequest(t *testing.T) {
 	pipeline := &ValidationPipeline{}
 	err := pipeline.validateStructural(ports.CustomerSalesProposal{

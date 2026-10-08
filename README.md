@@ -92,6 +92,6 @@ GOTOOLCHAIN=local /usr/local/go/bin/go vet ./...
 
 ## المستودع
 
-المسار المرجعي هو الفرع `feat/chatwoot-free` إلى أن تُراجع التغييرات ويُتخذ قرار منفصل برفعه أو دمجه.
+المسار المرجعي هو الفرع `feat/universal-catalog-ai-v3` إلى أن تُراجع التغييرات ويُتخذ قرار منفصل برفعه أو دمجه.
 
 <https://github.com/Ammar777782439/mujeeb24-backend-go>

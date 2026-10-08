@@ -1,6 +1,6 @@
 # حالة مشروع Mujeeb 24 Backend
 
-> **آخر تحديث:** 2026-08-28. هذه الوثيقة تصف الفرع `feat/chatwoot-free` فقط؛ لا تعني دمجه في `main` أو رفعه إلى GitHub.
+> **آخر تحديث:** 2026-10-08. هذه الوثيقة تصف الفرع `feat/universal-catalog-ai-v3`؛ لا تعني دمجه في main أو فرع الإنتاج.
 
 ## الخلاصة التنفيذية
 
@@ -8,9 +8,9 @@
 
 | المجال | الحالة في هذا الفرع | حد الإثبات |
 | --- | --- | --- |
-| Go API وHuma/OpenAPI | محدث ومختبر | contract يولد 75 عملية ولا يعلن Chatwoot webhook |
+| Go API وHuma/OpenAPI | محدث ومختبر | عدد العمليات يُستخرج من المولد الحالي؛ لا يُثبّت رقم تاريخي في تقرير الحالة |
 | JWT وtenant scope | موجود | مثبت باختبارات الوحدات الموجودة؛ راجع التشغيل الحي منفصلًا |
-| PostgreSQL migrations | حتى `000045` دون تعديل تاريخي | لا يوجد إسقاط للـschema التاريخي في هذه الدفعة |
+| PostgreSQL migrations | ترحيلات تراكمية؛ راجع مجلد migrations الحالي | لا يوجد إسقاط للـschema التاريخي في هذه الدفعة |
 | Event Ledger وOutbox | موجودان | يسجلان ويعالجان ضمن مسار Mujeeb |
 | SocialAPI inbound | موجود | verify/normalize ثم materialization داخل Mujeeb |
 | AutoReply | مربوط مباشرة بـSocialAPI inbound | يظل متوقفًا افتراضيًا ويتطلب LLM/policy محليين |
@@ -37,7 +37,7 @@ SocialAPI webhook موثّق
 
 الـmigrations من `000001` حتى `000045` غير قابلة للتعديل. توقفت خدمات وقراءَات/كتابات Chatwoot في runtime، لكن جداول وأعمدة تاريخية لا تزال في schema كي لا تُحذف بيانات أو تفسد ترقية بيئة قائمة. أي تنظيف لاحق يحتاج backup وخطة restore وموافقة صريحة، ثم migration forward-only جديدة.
 
-## ما بقي قبل رفع الفرع أو دمجه
+## التحقق المتبقي دون دمج
 
 1. تشغيل بوابة الجودة: `gofmt` و`go test ./...` و`go vet ./...` وOpenAPI drift وsecret scan.
 2. محاولة PostgreSQL integration عبر `POSTGRES_TEST_DSN` إذا كانت بيئة PostgreSQL متاحة؛ لا يُدّعى نجاحها إن كانت الحاويات غير متاحة.
@@ -49,3 +49,9 @@ SocialAPI webhook موثّق
 - [قرار الترحيل إلى Mujeeb-only](architecture/chatwoot-free-migration-ar.md)
 - [دليل التشغيل المحلي](../deploy/local/README-ar.md)
 - [دليل المطور](developer-guide-ar.md)
+
+## AI الحالي والتنظيف
+
+مسار B2B يستخدم MerchantCatalogAuthoringAdapter؛ مسار B2C يستخدم GeminiCustomerSalesAdapter عبر Interactions مع CatalogBatchController للتقييم الكامل بالدفعات. لا يوجد Customer Sales tool-loop قديم أو registry catalog_data في التشغيل الحالي. Gemini يقترح وMujeeb يتحقق ويطبق السياسة.
+
+AutoReply عبر webhook يحتاج بوابة التكلفة وWorker Pool. غياب الاعتماديات يمنع بدء AI مع استمرار استقبال الرسالة. الاختبارات المحلية لا تثبت اتصال PostgreSQL أو المزود حيًا؛ لا تُعد حالات skipped نجاحًا.

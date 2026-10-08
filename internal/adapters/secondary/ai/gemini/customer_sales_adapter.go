@@ -385,10 +385,10 @@ type interactionGenerationConfig struct {
 }
 
 type interactionResponse struct {
-	ID     string            `json:"id"`
-	Status string            `json:"status"`
-	Steps  []interactionStep `json:"steps"`
-	Usage  interactionUsage  `json:"usage"`
+	ID     string             `json:"id"`
+	Status string             `json:"status"`
+	Steps  []interactionStep  `json:"steps"`
+	Usage  interactionUsage   `json:"usage"`
 	Errors []interactionError `json:"errors,omitempty"`
 }
 

@@ -59,12 +59,12 @@ import (
 //   - Explains why each candidate is in the candidate set
 type CatalogBatchController struct {
 	// CatalogAI supplies complete tenant-scoped projection pages.
-	CatalogAI         ports.CatalogAIReadRepository
-	TokenCounter      TokenCounter
-	Gemini            BatchGeminiClient
-	RunRepo           ports.AIRunRepository
-	Now               func() time.Time
-	NewID             func() string
+	CatalogAI    ports.CatalogAIReadRepository
+	TokenCounter TokenCounter
+	Gemini       BatchGeminiClient
+	RunRepo      ports.AIRunRepository
+	Now          func() time.Time
+	NewID        func() string
 
 	// TokenBudget is the per-batch token cap. Per contract ② §2, this is
 	// token-based not item-count-based. Set via runtime config.
@@ -100,7 +100,6 @@ type ExactFinalTokenCounter interface {
 	CountFinalTokens(ctx context.Context, input FinalEvaluationInput, userPrompt string) (int, error)
 }
 
-
 // BatchEvaluationInput is one batch's input to Gemini.
 type BatchEvaluationInput struct {
 	AIRunID             string
@@ -114,7 +113,7 @@ type BatchEvaluationInput struct {
 	Batch               CatalogAIBatchPayload
 	// Reduction switches the provider prompt from full-catalog evaluation
 	// to token-driven candidate reduction. It never changes tenant scope.
-	Reduction           bool
+	Reduction bool
 }
 
 // FinalEvaluationInput is the post-batch final Gemini call.
@@ -508,7 +507,6 @@ func normalizeBatchCandidates(candidates []ports.CatalogBatchCandidate) []ports.
 	}
 	return out
 }
-
 
 // mapCatalogItemRecordToProjection converts a ports.CatalogItemRecord to a
 // CatalogAIItem per contract ① §1. Per contract ① §5, the projection does

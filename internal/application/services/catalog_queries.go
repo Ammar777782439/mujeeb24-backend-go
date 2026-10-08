@@ -166,7 +166,7 @@ func attributeSchemaView(record ports.AttributeSchemaRecord) commands.AttributeS
 			ID: commands.ID(definition.ID), Key: definition.Key, Label: definition.Label,
 			DataType: definition.DataType, Required: definition.Required,
 			ValidationRules: parseJSONAttributes(definition.ValidationRules),
-			DisplayOrder: definition.DisplayOrder,
+			DisplayOrder:    definition.DisplayOrder,
 		})
 	}
 	return commands.AttributeSchemaView{ID: commands.AttributeSchemaID(record.ID), BusinessID: commands.BusinessID(record.BusinessID), Name: record.Name, Version: record.Version, Definitions: definitions}
