@@ -150,7 +150,7 @@ func merchantCatalogProposalSchema() map[string]any {
 				},
 			},
 			"existing_offers": map[string]any{
-				"type": "array",
+				"type":        "array",
 				"description": "Modify only the existing offer(s) the merchant identified, using evidence-backed IDs. Omit unchanged fields. Use clear_* only when the merchant explicitly removes a nullable value or when a pricing transition requires clearing it. For quote_required, clear_amount and clear_currency should be true unless the merchant explicitly supplied compatible values.",
 				"items": map[string]any{
 					"type": "object",

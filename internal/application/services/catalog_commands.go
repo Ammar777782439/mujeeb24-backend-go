@@ -12,8 +12,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/catalogvalidation"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
@@ -266,22 +266,22 @@ func (s UpdateCatalogItemCommandService) Handle(ctx context.Context, command com
 	err = s.within(ctx, func(txCtx context.Context) error {
 		var err error
 		record, err = s.Repository.UpdateCatalogItem(txCtx, ports.CatalogItemPatch{
-			ID:                   string(command.CatalogItemID),
-			BusinessID:           string(command.Meta.Actor.BusinessID),
-			Name:                 command.Name,
-			Status:               command.Status,
-			ItemType:             command.ItemType,
+			ID:                      string(command.CatalogItemID),
+			BusinessID:              string(command.Meta.Actor.BusinessID),
+			Name:                    command.Name,
+			Status:                  command.Status,
+			ItemType:                command.ItemType,
 			ShortDescription:        command.ShortDescription,
 			ShortDescriptionPresent: command.ShortDescriptionPresent,
 			LongDescription:         command.LongDescription,
 			LongDescriptionPresent:  command.LongDescriptionPresent,
-			PricingMode:          command.PricingMode,
-			AvailabilityMode:     command.AvailabilityMode,
-			FulfillmentMode:      command.FulfillmentMode,
-			RequiresConfirmation: command.RequiresConfirmation,
-			Attributes:           attributes,
-			ExpectedVersion:      version,
-			UpdatedAt:            s.now(),
+			PricingMode:             command.PricingMode,
+			AvailabilityMode:        command.AvailabilityMode,
+			FulfillmentMode:         command.FulfillmentMode,
+			RequiresConfirmation:    command.RequiresConfirmation,
+			Attributes:              attributes,
+			ExpectedVersion:         version,
+			UpdatedAt:               s.now(),
 		})
 		return mapCatalogRepositoryError(err)
 	})
@@ -565,30 +565,40 @@ func validateOfferValues(name, pricingMode string, amountMinor *int64, amountDec
 	hasUnit := pricingUnit != nil && strings.TrimSpace(*pricingUnit) != ""
 	switch pricingMode {
 	case "fixed", "starting_from":
-		if !hasAmount || !hasCurrency { return errors.New("fixed and starting_from pricing require amount and currency") }
+		if !hasAmount || !hasCurrency {
+			return errors.New("fixed and starting_from pricing require amount and currency")
+		}
 	case "per_unit", "per_person", "per_day":
-		if !hasAmount || !hasCurrency || !hasUnit { return errors.New("per-unit pricing requires amount, currency, and pricing_unit") }
+		if !hasAmount || !hasCurrency || !hasUnit {
+			return errors.New("per-unit pricing requires amount, currency, and pricing_unit")
+		}
 	case "quote_required":
 	case "dynamic":
-		if hasAmount && !hasCurrency { return errors.New("dynamic pricing with amount requires currency") }
+		if hasAmount && !hasCurrency {
+			return errors.New("dynamic pricing with amount requires currency")
+		}
 	default:
 		return errors.New("invalid pricing_mode")
 	}
 	switch availabilityMode {
 	case "stock", "schedule", "supplier_check", "always_available", "unknown":
-	default: return errors.New("invalid availability_mode")
+	default:
+		return errors.New("invalid availability_mode")
 	}
 	switch availabilityStatus {
 	case "available", "unavailable", "unknown", "requires_check", "stale":
-	default: return errors.New("invalid availability_status")
+	default:
+		return errors.New("invalid availability_status")
 	}
 	switch fulfillmentMode {
 	case "delivery", "pickup", "digital", "appointment", "travel", "manual":
-	default: return errors.New("invalid fulfillment_mode")
+	default:
+		return errors.New("invalid fulfillment_mode")
 	}
 	switch status {
 	case "draft", "active", "inactive", "expired", "archived":
-	default: return errors.New("invalid offer status")
+	default:
+		return errors.New("invalid offer status")
 	}
 	if hasCurrency {
 		value := strings.TrimSpace(*currency)

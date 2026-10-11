@@ -86,21 +86,21 @@ type InitialOffer struct {
 }
 
 type UpdateCatalogItemCommand struct {
-	Meta                 CommandMeta
-	CatalogID            CatalogID
-	CatalogItemID        CatalogItemID
-	Name                 *string
-	Status               *string
-	ItemType             *string
+	Meta                    CommandMeta
+	CatalogID               CatalogID
+	CatalogItemID           CatalogItemID
+	Name                    *string
+	Status                  *string
+	ItemType                *string
 	ShortDescription        *string
 	ShortDescriptionPresent bool
 	LongDescription         *string
 	LongDescriptionPresent  bool
 	PricingMode             *string
-	AvailabilityMode     *string
-	FulfillmentMode      *string
-	RequiresConfirmation *bool
-	Attributes           map[string]any
+	AvailabilityMode        *string
+	FulfillmentMode         *string
+	RequiresConfirmation    *bool
+	Attributes              map[string]any
 }
 type CreateOfferCommand struct {
 	Meta               CommandMeta

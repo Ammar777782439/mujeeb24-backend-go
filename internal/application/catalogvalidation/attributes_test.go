@@ -20,10 +20,10 @@ func schemaFixture() ports.AttributeSchemaRecord {
 func TestValidateAttributesEnforcesManagedSchemaValues(t *testing.T) {
 	schema := schemaFixture()
 	valid := map[string]any{
-		"attr_color": "أسود",
+		"attr_color":    "أسود",
 		"attr_capacity": 256,
-		"attr_code": "AB12",
-		"legacy_note": "kept",
+		"attr_code":     "AB12",
+		"legacy_note":   "kept",
 	}
 	if err := ValidateAttributes(&schema, valid); err != nil {
 		t.Fatalf("valid attributes rejected: %v", err)

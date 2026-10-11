@@ -250,21 +250,21 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 			return mapApplicationError(appErrors.NotImplemented()), true
 		}
 		result, err := s.deps.UpdateCatalogItem.Handle(ctx, commands.UpdateCatalogItemCommand{
-			Meta:                 commandMeta(ctx, actor, in.CommandHeaders),
-			CatalogID:            commands.CatalogID(in.CatalogID),
-			CatalogItemID:        commands.CatalogItemID(in.ItemID),
-			Name:                 optionalStringPtr(in.Body.Name),
-			Status:               optionalStringPtr(in.Body.Status),
-			ItemType:             optionalStringPtr(in.Body.ItemType),
+			Meta:                    commandMeta(ctx, actor, in.CommandHeaders),
+			CatalogID:               commands.CatalogID(in.CatalogID),
+			CatalogItemID:           commands.CatalogItemID(in.ItemID),
+			Name:                    optionalStringPtr(in.Body.Name),
+			Status:                  optionalStringPtr(in.Body.Status),
+			ItemType:                optionalStringPtr(in.Body.ItemType),
 			ShortDescription:        in.Body.ShortDescription.Value,
 			ShortDescriptionPresent: in.Body.ShortDescription.Present,
 			LongDescription:         in.Body.LongDescription.Value,
 			LongDescriptionPresent:  in.Body.LongDescription.Present,
-			PricingMode:          optionalStringPtr(in.Body.PricingMode),
-			AvailabilityMode:     optionalStringPtr(in.Body.AvailabilityMode),
-			FulfillmentMode:      optionalStringPtr(in.Body.FulfillmentMode),
-			RequiresConfirmation: in.Body.RequiresConfirmation,
-			Attributes:           in.Body.Attributes,
+			PricingMode:             optionalStringPtr(in.Body.PricingMode),
+			AvailabilityMode:        optionalStringPtr(in.Body.AvailabilityMode),
+			FulfillmentMode:         optionalStringPtr(in.Body.FulfillmentMode),
+			RequiresConfirmation:    in.Body.RequiresConfirmation,
+			Attributes:              in.Body.Attributes,
 		})
 		if err != nil {
 			return mapApplicationError(err), true
@@ -313,10 +313,10 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 			AmountMinor: amount, AmountPresent: in.Body.Amount.Present,
 			Currency: in.Body.Currency.Value, CurrencyPresent: in.Body.Currency.Present,
 			PricingUnit: in.Body.PricingUnit.Value, PricingUnitPresent: in.Body.PricingUnit.Present,
-			AvailabilityMode: optionalStringPtr(in.Body.AvailabilityMode),
+			AvailabilityMode:   optionalStringPtr(in.Body.AvailabilityMode),
 			AvailabilityStatus: optionalStringPtr(in.Body.AvailabilityStatus),
-			FulfillmentMode: optionalStringPtr(in.Body.FulfillmentMode),
-			ValidityFrom: in.Body.ValidityFrom.Value, ValidityFromPresent: in.Body.ValidityFrom.Present,
+			FulfillmentMode:    optionalStringPtr(in.Body.FulfillmentMode),
+			ValidityFrom:       in.Body.ValidityFrom.Value, ValidityFromPresent: in.Body.ValidityFrom.Present,
 			ValidityUntil: in.Body.ValidityUntil.Value, ValidityUntilPresent: in.Body.ValidityUntil.Present,
 			Status: optionalStringPtr(in.Body.Status),
 		})

@@ -430,7 +430,7 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 				PricingUnit: v.PricingUnit, PricingUnitPresent: pricingUnitPresent,
 				AvailabilityMode: v.AvailabilityMode, AvailabilityStatus: v.AvailabilityStatus,
 				FulfillmentMode: v.FulfillmentMode,
-				ValidityFrom: validityFrom, ValidityFromPresent: validityFromPresent,
+				ValidityFrom:    validityFrom, ValidityFromPresent: validityFromPresent,
 				ValidityUntil: validityUntil, ValidityUntilPresent: validityUntilPresent,
 				Status: v.Status, ExpectedVersion: p.Versions["offer:"+v.ID], UpdatedAt: now,
 			}

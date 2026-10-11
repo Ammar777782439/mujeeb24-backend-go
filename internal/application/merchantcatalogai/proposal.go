@@ -96,25 +96,25 @@ type OfferCreate struct {
 }
 
 type OfferUpdate struct {
-	ID                   string  `json:"id"`
-	VariantID            *string `json:"variant_id,omitempty"`
-	ClearVariant         *bool   `json:"clear_variant,omitempty"`
-	Name                 *string `json:"name,omitempty"`
-	PricingMode          *string `json:"pricing_mode,omitempty"`
-	Amount               *string `json:"amount,omitempty"`
-	ClearAmount          *bool   `json:"clear_amount,omitempty"`
-	Currency             *string `json:"currency,omitempty"`
-	ClearCurrency        *bool   `json:"clear_currency,omitempty"`
-	PricingUnit          *string `json:"pricing_unit,omitempty"`
-	ClearPricingUnit     *bool   `json:"clear_pricing_unit,omitempty"`
-	AvailabilityMode     *string `json:"availability_mode,omitempty"`
-	AvailabilityStatus   *string `json:"availability_status,omitempty"`
-	FulfillmentMode      *string `json:"fulfillment_mode,omitempty"`
-	ValidityFrom         *string `json:"validity_from,omitempty"`
-	ClearValidityFrom    *bool   `json:"clear_validity_from,omitempty"`
-	ValidityUntil        *string `json:"validity_until,omitempty"`
-	ClearValidityUntil   *bool   `json:"clear_validity_until,omitempty"`
-	Status               *string `json:"status,omitempty"`
+	ID                 string  `json:"id"`
+	VariantID          *string `json:"variant_id,omitempty"`
+	ClearVariant       *bool   `json:"clear_variant,omitempty"`
+	Name               *string `json:"name,omitempty"`
+	PricingMode        *string `json:"pricing_mode,omitempty"`
+	Amount             *string `json:"amount,omitempty"`
+	ClearAmount        *bool   `json:"clear_amount,omitempty"`
+	Currency           *string `json:"currency,omitempty"`
+	ClearCurrency      *bool   `json:"clear_currency,omitempty"`
+	PricingUnit        *string `json:"pricing_unit,omitempty"`
+	ClearPricingUnit   *bool   `json:"clear_pricing_unit,omitempty"`
+	AvailabilityMode   *string `json:"availability_mode,omitempty"`
+	AvailabilityStatus *string `json:"availability_status,omitempty"`
+	FulfillmentMode    *string `json:"fulfillment_mode,omitempty"`
+	ValidityFrom       *string `json:"validity_from,omitempty"`
+	ClearValidityFrom  *bool   `json:"clear_validity_from,omitempty"`
+	ValidityUntil      *string `json:"validity_until,omitempty"`
+	ClearValidityUntil *bool   `json:"clear_validity_until,omitempty"`
+	Status             *string `json:"status,omitempty"`
 }
 
 type UpdateOperation struct {

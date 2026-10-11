@@ -12,11 +12,11 @@ import (
 
 type atomicCatalogRepo struct {
 	ports.CatalogRepository
-	items      int
-	offers     int
-	failOffer  bool
-	lastOffer  ports.OfferDraft
-	lastPatch  ports.OfferPatch
+	items     int
+	offers    int
+	failOffer bool
+	lastOffer ports.OfferDraft
+	lastPatch ports.OfferPatch
 }
 
 func (r *atomicCatalogRepo) CreateCatalogItem(_ context.Context, draft ports.CatalogItemDraft) (ports.CatalogItemRecord, error) {
@@ -64,9 +64,9 @@ func atomicCatalogService(repo *atomicCatalogRepo) CreateCatalogItemCommandServi
 	ids := []string{"item-id", "offer-id"}
 	index := 0
 	base := CatalogCommandServices{
-		Repository: repo,
+		Repository:   repo,
 		Transactions: atomicCatalogTx{repo: repo},
-		Now: func() time.Time { return time.Date(2026, 10, 12, 1, 0, 0, 0, time.UTC) },
+		Now:          func() time.Time { return time.Date(2026, 10, 12, 1, 0, 0, 0, time.UTC) },
 		NewID: func() string {
 			id := ids[index]
 			index++
@@ -80,7 +80,7 @@ func atomicCreateCommand() commands.CreateCatalogItemCommand {
 	amount := int64(1000000)
 	currency := "YER"
 	return commands.CreateCatalogItemCommand{
-		Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business"}},
+		Meta:      commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business"}},
 		CatalogID: "catalog", ItemType: "product", Name: "Phone",
 		PricingMode: "fixed", AvailabilityMode: "stock", FulfillmentMode: "delivery",
 		InitialOffer: &commands.InitialOffer{
@@ -118,16 +118,16 @@ func TestCreateCatalogItemRollsBackWhenInitialOfferFails(t *testing.T) {
 func TestUpdateOfferRefreshesOnlyChangedMerchantEvidence(t *testing.T) {
 	repo := &atomicCatalogRepo{}
 	base := CatalogCommandServices{
-		Repository: repo,
+		Repository:   repo,
 		Transactions: atomicCatalogTx{repo: repo},
-		Now: func() time.Time { return time.Date(2026, 10, 12, 2, 0, 0, 0, time.UTC) },
+		Now:          func() time.Time { return time.Date(2026, 10, 12, 2, 0, 0, 0, time.UTC) },
 	}
 	service := UpdateOfferCommandService{CatalogCommandServices: base}
 	version := commands.ResourceVersion("1")
 	amount := int64(250000)
 	status := "available"
 	_, err := service.Handle(context.Background(), commands.UpdateOfferCommand{
-		Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business"}, ExpectedVersion: &version},
+		Meta:    commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business"}, ExpectedVersion: &version},
 		OfferID: "offer", AmountMinor: &amount, AvailabilityStatus: &status,
 	})
 	if err != nil {

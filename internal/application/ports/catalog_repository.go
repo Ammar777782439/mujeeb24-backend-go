@@ -195,22 +195,22 @@ type CatalogItemDraft struct {
 }
 
 type CatalogItemPatch struct {
-	ID                   string
-	BusinessID           string
-	Name                 *string
-	Status               *string
-	ItemType             *string
+	ID                      string
+	BusinessID              string
+	Name                    *string
+	Status                  *string
+	ItemType                *string
 	ShortDescription        *string
 	ShortDescriptionPresent bool
 	LongDescription         *string
 	LongDescriptionPresent  bool
 	PricingMode             *string
-	AvailabilityMode     *string
-	FulfillmentMode      *string
-	RequiresConfirmation *bool
-	Attributes           []byte
-	ExpectedVersion      int64
-	UpdatedAt            time.Time
+	AvailabilityMode        *string
+	FulfillmentMode         *string
+	RequiresConfirmation    *bool
+	Attributes              []byte
+	ExpectedVersion         int64
+	UpdatedAt               time.Time
 }
 
 type OfferDraft struct {
@@ -220,21 +220,21 @@ type OfferDraft struct {
 	AvailabilitySource      *string
 	AvailabilityCheckedAt   *time.Time
 	AmountDecimal           *string // Validated exact NUMERIC(20,4); used by catalog proposal execution.
-	ID                 string
-	BusinessID         string
-	CatalogItemID      string
-	VariantID          *string
-	Name               string
-	PricingMode        string
-	AmountMinor        *int64
-	Currency           *string
-	PricingUnit        *string
-	AvailabilityMode   string
-	AvailabilityStatus string
-	FulfillmentMode    string
-	Status             string
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	ID                      string
+	BusinessID              string
+	CatalogItemID           string
+	VariantID               *string
+	Name                    string
+	PricingMode             string
+	AmountMinor             *int64
+	Currency                *string
+	PricingUnit             *string
+	AvailabilityMode        string
+	AvailabilityStatus      string
+	FulfillmentMode         string
+	Status                  string
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
 }
 
 type OfferPatch struct {

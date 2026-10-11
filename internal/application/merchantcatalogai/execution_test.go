@@ -110,7 +110,7 @@ func (tx executionTransaction) Within(ctx context.Context, fn func(context.Conte
 func executionFixture() (ExecutionService, *executionRepo, *executionMemoryStore) {
 	amount, currency := "1250.00", "YER"
 	repo := &executionRepo{
-		item: ports.CatalogItemRecord{ID: "item", BusinessID: "business", CatalogID: "catalog", ResourceVersion: 7, Attributes: []byte(`{"existing":true,"warranty":"1 year"}`)},
+		item:  ports.CatalogItemRecord{ID: "item", BusinessID: "business", CatalogID: "catalog", ResourceVersion: 7, Attributes: []byte(`{"existing":true,"warranty":"1 year"}`)},
 		offer: ports.OfferRecord{ID: "offer", BusinessID: "business", CatalogItemID: "item", Name: "سعر البيع", PricingMode: "fixed", Amount: &amount, Currency: &currency, AvailabilityMode: "stock", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active", ResourceVersion: 3},
 	}
 	store := &executionMemoryStore{}
