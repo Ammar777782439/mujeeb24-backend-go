@@ -49,7 +49,6 @@ type CreateAttributeSchemaVersionCommand struct {
 	Definitions []AttributeDefinition
 }
 type AttributeDefinition struct {
-	Key             string
 	Label           string
 	DataType        string
 	Required        bool

@@ -324,8 +324,6 @@ components:
           type: integer
         id:
           type: string
-        key:
-          type: string
         label:
           type: string
         required:
@@ -349,8 +347,6 @@ components:
         display_order:
           format: int64
           type: integer
-        key:
-          type: string
         label:
           type: string
         required:
@@ -359,7 +355,6 @@ components:
           additionalProperties: {}
           type: object
       required:
-        - key
         - label
         - data_type
         - required

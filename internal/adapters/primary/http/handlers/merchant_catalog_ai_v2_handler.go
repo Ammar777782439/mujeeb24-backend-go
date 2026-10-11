@@ -8,6 +8,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/authorization"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
 )
 
@@ -62,9 +63,7 @@ func (h *MerchantCatalogAIV2Handler) HandleExecute(ctx context.Context, in *cont
 	if h == nil || h.Execution == nil {
 		return nil, appErrors.NotImplemented()
 	}
-	switch actor.Role {
-	case "owner", "admin":
-	default:
+	if !authorization.Has(actor, authorization.PermissionCatalogWrite) {
 		return nil, appErrors.New(appErrors.CodeForbidden, "catalog write permission is required")
 	}
 	result, err := h.Execution.ExecuteApproved(ctx, string(actor.BusinessID), string(actor.PrincipalID), in.Body.ProposalID)

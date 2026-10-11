@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strconv"
@@ -51,6 +53,14 @@ func (s CatalogCommandServices) within(ctx context.Context, fn func(context.Cont
 		return err
 	}
 	return s.Transactions.Within(ctx, fn)
+}
+
+// stableAttributeKey returns an opaque, deterministic machine key derived from
+// the immutable AttributeDefinition ID. Labels remain the semantic meaning seen
+// by merchants and AI; renaming a label never changes persisted item attributes.
+func stableAttributeKey(definitionID string) string {
+	sum := sha256.Sum256([]byte(definitionID))
+	return "attr_" + hex.EncodeToString(sum[:8])
 }
 
 type CreateCatalogCommandService struct{ CatalogCommandServices }
@@ -113,15 +123,16 @@ func (s CreateAttributeSchemaVersionCommandService) Handle(ctx context.Context, 
 	}
 	definitionDrafts := make([]ports.AttributeDefinitionDraft, 0, len(command.Definitions))
 	for index, definition := range command.Definitions {
-		if definition.Key == "" || definition.Label == "" || definition.DataType == "" || definition.DisplayOrder < 0 {
+		if definition.Label == "" || definition.DataType == "" || definition.DisplayOrder < 0 {
 			return result, appErrors.New(appErrors.CodeValidation, "attribute definition is invalid at index "+strconv.Itoa(index))
 		}
 		rules, rulesErr := encodeObject(definition.ValidationRules)
 		if rulesErr != nil {
 			return result, appErrors.New(appErrors.CodeValidation, "attribute validation_rules are invalid at index "+strconv.Itoa(index))
 		}
+		definitionID := s.id()
 		definitionDrafts = append(definitionDrafts, ports.AttributeDefinitionDraft{
-			ID: s.id(), Key: definition.Key, Label: definition.Label, DataType: definition.DataType,
+			ID: definitionID, Key: stableAttributeKey(definitionID), Label: definition.Label, DataType: definition.DataType,
 			Required: definition.Required, DisplayOrder: definition.DisplayOrder,
 			ValidationRules: rules, CreatedAt: s.now(), UpdatedAt: s.now(),
 		})

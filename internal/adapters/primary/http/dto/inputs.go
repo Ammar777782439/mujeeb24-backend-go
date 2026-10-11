@@ -456,7 +456,6 @@ type CreateAttributeSchemaRequest struct {
 	Definitions []AttributeDefinitionInput `json:"definitions"`
 }
 type AttributeDefinitionInput struct {
-	Key             string         `json:"key"`
 	Label           string         `json:"label"`
 	DataType        string         `json:"data_type"`
 	Required        bool           `json:"required"`

@@ -435,14 +435,23 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 		t.Fatalf("expected stale catalog update, got %v", err)
 	}
 	createSchemaService := services.CreateAttributeSchemaVersionCommandService{CatalogCommandServices: commandServices}
-	createdSchema, err := createSchemaService.Handle(ctx, commands.CreateAttributeSchemaVersionCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, Name: "Write schema", Definitions: []commands.AttributeDefinition{{Key: "brand", Label: "Brand", DataType: "text", Required: true, DisplayOrder: 0}}})
+	createdSchema, err := createSchemaService.Handle(ctx, commands.CreateAttributeSchemaVersionCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, Name: "Write schema", Definitions: []commands.AttributeDefinition{{Label: "Brand", DataType: "text", Required: true, DisplayOrder: 0}}})
 	if err != nil || createdSchema.Schema.ID != commands.AttributeSchemaID(schemaWrite) || createdSchema.Schema.Version != 1 || len(createdSchema.Schema.Definitions) != 1 {
 		t.Fatalf("schema command create: %#v err=%v", createdSchema, err)
 	}
+	attributeKey := createdSchema.Schema.Definitions[0].Key
+	if !strings.HasPrefix(attributeKey, "attr_") || len(attributeKey) != len("attr_")+16 {
+		t.Fatalf("generated attribute key must be opaque and stable-shaped, got %q", attributeKey)
+	}
 	createItemService := services.CreateCatalogItemCommandService{CatalogCommandServices: commandServices}
-	createdItem, err := createItemService.Handle(ctx, commands.CreateCatalogItemCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, CatalogID: commands.CatalogID(catalogWrite), AttributeSchemaID: attributeSchemaID(schemaWrite), ItemType: "physical_good", Name: "Created phone", PricingMode: "fixed", AvailabilityMode: "stock", FulfillmentMode: "delivery", Attributes: map[string]any{"brand": "Mujeeb"}})
+	shortDescription := "Compact description"
+	longDescription := "Detailed merchant description"
+	createdItem, err := createItemService.Handle(ctx, commands.CreateCatalogItemCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, CatalogID: commands.CatalogID(catalogWrite), AttributeSchemaID: attributeSchemaID(schemaWrite), ItemType: "physical_good", Name: "Created phone", ShortDescription: &shortDescription, LongDescription: &longDescription, PricingMode: "fixed", AvailabilityMode: "stock", FulfillmentMode: "delivery", Attributes: map[string]any{attributeKey: "Mujeeb"}})
 	if err != nil || createdItem.Item.ID != commands.CatalogItemID(itemWrite) || createdItem.Item.AttributeSchemaVersion == nil || *createdItem.Item.AttributeSchemaVersion != 1 {
 		t.Fatalf("item command create: %#v err=%v", createdItem, err)
+	}
+	if createdItem.Item.ShortDescription == nil || *createdItem.Item.ShortDescription != shortDescription || createdItem.Item.LongDescription == nil || *createdItem.Item.LongDescription != longDescription {
+		t.Fatalf("catalog item descriptions were not persisted: %#v", createdItem.Item)
 	}
 	createOfferService := services.CreateOfferCommandService{CatalogCommandServices: commandServices}
 	amountMinor := int64(125050)

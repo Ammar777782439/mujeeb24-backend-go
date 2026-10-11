@@ -32,4 +32,6 @@
 | `audit:read` | `listAuditEvents`, `getAuditEvent`, `listAIDecisions`, `getAIDecision` |
 | `merchant_ai:use` | `merchantAIChat`, `merchantAIExecute`, `requestHumanReview` |
 
+> ملاحظة تنفيذية: `merchantAIExecute` يمر أولًا ببوابة `merchant_ai:use` مثل بقية عمليات مساعد التاجر، ثم يفرض داخل حد التنفيذ `catalog:write` أيضًا لأن الموافقة تنفذ Mutation حقيقيًا على الكتالوج. لا تعتمد هذه البوابة على اسم الدور.
+
 عمليات المصادقة العامة أو الخاصة بالهوية لا تستخدم Business Scope: تسجيل الدخول والتجديد، فحص دعوة، قبول حساب جديد، وقبول حساب قائم بعد المصادقة. عمليات `/platform/*` لها Platform Scope منفصل ولا تمنح مدير المنصة عضوية تاجر.
