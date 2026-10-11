@@ -7,7 +7,7 @@ import (
 )
 
 func TestCapabilityDecisionDoesNotRequireInventedIntent(t *testing.T) {
-	capability, denied, different := "reply_customer", "denied", "handoff_to_human"
+	capability, denied, different := "respond_without_action", "denied", "handoff_to_human"
 	now := time.Now()
 	base := ports.AIDecisionDraft{ID: "decision", BusinessID: "business", RequestedCapability: &capability, RequestedAction: "answer", ConfidenceBand: "medium", PolicyVersion: "v1", SchemaVersion: 1, Lifecycle: "proposed", CreatedAt: now, UpdatedAt: now}
 	if !validAIDecisionDraft(base) {

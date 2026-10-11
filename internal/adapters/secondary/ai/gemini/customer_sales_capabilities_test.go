@@ -19,7 +19,7 @@ func TestCustomerCapabilityBoundary(t *testing.T) {
 		capability     ports.CustomerSalesCapability
 		invalid        bool
 	}{
-		{"greeting", `{"steps":[{"type":"function_call","id":"c","name":"reply_customer","arguments":{"response_text":"وعليكم السلام"}}]}`, ports.CustomerSalesCapabilityReply, false},
+		{"greeting", `{"steps":[{"type":"function_call","id":"c","name":"respond_without_action","arguments":{"response_text":"وعليكم السلام"}}]}`, ports.CustomerSalesCapabilityRespondWithoutAction, false},
 		{"clarify", `{"steps":[{"type":"function_call","id":"c","name":"ask_customer","arguments":{"response_text":"ما العدد؟"}}]}`, ports.CustomerSalesCapabilityAsk, false},
 		{"handoff", `{"steps":[{"type":"function_call","id":"c","name":"handoff_to_human","arguments":{"response_text":"سأحوّل طلبك إلى الفريق"}}]}`, ports.CustomerSalesCapabilityHandoff, false},
 		{"catalog", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{}}]}`, ports.CustomerSalesCapabilityFullCatalog, false},
@@ -28,11 +28,11 @@ func TestCustomerCapabilityBoundary(t *testing.T) {
 		{"tenant argument", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{"business_id":"other"}}]}`, "", true},
 		{"filter", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{"query":"phone"}}]}`, "", true},
 		{"empty response", `{"steps":[{"type":"function_call","id":"c","name":"handoff_to_human","arguments":{"response_text":" "}}]}`, "", true},
-		{"authority", `{"steps":[{"type":"function_call","id":"c","name":"reply_customer","arguments":{"response_text":"hi","authorized":true}}]}`, "", true},
-		{"invented status", `{"steps":[{"type":"function_call","id":"c","name":"reply_customer","arguments":{"response_text":"hi","status":"resolved"}}]}`, "", true},
-		{"nested authority", `{"steps":[{"type":"function_call","id":"c","name":"reply_customer","arguments":{"response_text":"hi","selected":[{"item_id":"a","business_id":"b"}]}}]}`, "", true},
-		{"missing ID", `{"steps":[{"type":"function_call","name":"reply_customer","arguments":{"response_text":"hi"}}]}`, "", true},
-		{"parallel", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{}},{"type":"function_call","id":"d","name":"reply_customer","arguments":{"response_text":"hi"}}]}`, "", true},
+		{"authority", `{"steps":[{"type":"function_call","id":"c","name":"respond_without_action","arguments":{"response_text":"hi","authorized":true}}]}`, "", true},
+		{"invented status", `{"steps":[{"type":"function_call","id":"c","name":"respond_without_action","arguments":{"response_text":"hi","status":"resolved"}}]}`, "", true},
+		{"nested authority", `{"steps":[{"type":"function_call","id":"c","name":"respond_without_action","arguments":{"response_text":"hi","selected":[{"item_id":"a","business_id":"b"}]}}]}`, "", true},
+		{"missing ID", `{"steps":[{"type":"function_call","name":"respond_without_action","arguments":{"response_text":"hi"}}]}`, "", true},
+		{"parallel", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{}},{"type":"function_call","id":"d","name":"respond_without_action","arguments":{"response_text":"hi"}}]}`, "", true},
 		{"null", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":null}]}`, "", true},
 	}
 	for _, tc := range tests {
@@ -131,5 +131,39 @@ func TestFinalCatalogDecisionUsesOnlyTerminalCapabilitiesAndCountsTools(t *testi
 	proposal, usage, err := client.FinalEvaluateWithDetails(context.Background(), input, "verified candidates")
 	if err != nil || proposal.Capability != ports.CustomerSalesCapabilityHandoff || proposal.ResponseText != "سأحوّل طلبك للفريق" || usage.InputTokens != 125 || calls != 2 {
 		t.Fatalf("final %+v usage %+v err %v", proposal, usage, err)
+	}
+}
+
+
+func TestCustomerCapabilityDescriptionsEnforceOperationBoundary(t *testing.T) {
+	tools := customerSalesTools(ports.CustomerSalesCapabilities(true))
+	byName := make(map[string]customerSalesTool, len(tools))
+	for _, tool := range tools {
+		byName[tool.Name] = tool
+	}
+	if _, ok := byName["reply_customer"]; ok {
+		t.Fatal("obsolete broad reply_customer capability must not be offered")
+	}
+	respond, ok := byName[string(ports.CustomerSalesCapabilityRespondWithoutAction)]
+	if !ok {
+		t.Fatal("respond_without_action capability missing")
+	}
+	if !strings.Contains(respond.Description, "without starting, confirming, completing, changing, or promising an external business operation") ||
+		!strings.Contains(respond.Description, "use handoff_to_human") {
+		t.Fatalf("respond_without_action description lost operation boundary: %q", respond.Description)
+	}
+	respondText := respond.Parameters["properties"].(map[string]any)["response_text"].(map[string]any)["description"].(string)
+	if !strings.Contains(respondText, "must not ask the customer to confirm an unsupported external operation") ||
+		!strings.Contains(respondText, "must not claim") {
+		t.Fatalf("respond_without_action response schema lost truth boundary: %q", respondText)
+	}
+	ask := byName[string(ports.CustomerSalesCapabilityAsk)]
+	if !strings.Contains(ask.Description, "Never reconfirm a clear request") {
+		t.Fatalf("ask_customer can regress into redundant confirmation: %q", ask.Description)
+	}
+	handoff := byName[string(ports.CustomerSalesCapabilityHandoff)]
+	if !strings.Contains(handoff.Description, "start, confirm, complete, or change an external operation") ||
+		!strings.Contains(handoff.Description, "Short confirmations inherit the prior conversational goal") {
+		t.Fatalf("handoff_to_human description lost unsupported-operation boundary: %q", handoff.Description)
 	}
 }

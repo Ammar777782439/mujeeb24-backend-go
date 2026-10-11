@@ -2,7 +2,7 @@
 
 الحالة: CURRENT — يحل محل وصف status/action السابق.
 
-المرجع التفصيلي: [عقد القدرات v11](../../docs/architecture/customer-sales-capabilities-v11-ar.md).
+المرجع التفصيلي: [عقد القدرات v12](../../docs/architecture/customer-sales-capabilities-v12-ar.md).
 
 يمر `CapabilityDecision` دون تغيير هويته عبر: Structural → Reference → Tenant/Ownership → Policy → Authorization → Execution → Audit.
 
@@ -11,7 +11,7 @@
 - Tenant/Ownership يتحقق من نطاق التاجر الموثوق؛ النموذج لا يزود tenant.
 - Policy يتلقى CapabilityDecision نفسه ويطبق خصائص القدرة المسجلة وسياسة التاجر. جميع القدرات النهائية الحالية تستخدم منفذ رسالة العميل، لذا تخضع allow_auto_reply وdefault_human_review وai_mode.
 - Authorization يسمح أو يمنع أو يطلب مراجعة، ولا يستبدل القدرة المختارة ولا يتجاوز policy.
-- Execution يستخدم تعريف القدرة في Registry لتحديد المنفذ وحالة المحادثة. reply_customer/ask_customer يؤديان waiting_customer وownership=ai. handoff_to_human يرسل نص Gemini ويضع waiting_human دون ادعاء إسناد ownership لموظف.
+- Execution يستخدم تعريف القدرة في Registry لتحديد المنفذ وحالة المحادثة. respond_without_action/ask_customer يؤديان waiting_customer وownership=ai. handoff_to_human يرسل نص Gemini ويضع waiting_human دون ادعاء إسناد ownership لموظف.
 - VALIDATING → AUTHORIZED → EXECUTING إلزامية قبل Outbox؛ الانتقالان الأخيران مع القرار وOutbox داخل معاملة محلية دون شبكة.
 - denied/requires_approval لا ينفذان الرسالة. انتظار الموظف يوقف الدور التالي قبل النموذج.
 

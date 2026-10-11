@@ -29,7 +29,7 @@ func (s *exactTokenBatchGeminiStub) EvaluateBatch(_ context.Context, input Batch
 func (s *exactTokenBatchGeminiStub) FinalEvaluateWithDetails(_ context.Context, _ FinalEvaluationInput, _ string) (ports.CapabilityDecision, ports.CustomerSalesUsageTelemetry, error) {
 	decision := s.finalProposal
 	if decision.Capability == "" {
-		decision = ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityReply, ResponseText: "ok"}
+		decision = ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityRespondWithoutAction, ResponseText: "ok"}
 	}
 	return decision, ports.CustomerSalesUsageTelemetry{}, nil
 }

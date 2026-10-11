@@ -29,7 +29,7 @@
 //      Same as 'assist' but signals a different workflow stage.
 //
 //   4. ai_mode = 'restricted_auto':
-//      → capability=reply_customer: allowed IF allow_auto_reply=true
+//      → capability=respond_without_action: allowed IF allow_auto_reply=true
 //      → capability=ask_customer: allowed IF allow_auto_reply=true
 //      → capability=handoff_to_human: customer text allowed IF allow_auto_reply=true
 //      → default_human_review=true overrides: requires_approval for all

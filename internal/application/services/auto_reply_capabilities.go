@@ -52,7 +52,7 @@ func (s AutoReplyService) fullCatalogReady(run ports.AIRunRecord) bool {
 // These values never select a runtime executor or drive policy/validation.
 func legacyCustomerSalesAction(capability ports.CustomerSalesCapability) string {
 	switch capability {
-	case ports.CustomerSalesCapabilityReply:
+	case ports.CustomerSalesCapabilityRespondWithoutAction:
 		return "answer"
 	case ports.CustomerSalesCapabilityAsk:
 		return "clarification"

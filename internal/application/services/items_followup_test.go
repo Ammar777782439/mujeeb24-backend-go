@@ -51,7 +51,7 @@ func TestPersistenceFailurePropagatesError(t *testing.T) {
 	}
 	out := ports.CustomerSalesDecisionOutput{
 		Decision: ports.CapabilityDecision{
-			Capability:   ports.CustomerSalesCapabilityReply,
+			Capability:   ports.CustomerSalesCapabilityRespondWithoutAction,
 			ResponseText: "test response",
 		},
 		Usage: ports.CustomerSalesUsageTelemetry{

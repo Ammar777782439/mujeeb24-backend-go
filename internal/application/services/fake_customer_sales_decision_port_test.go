@@ -32,7 +32,7 @@ type FakeCustomerSalesDecisionPort struct {
 func NewFakeCustomerSalesDecisionPort(responseText string) *FakeCustomerSalesDecisionPort {
 	return &FakeCustomerSalesDecisionPort{
 		Decision: ports.CapabilityDecision{
-			Capability:   ports.CustomerSalesCapabilityReply,
+			Capability:   ports.CustomerSalesCapabilityRespondWithoutAction,
 			ResponseText: responseText,
 		},
 		GeminiInteractionID: "fake-interaction-id",

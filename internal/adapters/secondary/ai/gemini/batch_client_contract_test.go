@@ -203,7 +203,7 @@ func TestBatchCandidateParserRejectsUnknownFields(t *testing.T) {
 
 func TestFinalCapabilityRejectsUnknownFields(t *testing.T) {
 	var response interactionResponse
-	if err := json.Unmarshal([]byte(`{"steps":[{"type":"function_call","id":"c","name":"reply_customer","arguments":{"response_text":"ok","requires_approval":true}}]}`), &response); err != nil {
+	if err := json.Unmarshal([]byte(`{"steps":[{"type":"function_call","id":"c","name":"respond_without_action","arguments":{"response_text":"ok","requires_approval":true}}]}`), &response); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := parseCustomerSalesCapability(response, customerSalesTools(ports.CustomerSalesCapabilities(false))); err == nil {

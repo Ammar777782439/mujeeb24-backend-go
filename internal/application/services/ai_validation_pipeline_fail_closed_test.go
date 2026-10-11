@@ -21,7 +21,7 @@ func TestPolicyDecisionEmptyRequiresApproval(t *testing.T) {
 	}, nil)
 
 	decision, failure := pipeline.evaluateCustomerSalesPolicy(context.Background(), ValidationInput{
-		Decision: ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityReply},
+		Decision: ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityRespondWithoutAction},
 	})
 	if failure != nil {
 		t.Fatalf("unexpected failure: %v", failure)
@@ -37,7 +37,7 @@ func TestPolicyDecisionUnknownRequiresApproval(t *testing.T) {
 	}, nil)
 
 	decision, failure := pipeline.evaluateCustomerSalesPolicy(context.Background(), ValidationInput{
-		Decision: ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityReply},
+		Decision: ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityRespondWithoutAction},
 	})
 	if failure != nil {
 		t.Fatalf("unexpected failure: %v", failure)

@@ -5,7 +5,7 @@ package ports
 type CustomerSalesCapability string
 
 const (
-	CustomerSalesCapabilityReply       CustomerSalesCapability = "reply_customer"
+	CustomerSalesCapabilityRespondWithoutAction CustomerSalesCapability = "respond_without_action"
 	CustomerSalesCapabilityAsk         CustomerSalesCapability = "ask_customer"
 	CustomerSalesCapabilityHandoff     CustomerSalesCapability = "handoff_to_human"
 	CustomerSalesCapabilityFullCatalog CustomerSalesCapability = "evaluate_full_catalog"
@@ -16,7 +16,7 @@ const (
 func CustomerSalesCapabilities(fullCatalogAvailable bool) []CustomerSalesCapability {
 	capabilities := make([]CustomerSalesCapability, 0, len(customerSalesCapabilityRegistry))
 	for _, entry := range customerSalesCapabilityRegistry {
-		if entry.Definition.Terminal || fullCatalogAvailable {
+		if entry.Definition.Terminal || (entry.Definition.RequiresFullCatalogRuntime && fullCatalogAvailable) {
 			capabilities = append(capabilities, entry.Name)
 		}
 	}
@@ -38,19 +38,21 @@ type CustomerSalesCapabilityDefinition struct {
 	SendsCustomerMessage  bool
 	RequiresHuman         bool
 	ConversationState     string
-	ConversationOwnership string
+	ConversationOwnership      string
+	RequiresFullCatalogRuntime bool
 }
 
-// The registry is the single runtime definition for availability, validation,
-// customer-message policy requirements and executor conversation effects.
+// The registry is the single runtime definition for validation, policy requirements,
+// executor conversation effects and local capability availability. Non-terminal
+// capabilities are never exposed just because another non-terminal capability is ready.
 var customerSalesCapabilityRegistry = [...]struct {
 	Name       CustomerSalesCapability
 	Definition CustomerSalesCapabilityDefinition
 }{
-	{CustomerSalesCapabilityReply, CustomerSalesCapabilityDefinition{Terminal: true, SendsCustomerMessage: true, ConversationState: "waiting_customer", ConversationOwnership: "ai"}},
+	{CustomerSalesCapabilityRespondWithoutAction, CustomerSalesCapabilityDefinition{Terminal: true, SendsCustomerMessage: true, ConversationState: "waiting_customer", ConversationOwnership: "ai"}},
 	{CustomerSalesCapabilityAsk, CustomerSalesCapabilityDefinition{Terminal: true, SendsCustomerMessage: true, ConversationState: "waiting_customer", ConversationOwnership: "ai"}},
 	{CustomerSalesCapabilityHandoff, CustomerSalesCapabilityDefinition{Terminal: true, SendsCustomerMessage: true, RequiresHuman: true, ConversationState: "waiting_human"}},
-	{CustomerSalesCapabilityFullCatalog, CustomerSalesCapabilityDefinition{}},
+	{CustomerSalesCapabilityFullCatalog, CustomerSalesCapabilityDefinition{RequiresFullCatalogRuntime: true}},
 }
 
 func CustomerSalesCapabilityDefinitionFor(capability CustomerSalesCapability) (CustomerSalesCapabilityDefinition, bool) {

@@ -88,7 +88,7 @@ func buildServiceForUsageTest(usageRepo ports.AIUsageRepository, subsRepo ports.
 func buildUsageOutput() ports.CustomerSalesDecisionOutput {
 	return ports.CustomerSalesDecisionOutput{
 		Decision: ports.CapabilityDecision{
-			Capability:   ports.CustomerSalesCapabilityReply,
+			Capability:   ports.CustomerSalesCapabilityRespondWithoutAction,
 			ResponseText: "test response",
 		},
 		Usage: ports.CustomerSalesUsageTelemetry{
@@ -245,7 +245,7 @@ func (f *fakeInteractionRuntime) Decide(_ context.Context, input ports.CustomerS
 	f.receivedPrevID = input.GeminiInteraction.PreviousInteractionID
 	return ports.CustomerSalesDecisionOutput{
 		Decision: ports.CapabilityDecision{
-			Capability:   ports.CustomerSalesCapabilityReply,
+			Capability:   ports.CustomerSalesCapabilityRespondWithoutAction,
 			ResponseText: "ok",
 		},
 		GeminiInteraction: ports.GeminiInteractionContext{

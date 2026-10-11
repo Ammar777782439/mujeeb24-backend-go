@@ -14,7 +14,7 @@ func strPtr(s string) *string { return &s }
 func TestAutoReply_OneAICallPerTurn(t *testing.T) {
 	rt := &FakeCustomerSalesDecisionPort{
 		Decision: ports.CapabilityDecision{
-			Capability:   ports.CustomerSalesCapabilityReply,
+			Capability:   ports.CustomerSalesCapabilityRespondWithoutAction,
 			ResponseText: "ok",
 		},
 	}

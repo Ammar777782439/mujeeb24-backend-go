@@ -25,19 +25,19 @@ func customerSalesTools(capabilities []ports.CustomerSalesCapability) []customer
 	for _, capability := range capabilities {
 		description := ""
 		switch capability {
-		case ports.CustomerSalesCapabilityReply:
-			description = "Reply using verified current evidence. For facts, comparisons, alternatives or absence requiring catalog knowledge beyond that evidence, request evaluate_full_catalog first."
+		case ports.CustomerSalesCapabilityRespondWithoutAction:
+			description = "Answer, explain, acknowledge, or provide grounded information only when the customer goal can be satisfied without starting, confirming, completing, changing, or promising an external business operation. Never use this capability to ask for confirmation of an unsupported operation or to claim an external state change happened. If the customer wants to proceed and no offered executor can do it, use handoff_to_human."
 		case ports.CustomerSalesCapabilityAsk:
-			description = "Ask the customer for genuinely missing information. Do not ask the customer for catalog facts the merchant can provide through evaluate_full_catalog."
+			description = "Ask only for genuinely missing customer-supplied information required to understand the goal or use an available capability. Never reconfirm a clear request, and never use a confirmation question to postpone handoff for an unsupported external operation. Do not ask for catalog facts the merchant can provide through evaluate_full_catalog."
 		case ports.CustomerSalesCapabilityHandoff:
-			description = "Request human follow-up when the customer asks for a human or their goal cannot be executed by the available capabilities. Write a grounded customer response; never claim the requested transaction was executed."
+			description = "Use when the customer explicitly asks for a human, or when the current goal is to start, confirm, complete, or change an external operation that none of the offered executable capabilities can perform. Short confirmations inherit the prior conversational goal. Write a grounded handoff response and never claim the external operation was executed."
 		case ports.CustomerSalesCapabilityFullCatalog:
 			tools = append(tools, customerSalesTool{Type: "function", Name: string(capability), Description: "Request evaluation of ALL active catalog components and relationships for this merchant when current evidence is insufficient. All token-aware batches must complete before a final capability is chosen. This is not a search; no filters, IDs, tenant, or query arguments are accepted.", Parameters: map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{}}})
 			continue
 		default:
 			continue
 		}
-		tools = append(tools, customerSalesTool{Type: "function", Name: string(capability), Description: description, Parameters: customerSalesResponseParameters()})
+		tools = append(tools, customerSalesTool{Type: "function", Name: string(capability), Description: description, Parameters: customerSalesResponseParameters(capability)})
 	}
 	return tools
 }
@@ -99,16 +99,29 @@ func customerSalesTokenTools(tools []customerSalesTool) []map[string]any {
 }
 
 // All terminal capabilities share grounded customer text and catalog references.
-func customerSalesResponseParameters() map[string]any {
+func customerSalesResponseParameters(capability ports.CustomerSalesCapability) map[string]any {
 	return map[string]any{
 		"type": "object", "additionalProperties": false,
 		"properties": map[string]any{
-			"response_text": map[string]any{"type": "string"},
+			"response_text": map[string]any{"type": "string", "description": customerSalesResponseTextDescription(capability)},
 			"selected": map[string]any{"type": "array", "items": map[string]any{
 				"type": "object", "additionalProperties": false,
 				"properties": map[string]any{"item_id": map[string]any{"type": "string"}, "variant_id": map[string]any{"type": "string"}, "offer_id": map[string]any{"type": "string"}},
 				"required":   []string{"item_id"},
 			}},
 		}, "required": []string{"response_text"},
+	}
+}
+
+func customerSalesResponseTextDescription(capability ports.CustomerSalesCapability) string {
+	switch capability {
+	case ports.CustomerSalesCapabilityRespondWithoutAction:
+		return "Customer-facing text that answers, explains, acknowledges, or informs only. It must not ask the customer to confirm an unsupported external operation and must not claim, promise, start, confirm, or complete any external state change."
+	case ports.CustomerSalesCapabilityAsk:
+		return "One customer-facing question for genuinely missing customer-supplied information. It must not reconfirm a request that is already clear and must not postpone handoff for an unsupported external operation."
+	case ports.CustomerSalesCapabilityHandoff:
+		return "Customer-facing handoff text that states human follow-up is needed. It must not claim the requested external operation has already been executed, confirmed, or completed."
+	default:
+		return "Grounded customer-facing text."
 	}
 }

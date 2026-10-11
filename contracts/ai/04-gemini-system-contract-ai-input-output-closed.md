@@ -2,7 +2,7 @@
 
 الحالة: CURRENT — يحل محل وصف status/action السابق.
 
-المرجع التفصيلي: [عقد القدرات v11](../../docs/architecture/customer-sales-capabilities-v11-ar.md).
+المرجع التفصيلي: [عقد القدرات v12](../../docs/architecture/customer-sales-capabilities-v12-ar.md).
 
 Gemini يفهم الرسالة وسياق المحادثة ويختار استدعاء دالة واحدة من القدرات المعروضة. مجيب لا يصنف النية ولا يستخدم كلمات أو قطاعات لاختيار إجراء.
 

@@ -133,7 +133,7 @@ func (m *capabilityBatchModel) FinalEvaluateWithDetails(_ context.Context, input
 	}
 	capability := m.finalCapability
 	if capability == "" {
-		capability = ports.CustomerSalesCapabilityReply
+		capability = ports.CustomerSalesCapabilityRespondWithoutAction
 	}
 	return ports.CapabilityDecision{Capability: capability, ResponseText: "الخيار المناسب متوفر", Selected: []ports.SelectedReference{{ItemID: "item-4", VariantID: stringPtr("variant-item-4"), OfferID: stringPtr("offer-item-4")}}}, ports.CustomerSalesUsageTelemetry{}, nil
 }
