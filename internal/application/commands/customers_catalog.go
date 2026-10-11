@@ -68,7 +68,21 @@ type CreateCatalogItemCommand struct {
 	FulfillmentMode      string
 	RequiresConfirmation bool
 	Attributes           map[string]any
+	InitialOffer         *InitialOffer
 }
+
+type InitialOffer struct {
+	Name               string
+	PricingMode        string
+	AmountMinor        *int64
+	Currency           *string
+	PricingUnit        *string
+	AvailabilityMode   string
+	AvailabilityStatus string
+	FulfillmentMode    string
+	Status             string
+}
+
 type UpdateCatalogItemCommand struct {
 	Meta                 CommandMeta
 	CatalogID            CatalogID

@@ -464,6 +464,7 @@ type AttributeDefinitionInput struct {
 }
 type CreateCatalogItemRequest struct {
 	AttributeSchemaID    *UUID          `json:"attribute_schema_id,omitempty"`
+	InitialOffer         *CreateOfferRequest `json:"initial_offer,omitempty"`
 	ItemType             string         `json:"item_type"`
 	Name                 string         `json:"name"`
 	ShortDescription     *string        `json:"short_description,omitempty"`

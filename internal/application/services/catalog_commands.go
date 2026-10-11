@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -188,12 +189,36 @@ func (s CreateCatalogItemCommandService) Handle(ctx context.Context, command com
 	if err != nil {
 		return result, err
 	}
+	if command.InitialOffer != nil {
+		if validationErr := validateOfferValues(command.InitialOffer.Name, command.InitialOffer.PricingMode, command.InitialOffer.AmountMinor, nil, command.InitialOffer.Currency, command.InitialOffer.PricingUnit, command.InitialOffer.AvailabilityMode, command.InitialOffer.AvailabilityStatus, command.InitialOffer.FulfillmentMode, command.InitialOffer.Status); validationErr != nil {
+			return result, appErrors.New(appErrors.CodeValidation, validationErr.Error())
+		}
+	}
 	now := s.now()
 	var record ports.CatalogItemRecord
 	err = s.within(ctx, func(txCtx context.Context) error {
 		var err error
 		record, err = s.Repository.CreateCatalogItem(txCtx, ports.CatalogItemDraft{ID: s.id(), BusinessID: string(command.Meta.Actor.BusinessID), CatalogID: string(command.CatalogID), AttributeSchemaID: optionalID(command.AttributeSchemaID), AttributeSchemaVersion: schemaVersion, ItemType: command.ItemType, Name: command.Name, ShortDescription: command.ShortDescription, LongDescription: command.LongDescription, PricingMode: command.PricingMode, AvailabilityMode: command.AvailabilityMode, FulfillmentMode: command.FulfillmentMode, RequiresConfirmation: command.RequiresConfirmation, Attributes: attributes, CreatedAt: now, UpdatedAt: now})
-		return mapCatalogRepositoryError(err)
+		if err != nil {
+			return mapCatalogRepositoryError(err)
+		}
+		if command.InitialOffer != nil {
+			merchant := "merchant"
+			_, err = s.Repository.CreateOffer(txCtx, ports.OfferDraft{
+				ID: s.id(), BusinessID: string(command.Meta.Actor.BusinessID), CatalogItemID: record.ID,
+				Name: command.InitialOffer.Name, PricingMode: command.InitialOffer.PricingMode,
+				AmountMinor: command.InitialOffer.AmountMinor, Currency: command.InitialOffer.Currency, PricingUnit: command.InitialOffer.PricingUnit,
+				AvailabilityMode: command.InitialOffer.AvailabilityMode, AvailabilityStatus: command.InitialOffer.AvailabilityStatus,
+				FulfillmentMode: command.InitialOffer.FulfillmentMode, Status: command.InitialOffer.Status,
+				PriceSource: &merchant, PriceVerificationStatus: "verified", PriceCheckedAt: &now,
+				AvailabilitySource: &merchant, AvailabilityCheckedAt: &now,
+				CreatedAt: now, UpdatedAt: now,
+			})
+			if err != nil {
+				return mapCatalogRepositoryError(err)
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return result, err
@@ -272,14 +297,18 @@ type CreateOfferCommandService struct{ CatalogCommandServices }
 
 func (s CreateOfferCommandService) Handle(ctx context.Context, command commands.CreateOfferCommand) (commands.OfferResult, error) {
 	var result commands.OfferResult
-	if command.Meta.Actor.BusinessID == "" || command.CatalogItemID == "" || command.Name == "" || command.PricingMode == "" || command.AvailabilityMode == "" || command.AvailabilityStatus == "" || command.FulfillmentMode == "" || command.Status == "" {
-		return result, appErrors.New(appErrors.CodeValidation, "required offer fields are missing")
+	if command.Meta.Actor.BusinessID == "" || command.CatalogItemID == "" {
+		return result, appErrors.New(appErrors.CodeValidation, "business and catalog item are required")
+	}
+	if validationErr := validateOfferValues(command.Name, command.PricingMode, command.AmountMinor, nil, command.Currency, command.PricingUnit, command.AvailabilityMode, command.AvailabilityStatus, command.FulfillmentMode, command.Status); validationErr != nil {
+		return result, appErrors.New(appErrors.CodeValidation, validationErr.Error())
 	}
 	now := s.now()
+	merchant := "merchant"
 	var record ports.OfferRecord
 	err := s.within(ctx, func(txCtx context.Context) error {
 		var err error
-		record, err = s.Repository.CreateOffer(txCtx, ports.OfferDraft{ID: s.id(), BusinessID: string(command.Meta.Actor.BusinessID), CatalogItemID: string(command.CatalogItemID), VariantID: optionalID(command.VariantID), Name: command.Name, PricingMode: command.PricingMode, AmountMinor: command.AmountMinor, Currency: command.Currency, PricingUnit: command.PricingUnit, AvailabilityMode: command.AvailabilityMode, AvailabilityStatus: command.AvailabilityStatus, FulfillmentMode: command.FulfillmentMode, Status: command.Status, CreatedAt: now, UpdatedAt: now})
+		record, err = s.Repository.CreateOffer(txCtx, ports.OfferDraft{ID: s.id(), BusinessID: string(command.Meta.Actor.BusinessID), CatalogItemID: string(command.CatalogItemID), VariantID: optionalID(command.VariantID), Name: command.Name, PricingMode: command.PricingMode, AmountMinor: command.AmountMinor, Currency: command.Currency, PricingUnit: command.PricingUnit, AvailabilityMode: command.AvailabilityMode, AvailabilityStatus: command.AvailabilityStatus, FulfillmentMode: command.FulfillmentMode, Status: command.Status, PriceSource: &merchant, PriceVerificationStatus: "verified", PriceCheckedAt: &now, AvailabilitySource: &merchant, AvailabilityCheckedAt: &now, CreatedAt: now, UpdatedAt: now})
 		return mapCatalogRepositoryError(err)
 	})
 	if err != nil {
@@ -300,10 +329,23 @@ func (s UpdateOfferCommandService) Handle(ctx context.Context, command commands.
 	if err != nil {
 		return result, err
 	}
+	now := s.now()
+	patch := ports.OfferPatch{ID: string(command.OfferID), BusinessID: string(command.Meta.Actor.BusinessID), Name: command.Name, AmountMinor: command.AmountMinor, AvailabilityStatus: command.AvailabilityStatus, Status: command.Status, ExpectedVersion: version, UpdatedAt: now}
+	merchant := "merchant"
+	verified := "verified"
+	if command.AmountMinor != nil {
+		patch.PriceSource = &merchant
+		patch.PriceVerificationStatus = &verified
+		patch.PriceCheckedAt = &now
+	}
+	if command.AvailabilityStatus != nil {
+		patch.AvailabilitySource = &merchant
+		patch.AvailabilityCheckedAt = &now
+	}
 	var record ports.OfferRecord
 	err = s.within(ctx, func(txCtx context.Context) error {
 		var err error
-		record, err = s.Repository.UpdateOffer(txCtx, ports.OfferPatch{ID: string(command.OfferID), BusinessID: string(command.Meta.Actor.BusinessID), Name: command.Name, AmountMinor: command.AmountMinor, AvailabilityStatus: command.AvailabilityStatus, Status: command.Status, ExpectedVersion: version, UpdatedAt: s.now()})
+		record, err = s.Repository.UpdateOffer(txCtx, patch)
 		return mapCatalogRepositoryError(err)
 	})
 	if err != nil {
@@ -409,6 +451,58 @@ func (s UpdateVariantCommandService) Handle(ctx context.Context, command command
 	result.ResourceVersion = commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10))
 	result.Status = record.Status
 	return result, nil
+}
+
+func validateOfferValues(name, pricingMode string, amountMinor *int64, amountDecimal *string, currency, pricingUnit *string, availabilityMode, availabilityStatus, fulfillmentMode, status string) error {
+	name = strings.TrimSpace(name)
+	pricingMode = strings.TrimSpace(pricingMode)
+	availabilityMode = strings.TrimSpace(availabilityMode)
+	availabilityStatus = strings.TrimSpace(availabilityStatus)
+	fulfillmentMode = strings.TrimSpace(fulfillmentMode)
+	status = strings.TrimSpace(status)
+	if name == "" || pricingMode == "" || availabilityMode == "" || availabilityStatus == "" || fulfillmentMode == "" || status == "" {
+		return errors.New("required offer fields are missing")
+	}
+	if amountMinor != nil && *amountMinor < 0 {
+		return errors.New("offer amount cannot be negative")
+	}
+	hasAmount := amountMinor != nil || (amountDecimal != nil && strings.TrimSpace(*amountDecimal) != "")
+	hasCurrency := currency != nil && strings.TrimSpace(*currency) != ""
+	hasUnit := pricingUnit != nil && strings.TrimSpace(*pricingUnit) != ""
+	switch pricingMode {
+	case "fixed", "starting_from":
+		if !hasAmount || !hasCurrency { return errors.New("fixed and starting_from pricing require amount and currency") }
+	case "per_unit", "per_person", "per_day":
+		if !hasAmount || !hasCurrency || !hasUnit { return errors.New("per-unit pricing requires amount, currency, and pricing_unit") }
+	case "quote_required":
+	case "dynamic":
+		if hasAmount && !hasCurrency { return errors.New("dynamic pricing with amount requires currency") }
+	default:
+		return errors.New("invalid pricing_mode")
+	}
+	switch availabilityMode {
+	case "stock", "schedule", "supplier_check", "always_available", "unknown":
+	default: return errors.New("invalid availability_mode")
+	}
+	switch availabilityStatus {
+	case "available", "unavailable", "unknown", "requires_check", "stale":
+	default: return errors.New("invalid availability_status")
+	}
+	switch fulfillmentMode {
+	case "delivery", "pickup", "digital", "appointment", "travel", "manual":
+	default: return errors.New("invalid fulfillment_mode")
+	}
+	switch status {
+	case "draft", "active", "inactive", "expired", "archived":
+	default: return errors.New("invalid offer status")
+	}
+	if hasCurrency {
+		value := strings.TrimSpace(*currency)
+		if len(value) != 3 || value != strings.ToUpper(value) {
+			return errors.New("currency must be a three-letter uppercase code")
+		}
+	}
+	return nil
 }
 
 func parseExpectedVersion(value *commands.ResourceVersion) (int64, error) {

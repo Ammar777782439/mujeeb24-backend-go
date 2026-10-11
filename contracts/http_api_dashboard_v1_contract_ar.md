@@ -463,11 +463,11 @@ Customer قد يأتي من Channel، لكن Dashboard يستطيع عرضه و�
 | Method | Path | Role | Request/Query | Application operation | Success |
 |---|---|---|---|---|---:|
 | `GET` | `/businesses/{business_id}/catalogs` | all members | status, cursor, limit | `ListCatalogs` | `200` |
-| `POST` | `/businesses/{business_id}/catalogs` | admin/owner | name, description | `CreateCatalog` | `201` |
+| `POST` | `/businesses/{business_id}/catalogs` | `catalog:write` | name, description | `CreateCatalog` | `201` |
 | `GET` | `/businesses/{business_id}/catalogs/{id}` | all members | none | `GetCatalog` | `200` |
-| `PATCH` | `/businesses/{business_id}/catalogs/{id}` | admin/owner | name, description, status + `If-Match` | `UpdateCatalog` | `200` |
+| `PATCH` | `/businesses/{business_id}/catalogs/{id}` | `catalog:write` | name, description, status + `If-Match` | `UpdateCatalog` | `200` |
 | `GET` | `/businesses/{business_id}/attribute-schemas` | all members | name, version, cursor, limit | `ListAttributeSchemas` | `200` |
-| `POST` | `/businesses/{business_id}/attribute-schemas` | admin/owner | name, definitions | `CreateAttributeSchemaVersion` | `201` |
+| `POST` | `/businesses/{business_id}/attribute-schemas` | `catalog:write` | name, definitions | `CreateAttributeSchemaVersion` | `201` |
 | `GET` | `/businesses/{business_id}/attribute-schemas/{id}` | all members | none | `GetAttributeSchema` | `200` |
 
 إنشاء نسخة Schema جديدة لا يعدل Version منشورة in-place. `attribute_key` فريد داخل Schema Version، و`data_type` من الأنواع المغلقة في Domain Contract.
@@ -477,17 +477,19 @@ Customer قد يأتي من Channel، لكن Dashboard يستطيع عرضه و�
 | Method | Path | Role | Request/Query | Application operation | Success |
 |---|---|---|---|---|---:|
 | `GET` | `/businesses/{business_id}/catalogs/{catalog_id}/items` | all members | status, search, cursor, limit | `ListCatalogItems` | `200` |
-| `POST` | `/businesses/{business_id}/catalogs/{catalog_id}/items` | admin/owner | item fields + schema reference | `CreateCatalogItem` | `201` |
+| `POST` | `/businesses/{business_id}/catalogs/{catalog_id}/items` | `catalog:write` | item fields + schema reference + optional `initial_offer` | `CreateCatalogItem` | `201` |
 | `GET` | `/businesses/{business_id}/catalogs/{catalog_id}/items/{item_id}` | all members | none | `GetCatalogItem` | `200` |
-| `PATCH` | `/businesses/{business_id}/catalogs/{catalog_id}/items/{item_id}` | admin/owner | editable fields + `If-Match` | `UpdateCatalogItem` | `200` |
-| `POST` | `/businesses/{business_id}/catalog-items/{item_id}/offers` | admin/owner | pricing/availability/fulfillment | `CreateOffer` | `201` |
+| `PATCH` | `/businesses/{business_id}/catalogs/{catalog_id}/items/{item_id}` | `catalog:write` | editable fields + `If-Match` | `UpdateCatalogItem` | `200` |
+| `POST` | `/businesses/{business_id}/catalog-items/{item_id}/offers` | `catalog:write` | pricing/availability/fulfillment | `CreateOffer` | `201` |
 | `GET` | `/businesses/{business_id}/catalog-items/{item_id}/offers` | all members | status, cursor, limit | `ListOffers` | `200` |
-| `PATCH` | `/businesses/{business_id}/offers/{offer_id}` | admin/owner | offer fields + `If-Match` | `UpdateOffer` | `200` |
-| `POST` | `/businesses/{business_id}/catalog-items/{item_id}/variants` | admin/owner | name, typed attributes | `CreateVariant` | `201` |
+| `PATCH` | `/businesses/{business_id}/offers/{offer_id}` | `catalog:write` | offer fields + `If-Match` | `UpdateOffer` | `200` |
+| `POST` | `/businesses/{business_id}/catalog-items/{item_id}/variants` | `catalog:write` | name, typed attributes | `CreateVariant` | `201` |
 | `GET` | `/businesses/{business_id}/catalog-items/{item_id}/variants` | all members | status, cursor, limit | `ListVariants` | `200` |
-| `PATCH` | `/businesses/{business_id}/variants/{variant_id}` | admin/owner | fields + `If-Match` | `UpdateVariant` | `200` |
+| `PATCH` | `/businesses/{business_id}/variants/{variant_id}` | `catalog:write` | fields + `If-Match` | `UpdateVariant` | `200` |
 
 لا يوجد حذف تدميري لـCatalog أو Item أو Offer أو Variant بعد دخولها في Transaction؛ نستخدم `archived` أو status transition. `attributes` هي JSONB object ديناميكي. المفاتيح المُدارة بواسطة Schema تُولد Server-side كمعرّفات ثابتة `attr_...` ويجب أن تطابق Definition مرتبطة، بينما المفاتيح الحرة القديمة/المخصصة تبقى English `snake_case`. القيم المُدارة تخضع لـ `required/data_type/validation_rules`. `attribute_schema_id` و`attribute_schema_version` اختياريان.
+
+إذا احتوى CreateCatalogItem على `initial_offer` فإن العنصر والعرض الأول يُحفظان atomically داخل Transaction واحدة؛ لا توجد حالة نجاح جزئي. السعر/التوفر الذي يرسله مستخدم مخول من لوحة التاجر، أو يعتمد تنفيذه عبر Merchant Catalog AI، يُسجل Server-side كمصدر `merchant` مع وقت تحقق مناسب؛ لا يرسل العميل حقول الثقة بنفسه.
 
 ## 11. Leads API
 

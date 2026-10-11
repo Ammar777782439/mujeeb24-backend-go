@@ -231,7 +231,11 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 		if s.deps.CreateCatalogItem == nil {
 			return mapApplicationError(appErrors.NotImplemented()), true
 		}
-		result, err := s.deps.CreateCatalogItem.Handle(ctx, commands.CreateCatalogItemCommand{Meta: commandMeta(ctx, actor, in.CommandHeaders), CatalogID: commands.CatalogID(in.CatalogID), AttributeSchemaID: optionalAttributeSchemaID(in.Body.AttributeSchemaID), ItemType: in.Body.ItemType, Name: in.Body.Name, ShortDescription: in.Body.ShortDescription, LongDescription: in.Body.LongDescription, PricingMode: in.Body.PricingMode, AvailabilityMode: in.Body.AvailabilityMode, FulfillmentMode: in.Body.FulfillmentMode, RequiresConfirmation: in.Body.RequiresConfirmation, Attributes: in.Body.Attributes})
+		initialOffer, err := initialOfferCommand(in.Body.InitialOffer)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		result, err := s.deps.CreateCatalogItem.Handle(ctx, commands.CreateCatalogItemCommand{Meta: commandMeta(ctx, actor, in.CommandHeaders), CatalogID: commands.CatalogID(in.CatalogID), AttributeSchemaID: optionalAttributeSchemaID(in.Body.AttributeSchemaID), ItemType: in.Body.ItemType, Name: in.Body.Name, ShortDescription: in.Body.ShortDescription, LongDescription: in.Body.LongDescription, PricingMode: in.Body.PricingMode, AvailabilityMode: in.Body.AvailabilityMode, FulfillmentMode: in.Body.FulfillmentMode, RequiresConfirmation: in.Body.RequiresConfirmation, Attributes: in.Body.Attributes, InitialOffer: initialOffer})
 		if err != nil {
 			return mapApplicationError(err), true
 		}
@@ -597,6 +601,29 @@ func singleLead(v commands.LeadView) *contract.Single[contract.Lead] {
 	out.Body.Data = leadProjection(v)
 	return out
 }
+func initialOfferCommand(value *contract.CreateOfferRequest) (*commands.InitialOffer, error) {
+	if value == nil {
+		return nil, nil
+	}
+	if value.VariantID != nil {
+		return nil, appErrors.New(appErrors.CodeValidation, "initial_offer cannot reference a variant")
+	}
+	amount, err := minorUnits(value.Amount)
+	if err != nil {
+		return nil, err
+	}
+	status := value.Status
+	if status == "" {
+		status = "active"
+	}
+	return &commands.InitialOffer{
+		Name: value.Name, PricingMode: value.PricingMode, AmountMinor: amount,
+		Currency: value.Currency, PricingUnit: value.PricingUnit,
+		AvailabilityMode: value.AvailabilityMode, AvailabilityStatus: value.AvailabilityStatus,
+		FulfillmentMode: value.FulfillmentMode, Status: status,
+	}, nil
+}
+
 func optionalAttributeSchemaID(v *contract.UUID) *commands.AttributeSchemaID {
 	if v == nil || *v == "" {
 		return nil

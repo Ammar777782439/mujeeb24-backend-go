@@ -459,6 +459,9 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 	if err != nil || createdOffer.Offer.ID != commands.OfferID(offerWrite) || createdOffer.Offer.Amount == nil || *createdOffer.Offer.Amount != "1250.5000" || createdOffer.ResourceVersion != "1" {
 		t.Fatalf("offer command create: %#v err=%v", createdOffer, err)
 	}
+	if createdOffer.Offer.PriceSource == nil || *createdOffer.Offer.PriceSource != "merchant" || createdOffer.Offer.PriceVerificationStatus != "verified" || createdOffer.Offer.PriceCheckedAt == nil || createdOffer.Offer.AvailabilitySource == nil || *createdOffer.Offer.AvailabilitySource != "merchant" || createdOffer.Offer.AvailabilityCheckedAt == nil {
+		t.Fatalf("merchant offer evidence metadata is incomplete: %#v", createdOffer.Offer)
+	}
 	createVariantService := services.CreateVariantCommandService{CatalogCommandServices: commandServices}
 	createdVariant, err := createVariantService.Handle(ctx, commands.CreateVariantCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, CatalogItemID: commands.CatalogItemID(itemWrite), Name: "Created black", Attributes: map[string]any{"color": "black"}})
 	if err != nil || createdVariant.Variant.ID != commands.VariantID(variantWrite) || createdVariant.ResourceVersion != "1" {

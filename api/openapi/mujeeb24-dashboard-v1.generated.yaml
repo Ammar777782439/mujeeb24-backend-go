@@ -1342,6 +1342,8 @@ components:
         attributes:
           additionalProperties: {}
           type: object
+        initial_offer:
+          $ref: "#/components/schemas/CreateOfferRequest"
         availability_mode:
           type: string
         fulfillment_mode:

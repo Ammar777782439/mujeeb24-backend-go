@@ -313,7 +313,19 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 			}
 		}
 		for _, v := range u.ExistingOffers {
-			_, e = s.Catalogs.UpdateOffer(ctx, ports.OfferPatch{ID: v.ID, BusinessID: p.BusinessID, Name: v.Name, AmountDecimal: v.Amount, Status: v.Status, AvailabilityStatus: v.AvailabilityStatus, ExpectedVersion: p.Versions["offer:"+v.ID], UpdatedAt: now})
+			patch := ports.OfferPatch{ID: v.ID, BusinessID: p.BusinessID, Name: v.Name, AmountDecimal: v.Amount, Status: v.Status, AvailabilityStatus: v.AvailabilityStatus, ExpectedVersion: p.Versions["offer:"+v.ID], UpdatedAt: now}
+			merchant := "merchant"
+			verified := "verified"
+			if v.Amount != nil {
+				patch.PriceSource = &merchant
+				patch.PriceVerificationStatus = &verified
+				patch.PriceCheckedAt = &now
+			}
+			if v.AvailabilityStatus != nil {
+				patch.AvailabilitySource = &merchant
+				patch.AvailabilityCheckedAt = &now
+			}
+			_, e = s.Catalogs.UpdateOffer(ctx, patch)
 			if e != nil {
 				return r, e
 			}
@@ -367,7 +379,8 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 			}
 			variantID = &v
 		}
-		created, e := s.Catalogs.CreateOffer(ctx, ports.OfferDraft{ID: uuid.NewString(), BusinessID: p.BusinessID, CatalogItemID: r.ItemID, VariantID: variantID, Name: o.Name, PricingMode: o.PricingMode, AmountDecimal: o.Amount, PriceSource: &o.PriceSource, Currency: o.Currency, PricingUnit: o.PricingUnit, AvailabilityMode: o.AvailabilityMode, AvailabilityStatus: o.AvailabilityStatus, FulfillmentMode: o.FulfillmentMode, Status: o.Status, CreatedAt: now, UpdatedAt: now})
+		merchant := "merchant"
+		created, e := s.Catalogs.CreateOffer(ctx, ports.OfferDraft{ID: uuid.NewString(), BusinessID: p.BusinessID, CatalogItemID: r.ItemID, VariantID: variantID, Name: o.Name, PricingMode: o.PricingMode, AmountDecimal: o.Amount, PriceSource: &merchant, PriceVerificationStatus: "verified", PriceCheckedAt: &now, Currency: o.Currency, PricingUnit: o.PricingUnit, AvailabilityMode: o.AvailabilityMode, AvailabilityStatus: o.AvailabilityStatus, AvailabilitySource: &merchant, AvailabilityCheckedAt: &now, FulfillmentMode: o.FulfillmentMode, Status: o.Status, CreatedAt: now, UpdatedAt: now})
 		if e != nil {
 			return r, e
 		}

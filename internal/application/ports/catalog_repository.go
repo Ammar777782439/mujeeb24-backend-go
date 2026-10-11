@@ -212,8 +212,12 @@ type CatalogItemPatch struct {
 }
 
 type OfferDraft struct {
-	PriceSource        *string
-	AmountDecimal      *string // Validated exact NUMERIC(20,4); used by catalog proposal execution.
+	PriceSource             *string
+	PriceVerificationStatus string
+	PriceCheckedAt          *time.Time
+	AvailabilitySource      *string
+	AvailabilityCheckedAt   *time.Time
+	AmountDecimal           *string // Validated exact NUMERIC(20,4); used by catalog proposal execution.
 	ID                 string
 	BusinessID         string
 	CatalogItemID      string
@@ -232,15 +236,20 @@ type OfferDraft struct {
 }
 
 type OfferPatch struct {
-	AmountDecimal      *string // Takes precedence over the legacy minor-unit adapter.
-	ID                 string
-	BusinessID         string
-	Name               *string
-	AmountMinor        *int64
-	AvailabilityStatus *string
-	Status             *string
-	ExpectedVersion    int64
-	UpdatedAt          time.Time
+	AmountDecimal           *string // Takes precedence over the legacy minor-unit adapter.
+	ID                      string
+	BusinessID              string
+	Name                    *string
+	AmountMinor             *int64
+	AvailabilityStatus      *string
+	Status                  *string
+	PriceSource             *string
+	PriceVerificationStatus *string
+	PriceCheckedAt          *time.Time
+	AvailabilitySource      *string
+	AvailabilityCheckedAt   *time.Time
+	ExpectedVersion         int64
+	UpdatedAt               time.Time
 }
 
 type VariantDraft struct {
