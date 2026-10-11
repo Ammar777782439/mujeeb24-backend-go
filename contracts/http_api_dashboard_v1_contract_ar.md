@@ -487,7 +487,7 @@ Customer قد يأتي من Channel، لكن Dashboard يستطيع عرضه و�
 | `GET` | `/businesses/{business_id}/catalog-items/{item_id}/variants` | all members | status, cursor, limit | `ListVariants` | `200` |
 | `PATCH` | `/businesses/{business_id}/variants/{variant_id}` | `catalog:write` | fields + `If-Match` | `UpdateVariant` | `200` |
 
-لا يوجد حذف تدميري لـCatalog أو Item أو Offer أو Variant بعد دخولها في Transaction؛ نستخدم `archived` أو status transition. `attributes` هي JSONB object ديناميكي. المفاتيح المُدارة بواسطة Schema تُولد Server-side كمعرّفات ثابتة `attr_...` ويجب أن تطابق Definition مرتبطة، بينما المفاتيح الحرة القديمة/المخصصة تبقى English `snake_case`. القيم المُدارة تخضع لـ `required/data_type/validation_rules`. `attribute_schema_id` و`attribute_schema_version` اختياريان.
+لا يوجد حذف تدميري لـCatalog أو Item أو Offer أو Variant بعد دخولها في Transaction؛ نستخدم `archived` أو status transition. `attributes` هي JSONB object ديناميكي. المفاتيح المُدارة بواسطة Schema تُولد Server-side كمعرّفات ثابتة `attr_...` ويجب أن تطابق Definition مرتبطة، بينما المواصفات الحرة غير المرتبطة بـSchema تستخدم اسمًا دلاليًا بشريًا كما أدخله التاجر (مثل `مدة الضمان`)، مع حجز بادئة `attr_` حصريًا للمفاتيح المُدارة. القيم المُدارة تخضع لـ `required/data_type/validation_rules`. `attribute_schema_id` و`attribute_schema_version` اختياريان.
 
 إذا احتوى CreateCatalogItem على `initial_offer` فإن العنصر والعرض الأول يُحفظان atomically داخل Transaction واحدة؛ لا توجد حالة نجاح جزئي. السعر/التوفر الذي يرسله مستخدم مخول من لوحة التاجر، أو يعتمد تنفيذه عبر Merchant Catalog AI، يُسجل Server-side كمصدر `merchant` مع وقت تحقق مناسب؛ لا يرسل العميل حقول الثقة بنفسه.
 

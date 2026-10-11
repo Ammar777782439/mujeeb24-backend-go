@@ -244,7 +244,7 @@ Variant
 حقل `attributes` نفسه هو JSONB object ديناميكي:
 - المفاتيح المُدارة بواسطة AttributeSchema تُنشأ من الباك إند كمعرّفات آلة ثابتة تبدأ بـ `attr_` ولا يكتبها التاجر ولا تتغير عند تغيير الـlabel.
 - أي مفتاح يبدأ بـ `attr_` يجب أن يطابق AttributeDefinition حقيقية في الـSchema المرتبطة.
-- المفاتيح الحرة/القديمة خارج الـSchema تبقى مسموحة بصيغة English `snake_case` للحفاظ على التوافق مع البيانات الحالية.
+- المواصفات الحرة خارج الـSchema تبقى مسموحة باسم دلالي بشري، بما في ذلك العربية، مع الحفاظ على توافق مفاتيح `snake_case` القديمة. بادئة `attr_` محجوزة حصريًا لتعريفات الـSchema المُدارة.
 - القيم المرتبطة بـDefinition تخضع لـ `required` و`data_type` و`validation_rules` في Application validation.
 - `attribute_schema_id` و`attribute_schema_version` يبقيان اختياريين على CatalogItem.
 - معنى المفتاح المُدار لا يُستنتج من نص المفتاح؛ يؤخذ دائمًا من `AttributeDefinition.label/data_type/validation_rules`.

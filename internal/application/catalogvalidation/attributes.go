@@ -8,11 +8,11 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
-
-var customAttributeKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`)
 
 var supportedDataTypes = map[string]struct{}{
 	"text": {}, "number": {}, "boolean": {}, "date": {}, "datetime": {},
@@ -70,9 +70,9 @@ func ValidateDefinition(dataType string, rules map[string]any) error {
 	return nil
 }
 
-// ValidateAttributes enforces schema definitions without breaking legacy custom
-// attributes. Keys beginning with attr_ are reserved for managed schema
-// definitions. Other custom keys retain the historical snake_case contract.
+// ValidateAttributes enforces schema definitions without breaking free-form
+// merchant attributes. Keys beginning with attr_ are reserved for managed
+// schema definitions. Free-form keys keep their human-readable semantic label.
 func ValidateAttributes(schema *ports.AttributeSchemaRecord, attributes map[string]any) error {
 	return validateAttributes(schema, attributes, true)
 }
@@ -119,11 +119,18 @@ func validateAttributes(schema *ports.AttributeSchemaRecord, attributes map[stri
 	for key, value := range attributes {
 		definition, managed := definitions[key]
 		if !managed {
-			if strings.HasPrefix(key, "attr_") {
+			trimmed := strings.TrimSpace(key)
+			if trimmed == "" {
+				return fmt.Errorf("custom attribute name cannot be empty")
+			}
+			if strings.HasPrefix(trimmed, "attr_") {
 				return fmt.Errorf("attribute key %q is reserved for a managed schema definition", key)
 			}
-			if !customAttributeKeyPattern.MatchString(key) {
-				return fmt.Errorf("custom attribute key %q must use English snake_case", key)
+			if utf8.RuneCountInString(trimmed) > 120 {
+				return fmt.Errorf("custom attribute name is too long")
+			}
+			if strings.IndexFunc(trimmed, unicode.IsControl) >= 0 {
+				return fmt.Errorf("custom attribute name contains control characters")
 			}
 			continue
 		}

@@ -45,15 +45,21 @@ func TestValidateAttributesRejectsMissingWrongAndUnknownManagedKeys(t *testing.T
 	}
 }
 
-func TestValidateAttributesPreservesLegacyCustomKeys(t *testing.T) {
-	if err := ValidateAttributes(nil, map[string]any{"memory_size": "256GB"}); err != nil {
-		t.Fatalf("legacy custom key rejected: %v", err)
-	}
-	if err := ValidateAttributes(nil, map[string]any{"حجم الذاكرة": "256GB"}); err == nil {
-		t.Fatal("non machine-safe custom key accepted")
+func TestValidateAttributesPreservesHumanReadableCustomNames(t *testing.T) {
+	for _, attributes := range []map[string]any{
+		{"memory_size": "256GB"},
+		{"حجم الذاكرة": "256GB"},
+		{"مدة الضمان": "سنتان"},
+	} {
+		if err := ValidateAttributes(nil, attributes); err != nil {
+			t.Fatalf("human-readable custom attribute rejected: %v", err)
+		}
 	}
 	if err := ValidateAttributes(nil, map[string]any{"attr_unknown": "256GB"}); err == nil {
 		t.Fatal("reserved managed key accepted without definition")
+	}
+	if err := ValidateAttributes(nil, map[string]any{"bad\nname": "x"}); err == nil {
+		t.Fatal("control character in custom attribute name was accepted")
 	}
 }
 
