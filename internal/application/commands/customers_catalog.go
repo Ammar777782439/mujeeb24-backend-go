@@ -90,9 +90,11 @@ type UpdateCatalogItemCommand struct {
 	Name                 *string
 	Status               *string
 	ItemType             *string
-	ShortDescription     *string
-	LongDescription      *string
-	PricingMode          *string
+	ShortDescription        *string
+	ShortDescriptionPresent bool
+	LongDescription         *string
+	LongDescriptionPresent  bool
+	PricingMode             *string
 	AvailabilityMode     *string
 	FulfillmentMode      *string
 	RequiresConfirmation *bool

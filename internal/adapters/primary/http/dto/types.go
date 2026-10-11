@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"encoding/json"
 	"strconv"
 	"time"
 
@@ -14,6 +15,31 @@ type Timestamp time.Time
 type OptionalBool struct {
 	Value   bool
 	Present bool
+}
+
+// OptionalNullableString distinguishes three PATCH states:
+// omitted (Present=false), explicit null (Present=true, Value=nil), and a string value.
+type OptionalNullableString struct {
+	Value   *string
+	Present bool
+}
+
+func (s *OptionalNullableString) UnmarshalJSON(data []byte) error {
+	s.Present = true
+	if string(data) == "null" {
+		s.Value = nil
+		return nil
+	}
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	s.Value = &value
+	return nil
+}
+
+func (OptionalNullableString) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeString, Nullable: true}
 }
 
 // Permissions is the effective permission set returned by the API. It includes

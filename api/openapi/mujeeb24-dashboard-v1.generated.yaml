@@ -5006,6 +5006,7 @@ components:
         item_type:
           type: string
         long_description:
+          nullable: true
           type: string
         name:
           type: string
@@ -5014,6 +5015,7 @@ components:
         requires_confirmation:
           type: boolean
         short_description:
+          nullable: true
           type: string
         status:
           type: string
