@@ -57,11 +57,19 @@ func (r comparisonStubRepo) ListCatalogItems(_ context.Context, businessID, cata
 }
 func (r comparisonStubRepo) GetCatalogItem(_ context.Context, businessID, catalogID, itemID string) (ports.CatalogItemRecord, error) {
 	for _, item := range r.items {
-		if item.ID == itemID && item.CatalogID == catalogID {
+		if item.ID == itemID && item.CatalogID == catalogID && item.BusinessID == businessID {
 			return item, nil
 		}
 	}
 	return ports.CatalogItemRecord{}, notFoundError("catalog_item.get")
+}
+func (r comparisonStubRepo) GetCatalogItemByID(_ context.Context, businessID, itemID string) (ports.CatalogItemRecord, error) {
+	for _, item := range r.items {
+		if item.ID == itemID && item.BusinessID == businessID {
+			return item, nil
+		}
+	}
+	return ports.CatalogItemRecord{}, notFoundError("catalog_item.get_by_id")
 }
 func (r comparisonStubRepo) CreateCatalogItem(context.Context, ports.CatalogItemDraft) (ports.CatalogItemRecord, error) {
 	return ports.CatalogItemRecord{}, nil

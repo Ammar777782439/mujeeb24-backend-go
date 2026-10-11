@@ -60,6 +60,16 @@ func (r contextCatalogRepository) ListCatalogItems(_ context.Context, _ string, 
 func (r contextCatalogRepository) GetCatalogItem(context.Context, string, string, string) (ports.CatalogItemRecord, error) {
 	return ports.CatalogItemRecord{}, nil
 }
+func (r contextCatalogRepository) GetCatalogItemByID(_ context.Context, businessID, itemID string) (ports.CatalogItemRecord, error) {
+	for _, page := range r.items {
+		for _, item := range page.Items {
+			if item.ID == itemID && (businessID == "" || item.BusinessID == businessID) {
+				return item, nil
+			}
+		}
+	}
+	return ports.CatalogItemRecord{}, errNotFoundStub{}
+}
 func (r contextCatalogRepository) CreateCatalogItem(context.Context, ports.CatalogItemDraft) (ports.CatalogItemRecord, error) {
 	return ports.CatalogItemRecord{}, nil
 }
