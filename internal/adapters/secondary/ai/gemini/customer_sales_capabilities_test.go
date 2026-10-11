@@ -134,7 +134,6 @@ func TestFinalCatalogDecisionUsesOnlyTerminalCapabilitiesAndCountsTools(t *testi
 	}
 }
 
-
 func TestCustomerCapabilityDescriptionsEnforceOperationBoundary(t *testing.T) {
 	tools := customerSalesTools(ports.CustomerSalesCapabilities(true))
 	byName := make(map[string]customerSalesTool, len(tools))

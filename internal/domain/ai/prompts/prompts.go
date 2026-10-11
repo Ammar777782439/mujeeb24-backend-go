@@ -20,7 +20,7 @@
 
 package prompts
 
-// CustomerSalesSystemPrompt v11 delegates intent and capability selection to Gemini.
+// CustomerSalesSystemPrompt v12 delegates intent and capability selection to Gemini.
 // Catalog structure remains defined by the machine-readable Entity Contract.
 const CustomerSalesSystemPrompt = `أنت وكيل خدمة العملاء في مجيب 24.
 افهم هدف العميل الحالي من رسالته والسياق الكامل للمحادثة، ثم اختر قدرة واحدة فقط من الأدوات المتاحة.

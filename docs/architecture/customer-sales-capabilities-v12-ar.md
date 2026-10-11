@@ -52,34 +52,9 @@ Function Calling يستخدم تعريفات ذات schema مغلق و`tool_choi
 
 المراجع: [Gemini function calling](https://ai.google.dev/gemini-api/docs/function-calling)، [Interactions API](https://ai.google.dev/api/interactions-api).
 
-## نتيجة التحقق المحلي لهذه الدفعة
+## متطلبات التحقق
 
-- `go test ./...`: نجح.
-- `go vet ./...`: نجح.
-- `go test -race ./...`: نجح.
-- بوابة `scripts/verify-repository.sh` وتوليد OpenAPI دون drift: نجحت.
-- بناء تقييمات `gemini_live` مع تعطيل opt-in: نجح البناء، وتخطّي التشغيل الحي مسجل بوضوح.
-- تكامل PostgreSQL: لم يُشغّل لعدم وجود `POSTGRES_TEST_DSN`.
-- أدوات codebase-memory-mcp وgopls-mcp-server غير متاحة في هذه الجلسة؛ التحقق هنا من قراءة المصدر واختبارات Go وvet.
-
-دور جديد أثناء `waiting_human` ينتهي بـ`CANCELLED` قبل استدعاء النموذج؛ لا يبقى Run في RECEIVED بسبب محاولة انتقال غير مسموح إلى COMPLETED. هذا لا يغيّر حالة المحادثة أو يعيد تشغيل الرد الآلي.
-
-## تصحيح Source of Truth — 2026-10-11
-
-- أول اختيار والتقييم النهائي يعيدان CapabilityDecision نفسه؛ لا تحويل إلى Proposal أو status/action/routing_reason في Gemini.
-- BatchClient لا يمرر القرار عبر JSON legacy. FinalEvaluation لا يعرض retrieval capability ولا يقبل قدرة غير نهائية.
-- Registry مشترك للعرض والتحقق ومتطلبات سياسة رسالة العميل وآثار المنفذ. لا switch على legacy action داخل AutoReply أو PolicyEvaluator.
-- RequestedAction/EffectiveAction/AutoReplyResult.Action تبقى للتوافق فقط. RequestedCapability/EffectiveCapability وAutoReplyResult.Capability وrealtime capability تحمل الاسم الحقيقي.
-- اللوج يسجل capability بلا تسجيل نص رد العميل في GEMINI_OK. IntentBase فارغ. السياسة والتوقيت وحالة Run منفصلة عن القدرة المختارة، حتى إذا منع التنفيذ.
-- Ready يفحص Catalog repo وGemini وRunRepo وclock/IDs وtoken counter قبل عرض retrieval، ومعه service RunRepo ومعرف Run وEntity Contract صالح. هذه جاهزية تركيب محلية، لا ضمان توفر المزود لاحقًا.
-- عقدا ④ و⑥ الحاليان يوجهان التطوير؛ الوصف السابق نقل إلى archive وموسوم HISTORICAL/SUPERSEDED. تعليمات AGENTS تشير للقرار الحالي.
-
-## تحقق تصحيح بقاء القدرة
-
-نجحت بوابة المستودع (go test ./... وgo vet وOpenAPI drift) واختبار السباق لكل المستودع، ثم إعادة السباق لحزمة services بعد إضافة اختبارات التفويض والسياسة. الاختبارات الجديدة تتبع القدرات النهائية الثلاث بعد أربع دفعات عبر policy/execution/audit، وتمنع التنفيذ عند denied/requires_approval، وتمنع تبديل القدرة أو تجاوز policy في Authorization.
-
-تم بناء اختبارات PostgreSQL integration وGemini live. التشغيل الحي متخطى: POSTGRES_TEST_DSN غير موجود، وGemini opt-in معطل. اختبار PostgreSQL الجديد يفحص Get/List round-trip لحقلي القدرة وIntentBase الفارغ، لكنه لا يُعد ناجحًا قبل تشغيله على قاعدة فعلية. لا ينسب هذا التقرير نجاح CI إلى GitHub دون run مستقل.
-
-يجب تطبيق migration 000073 قبل تشغيل إصدار الكود الجديد. لا تشغيل migration على بيئة التاجر ضمن تعديل المصدر، ولا دمج إلى main.
-
-اختبار PostgreSQL الأول على GitHub كشف أن CreateProposed ما زال يشترط intent_base غير فارغ. حُدّث حد الحفظ ليقبل CapabilityDecision دون intent، ويقبل سجل expired للقدرة المرفوضة مع denied فقط، ويحافظ على شروط legacy. اختبارات boundary ترفض تبديل effective_capability، وSQL integration يفحص حفظ القدرة الناجحة والمرفوضة مع rollback الإرسال.
+- بوابة المستودع `scripts/verify-repository.sh` هي المرجع للتحقق من gofmt وGo tests وvet وOpenAPI drift واختبارات PostgreSQL عندما تكون بيئة التكامل مفعلة.
+- تقييمات Gemini الدلالية الحية تبقى opt-in عبر `gemini_live` و`MUJEEB_CAPABILITY_LIVE_EVALS=1`؛ لا يُنسب نجاحها دون تشغيل حي فعلي.
+- يجب تطبيق migration `000073_customer_sales_capability_audit.up.sql` قبل تشغيل الكود الذي يحفظ requested_capability/effective_capability.
+- لا يُعد تغيير هذا العقد مكتملًا تشغيليًا إلا بعد نجاح Quality Gate على الـSHA المنشور واختبار السيناريوهات الدلالية المستهدفة مع النموذج الفعلي.

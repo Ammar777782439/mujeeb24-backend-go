@@ -6,9 +6,9 @@ type CustomerSalesCapability string
 
 const (
 	CustomerSalesCapabilityRespondWithoutAction CustomerSalesCapability = "respond_without_action"
-	CustomerSalesCapabilityAsk         CustomerSalesCapability = "ask_customer"
-	CustomerSalesCapabilityHandoff     CustomerSalesCapability = "handoff_to_human"
-	CustomerSalesCapabilityFullCatalog CustomerSalesCapability = "evaluate_full_catalog"
+	CustomerSalesCapabilityAsk                  CustomerSalesCapability = "ask_customer"
+	CustomerSalesCapabilityHandoff              CustomerSalesCapability = "handoff_to_human"
+	CustomerSalesCapabilityFullCatalog          CustomerSalesCapability = "evaluate_full_catalog"
 )
 
 // CustomerSalesCapabilities exposes implemented operations, independent of sector.
@@ -34,10 +34,10 @@ type CapabilityDecision struct {
 // CustomerSalesCapabilityDefinition describes an executable operation, not intent.
 // All currently supported terminal operations use the customer-message executor.
 type CustomerSalesCapabilityDefinition struct {
-	Terminal              bool
-	SendsCustomerMessage  bool
-	RequiresHuman         bool
-	ConversationState     string
+	Terminal                   bool
+	SendsCustomerMessage       bool
+	RequiresHuman              bool
+	ConversationState          string
 	ConversationOwnership      string
 	RequiresFullCatalogRuntime bool
 }
