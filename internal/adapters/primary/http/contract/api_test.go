@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"regexp"
 	"testing"
+
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/authorization"
 )
 
 func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
@@ -80,6 +82,45 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
 		}
 		seen[id] = struct{}{}
 	}
+}
+
+
+func TestGeneratedContractPermissionEnumsTrackAuthorizationRegistry(t *testing.T) {
+	api, _ := BuildAPI()
+	document, err := api.OpenAPI().DowngradeYAML()
+	if err != nil {
+		t.Fatalf("downgrade OpenAPI: %v", err)
+	}
+
+	grantable := schemaBlock(t, document, "CreateTeamInvitationRequest")
+	for _, permission := range authorization.KnownPermissions() {
+		if !bytes.Contains(grantable, []byte("- "+permission)) {
+			t.Fatalf("grantable permission missing from generated contract: %s", permission)
+		}
+	}
+	if bytes.Contains(grantable, []byte("- "+authorization.PermissionAll)) {
+		t.Fatal("owner wildcard must not be grantable through team invitation request")
+	}
+
+	effective := schemaBlock(t, document, "TeamMember")
+	if !bytes.Contains(effective, []byte("- "+authorization.PermissionAll)) {
+		t.Fatal("effective team member permission enum must represent the owner wildcard")
+	}
+	for _, permission := range authorization.KnownPermissions() {
+		if !bytes.Contains(effective, []byte("- "+permission)) {
+			t.Fatalf("effective permission missing from generated contract: %s", permission)
+		}
+	}
+}
+
+func schemaBlock(t *testing.T, document []byte, schemaName string) []byte {
+	t.Helper()
+	pattern := regexp.MustCompile("(?ms)^    " + regexp.QuoteMeta(schemaName) + ":\\n(.*?)(?=^    [A-Za-z0-9_]+:\\n)")
+	match := pattern.FindSubmatch(document)
+	if len(match) != 2 {
+		t.Fatalf("schema %s not found in generated contract", schemaName)
+	}
+	return match[1]
 }
 
 func TestGeneratedContractHandlerSkeletonIsExplicitlyNotImplemented(t *testing.T) {

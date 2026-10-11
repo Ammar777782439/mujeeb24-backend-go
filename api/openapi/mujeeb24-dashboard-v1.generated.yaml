@@ -602,6 +602,29 @@ components:
           $ref: "#/components/schemas/Business"
         permissions:
           items:
+            enum:
+              - "*"
+              - audit:read
+              - automation:manage
+              - automation:read
+              - business:read
+              - business:settings
+              - catalog:read
+              - catalog:write
+              - channels:manage
+              - channels:read
+              - conversations:assign
+              - conversations:read
+              - conversations:reply
+              - customers:read
+              - customers:write
+              - dashboard:read
+              - merchant_ai:use
+              - sales:approve
+              - sales:read
+              - sales:write
+              - team:manage
+              - team:read
             type: string
           nullable: true
           type: array
@@ -1627,6 +1650,28 @@ components:
           type: integer
         permissions:
           items:
+            enum:
+              - audit:read
+              - automation:manage
+              - automation:read
+              - business:read
+              - business:settings
+              - catalog:read
+              - catalog:write
+              - channels:manage
+              - channels:read
+              - conversations:assign
+              - conversations:read
+              - conversations:reply
+              - customers:read
+              - customers:write
+              - dashboard:read
+              - merchant_ai:use
+              - sales:approve
+              - sales:read
+              - sales:write
+              - team:manage
+              - team:read
             type: string
           maxItems: 32
           minItems: 1
@@ -4701,6 +4746,28 @@ components:
           type: string
         permissions:
           items:
+            enum:
+              - audit:read
+              - automation:manage
+              - automation:read
+              - business:read
+              - business:settings
+              - catalog:read
+              - catalog:write
+              - channels:manage
+              - channels:read
+              - conversations:assign
+              - conversations:read
+              - conversations:reply
+              - customers:read
+              - customers:write
+              - dashboard:read
+              - merchant_ai:use
+              - sales:approve
+              - sales:read
+              - sales:write
+              - team:manage
+              - team:read
             type: string
           nullable: true
           type: array
@@ -4748,6 +4815,29 @@ components:
           type: string
         permissions:
           items:
+            enum:
+              - "*"
+              - audit:read
+              - automation:manage
+              - automation:read
+              - business:read
+              - business:settings
+              - catalog:read
+              - catalog:write
+              - channels:manage
+              - channels:read
+              - conversations:assign
+              - conversations:read
+              - conversations:reply
+              - customers:read
+              - customers:write
+              - dashboard:read
+              - merchant_ai:use
+              - sales:approve
+              - sales:read
+              - sales:write
+              - team:manage
+              - team:read
             type: string
           nullable: true
           type: array
@@ -5086,6 +5176,28 @@ components:
           type: string
         permissions:
           items:
+            enum:
+              - audit:read
+              - automation:manage
+              - automation:read
+              - business:read
+              - business:settings
+              - catalog:read
+              - catalog:write
+              - channels:manage
+              - channels:read
+              - conversations:assign
+              - conversations:read
+              - conversations:reply
+              - customers:read
+              - customers:write
+              - dashboard:read
+              - merchant_ai:use
+              - sales:approve
+              - sales:read
+              - sales:write
+              - team:manage
+              - team:read
             type: string
           maxItems: 32
           minItems: 1

@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/authorization"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -13,6 +14,38 @@ type Timestamp time.Time
 type OptionalBool struct {
 	Value   bool
 	Present bool
+}
+
+// Permissions is the effective permission set returned by the API. It includes
+// the owner wildcard because existing owner memberships are persisted as ["*"].
+type Permissions []string
+
+// GrantablePermissions is the set callers may explicitly grant to non-owner
+// team members. The wildcard is deliberately excluded.
+type GrantablePermissions []string
+
+func (Permissions) Schema(huma.Registry) *huma.Schema {
+	return permissionListSchema(true)
+}
+
+func (GrantablePermissions) Schema(huma.Registry) *huma.Schema {
+	return permissionListSchema(false)
+}
+
+func permissionListSchema(includeWildcard bool) *huma.Schema {
+	values := authorization.KnownPermissions()
+	if includeWildcard {
+		values = append([]string{authorization.PermissionAll}, values...)
+	}
+	enumValues := make([]any, 0, len(values))
+	for _, value := range values {
+		enumValues = append(enumValues, value)
+	}
+	return &huma.Schema{
+		Type:     huma.TypeArray,
+		Nullable: huma.DefaultArrayNullable,
+		Items:    &huma.Schema{Type: huma.TypeString, Enum: enumValues},
+	}
 }
 
 func (b *OptionalBool) UnmarshalText(value []byte) error {
@@ -87,14 +120,14 @@ type Business struct {
 type BusinessMembership struct {
 	Business    Business `json:"business"`
 	Role        string   `json:"role"`
-	Permissions []string `json:"permissions,omitempty"`
+	Permissions Permissions `json:"permissions,omitempty"`
 }
 type TeamMember struct {
 	PrincipalID UUID     `json:"principal_id"`
 	Email       string   `json:"email" format:"email"`
 	DisplayName string   `json:"display_name"`
 	Role        string   `json:"role"`
-	Permissions []string `json:"permissions"`
+	Permissions Permissions `json:"permissions"`
 	Status      string   `json:"status"`
 }
 type TeamInvitation struct {
@@ -104,7 +137,7 @@ type TeamInvitation struct {
 	Email        string     `json:"email" format:"email"`
 	DisplayName  string     `json:"display_name"`
 	Role         string     `json:"role"`
-	Permissions  []string   `json:"permissions"`
+	Permissions  GrantablePermissions `json:"permissions"`
 	Status       string     `json:"status"`
 	InvitedBy    UUID       `json:"invited_by"`
 	AcceptedBy   *UUID      `json:"accepted_by,omitempty"`

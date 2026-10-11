@@ -167,7 +167,7 @@ type CreateTeamInvitationRequest struct {
 	Email          string   `json:"email" format:"email" minLength:"3" maxLength:"320"`
 	DisplayName    string   `json:"display_name" minLength:"1" maxLength:"200"`
 	Role           string   `json:"role" enum:"admin,manager,agent,analyst,viewer"`
-	Permissions    []string `json:"permissions" minItems:"1" maxItems:"32"`
+	Permissions    GrantablePermissions `json:"permissions" minItems:"1" maxItems:"32"`
 	ExpiresInHours int      `json:"expires_in_hours,omitempty" minimum:"1" maximum:"720"`
 }
 type InspectTeamInvitationRequest struct {
@@ -189,7 +189,7 @@ type UpdateTeamMemberRoleRequest struct {
 }
 type UpdateTeamMemberAccessRequest struct {
 	Role        string   `json:"role" enum:"admin,manager,agent,analyst,viewer"`
-	Permissions []string `json:"permissions" minItems:"1" maxItems:"32"`
+	Permissions GrantablePermissions `json:"permissions" minItems:"1" maxItems:"32"`
 }
 type LabelsRequest struct {
 	Add    []string `json:"add,omitempty" maxItems:"50"`
