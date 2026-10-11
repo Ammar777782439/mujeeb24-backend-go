@@ -24,7 +24,7 @@ func TestCustomerSalesUsesSingleCapabilityAndCanonicalHistory(t *testing.T) {
 			t.Fatalf("decode request: %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"int-2","status":"requires_action","steps":[{"type":"function_call","id":"call-1","name":"reply_customer","arguments":{"response_text":"تم","selected":[]}}],"usage":{"total_input_tokens":21,"total_cached_tokens":4,"total_output_tokens":7,"total_tokens":28}}`))
+		_, _ = w.Write([]byte(`{"id":"int-2","status":"requires_action","steps":[{"type":"function_call","id":"call-1","name":"respond_without_action","arguments":{"response_text":"تم","selected":[]}}],"usage":{"total_input_tokens":21,"total_cached_tokens":4,"total_output_tokens":7,"total_tokens":28}}`))
 	}))
 	defer server.Close()
 
@@ -83,7 +83,7 @@ func TestCustomerSalesUsesSingleCapabilityAndCanonicalHistory(t *testing.T) {
 	if captured["generation_config"].(map[string]any)["tool_choice"] != "any" {
 		t.Fatal("one capability selection must be required")
 	}
-	if out.GeminiInteraction.ResultingInteractionID != "" || out.Decision.Capability != ports.CustomerSalesCapabilityReply {
+	if out.GeminiInteraction.ResultingInteractionID != "" || out.Decision.Capability != ports.CustomerSalesCapabilityRespondWithoutAction {
 		t.Fatalf("unexpected continuity/capability: %+v", out)
 	}
 	if out.Usage.InputTokens != 21 || out.Usage.CachedTokens != 4 || out.Usage.OutputTokens != 7 {
@@ -100,7 +100,7 @@ func TestCustomerSalesDropsPreviousInteractionWhenStoreDisabled(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		_, _ = w.Write([]byte(`{"id":"int-new","status":"requires_action","steps":[{"type":"function_call","id":"call-2","name":"reply_customer","arguments":{"response_text":"ok"}}]}`))
+		_, _ = w.Write([]byte(`{"id":"int-new","status":"requires_action","steps":[{"type":"function_call","id":"call-2","name":"respond_without_action","arguments":{"response_text":"ok"}}]}`))
 	}))
 	defer server.Close()
 
@@ -174,7 +174,7 @@ func TestStrictCustomerProposalRejectsUnknownSelectedFields(t *testing.T) {
 }
 
 func TestCustomerCapabilitySchemaDisallowsAdditionalProperties(t *testing.T) {
-	schema := customerSalesResponseParameters()
+	schema := customerSalesResponseParameters(ports.CustomerSalesCapabilityRespondWithoutAction)
 	if schema["additionalProperties"] != false {
 		t.Fatalf("proposal schema must close top-level properties: %#v", schema["additionalProperties"])
 	}

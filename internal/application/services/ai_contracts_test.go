@@ -70,14 +70,14 @@ func TestValidateStructural(t *testing.T) {
 		decision ports.CapabilityDecision
 		wantErr  bool
 	}{
-		{"reply", ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityReply, ResponseText: "السعر من الدليل"}, false},
+		{"respond without action", ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityRespondWithoutAction, ResponseText: "السعر من الدليل"}, false},
 		{"ask", ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityAsk, ResponseText: "ما العدد؟"}, false},
 		{"handoff", ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityHandoff, ResponseText: "سأحوّل طلبك"}, false},
 		{"handoff requires text", ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityHandoff}, true},
 		{"retrieval cannot execute", ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityFullCatalog}, true},
 		{"unimplemented draft", ports.CapabilityDecision{Capability: "create_order_draft", ResponseText: "تم"}, true},
 		{"legacy action rejected", ports.CapabilityDecision{Capability: "answer", ResponseText: "x"}, true},
-		{"missing text", ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityReply}, true},
+		{"missing text", ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityRespondWithoutAction}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -148,7 +148,7 @@ func TestCatalogEntityContractDescriptor(t *testing.T) {
 
 func TestValidateStructuralRejectsEmptySelectedReference(t *testing.T) {
 	pipeline := &ValidationPipeline{}
-	if failure := pipeline.validateStructural(ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityReply, ResponseText: "ok", Selected: []ports.SelectedReference{{}}}); failure == nil {
+	if failure := pipeline.validateStructural(ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityRespondWithoutAction, ResponseText: "ok", Selected: []ports.SelectedReference{{}}}); failure == nil {
 		t.Fatal("empty selected item accepted")
 	}
 }
