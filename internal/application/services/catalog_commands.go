@@ -349,9 +349,13 @@ func (s UpdateOfferCommandService) Handle(ctx context.Context, command commands.
 	}
 
 	name := current.Name
-	if command.Name != nil { name = *command.Name }
+	if command.Name != nil {
+		name = *command.Name
+	}
 	pricingMode := current.PricingMode
-	if command.PricingMode != nil { pricingMode = *command.PricingMode }
+	if command.PricingMode != nil {
+		pricingMode = *command.PricingMode
+	}
 	amountMinor := command.AmountMinor
 	amountDecimal := current.Amount
 	if command.AmountPresent {
@@ -360,26 +364,42 @@ func (s UpdateOfferCommandService) Handle(ctx context.Context, command commands.
 		amountMinor = nil
 	}
 	currency := current.Currency
-	if command.CurrencyPresent { currency = command.Currency }
+	if command.CurrencyPresent {
+		currency = command.Currency
+	}
 	pricingUnit := current.PricingUnit
-	if command.PricingUnitPresent { pricingUnit = command.PricingUnit }
+	if command.PricingUnitPresent {
+		pricingUnit = command.PricingUnit
+	}
 	availabilityMode := current.AvailabilityMode
-	if command.AvailabilityMode != nil { availabilityMode = *command.AvailabilityMode }
+	if command.AvailabilityMode != nil {
+		availabilityMode = *command.AvailabilityMode
+	}
 	availabilityStatus := current.AvailabilityStatus
-	if command.AvailabilityStatus != nil { availabilityStatus = *command.AvailabilityStatus }
+	if command.AvailabilityStatus != nil {
+		availabilityStatus = *command.AvailabilityStatus
+	}
 	fulfillmentMode := current.FulfillmentMode
-	if command.FulfillmentMode != nil { fulfillmentMode = *command.FulfillmentMode }
+	if command.FulfillmentMode != nil {
+		fulfillmentMode = *command.FulfillmentMode
+	}
 	status := current.Status
-	if command.Status != nil { status = *command.Status }
+	if command.Status != nil {
+		status = *command.Status
+	}
 
 	if validationErr := validateOfferValues(name, pricingMode, amountMinor, amountDecimal, currency, pricingUnit, availabilityMode, availabilityStatus, fulfillmentMode, status); validationErr != nil {
 		return result, appErrors.New(appErrors.CodeValidation, validationErr.Error())
 	}
 
 	validityFrom := current.ValidityFrom
-	if command.ValidityFromPresent { validityFrom = command.ValidityFrom }
+	if command.ValidityFromPresent {
+		validityFrom = command.ValidityFrom
+	}
 	validityUntil := current.ValidityUntil
-	if command.ValidityUntilPresent { validityUntil = command.ValidityUntil }
+	if command.ValidityUntilPresent {
+		validityUntil = command.ValidityUntil
+	}
 	if validityFrom != nil && validityUntil != nil && validityFrom.After(*validityUntil) {
 		return result, appErrors.New(appErrors.CodeValidation, "validity_from cannot be after validity_until")
 	}
@@ -394,7 +414,7 @@ func (s UpdateOfferCommandService) Handle(ctx context.Context, command commands.
 		PricingUnit: command.PricingUnit, PricingUnitPresent: command.PricingUnitPresent,
 		AvailabilityMode: command.AvailabilityMode, AvailabilityStatus: command.AvailabilityStatus,
 		FulfillmentMode: command.FulfillmentMode,
-		ValidityFrom: command.ValidityFrom, ValidityFromPresent: command.ValidityFromPresent,
+		ValidityFrom:    command.ValidityFrom, ValidityFromPresent: command.ValidityFromPresent,
 		ValidityUntil: command.ValidityUntil, ValidityUntilPresent: command.ValidityUntilPresent,
 		Status: command.Status, ExpectedVersion: version, UpdatedAt: now,
 	}
@@ -415,7 +435,9 @@ func (s UpdateOfferCommandService) Handle(ctx context.Context, command commands.
 		record, err = s.Repository.UpdateOffer(txCtx, patch)
 		return mapCatalogRepositoryError(err)
 	})
-	if err != nil { return result, err }
+	if err != nil {
+		return result, err
+	}
 	result.Offer = offerView(record)
 	result.ResourceID = commands.ID(record.ID)
 	result.ResourceVersion = commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10))

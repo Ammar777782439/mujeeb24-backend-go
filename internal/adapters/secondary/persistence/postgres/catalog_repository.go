@@ -579,12 +579,12 @@ func (r *CatalogRepository) UpdateCatalogItem(ctx context.Context, patch ports.C
 
 func (r *CatalogRepository) GetOffer(ctx context.Context, businessID, offerID string) (ports.OfferRecord, error) {
 	executor, err := r.catalogExecutor(ctx, "offer.get")
-	if err != nil { return ports.OfferRecord{}, err }
+	if err != nil {\n\t\treturn ports.OfferRecord{}, err\n\t}
 	if businessID == "" || offerID == "" {
 		return ports.OfferRecord{}, invalidRepositoryInput("offer.get", "business and offer ids are required")
 	}
 	record, err := scanOfferRecord(executor.QueryRow(ctx, `SELECT id::text, business_id::text, catalog_item_id::text, variant_id::text, name, pricing_mode, amount::text, currency, pricing_unit, price_source, price_verification_status, price_checked_at, availability_mode, availability_source, availability_checked_at, availability_valid_until, availability_evidence_ref, fulfillment_mode, validity_from, validity_until, availability_status, status, resource_version, created_at, updated_at FROM offers WHERE business_id = $1::uuid AND id = $2::uuid`, businessID, offerID))
-	if err != nil { return record, classifyRepositoryGetError("offer.get", err) }
+	if err != nil {\n\t\treturn record, classifyRepositoryGetError("offer.get", err)\n\t}
 	return record, nil
 }
 
@@ -610,7 +610,7 @@ func (r *CatalogRepository) CreateOffer(ctx context.Context, draft ports.OfferDr
 
 func (r *CatalogRepository) UpdateOffer(ctx context.Context, patch ports.OfferPatch) (ports.OfferRecord, error) {
 	executor, err := r.catalogExecutor(ctx, "offer.update")
-	if err != nil { return ports.OfferRecord{}, err }
+	if err != nil {\n\t\treturn ports.OfferRecord{}, err\n\t}
 	if patch.ID == "" || patch.BusinessID == "" || patch.ExpectedVersion <= 0 {
 		return ports.OfferRecord{}, invalidRepositoryInput("offer.update", "id, business, and positive expected version are required")
 	}
@@ -646,7 +646,7 @@ func (r *CatalogRepository) UpdateOffer(ctx context.Context, patch ports.OfferPa
 		patch.Status, patch.PriceSource, patch.PriceVerificationStatus, patch.PriceCheckedAt,
 		patch.AvailabilitySource, patch.AvailabilityCheckedAt, patch.UpdatedAt, patch.ExpectedVersion,
 	).Scan(&offer.ID, &offer.BusinessID, &offer.CatalogItemID, &offer.VariantID, &offer.Name, &offer.PricingMode, &offer.Amount, &offer.Currency, &offer.PricingUnit, &offer.PriceSource, &offer.PriceVerificationStatus, &offer.PriceCheckedAt, &offer.AvailabilityMode, &offer.AvailabilitySource, &offer.AvailabilityCheckedAt, &offer.AvailabilityValidUntil, &offer.AvailabilityEvidenceRef, &offer.FulfillmentMode, &offer.ValidityFrom, &offer.ValidityUntil, &offer.AvailabilityStatus, &offer.Status, &offer.ResourceVersion, &offer.CreatedAt, &offer.UpdatedAt)
-	if err == nil { return offer, nil }
+	if err == nil {\n\t\treturn offer, nil\n\t}
 	return offer, classifyCatalogUpdateMiss(ctx, executor, "offer.update", `SELECT EXISTS (SELECT 1 FROM offers WHERE business_id = $1::uuid AND id = $2::uuid)`, patch.BusinessID, patch.ID, err)
 }
 

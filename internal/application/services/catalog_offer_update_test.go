@@ -27,15 +27,26 @@ func (r *offerUpdateRepo) UpdateOffer(_ context.Context, patch ports.OfferPatch)
 	next := r.current
 	next.ResourceVersion++
 	next.UpdatedAt = patch.UpdatedAt
-	if patch.PricingMode != nil { next.PricingMode = *patch.PricingMode }
-	if patch.AmountPresent && patch.AmountMinor == nil { next.Amount = nil }
-	if patch.CurrencyPresent { next.Currency = patch.Currency }
-	if patch.VariantIDPresent { next.VariantID = patch.VariantID }
+	if patch.PricingMode != nil {
+		next.PricingMode = *patch.PricingMode
+	}
+	if patch.AmountPresent && patch.AmountMinor == nil {
+		next.Amount = nil
+	}
+	if patch.CurrencyPresent {
+		next.Currency = patch.Currency
+	}
+	if patch.VariantIDPresent {
+		next.VariantID = patch.VariantID
+	}
 	return next, nil
 }
 
 type offerUpdateTx struct{}
-func (offerUpdateTx) Within(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
+
+func (offerUpdateTx) Within(ctx context.Context, fn func(context.Context) error) error {
+	return fn(ctx)
+}
 
 func offerUpdateService(repo *offerUpdateRepo, now time.Time) UpdateOfferCommandService {
 	return UpdateOfferCommandService{CatalogCommandServices{
@@ -58,10 +69,12 @@ func TestUpdateOfferAllowsFixedToQuoteRequiredWithExplicitPriceClear(t *testing.
 	}}
 	mode := "quote_required"
 	_, err := offerUpdateService(repo, now).Handle(context.Background(), commands.UpdateOfferCommand{
-		Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}, ExpectedVersion: offerVersion("4")},
+		Meta:    commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}, ExpectedVersion: offerVersion("4")},
 		OfferID: "offer-1", PricingMode: &mode, AmountPresent: true, CurrencyPresent: true,
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !repo.patch.AmountPresent || repo.patch.AmountMinor != nil || !repo.patch.CurrencyPresent || repo.patch.Currency != nil {
 		t.Fatalf("explicit price clearing was lost: %+v", repo.patch)
 	}
@@ -81,10 +94,12 @@ func TestUpdateOfferRejectsClearingAmountForFixedPrice(t *testing.T) {
 		FulfillmentMode: "delivery", Status: "active", ResourceVersion: 4,
 	}}
 	_, err := offerUpdateService(repo, time.Now()).Handle(context.Background(), commands.UpdateOfferCommand{
-		Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}, ExpectedVersion: offerVersion("4")},
+		Meta:    commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}, ExpectedVersion: offerVersion("4")},
 		OfferID: "offer-1", AmountPresent: true,
 	})
-	if err == nil { t.Fatal("fixed pricing accepted an explicit amount clear") }
+	if err == nil {
+		t.Fatal("fixed pricing accepted an explicit amount clear")
+	}
 }
 
 func TestUpdateOfferRejectsVariantFromAnotherItem(t *testing.T) {
@@ -100,8 +115,10 @@ func TestUpdateOfferRejectsVariantFromAnotherItem(t *testing.T) {
 		variant: ports.VariantRecord{ID: "variant-2", BusinessID: "business-1", CatalogItemID: "item-2"},
 	}
 	_, err := offerUpdateService(repo, time.Now()).Handle(context.Background(), commands.UpdateOfferCommand{
-		Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}, ExpectedVersion: offerVersion("4")},
+		Meta:    commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}, ExpectedVersion: offerVersion("4")},
 		OfferID: "offer-1", VariantID: &variantID, VariantIDPresent: true,
 	})
-	if err == nil { t.Fatal("offer accepted a variant from another catalog item") }
+	if err == nil {
+		t.Fatal("offer accepted a variant from another catalog item")
+	}
 }
