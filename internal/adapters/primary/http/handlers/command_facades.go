@@ -247,6 +247,7 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 		}
 		result, err := s.deps.UpdateCatalogItem.Handle(ctx, commands.UpdateCatalogItemCommand{
 			Meta:                 commandMeta(ctx, actor, in.CommandHeaders),
+			CatalogID:            commands.CatalogID(in.CatalogID),
 			CatalogItemID:        commands.CatalogItemID(in.ItemID),
 			Name:                 optionalStringPtr(in.Body.Name),
 			Status:               optionalStringPtr(in.Body.Status),

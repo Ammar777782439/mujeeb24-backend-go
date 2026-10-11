@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/catalogvalidation"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
@@ -126,6 +127,9 @@ func (s CreateAttributeSchemaVersionCommandService) Handle(ctx context.Context, 
 		if definition.Label == "" || definition.DataType == "" || definition.DisplayOrder < 0 {
 			return result, appErrors.New(appErrors.CodeValidation, "attribute definition is invalid at index "+strconv.Itoa(index))
 		}
+		if validationErr := catalogvalidation.ValidateDefinition(definition.DataType, definition.ValidationRules); validationErr != nil {
+			return result, appErrors.New(appErrors.CodeValidation, "attribute definition is invalid at index "+strconv.Itoa(index)+": "+validationErr.Error())
+		}
 		rules, rulesErr := encodeObject(definition.ValidationRules)
 		if rulesErr != nil {
 			return result, appErrors.New(appErrors.CodeValidation, "attribute validation_rules are invalid at index "+strconv.Itoa(index))
@@ -164,20 +168,25 @@ func (s CreateCatalogItemCommandService) Handle(ctx context.Context, command com
 	if command.Meta.Actor.BusinessID == "" || command.CatalogID == "" || command.ItemType == "" || command.Name == "" || command.PricingMode == "" || command.AvailabilityMode == "" || command.FulfillmentMode == "" {
 		return result, appErrors.New(appErrors.CodeValidation, "required catalog item fields are missing")
 	}
-	attributes, err := encodeObject(command.Attributes)
-	if err != nil {
-		return result, err
-	}
 	var schemaVersion *int
+	var schema *ports.AttributeSchemaRecord
 	if command.AttributeSchemaID != nil {
 		if *command.AttributeSchemaID == "" {
 			return result, appErrors.New(appErrors.CodeValidation, "attribute schema id is invalid")
 		}
-		schema, err := s.Repository.GetAttributeSchema(ctx, string(command.Meta.Actor.BusinessID), string(*command.AttributeSchemaID))
+		loaded, err := s.Repository.GetAttributeSchema(ctx, string(command.Meta.Actor.BusinessID), string(*command.AttributeSchemaID))
 		if err != nil {
 			return result, mapCatalogRepositoryError(err)
 		}
-		schemaVersion = &schema.Version
+		schema = &loaded
+		schemaVersion = &loaded.Version
+	}
+	if err := catalogvalidation.ValidateAttributes(schema, command.Attributes); err != nil {
+		return result, appErrors.New(appErrors.CodeValidation, err.Error())
+	}
+	attributes, err := encodeObject(command.Attributes)
+	if err != nil {
+		return result, err
 	}
 	now := s.now()
 	var record ports.CatalogItemRecord
@@ -200,9 +209,29 @@ type UpdateCatalogItemCommandService struct{ CatalogCommandServices }
 
 func (s UpdateCatalogItemCommandService) Handle(ctx context.Context, command commands.UpdateCatalogItemCommand) (commands.CatalogItemResult, error) {
 	var result commands.CatalogItemResult
+	if command.Meta.Actor.BusinessID == "" || command.CatalogID == "" || command.CatalogItemID == "" {
+		return result, appErrors.New(appErrors.CodeValidation, "business, catalog, and item ids are required")
+	}
 	version, err := parseExpectedVersion(command.Meta.ExpectedVersion)
 	if err != nil {
 		return result, err
+	}
+	if command.Attributes != nil {
+		current, readErr := s.Repository.GetCatalogItem(ctx, string(command.Meta.Actor.BusinessID), string(command.CatalogID), string(command.CatalogItemID))
+		if readErr != nil {
+			return result, mapCatalogRepositoryError(readErr)
+		}
+		var schema *ports.AttributeSchemaRecord
+		if current.AttributeSchemaID != nil {
+			loaded, schemaErr := s.Repository.GetAttributeSchema(ctx, string(command.Meta.Actor.BusinessID), *current.AttributeSchemaID)
+			if schemaErr != nil {
+				return result, mapCatalogRepositoryError(schemaErr)
+			}
+			schema = &loaded
+		}
+		if validationErr := catalogvalidation.ValidateAttributes(schema, command.Attributes); validationErr != nil {
+			return result, appErrors.New(appErrors.CodeValidation, validationErr.Error())
+		}
 	}
 	attributes, err := optionalObject(command.Attributes)
 	if err != nil {
@@ -294,6 +323,21 @@ func (s CreateVariantCommandService) Handle(ctx context.Context, command command
 	if command.Meta.Actor.BusinessID == "" || command.CatalogItemID == "" || command.Name == "" {
 		return result, appErrors.New(appErrors.CodeValidation, "business, item, and variant name are required")
 	}
+	item, readErr := s.Repository.GetCatalogItemByID(ctx, string(command.Meta.Actor.BusinessID), string(command.CatalogItemID))
+	if readErr != nil {
+		return result, mapCatalogRepositoryError(readErr)
+	}
+	var schema *ports.AttributeSchemaRecord
+	if item.AttributeSchemaID != nil {
+		loaded, schemaErr := s.Repository.GetAttributeSchema(ctx, string(command.Meta.Actor.BusinessID), *item.AttributeSchemaID)
+		if schemaErr != nil {
+			return result, mapCatalogRepositoryError(schemaErr)
+		}
+		schema = &loaded
+	}
+	if validationErr := catalogvalidation.ValidatePartialAttributes(schema, command.Attributes); validationErr != nil {
+		return result, appErrors.New(appErrors.CodeValidation, validationErr.Error())
+	}
 	attributes, err := encodeObject(command.Attributes)
 	if err != nil {
 		return result, err
@@ -319,9 +363,33 @@ type UpdateVariantCommandService struct{ CatalogCommandServices }
 
 func (s UpdateVariantCommandService) Handle(ctx context.Context, command commands.UpdateVariantCommand) (commands.VariantResult, error) {
 	var result commands.VariantResult
+	if command.Meta.Actor.BusinessID == "" || command.VariantID == "" {
+		return result, appErrors.New(appErrors.CodeValidation, "business and variant ids are required")
+	}
 	version, err := parseExpectedVersion(command.Meta.ExpectedVersion)
 	if err != nil {
 		return result, err
+	}
+	if command.Attributes != nil {
+		variant, readErr := s.Repository.GetVariant(ctx, string(command.Meta.Actor.BusinessID), string(command.VariantID))
+		if readErr != nil {
+			return result, mapCatalogRepositoryError(readErr)
+		}
+		item, itemErr := s.Repository.GetCatalogItemByID(ctx, string(command.Meta.Actor.BusinessID), variant.CatalogItemID)
+		if itemErr != nil {
+			return result, mapCatalogRepositoryError(itemErr)
+		}
+		var schema *ports.AttributeSchemaRecord
+		if item.AttributeSchemaID != nil {
+			loaded, schemaErr := s.Repository.GetAttributeSchema(ctx, string(command.Meta.Actor.BusinessID), *item.AttributeSchemaID)
+			if schemaErr != nil {
+				return result, mapCatalogRepositoryError(schemaErr)
+			}
+			schema = &loaded
+		}
+		if validationErr := catalogvalidation.ValidatePartialAttributes(schema, command.Attributes); validationErr != nil {
+			return result, appErrors.New(appErrors.CodeValidation, validationErr.Error())
+		}
 	}
 	attributes, err := optionalObject(command.Attributes)
 	if err != nil {

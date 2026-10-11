@@ -238,11 +238,12 @@ Variant
 
 الـAttributeSchema هو **تعريف اختياري ومُدار** للمواصفات، وليس سجلًا مطلوبًا لكل attribute key.
 حقل `attributes` نفسه هو JSONB object ديناميكي:
-- المفتاح يجب أن يكون English `snake_case`.
-- القيمة يمكن أن تكون أي JSON value صالحة.
-- لا يشترط أن يكون المفتاح موجودًا كسجل في `attribute_definitions`.
+- المفاتيح المُدارة بواسطة AttributeSchema تُنشأ من الباك إند كمعرّفات آلة ثابتة تبدأ بـ `attr_` ولا يكتبها التاجر ولا تتغير عند تغيير الـlabel.
+- أي مفتاح يبدأ بـ `attr_` يجب أن يطابق AttributeDefinition حقيقية في الـSchema المرتبطة.
+- المفاتيح الحرة/القديمة خارج الـSchema تبقى مسموحة بصيغة English `snake_case` للحفاظ على التوافق مع البيانات الحالية.
+- القيم المرتبطة بـDefinition تخضع لـ `required` و`data_type` و`validation_rules` في Application validation.
 - `attribute_schema_id` و`attribute_schema_version` يبقيان اختياريين على CatalogItem.
-- إذا وُجد Schema حقيقي، يمكن استخدامه لفهم/تنظيم المواصفات، لكنه لا يمنع حفظ attribute key/value صالحين لا يوجدان في definitions.
+- معنى المفتاح المُدار لا يُستنتج من نص المفتاح؛ يؤخذ دائمًا من `AttributeDefinition.label/data_type/validation_rules`.
 
 ```text
 AttributeSchema

@@ -54,7 +54,8 @@ type CatalogEntityDefinition struct {
 //     'always_available', 'unknown')
 //   - fulfillment_mode IN ('delivery', 'pickup', 'digital', 'appointment',
 //     'travel', 'manual')
-//   - attributes is a dynamic JSONB object. Keys are English snake_case; values may be any valid JSON value.
+//   - attributes is a dynamic JSONB object. Managed schema keys are stable machine identifiers
+//     (attr_...) resolved through AttributeDefinition; legacy/custom keys remain English snake_case.
 type CatalogItemEntityDefinition struct {
 	ID                     string         `json:"id"`
 	CatalogID              string         `json:"catalog_id"`
@@ -104,7 +105,8 @@ type AttributeDefinitionEntityDefinition struct {
 // Per SQL migration 000017:
 //   - status IN ('active', 'inactive', 'archived') — NO "draft" (variants
 //     are not draftable; only CatalogItem and Offer have draft state).
-//   - attributes is a dynamic JSONB object. Keys are English snake_case; values may be any valid JSON value.
+//   - attributes is a dynamic JSONB object. Managed schema keys are stable machine identifiers
+//     (attr_...) resolved through AttributeDefinition; legacy/custom keys remain English snake_case.
 type VariantEntityDefinition struct {
 	ID            string         `json:"id"`
 	CatalogItemID string         `json:"catalog_item_id"`

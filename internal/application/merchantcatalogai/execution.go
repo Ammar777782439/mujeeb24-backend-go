@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/catalogvalidation"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/google/uuid"
@@ -206,6 +207,17 @@ func encodedAttributes(v map[string]any) ([]byte, error) {
 	}
 	return json.Marshal(v)
 }
+func decodeAttributes(raw []byte) (map[string]any, error) {
+	value := map[string]any{}
+	if len(raw) == 0 {
+		return value, nil
+	}
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
 func mergeAttributes(old []byte, changes map[string]any) ([]byte, error) {
 	if changes == nil {
 		return nil, nil
@@ -228,19 +240,29 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 	q := p.Proposal
 	var variants []VariantCreate
 	var offers []OfferCreate
+	var schema *ports.AttributeSchemaRecord
 	if q.Create != nil {
 		c := q.Create
-		attrs, e := encodedAttributes(c.Attributes)
-		if e != nil {
-			return r, e
-		}
 		var sv *int
 		if c.AttributeSchemaID != nil {
-			schema, e := s.Catalogs.GetAttributeSchema(ctx, p.BusinessID, *c.AttributeSchemaID)
+			loaded, e := s.Catalogs.GetAttributeSchema(ctx, p.BusinessID, *c.AttributeSchemaID)
 			if e != nil {
 				return r, e
 			}
-			sv = &schema.Version
+			schema = &loaded
+			sv = &loaded.Version
+		}
+		if e := catalogvalidation.ValidateAttributes(schema, c.Attributes); e != nil {
+			return r, appErrors.New(appErrors.CodeValidation, e.Error())
+		}
+		for _, variant := range c.Variants {
+			if e := catalogvalidation.ValidatePartialAttributes(schema, variant.Attributes); e != nil {
+				return r, appErrors.New(appErrors.CodeValidation, e.Error())
+			}
+		}
+		attrs, e := encodedAttributes(c.Attributes)
+		if e != nil {
+			return r, e
 		}
 		item, e := s.Catalogs.CreateCatalogItem(ctx, ports.CatalogItemDraft{ID: uuid.NewString(), BusinessID: p.BusinessID, CatalogID: p.CatalogID, Name: c.Name, ItemType: c.ItemType, ShortDescription: c.ShortDescription, LongDescription: c.LongDescription, AttributeSchemaID: c.AttributeSchemaID, AttributeSchemaVersion: sv, PricingMode: c.PricingMode, AvailabilityMode: c.AvailabilityMode, FulfillmentMode: c.FulfillmentMode, RequiresConfirmation: c.RequiresConfirmation, Attributes: attrs, CreatedAt: now, UpdatedAt: now})
 		if e != nil {
@@ -264,9 +286,25 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 		if e != nil {
 			return r, e
 		}
+		if item.AttributeSchemaID != nil {
+			loaded, schemaErr := s.Catalogs.GetAttributeSchema(ctx, p.BusinessID, *item.AttributeSchemaID)
+			if schemaErr != nil {
+				return r, schemaErr
+			}
+			schema = &loaded
+		}
 		attrs, e := mergeAttributes(item.Attributes, c.Attributes)
 		if e != nil {
 			return r, e
+		}
+		if c.Attributes != nil {
+			merged, decodeErr := decodeAttributes(attrs)
+			if decodeErr != nil {
+				return r, decodeErr
+			}
+			if validationErr := catalogvalidation.ValidateAttributes(schema, merged); validationErr != nil {
+				return r, appErrors.New(appErrors.CodeValidation, validationErr.Error())
+			}
 		}
 		if c.Name != nil || c.ItemType != nil || c.Status != nil || c.ShortDescription != nil || c.LongDescription != nil || c.PricingMode != nil || c.AvailabilityMode != nil || c.FulfillmentMode != nil || c.RequiresConfirmation != nil || c.Attributes != nil {
 			_, e = s.Catalogs.UpdateCatalogItem(ctx, ports.CatalogItemPatch{ID: r.ItemID, BusinessID: p.BusinessID, Name: c.Name, ItemType: c.ItemType, Status: c.Status, ShortDescription: c.ShortDescription, LongDescription: c.LongDescription, PricingMode: c.PricingMode, AvailabilityMode: c.AvailabilityMode, FulfillmentMode: c.FulfillmentMode, RequiresConfirmation: c.RequiresConfirmation, Attributes: attrs, ExpectedVersion: p.Versions["item:"+r.ItemID], UpdatedAt: now})
@@ -286,6 +324,15 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 			if e != nil {
 				return r, e
 			}
+			if v.Attributes != nil {
+				merged, decodeErr := decodeAttributes(attrs)
+				if decodeErr != nil {
+					return r, decodeErr
+				}
+				if validationErr := catalogvalidation.ValidatePartialAttributes(schema, merged); validationErr != nil {
+					return r, appErrors.New(appErrors.CodeValidation, validationErr.Error())
+				}
+			}
 			_, e = s.Catalogs.UpdateVariant(ctx, ports.VariantPatch{ID: v.ID, BusinessID: p.BusinessID, Name: v.Name, Attributes: attrs, Status: v.Status, ExpectedVersion: p.Versions["variant:"+v.ID], UpdatedAt: now})
 			if e != nil {
 				return r, e
@@ -297,6 +344,9 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 	}
 	refs := map[string]string{}
 	for _, v := range variants {
+		if e := catalogvalidation.ValidatePartialAttributes(schema, v.Attributes); e != nil {
+			return r, appErrors.New(appErrors.CodeValidation, e.Error())
+		}
 		attrs, e := encodedAttributes(v.Attributes)
 		if e != nil {
 			return r, e

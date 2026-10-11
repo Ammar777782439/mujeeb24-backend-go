@@ -71,6 +71,7 @@ type CreateCatalogItemCommand struct {
 }
 type UpdateCatalogItemCommand struct {
 	Meta                 CommandMeta
+	CatalogID            CatalogID
 	CatalogItemID        CatalogItemID
 	Name                 *string
 	Status               *string

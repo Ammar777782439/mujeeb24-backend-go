@@ -140,6 +140,21 @@ func (r *CatalogRepository) GetCatalogItem(ctx context.Context, businessID, cata
 	return item, nil
 }
 
+func (r *CatalogRepository) GetCatalogItemByID(ctx context.Context, businessID, itemID string) (ports.CatalogItemRecord, error) {
+	executor, err := r.catalogExecutor(ctx, "catalog_item.get_by_id")
+	if err != nil {
+		return ports.CatalogItemRecord{}, err
+	}
+	if businessID == "" || itemID == "" {
+		return ports.CatalogItemRecord{}, invalidRepositoryInput("catalog_item.get_by_id", "business and item ids are required")
+	}
+	item, err := scanCatalogItem(executor.QueryRow(ctx, `SELECT id::text, business_id::text, catalog_id::text, attribute_schema_id::text, attribute_schema_version, item_type, name, short_description, long_description, status, pricing_mode, availability_mode, fulfillment_mode, requires_confirmation, attributes, resource_version, created_at, updated_at FROM catalog_items WHERE business_id = $1::uuid AND id = $2::uuid`, businessID, itemID))
+	if err != nil {
+		return item, classifyRepositoryGetError("catalog_item.get_by_id", err)
+	}
+	return item, nil
+}
+
 func (r *CatalogRepository) ListOffers(ctx context.Context, businessID, itemID, status string, limit int, cursor string) (ports.OfferPage, error) {
 	executor, err := r.catalogExecutor(ctx, "offer.list")
 	if err != nil {
@@ -222,6 +237,21 @@ func (r *CatalogRepository) ListVariants(ctx context.Context, businessID, itemID
 		page.NextCursor = encodeVariantCursor(page.Items[len(page.Items)-1])
 	}
 	return page, nil
+}
+
+func (r *CatalogRepository) GetVariant(ctx context.Context, businessID, variantID string) (ports.VariantRecord, error) {
+	executor, err := r.catalogExecutor(ctx, "variant.get")
+	if err != nil {
+		return ports.VariantRecord{}, err
+	}
+	if businessID == "" || variantID == "" {
+		return ports.VariantRecord{}, invalidRepositoryInput("variant.get", "business and variant ids are required")
+	}
+	var record ports.VariantRecord
+	if err := executor.QueryRow(ctx, `SELECT id::text, business_id::text, catalog_item_id::text, name, attributes, status, resource_version, created_at, updated_at FROM variants WHERE business_id = $1::uuid AND id = $2::uuid`, businessID, variantID).Scan(&record.ID, &record.BusinessID, &record.CatalogItemID, &record.Name, &record.Attributes, &record.Status, &record.ResourceVersion, &record.CreatedAt, &record.UpdatedAt); err != nil {
+		return record, classifyRepositoryGetError("variant.get", err)
+	}
+	return record, nil
 }
 
 func (r *CatalogRepository) ListAttributeSchemas(ctx context.Context, businessID, name string, version *int, limit int, cursor string) (ports.AttributeSchemaPage, error) {
