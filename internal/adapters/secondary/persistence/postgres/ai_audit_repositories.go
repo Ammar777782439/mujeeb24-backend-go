@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 
@@ -29,9 +30,10 @@ func (r *AIDecisionRepository) CreateProposed(ctx context.Context, draft ports.A
 	if err != nil {
 		return ports.AIDecisionRecord{}, err
 	}
-	if draft.ID == "" || draft.BusinessID == "" || draft.IntentBase == "" || draft.RequestedAction == "" || draft.ConfidenceBand == "" || draft.PolicyVersion == "" || draft.SchemaVersion <= 0 || draft.Lifecycle != "proposed" || draft.CreatedAt.IsZero() || draft.UpdatedAt.IsZero() {
-		return ports.AIDecisionRecord{}, invalidRepositoryInput("ai_decision.create_proposed", "id, business, intent, action, confidence band, policy version, schema version, proposed lifecycle, and timestamps are required")
+	if !validAIDecisionDraft(draft) {
+		return ports.AIDecisionRecord{}, invalidRepositoryInput("ai_decision.create_proposed", "decision identity, capability or legacy intent/action, policy, lifecycle and timestamps are required")
 	}
+
 	entities := draft.Entities
 	if len(entities) == 0 {
 		entities = []byte(`{}`)
@@ -261,3 +263,24 @@ func classifyAIDecisionMutationMiss(ctx context.Context, executor SQLExecutor, p
 
 var _ ports.AIDecisionRepository = (*AIDecisionRepository)(nil)
 var _ ports.AuditEventRepository = (*AuditEventRepository)(nil)
+
+// validAIDecisionDraft enforces the persistence boundary for both legacy callers
+// and capability decisions. A rejected capability is an expired audit record,
+// not a proposal authorized for execution.
+func validAIDecisionDraft(draft ports.AIDecisionDraft) bool {
+	hasCapability := draft.RequestedCapability != nil && strings.TrimSpace(*draft.RequestedCapability) != ""
+	if draft.RequestedCapability != nil && !hasCapability {
+		return false
+	}
+	if draft.EffectiveCapability != nil && (!hasCapability || *draft.EffectiveCapability != *draft.RequestedCapability) {
+		return false
+	}
+	rejectedCapability := hasCapability && draft.Lifecycle == "expired" && draft.PolicyDecision != nil && *draft.PolicyDecision == "denied" && draft.EffectiveCapability == nil
+	if strings.TrimSpace(draft.IntentBase) == "" && !hasCapability {
+		return false
+	}
+	if strings.TrimSpace(draft.RequestedAction) == "" && !rejectedCapability {
+		return false
+	}
+	return draft.ID != "" && draft.BusinessID != "" && draft.ConfidenceBand != "" && draft.PolicyVersion != "" && draft.SchemaVersion > 0 && (draft.Lifecycle == "proposed" || rejectedCapability) && !draft.CreatedAt.IsZero() && !draft.UpdatedAt.IsZero()
+}

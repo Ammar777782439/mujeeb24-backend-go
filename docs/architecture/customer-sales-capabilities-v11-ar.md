@@ -78,3 +78,5 @@ Function Calling يستخدم تعريفات ذات schema مغلق و`tool_choi
 تم بناء اختبارات PostgreSQL integration وGemini live. التشغيل الحي متخطى: POSTGRES_TEST_DSN غير موجود، وGemini opt-in معطل. اختبار PostgreSQL الجديد يفحص Get/List round-trip لحقلي القدرة وIntentBase الفارغ، لكنه لا يُعد ناجحًا قبل تشغيله على قاعدة فعلية. لا ينسب هذا التقرير نجاح CI إلى GitHub دون run مستقل.
 
 يجب تطبيق migration 000073 قبل تشغيل إصدار الكود الجديد. لا تشغيل migration على بيئة التاجر ضمن تعديل المصدر، ولا دمج إلى main.
+
+اختبار PostgreSQL الأول على GitHub كشف أن CreateProposed ما زال يشترط intent_base غير فارغ. حُدّث حد الحفظ ليقبل CapabilityDecision دون intent، ويقبل سجل expired للقدرة المرفوضة مع denied فقط، ويحافظ على شروط legacy. اختبارات boundary ترفض تبديل effective_capability، وSQL integration يفحص حفظ القدرة الناجحة والمرفوضة مع rollback الإرسال.

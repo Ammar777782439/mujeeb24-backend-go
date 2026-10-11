@@ -358,6 +358,17 @@ func TestAutoReplyVerticalSliceAgainstPostgres(t *testing.T) {
 		t.Fatalf("auto reply persistence counts decision=%d outbound=%d outbox=%d", decisionCount, outboundCount, outboxCount)
 	}
 
+	unknown, denied := "unimplemented_capability", "denied"
+	rejected, rejectedErr := decisionRepo.CreateProposed(ctx, ports.AIDecisionDraft{
+		ID: uuid.NewString(), BusinessID: businessID, ConversationID: &conversationID,
+		RequestedCapability: &unknown, RequestedAction: "", IntentBase: "", ConfidenceBand: "unknown",
+		PolicyVersion: "v1", SchemaVersion: 1, Lifecycle: "expired", PolicyDecision: &denied,
+		CreatedAt: base, UpdatedAt: base,
+	})
+	if rejectedErr != nil || rejected.RequestedCapability == nil || *rejected.RequestedCapability != unknown || rejected.EffectiveCapability != nil || rejected.RequestedAction != "" || rejected.IntentBase != "" {
+		t.Fatalf("rejected capability audit persistence: %+v err=%v", rejected, rejectedErr)
+	}
+
 	failingService := services.NewAutoReplyService(customerSalesDecisionStub{}, decisionRepo, referenceRepo, outboundRepo, failingEnqueueOutbox{OutboxStore: outboxRepo}, adapter)
 	failingService.Validation = services.NewValidationPipeline(
 		NewPostgresReferenceValidator(adapter),
