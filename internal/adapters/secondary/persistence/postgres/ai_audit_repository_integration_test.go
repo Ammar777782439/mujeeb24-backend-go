@@ -24,7 +24,7 @@ type customerSalesDecisionStub struct{}
 func (customerSalesDecisionStub) Decide(context.Context, ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
 	return ports.CustomerSalesDecisionOutput{
 		Decision: ports.CapabilityDecision{
-			Capability:   ports.CustomerSalesCapabilityReply,
+			Capability:   ports.CustomerSalesCapabilityRespondWithoutAction,
 			ResponseText: "ok",
 		},
 	}, nil
@@ -337,11 +337,11 @@ func TestAutoReplyVerticalSliceAgainstPostgres(t *testing.T) {
 		t.Fatalf("unexpected auto reply result: %#v", result)
 	}
 	stored, getErr := decisionRepo.Get(ctx, businessID, string(result.Decision.ID))
-	if getErr != nil || stored.RequestedCapability == nil || *stored.RequestedCapability != "reply_customer" || stored.EffectiveCapability == nil || *stored.EffectiveCapability != "reply_customer" || stored.IntentBase != "" {
+	if getErr != nil || stored.RequestedCapability == nil || *stored.RequestedCapability != "respond_without_action" || stored.EffectiveCapability == nil || *stored.EffectiveCapability != "respond_without_action" || stored.IntentBase != "" {
 		t.Fatalf("capability audit round trip: %+v err=%v", stored, getErr)
 	}
 	page, listErr := decisionRepo.List(ctx, ports.AIDecisionFilter{BusinessID: businessID, Limit: 20})
-	if listErr != nil || len(page.Items) != 1 || page.Items[0].RequestedCapability == nil || *page.Items[0].RequestedCapability != "reply_customer" {
+	if listErr != nil || len(page.Items) != 1 || page.Items[0].RequestedCapability == nil || *page.Items[0].RequestedCapability != "respond_without_action" {
 		t.Fatalf("capability audit list round trip: %+v err=%v", page, listErr)
 	}
 	var decisionCount, outboundCount, outboxCount int
