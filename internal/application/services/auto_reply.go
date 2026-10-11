@@ -1,7 +1,7 @@
 // Package services — AutoReplyService refactored to contract-aligned flow.
 //
 // Implements contracts ③ §1 (Mujeeb = canonical conversation state),
-// ④ §4 (Gemini output is CustomerSalesProposal only),
+// ADR capability amendment (Gemini chooses a bounded tool; internal proposal preserves storage),
 // ⑥ §2 (Structural→Reference→Tenant→Ownership→Policy→Authorization→EffectiveDecision),
 // ⑨ §2 (AI Run lifecycle),
 // ⑧ §5 (operational trace via ai_runs + ai_run_attempts + ai_tool_calls).
@@ -43,12 +43,6 @@ const (
 	AutoReplyActionClarification = "clarification"
 )
 
-// HandoffFarewellMessage is fixed Mujeeb-owned farewell content for
-// subscription/activation requests. It is never model output, so sending it
-// cannot hallucinate prices or terms. The persisted decision keeps
-// RequiresHuman=true so the dashboard hands the conversation to staff.
-const HandoffFarewellMessage = "يسعدنا اختيارك! تم استلام طلبك، وسيقوم أحد ممثلي المبيعات بالتواصل معك فوراً لإتمام خطوات التفعيل والربط."
-
 // AutoReplyService drives the contract ⑥ post-Gemini flow for one customer turn.
 //
 // Per contract ⑨ §1, each Handle() call is one AI Run.
@@ -83,8 +77,7 @@ type AutoReplyService struct {
 	// Per contract ② §9, the flow is: Gemini → needs_catalog → build
 	// projection → token-count → batch → evaluate → aggregate candidates
 	// → final evaluate → CustomerSalesProposal.
-	// If nil, catalog evaluation is skipped (the AI replies with whatever
-	// it can infer from the context alone).
+	// If nil, evaluate_full_catalog is not offered; unsupported requests cannot expand evidence.
 	CatalogBatch *CatalogBatchController
 
 	// SummaryService per ADR-039: maintains the running conversation
@@ -234,7 +227,11 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		// AI does not respond.
 		if strings.EqualFold(bc.Conversation.Ownership, "human") || strings.EqualFold(bc.Conversation.State, "waiting_human") {
 			log.Printf("[AutoReply] SKIPPED business=%s reason=human_owned_or_waiting_human ownership=%s state=%s", businessID, bc.Conversation.Ownership, bc.Conversation.State)
-			s.markCompletedSafe(ctx, run)
+			if s.RunRepository != nil && run.ID != "" {
+				if _, err := NewAIRunLifecycle(s.RunRepository).CancelBeforeModel(ctx, run.BusinessID, run.ID); err != nil {
+					return commands.AutoReplyResult{}, err
+				}
+			}
 			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, nil
 		}
 		builtContext = &bc
@@ -274,7 +271,8 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		EntityContractPayload: s.EntityContractPayload,
 		// Per fix #4: pass the AI Run ID so tool call records are
 		// persisted with the correct run reference during the Tool Loop.
-		AIRunID: run.ID,
+		AIRunID:      run.ID,
+		Capabilities: ports.CustomerSalesCapabilities(s.CatalogBatch != nil),
 	})
 	if err != nil {
 		log.Printf("[AutoReply] GEMINI_FAILED business=%s err=%v", businessID, err)
@@ -283,7 +281,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	}
 	proposal := out.Proposal
 	interactionIDToPersist := strings.TrimSpace(out.GeminiInteraction.ResultingInteractionID)
-	resetGeminiInteraction := false
+	resetGeminiInteraction := out.Capability != ""
 	log.Printf("[AutoReply] GEMINI_OK business=%s status=%s action=%s tokens_in=%d tokens_out=%d latency=%dms response=%q",
 		businessID, proposal.Status, proposal.Action, out.Usage.InputTokens, out.Usage.OutputTokens, out.LatencyMs, truncate(proposal.ResponseText, 200))
 
@@ -295,46 +293,17 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	// Batch evaluation evidence is merged only after complete batch coverage.
 	catalogEvidence := EvidenceFromCustomerSalesContext(builtContext)
 
-	// Per contract ② §9 — Catalog Evaluation flow.
-	//
-	// When Gemini's first response indicates it needs more catalog data
-	// (status=needs_more_data),
-	// invoke the CatalogBatchController to:
-	//   1. Build the Catalog AI Projection from PostgreSQL (contract ① §6)
-	//   2. Token-count and split into batches (contract ② §2)
-	//   3. Evaluate each batch independently (contract ② §5-8)
-	//   4. Aggregate candidates and run Final Evaluation (contract ② §6)
-	//
-	// The Final Evaluation produces a new CustomerSalesProposal that replaces
-	// the initial one. This is the contract ② §9 flow:
-	//   Customer Message → Gemini → needs_catalog? → Catalog Evaluation
-	//   → Final Gemini → AI Proposal → Validation → Execution
-	//
-	// Per contract ② "ما أغلقناه": no semantic search, no product matching
-	// inside Mujeeb. Mujeeb only builds the projection and counts tokens.
-	fullCatalogRequired := proposal.Status == ports.CustomerSalesProposalStatusNeedsMoreData ||
-		proposal.Status == ports.CustomerSalesProposalStatusNotFound ||
-		proposalReferencesOutsideEvidence(proposal, catalogEvidence)
+	// Only Gemini's explicit capability request starts full catalog evaluation.
+	// Invalid references are rejected by validation; they never expand evidence.
+	fullCatalogRequired := out.Capability == ports.CustomerSalesCapabilityFullCatalog
 	if fullCatalogRequired && s.CatalogBatch == nil {
-		err := errors.New("full catalog evaluation is required before needs_more_data/not_found can be finalized, but CatalogBatchController is not configured")
+		err := errors.New("Gemini requested full catalog evaluation but CatalogBatchController is not configured")
 		s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), err.Error())
 		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
 	}
 	if s.CatalogBatch != nil && fullCatalogRequired {
 		resetGeminiInteraction = true
-		// Per contract ② §9, invoke catalog evaluation whenever Gemini
-		// says it needs more data — regardless of whether some evidence
-		// already exists. The fact that Gemini returned needs_more_data
-		// means the current context was insufficient; the batch
-		// evaluation will provide the FULL catalog for Gemini to reason over.
-		//
-		// Previous condition `len(builtContext.CatalogEvidence) == 0` was
-		// wrong: the ContextBuilder always puts 5 items in the evidence,
-		// so the condition was never true, and the batch evaluation never ran.
-		log.Printf("[AutoReply] CATALOG_EVAL_TRIGGER run=%s reason=%s current_evidence=%d", run.ID, proposal.Status, len(builtContext.CatalogEvidence))
-		// Catalog evaluation continues the current RUNNING phase. Validation
-		// happens after the final proposal; do not repeat RUNNING -> RUNNING.
-
+		log.Printf("[AutoReply] CATALOG_EVAL_TRIGGER run=%s capability=%s", run.ID, out.Capability)
 		// Per contract ② §9, run the full catalog evaluation pipeline.
 		entityContract := CatalogEntityContractPayload{}
 		if len(s.EntityContractPayload) == 0 {
@@ -378,7 +347,9 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	}
 
 	// Per contract ⑨ §3, mark VALIDATING.
-	s.markValidatingSafe(ctx, run)
+	if err := s.transitionRun(ctx, run, ports.AIRunStatusValidating); err != nil {
+		return commands.AutoReplyResult{}, err
+	}
 	log.Printf("[AutoReply] STATE→VALIDATING run=%s", run.ID)
 
 	// Per contract ⑥ §2, run the validation pipeline.
@@ -446,55 +417,37 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
 	}
 
-	// Per contract ⑥ §14, handoff for subscription/activation requests uses
-	// fixed Mujeeb-owned farewell (never model text). This is product routing,
-	// not reference resolution.
-	//
-	// Subscription/activation routing is structured model output. Mujeeb
-	// never infers it from response_text, avoiding text-based false positives.
-	farewellHandoff := false
-	var farewellReasonCodes []string
-	if proposal.Action == ports.CustomerSalesProposalActionHumanRequest &&
-		effective.PolicyDecision == "allowed" &&
-		proposal.RoutingReason == ports.CustomerSalesRoutingReasonSubscriptionActivation {
-		farewellHandoff = true
-		// Override the proposal's response text with the fixed farewell and
-		// the action to "answer" so the sendable check enqueues the message.
-		// Per contract ⑥ §14, handoff is governed by Mujeeb policy, not by
-		// Gemini prompt text — Mujeeb decides what to send.
-		proposal.ResponseText = HandoffFarewellMessage
-		proposal.Action = ports.CustomerSalesProposalActionAnswer
-		farewellReasonCodes = []string{"handoff_farewell_sent"}
-	}
-
 	now := s.now()
 	decisionID := s.id()
 
 	// Per contract ⑥ §17, persist the Effective Decision (or proposal if no
 	// validation ran).
 	decisionDraft := ports.AIDecisionDraft{
-		ID:                     decisionID,
-		BusinessID:             businessID,
-		ConversationID:         &conversationID,
-		SourceMessageReference: &sourceMessageRef,
-		IntentBase:             string(proposal.Status),
-		Entities:               []byte(`{}`),
-		EvidenceReferences:     encodeProposalSelectedAsJSON(proposal.Selected),
-		RequestedAction:        string(proposal.Action),
-		ConfidenceBand:         "medium",
-		RequiresHuman:          proposal.Action == ports.CustomerSalesProposalActionHumanRequest || farewellHandoff,
-		MissingInformation:     []byte(`[]`),
-		ReasonCodes:            encodeReasonCodes(farewellReasonCodes),
-		PolicyVersion:          policyVersion,
-		ModelReference:         stringPtr(out.Usage.Model),
-		SchemaVersion:          1,
-		Lifecycle:              "proposed",
-		PolicyDecision:         stringPtr(effective.PolicyDecision),
-		CorrelationID:          uuidStringPointer(command.Meta.CorrelationID),
-		CausationID:            uuidStringPointer(sourceMessageRef),
-		ExpiresAt:              pointerTo(now.Add(5 * time.Minute)),
-		CreatedAt:              now,
-		UpdatedAt:              now,
+		ID:                      decisionID,
+		BusinessID:              businessID,
+		ConversationID:          &conversationID,
+		SourceMessageReference:  &sourceMessageRef,
+		IntentBase:              string(proposal.Status),
+		Entities:                []byte(`{}`),
+		EvidenceReferences:      encodeProposalSelectedAsJSON(proposal.Selected),
+		RequestedAction:         string(proposal.Action),
+		ConfidenceBand:          "medium",
+		RequiresHuman:           proposal.Action == ports.CustomerSalesProposalActionHumanRequest,
+		MissingInformation:      []byte(`[]`),
+		ReasonCodes:             encodeReasonCodes(nil),
+		PolicyVersion:           policyVersion,
+		ModelReference:          stringPtr(out.Usage.Model),
+		SchemaVersion:           1,
+		Lifecycle:               "proposed",
+		PolicyDecision:          stringPtr(effective.PolicyDecision),
+		EffectiveAction:         stringPtr(effective.EffectiveAction),
+		EffectiveDecisionReason: stringPtr(effective.Reason),
+		AuthorizedAt:            effective.AuthorizedAt,
+		CorrelationID:           uuidStringPointer(command.Meta.CorrelationID),
+		CausationID:             uuidStringPointer(sourceMessageRef),
+		ExpiresAt:               pointerTo(now.Add(5 * time.Minute)),
+		CreatedAt:               now,
+		UpdatedAt:               now,
 	}
 	if run.ID != "" {
 		decisionDraft.AIRunID = &run.ID
@@ -515,7 +468,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		}
 		// Per contract ⑥ §17, if Effective Decision is "requires_approval",
 		// persist and wait for human approval — no execution.
-		if effective.PolicyDecision == "requires_approval" && !farewellHandoff {
+		if effective.PolicyDecision == "requires_approval" {
 			log.Printf("[AutoReply] POLICY_REQUIRES_APPROVAL run=%s decision_id=%s", run.ID, decision.ID)
 			// Transition conversation to waiting_human.
 			if s.Conversations != nil {
@@ -534,7 +487,12 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 
 		// Per contract ⑥ §19, Execution only after Authorization.
 		// Mark EXECUTING per contract ⑨ §3.
-		s.markExecutingSafe(ctx, run)
+		if err := s.transitionRun(txCtx, run, ports.AIRunStatusAuthorized); err != nil {
+			return err
+		}
+		if err := s.transitionRun(txCtx, run, ports.AIRunStatusExecuting); err != nil {
+			return err
+		}
 		log.Printf("[AutoReply] STATE→EXECUTING run=%s", run.ID)
 
 		// Per contract ③ §1, Mujeeb owns the conversation state. After a
@@ -570,10 +528,10 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			}
 		}
 
-		// Per contract ⑥ §21, only answer/clarification are customer-facing
-		// messaging actions. Lead/Order drafts follow their own flow.
+		// Replies, clarification and handoff all carry the model-written customer text.
 		sendable := proposal.Action == ports.CustomerSalesProposalActionAnswer ||
-			proposal.Action == ports.CustomerSalesProposalActionClarification
+			proposal.Action == ports.CustomerSalesProposalActionClarification ||
+			proposal.Action == ports.CustomerSalesProposalActionHumanRequest
 		if !sendable {
 			return nil
 		}
@@ -677,7 +635,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			if err := s.Conversations.UpdateLastGeminiInteractionID(ctx, businessID, conversationID, ""); err != nil {
 				log.Printf("[AutoReply] GEMINI_INTERACTION_ID_RESET_FAILED business=%s conversation=%s err=%v", businessID, conversationID, err)
 			}
-		case result.Enqueued && !farewellHandoff && interactionIDToPersist != "":
+		case result.Enqueued && interactionIDToPersist != "":
 			if err := s.Conversations.UpdateLastGeminiInteractionID(ctx, businessID, conversationID, interactionIDToPersist); err != nil {
 				log.Printf("[AutoReply] GEMINI_INTERACTION_ID_PERSIST_FAILED business=%s conversation=%s err=%v", businessID, conversationID, err)
 			}
@@ -845,28 +803,6 @@ func (s AutoReplyService) markRunningSafe(ctx context.Context, run ports.AIRunRe
 	}
 }
 
-func (s AutoReplyService) markValidatingSafe(ctx context.Context, run ports.AIRunRecord) {
-	if s.RunRepository == nil || run.ID == "" {
-		return
-	}
-	lc := NewAIRunLifecycle(s.RunRepository)
-	if _, err := lc.MarkValidating(ctx, run.BusinessID, run.ID); err != nil {
-		log.Printf("[AutoReply] LIFECYCLE_TRANSITION_FAILED business=%s run=%s transition=validating err=%v",
-			run.BusinessID, run.ID, err)
-	}
-}
-
-func (s AutoReplyService) markExecutingSafe(ctx context.Context, run ports.AIRunRecord) {
-	if s.RunRepository == nil || run.ID == "" {
-		return
-	}
-	lc := NewAIRunLifecycle(s.RunRepository)
-	if _, err := lc.MarkExecuting(ctx, run.BusinessID, run.ID); err != nil {
-		log.Printf("[AutoReply] LIFECYCLE_TRANSITION_FAILED business=%s run=%s transition=executing err=%v",
-			run.BusinessID, run.ID, err)
-	}
-}
-
 func (s AutoReplyService) markCompletedSafe(ctx context.Context, run ports.AIRunRecord) {
 	if s.RunRepository == nil || run.ID == "" {
 		return
@@ -956,15 +892,6 @@ func encodeProposalSelectedAsJSON(selected []ports.SelectedReference) []byte {
 // derefCustomerSalesContext safely dereferences a *ports.CustomerSalesContext, returning a zero
 // value if nil. Used when passing the context to CatalogBatchController
 // which expects a value (not a pointer).
-func proposalReferencesOutsideEvidence(proposal ports.CustomerSalesProposal, evidence ports.CatalogAIEvidenceSet) bool {
-	for _, ref := range proposal.Selected {
-		if !evidence.ContainsSelection(ref) {
-			return true
-		}
-	}
-	return false
-}
-
 func derefCustomerSalesContext(ctx *ports.CustomerSalesContext) ports.CustomerSalesContext {
 	if ctx == nil {
 		return ports.CustomerSalesContext{}
@@ -1266,11 +1193,16 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
 	// Per §6: record the per-execution row.
 	recordID := s.NewID()
 	correlationID := run.ID
-	// Per fix #5: count actual tool calls from the run repository
-	// instead of hardcoding 0. Uses the existing AIRunRepository +
-	// ListToolCalls (no new repository or trace system).
+	// The bounded capability path makes one selection directly, or a catalog
+	// request followed by one final selection. Preserve historical trace counting
+	// for callers returning the internal legacy proposal shape.
 	toolCallCount := 0
-	if s.RunRepository != nil && run.ID != "" {
+	if out.Capability != "" {
+		toolCallCount = 1
+		if out.Capability == ports.CustomerSalesCapabilityFullCatalog {
+			toolCallCount = 2
+		}
+	} else if s.RunRepository != nil && run.ID != "" {
 		if toolCalls, tcErr := s.RunRepository.ListToolCalls(ctx, run.ID); tcErr == nil {
 			toolCallCount = len(toolCalls)
 		}

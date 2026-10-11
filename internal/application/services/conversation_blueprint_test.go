@@ -2,8 +2,6 @@ package services
 
 import (
 	"context"
-	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
@@ -170,12 +168,9 @@ func TestRetrieveComparisonDoesNotBackendMatchSiblingCandidates(t *testing.T) {
 }
 
 // Explicit NO_REFERENCE resets a stale comparison but preserves focus/history.
-func TestAutoReplyHandoffFarewellOnSubscription(t *testing.T) {
+func TestAutoReplyHandoffPreservesModelResponse(t *testing.T) {
 	outbound := &fakeOutboundRepository{}
 	outbox := &fakeOutboxStore{}
-	// Per contract ④ §4, Gemini returns action=human_request with response_text
-	// containing "subscribe"/"activat"/"purchase" keywords (the system prompt
-	// instructs Gemini to use those words when handing off a subscription intent).
 	service := NewAutoReplyService(
 		&FakeCustomerSalesDecisionPort{Proposal: ports.CustomerSalesProposal{Status: ports.CustomerSalesProposalStatusResolved, Action: ports.CustomerSalesProposalActionHumanRequest, ResponseText: "model suggests subscribe", RoutingReason: ports.CustomerSalesRoutingReasonSubscriptionActivation}},
 		&fakeDecisionRepository{},
@@ -194,36 +189,20 @@ func TestAutoReplyHandoffFarewellOnSubscription(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
-	// Per contract ⑥ §14, the proposal.Action is human_request but the farewell
-	// flow overrides the action to "answer" (so it gets enqueued) and overrides
-	// ResponseText with the fixed HandoffFarewellMessage.
-	if !result.Enqueued || outbox.calls != 1 || result.Action != string(ports.CustomerSalesProposalActionAnswer) {
-		t.Fatalf("farewell must be enqueued, got %#v calls=%d", result, outbox.calls)
+	if !result.Enqueued || outbox.calls != 1 || result.Action != string(ports.CustomerSalesProposalActionHumanRequest) {
+		t.Fatalf("handoff must preserve its action and enqueue response, got %#v calls=%d", result, outbox.calls)
 	}
 	if !result.Decision.RequiresHuman {
-		t.Fatal("handoff decision must keep RequiresHuman for the dashboard")
+		t.Fatal("handoff must require human follow-up")
 	}
 	text, err := DecodeInlineTextContentReference(outbound.record.ContentReference)
-	if err != nil || text != HandoffFarewellMessage {
-		t.Fatalf("outbound must carry fixed farewell, got %q err=%v", text, err)
+	if err != nil || text != "model suggests subscribe" {
+		t.Fatalf("outbound must preserve Gemini text, got %q err=%v", text, err)
 	}
-	var reasons []string
-	_ = json.Unmarshal(result.Decision.ReasonCodes, &reasons)
-	found := false
-	for _, reason := range reasons {
-		if reason == "handoff_farewell_sent" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("reason codes must include handoff_farewell_sent: %v", reasons)
-	}
-	if !strings.Contains(HandoffFarewellMessage, "ممثلي المبيعات") {
-		t.Fatal("farewell template drifted from approved wording")
-	}
+
 }
 
-func TestAutoReplyHandoffFarewellBlockedWhenApprovalRequired(t *testing.T) {
+func TestAutoReplyHandoffBlockedWhenApprovalRequired(t *testing.T) {
 	outbox := &fakeOutboxStore{}
 	service := NewAutoReplyService(
 		&FakeCustomerSalesDecisionPort{Proposal: ports.CustomerSalesProposal{Status: ports.CustomerSalesProposalStatusResolved, Action: ports.CustomerSalesProposalActionHumanRequest, ResponseText: "model text"}},
@@ -234,6 +213,7 @@ func TestAutoReplyHandoffFarewellBlockedWhenApprovalRequired(t *testing.T) {
 		fakeTransactionManager{},
 	)
 	service.Validation = allowAllValidationPipeline()
+	service.Validation.CustomerSalesPolicy = stubCustomerSalesPolicy{decision: ports.CustomerSalesPolicyDecision{Decision: "requires_approval"}}
 	result, err := service.Handle(context.Background(), commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}}, ConversationID: "conversation-1", SourceMessageReference: "inbound-1", Text: "أريد الاشتراك", Channel: "whatsapp", ProviderRef: "socialapi"})
 	if err != nil {
 		t.Fatalf("Handle: %v", err)

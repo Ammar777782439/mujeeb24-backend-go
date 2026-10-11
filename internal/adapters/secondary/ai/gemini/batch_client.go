@@ -318,14 +318,15 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
 func (c *BatchClient) buildFinalEvaluateRequest(input services.FinalEvaluationInput, userPrompt string, rc *resolvedAIConfig) batchGeminiRequest {
 	return batchGeminiRequest{
 		Model:             "models/" + strings.TrimPrefix(rc.model, "models/"),
-		SystemInstruction: c.buildBatchSystemInstructionWithSuffix(input.EntityContract, prompts.FinalEvaluationSystemPromptSuffix),
+		SystemInstruction: finalCustomerSalesInstruction(input.EntityContract),
+		Tools:             customerSalesTokenTools(customerSalesTools(ports.CustomerSalesCapabilities(false))),
+		ToolConfig:        map[string]any{"functionCallingConfig": map[string]any{"mode": "ANY"}},
+		capabilityTools:   customerSalesTools(ports.CustomerSalesCapabilities(false)),
 		Contents: []batchContent{
 			{Role: "user", Parts: []batchPart{{Text: userPrompt}}},
 		},
 		GenerationConfig: batchGenerationConfig{
-			ResponseMimeType: "application/json",
-			ResponseSchema:   finalProposalResponseSchema(),
-			MaxOutputTokens:  rc.maxOutputTokens,
+			MaxOutputTokens: rc.maxOutputTokens,
 		},
 	}
 }
@@ -440,13 +441,28 @@ func (c *BatchClient) sendRequestWithConfig(ctx context.Context, reqBody batchGe
 	if err := json.Unmarshal(body, &interaction); err != nil {
 		return batchGeminiResponse{}, fmt.Errorf("decode batch interaction: %w", err)
 	}
-	if interaction.Status != "completed" {
+	if interaction.Status != "completed" && !(len(reqBody.capabilityTools) > 0 && interaction.Status == "requires_action") {
 		return batchGeminiResponse{}, fmt.Errorf("batch interaction did not complete: %s", interaction.Status)
 	}
-	raw, err := interactionOutputText(interaction)
-	if err != nil {
-		return batchGeminiResponse{}, err
+	var raw string
+	if len(reqBody.capabilityTools) > 0 {
+		_, proposal, parseErr := parseCustomerSalesCapability(interaction, reqBody.capabilityTools)
+		if parseErr != nil {
+			return batchGeminiResponse{}, parseErr
+		}
+		encoded, encodeErr := json.Marshal(proposal)
+		if encodeErr != nil {
+			return batchGeminiResponse{}, encodeErr
+		}
+		raw = string(encoded)
+	} else {
+		var textErr error
+		raw, textErr = interactionOutputText(interaction)
+		if textErr != nil {
+			return batchGeminiResponse{}, textErr
+		}
 	}
+
 	return batchGeminiResponse{Candidates: []batchCandidate{{Content: batchContent{Parts: []batchPart{{Text: raw}}}}}, UsageMetadata: batchUsageMetadata{PromptTokenCount: interaction.Usage.TotalInputTokens, CandidatesTokenCount: interaction.Usage.TotalOutputTokens, CachedContentTokenCount: interaction.Usage.TotalCachedTokens, TotalTokenCount: interaction.Usage.TotalTokens}}, nil
 }
 
@@ -526,14 +542,10 @@ func batchCandidateResponseSchema() map[string]any {
 	}
 }
 
-// finalProposalResponseSchema is the JSON Schema that enforces the contract
-// ④ §4 final proposal output shape (same as the regular proposal schema).
-func finalProposalResponseSchema() map[string]any {
-	return contractProposalResponseSchema()
-}
-
-// batchGeminiRequest is the countTokens compatibility representation of a batch.
 type batchGeminiRequest struct {
+	Tools             []map[string]any `json:"tools,omitempty"`
+	ToolConfig        map[string]any   `json:"toolConfig,omitempty"`
+	capabilityTools   []customerSalesTool
 	Model             string                `json:"model,omitempty"`
 	SystemInstruction *batchContent         `json:"systemInstruction,omitempty"`
 	Contents          []batchContent        `json:"contents"`
@@ -588,5 +600,13 @@ func batchInteractionRequest(request batchGeminiRequest, model string) interacti
 			input = append(input, part.Text)
 		}
 	}
-	return interactionRequest{Model: model, Store: false, Input: strings.Join(input, "\n\n"), SystemInstruction: strings.Join(system, "\n\n"), ResponseFormat: interactionResponseFormat{Type: "text", MimeType: "application/json", Schema: request.GenerationConfig.ResponseSchema}, GenerationConfig: interactionGenerationConfig{MaxOutputTokens: request.GenerationConfig.MaxOutputTokens}}
+	if len(request.capabilityTools) > 0 {
+		return interactionRequest{Model: model, Store: false, Input: strings.Join(input, "\n\n"), SystemInstruction: strings.Join(system, "\n\n"), Tools: request.capabilityTools, GenerationConfig: interactionGenerationConfig{MaxOutputTokens: request.GenerationConfig.MaxOutputTokens, ToolChoice: "any"}}
+	}
+	return interactionRequest{Model: model, Store: false, Input: strings.Join(input, "\n\n"), SystemInstruction: strings.Join(system, "\n\n"), ResponseFormat: &interactionResponseFormat{Type: "text", MimeType: "application/json", Schema: request.GenerationConfig.ResponseSchema}, GenerationConfig: interactionGenerationConfig{MaxOutputTokens: request.GenerationConfig.MaxOutputTokens}}
+}
+
+func finalCustomerSalesInstruction(contract services.CatalogEntityContractPayload) *batchContent {
+	encoded, _ := json.Marshal(contract)
+	return &batchContent{Role: "system", Parts: []batchPart{{Text: prompts.CustomerSalesSystemPrompt + prompts.FinalEvaluationSystemPromptSuffix}, {Text: "Catalog Entity Contract\n" + string(encoded)}}}
 }

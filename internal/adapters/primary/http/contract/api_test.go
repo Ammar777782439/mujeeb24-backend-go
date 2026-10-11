@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http/httptest"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/authorization"
@@ -84,7 +85,6 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
 	}
 }
 
-
 func TestGeneratedContractPermissionEnumsTrackAuthorizationRegistry(t *testing.T) {
 	api, _ := BuildAPI()
 	document, err := api.OpenAPI().DowngradeYAML()
@@ -94,20 +94,20 @@ func TestGeneratedContractPermissionEnumsTrackAuthorizationRegistry(t *testing.T
 
 	grantable := schemaBlock(t, document, "CreateTeamInvitationRequest")
 	for _, permission := range authorization.KnownPermissions() {
-		if !bytes.Contains(grantable, []byte("- "+permission)) {
+		if !schemaEnumContains(grantable, permission) {
 			t.Fatalf("grantable permission missing from generated contract: %s", permission)
 		}
 	}
-	if bytes.Contains(grantable, []byte("- "+authorization.PermissionAll)) {
+	if schemaEnumContains(grantable, authorization.PermissionAll) {
 		t.Fatal("owner wildcard must not be grantable through team invitation request")
 	}
 
 	effective := schemaBlock(t, document, "TeamMember")
-	if !bytes.Contains(effective, []byte("- "+authorization.PermissionAll)) {
+	if !schemaEnumContains(effective, authorization.PermissionAll) {
 		t.Fatal("effective team member permission enum must represent the owner wildcard")
 	}
 	for _, permission := range authorization.KnownPermissions() {
-		if !bytes.Contains(effective, []byte("- "+permission)) {
+		if !schemaEnumContains(effective, permission) {
 			t.Fatalf("effective permission missing from generated contract: %s", permission)
 		}
 	}
@@ -115,12 +115,16 @@ func TestGeneratedContractPermissionEnumsTrackAuthorizationRegistry(t *testing.T
 
 func schemaBlock(t *testing.T, document []byte, schemaName string) []byte {
 	t.Helper()
-	pattern := regexp.MustCompile("(?ms)^    " + regexp.QuoteMeta(schemaName) + ":\\n(.*?)(?=^    [A-Za-z0-9_]+:\\n)")
-	match := pattern.FindSubmatch(document)
-	if len(match) != 2 {
+	header := regexp.MustCompile("(?m)^    " + regexp.QuoteMeta(schemaName) + ":\n").FindIndex(document)
+	if header == nil {
 		t.Fatalf("schema %s not found in generated contract", schemaName)
 	}
-	return match[1]
+	body := document[header[1]:]
+	if next := regexp.MustCompile(`(?m)^(?:    [A-Za-z0-9_]+:|  [A-Za-z0-9_]+:|[A-Za-z0-9_]+:)`).FindIndex(body); next != nil {
+		body = body[:next[0]]
+	}
+	return body
+
 }
 
 func TestGeneratedContractHandlerSkeletonIsExplicitlyNotImplemented(t *testing.T) {
@@ -142,4 +146,24 @@ func TestBuildAPIRoutesUseV1Prefix(t *testing.T) {
 	if res.Code != 501 {
 		t.Fatalf("expected registered skeleton under /api/v1 to return 501, got %d", res.Code)
 	}
+}
+
+func TestSchemaBlockKeepsAdjacentAndLastSchemasSeparate(t *testing.T) {
+	document := []byte("components:\n  schemas:\n    First:\n      enum:\n        - first\n    Last:\n      enum:\n        - last\npaths:\n  /example: {}\n")
+	if block := schemaBlock(t, document, "First"); !bytes.Contains(block, []byte("- first")) || bytes.Contains(block, []byte("- last")) {
+		t.Fatalf("schema boundary lost: %s", block)
+	}
+	if block := schemaBlock(t, document, "Last"); !bytes.Contains(block, []byte("- last")) || bytes.Contains(block, []byte("paths:")) {
+		t.Fatalf("last schema boundary lost: %s", block)
+	}
+}
+
+func schemaEnumContains(block []byte, value string) bool {
+	for _, line := range strings.Split(string(block), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "- ") && strings.Trim(strings.TrimSpace(strings.TrimPrefix(line, "- ")), "\"'") == value {
+			return true
+		}
+	}
+	return false
 }

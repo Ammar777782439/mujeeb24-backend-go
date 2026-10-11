@@ -11,7 +11,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
-func TestCustomerSalesUsesInteractionsAPIAndChainsState(t *testing.T) {
+func TestCustomerSalesUsesSingleCapabilityAndCanonicalHistory(t *testing.T) {
 	var captured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/interactions" {
@@ -24,12 +24,7 @@ func TestCustomerSalesUsesInteractionsAPIAndChainsState(t *testing.T) {
 			t.Fatalf("decode request: %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{
-			"id":"int-2",
-			"status":"completed",
-			"steps":[{"type":"model_output","content":[{"type":"text","text":"{\"status\":\"resolved\",\"action\":\"answer\",\"response_text\":\"تم\",\"selected\":[]}" }]}],
-			"usage":{"total_input_tokens":21,"total_cached_tokens":4,"total_output_tokens":7,"total_tokens":28}
-		}`))
+		_, _ = w.Write([]byte(`{"id":"int-2","status":"requires_action","steps":[{"type":"function_call","id":"call-1","name":"reply_customer","arguments":{"response_text":"تم","selected":[]}}],"usage":{"total_input_tokens":21,"total_cached_tokens":4,"total_output_tokens":7,"total_tokens":28}}`))
 	}))
 	defer server.Close()
 
@@ -66,11 +61,11 @@ func TestCustomerSalesUsesInteractionsAPIAndChainsState(t *testing.T) {
 	if captured["model"] != "gemini-test" {
 		t.Fatalf("model mismatch: %#v", captured["model"])
 	}
-	if captured["previous_interaction_id"] != "int-1" {
-		t.Fatalf("previous_interaction_id mismatch: %#v", captured["previous_interaction_id"])
+	if _, ok := captured["previous_interaction_id"]; ok {
+		t.Fatal("terminal capability must use canonical history rather than unfinished provider calls")
 	}
-	if captured["store"] != true {
-		t.Fatalf("store must be true")
+	if captured["store"] != false {
+		t.Fatal("capability decision must be stateless")
 	}
 	if _, ok := captured["contents"]; ok {
 		t.Fatal("Interactions request must not use generateContent contents")
@@ -78,15 +73,18 @@ func TestCustomerSalesUsesInteractionsAPIAndChainsState(t *testing.T) {
 	if _, ok := captured["generationConfig"]; ok {
 		t.Fatal("Interactions request must use generation_config snake_case")
 	}
-	responseFormat, ok := captured["response_format"].(map[string]any)
-	if !ok || responseFormat["type"] != "text" || responseFormat["mime_type"] != "application/json" {
-		t.Fatalf("invalid response_format: %#v", captured["response_format"])
+	if _, ok := captured["response_format"]; ok {
+		t.Fatal("function calling must not use the old proposal schema")
 	}
-	if _, ok := responseFormat["schema"].(map[string]any); !ok {
-		t.Fatalf("response_format.schema missing")
+	tools, ok := captured["tools"].([]any)
+	if !ok || len(tools) != 3 {
+		t.Fatalf("executable tools missing: %#v", captured["tools"])
 	}
-	if out.GeminiInteraction.ResultingInteractionID != "int-2" {
-		t.Fatalf("resulting interaction id = %q", out.GeminiInteraction.ResultingInteractionID)
+	if captured["generation_config"].(map[string]any)["tool_choice"] != "any" {
+		t.Fatal("one capability selection must be required")
+	}
+	if out.GeminiInteraction.ResultingInteractionID != "" || out.Capability != ports.CustomerSalesCapabilityReply {
+		t.Fatalf("unexpected continuity/capability: %+v", out)
 	}
 	if out.Usage.InputTokens != 21 || out.Usage.CachedTokens != 4 || out.Usage.OutputTokens != 7 {
 		t.Fatalf("usage mismatch: %+v", out.Usage)
@@ -102,7 +100,7 @@ func TestCustomerSalesDropsPreviousInteractionWhenStoreDisabled(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		_, _ = w.Write([]byte(`{"id":"int-new","status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{\"status\":\"resolved\",\"action\":\"answer\",\"response_text\":\"ok\"}"}]}]}`))
+		_, _ = w.Write([]byte(`{"id":"int-new","status":"requires_action","steps":[{"type":"function_call","id":"call-2","name":"reply_customer","arguments":{"response_text":"ok"}}]}`))
 	}))
 	defer server.Close()
 
@@ -175,8 +173,8 @@ func TestStrictCustomerProposalRejectsUnknownSelectedFields(t *testing.T) {
 	}
 }
 
-func TestCustomerProposalSchemaDisallowsAdditionalProperties(t *testing.T) {
-	schema := contractProposalResponseSchema()
+func TestCustomerCapabilitySchemaDisallowsAdditionalProperties(t *testing.T) {
+	schema := customerSalesResponseParameters()
 	if schema["additionalProperties"] != false {
 		t.Fatalf("proposal schema must close top-level properties: %#v", schema["additionalProperties"])
 	}

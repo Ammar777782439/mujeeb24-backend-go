@@ -31,7 +31,7 @@
 //   4. ai_mode = 'restricted_auto':
 //      → action=answer: allowed IF allow_auto_reply=true
 //      → action=clarification: allowed IF allow_auto_reply=true
-//      → action=human_request: always allowed (handoff is always permitted)
+//      → action=human_request: customer text allowed IF allow_auto_reply=true
 //      → action=lead_draft: requires_approval IF allow_auto_lead_creation=false
 //      → action=order_draft: requires_approval IF allow_auto_transaction_draft=false
 //      → default_human_review=true overrides: requires_approval for all
@@ -157,18 +157,13 @@ func evaluatePolicyAgainstAction(policy ports.BusinessRuntimePolicyRecord, actio
 		}
 
 		switch action {
-		case "answer", "clarification":
+		case "answer", "clarification", "human_request":
 			// Per migration 000002: allow_auto_reply controls whether
 			// the AI can auto-send answers and clarifications.
 			if policy.AllowAutoReply {
 				return "allowed"
 			}
 			return "requires_approval"
-
-		case "human_request":
-			// Handoff is always permitted — it routes to a human, which is
-			// inherently safe per contract ⑥ §14.
-			return "allowed"
 
 		case "lead_draft":
 			// Per migration 000002: allow_auto_lead_creation controls whether

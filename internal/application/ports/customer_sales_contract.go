@@ -176,6 +176,8 @@ type CustomerSalesDecisionPort interface {
 
 // CustomerSalesDecisionInput is the complete request envelope for CustomerSalesDecisionPort.Decide.
 type CustomerSalesDecisionInput struct {
+	Capabilities []CustomerSalesCapability
+
 	// Request is the customer-facing business request and grounded Mujeeb context.
 	Request CustomerSalesDecisionRequest
 
@@ -191,6 +193,9 @@ type CustomerSalesDecisionInput struct {
 
 // CustomerSalesDecisionOutput is the output of CustomerSalesDecisionPort.Decide.
 type CustomerSalesDecisionOutput struct {
+	// Capability is the model-selected operation; Proposal is the internal persistence/validation shape.
+	Capability CustomerSalesCapability
+
 	// Proposal is the contract ④ §4 structured Gemini output.
 	Proposal CustomerSalesProposal
 

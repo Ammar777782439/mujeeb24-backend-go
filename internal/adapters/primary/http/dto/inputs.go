@@ -164,11 +164,11 @@ type AssignConversationRequest struct {
 	AssigneePrincipalID UUID `json:"assignee_principal_id" format:"uuid"`
 }
 type CreateTeamInvitationRequest struct {
-	Email          string   `json:"email" format:"email" minLength:"3" maxLength:"320"`
-	DisplayName    string   `json:"display_name" minLength:"1" maxLength:"200"`
-	Role           string   `json:"role" enum:"admin,manager,agent,analyst,viewer"`
+	Email          string               `json:"email" format:"email" minLength:"3" maxLength:"320"`
+	DisplayName    string               `json:"display_name" minLength:"1" maxLength:"200"`
+	Role           string               `json:"role" enum:"admin,manager,agent,analyst,viewer"`
 	Permissions    GrantablePermissions `json:"permissions" minItems:"1" maxItems:"32"`
-	ExpiresInHours int      `json:"expires_in_hours,omitempty" minimum:"1" maximum:"720"`
+	ExpiresInHours int                  `json:"expires_in_hours,omitempty" minimum:"1" maximum:"720"`
 }
 type InspectTeamInvitationRequest struct {
 	AcceptanceToken string `json:"acceptance_token" minLength:"1" maxLength:"200"`
@@ -188,7 +188,7 @@ type UpdateTeamMemberRoleRequest struct {
 	Role string `json:"role" enum:"admin,manager,agent,analyst,viewer"`
 }
 type UpdateTeamMemberAccessRequest struct {
-	Role        string   `json:"role" enum:"admin,manager,agent,analyst,viewer"`
+	Role        string               `json:"role" enum:"admin,manager,agent,analyst,viewer"`
 	Permissions GrantablePermissions `json:"permissions" minItems:"1" maxItems:"32"`
 }
 type LabelsRequest struct {

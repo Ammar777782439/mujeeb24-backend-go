@@ -118,35 +118,35 @@ type Business struct {
 	ResourceVersion string    `json:"resource_version"`
 }
 type BusinessMembership struct {
-	Business    Business `json:"business"`
-	Role        string   `json:"role"`
+	Business    Business    `json:"business"`
+	Role        string      `json:"role"`
 	Permissions Permissions `json:"permissions,omitempty"`
 }
 type TeamMember struct {
-	PrincipalID UUID     `json:"principal_id"`
-	Email       string   `json:"email" format:"email"`
-	DisplayName string   `json:"display_name"`
-	Role        string   `json:"role"`
+	PrincipalID UUID        `json:"principal_id"`
+	Email       string      `json:"email" format:"email"`
+	DisplayName string      `json:"display_name"`
+	Role        string      `json:"role"`
 	Permissions Permissions `json:"permissions"`
-	Status      string   `json:"status"`
+	Status      string      `json:"status"`
 }
 type TeamInvitation struct {
-	ID           UUID       `json:"id"`
-	BusinessID   UUID       `json:"business_id"`
-	BusinessName string     `json:"business_name,omitempty"`
-	Email        string     `json:"email" format:"email"`
-	DisplayName  string     `json:"display_name"`
-	Role         string     `json:"role"`
+	ID           UUID                 `json:"id"`
+	BusinessID   UUID                 `json:"business_id"`
+	BusinessName string               `json:"business_name,omitempty"`
+	Email        string               `json:"email" format:"email"`
+	DisplayName  string               `json:"display_name"`
+	Role         string               `json:"role"`
 	Permissions  GrantablePermissions `json:"permissions"`
-	Status       string     `json:"status"`
-	InvitedBy    UUID       `json:"invited_by"`
-	AcceptedBy   *UUID      `json:"accepted_by,omitempty"`
-	ExpiresAt    time.Time  `json:"expires_at"`
-	AcceptedAt   *time.Time `json:"accepted_at,omitempty"`
-	RevokedAt    *time.Time `json:"revoked_at,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	AccountState string     `json:"account_state,omitempty" enum:"new,existing"`
+	Status       string               `json:"status"`
+	InvitedBy    UUID                 `json:"invited_by"`
+	AcceptedBy   *UUID                `json:"accepted_by,omitempty"`
+	ExpiresAt    time.Time            `json:"expires_at"`
+	AcceptedAt   *time.Time           `json:"accepted_at,omitempty"`
+	RevokedAt    *time.Time           `json:"revoked_at,omitempty"`
+	CreatedAt    time.Time            `json:"created_at"`
+	UpdatedAt    time.Time            `json:"updated_at"`
+	AccountState string               `json:"account_state,omitempty" enum:"new,existing"`
 }
 type TeamInvitationCreated struct {
 	Invitation      TeamInvitation `json:"invitation"`

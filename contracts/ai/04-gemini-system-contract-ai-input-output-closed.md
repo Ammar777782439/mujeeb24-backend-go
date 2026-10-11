@@ -1,3 +1,5 @@
+> تعديل Customer Sales المعتمد في 2026-10-11: راجع [عقد القدرات v11](../../docs/architecture/customer-sales-capabilities-v11-ar.md). Gemini يختار القدرة عبر Function Calling؛ Proposal هو شكل داخلي للحفظ والتحقق. لا استبدال لنص handoff ولا تصنيف نوايا داخل مجيب.
+
  ④ Gemini System Contract + AI Input/Output Contract كعقد واحد، مع الحفاظ على قراراتنا السابقة وعدم اختراع مسؤوليات جديدة.
 
  العقد الموجود في ملفات المشروع، خصوصًا فصل AI Decision Contract وContext Builder، وثبّتُّ نقطة مهمة: requires_approval لا يجب أن يكون قرارًا صادرًا من Gemini؛ الـPolicyEvaluator في Mujeeb هو صاحب السلطة النهائية.

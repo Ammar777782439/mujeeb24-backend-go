@@ -21,6 +21,7 @@ import (
 // It returns the configured Proposal on every call, recording the input
 // arguments for assertions. Tests may set Error to simulate a provider failure.
 type FakeCustomerSalesDecisionPort struct {
+	Capability          ports.CustomerSalesCapability
 	Proposal            ports.CustomerSalesProposal
 	GeminiInteractionID string // returned as ResultingInteractionID
 	Error               error
@@ -50,7 +51,8 @@ func (f *FakeCustomerSalesDecisionPort) Decide(ctx context.Context, input ports.
 		return ports.CustomerSalesDecisionOutput{}, errors.New("text is required")
 	}
 	return ports.CustomerSalesDecisionOutput{
-		Proposal: f.Proposal,
+		Proposal:   f.Proposal,
+		Capability: f.Capability,
 		GeminiInteraction: ports.GeminiInteractionContext{
 			PreviousInteractionID:  input.GeminiInteraction.PreviousInteractionID,
 			ResultingInteractionID: f.GeminiInteractionID,

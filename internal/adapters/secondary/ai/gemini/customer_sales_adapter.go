@@ -1,20 +1,8 @@
-// Package gemini — Contract-aligned Gemini Client.
-//
-// Implements ports.CustomerSalesDecisionPort, the contract ④ §8 mapping of Mujeeb
-// Contract to Gemini API:
-//   - Mujeeb System Contract → system_instruction
-//   - Mujeeb Input Context → input (contents)
-//   - Catalog boundary → Structured Output (responseSchema)
-//   - Mujeeb Output Contract → CustomerSalesProposal
-//
-// Per contract ③ §4, supports Gemini Interactions API with previous_interaction_id
-// chaining (store=true per contract ③ §9). Per contract ⑤ §7, includes the
-// Catalog Entity Contract in system_instruction. Per contract ④ §4, enforces
-// Structured Output via responseSchema. Per contract ⑧ §8, captures usage
-// telemetry. Per contract ⑧ §9, captures latency.
-//
-// This adapter is the sole Gemini implementation of the customer-sales
-// decision capability. No generic AI execution path is used.
+// Package gemini implements bounded B2C capability selection.
+// Gemini understands the customer and selects one offered function.
+// The adapter returns a proposal for local validation, never executes tools.
+// Catalog evaluation is requested explicitly and runs in the application layer.
+// Canonical Mujeeb conversation history is sent on every stateless decision.
 
 package gemini
 
@@ -33,14 +21,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/prompts"
 )
 
-// GeminiCustomerSalesAdapter is the contract ④ §8 implementation of ports.CustomerSalesDecisionPort.
-//
-// It wraps an existing Client to reuse HTTP machinery (base URL, API key,
-// model, system prompt) but adds:
-//   - previous_interaction_id chaining per contract ③ §4
-//   - Catalog Entity Contract in system_instruction per contract ⑤ §7
-//   - Structured Output enforcement for CustomerSalesProposal per contract ④ §4
-//   - Usage telemetry capture for AI Trace per contract ⑧ §8
+// GeminiCustomerSalesAdapter selects an offered B2C capability through Gemini.
 type GeminiCustomerSalesAdapter struct {
 	base           *GeminiHTTPClient
 	httpClient     *http.Client
@@ -116,16 +97,7 @@ func NewGeminiCustomerSalesAdapter(base *GeminiHTTPClient) (*GeminiCustomerSales
 	}, nil
 }
 
-// Decide is the contract ④ §8 method implementing ports.CustomerSalesDecisionPort.
-//
-// Per contract ③ §4, it carries previous_interaction_id chaining via input.GeminiInteraction.
-// Per contract ⑤ §7, the Entity Contract is sent as part of system_instruction.
-// Per contract ④ §4, Structured Output enforces the CustomerSalesProposal shape.
-// Per contract ⑧ §8, usage telemetry is captured for AI Trace.
-//
-// Customer Sales uses the Interactions API; catalog evaluation runs in batches.
-//
-// This method is the Customer Sales decision adapter; no generic AI runtime is used.
+// Decide performs one bounded capability selection. It never executes side effects.
 func (c *GeminiCustomerSalesAdapter) Decide(ctx context.Context, input ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
 	if err := ctx.Err(); err != nil {
 		return ports.CustomerSalesDecisionOutput{}, err
@@ -152,15 +124,23 @@ func (c *GeminiCustomerSalesAdapter) decideInteraction(
 	rc *resolvedAIConfig,
 	startedAt time.Time,
 ) (ports.CustomerSalesDecisionOutput, error) {
-	previousID := strings.TrimSpace(input.GeminiInteraction.PreviousInteractionID)
-	if !input.GeminiInteraction.Store {
-		previousID = ""
-	}
 
 	interactionInput := buildUserPrompt(input.Request)
 	systemInstruction := c.buildContractSystemInstructionText(input.EntityContractPayload)
+	capabilities := input.Capabilities
+	if capabilities == nil {
+		capabilities = ports.CustomerSalesCapabilities(false)
+	}
+	tools := customerSalesTools(capabilities)
+	if len(tools) == 0 {
+		return ports.CustomerSalesDecisionOutput{}, errors.New("no customer sales capabilities available")
+	}
 	if rc.maxInputCharacters > 0 {
-		totalChars := len([]rune(interactionInput)) + len([]rune(systemInstruction))
+		encodedTools, encodeErr := json.Marshal(tools)
+		if encodeErr != nil {
+			return ports.CustomerSalesDecisionOutput{}, encodeErr
+		}
+		totalChars := len([]rune(interactionInput)) + len([]rune(systemInstruction)) + len([]rune(string(encodedTools)))
 		if totalChars > rc.maxInputCharacters {
 			return ports.CustomerSalesDecisionOutput{}, fmt.Errorf(
 				"customer sales interaction input exceeds %d characters after context and system instruction serialization: %d",
@@ -171,26 +151,18 @@ func (c *GeminiCustomerSalesAdapter) decideInteraction(
 	}
 
 	reqBody := interactionRequest{
-		Model:                 rc.model,
-		Input:                 interactionInput,
-		SystemInstruction:     systemInstruction,
-		PreviousInteractionID: previousID,
-		Store:                 input.GeminiInteraction.Store,
-		ResponseFormat: interactionResponseFormat{
-			Type:     "text",
-			MimeType: "application/json",
-			Schema:   contractProposalResponseSchema(),
-		},
-		GenerationConfig: interactionGenerationConfig{
-			MaxOutputTokens: rc.maxOutputTokens,
-		},
+		Model: rc.model, Input: interactionInput, SystemInstruction: systemInstruction,
+		Store: false,
+		Tools: tools, GenerationConfig: interactionGenerationConfig{MaxOutputTokens: rc.maxOutputTokens, ToolChoice: "any"},
 	}
+	// Terminal capability calls are interpreted locally, not continued as an agent loop.
+	// Canonical Mujeeb history is authoritative; never chain an unresolved function call.
 
 	resp, err := c.sendInteractionRequest(ctx, reqBody, rc)
 	if err != nil {
 		return ports.CustomerSalesDecisionOutput{}, err
 	}
-	if resp.Status != "completed" {
+	if resp.Status != "completed" && resp.Status != "requires_action" {
 		reason := resp.Status
 		if len(resp.Errors) > 0 && strings.TrimSpace(resp.Errors[0].Message) != "" {
 			reason += ": " + resp.Errors[0].Message
@@ -198,22 +170,19 @@ func (c *GeminiCustomerSalesAdapter) decideInteraction(
 		return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("gemini interaction did not complete: %s", reason)
 	}
 
-	raw, err := interactionOutputText(resp)
+	capability, proposal, err := parseCustomerSalesCapability(resp, tools)
 	if err != nil {
 		return ports.CustomerSalesDecisionOutput{}, err
-	}
-	var proposal ports.CustomerSalesProposal
-	if err := decodeStrictStructuredJSON([]byte(raw), &proposal); err != nil {
-		return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("decode interaction structured output: %w", err)
 	}
 
 	latencyMs := time.Since(startedAt).Milliseconds()
 	return ports.CustomerSalesDecisionOutput{
-		Proposal: proposal,
+		Proposal:   proposal,
+		Capability: capability,
 		GeminiInteraction: ports.GeminiInteractionContext{
-			PreviousInteractionID:  previousID,
-			ResultingInteractionID: resp.ID,
-			Store:                  input.GeminiInteraction.Store,
+			PreviousInteractionID:  "",
+			ResultingInteractionID: "",
+			Store:                  false,
 		},
 		Usage: ports.CustomerSalesUsageTelemetry{
 			InputTokens:         resp.Usage.TotalInputTokens,
@@ -309,68 +278,14 @@ func interactionOutputText(resp interactionResponse) (string, error) {
 	return "", errors.New("gemini interaction completed without model text output")
 }
 
-// contractProposalResponseSchema is the JSON Schema that enforces the contract
-// ④ §4 output shape via Gemini's responseSchema field.
-//
-// The contract response schema is shared by contract-aligned AI calls.
-func contractProposalResponseSchema() map[string]any {
-	return map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
-			"status": map[string]any{
-				"type": "string",
-				"enum": []string{
-					string(ports.CustomerSalesProposalStatusResolved),
-					string(ports.CustomerSalesProposalStatusAmbiguous),
-					string(ports.CustomerSalesProposalStatusNotFound),
-					string(ports.CustomerSalesProposalStatusNeedsMoreData),
-				},
-			},
-			"action": map[string]any{
-				"type": "string",
-				"enum": []string{
-					string(ports.CustomerSalesProposalActionAnswer),
-					string(ports.CustomerSalesProposalActionClarification),
-					string(ports.CustomerSalesProposalActionHumanRequest),
-					string(ports.CustomerSalesProposalActionLeadDraft),
-					string(ports.CustomerSalesProposalActionOrderDraft),
-				},
-			},
-			"response_text": map[string]any{"type": "string"},
-			"routing_reason": map[string]any{
-				"type": "string",
-				"enum": []string{
-					string(ports.CustomerSalesRoutingReasonSubscriptionActivation),
-					string(ports.CustomerSalesRoutingReasonCustomerRequestedHuman),
-					string(ports.CustomerSalesRoutingReasonOther),
-				},
-			},
-			"selected": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type":                 "object",
-					"additionalProperties": false,
-					"properties": map[string]any{
-						"item_id":    map[string]any{"type": "string"},
-						"variant_id": map[string]any{"type": "string"},
-						"offer_id":   map[string]any{"type": "string"},
-					},
-					"required": []string{"item_id"},
-				},
-			},
-		},
-		"required": []string{"status", "action", "response_text"},
-	}
-}
-
 type interactionRequest struct {
 	Model                 string                      `json:"model"`
 	Input                 string                      `json:"input"`
 	SystemInstruction     string                      `json:"system_instruction,omitempty"`
 	PreviousInteractionID string                      `json:"previous_interaction_id,omitempty"`
 	Store                 bool                        `json:"store"`
-	ResponseFormat        interactionResponseFormat   `json:"response_format"`
+	ResponseFormat        *interactionResponseFormat  `json:"response_format,omitempty"`
+	Tools                 []customerSalesTool         `json:"tools,omitempty"`
 	GenerationConfig      interactionGenerationConfig `json:"generation_config,omitempty"`
 }
 
@@ -381,7 +296,8 @@ type interactionResponseFormat struct {
 }
 
 type interactionGenerationConfig struct {
-	MaxOutputTokens int `json:"max_output_tokens,omitempty"`
+	MaxOutputTokens int    `json:"max_output_tokens,omitempty"`
+	ToolChoice      string `json:"tool_choice,omitempty"`
 }
 
 type interactionResponse struct {
@@ -393,8 +309,11 @@ type interactionResponse struct {
 }
 
 type interactionStep struct {
-	Type    string               `json:"type"`
-	Content []interactionContent `json:"content,omitempty"`
+	ID        string               `json:"id,omitempty"`
+	Name      string               `json:"name,omitempty"`
+	Arguments json.RawMessage      `json:"arguments,omitempty"`
+	Type      string               `json:"type"`
+	Content   []interactionContent `json:"content,omitempty"`
 }
 
 type interactionContent struct {

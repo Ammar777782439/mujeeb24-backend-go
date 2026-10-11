@@ -158,7 +158,7 @@ type TokenCounter interface {
 // Returns the final CustomerSalesProposal (post-Final-Evaluation) on success.
 // On failure, returns the failure stage + category for ai_runs.failure_*.
 func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input CatalogEvaluationInput) (CatalogEvaluationResult, error) {
-	if c.Gemini == nil || c.RunRepo == nil || c.CatalogAI == nil {
+	if c == nil || c.Gemini == nil || c.RunRepo == nil || c.CatalogAI == nil || c.Now == nil || c.NewID == nil {
 		return CatalogEvaluationResult{}, errors.New("CatalogBatchController is not fully wired per contract ② §1")
 	}
 	if _, ok := c.Gemini.(ExactBatchTokenCounter); !ok && c.TokenCounter == nil {

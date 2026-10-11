@@ -140,6 +140,12 @@ func (l *AIRunLifecycle) MarkValidating(ctx context.Context, businessID, runID s
 	return l.transition(ctx, businessID, runID, patch, []string{ports.AIRunStatusRunning})
 }
 
+// MarkAuthorized records the successful policy/authorization gate before execution.
+func (l *AIRunLifecycle) MarkAuthorized(ctx context.Context, businessID, runID string) (ports.AIRunRecord, error) {
+	now := l.Now()
+	return l.transition(ctx, businessID, runID, ports.AIRunStatusPatch{Status: ports.AIRunStatusAuthorized, AuthorizedAt: &now}, []string{ports.AIRunStatusValidating})
+}
+
 // MarkExecuting transitions AUTHORIZED → EXECUTING.
 // Per contract ⑥ §19, Execution only starts after Authorization.
 func (l *AIRunLifecycle) MarkExecuting(ctx context.Context, businessID, runID string) (ports.AIRunRecord, error) {
@@ -171,6 +177,13 @@ func (l *AIRunLifecycle) MarkCompleted(ctx context.Context, businessID, runID st
 		ports.AIRunStatusValidating,
 		ports.AIRunStatusAuthorized,
 	})
+}
+
+// CancelBeforeModel ends a turn when canonical conversation state requires a human.
+// No model call, authorization or business execution has occurred.
+func (l *AIRunLifecycle) CancelBeforeModel(ctx context.Context, businessID, runID string) (ports.AIRunRecord, error) {
+	now := l.Now()
+	return l.transition(ctx, businessID, runID, ports.AIRunStatusPatch{Status: ports.AIRunStatusCancelled, CancelledAt: &now}, []string{ports.AIRunStatusReceived, ports.AIRunStatusContextBuilt})
 }
 
 // MarkFailed transitions any non-terminal state → FAILED.
