@@ -79,6 +79,38 @@ func TestRequireScopeRejectsMismatch(t *testing.T) {
 	}
 }
 
+func TestRequireScopeRejectsMissingOperationPermission(t *testing.T) {
+	server := NewServer(Dependencies{Scope: fakeScope{actor: commands.ActorContext{
+		PrincipalID: "principal-1", BusinessID: "business-1", Role: "agent",
+		Permissions: []string{"conversations:read"},
+	}}})
+	ctx := context.WithValue(context.Background(), operationIDContextKey{}, "assignConversation")
+	_, err := server.requireScope(ctx, "business-1")
+	if err == nil {
+		t.Fatal("expected missing permission error")
+	}
+	var typed *appErrors.Error
+	if !asApplicationError(err, &typed) || typed.Code != appErrors.CodeForbidden {
+		t.Fatalf("expected forbidden missing permission, got %v", err)
+	}
+}
+
+func TestRequireScopeDefaultsToDenyForUnclassifiedOperation(t *testing.T) {
+	server := NewServer(Dependencies{Scope: fakeScope{actor: commands.ActorContext{
+		PrincipalID: "principal-1", BusinessID: "business-1", Role: "admin",
+		Permissions: []string{"*"},
+	}}})
+	ctx := context.WithValue(context.Background(), operationIDContextKey{}, "newUnclassifiedMerchantOperation")
+	_, err := server.requireScope(ctx, "business-1")
+	if err == nil {
+		t.Fatal("expected default-deny error")
+	}
+	var typed *appErrors.Error
+	if !asApplicationError(err, &typed) || typed.Code != appErrors.CodeForbidden {
+		t.Fatalf("expected forbidden unclassified operation, got %v", err)
+	}
+}
+
 func TestCommandMetaPreservesOpaqueIfMatchAndIdempotency(t *testing.T) {
 	actor := commands.ActorContext{PrincipalID: "principal-1", BusinessID: "business-1"}
 	meta := commandMeta(context.Background(), actor, contract.CommandHeaders{IfMatch: "\"opaque-v4\"", IdempotencyKey: "idem-1", XRequestID: "req-1", XCorrelationID: "corr-1"})
@@ -231,7 +263,7 @@ func TestAssignConversationHTTPUsesAssigneePrincipalID(t *testing.T) {
 		ResourceVersion: "2",
 	}}}
 	server := NewServer(Dependencies{
-		Scope:              fakeScope{actor: commands.ActorContext{BusinessID: "00000000-0000-0000-0000-000000000001", PrincipalID: "00000000-0000-0000-0000-000000000100", Role: "manager"}},
+		Scope:              fakeScope{actor: commands.ActorContext{BusinessID: "00000000-0000-0000-0000-000000000001", PrincipalID: "00000000-0000-0000-0000-000000000100", Role: "manager", Permissions: []string{"conversations:assign"}}},
 		AssignConversation: handler,
 	})
 	_, mux := contract.BuildAPIWithHandlers(server)
@@ -293,7 +325,7 @@ func TestUpdateConversationHTTPDispatchesCorrectly(t *testing.T) {
 		ResourceVersion: "4",
 	}}}
 	server := NewServer(Dependencies{
-		Scope:              fakeScope{actor: commands.ActorContext{BusinessID: "00000000-0000-0000-0000-000000000001", PrincipalID: "00000000-0000-0000-0000-000000000100", Role: "agent"}},
+		Scope:              fakeScope{actor: commands.ActorContext{BusinessID: "00000000-0000-0000-0000-000000000001", PrincipalID: "00000000-0000-0000-0000-000000000100", Role: "agent", Permissions: []string{"conversations:assign"}}},
 		UpdateConversation: handler,
 	})
 	_, mux := contract.BuildAPIWithHandlers(server)

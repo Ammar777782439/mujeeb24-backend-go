@@ -37,7 +37,7 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
 			t.Fatalf("Inbox V1 operation is missing: %s", expected)
 		}
 	}
-	for _, expected := range []string{"listTeamMembers", "createTeamInvitation", "acceptTeamInvitation", "updateTeamMemberRole", "revokeTeamMember"} {
+	for _, expected := range []string{"listTeamMembers", "createTeamInvitation", "listTeamInvitations", "inspectTeamInvitation", "acceptNewTeamInvitation", "acceptTeamInvitation", "revokeTeamInvitation", "resendTeamInvitation", "updateTeamMemberRole", "updateTeamMemberAccess", "revokeTeamMember", "platformCreateTeamInvitation"} {
 		if !bytes.Contains(document, []byte("operationId: "+expected)) {
 			t.Fatalf("team operation is missing: %s", expected)
 		}
@@ -62,9 +62,10 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
 	// Gap fix: POST /platform/businesses (create business) added. Total = 134.
 	// AI Provider Configuration: 6 endpoints added. Total = 140.
 	// Business owner assignment adds 1 platform business lifecycle endpoint. Total = 141.
+	// Later contract work brought the baseline to 144; token-based team invitations add 7. Total = 151.
 	operationIDs := regexp.MustCompile(`(?m)^\s+operationId: ([A-Za-z0-9_]+)$`).FindAllSubmatch(document, -1)
-	if len(operationIDs) != 144 {
-		t.Fatalf("generated %d operations, want 144", len(operationIDs))
+	if len(operationIDs) != 151 {
+		t.Fatalf("generated %d operations, want 151", len(operationIDs))
 	}
 	for _, op := range []string{"previewChannelHistoryPurge", "purgeChannelHistory"} {
 		if !bytes.Contains(document, []byte("operationId: "+op)) {

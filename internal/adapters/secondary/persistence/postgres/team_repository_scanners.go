@@ -45,6 +45,7 @@ func scanTeamInvitation(row scanRow) (ports.TeamInvitationRecord, error) {
 		&item.ID,
 		&item.BusinessID,
 		&item.Email,
+		&item.DisplayName,
 		&item.Role,
 		&rawPermissions,
 		&item.TokenHash,
@@ -56,6 +57,39 @@ func scanTeamInvitation(row scanRow) (ports.TeamInvitationRecord, error) {
 		&item.RevokedAt,
 		&item.CreatedAt,
 		&item.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return item, &RepositoryError{Operation: "team.invitation", Kind: RepositoryNotFound, Err: err}
+		}
+		return item, &RepositoryError{Operation: "team.invitation", Kind: RepositoryInvalid, Err: err}
+	}
+	if err := json.Unmarshal(rawPermissions, &item.Permissions); err != nil {
+		return item, err
+	}
+	return item, nil
+}
+
+func scanTeamInvitationMetadata(row scanRow) (ports.TeamInvitationRecord, error) {
+	var item ports.TeamInvitationRecord
+	var rawPermissions []byte
+	if err := row.Scan(
+		&item.ID,
+		&item.BusinessID,
+		&item.Email,
+		&item.DisplayName,
+		&item.Role,
+		&rawPermissions,
+		&item.TokenHash,
+		&item.Status,
+		&item.InvitedBy,
+		&item.AcceptedBy,
+		&item.ExpiresAt,
+		&item.AcceptedAt,
+		&item.RevokedAt,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+		&item.BusinessName,
+		&item.AccountState,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return item, &RepositoryError{Operation: "team.invitation", Kind: RepositoryNotFound, Err: err}

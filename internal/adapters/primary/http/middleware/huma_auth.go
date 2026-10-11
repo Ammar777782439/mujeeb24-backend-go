@@ -98,7 +98,9 @@ func isPublicAPIPath(path string) bool {
 	// Remove it from the public allowlist. Operators who want public metrics
 	// should expose them via a separate /metrics route behind a reverse-proxy
 	// with IP allowlisting or basic auth — NOT via this application layer.
-	return path == "/api/v1/auth/login" || path == "/api/v1/auth/refresh" || path == "/api/v1/health/live" || path == "/api/v1/health/ready" || strings.HasPrefix(path, "/api/v1/webhooks/")
+	return path == "/api/v1/auth/login" || path == "/api/v1/auth/refresh" ||
+		path == "/api/v1/auth/invitations/inspect" || path == "/api/v1/auth/invitations/accept-new-account" ||
+		path == "/api/v1/health/live" || path == "/api/v1/health/ready" || strings.HasPrefix(path, "/api/v1/webhooks/")
 }
 
 func writeHumaUnauthorized(ctx huma.Context, message string) {

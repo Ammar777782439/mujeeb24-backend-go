@@ -36,11 +36,13 @@ func TestTeamRepositoriesAgainstPostgres(t *testing.T) {
 		inviteeID         = "49000000-0000-0000-0000-000000000011"
 		wrongInviteeID    = "49000000-0000-0000-0000-000000000012"
 		platformPrincipal = "49000000-0000-0000-0000-000000000013"
+		newInviteeID      = "49000000-0000-0000-0000-000000000014"
 		invitationID      = "49000000-0000-0000-0000-000000000020"
+		newInvitationID   = "49000000-0000-0000-0000-000000000021"
 	)
 	pool := adapter.Pool()
-	cleanupTeamRepositoryFixture(t, pool, businessID, []string{ownerID, inviteeID, wrongInviteeID, platformPrincipal})
-	defer cleanupTeamRepositoryFixture(t, pool, businessID, []string{ownerID, inviteeID, wrongInviteeID, platformPrincipal})
+	cleanupTeamRepositoryFixture(t, pool, businessID, []string{ownerID, inviteeID, wrongInviteeID, platformPrincipal, newInviteeID})
+	defer cleanupTeamRepositoryFixture(t, pool, businessID, []string{ownerID, inviteeID, wrongInviteeID, platformPrincipal, newInviteeID})
 
 	now := time.Date(2026, 8, 28, 11, 0, 0, 0, time.UTC)
 	if _, err := pool.Exec(ctx, `
@@ -66,8 +68,9 @@ func TestTeamRepositoriesAgainstPostgres(t *testing.T) {
 		ID:          invitationID,
 		BusinessID:  businessID,
 		Email:       "Agent@Team.Example.Test",
+		DisplayName: "Agent",
 		Role:        "agent",
-		Permissions: []string{},
+		Permissions: []string{"conversations:read"},
 		TokenHash:   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		InvitedBy:   ownerID,
 		ExpiresAt:   now.Add(24 * time.Hour),
@@ -76,6 +79,30 @@ func TestTeamRepositoriesAgainstPostgres(t *testing.T) {
 	})
 	if err != nil || invitation.Email != "agent@team.example.test" || invitation.Status != "pending" {
 		t.Fatalf("create invitation: record=%#v err=%v", invitation, err)
+	}
+	newInvitation, err := team.CreateInvitation(ctx, ports.TeamInvitationCreate{
+		ID: newInvitationID, BusinessID: businessID, Email: "new-agent@team.example.test", DisplayName: "New Agent",
+		Role: "agent", Permissions: []string{"conversations:read", "conversations:reply"},
+		TokenHash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		InvitedBy: ownerID, ExpiresAt: now.Add(24 * time.Hour), CreatedAt: now, UpdatedAt: now,
+	})
+	if err != nil {
+		t.Fatalf("create new-account invitation: %v", err)
+	}
+	inspected, err := team.InspectInvitation(ctx, newInvitation.TokenHash, now.Add(time.Minute))
+	if err != nil || inspected.AccountState != "new" || inspected.BusinessName != "Team Integration" {
+		t.Fatalf("inspect new-account invitation: record=%#v err=%v", inspected, err)
+	}
+	acceptedNew, err := team.AcceptInvitationNewAccount(ctx, ports.TeamInvitationNewAccountAcceptance{
+		TokenHash: newInvitation.TokenHash, PrincipalID: newInviteeID, DisplayName: "New Agent Chosen",
+		PasswordHash: "$2a$10$new-agent-placeholder", AcceptedAt: now.Add(2 * time.Minute),
+	})
+	if err != nil || acceptedNew.Status != "accepted" || acceptedNew.AcceptedBy == nil || *acceptedNew.AcceptedBy != newInviteeID {
+		t.Fatalf("accept new-account invitation: record=%#v err=%v", acceptedNew, err)
+	}
+	newMember, err := team.ResolveActiveMember(ctx, businessID, newInviteeID)
+	if err != nil || newMember.DisplayName != "New Agent Chosen" || len(newMember.Permissions) != 2 {
+		t.Fatalf("new-account membership: record=%#v err=%v", newMember, err)
 	}
 
 	if _, err := team.AcceptInvitation(ctx, ports.TeamInvitationAcceptance{TokenHash: invitation.TokenHash, PrincipalID: wrongInviteeID, AcceptedAt: now.Add(time.Minute)}); !IsRepositoryKind(err, RepositoryNotFound) {

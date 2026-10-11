@@ -16,7 +16,7 @@ import (
 type ConversationRuntimeService struct {
 	Repository   ports.ConversationRuntimeRepository
 	Reader       ports.ConversationRepository
-	Assignees    ports.TeamRepository
+	Assignees    ports.TeamMemberResolver
 	Labels       ports.ConversationLabelRepository
 	References   ports.ConversationReferenceRepository
 	Messages     ports.MessageRepository

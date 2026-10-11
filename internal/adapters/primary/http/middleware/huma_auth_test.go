@@ -67,6 +67,8 @@ func TestRequirePlatformAdminHumaBypassesMerchantPaths(t *testing.T) {
 		{"business transactions", "/api/v1/businesses/abc-123/transactions"},
 		{"webhook path (public)", "/api/v1/webhooks/socialapi/route-key"},
 		{"health (public)", "/api/v1/health/live"},
+		{"invitation inspect (public)", "/api/v1/auth/invitations/inspect"},
+		{"new-account invitation acceptance (public)", "/api/v1/auth/invitations/accept-new-account"},
 	}
 
 	for _, tc := range cases {

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/authorization"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/queries"
@@ -54,8 +55,13 @@ type Dependencies struct {
 	CreateAutomationRule         commands.CreateAutomationRuleHandler
 	UpdateAutomationRule         commands.UpdateAutomationRuleHandler
 	InviteTeamMember             commands.InviteTeamMemberHandler
+	PlatformInviteTeamMember     commands.InviteTeamMemberHandler
 	AcceptTeamInvitation         commands.AcceptTeamInvitationHandler
+	AcceptNewTeamInvitation      commands.AcceptNewTeamInvitationHandler
+	RevokeTeamInvitation         commands.RevokeTeamInvitationHandler
+	ResendTeamInvitation         commands.ResendTeamInvitationHandler
 	UpdateTeamMemberRole         commands.UpdateTeamMemberRoleHandler
+	UpdateTeamMemberAccess       commands.UpdateTeamMemberAccessHandler
 	RevokeTeamMember             commands.RevokeTeamMemberHandler
 	CreateCatalog                commands.CreateCatalogHandler
 	UpdateCatalog                commands.UpdateCatalogHandler
@@ -92,6 +98,8 @@ type Dependencies struct {
 	ListCannedReplies         queries.ListCannedRepliesHandler
 	ListAutomationRules       queries.ListAutomationRulesHandler
 	ListTeamMembers           queries.ListTeamMembersHandler
+	ListTeamInvitations       queries.ListTeamInvitationsHandler
+	InspectTeamInvitation     queries.InspectTeamInvitationHandler
 	ListCustomerConversations queries.ListCustomerConversationsHandler
 	ListCustomerTransactions  queries.ListCustomerTransactionsHandler
 	ListCatalogs              queries.ListCatalogsHandler
@@ -127,6 +135,8 @@ type Server struct {
 	idempotency         *IdempotencyStore
 }
 
+type operationIDContextKey struct{}
+
 func NewServer(deps Dependencies) *Server {
 	return &Server{deps: deps, idempotency: NewIdempotencyStore()}
 }
@@ -149,6 +159,15 @@ func (s *Server) requireScope(ctx context.Context, businessID contract.UUID) (co
 	}
 	if actor.BusinessID != commands.BusinessID(businessID) {
 		return commands.ActorContext{}, appErrors.New(appErrors.CodeForbidden, "business scope mismatch")
+	}
+	if operationID, ok := ctx.Value(operationIDContextKey{}).(string); ok && operationID != "" {
+		permission, classified := authorization.RequiredForOperation(operationID)
+		if !classified {
+			return commands.ActorContext{}, appErrors.New(appErrors.CodeForbidden, "operation is not classified in the permission registry")
+		}
+		if !authorization.Has(actor, permission) {
+			return commands.ActorContext{}, appErrors.New(appErrors.CodeForbidden, "required permission is missing: "+permission)
+		}
 	}
 	return actor, nil
 }
@@ -330,6 +349,7 @@ func singleMessage(v commands.MessageView) *contract.Single[contract.Message] {
 // Application dependency yet still fail through the Application error boundary,
 // never through a contract-local generic handler.
 func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (any, error) {
+	ctx = context.WithValue(ctx, operationIDContextKey{}, operationID)
 	// Platform operations (operationID starts with "platform") are dispatched
 	// FIRST so they bypass merchant requireScope (which would 403 a platform
 	// super admin because they have no business_memberships row).

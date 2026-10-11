@@ -18,7 +18,7 @@ type InboundAutomationService struct {
 	Conversations ports.ConversationRuntimeRepository
 	Reader        ports.ConversationRepository
 	Labels        ports.ConversationLabelRepository
-	Assignees     ports.TeamRepository
+	Assignees     ports.TeamMemberResolver
 	Transactions  ports.TransactionManager
 	Now           func() time.Time
 	NewID         func() string

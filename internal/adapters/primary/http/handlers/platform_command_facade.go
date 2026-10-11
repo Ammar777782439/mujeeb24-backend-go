@@ -11,6 +11,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/dto"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/middleware"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
@@ -162,6 +163,8 @@ func (s *Server) dispatchPlatformCommandInner(ctx context.Context, operationID s
 		return s.platformCreateBusiness(ctx, input.(*dto.CreateBusinessInput))
 	case "platformAssignBusinessOwner":
 		return s.platformAssignBusinessOwner(ctx, input.(*dto.AssignBusinessOwnerInput))
+	case "platformCreateTeamInvitation":
+		return s.platformCreateTeamInvitation(ctx, input.(*dto.PlatformTeamInvitationCreateInput))
 	case "platformListBusinesses":
 		return s.platformListBusinesses(ctx, input.(*dto.PlatformBusinessListInput))
 	case "platformGetBusiness":
@@ -581,6 +584,38 @@ func (s *Server) platformAssignBusinessOwner(ctx context.Context, in *dto.Assign
 		Role:           result.Role,
 		BusinessStatus: result.BusinessStatus,
 	}
+	return out, true
+}
+
+func (s *Server) platformCreateTeamInvitation(ctx context.Context, in *dto.PlatformTeamInvitationCreateInput) (any, bool) {
+	if s.deps.PlatformInviteTeamMember == nil {
+		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "platform team invitation service is not wired")), true
+	}
+	adminID, ok := middleware.PlatformAdminID(ctx)
+	if !ok {
+		return mapApplicationError(appErrors.New(appErrors.CodeForbidden, "platform super admin scope required")), true
+	}
+	result, err := s.deps.PlatformInviteTeamMember.Handle(ctx, commands.InviteTeamMemberCommand{
+		Meta: commands.CommandMeta{
+			Actor:     commands.ActorContext{PrincipalID: adminID, BusinessID: commands.BusinessID(in.BusinessID), Role: "platform_super_admin"},
+			RequestID: in.XRequestID, CorrelationID: in.XCorrelationID, IdempotencyKey: in.IdempotencyKey,
+		},
+		Email: in.Body.Email, DisplayName: in.Body.DisplayName, Role: in.Body.Role,
+		Permissions: in.Body.Permissions, ExpiresIn: time.Duration(in.Body.ExpiresInHours) * time.Hour,
+	})
+	if err != nil {
+		failureCode := classifyPlatformRepoErrorKind(err)
+		businessID := string(in.BusinessID)
+		s.appendPlatformAudit(ctx, "team.invitation.created", "team_invitation", nil, &businessID, "FAILURE", failureCode, map[string]any{"email": in.Body.Email})
+		return mapApplicationError(err), true
+	}
+	businessID := string(in.BusinessID)
+	invitationID := string(result.Invitation.ID)
+	s.appendPlatformAudit(ctx, "team.invitation.created", "team_invitation", &invitationID, &businessID, "SUCCESS", "", map[string]any{
+		"email": result.Invitation.Email, "role": result.Invitation.Role, "permissions": result.Invitation.Permissions,
+	})
+	out := &contract.Single[contract.TeamInvitationCreated]{}
+	out.Body.Data = teamInvitationCreatedProjection(result)
 	return out, true
 }
 

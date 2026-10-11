@@ -35,6 +35,12 @@ type AssignBusinessOwnerInput struct {
 	Body AssignBusinessOwnerRequest
 }
 
+type PlatformTeamInvitationCreateInput struct {
+	PlatformBusinessPath
+	PlatformCommandHeaders
+	Body CreateTeamInvitationRequest
+}
+
 // ----------------------------------------------------------------------------
 // Shared path/header inputs
 // ----------------------------------------------------------------------------

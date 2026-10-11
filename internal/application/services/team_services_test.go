@@ -2,12 +2,15 @@ package services
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/queries"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestInviteTeamMemberCreatesHashedNormalizedInvitation(t *testing.T) {
@@ -21,9 +24,11 @@ func TestInviteTeamMemberCreatesHashedNormalizedInvitation(t *testing.T) {
 	}}
 
 	result, err := service.Handle(context.Background(), commands.InviteTeamMemberCommand{
-		Meta:  commands.CommandMeta{Actor: teamActor(TeamRoleAdmin)},
-		Email: "  STAFF@EXAMPLE.TEST ",
-		Role:  " Agent ",
+		Meta:        commands.CommandMeta{Actor: teamActor(TeamRoleAdmin)},
+		Email:       "  STAFF@EXAMPLE.TEST ",
+		DisplayName: "Staff Member",
+		Role:        " Agent ",
+		Permissions: []string{"conversations:read"},
 	})
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
@@ -52,7 +57,7 @@ func TestInviteTeamMemberRejectsUnauthorizedAndOwnerRole(t *testing.T) {
 		t.Fatalf("expected forbidden invite without persistence, err=%v calls=%d", err, repository.createCalls)
 	}
 
-	_, err = service.Handle(context.Background(), commands.InviteTeamMemberCommand{Meta: commands.CommandMeta{Actor: teamActor(TeamRoleOwner)}, Email: "staff@example.test", Role: TeamRoleOwner})
+	_, err = service.Handle(context.Background(), commands.InviteTeamMemberCommand{Meta: commands.CommandMeta{Actor: teamActor(TeamRoleOwner)}, Email: "staff@example.test", DisplayName: "Staff", Role: TeamRoleOwner, Permissions: []string{"team:read"}})
 	if err == nil || !hasApplicationCode(err, appErrors.CodeValidation) || repository.createCalls != 0 {
 		t.Fatalf("expected owner-role rejection without persistence, err=%v calls=%d", err, repository.createCalls)
 	}
@@ -105,6 +110,63 @@ func TestAcceptTeamInvitationRejectsBlankToken(t *testing.T) {
 	}
 }
 
+func TestAcceptNewTeamInvitationCreatesHashedCredentialsThroughRepository(t *testing.T) {
+	now := time.Date(2026, 10, 11, 16, 0, 0, 0, time.UTC)
+	const principalID = "00000000-0000-0000-0000-000000000099"
+	repository := &teamServiceRepository{acceptedNew: ports.TeamInvitationRecord{ID: "invitation-1", Email: "new@example.test", Status: "accepted"}}
+	service := AcceptNewTeamInvitationCommandService{TeamService: TeamService{
+		Repository: repository,
+		Now:        func() time.Time { return now },
+		NewID:      func() string { return principalID },
+	}}
+	result, err := service.Handle(context.Background(), commands.AcceptNewTeamInvitationCommand{
+		AcceptanceToken: "one-time-token", DisplayName: "New Employee", Password: "strong-password-2026",
+	})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	input := repository.acceptedNewInput
+	if input.TokenHash != invitationTokenHash("one-time-token") || input.TokenHash == "one-time-token" {
+		t.Fatal("new-account acceptance must pass only the token hash")
+	}
+	if input.PrincipalID != principalID || input.DisplayName != "New Employee" || !input.AcceptedAt.Equal(now) {
+		t.Fatalf("unexpected new-account acceptance: %#v", input)
+	}
+	if input.PasswordHash == "strong-password-2026" || bcrypt.CompareHashAndPassword([]byte(input.PasswordHash), []byte("strong-password-2026")) != nil {
+		t.Fatal("new-account password must be bcrypt hashed before persistence")
+	}
+	if result.Status != "accepted" {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+}
+
+func TestAcceptNewTeamInvitationRejectsPasswordBeyondBcryptLimit(t *testing.T) {
+	repository := &teamServiceRepository{}
+	service := AcceptNewTeamInvitationCommandService{TeamService: TeamService{Repository: repository}}
+	_, err := service.Handle(context.Background(), commands.AcceptNewTeamInvitationCommand{
+		AcceptanceToken: "one-time-token", DisplayName: "New Employee", Password: strings.Repeat("a", maximumBcryptPasswordBytes+1),
+	})
+	if err == nil || !hasApplicationCode(err, appErrors.CodeValidation) || repository.acceptedNewInput.TokenHash != "" {
+		t.Fatalf("expected validation before persistence, err=%v input=%#v", err, repository.acceptedNewInput)
+	}
+}
+
+func TestInspectTeamInvitationHashesTokenAndReportsAccountState(t *testing.T) {
+	now := time.Date(2026, 10, 11, 16, 0, 0, 0, time.UTC)
+	repository := &teamServiceRepository{inspected: ports.TeamInvitationRecord{ID: "invitation-1", Status: "pending", AccountState: "new"}}
+	service := InspectTeamInvitationQueryService{TeamService: TeamService{Repository: repository, Now: func() time.Time { return now }}}
+	result, err := service.Handle(context.Background(), queries.InspectTeamInvitationQuery{AcceptanceToken: "raw-token"})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if repository.inspectedHash != invitationTokenHash("raw-token") || repository.inspectedHash == "raw-token" {
+		t.Fatal("inspect must pass only a token hash to persistence")
+	}
+	if result.AccountState != "new" {
+		t.Fatalf("unexpected inspect result: %#v", result)
+	}
+}
+
 func TestUpdateTeamMemberRoleRequiresManagerAndNonOwnerTargetRole(t *testing.T) {
 	memberID := commands.PrincipalID("00000000-0000-0000-0000-000000000012")
 	repository := &teamServiceRepository{
@@ -145,25 +207,33 @@ func TestRevokeTeamMemberValidatesPrincipalBeforePersistence(t *testing.T) {
 }
 
 func teamActor(role string) commands.ActorContext {
-	return commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1", Role: role}
+	return commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1", Role: role, Permissions: []string{"conversations:read", "team:read", "team:manage"}}
 }
 
 type teamServiceRepository struct {
-	created       ports.TeamInvitationCreate
-	createCalls   int
-	accepted      ports.TeamInvitationRecord
-	acceptedInput ports.TeamInvitationAcceptance
-	acceptCalls   int
-	updated       ports.TeamMemberRecord
-	updateInput   ports.TeamMemberRoleChange
-	updateCalls   int
-	revoked       ports.TeamMemberRecord
-	revokeInput   ports.TeamMemberRevocation
-	revokeCalls   int
+	created          ports.TeamInvitationCreate
+	createCalls      int
+	accepted         ports.TeamInvitationRecord
+	acceptedInput    ports.TeamInvitationAcceptance
+	acceptCalls      int
+	acceptedNew      ports.TeamInvitationRecord
+	acceptedNewInput ports.TeamInvitationNewAccountAcceptance
+	inspected        ports.TeamInvitationRecord
+	inspectedHash    string
+	updated          ports.TeamMemberRecord
+	updateInput      ports.TeamMemberRoleChange
+	updateCalls      int
+	revoked          ports.TeamMemberRecord
+	revokeInput      ports.TeamMemberRevocation
+	revokeCalls      int
 }
 
 func (r *teamServiceRepository) ListMembers(context.Context, string, int, string) (ports.TeamMemberPage, error) {
 	return ports.TeamMemberPage{}, nil
+}
+
+func (r *teamServiceRepository) ListInvitations(context.Context, string, int, string, time.Time) (ports.TeamInvitationPage, error) {
+	return ports.TeamInvitationPage{}, nil
 }
 
 func (r *teamServiceRepository) ResolveActiveMember(context.Context, string, string) (ports.TeamMemberRecord, error) {
@@ -176,16 +246,38 @@ func (r *teamServiceRepository) CreateInvitation(_ context.Context, create ports
 	return ports.TeamInvitationRecord{ID: create.ID, Email: create.Email, Role: create.Role, Status: "pending", ExpiresAt: create.ExpiresAt}, nil
 }
 
+func (r *teamServiceRepository) InspectInvitation(_ context.Context, tokenHash string, _ time.Time) (ports.TeamInvitationRecord, error) {
+	r.inspectedHash = tokenHash
+	return r.inspected, nil
+}
+
 func (r *teamServiceRepository) AcceptInvitation(_ context.Context, acceptance ports.TeamInvitationAcceptance) (ports.TeamInvitationRecord, error) {
 	r.acceptedInput = acceptance
 	r.acceptCalls++
 	return r.accepted, nil
 }
 
+func (r *teamServiceRepository) AcceptInvitationNewAccount(_ context.Context, acceptance ports.TeamInvitationNewAccountAcceptance) (ports.TeamInvitationRecord, error) {
+	r.acceptedNewInput = acceptance
+	return r.acceptedNew, nil
+}
+
+func (r *teamServiceRepository) RevokeInvitation(context.Context, ports.TeamInvitationRevocation) (ports.TeamInvitationRecord, error) {
+	return ports.TeamInvitationRecord{}, nil
+}
+
+func (r *teamServiceRepository) ResendInvitation(context.Context, ports.TeamInvitationResend) (ports.TeamInvitationRecord, error) {
+	return ports.TeamInvitationRecord{}, nil
+}
+
 func (r *teamServiceRepository) UpdateMemberRole(_ context.Context, change ports.TeamMemberRoleChange) (ports.TeamMemberRecord, error) {
 	r.updateInput = change
 	r.updateCalls++
 	return r.updated, nil
+}
+
+func (r *teamServiceRepository) UpdateMemberAccess(context.Context, ports.TeamMemberAccessChange) (ports.TeamMemberRecord, error) {
+	return ports.TeamMemberRecord{}, nil
 }
 
 func (r *teamServiceRepository) RevokeMember(_ context.Context, revocation ports.TeamMemberRevocation) (ports.TeamMemberRecord, error) {

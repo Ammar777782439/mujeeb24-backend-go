@@ -65,8 +65,13 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 		CreateAutomationRule:      services.CreateAutomationRuleCommandService{AutomationRuleService: automationRules},
 		UpdateAutomationRule:      services.UpdateAutomationRuleCommandService{AutomationRuleService: automationRules},
 		InviteTeamMember:          services.InviteTeamMemberCommandService{TeamService: teamService},
+		PlatformInviteTeamMember:  services.PlatformInviteTeamMemberCommandService{TeamService: teamService},
 		AcceptTeamInvitation:      services.AcceptTeamInvitationCommandService{TeamService: teamService},
+		AcceptNewTeamInvitation:   services.AcceptNewTeamInvitationCommandService{TeamService: teamService},
+		RevokeTeamInvitation:      services.RevokeTeamInvitationCommandService{TeamService: teamService},
+		ResendTeamInvitation:      services.ResendTeamInvitationCommandService{TeamService: teamService},
 		UpdateTeamMemberRole:      services.UpdateTeamMemberRoleCommandService{TeamService: teamService},
+		UpdateTeamMemberAccess:    services.UpdateTeamMemberAccessCommandService{TeamService: teamService},
 		RevokeTeamMember:          services.RevokeTeamMemberCommandService{TeamService: teamService},
 		GetConversation:           services.GetConversationQueryService{Repository: conversationRepository, Labels: conversationLabelRepository},
 
@@ -74,6 +79,8 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 		ListCannedReplies:        services.ListCannedRepliesQueryService{CannedReplyService: cannedReplies},
 		ListAutomationRules:      services.ListAutomationRulesQueryService{AutomationRuleService: automationRules},
 		ListTeamMembers:          services.ListTeamMembersQueryService{TeamService: teamService},
+		ListTeamInvitations:      services.ListTeamInvitationsQueryService{TeamService: teamService},
+		InspectTeamInvitation:    services.InspectTeamInvitationQueryService{TeamService: teamService},
 		CreateOutboundMessage:    manualOutbound,
 		GetConnectionCapabilities: services.ConnectionCapabilitiesQueryService{
 			Repository: channelCapabilityRepository,
