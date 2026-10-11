@@ -98,6 +98,16 @@ func (r contextCatalogRepository) UpdateOffer(context.Context, ports.OfferPatch)
 func (r contextCatalogRepository) ListVariants(_ context.Context, _ string, itemID, _ string, _ int, _ string) (ports.VariantPage, error) {
 	return r.variants[itemID], nil
 }
+func (r contextCatalogRepository) GetVariant(_ context.Context, businessID, variantID string) (ports.VariantRecord, error) {
+	for _, page := range r.variants {
+		for _, variant := range page.Items {
+			if variant.ID == variantID && (businessID == "" || variant.BusinessID == businessID) {
+				return variant, nil
+			}
+		}
+	}
+	return ports.VariantRecord{}, errNotFoundStub{}
+}
 func (r contextCatalogRepository) CreateVariant(context.Context, ports.VariantDraft) (ports.VariantRecord, error) {
 	return ports.VariantRecord{}, nil
 }

@@ -99,6 +99,9 @@ func (r comparisonStubRepo) UpdateOffer(context.Context, ports.OfferPatch) (port
 func (r comparisonStubRepo) ListVariants(context.Context, string, string, string, int, string) (ports.VariantPage, error) {
 	return ports.VariantPage{}, nil
 }
+func (r comparisonStubRepo) GetVariant(context.Context, string, string) (ports.VariantRecord, error) {
+	return ports.VariantRecord{}, notFoundError("variant.get")
+}
 func (r comparisonStubRepo) CreateVariant(context.Context, ports.VariantDraft) (ports.VariantRecord, error) {
 	return ports.VariantRecord{}, nil
 }
