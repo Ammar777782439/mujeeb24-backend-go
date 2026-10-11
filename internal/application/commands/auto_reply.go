@@ -10,6 +10,7 @@ type AutoReplyCommand struct {
 }
 
 type AutoReplyResult struct {
+	Capability        string
 	Decision          AIDecisionView
 	Action            string
 	OutboundMessageID MessageID

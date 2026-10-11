@@ -10,7 +10,7 @@ import (
 )
 
 // fakeAIRuntime was removed; tests now use FakeCustomerSalesDecisionPort (defined in
-// fake_contract_runtime.go) which returns ports.CustomerSalesProposal per contract ④ §4.
+// fake_contract_runtime.go) which returns ports.CapabilityDecision per contract ④ §4.
 
 type fakeDecisionRepository struct {
 	record ports.AIDecisionRecord
@@ -25,7 +25,7 @@ func (f *fakeDecisionRepository) CreateProposed(_ context.Context, draft ports.A
 		ID: draft.ID, BusinessID: draft.BusinessID, ConversationID: draft.ConversationID,
 		SourceMessageReference: draft.SourceMessageReference, IntentBase: draft.IntentBase,
 		DomainContext: draft.DomainContext, Entities: draft.Entities, EvidenceReferences: draft.EvidenceReferences,
-		RequestedAction: draft.RequestedAction, ConfidenceValue: draft.ConfidenceValue, ConfidenceBand: draft.ConfidenceBand,
+		RequestedAction: draft.RequestedAction, RequestedCapability: draft.RequestedCapability, EffectiveCapability: draft.EffectiveCapability, ConfidenceValue: draft.ConfidenceValue, ConfidenceBand: draft.ConfidenceBand,
 		RequiresHuman: draft.RequiresHuman, MissingInformation: draft.MissingInformation, ReasonCodes: draft.ReasonCodes,
 		PolicyVersion: draft.PolicyVersion, ModelReference: draft.ModelReference, SchemaVersion: draft.SchemaVersion,
 		Lifecycle: draft.Lifecycle, PolicyDecision: draft.PolicyDecision, ExecutionReference: draft.ExecutionReference, CorrelationID: draft.CorrelationID,
@@ -145,7 +145,7 @@ func (f *fakeConversationRuntimeRepository) UpdateLastGeminiInteractionID(_ cont
 // TestSafeAutoReplyRuntimeProducesStructuredAnswer was removed: SafeAutoReplyRuntime
 // was a stub runtime that violated contract ④ §4 (it produced a non-contract-aligned
 // AIDecisionProposal). The contract-aligned path uses ContractClient.DecideContract
-// which produces CustomerSalesProposal with status+action+response_text+selected[].
+// which produces CapabilityDecision with capability+response_text+selected[].
 
 func TestAutoReplyServicePersistsDecisionAndEnqueuesAnswerAtomically(t *testing.T) {
 	decisions := &fakeDecisionRepository{}
@@ -207,16 +207,12 @@ func TestAutoReplyServicePersistsDecisionAndEnqueuesAnswerAtomically(t *testing.
 }
 
 // TestAutoReplyServiceDoesNotEnqueueNonAnswerDecision verifies per contract ⑥ §21
-// that non-answer/non-clarification actions (lead_draft, order_draft, human_request)
-// do NOT enqueue an outbound message. Per contract ⑥ §17, drafts follow their own
-// authorization flow; the auto-reply path only handles messaging actions.
+// that unimplemented draft capabilities never enqueue an outbound message.
 func TestAutoReplyServiceDoesNotEnqueueNonAnswerDecision(t *testing.T) {
 	outbox := &fakeOutboxStore{}
 	service := NewAutoReplyService(
-		// Per contract ④ §4, lead_draft is one of the closed action values.
-		// Lead drafts do not enqueue; they persist a decision and wait for the
-		// separate Lead flow.
-		&FakeCustomerSalesDecisionPort{Proposal: ports.CustomerSalesProposal{Status: ports.CustomerSalesProposalStatusResolved, Action: ports.CustomerSalesProposalActionLeadDraft, ResponseText: "تم تجهيز مسودة العميل المحتمل"}},
+		// No B2C draft executor exists; an unimplemented capability must be blocked.
+		&FakeCustomerSalesDecisionPort{Decision: ports.CapabilityDecision{Capability: "create_lead_draft", ResponseText: "تم تجهيز مسودة العميل المحتمل"}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
 		&fakeOutboundRepository{},
@@ -228,7 +224,7 @@ func TestAutoReplyServiceDoesNotEnqueueNonAnswerDecision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
-	if result.Enqueued || outbox.calls != 0 || result.Action != "lead_draft" {
+	if result.Enqueued || outbox.calls != 0 || result.Action != "no_action" {
 		t.Fatalf("unexpected non-answer result=%#v outbox_calls=%d", result, outbox.calls)
 	}
 }
@@ -236,7 +232,7 @@ func TestAutoReplyServiceDoesNotEnqueueNonAnswerDecision(t *testing.T) {
 func TestAutoReplyServiceEnqueuesAllowedClarification(t *testing.T) {
 	outbox := &fakeOutboxStore{}
 	service := NewAutoReplyService(
-		&FakeCustomerSalesDecisionPort{Proposal: ports.CustomerSalesProposal{Status: ports.CustomerSalesProposalStatusAmbiguous, Action: ports.CustomerSalesProposalActionClarification, ResponseText: "أي باقة تقصد؟"}},
+		&FakeCustomerSalesDecisionPort{Decision: ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityAsk, ResponseText: "أي باقة تقصد؟"}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
 		&fakeOutboundRepository{},
@@ -268,7 +264,7 @@ func TestAutoReplyServiceRejectsEmptyClarificationText(t *testing.T) {
 		// Per contract ④ §4, clarification action requires non-empty response_text.
 		// We set ResponseText empty to simulate a malformed Gemini output (which
 		// the API schema would normally reject; we test the secondary Mujeeb gate).
-		&FakeCustomerSalesDecisionPort{Proposal: ports.CustomerSalesProposal{Status: ports.CustomerSalesProposalStatusAmbiguous, Action: ports.CustomerSalesProposalActionClarification, ResponseText: ""}},
+		&FakeCustomerSalesDecisionPort{Decision: ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityAsk, ResponseText: ""}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
 		&fakeOutboundRepository{},
@@ -315,7 +311,7 @@ func (allowAllTenantValidator) ValidateOfferOwnership(context.Context, string, s
 
 type allowAllCustomerSalesPolicy struct{}
 
-func (allowAllCustomerSalesPolicy) Evaluate(context.Context, ports.CustomerSalesProposal, *ports.CustomerSalesContext) ports.CustomerSalesPolicyDecision {
+func (allowAllCustomerSalesPolicy) Evaluate(context.Context, ports.CapabilityDecision, *ports.CustomerSalesContext) ports.CustomerSalesPolicyDecision {
 	return ports.CustomerSalesPolicyDecision{Decision: "allowed", Reason: "test policy"}
 }
 
@@ -352,7 +348,7 @@ func TestAutoReplyServiceEnqueuesGeneralAnswerAfterFocus(t *testing.T) {
 	}}
 	outbox := &fakeOutboxStore{}
 	service := NewAutoReplyService(
-		&FakeCustomerSalesDecisionPort{Proposal: ports.CustomerSalesProposal{Status: ports.CustomerSalesProposalStatusResolved, Action: ports.CustomerSalesProposalActionAnswer, ResponseText: "الباقات: الأساسية والاحترافية", Selected: []ports.SelectedReference{{ItemID: "item-basic", OfferID: stringPtr("offer-basic")}, {ItemID: "item-pro", OfferID: stringPtr("offer-pro")}}}},
+		&FakeCustomerSalesDecisionPort{Decision: ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityReply, ResponseText: "الباقات: الأساسية والاحترافية", Selected: []ports.SelectedReference{{ItemID: "item-basic", OfferID: stringPtr("offer-basic")}, {ItemID: "item-pro", OfferID: stringPtr("offer-pro")}}}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
 		&fakeOutboundRepository{},
@@ -456,11 +452,11 @@ func TestAutoReplyServiceHandlesWaitingHuman(t *testing.T) {
 	}
 }
 
-func TestAutoReplyServiceHandlesDraftOrder(t *testing.T) {
+func TestAutoReplyServiceRejectsUnimplementedOrderDraft(t *testing.T) {
 	outbox := &fakeOutboxStore{}
 	convRepo := &fakeConversationRuntimeRepository{}
 	service := NewAutoReplyService(
-		&FakeCustomerSalesDecisionPort{Proposal: ports.CustomerSalesProposal{Status: ports.CustomerSalesProposalStatusResolved, Action: ports.CustomerSalesProposalActionOrderDraft, ResponseText: "تم تجهيز مسودة الطلب"}},
+		&FakeCustomerSalesDecisionPort{Decision: ports.CapabilityDecision{Capability: "create_order_draft", ResponseText: "تم تجهيز مسودة الطلب"}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{},
 		&fakeOutboundRepository{},
@@ -478,22 +474,19 @@ func TestAutoReplyServiceHandlesDraftOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
-	if result.Enqueued || outbox.calls != 0 || result.Action != "order_draft" {
+	if result.Enqueued || outbox.calls != 0 || result.Action != "no_action" {
 		t.Fatalf("unexpected result for order_draft=%#v outbox_calls=%d", result, outbox.calls)
 	}
-	if len(convRepo.transitions) != 1 {
-		t.Fatalf("expected 1 conversation transition, got %d", len(convRepo.transitions))
-	}
-	if convRepo.transitions[0].State == nil || *convRepo.transitions[0].State != "waiting_human" {
-		t.Errorf("expected state waiting_human for order_draft, got %#v", convRepo.transitions[0])
+	if len(convRepo.transitions) != 0 {
+		t.Fatal("unimplemented draft must not change conversation state")
 	}
 }
 
-func TestAutoReplyServiceHandlesDraftLead(t *testing.T) {
+func TestAutoReplyServiceRejectsUnimplementedLeadDraft(t *testing.T) {
 	outbox := &fakeOutboxStore{}
 	convRepo := &fakeConversationRuntimeRepository{}
 	service := NewAutoReplyService(
-		&FakeCustomerSalesDecisionPort{Proposal: ports.CustomerSalesProposal{Status: ports.CustomerSalesProposalStatusResolved, Action: ports.CustomerSalesProposalActionLeadDraft, ResponseText: "تم تجهيز مسودة العميل المحتمل"}},
+		&FakeCustomerSalesDecisionPort{Decision: ports.CapabilityDecision{Capability: "create_lead_draft", ResponseText: "تم تجهيز مسودة العميل المحتمل"}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{},
 		&fakeOutboundRepository{},
@@ -511,13 +504,10 @@ func TestAutoReplyServiceHandlesDraftLead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
-	if result.Enqueued || outbox.calls != 0 || result.Action != "lead_draft" {
+	if result.Enqueued || outbox.calls != 0 || result.Action != "no_action" {
 		t.Fatalf("unexpected result for lead_draft=%#v outbox_calls=%d", result, outbox.calls)
 	}
-	if len(convRepo.transitions) != 1 {
-		t.Fatalf("expected 1 conversation transition, got %d", len(convRepo.transitions))
-	}
-	if convRepo.transitions[0].State == nil || *convRepo.transitions[0].State != "waiting_human" {
-		t.Errorf("expected state waiting_human for lead_draft, got %#v", convRepo.transitions[0])
+	if len(convRepo.transitions) != 0 {
+		t.Fatal("unimplemented draft must not change conversation state")
 	}
 }

@@ -1,4 +1,4 @@
-> تعديل Customer Sales المعتمد في 2026-10-11: راجع [عقد القدرات v11](docs/architecture/customer-sales-capabilities-v11-ar.md). Gemini يختار القدرة عبر Function Calling؛ Proposal هو شكل داخلي للحفظ والتحقق. لا استبدال لنص handoff ولا تصنيف نوايا داخل مجيب.
+> تعديل Customer Sales المعتمد في 2026-10-11: راجع [عقد القدرات v11](docs/architecture/customer-sales-capabilities-v11-ar.md). Gemini يختار القدرة عبر Function Calling؛ CapabilityDecision يبقى مصدر الحقيقة حتى التنفيذ والتدقيق؛ Action القديم محصور بحد التوافق للحفظ وAPI. لا استبدال لنص handoff ولا تصنيف نوايا داخل مجيب.
 
 # تعليمات وكيل البرمجة (Agent Guidelines) — Mujeeb 24 Backend
 

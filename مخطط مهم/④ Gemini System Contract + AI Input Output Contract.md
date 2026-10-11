@@ -1,3 +1,5 @@
+> HISTORICAL / SUPERSEDED — هذه نسخة تاريخية وليست عقد تشغيل. المرجع الحالي: [عقد القدرات](../contracts/ai/04-gemini-system-contract-ai-input-output-closed.md). أي CLOSED أو status/action أدناه يمثل التصميم السابق فقط.
+
  ④ Gemini System Contract + AI Input/Output Contract كعقد واحد، مع الحفاظ على قراراتنا السابقة وعدم اختراع مسؤوليات جديدة.
 
  العقد الموجود في ملفات المشروع، خصوصًا فصل AI Decision Contract وContext Builder، وثبّتُّ نقطة مهمة: requires_approval لا يجب أن يكون قرارًا صادرًا من Gemini؛ الـPolicyEvaluator في Mujeeb هو صاحب السلطة النهائية.
@@ -425,13 +427,13 @@ Action / Send / Human Handoff
 
 Contract Status
 
-Gemini Role                 CLOSED
-System Rules                CLOSED
-Input Contract              CLOSED
-Conversation Context        CLOSED
-Catalog Evidence            CLOSED
-Output Contract             CLOSED
-AI Proposal                 CLOSED
+Gemini Role                 HISTORICAL SUPERSEDED
+System Rules                HISTORICAL SUPERSEDED
+Input Contract              HISTORICAL SUPERSEDED
+Conversation Context        HISTORICAL SUPERSEDED
+Catalog Evidence            HISTORICAL SUPERSEDED
+Output Contract             HISTORICAL SUPERSEDED
+AI Proposal                 HISTORICAL SUPERSEDED
 Policy Authority            Mujeeb
 Execution Authority         Mujeeb
 Tenant Authority            Mujeeb

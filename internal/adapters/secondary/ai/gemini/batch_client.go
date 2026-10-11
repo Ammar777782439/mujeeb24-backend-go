@@ -303,8 +303,7 @@ func (c *BatchClient) EvaluateBatch(ctx context.Context, input services.BatchEva
 // أخرى. يرى: Customer Message + Conversation Context + Candidate Results +
 // الدليل التجاري المرتبط بالمرشحين. ثم يقوم بالقرار النهائي وصياغة الرد."
 //
-// Per contract ④ §4, the final output is an CustomerSalesProposal (status +
-// action + response_text + selected[]).
+// The final output is a terminal CapabilityDecision, preserving the function name.
 // FinalEvaluateWithDetails runs the contract ② §6 final evaluation with
 // a custom user prompt that includes BOTH candidate IDs AND full product
 // details (names, prices, descriptions, variants, offers).
@@ -377,13 +376,13 @@ func (c *BatchClient) CountFinalTokens(ctx context.Context, input services.Final
 	return out.TotalTokens, nil
 }
 
-func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input services.FinalEvaluationInput, userPrompt string) (ports.CustomerSalesProposal, ports.CustomerSalesUsageTelemetry, error) {
+func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input services.FinalEvaluationInput, userPrompt string) (ports.CapabilityDecision, ports.CustomerSalesUsageTelemetry, error) {
 	if c == nil {
-		return ports.CustomerSalesProposal{}, ports.CustomerSalesUsageTelemetry{}, errors.New("batch client is not configured")
+		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, errors.New("batch client is not configured")
 	}
 	rc, err := c.resolveConfig(ctx)
 	if err != nil {
-		return ports.CustomerSalesProposal{}, ports.CustomerSalesUsageTelemetry{}, err
+		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
 	}
 	reqBody := c.buildFinalEvaluateRequest(input, userPrompt, rc)
 
@@ -391,12 +390,14 @@ func (c *BatchClient) FinalEvaluateWithDetails(ctx context.Context, input servic
 	resp, err := c.sendRequestWithConfig(ctx, reqBody, rc)
 	finalEnd := time.Now()
 	if err != nil {
-		return ports.CustomerSalesProposal{}, ports.CustomerSalesUsageTelemetry{}, fmt.Errorf("final evaluate: %w", err)
+		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, fmt.Errorf("final evaluate: %w", err)
 	}
-	proposal, err := parseFinalProposal(resp)
-	if err != nil {
-		return ports.CustomerSalesProposal{}, ports.CustomerSalesUsageTelemetry{}, fmt.Errorf("parse final proposal: %w", err)
+	proposal := resp.Decision
+	definition, ok := ports.CustomerSalesCapabilityDefinitionFor(proposal.Capability)
+	if !ok || !definition.Terminal {
+		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, errors.New("final evaluation returned an unavailable capability")
 	}
+
 	usage := ports.CustomerSalesUsageTelemetry{
 		InputTokens:  resp.UsageMetadata.PromptTokenCount,
 		CachedTokens: resp.UsageMetadata.CachedContentTokenCount,
@@ -446,15 +447,11 @@ func (c *BatchClient) sendRequestWithConfig(ctx context.Context, reqBody batchGe
 	}
 	var raw string
 	if len(reqBody.capabilityTools) > 0 {
-		_, proposal, parseErr := parseCustomerSalesCapability(interaction, reqBody.capabilityTools)
+		decision, parseErr := parseCustomerSalesCapability(interaction, reqBody.capabilityTools)
 		if parseErr != nil {
 			return batchGeminiResponse{}, parseErr
 		}
-		encoded, encodeErr := json.Marshal(proposal)
-		if encodeErr != nil {
-			return batchGeminiResponse{}, encodeErr
-		}
-		raw = string(encoded)
+		return batchGeminiResponse{Decision: decision, UsageMetadata: batchUsageMetadata{PromptTokenCount: interaction.Usage.TotalInputTokens, CachedContentTokenCount: interaction.Usage.TotalCachedTokens, CandidatesTokenCount: interaction.Usage.TotalOutputTokens}}, nil
 	} else {
 		var textErr error
 		raw, textErr = interactionOutputText(interaction)
@@ -489,27 +486,6 @@ func parseBatchCandidates(resp batchGeminiResponse) ([]ports.CatalogBatchCandida
 		return nil, fmt.Errorf("decode candidates wrapper: %w", err)
 	}
 	return wrapper.Candidates, nil
-}
-
-// parseFinalProposal extracts the CustomerSalesProposal from the structured
-// output per contract ④ §4.
-func parseFinalProposal(resp batchGeminiResponse) (ports.CustomerSalesProposal, error) {
-	if len(resp.Candidates) == 0 {
-		return ports.CustomerSalesProposal{}, errors.New("no candidates in gemini response per contract ④ §4")
-	}
-	candidate := resp.Candidates[0]
-	if len(candidate.Content.Parts) == 0 {
-		return ports.CustomerSalesProposal{}, errors.New("no content parts in gemini response per contract ④ §4")
-	}
-	raw := candidate.Content.Parts[0].Text
-	if strings.TrimSpace(raw) == "" {
-		return ports.CustomerSalesProposal{}, errors.New("empty structured output text per contract ④ §4")
-	}
-	var proposal ports.CustomerSalesProposal
-	if err := decodeStrictStructuredJSON([]byte(raw), &proposal); err != nil {
-		return ports.CustomerSalesProposal{}, fmt.Errorf("decode final proposal: %w", err)
-	}
-	return proposal, nil
 }
 
 // batchCandidateResponseSchema is the JSON Schema that enforces the contract
@@ -568,6 +544,7 @@ type batchPart struct {
 }
 
 type batchGeminiResponse struct {
+	Decision      ports.CapabilityDecision
 	Candidates    []batchCandidate   `json:"candidates"`
 	UsageMetadata batchUsageMetadata `json:"usageMetadata"`
 }

@@ -170,15 +170,14 @@ func (c *GeminiCustomerSalesAdapter) decideInteraction(
 		return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("gemini interaction did not complete: %s", reason)
 	}
 
-	capability, proposal, err := parseCustomerSalesCapability(resp, tools)
+	decision, err := parseCustomerSalesCapability(resp, tools)
 	if err != nil {
 		return ports.CustomerSalesDecisionOutput{}, err
 	}
 
 	latencyMs := time.Since(startedAt).Milliseconds()
 	return ports.CustomerSalesDecisionOutput{
-		Proposal:   proposal,
-		Capability: capability,
+		Decision: decision,
 		GeminiInteraction: ports.GeminiInteractionContext{
 			PreviousInteractionID:  "",
 			ResultingInteractionID: "",

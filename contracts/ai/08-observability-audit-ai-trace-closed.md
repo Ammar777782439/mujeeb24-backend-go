@@ -1,3 +1,5 @@
+> تعديل B2C الحالي: requested_capability/effective_capability يسجلان الاسم الحقيقي. intent_base فارغ لقرارات القدرات، وAction قديم للتوافق فقط. التفاصيل في [عقد القدرات](../../docs/architecture/customer-sales-capabilities-v11-ar.md). وصف Proposal أدناه لا يفرض status/action على النموذج.
+
 Mujeeb 24 — ⑧ Observability + Audit + AI Trace
 
 الحالة

@@ -48,7 +48,7 @@ const (
 // Per contract ⑨ §1, each Handle() call is one AI Run.
 // Per contract ⑨ §2, the Run progresses: RECEIVED → CONTEXT_BUILT → RUNNING
 // → VALIDATING → AUTHORIZED → EXECUTING → COMPLETED (or FAILED/CANCELLED).
-// Per contract ⑥ §2, after Gemini produces CustomerSalesProposal, the ValidationPipeline
+// Per contract ⑥ §2, after Gemini produces CapabilityDecision, the ValidationPipeline
 // runs Structural→Reference→Tenant→Ownership→Policy→Authorization.
 // Per contract ⑥ §19, Execution happens only after Authorization succeeds.
 //
@@ -76,7 +76,7 @@ type AutoReplyService struct {
 	// when Gemini's first response indicates catalog data is needed.
 	// Per contract ② §9, the flow is: Gemini → needs_catalog → build
 	// projection → token-count → batch → evaluate → aggregate candidates
-	// → final evaluate → CustomerSalesProposal.
+	// → final evaluate → CapabilityDecision.
 	// If nil, evaluate_full_catalog is not offered; unsupported requests cannot expand evidence.
 	CatalogBatch *CatalogBatchController
 
@@ -253,6 +253,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	if builtContext != nil && builtContext.Conversation.LastGeminiInteractionID != nil {
 		previousInteractionID = *builtContext.Conversation.LastGeminiInteractionID
 	}
+	capabilities := ports.CustomerSalesCapabilities(s.fullCatalogReady(run))
 	out, err := s.CustomerSalesDecision.Decide(ctx, ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{
 			BusinessID:             businessID,
@@ -272,21 +273,21 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		// Per fix #4: pass the AI Run ID so tool call records are
 		// persisted with the correct run reference during the Tool Loop.
 		AIRunID:      run.ID,
-		Capabilities: ports.CustomerSalesCapabilities(s.CatalogBatch != nil),
+		Capabilities: capabilities,
 	})
 	if err != nil {
 		log.Printf("[AutoReply] GEMINI_FAILED business=%s err=%v", businessID, err)
 		s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), err.Error())
 		return commands.AutoReplyResult{}, err
 	}
-	proposal := out.Proposal
+	proposal := out.Decision
 	interactionIDToPersist := strings.TrimSpace(out.GeminiInteraction.ResultingInteractionID)
-	resetGeminiInteraction := out.Capability != ""
-	log.Printf("[AutoReply] GEMINI_OK business=%s status=%s action=%s tokens_in=%d tokens_out=%d latency=%dms response=%q",
-		businessID, proposal.Status, proposal.Action, out.Usage.InputTokens, out.Usage.OutputTokens, out.LatencyMs, truncate(proposal.ResponseText, 200))
+	resetGeminiInteraction := out.Decision.Capability != ""
+	log.Printf("[AutoReply] GEMINI_OK business=%s capability=%s tokens_in=%d tokens_out=%d latency=%dms",
+		businessID, proposal.Capability, out.Usage.InputTokens, out.Usage.OutputTokens, out.LatencyMs)
 
 	// Gemini continuity is persisted only after the effective action is known.
-	// An internal needs_more_data interaction is never stored as the previous
+	// An internal evaluate_full_catalog interaction is never stored as the previous
 	// customer-facing turn; the full-catalog path below resets the chain.
 
 	// Exact relational evidence exposed in the normal customer-sales context.
@@ -295,15 +296,15 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 
 	// Only Gemini's explicit capability request starts full catalog evaluation.
 	// Invalid references are rejected by validation; they never expand evidence.
-	fullCatalogRequired := out.Capability == ports.CustomerSalesCapabilityFullCatalog
-	if fullCatalogRequired && s.CatalogBatch == nil {
+	fullCatalogRequired := out.Decision.Capability == ports.CustomerSalesCapabilityFullCatalog
+	if fullCatalogRequired && !s.fullCatalogReady(run) {
 		err := errors.New("Gemini requested full catalog evaluation but CatalogBatchController is not configured")
 		s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), err.Error())
 		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
 	}
-	if s.CatalogBatch != nil && fullCatalogRequired {
+	if fullCatalogRequired {
 		resetGeminiInteraction = true
-		log.Printf("[AutoReply] CATALOG_EVAL_TRIGGER run=%s capability=%s", run.ID, out.Capability)
+		log.Printf("[AutoReply] CATALOG_EVAL_TRIGGER run=%s capability=%s", run.ID, out.Decision.Capability)
 		// Per contract ② §9, run the full catalog evaluation pipeline.
 		entityContract := CatalogEntityContractPayload{}
 		if len(s.EntityContractPayload) == 0 {
@@ -330,20 +331,10 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), "catalog evaluation: "+err.Error())
 			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, fmt.Errorf("catalog evaluation failed: %w", err)
 		} else {
-			log.Printf("[AutoReply] CATALOG_EVAL_OK run=%s final_status=%s final_action=%s response=%q", run.ID, catalogResult.Proposal.Status, catalogResult.Proposal.Action, truncate(catalogResult.Proposal.ResponseText, 200))
-			proposal = catalogResult.Proposal
+			log.Printf("[AutoReply] CATALOG_EVAL_OK run=%s capability=%s", run.ID, catalogResult.Decision.Capability)
+			proposal = catalogResult.Decision
 			catalogEvidence.Merge(catalogResult.Evidence)
 		}
-	}
-
-	// needs_more_data is an internal retrieval signal, never an executable
-	// customer-facing decision. By this point the catalog path has either run
-	// to complete coverage or failed above; allowing this status to continue
-	// could turn an unresolved model response into an outbound message.
-	if proposal.Status == ports.CustomerSalesProposalStatusNeedsMoreData {
-		err := errors.New("AI proposal remained needs_more_data after catalog evaluation")
-		s.markFailedSafe(ctx, run, ports.AIRunFailureStageValidation, string(ports.AIRunFailureCategoryInvalidAIOutput), err.Error())
-		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
 	}
 
 	// Per contract ⑨ §3, mark VALIDATING.
@@ -367,7 +358,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			DecisionID:     "", // linked later when ai_decisions is created
 			BusinessID:     businessID,
 			ConversationID: conversationID,
-			Proposal:       proposal,
+			Decision:       proposal,
 			Context:        builtContext,
 			Evidence:       catalogEvidence,
 		})
@@ -382,13 +373,14 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 				BusinessID:             businessID,
 				ConversationID:         &conversationID,
 				SourceMessageReference: &sourceMessageRef,
-				IntentBase:             string(proposal.Status),
+				IntentBase:             "",
 				Entities:               []byte(`{}`),
 				EvidenceReferences:     []byte(`[]`),
-				RequestedAction:        string(proposal.Action),
+				RequestedAction:        legacyCustomerSalesAction(proposal.Capability),
+				RequestedCapability:    stringPtr(string(proposal.Capability)),
 				ConfidenceBand:         "unknown",
 				RequiresHuman:          true,
-				MissingInformation:     []byte(`["` + failure.Reason + `"]`),
+				MissingInformation:     encodeReasonCodes([]string{failure.Reason}),
 				ReasonCodes:            []byte(`["validation_failed"]`),
 				PolicyVersion:          policyVersion,
 				SchemaVersion:          1,
@@ -417,6 +409,10 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
 	}
 
+	definition, ok := ports.CustomerSalesCapabilityDefinitionFor(effective.Capability)
+	if !ok || !definition.Terminal || effective.Capability != proposal.Capability {
+		return commands.AutoReplyResult{}, errors.New("effective capability is not the validated terminal decision")
+	}
 	now := s.now()
 	decisionID := s.id()
 
@@ -427,12 +423,14 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		BusinessID:              businessID,
 		ConversationID:          &conversationID,
 		SourceMessageReference:  &sourceMessageRef,
-		IntentBase:              string(proposal.Status),
+		IntentBase:              "",
 		Entities:                []byte(`{}`),
 		EvidenceReferences:      encodeProposalSelectedAsJSON(proposal.Selected),
-		RequestedAction:         string(proposal.Action),
+		RequestedAction:         legacyCustomerSalesAction(proposal.Capability),
+		RequestedCapability:     stringPtr(string(proposal.Capability)),
+		EffectiveCapability:     stringPtr(string(effective.Capability)),
 		ConfidenceBand:          "medium",
-		RequiresHuman:           proposal.Action == ports.CustomerSalesProposalActionHumanRequest,
+		RequiresHuman:           definition.RequiresHuman || effective.PolicyDecision == "requires_approval",
 		MissingInformation:      []byte(`[]`),
 		ReasonCodes:             encodeReasonCodes(nil),
 		PolicyVersion:           policyVersion,
@@ -440,7 +438,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		SchemaVersion:           1,
 		Lifecycle:               "proposed",
 		PolicyDecision:          stringPtr(effective.PolicyDecision),
-		EffectiveAction:         stringPtr(effective.EffectiveAction),
+		EffectiveAction:         stringPtr(legacyCustomerSalesAction(effective.Capability)),
 		EffectiveDecisionReason: stringPtr(effective.Reason),
 		AuthorizedAt:            effective.AuthorizedAt,
 		CorrelationID:           uuidStringPointer(command.Meta.CorrelationID),
@@ -453,7 +451,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		decisionDraft.AIRunID = &run.ID
 	}
 
-	result := commands.AutoReplyResult{Action: string(proposal.Action)}
+	result := commands.AutoReplyResult{Action: legacyCustomerSalesAction(proposal.Capability), Capability: string(proposal.Capability)}
 	err = s.Transactions.Within(ctx, func(txCtx context.Context) error {
 		decision, createErr := s.DecisionRepository.CreateProposed(txCtx, decisionDraft)
 		if createErr != nil {
@@ -502,18 +500,13 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		if s.Conversations != nil {
 			var targetState *string
 			var targetOwnership *string
-			switch proposal.Action {
-			case ports.CustomerSalesProposalActionAnswer, ports.CustomerSalesProposalActionClarification:
-				st := "waiting_customer"
+			if definition.ConversationState != "" {
+				st := definition.ConversationState
 				targetState = &st
-				own := "ai"
+			}
+			if definition.ConversationOwnership != "" {
+				own := definition.ConversationOwnership
 				targetOwnership = &own
-			case ports.CustomerSalesProposalActionHumanRequest:
-				st := "waiting_human"
-				targetState = &st
-			case ports.CustomerSalesProposalActionLeadDraft, ports.CustomerSalesProposalActionOrderDraft:
-				st := "waiting_human"
-				targetState = &st
 			}
 			if targetState != nil {
 				if _, convErr := s.Conversations.TransitionLifecycle(txCtx, ports.ConversationLifecycleTransition{
@@ -529,9 +522,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		}
 
 		// Replies, clarification and handoff all carry the model-written customer text.
-		sendable := proposal.Action == ports.CustomerSalesProposalActionAnswer ||
-			proposal.Action == ports.CustomerSalesProposalActionClarification ||
-			proposal.Action == ports.CustomerSalesProposalActionHumanRequest
+		sendable := definition.SendsCustomerMessage
 		if !sendable {
 			return nil
 		}
@@ -627,7 +618,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 
 	// Persist Gemini server-side continuity only when it matches the canonical
 	// customer-facing history. The full-catalog final response is generated by
-	// a separate provider call, so its initial needs_more_data interaction must
+	// a separate provider call, so its initial evaluate_full_catalog interaction must
 	// not become the next turn's previous_interaction_id.
 	if s.Conversations != nil {
 		switch {
@@ -700,6 +691,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			"conversation_id":       conversationID,
 			"text":                  proposal.ResponseText,
 			"action":                result.Action,
+			"capability":            result.Capability,
 			"ai_run_id":             run.ID,
 			"gemini_interaction_id": out.GeminiInteraction.ResultingInteractionID,
 		})
@@ -917,7 +909,7 @@ func (s *AutoReplyService) persistValidatedProposalState(
 	current *ports.ConversationStateRecord,
 	businessID string,
 	conversationID string,
-	proposal ports.CustomerSalesProposal,
+	proposal ports.CapabilityDecision,
 	context *ports.CustomerSalesContext,
 ) error {
 	if s.StateRepository == nil || len(proposal.Selected) == 0 {
@@ -1197,9 +1189,9 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
 	// request followed by one final selection. Preserve historical trace counting
 	// for callers returning the internal legacy proposal shape.
 	toolCallCount := 0
-	if out.Capability != "" {
+	if out.Decision.Capability != "" {
 		toolCallCount = 1
-		if out.Capability == ports.CustomerSalesCapabilityFullCatalog {
+		if out.Decision.Capability == ports.CustomerSalesCapabilityFullCatalog {
 			toolCallCount = 2
 		}
 	} else if s.RunRepository != nil && run.ID != "" {

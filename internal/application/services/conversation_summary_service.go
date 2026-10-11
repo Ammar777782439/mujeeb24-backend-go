@@ -311,7 +311,7 @@ Rules:
 	if err != nil {
 		return "", fmt.Errorf("customer sales decision: %w", err)
 	}
-	summary := strings.TrimSpace(out.Proposal.ResponseText)
+	summary := strings.TrimSpace(out.Decision.ResponseText)
 	usageTelemetry := out.Usage
 	latencyMs := out.LatencyMs
 

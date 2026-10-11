@@ -60,12 +60,12 @@ func TestGeminiLiveSmoke(t *testing.T) {
 		t.Fatalf("Gemini API returned error: %v", err)
 	}
 
-	if out.Proposal.ResponseText == "" {
+	if out.Decision.ResponseText == "" {
 		t.Errorf("expected non-empty response from Gemini")
 	}
 	if out.Usage.InputTokens <= 0 {
 		t.Errorf("expected positive input tokens, got %d", out.Usage.InputTokens)
 	}
 	t.Logf("Gemini live smoke: model=%s input=%d output=%d latency=%dms response=%q",
-		out.Usage.Model, out.Usage.InputTokens, out.Usage.OutputTokens, out.LatencyMs, out.Proposal.ResponseText)
+		out.Usage.Model, out.Usage.InputTokens, out.Usage.OutputTokens, out.LatencyMs, out.Decision.ResponseText)
 }

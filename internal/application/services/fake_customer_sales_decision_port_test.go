@@ -2,9 +2,9 @@
 //
 // This fake implements ports.CustomerSalesDecisionPort so application/postgres tests can
 // exercise the contract-aligned AutoReplyService flow without an HTTP Gemini
-// call. It returns a fixed CustomerSalesProposal per contract ④ §4.
+// call. It returns a fixed CapabilityDecision per contract ④ §4.
 //
-// Tests can override the returned proposal by setting FakeCustomerSalesDecisionPort.Proposal.
+// Tests can override the returned proposal by setting FakeCustomerSalesDecisionPort.Decision.
 
 package services
 
@@ -21,8 +21,7 @@ import (
 // It returns the configured Proposal on every call, recording the input
 // arguments for assertions. Tests may set Error to simulate a provider failure.
 type FakeCustomerSalesDecisionPort struct {
-	Capability          ports.CustomerSalesCapability
-	Proposal            ports.CustomerSalesProposal
+	Decision            ports.CapabilityDecision
 	GeminiInteractionID string // returned as ResultingInteractionID
 	Error               error
 	LastInput           ports.CustomerSalesDecisionInput
@@ -32,9 +31,8 @@ type FakeCustomerSalesDecisionPort struct {
 // resolved/answer proposal with the given response text.
 func NewFakeCustomerSalesDecisionPort(responseText string) *FakeCustomerSalesDecisionPort {
 	return &FakeCustomerSalesDecisionPort{
-		Proposal: ports.CustomerSalesProposal{
-			Status:       ports.CustomerSalesProposalStatusResolved,
-			Action:       ports.CustomerSalesProposalActionAnswer,
+		Decision: ports.CapabilityDecision{
+			Capability:   ports.CustomerSalesCapabilityReply,
 			ResponseText: responseText,
 		},
 		GeminiInteractionID: "fake-interaction-id",
@@ -51,8 +49,7 @@ func (f *FakeCustomerSalesDecisionPort) Decide(ctx context.Context, input ports.
 		return ports.CustomerSalesDecisionOutput{}, errors.New("text is required")
 	}
 	return ports.CustomerSalesDecisionOutput{
-		Proposal:   f.Proposal,
-		Capability: f.Capability,
+		Decision: f.Decision,
 		GeminiInteraction: ports.GeminiInteractionContext{
 			PreviousInteractionID:  input.GeminiInteraction.PreviousInteractionID,
 			ResultingInteractionID: f.GeminiInteractionID,

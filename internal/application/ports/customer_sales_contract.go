@@ -8,50 +8,6 @@ import "context"
 // proposal, catalog-evaluation results, Gemini conversation continuity, and the
 // application port consumed by Customer Sales AI.
 
-// ════════════════════════════════════════════════════════════════════════════
-// Contract ④ §4 — Gemini → Mujeeb Output Contract (Final Proposal)
-// ════════════════════════════════════════════════════════════════════════════
-
-// CustomerSalesProposalStatus — the four closed status values per contract ④ §4.
-//
-// These are the ONLY allowed status values Gemini may return. Any other value
-// fails Structural Validation per contract ⑥ §4.
-type CustomerSalesProposalStatus string
-
-const (
-	CustomerSalesProposalStatusResolved      CustomerSalesProposalStatus = "resolved"
-	CustomerSalesProposalStatusAmbiguous     CustomerSalesProposalStatus = "ambiguous"
-	CustomerSalesProposalStatusNotFound      CustomerSalesProposalStatus = "not_found"
-	CustomerSalesProposalStatusNeedsMoreData CustomerSalesProposalStatus = "needs_more_data"
-)
-
-// CustomerSalesProposalAction — the five closed action values per contract ④ §4.
-//
-// These are the ONLY allowed action values Gemini may return. Any other value
-// fails Structural Validation per contract ⑥ §5.
-//
-// Note: contract ④ uses "human_request" (not "request_human"), and
-// "clarification" (not "ask_clarification"), "lead_draft" (not "create_lead"),
-// "order_draft" (not "create_transaction_draft"). Migration 000056 aligns the
-// ai_decisions table accordingly.
-type CustomerSalesRoutingReason string
-
-const (
-	CustomerSalesRoutingReasonSubscriptionActivation CustomerSalesRoutingReason = "subscription_activation"
-	CustomerSalesRoutingReasonCustomerRequestedHuman CustomerSalesRoutingReason = "customer_requested_human"
-	CustomerSalesRoutingReasonOther                  CustomerSalesRoutingReason = "other"
-)
-
-type CustomerSalesProposalAction string
-
-const (
-	CustomerSalesProposalActionAnswer        CustomerSalesProposalAction = "answer"
-	CustomerSalesProposalActionClarification CustomerSalesProposalAction = "clarification"
-	CustomerSalesProposalActionHumanRequest  CustomerSalesProposalAction = "human_request"
-	CustomerSalesProposalActionLeadDraft     CustomerSalesProposalAction = "lead_draft"
-	CustomerSalesProposalActionOrderDraft    CustomerSalesProposalAction = "order_draft"
-)
-
 // SelectedReference is a per-contract ④ §4 reference to a catalog entity that
 // Gemini's proposal depends on. All three IDs are required to be UUIDs that
 // were actually present in the evidence Mujeeb sent — never invented by Gemini.
@@ -75,26 +31,6 @@ type CatalogBatchCandidate struct {
 	VariantIDs []string `json:"variant_ids,omitempty"`
 	OfferIDs   []string `json:"offer_ids,omitempty"`
 	Reason     string   `json:"reason,omitempty"`
-}
-
-// CustomerSalesProposal is the contract ④ §4 final output of one Gemini interaction
-// for one AI Run. It is the ONLY shape Gemini is allowed to return for the
-// customer-facing decision.
-//
-// This type is distinct from the per-batch CatalogBatchResult (contract ② §5).
-//
-// Contract ④ §5 explicitly forbids these fields from appearing in Gemini output:
-//   - business_id, tenant_id
-//   - requires_approval, authorized, executed, sent
-//   - payment_confirmed, order_created
-//
-// Such fields are Mujeeb's responsibility and live in EffectiveDecision.
-type CustomerSalesProposal struct {
-	Status        CustomerSalesProposalStatus `json:"status"`
-	Action        CustomerSalesProposalAction `json:"action"`
-	ResponseText  string                      `json:"response_text"`
-	RoutingReason CustomerSalesRoutingReason  `json:"routing_reason,omitempty"`
-	Selected      []SelectedReference         `json:"selected,omitempty"`
 }
 
 // CatalogBatchResult is the contract ② §5 per-batch evaluation output.
@@ -161,7 +97,7 @@ type GeminiInteractionContext struct {
 //	Mujeeb System Contract → system_instruction
 //	Mujeeb Input Context → input (contents)
 //	Catalog boundary → Function Calling / tool
-//	Mujeeb Output Contract → Structured Output (responseSchema)
+//	Mujeeb Output Contract → one offered Function Call
 //
 // CustomerSalesDecisionPort is the application port for customer-facing sales decisions.
 //
@@ -193,11 +129,8 @@ type CustomerSalesDecisionInput struct {
 
 // CustomerSalesDecisionOutput is the output of CustomerSalesDecisionPort.Decide.
 type CustomerSalesDecisionOutput struct {
-	// Capability is the model-selected operation; Proposal is the internal persistence/validation shape.
-	Capability CustomerSalesCapability
-
-	// Proposal is the contract ④ §4 structured Gemini output.
-	Proposal CustomerSalesProposal
+	// Decision remains authoritative through validation, policy and execution.
+	Decision CapabilityDecision
 
 	// GeminiInteraction echoes the input and is populated with the
 	// ResultingInteractionID returned by Gemini. Caller persists this as the

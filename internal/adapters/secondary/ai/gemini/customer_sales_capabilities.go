@@ -44,19 +44,19 @@ func customerSalesTools(capabilities []ports.CustomerSalesCapability) []customer
 
 // parseCustomerSalesCapability accepts exactly one offered function call.
 // Text, unknown tools, parallel calls and extra arguments fail closed.
-func parseCustomerSalesCapability(resp interactionResponse, tools []customerSalesTool) (ports.CustomerSalesCapability, ports.CustomerSalesProposal, error) {
+func parseCustomerSalesCapability(resp interactionResponse, tools []customerSalesTool) (ports.CapabilityDecision, error) {
 	var call *interactionStep
 	for i := range resp.Steps {
 		step := &resp.Steps[i]
 		if step.Type == "function_call" {
 			if call != nil {
-				return "", ports.CustomerSalesProposal{}, errors.New("customer sales requires exactly one capability call")
+				return ports.CapabilityDecision{}, errors.New("customer sales requires exactly one capability call")
 			}
 			call = step
 		}
 	}
 	if call == nil || strings.TrimSpace(call.ID) == "" {
-		return "", ports.CustomerSalesProposal{}, errors.New("customer sales requires an identified capability call")
+		return ports.CapabilityDecision{}, errors.New("customer sales requires an identified capability call")
 	}
 	offered := false
 	for _, tool := range tools {
@@ -66,37 +66,27 @@ func parseCustomerSalesCapability(resp interactionResponse, tools []customerSale
 		}
 	}
 	if !offered {
-		return "", ports.CustomerSalesProposal{}, fmt.Errorf("unavailable customer sales capability %q", call.Name)
+		return ports.CapabilityDecision{}, fmt.Errorf("unavailable customer sales capability %q", call.Name)
 	}
 	if len(call.Arguments) == 0 || strings.TrimSpace(string(call.Arguments)) == "null" {
-		return "", ports.CustomerSalesProposal{}, errors.New("capability arguments must be an object")
+		return ports.CapabilityDecision{}, errors.New("capability arguments must be an object")
 	}
 	capability := ports.CustomerSalesCapability(call.Name)
 	if capability == ports.CustomerSalesCapabilityFullCatalog {
 		var args struct{}
 		if err := decodeStrictStructuredJSON(call.Arguments, &args); err != nil {
-			return "", ports.CustomerSalesProposal{}, fmt.Errorf("decode catalog capability: %w", err)
+			return ports.CapabilityDecision{}, fmt.Errorf("decode catalog capability: %w", err)
 		}
-		return capability, ports.CustomerSalesProposal{}, nil
+		return ports.CapabilityDecision{Capability: capability}, nil
 	}
 	var args customerSalesToolArguments
 	if err := decodeStrictStructuredJSON(call.Arguments, &args); err != nil {
-		return "", ports.CustomerSalesProposal{}, fmt.Errorf("decode capability arguments: %w", err)
+		return ports.CapabilityDecision{}, fmt.Errorf("decode capability arguments: %w", err)
 	}
 	if strings.TrimSpace(args.ResponseText) == "" {
-		return "", ports.CustomerSalesProposal{}, errors.New("capability requires response_text")
+		return ports.CapabilityDecision{}, errors.New("capability requires response_text")
 	}
-	proposal := ports.CustomerSalesProposal{Status: ports.CustomerSalesProposalStatusResolved, ResponseText: args.ResponseText, Selected: args.Selected}
-	switch capability {
-	case ports.CustomerSalesCapabilityReply:
-		proposal.Action = ports.CustomerSalesProposalActionAnswer
-	case ports.CustomerSalesCapabilityAsk:
-		proposal.Status = ports.CustomerSalesProposalStatusAmbiguous
-		proposal.Action = ports.CustomerSalesProposalActionClarification
-	case ports.CustomerSalesCapabilityHandoff:
-		proposal.Action = ports.CustomerSalesProposalActionHumanRequest
-	}
-	return capability, proposal, nil
+	return ports.CapabilityDecision{Capability: capability, ResponseText: args.ResponseText, Selected: args.Selected}, nil
 }
 
 // Token counting uses equivalent GenerateContent function declarations.

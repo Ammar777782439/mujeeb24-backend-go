@@ -19,7 +19,7 @@ func TestHandoffCustomerMessageRespectsAutoReplyPolicy(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := evaluatePolicyAgainstAction(tc.policy, "human_request"); got != tc.want {
+			if got := evaluatePolicyAgainstCapability(tc.policy, ports.CustomerSalesCapabilityHandoff); got != tc.want {
 				t.Fatalf("handoff policy=%s want=%s", got, tc.want)
 			}
 		})

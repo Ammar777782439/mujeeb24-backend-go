@@ -29,7 +29,7 @@
 
 Function Calling يستخدم تعريفات ذات schema مغلق و`tool_choice=any`. يجب أن يعيد النموذج استدعاءً واحدًا معرفًا لأداة معروضة. يُرفض النص المنفرد، والاستدعاءات المتعددة، والأدوات غير المتاحة، والحقول الإضافية، والنص الفارغ. الفهم والرد من Gemini؛ المراجع والسياسات والتفويض والتنفيذ من مجيب.
 
-تتحول القدرة تقنيًا إلى القيم الداخلية الموجودة `answer/clarification/human_request` لتبقى مخططات الحفظ وDTOs مستقرة. لا يطلب العقد الجديد `status/action/routing_reason` من Gemini. لم تعد subscription_activation تتحكم بالتنفيذ، وحُذفت الرسالة الثابتة واستبدال human_request بـanswer.
+يبقى `CapabilityDecision` مصدر الحقيقة في المهايئ والتقييم النهائي وValidation وPolicy وAuthorization وExecution. Registry موحد يعرف القدرات المنفذة وخصائصها التشغيلية. التحويل إلى `answer/clarification/human_request` يحدث في حد التوافق للحفظ وAPI فقط؛ لا يقود runtime. لا يطلب العقد الجديد `status/action/routing_reason` من Gemini. لم تعد subscription_activation تتحكم بالتنفيذ، وحُذفت الرسالة الثابتة واستبدال human_request بـanswer.
 
 رسالة handoff تخضع لـallow_auto_reply والمراجعة البشرية كأي رسالة للعميل. التفويض الناجح يسجل `VALIDATING → AUTHORIZED → EXECUTING`؛ فشل الانتقال يمنع الإرسال. AUTHORIZED وEXECUTING داخل معاملة القرار وOutbox نفسها، بلا اتصال شبكة داخلها.
 
@@ -45,7 +45,7 @@ Function Calling يستخدم تعريفات ذات schema مغلق و`tool_choi
 
 التقييمات الدلالية الحية منفصلة ومقيدة بـ`gemini_live` و`MUJEEB_CAPABILITY_LIVE_EVALS=1`. تشمل لهجات وأخطاء إملائية وقطاعات مختلفة، وتفحص اختيار القدرة دون تطابق حرفي لنص الرد. تشغيلها يحتاج تصريحًا حيًا وGEMINI_API_KEY وGEMINI_MODEL في البيئة، ولا تنفذ ضمن الاختبارات المحلية أو push.
 
-لا تغييرات في قاعدة البيانات ولا migrations ولا أسرار. نجاح الاختبارات المحلية لا يثبت صحة الاختيارات الدلالية مع النموذج الحي أو تكامل PostgreSQL دون DSN.
+تصحيح بقاء القدرات يضيف migration أمامية `000073_customer_sales_capability_audit.up.sql`: requested_capability/effective_capability اختياريان للسجلات التاريخية وB2B؛ لا تخمين أو backfill لأسماء قديمة. يتيح intent_base فارغًا لقرارات القدرات ويتيح action فارغًا فقط للقدرات المرفوضة دون mapping. DTOs تعرض حقلي القدرة، وOpenAPI يولد من الكود. لا أسرار. نجاح الاختبارات المحلية لا يثبت صحة الاختيارات الدلالية مع النموذج الحي أو تكامل PostgreSQL دون DSN.
 
 المراجع: [Gemini function calling](https://ai.google.dev/gemini-api/docs/function-calling)، [Interactions API](https://ai.google.dev/api/interactions-api).
 
@@ -60,3 +60,21 @@ Function Calling يستخدم تعريفات ذات schema مغلق و`tool_choi
 - أدوات codebase-memory-mcp وgopls-mcp-server غير متاحة في هذه الجلسة؛ التحقق هنا من قراءة المصدر واختبارات Go وvet.
 
 دور جديد أثناء `waiting_human` ينتهي بـ`CANCELLED` قبل استدعاء النموذج؛ لا يبقى Run في RECEIVED بسبب محاولة انتقال غير مسموح إلى COMPLETED. هذا لا يغيّر حالة المحادثة أو يعيد تشغيل الرد الآلي.
+
+## تصحيح Source of Truth — 2026-10-11
+
+- أول اختيار والتقييم النهائي يعيدان CapabilityDecision نفسه؛ لا تحويل إلى Proposal أو status/action/routing_reason في Gemini.
+- BatchClient لا يمرر القرار عبر JSON legacy. FinalEvaluation لا يعرض retrieval capability ولا يقبل قدرة غير نهائية.
+- Registry مشترك للعرض والتحقق ومتطلبات سياسة رسالة العميل وآثار المنفذ. لا switch على legacy action داخل AutoReply أو PolicyEvaluator.
+- RequestedAction/EffectiveAction/AutoReplyResult.Action تبقى للتوافق فقط. RequestedCapability/EffectiveCapability وAutoReplyResult.Capability وrealtime capability تحمل الاسم الحقيقي.
+- اللوج يسجل capability بلا تسجيل نص رد العميل في GEMINI_OK. IntentBase فارغ. السياسة والتوقيت وحالة Run منفصلة عن القدرة المختارة، حتى إذا منع التنفيذ.
+- Ready يفحص Catalog repo وGemini وRunRepo وclock/IDs وtoken counter قبل عرض retrieval، ومعه service RunRepo ومعرف Run وEntity Contract صالح. هذه جاهزية تركيب محلية، لا ضمان توفر المزود لاحقًا.
+- عقدا ④ و⑥ الحاليان يوجهان التطوير؛ الوصف السابق نقل إلى archive وموسوم HISTORICAL/SUPERSEDED. تعليمات AGENTS تشير للقرار الحالي.
+
+## تحقق تصحيح بقاء القدرة
+
+نجحت بوابة المستودع (go test ./... وgo vet وOpenAPI drift) واختبار السباق لكل المستودع، ثم إعادة السباق لحزمة services بعد إضافة اختبارات التفويض والسياسة. الاختبارات الجديدة تتبع القدرات النهائية الثلاث بعد أربع دفعات عبر policy/execution/audit، وتمنع التنفيذ عند denied/requires_approval، وتمنع تبديل القدرة أو تجاوز policy في Authorization.
+
+تم بناء اختبارات PostgreSQL integration وGemini live. التشغيل الحي متخطى: POSTGRES_TEST_DSN غير موجود، وGemini opt-in معطل. اختبار PostgreSQL الجديد يفحص Get/List round-trip لحقلي القدرة وIntentBase الفارغ، لكنه لا يُعد ناجحًا قبل تشغيله على قاعدة فعلية. لا ينسب هذا التقرير نجاح CI إلى GitHub دون run مستقل.
+
+يجب تطبيق migration 000073 قبل تشغيل إصدار الكود الجديد. لا تشغيل migration على بيئة التاجر ضمن تعديل المصدر، ولا دمج إلى main.

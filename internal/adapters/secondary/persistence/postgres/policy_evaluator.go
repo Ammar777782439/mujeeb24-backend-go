@@ -29,11 +29,9 @@
 //      Same as 'assist' but signals a different workflow stage.
 //
 //   4. ai_mode = 'restricted_auto':
-//      → action=answer: allowed IF allow_auto_reply=true
-//      → action=clarification: allowed IF allow_auto_reply=true
-//      → action=human_request: customer text allowed IF allow_auto_reply=true
-//      → action=lead_draft: requires_approval IF allow_auto_lead_creation=false
-//      → action=order_draft: requires_approval IF allow_auto_transaction_draft=false
+//      → capability=reply_customer: allowed IF allow_auto_reply=true
+//      → capability=ask_customer: allowed IF allow_auto_reply=true
+//      → capability=handoff_to_human: customer text allowed IF allow_auto_reply=true
 //      → default_human_review=true overrides: requires_approval for all
 //
 // Per contract ⑥ §13, when Gemini proposes 'answer' but policy requires
@@ -73,13 +71,10 @@ func NewPostgresCustomerSalesPolicyEvaluator(management ports.BusinessManagement
 // to the validated proposal. Per contract ⑥ §13, requires_approval is decided
 // here — NOT by Gemini.
 //
-// The input proposal is the legacy AIDecisionProposal shape (the bridge from
-// contract ④ §4 CustomerSalesProposal is done by the ValidationPipeline's
-// toLegacyProposal helper). The returned proposal has PolicyDecision set
-// to 'allowed', 'requires_approval', or 'denied' per the business policy.
+// The validated CapabilityDecision remains authoritative here.
 //
 // Per contract ⑥ §20, validation is deterministic — no second LLM is used.
-func (e *PostgresCustomerSalesPolicyEvaluator) Evaluate(ctx context.Context, proposal ports.CustomerSalesProposal, contextValue *ports.CustomerSalesContext) ports.CustomerSalesPolicyDecision {
+func (e *PostgresCustomerSalesPolicyEvaluator) Evaluate(ctx context.Context, proposal ports.CapabilityDecision, contextValue *ports.CustomerSalesContext) ports.CustomerSalesPolicyDecision {
 	if e == nil || e.Management == nil {
 		return ports.CustomerSalesPolicyDecision{
 			Decision:      "requires_approval",
@@ -120,7 +115,7 @@ func (e *PostgresCustomerSalesPolicyEvaluator) Evaluate(ctx context.Context, pro
 
 	// Evaluate per the migration 000002 columns. NO INVENTION — every
 	// rule below maps directly to a column in business_policies.
-	decision := evaluatePolicyAgainstAction(policy, string(proposal.Action))
+	decision := evaluatePolicyAgainstCapability(policy, proposal.Capability)
 	return ports.CustomerSalesPolicyDecision{
 		Decision:      decision,
 		RequiresHuman: decision == "requires_approval",
@@ -128,13 +123,13 @@ func (e *PostgresCustomerSalesPolicyEvaluator) Evaluate(ctx context.Context, pro
 	}
 }
 
-// evaluatePolicyAgainstAction applies the business_policies columns to the
+// evaluatePolicyAgainstCapability applies the business_policies columns to the
 // proposed action. Returns 'allowed', 'requires_approval', or 'denied'.
 //
 // Per migration 000002 business_policies_ai_mode_chk:
 //
 //	ai_mode IN ('disabled', 'assist', 'approval', 'restricted_auto')
-func evaluatePolicyAgainstAction(policy ports.BusinessRuntimePolicyRecord, action string) string {
+func evaluatePolicyAgainstCapability(policy ports.BusinessRuntimePolicyRecord, capability ports.CustomerSalesCapability) string {
 	switch policy.AIMode {
 	case "disabled":
 		// Per migration 000002: ai_mode='disabled' means AI is fully off.
@@ -156,35 +151,14 @@ func evaluatePolicyAgainstAction(policy ports.BusinessRuntimePolicyRecord, actio
 			return "requires_approval"
 		}
 
-		switch action {
-		case "answer", "clarification", "human_request":
-			// Per migration 000002: allow_auto_reply controls whether
-			// the AI can auto-send answers and clarifications.
-			if policy.AllowAutoReply {
-				return "allowed"
-			}
-			return "requires_approval"
-
-		case "lead_draft":
-			// Per migration 000002: allow_auto_lead_creation controls whether
-			// the AI can create lead drafts.
-			if policy.AllowAutoLeadCreation {
-				return "allowed"
-			}
-			return "requires_approval"
-
-		case "order_draft":
-			// Per migration 000002: allow_auto_transaction_draft controls
-			// whether the AI can create transaction (order) drafts.
-			if policy.AllowAutoTransactionDraft {
-				return "allowed"
-			}
-			return "requires_approval"
-
-		default:
-			// Unknown action — require approval (safe default).
-			return "requires_approval"
+		definition, ok := ports.CustomerSalesCapabilityDefinitionFor(capability)
+		if !ok || !definition.Terminal {
+			return "denied"
 		}
+		if definition.SendsCustomerMessage && policy.AllowAutoReply {
+			return "allowed"
+		}
+		return "requires_approval"
 
 	default:
 		// Unknown ai_mode — require approval (safe default).

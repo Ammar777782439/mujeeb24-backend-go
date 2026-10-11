@@ -17,24 +17,23 @@ func TestCustomerCapabilityBoundary(t *testing.T) {
 	tests := []struct {
 		name, response string
 		capability     ports.CustomerSalesCapability
-		action         ports.CustomerSalesProposalAction
 		invalid        bool
 	}{
-		{"greeting", `{"steps":[{"type":"function_call","id":"c","name":"reply_customer","arguments":{"response_text":"وعليكم السلام"}}]}`, ports.CustomerSalesCapabilityReply, ports.CustomerSalesProposalActionAnswer, false},
-		{"clarify", `{"steps":[{"type":"function_call","id":"c","name":"ask_customer","arguments":{"response_text":"ما العدد؟"}}]}`, ports.CustomerSalesCapabilityAsk, ports.CustomerSalesProposalActionClarification, false},
-		{"handoff", `{"steps":[{"type":"function_call","id":"c","name":"handoff_to_human","arguments":{"response_text":"سأحوّل طلبك إلى الفريق"}}]}`, ports.CustomerSalesCapabilityHandoff, ports.CustomerSalesProposalActionHumanRequest, false},
-		{"catalog", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{}}]}`, ports.CustomerSalesCapabilityFullCatalog, "", false},
-		{"no call", `{"steps":[{"type":"model_output","content":[{"type":"text","text":"hello"}]}]}`, "", "", true},
-		{"unknown", `{"steps":[{"type":"function_call","id":"c","name":"create_order_draft","arguments":{}}]}`, "", "", true},
-		{"tenant argument", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{"business_id":"other"}}]}`, "", "", true},
-		{"filter", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{"query":"phone"}}]}`, "", "", true},
-		{"empty response", `{"steps":[{"type":"function_call","id":"c","name":"handoff_to_human","arguments":{"response_text":" "}}]}`, "", "", true},
-		{"authority", `{"steps":[{"type":"function_call","id":"c","name":"reply_customer","arguments":{"response_text":"hi","authorized":true}}]}`, "", "", true},
-		{"invented status", `{"steps":[{"type":"function_call","id":"c","name":"reply_customer","arguments":{"response_text":"hi","status":"resolved"}}]}`, "", "", true},
-		{"nested authority", `{"steps":[{"type":"function_call","id":"c","name":"reply_customer","arguments":{"response_text":"hi","selected":[{"item_id":"a","business_id":"b"}]}}]}`, "", "", true},
-		{"missing ID", `{"steps":[{"type":"function_call","name":"reply_customer","arguments":{"response_text":"hi"}}]}`, "", "", true},
-		{"parallel", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{}},{"type":"function_call","id":"d","name":"reply_customer","arguments":{"response_text":"hi"}}]}`, "", "", true},
-		{"null", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":null}]}`, "", "", true},
+		{"greeting", `{"steps":[{"type":"function_call","id":"c","name":"reply_customer","arguments":{"response_text":"وعليكم السلام"}}]}`, ports.CustomerSalesCapabilityReply, false},
+		{"clarify", `{"steps":[{"type":"function_call","id":"c","name":"ask_customer","arguments":{"response_text":"ما العدد؟"}}]}`, ports.CustomerSalesCapabilityAsk, false},
+		{"handoff", `{"steps":[{"type":"function_call","id":"c","name":"handoff_to_human","arguments":{"response_text":"سأحوّل طلبك إلى الفريق"}}]}`, ports.CustomerSalesCapabilityHandoff, false},
+		{"catalog", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{}}]}`, ports.CustomerSalesCapabilityFullCatalog, false},
+		{"no call", `{"steps":[{"type":"model_output","content":[{"type":"text","text":"hello"}]}]}`, "", true},
+		{"unknown", `{"steps":[{"type":"function_call","id":"c","name":"create_order_draft","arguments":{}}]}`, "", true},
+		{"tenant argument", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{"business_id":"other"}}]}`, "", true},
+		{"filter", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{"query":"phone"}}]}`, "", true},
+		{"empty response", `{"steps":[{"type":"function_call","id":"c","name":"handoff_to_human","arguments":{"response_text":" "}}]}`, "", true},
+		{"authority", `{"steps":[{"type":"function_call","id":"c","name":"reply_customer","arguments":{"response_text":"hi","authorized":true}}]}`, "", true},
+		{"invented status", `{"steps":[{"type":"function_call","id":"c","name":"reply_customer","arguments":{"response_text":"hi","status":"resolved"}}]}`, "", true},
+		{"nested authority", `{"steps":[{"type":"function_call","id":"c","name":"reply_customer","arguments":{"response_text":"hi","selected":[{"item_id":"a","business_id":"b"}]}}]}`, "", true},
+		{"missing ID", `{"steps":[{"type":"function_call","name":"reply_customer","arguments":{"response_text":"hi"}}]}`, "", true},
+		{"parallel", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{}},{"type":"function_call","id":"d","name":"reply_customer","arguments":{"response_text":"hi"}}]}`, "", true},
+		{"null", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":null}]}`, "", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -42,21 +41,21 @@ func TestCustomerCapabilityBoundary(t *testing.T) {
 			if err := json.Unmarshal([]byte(tc.response), &response); err != nil {
 				t.Fatal(err)
 			}
-			capability, proposal, err := parseCustomerSalesCapability(response, tools)
+			decision, err := parseCustomerSalesCapability(response, tools)
 			if tc.invalid {
 				if err == nil {
 					t.Fatal("invalid capability accepted")
 				}
 				return
 			}
-			if err != nil || capability != tc.capability || proposal.Action != tc.action {
-				t.Fatalf("%s %+v %v", capability, proposal, err)
+			if err != nil || decision.Capability != tc.capability {
+				t.Fatalf("%s %+v %v", decision.Capability, decision, err)
 			}
 		})
 	}
 	var response interactionResponse
 	_ = json.Unmarshal([]byte(tests[3].response), &response)
-	if _, _, err := parseCustomerSalesCapability(response, customerSalesTools(ports.CustomerSalesCapabilities(false))); err == nil {
+	if _, err := parseCustomerSalesCapability(response, customerSalesTools(ports.CustomerSalesCapabilities(false))); err == nil {
 		t.Fatal("catalog call accepted when unavailable or after complete coverage")
 	}
 }
@@ -81,7 +80,7 @@ func TestFullCatalogCapabilityIsAnInternalRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.Capability != ports.CustomerSalesCapabilityFullCatalog || out.Proposal.ResponseText != "" || out.Proposal.Action != "" || calls != 1 || out.Usage.ModelRequests != 1 {
+	if out.Decision.Capability != ports.CustomerSalesCapabilityFullCatalog || out.Decision.ResponseText != "" || calls != 1 || out.Usage.ModelRequests != 1 {
 		t.Fatalf("catalog request must not become final reply: %+v", out)
 	}
 }
@@ -130,7 +129,7 @@ func TestFinalCatalogDecisionUsesOnlyTerminalCapabilitiesAndCountsTools(t *testi
 		t.Fatalf("count %d %v", tokens, err)
 	}
 	proposal, usage, err := client.FinalEvaluateWithDetails(context.Background(), input, "verified candidates")
-	if err != nil || proposal.Action != ports.CustomerSalesProposalActionHumanRequest || proposal.ResponseText != "سأحوّل طلبك للفريق" || usage.InputTokens != 125 || calls != 2 {
+	if err != nil || proposal.Capability != ports.CustomerSalesCapabilityHandoff || proposal.ResponseText != "سأحوّل طلبك للفريق" || usage.InputTokens != 125 || calls != 2 {
 		t.Fatalf("final %+v usage %+v err %v", proposal, usage, err)
 	}
 }

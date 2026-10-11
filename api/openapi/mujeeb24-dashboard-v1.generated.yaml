@@ -77,6 +77,8 @@ components:
         created_at:
           format: date-time
           type: string
+        effective_capability:
+          type: string
         entities:
           additionalProperties: {}
           type: object
@@ -99,6 +101,8 @@ components:
         policy_version:
           type: string
         requested_action:
+          type: string
+        requested_capability:
           type: string
         requires_human:
           type: boolean

@@ -63,76 +63,31 @@ var legalTransitions = map[string][]string{
 	},
 }
 
-// TestValidateStructural verifies contract ⑥ §3-5: only the closed status
-// and action values pass structural validation.
 func TestValidateStructural(t *testing.T) {
 	pipeline := &ValidationPipeline{}
 	cases := []struct {
 		name     string
-		proposal ports.CustomerSalesProposal
+		decision ports.CapabilityDecision
 		wantErr  bool
 	}{
-		{
-			name: "valid resolved answer",
-			proposal: ports.CustomerSalesProposal{
-				Status:       ports.CustomerSalesProposalStatusResolved,
-				Action:       ports.CustomerSalesProposalActionAnswer,
-				ResponseText: "السعر 12000 ريال",
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid human_request without response_text",
-			proposal: ports.CustomerSalesProposal{
-				Status: ports.CustomerSalesProposalStatusAmbiguous,
-				Action: ports.CustomerSalesProposalActionHumanRequest,
-			},
-			wantErr: false,
-		},
-		{
-			name: "invalid status",
-			proposal: ports.CustomerSalesProposal{
-				Status:       "approved",
-				Action:       ports.CustomerSalesProposalActionAnswer,
-				ResponseText: "x",
-			},
-			wantErr: true,
-		},
-		{
-			name: "invalid action",
-			proposal: ports.CustomerSalesProposal{
-				Status:       ports.CustomerSalesProposalStatusResolved,
-				Action:       "create_lead", // legacy, no longer valid
-				ResponseText: "x",
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing response_text for answer",
-			proposal: ports.CustomerSalesProposal{
-				Status: ports.CustomerSalesProposalStatusResolved,
-				Action: ports.CustomerSalesProposalActionAnswer,
-			},
-			wantErr: true,
-		},
+		{"reply", ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityReply, ResponseText: "السعر من الدليل"}, false},
+		{"ask", ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityAsk, ResponseText: "ما العدد؟"}, false},
+		{"handoff", ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityHandoff, ResponseText: "سأحوّل طلبك"}, false},
+		{"handoff requires text", ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityHandoff}, true},
+		{"retrieval cannot execute", ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityFullCatalog}, true},
+		{"unimplemented draft", ports.CapabilityDecision{Capability: "create_order_draft", ResponseText: "تم"}, true},
+		{"legacy action rejected", ports.CapabilityDecision{Capability: "answer", ResponseText: "x"}, true},
+		{"missing text", ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityReply}, true},
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			err := pipeline.validateStructural(c.proposal)
-			if (err != nil) != c.wantErr {
-				t.Errorf("expected wantErr=%v, got err=%v", c.wantErr, err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if failure := pipeline.validateStructural(tc.decision); (failure != nil) != tc.wantErr {
+				t.Fatalf("failure=%v", failure)
 			}
 		})
 	}
 }
 
-// TestCatalogEntityContractDescriptor verifies contract ⑤ §8: every enum
-// value used in merchant data must have a documented meaning in the descriptor.
-//
-// The closed enum values are sourced VERBATIM from the SQL migration CHECK
-// constraints (migrations/000013..000018). Per the "NO INVENTION" rule, no
-// value may be added unless it appears in the SQL migrations OR an explicit
-// ADR amends the contract.
 func TestCatalogEntityContractDescriptor(t *testing.T) {
 	d := DefaultCatalogEntityContractDescriptor()
 	// Per SQL migration 000016/000018: catalog_items_pricing_mode_chk +
@@ -191,28 +146,9 @@ func TestCatalogEntityContractDescriptor(t *testing.T) {
 	}
 }
 
-func TestValidateStructuralRejectsRoutingReasonOutsideHumanRequest(t *testing.T) {
+func TestValidateStructuralRejectsEmptySelectedReference(t *testing.T) {
 	pipeline := &ValidationPipeline{}
-	err := pipeline.validateStructural(ports.CustomerSalesProposal{
-		Status:        ports.CustomerSalesProposalStatusResolved,
-		Action:        ports.CustomerSalesProposalActionAnswer,
-		ResponseText:  "ok",
-		RoutingReason: ports.CustomerSalesRoutingReasonOther,
-	})
-	if err == nil {
-		t.Fatal("expected routing_reason outside human_request to be rejected")
-	}
-}
-
-func TestValidateStructuralRejectsNotFoundWithSelectedReferences(t *testing.T) {
-	pipeline := &ValidationPipeline{}
-	err := pipeline.validateStructural(ports.CustomerSalesProposal{
-		Status:       ports.CustomerSalesProposalStatusNotFound,
-		Action:       ports.CustomerSalesProposalActionAnswer,
-		ResponseText: "غير موجود",
-		Selected:     []ports.SelectedReference{{ItemID: "item-1"}},
-	})
-	if err == nil {
-		t.Fatal("expected not_found with selected references to be rejected")
+	if failure := pipeline.validateStructural(ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityReply, ResponseText: "ok", Selected: []ports.SelectedReference{{}}}); failure == nil {
+		t.Fatal("empty selected item accepted")
 	}
 }

@@ -77,9 +77,8 @@ func TestPricingFailureDoesNotEraseReplyFromEntitlement(t *testing.T) {
 	}
 	// Simulate a successful Gemini call with replyEnqueued=true.
 	out := ports.CustomerSalesDecisionOutput{
-		Proposal: ports.CustomerSalesProposal{
-			Status:       "resolved",
-			Action:       "answer",
+		Decision: ports.CapabilityDecision{
+			Capability:   ports.CustomerSalesCapabilityReply,
 			ResponseText: "test response",
 		},
 		Usage: ports.CustomerSalesUsageTelemetry{

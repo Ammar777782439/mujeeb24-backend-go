@@ -50,9 +50,8 @@ func TestPersistenceFailurePropagatesError(t *testing.T) {
 		NewID: func() string { return "test-id" },
 	}
 	out := ports.CustomerSalesDecisionOutput{
-		Proposal: ports.CustomerSalesProposal{
-			Status:       "resolved",
-			Action:       "answer",
+		Decision: ports.CapabilityDecision{
+			Capability:   ports.CustomerSalesCapabilityReply,
 			ResponseText: "test response",
 		},
 		Usage: ports.CustomerSalesUsageTelemetry{

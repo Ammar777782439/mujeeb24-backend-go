@@ -11,7 +11,7 @@ import (
 type exactTokenBatchGeminiStub struct {
 	countFn       func(BatchEvaluationInput) (int, error)
 	seen          []BatchEvaluationInput
-	finalProposal ports.CustomerSalesProposal
+	finalProposal ports.CapabilityDecision
 }
 
 func (s *exactTokenBatchGeminiStub) CountBatchTokens(_ context.Context, input BatchEvaluationInput) (int, error) {
@@ -26,8 +26,12 @@ func (s *exactTokenBatchGeminiStub) EvaluateBatch(_ context.Context, input Batch
 	return ports.CatalogBatchResult{BatchNumber: input.BatchNumber}, nil
 }
 
-func (s *exactTokenBatchGeminiStub) FinalEvaluateWithDetails(_ context.Context, _ FinalEvaluationInput, _ string) (ports.CustomerSalesProposal, ports.CustomerSalesUsageTelemetry, error) {
-	return s.finalProposal, ports.CustomerSalesUsageTelemetry{}, nil
+func (s *exactTokenBatchGeminiStub) FinalEvaluateWithDetails(_ context.Context, _ FinalEvaluationInput, _ string) (ports.CapabilityDecision, ports.CustomerSalesUsageTelemetry, error) {
+	decision := s.finalProposal
+	if decision.Capability == "" {
+		decision = ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityReply, ResponseText: "ok"}
+	}
+	return decision, ports.CustomerSalesUsageTelemetry{}, nil
 }
 
 func TestSplitIntoBatchesUsesExactRequestTokensAndSequentialNumbers(t *testing.T) {
@@ -314,12 +318,10 @@ func TestAppendCandidateProjectionMergesSameItemFragments(t *testing.T) {
 	}
 }
 
-func TestFinalEvaluationRejectsNeedsMoreDataAfterCoverage(t *testing.T) {
+func TestFinalEvaluationRejectsRetrievalAfterCoverage(t *testing.T) {
 	gemini := &exactTokenBatchGeminiStub{
-		finalProposal: ports.CustomerSalesProposal{
-			Status:       ports.CustomerSalesProposalStatusNeedsMoreData,
-			Action:       ports.CustomerSalesProposalActionClarification,
-			ResponseText: "أحتاج بيانات إضافية",
+		finalProposal: ports.CapabilityDecision{
+			Capability: ports.CustomerSalesCapabilityFullCatalog,
 		},
 	}
 	controller := &CatalogBatchController{Gemini: gemini, TokenBudget: 8000}

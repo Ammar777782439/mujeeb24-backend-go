@@ -12,6 +12,7 @@ package gemini
 
 import (
 	"encoding/json"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"strings"
 	"testing"
 
@@ -200,16 +201,13 @@ func TestBatchCandidateParserRejectsUnknownFields(t *testing.T) {
 	}
 }
 
-func TestFinalProposalParserRejectsUnknownFields(t *testing.T) {
-	resp := batchGeminiResponse{
-		Candidates: []batchCandidate{{
-			Content: batchContent{Parts: []batchPart{{
-				Text: `{"status":"resolved","action":"answer","response_text":"ok","requires_approval":true}`,
-			}}},
-		}},
+func TestFinalCapabilityRejectsUnknownFields(t *testing.T) {
+	var response interactionResponse
+	if err := json.Unmarshal([]byte(`{"steps":[{"type":"function_call","id":"c","name":"reply_customer","arguments":{"response_text":"ok","requires_approval":true}}]}`), &response); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := parseFinalProposal(resp); err == nil {
-		t.Fatal("unknown final proposal field must be rejected")
+	if _, err := parseCustomerSalesCapability(response, customerSalesTools(ports.CustomerSalesCapabilities(false))); err == nil {
+		t.Fatal("unknown final authority accepted")
 	}
 }
 

@@ -172,7 +172,7 @@ func TestAutoReplyHandoffPreservesModelResponse(t *testing.T) {
 	outbound := &fakeOutboundRepository{}
 	outbox := &fakeOutboxStore{}
 	service := NewAutoReplyService(
-		&FakeCustomerSalesDecisionPort{Proposal: ports.CustomerSalesProposal{Status: ports.CustomerSalesProposalStatusResolved, Action: ports.CustomerSalesProposalActionHumanRequest, ResponseText: "model suggests subscribe", RoutingReason: ports.CustomerSalesRoutingReasonSubscriptionActivation}},
+		&FakeCustomerSalesDecisionPort{Decision: ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityHandoff, ResponseText: "model suggests subscribe"}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
 		outbound,
@@ -189,7 +189,7 @@ func TestAutoReplyHandoffPreservesModelResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
-	if !result.Enqueued || outbox.calls != 1 || result.Action != string(ports.CustomerSalesProposalActionHumanRequest) {
+	if !result.Enqueued || outbox.calls != 1 || result.Action != "human_request" {
 		t.Fatalf("handoff must preserve its action and enqueue response, got %#v calls=%d", result, outbox.calls)
 	}
 	if !result.Decision.RequiresHuman {
@@ -205,7 +205,7 @@ func TestAutoReplyHandoffPreservesModelResponse(t *testing.T) {
 func TestAutoReplyHandoffBlockedWhenApprovalRequired(t *testing.T) {
 	outbox := &fakeOutboxStore{}
 	service := NewAutoReplyService(
-		&FakeCustomerSalesDecisionPort{Proposal: ports.CustomerSalesProposal{Status: ports.CustomerSalesProposalStatusResolved, Action: ports.CustomerSalesProposalActionHumanRequest, ResponseText: "model text"}},
+		&FakeCustomerSalesDecisionPort{Decision: ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityHandoff, ResponseText: "model text"}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{ID: "reference-1", BusinessID: "business-1", ConversationID: "conversation-1", System: "socialapi", ProviderRef: "socialapi", ResourceID: "provider-conversation-1", ConnectionID: stringPtr("connection-1"), IsCurrent: true, MappingStatus: "active"}},
 		&fakeOutboundRepository{},

@@ -186,22 +186,24 @@ type TransactionView struct {
 	ResourceVersion ResourceVersion
 }
 type AIDecisionView struct {
-	ID                 AIDecisionID
-	BusinessID         BusinessID
-	ConversationID     *ConversationID
-	IntentBase         string
-	DomainContext      string
-	Entities           []byte
-	EvidenceReferences []byte
-	RequestedAction    string
-	RequiresHuman      bool
-	MissingInformation []byte
-	ReasonCodes        []byte
-	PolicyVersion      string
-	Lifecycle          string
-	HumanReviewReason  string
-	ResourceVersion    ResourceVersion
-	CreatedAt          time.Time
+	ID                  AIDecisionID
+	BusinessID          BusinessID
+	ConversationID      *ConversationID
+	IntentBase          string
+	DomainContext       string
+	Entities            []byte
+	EvidenceReferences  []byte
+	RequestedCapability *string
+	EffectiveCapability *string
+	RequestedAction     string
+	RequiresHuman       bool
+	MissingInformation  []byte
+	ReasonCodes         []byte
+	PolicyVersion       string
+	Lifecycle           string
+	HumanReviewReason   string
+	ResourceVersion     ResourceVersion
+	CreatedAt           time.Time
 }
 type AuditEventView struct {
 	ID                AuditEventID

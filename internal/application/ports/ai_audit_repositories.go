@@ -21,27 +21,30 @@ type AIDecisionDraft struct {
 	DomainContext          *string
 	Entities               []byte
 	EvidenceReferences     []byte
-	RequestedAction        string
-	ConfidenceValue        *string
-	ConfidenceBand         string
-	RequiresHuman          bool
-	MissingInformation     []byte
-	ReasonCodes            []byte
-	PolicyReference        *string
-	PolicyVersion          string
-	KnowledgeVersion       *string
-	ModelReference         *string
-	SchemaVersion          int
-	Lifecycle              string
-	PolicyDecision         *string
-	Outcome                *string
-	ExecutionReference     *string
-	CorrelationID          *string
-	CausationID            *string
-	ExpiresAt              *time.Time
-	DecidedAt              *time.Time
-	CreatedAt              time.Time
-	UpdatedAt              time.Time
+	// Capability fields are nullable for historical/B2B rows; never inferred from legacy actions.
+	RequestedCapability *string
+	EffectiveCapability *string
+	RequestedAction     string
+	ConfidenceValue     *string
+	ConfidenceBand      string
+	RequiresHuman       bool
+	MissingInformation  []byte
+	ReasonCodes         []byte
+	PolicyReference     *string
+	PolicyVersion       string
+	KnowledgeVersion    *string
+	ModelReference      *string
+	SchemaVersion       int
+	Lifecycle           string
+	PolicyDecision      *string
+	Outcome             *string
+	ExecutionReference  *string
+	CorrelationID       *string
+	CausationID         *string
+	ExpiresAt           *time.Time
+	DecidedAt           *time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 	// AIRunID links this business decision to the operational AI Run trace
 	// (ai_runs.id) per contract ⑧ §5. Per contract ⑨ §1, an AI Run is the
 	// operational trace; an ai_decisions row is the business decision. They
@@ -79,6 +82,9 @@ type AIDecisionRecord struct {
 	DomainContext          *string
 	Entities               []byte
 	EvidenceReferences     []byte
+	// Capability fields are nullable for historical/B2B rows; never inferred from legacy actions.
+	RequestedCapability    *string
+	EffectiveCapability    *string
 	RequestedAction        string
 	ConfidenceValue        *string
 	ConfidenceBand         string

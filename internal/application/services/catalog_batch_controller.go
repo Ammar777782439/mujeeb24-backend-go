@@ -89,7 +89,7 @@ type BatchGeminiClient interface {
 	// user prompt that includes BOTH candidate IDs AND full product details.
 	// This allows Gemini to compose a response with names, prices, descriptions.
 	// Returns the proposal + usage telemetry for cost recording.
-	FinalEvaluateWithDetails(ctx context.Context, input FinalEvaluationInput, userPrompt string) (ports.CustomerSalesProposal, ports.CustomerSalesUsageTelemetry, error)
+	FinalEvaluateWithDetails(ctx context.Context, input FinalEvaluationInput, userPrompt string) (ports.CapabilityDecision, ports.CustomerSalesUsageTelemetry, error)
 }
 
 type ExactBatchTokenCounter interface {
@@ -129,7 +129,7 @@ type FinalEvaluationInput struct {
 }
 
 type CatalogEvaluationResult struct {
-	Proposal ports.CustomerSalesProposal
+	Decision ports.CapabilityDecision
 	Evidence ports.CatalogAIEvidenceSet
 }
 
@@ -155,14 +155,11 @@ type TokenCounter interface {
 
 // RunCatalogEvaluation drives the full contract ② §9 evaluation pipeline.
 //
-// Returns the final CustomerSalesProposal (post-Final-Evaluation) on success.
+// Returns the final CapabilityDecision (post-Final-Evaluation) on success.
 // On failure, returns the failure stage + category for ai_runs.failure_*.
 func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input CatalogEvaluationInput) (CatalogEvaluationResult, error) {
-	if c == nil || c.Gemini == nil || c.RunRepo == nil || c.CatalogAI == nil || c.Now == nil || c.NewID == nil {
-		return CatalogEvaluationResult{}, errors.New("CatalogBatchController is not fully wired per contract ② §1")
-	}
-	if _, ok := c.Gemini.(ExactBatchTokenCounter); !ok && c.TokenCounter == nil {
-		return CatalogEvaluationResult{}, errors.New("CatalogBatchController requires an exact or compatibility token counter")
+	if !c.Ready() {
+		return CatalogEvaluationResult{}, errors.New("CatalogBatchController is not fully wired with a token counter")
 	}
 	if strings.TrimSpace(input.BusinessID) == "" || strings.TrimSpace(input.AIRunID) == "" {
 		return CatalogEvaluationResult{}, errors.New("business_id and ai_run_id are required for Catalog Evaluation per contract ② §1")
@@ -284,7 +281,7 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 		return CatalogEvaluationResult{}, err
 	}
 	return CatalogEvaluationResult{
-		Proposal: proposal,
+		Decision: proposal,
 		// Validation trusts exactly the projection exposed to the final model
 		// after any token-driven reduction, never discarded catalog pages.
 		Evidence: EvidenceFromProjection(finalProjection),
@@ -875,7 +872,7 @@ func (c *CatalogBatchController) runFinalEvaluation(
 	candidates []ports.CatalogBatchCandidate,
 	projection CatalogAIProjection,
 	startBatchNumber int,
-) (ports.CustomerSalesProposal, CatalogAIProjection, error) {
+) (ports.CapabilityDecision, CatalogAIProjection, error) {
 	candidates = normalizeBatchCandidates(candidates)
 	candidateProjection := CatalogAIProjection{}
 	appendCandidateProjection(
@@ -901,7 +898,7 @@ func (c *CatalogBatchController) runFinalEvaluation(
 
 	for {
 		if err := ctx.Err(); err != nil {
-			return ports.CustomerSalesProposal{}, CatalogAIProjection{}, err
+			return ports.CapabilityDecision{}, CatalogAIProjection{}, err
 		}
 
 		finalInput, userPrompt := buildFinalEvaluationPayload(input, candidates, candidateProjection)
@@ -909,17 +906,17 @@ func (c *CatalogBatchController) runFinalEvaluation(
 		if exact, ok := c.Gemini.(ExactFinalTokenCounter); ok {
 			tokens, err := exact.CountFinalTokens(ctx, finalInput, userPrompt)
 			if err != nil {
-				return ports.CustomerSalesProposal{}, CatalogAIProjection{}, fmt.Errorf("count final evaluation tokens: %w", err)
+				return ports.CapabilityDecision{}, CatalogAIProjection{}, fmt.Errorf("count final evaluation tokens: %w", err)
 			}
 			if tokens > budget {
 				if len(candidateProjection.Items) == 0 {
-					return ports.CustomerSalesProposal{}, CatalogAIProjection{}, fmt.Errorf(
+					return ports.CapabilityDecision{}, CatalogAIProjection{}, fmt.Errorf(
 						"final evaluation base context exceeds token budget %d with exact request size %d",
 						budget, tokens,
 					)
 				}
 				if lastOversizeTokens > 0 && tokens >= lastOversizeTokens {
-					return ports.CustomerSalesProposal{}, CatalogAIProjection{}, fmt.Errorf(
+					return ports.CapabilityDecision{}, CatalogAIProjection{}, fmt.Errorf(
 						"candidate reduction made no token progress: previous=%d current=%d budget=%d",
 						lastOversizeTokens, tokens, budget,
 					)
@@ -933,7 +930,7 @@ func (c *CatalogBatchController) runFinalEvaluation(
 					nextBatchNumber,
 				)
 				if err != nil {
-					return ports.CustomerSalesProposal{}, CatalogAIProjection{}, err
+					return ports.CapabilityDecision{}, CatalogAIProjection{}, err
 				}
 				candidates = normalizeBatchCandidates(reducedCandidates)
 				candidateProjection = reducedProjection
@@ -944,10 +941,10 @@ func (c *CatalogBatchController) runFinalEvaluation(
 
 		proposal, usage, err := c.Gemini.FinalEvaluateWithDetails(ctx, finalInput, userPrompt)
 		if err != nil {
-			return ports.CustomerSalesProposal{}, CatalogAIProjection{}, err
+			return ports.CapabilityDecision{}, CatalogAIProjection{}, err
 		}
-		if proposal.Status == ports.CustomerSalesProposalStatusNeedsMoreData {
-			return ports.CustomerSalesProposal{}, CatalogAIProjection{}, errors.New("final catalog evaluation returned needs_more_data after complete catalog coverage")
+		if !isTerminalCustomerSalesCapability(proposal.Capability) {
+			return ports.CapabilityDecision{}, CatalogAIProjection{}, errors.New("final catalog evaluation returned a non-terminal or unavailable capability after complete catalog coverage")
 		}
 		c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, usage, "final_evaluation")
 		return proposal, candidateProjection, nil
@@ -1210,4 +1207,13 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 	}
 	log.Printf("[CatalogBatch] AI_USAGE_RECORDED business=%s phase=%s tokens_in=%d cached=%d tokens_out=%d cost_yer=%d",
 		businessID, phase, nonCachedInput, cachedInput, usage.OutputTokens, providerCostYER)
+}
+
+// Ready is the same local dependency check used when offering the capability.
+func (c *CatalogBatchController) Ready() bool {
+	if c == nil || c.Gemini == nil || c.RunRepo == nil || c.CatalogAI == nil || c.Now == nil || c.NewID == nil {
+		return false
+	}
+	_, exact := c.Gemini.(ExactBatchTokenCounter)
+	return exact || c.TokenCounter != nil
 }

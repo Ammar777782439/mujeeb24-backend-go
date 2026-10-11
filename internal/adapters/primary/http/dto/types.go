@@ -413,18 +413,20 @@ type TransactionReview struct {
 }
 
 type AIDecision struct {
-	ID                 UUID           `json:"id"`
-	BusinessID         UUID           `json:"business_id"`
-	ConversationID     *UUID          `json:"conversation_id,omitempty"`
-	IntentBase         string         `json:"intent_base"`
-	Entities           map[string]any `json:"entities"`
-	EvidenceReferences []string       `json:"evidence_references"`
-	RequestedAction    string         `json:"requested_action"`
-	RequiresHuman      bool           `json:"requires_human"`
-	MissingInformation []string       `json:"missing_information"`
-	PolicyVersion      string         `json:"policy_version"`
-	Lifecycle          string         `json:"lifecycle"`
-	CreatedAt          time.Time      `json:"created_at"`
+	ID                  UUID           `json:"id"`
+	BusinessID          UUID           `json:"business_id"`
+	ConversationID      *UUID          `json:"conversation_id,omitempty"`
+	IntentBase          string         `json:"intent_base"`
+	Entities            map[string]any `json:"entities"`
+	EvidenceReferences  []string       `json:"evidence_references"`
+	RequestedCapability *string        `json:"requested_capability,omitempty"`
+	EffectiveCapability *string        `json:"effective_capability,omitempty"`
+	RequestedAction     string         `json:"requested_action"`
+	RequiresHuman       bool           `json:"requires_human"`
+	MissingInformation  []string       `json:"missing_information"`
+	PolicyVersion       string         `json:"policy_version"`
+	Lifecycle           string         `json:"lifecycle"`
+	CreatedAt           time.Time      `json:"created_at"`
 }
 type AuditEvent struct {
 	ID             UUID           `json:"id"`

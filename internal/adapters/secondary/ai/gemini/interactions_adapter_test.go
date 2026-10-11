@@ -83,14 +83,14 @@ func TestCustomerSalesUsesSingleCapabilityAndCanonicalHistory(t *testing.T) {
 	if captured["generation_config"].(map[string]any)["tool_choice"] != "any" {
 		t.Fatal("one capability selection must be required")
 	}
-	if out.GeminiInteraction.ResultingInteractionID != "" || out.Capability != ports.CustomerSalesCapabilityReply {
+	if out.GeminiInteraction.ResultingInteractionID != "" || out.Decision.Capability != ports.CustomerSalesCapabilityReply {
 		t.Fatalf("unexpected continuity/capability: %+v", out)
 	}
 	if out.Usage.InputTokens != 21 || out.Usage.CachedTokens != 4 || out.Usage.OutputTokens != 7 {
 		t.Fatalf("usage mismatch: %+v", out.Usage)
 	}
-	if out.Proposal.ResponseText != "تم" {
-		t.Fatalf("proposal response = %q", out.Proposal.ResponseText)
+	if out.Decision.ResponseText != "تم" {
+		t.Fatalf("proposal response = %q", out.Decision.ResponseText)
 	}
 }
 
@@ -158,7 +158,7 @@ func TestCustomerSalesEnforcesMaxInputOnSerializedInteraction(t *testing.T) {
 }
 
 func TestStrictCustomerProposalRejectsUnknownFields(t *testing.T) {
-	var proposal ports.CustomerSalesProposal
+	var proposal ports.CapabilityDecision
 	err := decodeStrictStructuredJSON([]byte(`{"status":"resolved","action":"answer","response_text":"ok","authorized":true}`), &proposal)
 	if err == nil {
 		t.Fatal("unknown top-level proposal field must be rejected")
@@ -166,7 +166,7 @@ func TestStrictCustomerProposalRejectsUnknownFields(t *testing.T) {
 }
 
 func TestStrictCustomerProposalRejectsUnknownSelectedFields(t *testing.T) {
-	var proposal ports.CustomerSalesProposal
+	var proposal ports.CapabilityDecision
 	err := decodeStrictStructuredJSON([]byte(`{"status":"resolved","action":"answer","response_text":"ok","selected":[{"item_id":"item-1","payment_confirmed":true}]}`), &proposal)
 	if err == nil {
 		t.Fatal("unknown selected[] field must be rejected")

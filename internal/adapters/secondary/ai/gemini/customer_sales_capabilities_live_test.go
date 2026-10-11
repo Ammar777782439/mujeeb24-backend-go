@@ -58,8 +58,8 @@ func TestCustomerSalesCapabilityLiveEvals(t *testing.T) {
 			if err != nil {
 				t.Fatalf("live decision failed: %v", err)
 			}
-			if out.Capability != tc.want {
-				t.Fatalf("selected %s, want %s", out.Capability, tc.want)
+			if out.Decision.Capability != tc.want {
+				t.Fatalf("selected %s, want %s", out.Decision.Capability, tc.want)
 			}
 		})
 	}

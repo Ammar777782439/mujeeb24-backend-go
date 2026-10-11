@@ -12,22 +12,17 @@ import "time"
 // ════════════════════════════════════════════════════════════════════════════
 
 // EffectiveDecision is the contract ⑥ §17 outcome after Structural → Reference
-// → Tenant → Ownership → Policy → Authorization. It is distinct from AIGeminiProposal.
+// → Tenant → Ownership → Policy → Authorization. It preserves the selected CapabilityDecision separately from the policy outcome.
 //
 // Per contract ⑥ §22, no new "invalid/rejected/unauthorized" statuses are added
 // to the AI Contract; those are internal layer resultss. The EffectiveDecision
-// carries the authoritative action and the policy decision Mujeeb reached.
+// carries the selected capability and the policy decision Mujeeb reached.
 type EffectiveDecision struct {
 	// DecisionID is the ai_decisions.id this Effective Decision is attached to.
 	DecisionID string
 
-	// EffectiveAction may differ from the AI proposal's action when policy or
-	// authorization overrode it. For example, if Gemini proposed "answer" but
-	// policy requires approval, EffectiveAction becomes "blocked" until
-	// approval arrives, then transitions to the original action.
-	//
-	// Allowed values: same as AIProposalAction plus "no_action" and "blocked".
-	EffectiveAction string
+	// Capability remains the model choice; PolicyDecision gates execution.
+	Capability CustomerSalesCapability
 
 	// PolicyDecision is the PolicyEvaluator's verdict per contract ⑥ §12-13.
 	//   allowed           — proceed without human approval

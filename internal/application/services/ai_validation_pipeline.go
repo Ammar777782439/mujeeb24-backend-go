@@ -40,12 +40,12 @@ import (
 // ValidationPipeline executes the contract ⑥ post-Gemini validation chain.
 //
 // Each stage returns a structured failure (StageFailure) which the pipeline
-// converts into an EffectiveDecision with EffectiveAction "blocked" (per
+// converts into an EffectiveDecision with a blocked policy outcome (per
 // contract ⑥ §21 — no Execution when validation fails) and records the
 // failure in ai_runs (via the lifecycle) for observability.
 //
 // On full success, the pipeline returns an EffectiveDecision with the
-// EffectiveAction set per PolicyEvaluator's verdict and the PolicyDecision
+// Capability preserved with PolicyEvaluator's verdict and the PolicyDecision
 // (allowed / requires_approval / denied).
 type ValidationPipeline struct {
 	ReferenceValidator   ReferenceValidator
@@ -90,7 +90,7 @@ func (f StageFailure) Error() string { return fmt.Sprintf("%s/%s: %s", f.Stage, 
 // Per contract ⑥ §2, if any barrier fails, no downstream barrier runs.
 // This is enforced via early return on each stage.
 func (p *ValidationPipeline) Validate(ctx context.Context, input ValidationInput) (ports.EffectiveDecision, *StageFailure) {
-	if err := p.validateStructural(input.Proposal); err != nil {
+	if err := p.validateStructural(input.Decision); err != nil {
 		return ports.EffectiveDecision{}, err
 	}
 	if err := p.validateReferences(ctx, input); err != nil {
@@ -110,84 +110,18 @@ func (p *ValidationPipeline) Validate(ctx context.Context, input ValidationInput
 	return authorized, nil
 }
 
-// validateStructural is contract ⑥ §3 — the AI Proposal must match the
-// closed Output Contract per contract ④ §4.
-//
-// Allowed status: resolved/ambiguous/not_found/needs_more_data.
-// Allowed action: answer/clarification/human_request/lead_draft/order_draft.
-// response_text: non-empty when action != human_request.
-// selected: each SelectedReference has a non-empty item_id (variant_id and
-// offer_id may be nil per contract ④ §4).
-func (p *ValidationPipeline) validateStructural(proposal ports.CustomerSalesProposal) *StageFailure {
-	switch proposal.Status {
-	case ports.CustomerSalesProposalStatusResolved,
-		ports.CustomerSalesProposalStatusAmbiguous,
-		ports.CustomerSalesProposalStatusNotFound,
-		ports.CustomerSalesProposalStatusNeedsMoreData:
-		// allowed
-	default:
-		return &StageFailure{
-			Stage:    ports.AIRunFailureStageValidation,
-			Category: ports.AIRunFailureCategoryInvalidAIOutput,
-			Reason:   fmt.Sprintf("invalid status %q per contract ④ §4", proposal.Status),
-		}
+// validateStructural accepts only implemented terminal capabilities.
+func (p *ValidationPipeline) validateStructural(decision ports.CapabilityDecision) *StageFailure {
+	definition, ok := ports.CustomerSalesCapabilityDefinitionFor(decision.Capability)
+	if !ok || !definition.Terminal {
+		return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidAIOutput, Reason: fmt.Sprintf("unavailable terminal capability %q", decision.Capability)}
 	}
-	switch proposal.Action {
-	case ports.CustomerSalesProposalActionAnswer,
-		ports.CustomerSalesProposalActionClarification,
-		ports.CustomerSalesProposalActionHumanRequest,
-		ports.CustomerSalesProposalActionLeadDraft,
-		ports.CustomerSalesProposalActionOrderDraft:
-		// allowed
-	default:
-		return &StageFailure{
-			Stage:    ports.AIRunFailureStageValidation,
-			Category: ports.AIRunFailureCategoryInvalidAIOutput,
-			Reason:   fmt.Sprintf("invalid action %q per contract ④ §4", proposal.Action),
-		}
+	if definition.SendsCustomerMessage && strings.TrimSpace(decision.ResponseText) == "" {
+		return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidAIOutput, Reason: "customer-facing capability requires response_text"}
 	}
-	if proposal.RoutingReason != "" {
-		switch proposal.RoutingReason {
-		case ports.CustomerSalesRoutingReasonSubscriptionActivation,
-			ports.CustomerSalesRoutingReasonCustomerRequestedHuman,
-			ports.CustomerSalesRoutingReasonOther:
-			// allowed
-		default:
-			return &StageFailure{
-				Stage:    ports.AIRunFailureStageValidation,
-				Category: ports.AIRunFailureCategoryInvalidAIOutput,
-				Reason:   fmt.Sprintf("invalid routing_reason %q", proposal.RoutingReason),
-			}
-		}
-	}
-	if proposal.RoutingReason != "" && proposal.Action != ports.CustomerSalesProposalActionHumanRequest {
-		return &StageFailure{
-			Stage:    ports.AIRunFailureStageValidation,
-			Category: ports.AIRunFailureCategoryInvalidAIOutput,
-			Reason:   "routing_reason is only valid with action=human_request",
-		}
-	}
-	if proposal.Status == ports.CustomerSalesProposalStatusNotFound && len(proposal.Selected) > 0 {
-		return &StageFailure{
-			Stage:    ports.AIRunFailureStageValidation,
-			Category: ports.AIRunFailureCategoryInvalidAIOutput,
-			Reason:   "not_found proposal must not contain selected catalog references",
-		}
-	}
-	if proposal.Action != ports.CustomerSalesProposalActionHumanRequest && strings.TrimSpace(proposal.ResponseText) == "" {
-		return &StageFailure{
-			Stage:    ports.AIRunFailureStageValidation,
-			Category: ports.AIRunFailureCategoryInvalidAIOutput,
-			Reason:   "response_text must be non-empty unless action is human_request",
-		}
-	}
-	for i, ref := range proposal.Selected {
+	for i, ref := range decision.Selected {
 		if strings.TrimSpace(ref.ItemID) == "" {
-			return &StageFailure{
-				Stage:    ports.AIRunFailureStageValidation,
-				Category: ports.AIRunFailureCategoryInvalidAIOutput,
-				Reason:   fmt.Sprintf("selected[%d].item_id is required per contract ④ §4", i),
-			}
+			return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidAIOutput, Reason: fmt.Sprintf("selected[%d].item_id is required", i)}
 		}
 	}
 	return nil
@@ -209,7 +143,7 @@ func (p *ValidationPipeline) validateReferences(ctx context.Context, input Valid
 	// Universal Catalog AI v3 validates the complete item -> variant -> offer
 	// relationship against the exact evidence exposed to the model.
 	if relational, ok := p.ReferenceValidator.(RelationalReferenceValidator); ok {
-		for i, ref := range input.Proposal.Selected {
+		for i, ref := range input.Decision.Selected {
 			if err := relational.ValidateSelection(ctx, input.BusinessID, ref, input.Evidence); err != nil {
 				return &StageFailure{
 					Stage:    ports.AIRunFailureStageValidation,
@@ -223,7 +157,7 @@ func (p *ValidationPipeline) validateReferences(ctx context.Context, input Valid
 
 	// Compatibility path for older validators/tests. Production Postgres
 	// implements RelationalReferenceValidator and never reaches this path.
-	for i, ref := range input.Proposal.Selected {
+	for i, ref := range input.Decision.Selected {
 		if err := p.ReferenceValidator.ValidateItemReference(ctx, input.BusinessID, ref.ItemID, input.EvidenceItemIDs); err != nil {
 			return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidReference, Reason: fmt.Sprintf("selected[%d].item_id %s: %s", i, ref.ItemID, err.Error())}
 		}
@@ -256,7 +190,7 @@ func (p *ValidationPipeline) validateTenant(ctx context.Context, input Validatio
 			Reason:   "tenant validator is required; validation fails closed",
 		}
 	}
-	for i, ref := range input.Proposal.Selected {
+	for i, ref := range input.Decision.Selected {
 		if err := p.TenantValidator.ValidateItemOwnership(ctx, input.BusinessID, ref.ItemID); err != nil {
 			return &StageFailure{
 				Stage:    ports.AIRunFailureStageValidation,
@@ -298,7 +232,7 @@ func (p *ValidationPipeline) evaluateCustomerSalesPolicy(ctx context.Context, in
 		}
 	}
 
-	result := p.CustomerSalesPolicy.Evaluate(ctx, input.Proposal, input.Context)
+	result := p.CustomerSalesPolicy.Evaluate(ctx, input.Decision, input.Context)
 	policyDecision := strings.TrimSpace(result.Decision)
 	switch policyDecision {
 	case "allowed", "requires_approval", "denied":
@@ -313,17 +247,17 @@ func (p *ValidationPipeline) evaluateCustomerSalesPolicy(ctx context.Context, in
 	}
 
 	return ports.EffectiveDecision{
-		DecisionID:      input.DecisionID,
-		EffectiveAction: string(input.Proposal.Action),
-		PolicyDecision:  policyDecision,
-		Reason:          result.Reason,
+		DecisionID:     input.DecisionID,
+		Capability:     input.Decision.Capability,
+		PolicyDecision: policyDecision,
+		Reason:         result.Reason,
 	}, nil
 }
 
 // authorize is contract ⑥ §17 — the final go/no-go. Per contract ⑥ §19,
 // Execution only happens after Authorization succeeds.
 //
-// Per contract ⑥ §14, when action == human_request, Mujeeb applies its own
+// Per contract ⑥ §14, when capability == handoff_to_human, Mujeeb applies its own
 // handoff policy; Gemini cannot force handoff via prompt text alone.
 func (p *ValidationPipeline) authorize(ctx context.Context, input ValidationInput, decision ports.EffectiveDecision) (ports.EffectiveDecision, *StageFailure) {
 	if p.AuthorizationService == nil {
@@ -342,6 +276,15 @@ func (p *ValidationPipeline) authorize(ctx context.Context, input ValidationInpu
 			Reason:   err.Error(),
 		}
 	}
+	if (authorized.PolicyDecision != "allowed" && authorized.PolicyDecision != "requires_approval" && authorized.PolicyDecision != "denied") || authorized.Capability != input.Decision.Capability || (decision.PolicyDecision != "allowed" && authorized.PolicyDecision == "allowed") {
+		return ports.EffectiveDecision{}, &StageFailure{Stage: ports.AIRunFailureStageAuthorization, Category: ports.AIRunFailureCategoryAuthorizationDenial, Reason: "authorization must preserve capability and a valid policy gate without bypassing merchant policy"}
+	}
+	if authorized.PolicyDecision == "allowed" {
+		now := p.Now()
+		authorized.AuthorizedAt = &now
+	} else {
+		authorized.AuthorizedAt = nil
+	}
 	return authorized, nil
 }
 
@@ -357,8 +300,8 @@ type ValidationInput struct {
 	// ConversationID is the conversation this decision belongs to.
 	ConversationID string
 
-	// Proposal is the contract ④ §4 Gemini output.
-	Proposal ports.CustomerSalesProposal
+	// Decision is the model-selected capability and its grounded arguments.
+	Decision ports.CapabilityDecision
 
 	// Context is the CustomerSalesContext built by the ContextBuilder.
 	Context *ports.CustomerSalesContext

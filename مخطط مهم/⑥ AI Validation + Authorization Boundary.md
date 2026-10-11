@@ -1,8 +1,10 @@
+> HISTORICAL / SUPERSEDED — هذه نسخة تاريخية وليست عقد تشغيل. المرجع الحالي: [عقد القدرات](../contracts/ai/06-ai-validation-authorization-boundary-closed.md). أي CLOSED أو status/action أدناه يمثل التصميم السابق فقط.
+
 Mujeeb 24 — ⑥ AI Validation + Authorization Boundary
 
 الحالة
 
-CLOSED
+HISTORICAL SUPERSEDED
 
 هذه الخطوة تحسم ما يحدث بعد أن يعيد Gemini:
 
@@ -635,4 +637,4 @@ EXECUTION
 
 القرار
 
-⑥ AI Validation + Authorization Boundary = CLOSED
+⑥ AI Validation + Authorization Boundary = HISTORICAL SUPERSEDED
