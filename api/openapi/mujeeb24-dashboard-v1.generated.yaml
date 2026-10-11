@@ -5129,12 +5129,70 @@ components:
           type: string
         amount:
           format: double
+          nullable: true
           type: number
+        availability_mode:
+          enum:
+            - stock
+            - schedule
+            - supplier_check
+            - always_available
+            - unknown
+          type: string
         availability_status:
+          enum:
+            - available
+            - unavailable
+            - unknown
+            - requires_check
+            - stale
+          type: string
+        currency:
+          nullable: true
+          type: string
+        fulfillment_mode:
+          enum:
+            - delivery
+            - pickup
+            - digital
+            - appointment
+            - travel
+            - manual
           type: string
         name:
           type: string
+        pricing_mode:
+          enum:
+            - fixed
+            - starting_from
+            - per_unit
+            - per_person
+            - per_day
+            - quote_required
+            - dynamic
+          type: string
+        pricing_unit:
+          nullable: true
+          type: string
         status:
+          enum:
+            - draft
+            - active
+            - inactive
+            - expired
+            - archived
+          type: string
+        validity_from:
+          format: date-time
+          nullable: true
+          type: string
+        validity_until:
+          format: date-time
+          nullable: true
+          type: string
+        variant_id:
+          format: uuid
+          nullable: true
           type: string
       type: object
     UpdateOperation:

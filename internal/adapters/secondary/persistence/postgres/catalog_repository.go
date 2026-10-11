@@ -577,6 +577,17 @@ func (r *CatalogRepository) UpdateCatalogItem(ctx context.Context, patch ports.C
 	return item, classifyCatalogUpdateMiss(ctx, executor, "catalog_item.update", `SELECT EXISTS (SELECT 1 FROM catalog_items WHERE business_id = $1::uuid AND id = $2::uuid)`, patch.BusinessID, patch.ID, err)
 }
 
+func (r *CatalogRepository) GetOffer(ctx context.Context, businessID, offerID string) (ports.OfferRecord, error) {
+	executor, err := r.catalogExecutor(ctx, "offer.get")
+	if err != nil { return ports.OfferRecord{}, err }
+	if businessID == "" || offerID == "" {
+		return ports.OfferRecord{}, invalidRepositoryInput("offer.get", "business and offer ids are required")
+	}
+	record, err := scanOfferRecord(executor.QueryRow(ctx, `SELECT id::text, business_id::text, catalog_item_id::text, variant_id::text, name, pricing_mode, amount::text, currency, pricing_unit, price_source, price_verification_status, price_checked_at, availability_mode, availability_source, availability_checked_at, availability_valid_until, availability_evidence_ref, fulfillment_mode, validity_from, validity_until, availability_status, status, resource_version, created_at, updated_at FROM offers WHERE business_id = $1::uuid AND id = $2::uuid`, businessID, offerID))
+	if err != nil { return record, classifyRepositoryGetError("offer.get", err) }
+	return record, nil
+}
+
 func (r *CatalogRepository) CreateOffer(ctx context.Context, draft ports.OfferDraft) (ports.OfferRecord, error) {
 	executor, err := r.catalogExecutor(ctx, "offer.create")
 	if err != nil {
@@ -599,35 +610,43 @@ func (r *CatalogRepository) CreateOffer(ctx context.Context, draft ports.OfferDr
 
 func (r *CatalogRepository) UpdateOffer(ctx context.Context, patch ports.OfferPatch) (ports.OfferRecord, error) {
 	executor, err := r.catalogExecutor(ctx, "offer.update")
-	if err != nil {
-		return ports.OfferRecord{}, err
-	}
+	if err != nil { return ports.OfferRecord{}, err }
 	if patch.ID == "" || patch.BusinessID == "" || patch.ExpectedVersion <= 0 {
 		return ports.OfferRecord{}, invalidRepositoryInput("offer.update", "id, business, and positive expected version are required")
 	}
+	amountPresent := patch.AmountPresent || patch.AmountDecimal != nil || patch.AmountMinor != nil
 	var offer ports.OfferRecord
 	err = executor.QueryRow(ctx, `UPDATE offers SET
-        name = COALESCE($3, name),
-        amount = COALESCE($4::text::numeric, CASE WHEN $5::bigint IS NULL THEN amount ELSE $5::numeric / 100 END),
-        availability_status = COALESCE($6, availability_status),
-        status = COALESCE($7, status),
-        price_source = COALESCE($8, price_source),
-        price_verification_status = COALESCE($9, price_verification_status),
-        price_checked_at = COALESCE($10, price_checked_at),
-        availability_source = COALESCE($11, availability_source),
-        availability_checked_at = COALESCE($12, availability_checked_at),
+        variant_id = CASE WHEN $3::boolean THEN $4::uuid ELSE variant_id END,
+        name = COALESCE($5, name),
+        pricing_mode = COALESCE($6, pricing_mode),
+        amount = CASE WHEN $7::boolean THEN CASE WHEN $8::text IS NOT NULL THEN $8::text::numeric WHEN $9::bigint IS NOT NULL THEN $9::numeric / 100 ELSE NULL END ELSE amount END,
+        currency = CASE WHEN $10::boolean THEN $11::text ELSE currency END,
+        pricing_unit = CASE WHEN $12::boolean THEN $13::text ELSE pricing_unit END,
+        availability_mode = COALESCE($14, availability_mode),
+        availability_status = COALESCE($15, availability_status),
+        fulfillment_mode = COALESCE($16, fulfillment_mode),
+        validity_from = CASE WHEN $17::boolean THEN $18::timestamptz ELSE validity_from END,
+        validity_until = CASE WHEN $19::boolean THEN $20::timestamptz ELSE validity_until END,
+        status = COALESCE($21, status),
+        price_source = COALESCE($22, price_source),
+        price_verification_status = COALESCE($23, price_verification_status),
+        price_checked_at = COALESCE($24, price_checked_at),
+        availability_source = COALESCE($25, availability_source),
+        availability_checked_at = COALESCE($26, availability_checked_at),
         resource_version = resource_version + 1,
-        updated_at = $13
-        WHERE business_id = $1::uuid AND id = $2::uuid AND resource_version = $14
+        updated_at = $27
+        WHERE business_id = $1::uuid AND id = $2::uuid AND resource_version = $28
         RETURNING id::text, business_id::text, catalog_item_id::text, variant_id::text, name, pricing_mode, amount::text, currency, pricing_unit, price_source, price_verification_status, price_checked_at, availability_mode, availability_source, availability_checked_at, availability_valid_until, availability_evidence_ref, fulfillment_mode, validity_from, validity_until, availability_status, status, resource_version, created_at, updated_at`,
-        patch.BusinessID, patch.ID, patch.Name, patch.AmountDecimal, patch.AmountMinor,
-        patch.AvailabilityStatus, patch.Status, patch.PriceSource, patch.PriceVerificationStatus,
-        patch.PriceCheckedAt, patch.AvailabilitySource, patch.AvailabilityCheckedAt,
-        patch.UpdatedAt, patch.ExpectedVersion,
-    ).Scan(&offer.ID, &offer.BusinessID, &offer.CatalogItemID, &offer.VariantID, &offer.Name, &offer.PricingMode, &offer.Amount, &offer.Currency, &offer.PricingUnit, &offer.PriceSource, &offer.PriceVerificationStatus, &offer.PriceCheckedAt, &offer.AvailabilityMode, &offer.AvailabilitySource, &offer.AvailabilityCheckedAt, &offer.AvailabilityValidUntil, &offer.AvailabilityEvidenceRef, &offer.FulfillmentMode, &offer.ValidityFrom, &offer.ValidityUntil, &offer.AvailabilityStatus, &offer.Status, &offer.ResourceVersion, &offer.CreatedAt, &offer.UpdatedAt)
-	if err == nil {
-		return offer, nil
-	}
+		patch.BusinessID, patch.ID, patch.VariantIDPresent, patch.VariantID,
+		patch.Name, patch.PricingMode, amountPresent, patch.AmountDecimal, patch.AmountMinor,
+		patch.CurrencyPresent, patch.Currency, patch.PricingUnitPresent, patch.PricingUnit,
+		patch.AvailabilityMode, patch.AvailabilityStatus, patch.FulfillmentMode,
+		patch.ValidityFromPresent, patch.ValidityFrom, patch.ValidityUntilPresent, patch.ValidityUntil,
+		patch.Status, patch.PriceSource, patch.PriceVerificationStatus, patch.PriceCheckedAt,
+		patch.AvailabilitySource, patch.AvailabilityCheckedAt, patch.UpdatedAt, patch.ExpectedVersion,
+	).Scan(&offer.ID, &offer.BusinessID, &offer.CatalogItemID, &offer.VariantID, &offer.Name, &offer.PricingMode, &offer.Amount, &offer.Currency, &offer.PricingUnit, &offer.PriceSource, &offer.PriceVerificationStatus, &offer.PriceCheckedAt, &offer.AvailabilityMode, &offer.AvailabilitySource, &offer.AvailabilityCheckedAt, &offer.AvailabilityValidUntil, &offer.AvailabilityEvidenceRef, &offer.FulfillmentMode, &offer.ValidityFrom, &offer.ValidityUntil, &offer.AvailabilityStatus, &offer.Status, &offer.ResourceVersion, &offer.CreatedAt, &offer.UpdatedAt)
+	if err == nil { return offer, nil }
 	return offer, classifyCatalogUpdateMiss(ctx, executor, "offer.update", `SELECT EXISTS (SELECT 1 FROM offers WHERE business_id = $1::uuid AND id = $2::uuid)`, patch.BusinessID, patch.ID, err)
 }
 

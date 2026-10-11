@@ -69,6 +69,16 @@ func (r contextCatalogRepository) UpdateCatalogItem(context.Context, ports.Catal
 func (r contextCatalogRepository) ListOffers(_ context.Context, _ string, itemID, _ string, _ int, _ string) (ports.OfferPage, error) {
 	return r.offers[itemID], nil
 }
+func (r contextCatalogRepository) GetOffer(_ context.Context, _ string, offerID string) (ports.OfferRecord, error) {
+	for _, page := range r.offers {
+		for _, offer := range page.Items {
+			if offer.ID == offerID {
+				return offer, nil
+			}
+		}
+	}
+	return ports.OfferRecord{}, errNotFoundStub{}
+}
 func (r contextCatalogRepository) CreateOffer(context.Context, ports.OfferDraft) (ports.OfferRecord, error) {
 	return ports.OfferRecord{}, nil
 }

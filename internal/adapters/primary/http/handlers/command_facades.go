@@ -294,14 +294,32 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 		if err != nil {
 			return mapApplicationError(err), true
 		}
-		amount, err := minorUnits(in.Body.Amount)
+		amount, err := minorUnits(in.Body.Amount.Value)
 		if err != nil {
 			return mapApplicationError(err), true
 		}
 		if s.deps.UpdateOffer == nil {
 			return mapApplicationError(appErrors.NotImplemented()), true
 		}
-		result, err := s.deps.UpdateOffer.Handle(ctx, commands.UpdateOfferCommand{Meta: commandMeta(ctx, actor, in.CommandHeaders), OfferID: commands.OfferID(in.OfferID), Name: optionalStringPtr(in.Body.Name), AmountMinor: amount, AvailabilityStatus: optionalStringPtr(in.Body.AvailabilityStatus), Status: optionalStringPtr(in.Body.Status)})
+		var variantID *commands.VariantID
+		if in.Body.VariantID.Value != nil {
+			value := commands.VariantID(*in.Body.VariantID.Value)
+			variantID = &value
+		}
+		result, err := s.deps.UpdateOffer.Handle(ctx, commands.UpdateOfferCommand{
+			Meta: commandMeta(ctx, actor, in.CommandHeaders), OfferID: commands.OfferID(in.OfferID),
+			VariantID: variantID, VariantIDPresent: in.Body.VariantID.Present,
+			Name: optionalStringPtr(in.Body.Name), PricingMode: optionalStringPtr(in.Body.PricingMode),
+			AmountMinor: amount, AmountPresent: in.Body.Amount.Present,
+			Currency: in.Body.Currency.Value, CurrencyPresent: in.Body.Currency.Present,
+			PricingUnit: in.Body.PricingUnit.Value, PricingUnitPresent: in.Body.PricingUnit.Present,
+			AvailabilityMode: optionalStringPtr(in.Body.AvailabilityMode),
+			AvailabilityStatus: optionalStringPtr(in.Body.AvailabilityStatus),
+			FulfillmentMode: optionalStringPtr(in.Body.FulfillmentMode),
+			ValidityFrom: in.Body.ValidityFrom.Value, ValidityFromPresent: in.Body.ValidityFrom.Present,
+			ValidityUntil: in.Body.ValidityUntil.Value, ValidityUntilPresent: in.Body.ValidityUntil.Present,
+			Status: optionalStringPtr(in.Body.Status),
+		})
 		if err != nil {
 			return mapApplicationError(err), true
 		}

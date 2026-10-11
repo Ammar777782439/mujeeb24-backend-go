@@ -72,6 +72,16 @@ func (r comparisonStubRepo) UpdateCatalogItem(context.Context, ports.CatalogItem
 func (r comparisonStubRepo) ListOffers(_ context.Context, _ string, itemID, _ string, _ int, _ string) (ports.OfferPage, error) {
 	return ports.OfferPage{Items: r.offers[itemID]}, nil
 }
+func (r comparisonStubRepo) GetOffer(_ context.Context, _ string, offerID string) (ports.OfferRecord, error) {
+	for _, offers := range r.offers {
+		for _, offer := range offers {
+			if offer.ID == offerID {
+				return offer, nil
+			}
+		}
+	}
+	return ports.OfferRecord{}, notFoundError("offer.get")
+}
 func (r comparisonStubRepo) CreateOffer(context.Context, ports.OfferDraft) (ports.OfferRecord, error) {
 	return ports.OfferRecord{}, nil
 }

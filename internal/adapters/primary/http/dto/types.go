@@ -42,6 +42,79 @@ func (OptionalNullableString) Schema(huma.Registry) *huma.Schema {
 	return &huma.Schema{Type: huma.TypeString, Nullable: true}
 }
 
+type OptionalNullableFloat64 struct {
+	Value   *float64
+	Present bool
+}
+
+func (n *OptionalNullableFloat64) UnmarshalJSON(data []byte) error {
+	n.Present = true
+	if string(data) == "null" {
+		n.Value = nil
+		return nil
+	}
+	var value float64
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	n.Value = &value
+	return nil
+}
+
+func (OptionalNullableFloat64) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeNumber, Format: "double", Nullable: true}
+}
+
+type OptionalNullableUUID struct {
+	Value   *UUID
+	Present bool
+}
+
+func (u *OptionalNullableUUID) UnmarshalJSON(data []byte) error {
+	u.Present = true
+	if string(data) == "null" {
+		u.Value = nil
+		return nil
+	}
+	var value UUID
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	u.Value = &value
+	return nil
+}
+
+func (OptionalNullableUUID) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeString, Format: "uuid", Nullable: true}
+}
+
+type OptionalNullableTimestamp struct {
+	Value   *time.Time
+	Present bool
+}
+
+func (t *OptionalNullableTimestamp) UnmarshalJSON(data []byte) error {
+	t.Present = true
+	if string(data) == "null" {
+		t.Value = nil
+		return nil
+	}
+	var raw string
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	value, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return err
+	}
+	t.Value = &value
+	return nil
+}
+
+func (OptionalNullableTimestamp) Schema(huma.Registry) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeString, Format: "date-time", Nullable: true}
+}
+
 // Permissions is the effective permission set returned by the API. It includes
 // the owner wildcard because existing owner memberships are persisted as ["*"].
 type Permissions []string

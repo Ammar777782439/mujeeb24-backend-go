@@ -1,5 +1,7 @@
 package commands
 
+import "time"
+
 type CreateCustomerCommand struct {
 	Meta             CommandMeta
 	Profile          map[string]any
@@ -115,12 +117,26 @@ type CreateOfferCommand struct {
 	Status             string
 }
 type UpdateOfferCommand struct {
-	Meta               CommandMeta
-	OfferID            OfferID
-	Name               *string
-	AmountMinor        *int64
-	AvailabilityStatus *string
-	Status             *string
+	Meta                 CommandMeta
+	OfferID              OfferID
+	VariantID            *VariantID
+	VariantIDPresent     bool
+	Name                 *string
+	PricingMode          *string
+	AmountMinor          *int64
+	AmountPresent        bool
+	Currency             *string
+	CurrencyPresent      bool
+	PricingUnit          *string
+	PricingUnitPresent   bool
+	AvailabilityMode     *string
+	AvailabilityStatus   *string
+	FulfillmentMode      *string
+	ValidityFrom         *time.Time
+	ValidityFromPresent  bool
+	ValidityUntil        *time.Time
+	ValidityUntilPresent bool
+	Status               *string
 }
 type CreateVariantCommand struct {
 	Meta          CommandMeta

@@ -241,9 +241,23 @@ type OfferPatch struct {
 	AmountDecimal           *string // Takes precedence over the legacy minor-unit adapter.
 	ID                      string
 	BusinessID              string
+	VariantID               *string
+	VariantIDPresent        bool
 	Name                    *string
+	PricingMode             *string
 	AmountMinor             *int64
+	AmountPresent           bool
+	Currency                *string
+	CurrencyPresent         bool
+	PricingUnit             *string
+	PricingUnitPresent      bool
+	AvailabilityMode        *string
 	AvailabilityStatus      *string
+	FulfillmentMode         *string
+	ValidityFrom            *time.Time
+	ValidityFromPresent     bool
+	ValidityUntil           *time.Time
+	ValidityUntilPresent    bool
 	Status                  *string
 	PriceSource             *string
 	PriceVerificationStatus *string
@@ -286,6 +300,7 @@ type CatalogRepository interface {
 	CreateCatalogItem(ctx context.Context, draft CatalogItemDraft) (CatalogItemRecord, error)
 	UpdateCatalogItem(ctx context.Context, patch CatalogItemPatch) (CatalogItemRecord, error)
 	ListOffers(ctx context.Context, businessID, itemID, status string, limit int, cursor string) (OfferPage, error)
+	GetOffer(ctx context.Context, businessID, offerID string) (OfferRecord, error)
 	CreateOffer(ctx context.Context, draft OfferDraft) (OfferRecord, error)
 	UpdateOffer(ctx context.Context, patch OfferPatch) (OfferRecord, error)
 	ListVariants(ctx context.Context, businessID, itemID, status string, limit int, cursor string) (VariantPage, error)

@@ -500,10 +500,18 @@ type CreateOfferRequest struct {
 	Status             string   `json:"status,omitempty"`
 }
 type UpdateOfferRequest struct {
-	Name               string   `json:"name,omitempty"`
-	Amount             *float64 `json:"amount,omitempty"`
-	AvailabilityStatus string   `json:"availability_status,omitempty"`
-	Status             string   `json:"status,omitempty"`
+	VariantID          OptionalNullableUUID      `json:"variant_id,omitempty"`
+	Name               string                    `json:"name,omitempty"`
+	PricingMode        string                    `json:"pricing_mode,omitempty" enum:"fixed,starting_from,per_unit,per_person,per_day,quote_required,dynamic"`
+	Amount             OptionalNullableFloat64   `json:"amount,omitempty"`
+	Currency           OptionalNullableString    `json:"currency,omitempty"`
+	PricingUnit        OptionalNullableString    `json:"pricing_unit,omitempty"`
+	AvailabilityMode   string                    `json:"availability_mode,omitempty" enum:"stock,schedule,supplier_check,always_available,unknown"`
+	AvailabilityStatus string                    `json:"availability_status,omitempty" enum:"available,unavailable,unknown,requires_check,stale"`
+	FulfillmentMode    string                    `json:"fulfillment_mode,omitempty" enum:"delivery,pickup,digital,appointment,travel,manual"`
+	ValidityFrom       OptionalNullableTimestamp `json:"validity_from,omitempty"`
+	ValidityUntil      OptionalNullableTimestamp `json:"validity_until,omitempty"`
+	Status             string                    `json:"status,omitempty" enum:"draft,active,inactive,expired,archived"`
 }
 type CreateVariantRequest struct {
 	Name       string         `json:"name"`
