@@ -10,6 +10,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/catalogvalidation"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 	"github.com/google/uuid"
 )
 
@@ -104,7 +105,14 @@ func (s ExecutionService) snapshot(ctx context.Context, p *StoredProposal) error
 			cursor = page.NextCursor
 		}
 	}
-	if len(u.ExistingVariants) > 0 || len(u.NewOffers) > 0 {
+	needsVariants := len(u.ExistingVariants) > 0 || len(u.NewOffers) > 0
+	for _, offer := range u.ExistingOffers {
+		if offer.VariantID != nil {
+			needsVariants = true
+			break
+		}
+	}
+	if needsVariants {
 		cursor := ""
 		for {
 			page, e := s.Catalogs.ListVariants(ctx, p.BusinessID, itemID, "", 100, cursor)
@@ -133,6 +141,15 @@ func (s ExecutionService) snapshot(ctx context.Context, p *StoredProposal) error
 			return appErrors.New(appErrors.CodeNotFound, "offer does not belong to target item")
 		}
 		p.Versions["offer:"+v.ID] = version
+	}
+	for _, v := range u.ExistingOffers {
+		if v.VariantID != nil {
+			version, ok := variants[*v.VariantID]
+			if !ok {
+				return appErrors.New(appErrors.CodeNotFound, "offer variant does not belong to target item")
+			}
+			p.Versions["variant:"+*v.VariantID] = version
+		}
 	}
 	for _, v := range u.ExistingVariants {
 		version, ok := variants[v.ID]
@@ -313,15 +330,118 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 			}
 		}
 		for _, v := range u.ExistingOffers {
-			patch := ports.OfferPatch{ID: v.ID, BusinessID: p.BusinessID, Name: v.Name, AmountDecimal: v.Amount, Status: v.Status, AvailabilityStatus: v.AvailabilityStatus, ExpectedVersion: p.Versions["offer:"+v.ID], UpdatedAt: now}
+			currentOffer, offerErr := s.Catalogs.GetOffer(ctx, p.BusinessID, v.ID)
+			if offerErr != nil {
+				return r, offerErr
+			}
+			if currentOffer.BusinessID != p.BusinessID || currentOffer.CatalogItemID != r.ItemID {
+				return r, appErrors.New(appErrors.CodeForbidden, "offer scope mismatch")
+			}
+
+			clearRequested := func(value *bool) bool { return value != nil && *value }
+			variantPresent := v.VariantID != nil || clearRequested(v.ClearVariant)
+			if v.VariantID != nil {
+				variant, variantErr := s.Catalogs.GetVariant(ctx, p.BusinessID, *v.VariantID)
+				if variantErr != nil {
+					return r, variantErr
+				}
+				if variant.CatalogItemID != r.ItemID {
+					return r, appErrors.New(appErrors.CodeValidation, "offer variant must belong to the same catalog item")
+				}
+			}
+
+			name := currentOffer.Name
+			if v.Name != nil {
+				name = *v.Name
+			}
+			pricingMode := currentOffer.PricingMode
+			if v.PricingMode != nil {
+				pricingMode = *v.PricingMode
+			}
+			amountPresent := v.Amount != nil || clearRequested(v.ClearAmount)
+			amountDecimal := currentOffer.Amount
+			if amountPresent {
+				amountDecimal = v.Amount
+			}
+			currencyPresent := v.Currency != nil || clearRequested(v.ClearCurrency)
+			currency := currentOffer.Currency
+			if currencyPresent {
+				currency = v.Currency
+			}
+			pricingUnitPresent := v.PricingUnit != nil || clearRequested(v.ClearPricingUnit)
+			pricingUnit := currentOffer.PricingUnit
+			if pricingUnitPresent {
+				pricingUnit = v.PricingUnit
+			}
+			availabilityMode := currentOffer.AvailabilityMode
+			if v.AvailabilityMode != nil {
+				availabilityMode = *v.AvailabilityMode
+			}
+			availabilityStatus := currentOffer.AvailabilityStatus
+			if v.AvailabilityStatus != nil {
+				availabilityStatus = *v.AvailabilityStatus
+			}
+			fulfillmentMode := currentOffer.FulfillmentMode
+			if v.FulfillmentMode != nil {
+				fulfillmentMode = *v.FulfillmentMode
+			}
+			status := currentOffer.Status
+			if v.Status != nil {
+				status = *v.Status
+			}
+			if validationErr := services.ValidateOfferValues(name, pricingMode, nil, amountDecimal, currency, pricingUnit, availabilityMode, availabilityStatus, fulfillmentMode, status); validationErr != nil {
+				return r, appErrors.New(appErrors.CodeValidation, validationErr.Error())
+			}
+
+			validityFromPresent := v.ValidityFrom != nil || clearRequested(v.ClearValidityFrom)
+			validityUntilPresent := v.ValidityUntil != nil || clearRequested(v.ClearValidityUntil)
+			validityFrom := currentOffer.ValidityFrom
+			if validityFromPresent {
+				validityFrom = nil
+				if v.ValidityFrom != nil {
+					parsed, parseErr := time.Parse(time.RFC3339, *v.ValidityFrom)
+					if parseErr != nil {
+						return r, appErrors.New(appErrors.CodeValidation, "validity_from must use RFC3339")
+					}
+					validityFrom = &parsed
+				}
+			}
+			validityUntil := currentOffer.ValidityUntil
+			if validityUntilPresent {
+				validityUntil = nil
+				if v.ValidityUntil != nil {
+					parsed, parseErr := time.Parse(time.RFC3339, *v.ValidityUntil)
+					if parseErr != nil {
+						return r, appErrors.New(appErrors.CodeValidation, "validity_until must use RFC3339")
+					}
+					validityUntil = &parsed
+				}
+			}
+			if validityFrom != nil && validityUntil != nil && validityFrom.After(*validityUntil) {
+				return r, appErrors.New(appErrors.CodeValidation, "validity_from cannot be after validity_until")
+			}
+
+			patch := ports.OfferPatch{
+				ID: v.ID, BusinessID: p.BusinessID,
+				VariantID: v.VariantID, VariantIDPresent: variantPresent,
+				Name: v.Name, PricingMode: v.PricingMode,
+				AmountDecimal: v.Amount, AmountPresent: amountPresent,
+				Currency: v.Currency, CurrencyPresent: currencyPresent,
+				PricingUnit: v.PricingUnit, PricingUnitPresent: pricingUnitPresent,
+				AvailabilityMode: v.AvailabilityMode, AvailabilityStatus: v.AvailabilityStatus,
+				FulfillmentMode: v.FulfillmentMode,
+				ValidityFrom: validityFrom, ValidityFromPresent: validityFromPresent,
+				ValidityUntil: validityUntil, ValidityUntilPresent: validityUntilPresent,
+				Status: v.Status, ExpectedVersion: p.Versions["offer:"+v.ID], UpdatedAt: now,
+			}
 			merchant := "merchant"
 			verified := "verified"
-			if v.Amount != nil {
+			if v.PricingMode != nil || amountPresent || currencyPresent || pricingUnitPresent {
 				patch.PriceSource = &merchant
 				patch.PriceVerificationStatus = &verified
 				patch.PriceCheckedAt = &now
 			}
-			if v.AvailabilityStatus != nil {
+			if v.AvailabilityMode != nil || v.AvailabilityStatus != nil {
 				patch.AvailabilitySource = &merchant
 				patch.AvailabilityCheckedAt = &now
 			}

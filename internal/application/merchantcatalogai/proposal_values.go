@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 )
@@ -106,22 +107,74 @@ func validateProposalValues(p Proposal) error {
 			}
 		}
 		ids := make(map[string]bool)
+		clearRequested := func(value *bool) bool { return value != nil && *value }
 		for _, offer := range u.ExistingOffers {
 			if strings.TrimSpace(offer.ID) == "" || ids[offer.ID] {
 				return fmt.Errorf("existing offer ID is empty or duplicated")
 			}
 			ids[offer.ID] = true
-			if offer.Name == nil && offer.Amount == nil && offer.Status == nil && offer.AvailabilityStatus == nil {
+			changed := offer.VariantID != nil || clearRequested(offer.ClearVariant) ||
+				offer.Name != nil || offer.PricingMode != nil ||
+				offer.Amount != nil || clearRequested(offer.ClearAmount) ||
+				offer.Currency != nil || clearRequested(offer.ClearCurrency) ||
+				offer.PricingUnit != nil || clearRequested(offer.ClearPricingUnit) ||
+				offer.AvailabilityMode != nil || offer.AvailabilityStatus != nil ||
+				offer.FulfillmentMode != nil ||
+				offer.ValidityFrom != nil || clearRequested(offer.ClearValidityFrom) ||
+				offer.ValidityUntil != nil || clearRequested(offer.ClearValidityUntil) ||
+				offer.Status != nil
+			if !changed {
 				return fmt.Errorf("existing offer update requires a changed field")
+			}
+			for _, pair := range []struct {
+				value *string
+				clear *bool
+				path  string
+			}{
+				{offer.VariantID, offer.ClearVariant, "existing_offer.variant_id"},
+				{offer.Amount, offer.ClearAmount, "existing_offer.amount"},
+				{offer.Currency, offer.ClearCurrency, "existing_offer.currency"},
+				{offer.PricingUnit, offer.ClearPricingUnit, "existing_offer.pricing_unit"},
+				{offer.ValidityFrom, offer.ClearValidityFrom, "existing_offer.validity_from"},
+				{offer.ValidityUntil, offer.ClearValidityUntil, "existing_offer.validity_until"},
+			} {
+				if pair.value != nil && clearRequested(pair.clear) {
+					return fmt.Errorf("%s cannot be set and cleared in the same update", pair.path)
+				}
+			}
+			if offer.Name != nil && strings.TrimSpace(*offer.Name) == "" {
+				return fmt.Errorf("existing_offer.name cannot be empty")
+			}
+			if offer.VariantID != nil && strings.TrimSpace(*offer.VariantID) == "" {
+				return fmt.Errorf("existing_offer.variant_id cannot be empty")
 			}
 			if err := amount(offer.Amount, "existing_offer.amount"); err != nil {
 				return err
 			}
-			if err := optional(offer.Status, "existing_offer.status", d.OfferStatuses); err != nil {
-				return err
+			if offer.Currency != nil && !proposalCurrencyPattern.MatchString(*offer.Currency) {
+				return fmt.Errorf("existing_offer.currency must be a three-letter uppercase code")
 			}
-			if err := optional(offer.AvailabilityStatus, "existing_offer.availability_status", d.AvailabilityStatuses); err != nil {
-				return err
+			for _, value := range []*string{offer.ValidityFrom, offer.ValidityUntil} {
+				if value != nil {
+					if _, err := time.Parse(time.RFC3339, *value); err != nil {
+						return fmt.Errorf("offer validity timestamps must use RFC3339")
+					}
+				}
+			}
+			for _, choice := range []struct {
+				value   *string
+				path    string
+				allowed map[string]string
+			}{
+				{offer.PricingMode, "existing_offer.pricing_mode", d.PricingModes},
+				{offer.AvailabilityMode, "existing_offer.availability_mode", d.AvailabilityModes},
+				{offer.AvailabilityStatus, "existing_offer.availability_status", d.AvailabilityStatuses},
+				{offer.FulfillmentMode, "existing_offer.fulfillment_mode", d.FulfillmentModes},
+				{offer.Status, "existing_offer.status", d.OfferStatuses},
+			} {
+				if err := optional(choice.value, choice.path, choice.allowed); err != nil {
+					return err
+				}
 			}
 		}
 		ids = make(map[string]bool)

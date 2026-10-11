@@ -99,6 +99,13 @@ func (r *ReadOnlyCapabilityRegistry) ValidateProposalReferences(p Proposal) erro
 				return err
 			}
 		}
+		for _, offer := range p.Update.ExistingOffers {
+			if offer.VariantID != nil {
+				if err := require(*offer.VariantID, "variant"); err != nil {
+					return err
+				}
+			}
+		}
 		for _, offer := range p.Update.NewOffers {
 			if offer.VariantID != nil {
 				if err := require(*offer.VariantID, "variant"); err != nil {

@@ -3141,13 +3141,41 @@ components:
       properties:
         amount:
           type: string
+        availability_mode:
+          type: string
         availability_status:
+          type: string
+        clear_amount:
+          type: boolean
+        clear_currency:
+          type: boolean
+        clear_pricing_unit:
+          type: boolean
+        clear_validity_from:
+          type: boolean
+        clear_validity_until:
+          type: boolean
+        clear_variant:
+          type: boolean
+        currency:
+          type: string
+        fulfillment_mode:
           type: string
         id:
           type: string
         name:
           type: string
+        pricing_mode:
+          type: string
+        pricing_unit:
+          type: string
         status:
+          type: string
+        validity_from:
+          type: string
+        validity_until:
+          type: string
+        variant_id:
           type: string
       required:
         - id

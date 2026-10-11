@@ -540,6 +540,12 @@ func (s UpdateVariantCommandService) Handle(ctx context.Context, command command
 	return result, nil
 }
 
+// ValidateOfferValues exposes the shared commercial consistency rules to
+// Merchant Catalog AI execution so manual and AI-approved mutations cannot diverge.
+func ValidateOfferValues(name, pricingMode string, amountMinor *int64, amountDecimal *string, currency, pricingUnit *string, availabilityMode, availabilityStatus, fulfillmentMode, status string) error {
+	return validateOfferValues(name, pricingMode, amountMinor, amountDecimal, currency, pricingUnit, availabilityMode, availabilityStatus, fulfillmentMode, status)
+}
+
 func validateOfferValues(name, pricingMode string, amountMinor *int64, amountDecimal *string, currency, pricingUnit *string, availabilityMode, availabilityStatus, fulfillmentMode, status string) error {
 	name = strings.TrimSpace(name)
 	pricingMode = strings.TrimSpace(pricingMode)

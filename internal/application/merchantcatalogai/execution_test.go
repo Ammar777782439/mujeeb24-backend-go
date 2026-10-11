@@ -11,11 +11,14 @@ import (
 
 type executionRepo struct {
 	ports.CatalogRepository
-	item        ports.CatalogItemRecord
-	creates     int
-	updates     int
-	variants    int
-	failVariant bool
+	item         ports.CatalogItemRecord
+	offer        ports.OfferRecord
+	lastOffer    ports.OfferPatch
+	creates      int
+	updates      int
+	offerUpdates int
+	variants     int
+	failVariant  bool
 }
 
 func (r *executionRepo) GetCatalogItem(context.Context, string, string, string) (ports.CatalogItemRecord, error) {
@@ -42,6 +45,30 @@ func (r *executionRepo) CreateVariant(_ context.Context, p ports.VariantDraft) (
 }
 func (r *executionRepo) CreateOffer(_ context.Context, p ports.OfferDraft) (ports.OfferRecord, error) {
 	return ports.OfferRecord{ID: p.ID}, nil
+}
+func (r *executionRepo) ListOffers(context.Context, string, string, string, int, string) (ports.OfferPage, error) {
+	if r.offer.ID == "" {
+		return ports.OfferPage{}, nil
+	}
+	return ports.OfferPage{Items: []ports.OfferRecord{r.offer}}, nil
+}
+func (r *executionRepo) GetOffer(context.Context, string, string) (ports.OfferRecord, error) {
+	return r.offer, nil
+}
+func (r *executionRepo) UpdateOffer(_ context.Context, p ports.OfferPatch) (ports.OfferRecord, error) {
+	r.offerUpdates++
+	r.lastOffer = p
+	if p.PricingMode != nil {
+		r.offer.PricingMode = *p.PricingMode
+	}
+	if p.AmountPresent {
+		r.offer.Amount = p.AmountDecimal
+	}
+	if p.CurrencyPresent {
+		r.offer.Currency = p.Currency
+	}
+	r.offer.ResourceVersion++
+	return r.offer, nil
 }
 func (r *executionRepo) ListVariants(context.Context, string, string, string, int, string) (ports.VariantPage, error) {
 	return ports.VariantPage{}, nil
@@ -81,7 +108,11 @@ func (tx executionTransaction) Within(ctx context.Context, fn func(context.Conte
 	return err
 }
 func executionFixture() (ExecutionService, *executionRepo, *executionMemoryStore) {
-	repo := &executionRepo{item: ports.CatalogItemRecord{ID: "item", BusinessID: "business", CatalogID: "catalog", ResourceVersion: 7, Attributes: []byte(`{"existing":true,"warranty":"1 year"}`)}}
+	amount, currency := "1250.00", "YER"
+	repo := &executionRepo{
+		item: ports.CatalogItemRecord{ID: "item", BusinessID: "business", CatalogID: "catalog", ResourceVersion: 7, Attributes: []byte(`{"existing":true,"warranty":"1 year"}`)},
+		offer: ports.OfferRecord{ID: "offer", BusinessID: "business", CatalogItemID: "item", Name: "سعر البيع", PricingMode: "fixed", Amount: &amount, Currency: &currency, AvailabilityMode: "stock", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active", ResourceVersion: 3},
+	}
 	store := &executionMemoryStore{}
 	return ExecutionService{Catalogs: repo, Store: store, Transactions: executionTransaction{repo, store}}, repo, store
 }
@@ -173,3 +204,33 @@ func TestApprovalCreateReplaysWithoutCreatingAnotherProduct(t *testing.T) {
 		t.Fatalf("duplicate product or offer: %+v %+v", first, second)
 	}
 }
+
+func TestApprovalOfferUpdateUsesFullCommercialSemantics(t *testing.T) {
+	s, r, _ := executionFixture()
+	mode := "quote_required"
+	clear := true
+	input := executionUpdate()
+	input.Proposal.Update.NewVariants = nil
+	input.Proposal.Update.Changes.Attributes = nil
+	input.Proposal.Update.ExistingOffers = []OfferUpdate{{
+		ID: "offer", PricingMode: &mode,
+		ClearAmount: &clear, ClearCurrency: &clear,
+	}}
+	id, err := s.Prepare(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ExecuteApproved(context.Background(), "business", "principal", id); err != nil {
+		t.Fatal(err)
+	}
+	if r.offerUpdates != 1 || r.offer.PricingMode != "quote_required" || r.offer.Amount != nil || r.offer.Currency != nil {
+		t.Fatalf("offer transition was not applied atomically: offer=%+v patch=%+v", r.offer, r.lastOffer)
+	}
+	if r.lastOffer.PriceSource == nil || *r.lastOffer.PriceSource != "merchant" ||
+		r.lastOffer.PriceVerificationStatus == nil || *r.lastOffer.PriceVerificationStatus != "verified" ||
+		r.lastOffer.PriceCheckedAt == nil {
+		t.Fatalf("merchant price provenance was not refreshed: %+v", r.lastOffer)
+	}
+}
+
+func boolPtr(value bool) *bool { return &value }
