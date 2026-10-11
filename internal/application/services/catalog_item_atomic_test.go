@@ -33,6 +33,17 @@ func (r *atomicCatalogRepo) CreateOffer(_ context.Context, draft ports.OfferDraf
 	return ports.OfferRecord{ID: draft.ID}, nil
 }
 
+func (r *atomicCatalogRepo) GetOffer(_ context.Context, businessID, offerID string) (ports.OfferRecord, error) {
+	amount := "10000.00"
+	currency := "YER"
+	return ports.OfferRecord{
+		ID: offerID, BusinessID: businessID, CatalogItemID: "item-id",
+		Name: "السعر الأساسي", PricingMode: "fixed", Amount: &amount, Currency: &currency,
+		AvailabilityMode: "stock", AvailabilityStatus: "available",
+		FulfillmentMode: "delivery", Status: "active", ResourceVersion: 1,
+	}, nil
+}
+
 func (r *atomicCatalogRepo) UpdateOffer(_ context.Context, patch ports.OfferPatch) (ports.OfferRecord, error) {
 	r.lastPatch = patch
 	return ports.OfferRecord{ID: patch.ID, BusinessID: patch.BusinessID, Status: "active", ResourceVersion: patch.ExpectedVersion + 1}, nil

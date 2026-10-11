@@ -356,9 +356,10 @@ func (s UpdateOfferCommandService) Handle(ctx context.Context, command commands.
 	if command.PricingMode != nil {
 		pricingMode = *command.PricingMode
 	}
+	amountPresent := command.AmountPresent || command.AmountMinor != nil
 	amountMinor := command.AmountMinor
 	amountDecimal := current.Amount
-	if command.AmountPresent {
+	if amountPresent {
 		amountDecimal = nil
 	} else {
 		amountMinor = nil
@@ -409,7 +410,7 @@ func (s UpdateOfferCommandService) Handle(ctx context.Context, command commands.
 		ID: string(command.OfferID), BusinessID: string(command.Meta.Actor.BusinessID),
 		VariantID: optionalID(command.VariantID), VariantIDPresent: command.VariantIDPresent,
 		Name: command.Name, PricingMode: command.PricingMode,
-		AmountMinor: command.AmountMinor, AmountPresent: command.AmountPresent,
+		AmountMinor: command.AmountMinor, AmountPresent: amountPresent,
 		Currency: command.Currency, CurrencyPresent: command.CurrencyPresent,
 		PricingUnit: command.PricingUnit, PricingUnitPresent: command.PricingUnitPresent,
 		AvailabilityMode: command.AvailabilityMode, AvailabilityStatus: command.AvailabilityStatus,
@@ -420,7 +421,7 @@ func (s UpdateOfferCommandService) Handle(ctx context.Context, command commands.
 	}
 	merchant := "merchant"
 	verified := "verified"
-	if command.PricingMode != nil || command.AmountPresent || command.CurrencyPresent || command.PricingUnitPresent {
+	if command.PricingMode != nil || amountPresent || command.CurrencyPresent || command.PricingUnitPresent {
 		patch.PriceSource = &merchant
 		patch.PriceVerificationStatus = &verified
 		patch.PriceCheckedAt = &now
