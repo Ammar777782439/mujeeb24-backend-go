@@ -122,9 +122,9 @@ func (r *BusinessRepository) GetRuntimePolicy(ctx context.Context, businessID st
 	if err != nil {
 		return ports.BusinessRuntimePolicyRecord{}, err
 	}
-	const query = `SELECT business_id::text, ai_mode, default_human_review, allow_auto_reply, allow_auto_lead_creation, allow_auto_transaction_draft, allow_auto_confirmation, resource_version FROM business_policies WHERE business_id = $1::uuid`
+	const query = `SELECT business_id::text, ai_mode, default_human_review, allow_auto_reply, allow_auto_lead_creation, allow_auto_transaction_draft, allow_auto_confirmation, sales_workflow_enabled, allow_sales_interactions, resource_version FROM business_policies WHERE business_id = $1::uuid`
 	var record ports.BusinessRuntimePolicyRecord
-	if err := executor.QueryRow(ctx, query, businessID).Scan(&record.BusinessID, &record.AIMode, &record.DefaultHumanReview, &record.AllowAutoReply, &record.AllowAutoLeadCreation, &record.AllowAutoTransactionDraft, &record.AllowAutoConfirmation, &record.ResourceVersion); err != nil {
+	if err := executor.QueryRow(ctx, query, businessID).Scan(&record.BusinessID, &record.AIMode, &record.DefaultHumanReview, &record.AllowAutoReply, &record.AllowAutoLeadCreation, &record.AllowAutoTransactionDraft, &record.AllowAutoConfirmation, &record.SalesWorkflowEnabled, &record.AllowSalesInteractions, &record.ResourceVersion); err != nil {
 		return ports.BusinessRuntimePolicyRecord{}, classifyRepositoryGetError("business_policy.get", err)
 	}
 	return record, nil
@@ -137,16 +137,16 @@ func (r *BusinessRepository) UpdateRuntimePolicy(ctx context.Context, update por
 	if strings.TrimSpace(update.BusinessID) == "" || update.ExpectedVersion <= 0 {
 		return ports.BusinessRuntimePolicyRecord{}, invalidRepositoryInput("business_policy.update", "business id and expected resource version are required")
 	}
-	if update.AIMode == nil && update.DefaultHumanReview == nil && update.AllowAutoReply == nil && update.AllowAutoLeadCreation == nil && update.AllowAutoTransactionDraft == nil && update.AllowAutoConfirmation == nil {
+	if update.AIMode == nil && update.DefaultHumanReview == nil && update.AllowAutoReply == nil && update.AllowAutoLeadCreation == nil && update.AllowAutoTransactionDraft == nil && update.AllowAutoConfirmation == nil && update.SalesWorkflowEnabled == nil && update.AllowSalesInteractions == nil {
 		return ports.BusinessRuntimePolicyRecord{}, invalidRepositoryInput("business_policy.update", "at least one policy field is required")
 	}
 	executor, err := r.adapter.Executor(ctx)
 	if err != nil {
 		return ports.BusinessRuntimePolicyRecord{}, err
 	}
-	const query = `UPDATE business_policies SET ai_mode = COALESCE($3, ai_mode), default_human_review = COALESCE($4, default_human_review), allow_auto_reply = COALESCE($5, allow_auto_reply), allow_auto_lead_creation = COALESCE($6, allow_auto_lead_creation), allow_auto_transaction_draft = COALESCE($7, allow_auto_transaction_draft), allow_auto_confirmation = COALESCE($8, allow_auto_confirmation), resource_version = resource_version + 1, updated_at = $9 WHERE business_id = $1::uuid AND resource_version = $2 RETURNING business_id::text, ai_mode, default_human_review, allow_auto_reply, allow_auto_lead_creation, allow_auto_transaction_draft, allow_auto_confirmation, resource_version`
+	const query = `UPDATE business_policies SET ai_mode = COALESCE($3, ai_mode), default_human_review = COALESCE($4, default_human_review), allow_auto_reply = COALESCE($5, allow_auto_reply), allow_auto_lead_creation = COALESCE($6, allow_auto_lead_creation), allow_auto_transaction_draft = COALESCE($7, allow_auto_transaction_draft), allow_auto_confirmation = COALESCE($8, allow_auto_confirmation), sales_workflow_enabled=COALESCE($10,sales_workflow_enabled),allow_sales_interactions=COALESCE($11,allow_sales_interactions),resource_version = resource_version + 1, updated_at = $9 WHERE business_id = $1::uuid AND resource_version = $2 RETURNING business_id::text, ai_mode, default_human_review, allow_auto_reply, allow_auto_lead_creation, allow_auto_transaction_draft, allow_auto_confirmation, sales_workflow_enabled, allow_sales_interactions, resource_version`
 	var record ports.BusinessRuntimePolicyRecord
-	err = executor.QueryRow(ctx, query, update.BusinessID, update.ExpectedVersion, nilIfBlank(update.AIMode), update.DefaultHumanReview, update.AllowAutoReply, update.AllowAutoLeadCreation, update.AllowAutoTransactionDraft, update.AllowAutoConfirmation, time.Now().UTC()).Scan(&record.BusinessID, &record.AIMode, &record.DefaultHumanReview, &record.AllowAutoReply, &record.AllowAutoLeadCreation, &record.AllowAutoTransactionDraft, &record.AllowAutoConfirmation, &record.ResourceVersion)
+	err = executor.QueryRow(ctx, query, update.BusinessID, update.ExpectedVersion, nilIfBlank(update.AIMode), update.DefaultHumanReview, update.AllowAutoReply, update.AllowAutoLeadCreation, update.AllowAutoTransactionDraft, update.AllowAutoConfirmation, time.Now().UTC(), update.SalesWorkflowEnabled, update.AllowSalesInteractions).Scan(&record.BusinessID, &record.AIMode, &record.DefaultHumanReview, &record.AllowAutoReply, &record.AllowAutoLeadCreation, &record.AllowAutoTransactionDraft, &record.AllowAutoConfirmation, &record.SalesWorkflowEnabled, &record.AllowSalesInteractions, &record.ResourceVersion)
 	if err == nil {
 		return record, nil
 	}

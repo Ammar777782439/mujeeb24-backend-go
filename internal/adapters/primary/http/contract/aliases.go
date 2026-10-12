@@ -235,3 +235,11 @@ type MerchantCatalogAIResponse = dto.MerchantCatalogAIResponse
 
 type MerchantAIExecuteInput = dto.MerchantAIExecuteInput
 type MerchantAIExecutionResponse = dto.MerchantAIExecutionResponse
+
+type SalesWorkflow = dto.SalesWorkflow
+type SalesRequirementDefinition = dto.SalesRequirementDefinition
+type SalesRequirement = dto.SalesRequirement
+type SalesWorkflowPath = dto.SalesWorkflowPath
+type SalesWorkflowListInput = dto.SalesWorkflowListInput
+type SalesWorkflowReviewInput = dto.SalesWorkflowReviewInput
+type SalesRequirementCreateInput = dto.SalesRequirementCreateInput

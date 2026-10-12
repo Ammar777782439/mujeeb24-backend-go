@@ -96,7 +96,7 @@ func parseBusinessExpectedVersion(value *commands.ResourceVersion) (int64, error
 }
 
 func businessPolicyView(record ports.BusinessRuntimePolicyRecord) commands.BusinessPolicyView {
-	return commands.BusinessPolicyView{BusinessID: commands.BusinessID(record.BusinessID), AIMode: record.AIMode, DefaultHumanReview: record.DefaultHumanReview, AllowAutoReply: record.AllowAutoReply, AllowAutoLeadCreation: record.AllowAutoLeadCreation, AllowAutoTransactionDraft: record.AllowAutoTransactionDraft, AllowAutoConfirmation: record.AllowAutoConfirmation, ResourceVersion: commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10))}
+	return commands.BusinessPolicyView{BusinessID: commands.BusinessID(record.BusinessID), AIMode: record.AIMode, DefaultHumanReview: record.DefaultHumanReview, AllowAutoReply: record.AllowAutoReply, AllowAutoLeadCreation: record.AllowAutoLeadCreation, AllowAutoTransactionDraft: record.AllowAutoTransactionDraft, AllowAutoConfirmation: record.AllowAutoConfirmation, SalesWorkflowEnabled: record.SalesWorkflowEnabled, AllowSalesInteractions: record.AllowSalesInteractions, ResourceVersion: commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10))}
 }
 
 var _ queries.GetBusinessPolicyHandler = BusinessPolicyQueryService{}

@@ -208,6 +208,7 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 				return commands.WebhookAcceptedResult{}, appErrors.NotImplemented()
 			}
 			materialized, materializeErr := s.Inbound.Materialize(ctx, ports.ProviderInboundDraft{
+				ActionPayload:          event.ActionPayload,
 				InboundEventID:         record.ID,
 				BusinessID:             connection.BusinessID,
 				ConnectionID:           connection.ID,
@@ -235,6 +236,10 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 			}
 			if materialized.Ignored {
 				result.Ignored = true
+				continue
+			}
+			// Postbacks were durably queued during materialization; never send them to Gemini or automation.
+			if event.ActionPayload != "" {
 				continue
 			}
 			// Per the SocialAPI docs (verified against docs.social-api.ai/guides/webhooks):

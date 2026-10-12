@@ -61,7 +61,7 @@ func (p OutboxProcessor) Process(ctx context.Context, entryID string) error {
 		return p.deadLetter(ctx, record, "outbound_mapping_missing")
 	}
 	log.Printf("[Worker] SENDING outbox=%s to=%s", record.ID, delivery.ProviderConversationID)
-	result, err := p.Provider.SendMessage(ctx, ports.SendMessageCommand{ConnectionID: delivery.ConnectionID, ProviderAccountID: delivery.ProviderAccountID, ProviderConversationID: delivery.ProviderConversationID, Text: delivery.Text, IdempotencyKey: delivery.IdempotencyKey})
+	result, err := p.Provider.SendMessage(ctx, ports.SendMessageCommand{ConnectionID: delivery.ConnectionID, ProviderAccountID: delivery.ProviderAccountID, ProviderConversationID: delivery.ProviderConversationID, Text: delivery.Text, Buttons: delivery.Buttons, Channel: delivery.Channel, IdempotencyKey: delivery.IdempotencyKey})
 	if err != nil {
 		log.Printf("[Worker] DEAD_LETTER outbox=%s code=provider_send_outcome_unknown err=%v", record.ID, err)
 		return p.deadLetter(ctx, record, "provider_send_outcome_unknown")

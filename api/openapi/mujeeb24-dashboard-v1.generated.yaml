@@ -648,13 +648,19 @@ components:
           type: boolean
         allow_auto_transaction_draft:
           type: boolean
+        allow_sales_interactions:
+          type: boolean
         business_id:
           type: string
         default_human_review:
           type: boolean
         resource_version:
           type: string
+        sales_workflow_enabled:
+          type: boolean
       required:
+        - sales_workflow_enabled
+        - allow_sales_interactions
         - business_id
         - ai_mode
         - default_human_review
@@ -683,7 +689,11 @@ components:
           type: boolean
         allow_auto_transaction_draft:
           type: boolean
+        allow_sales_interactions:
+          type: boolean
         default_human_review:
+          type: boolean
+        sales_workflow_enabled:
           type: boolean
       type: object
     BusinessUpdateRequest:
@@ -2720,6 +2730,52 @@ components:
         - pagination
         - request_id
       type: object
+    ListSalesRequirementBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListSalesRequirementBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/SalesRequirement"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
+    ListSalesWorkflowBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListSalesWorkflowBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/SalesWorkflow"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
     ListSubscriptionAIUsageViewBody:
       additionalProperties: false
       properties:
@@ -3691,6 +3747,112 @@ components:
       required:
         - reviewer_reference
       type: object
+    SalesRequirement:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SalesRequirement.json
+          format: uri
+          readOnly: true
+          type: string
+        definitions:
+          items:
+            $ref: "#/components/schemas/SalesRequirementDefinition"
+          nullable: true
+          type: array
+        schema_version:
+          format: int64
+          minimum: 1
+          type: integer
+        transaction_type:
+          enum:
+            - order
+            - booking
+            - appointment
+            - service_request
+            - reservation
+            - quote
+            - subscription
+          type: string
+      required:
+        - transaction_type
+        - schema_version
+        - definitions
+      type: object
+    SalesRequirementDefinition:
+      additionalProperties: false
+      properties:
+        attribute_key:
+          type: string
+        data_type:
+          enum:
+            - text
+            - number
+            - boolean
+            - date
+            - datetime
+            - select
+            - multi_select
+            - location
+            - money
+          type: string
+        is_required:
+          type: boolean
+        label:
+          type: string
+        validation_rules:
+          additionalProperties: {}
+          type: object
+      required:
+        - attribute_key
+        - label
+        - data_type
+        - is_required
+      type: object
+    SalesWorkflow:
+      additionalProperties: false
+      properties:
+        conversation_id:
+          type: string
+        customer_id:
+          type: string
+        id:
+          type: string
+        lead_id:
+          type: string
+        pending_action:
+          type: string
+        proposal:
+          additionalProperties: {}
+          type: object
+        resource_version:
+          type: string
+        state:
+          type: string
+        transaction_id:
+          type: string
+      required:
+        - id
+        - customer_id
+        - state
+        - proposal
+        - resource_version
+      type: object
+    SalesWorkflowReviewInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SalesWorkflowReviewInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        approved:
+          type: boolean
+      required:
+        - approved
+      type: object
     SendMessageRequest:
       additionalProperties: false
       properties:
@@ -4330,6 +4492,40 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/Principal"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleSalesRequirementBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleSalesRequirementBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/SalesRequirement"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleSalesWorkflowBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleSalesWorkflowBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/SalesWorkflow"
         request_id:
           type: string
       required:
@@ -11465,6 +11661,389 @@ paths:
       summary: Update business policy
       tags:
         - Business
+  /businesses/{business_id}/sales/requirements:
+    get:
+      operationId: listSalesRequirements
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSalesRequirementBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: listSalesRequirements
+      tags:
+        - Sales
+    post:
+      operationId: createSalesRequirement
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SalesRequirement"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSalesRequirementBody"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: createSalesRequirement
+      tags:
+        - Sales
+  /businesses/{business_id}/sales/workflows:
+    get:
+      operationId: listSalesWorkflows
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            default: 25
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: customer_id
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: state
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSalesWorkflowBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: listSalesWorkflows
+      tags:
+        - Sales
+  /businesses/{business_id}/sales/workflows/{workflow_id}:
+    get:
+      operationId: getSalesWorkflow
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: workflow_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSalesWorkflowBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: getSalesWorkflow
+      tags:
+        - Sales
+  /businesses/{business_id}/sales/workflows/{workflow_id}/review:
+    post:
+      operationId: reviewSalesWorkflow
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: workflow_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SalesWorkflowReviewInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSalesWorkflowBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: reviewSalesWorkflow
+      tags:
+        - Sales
   /businesses/{business_id}/team/invitations:
     get:
       operationId: listTeamInvitations

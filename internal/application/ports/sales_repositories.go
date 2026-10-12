@@ -124,6 +124,7 @@ type LeadRepository interface {
 }
 
 type TransactionRecord struct {
+	AgreementVersion              int64
 	ID                            string
 	BusinessID                    string
 	CustomerID                    string
@@ -225,6 +226,7 @@ type TransactionPatch struct {
 }
 
 type TransactionConfirmPatch struct {
+	ConfirmedBy       string
 	ID                string
 	BusinessID        string
 	EvidenceReference string

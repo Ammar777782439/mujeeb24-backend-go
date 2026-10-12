@@ -505,7 +505,7 @@ func (s *Server) dispatchAdditionalQuery(ctx context.Context, operationID string
 }
 
 func businessPolicyProjection(v commands.BusinessPolicyView) contract.BusinessPolicy {
-	return contract.BusinessPolicy{BusinessID: contract.UUID(v.BusinessID), AIMode: v.AIMode, DefaultHumanReview: v.DefaultHumanReview, AllowAutoReply: v.AllowAutoReply, AllowAutoLeadCreation: v.AllowAutoLeadCreation, AllowAutoTransactionDraft: v.AllowAutoTransactionDraft, AllowAutoConfirmation: v.AllowAutoConfirmation, ResourceVersion: string(v.ResourceVersion)}
+	return contract.BusinessPolicy{BusinessID: contract.UUID(v.BusinessID), AIMode: v.AIMode, DefaultHumanReview: v.DefaultHumanReview, AllowAutoReply: v.AllowAutoReply, AllowAutoLeadCreation: v.AllowAutoLeadCreation, AllowAutoTransactionDraft: v.AllowAutoTransactionDraft, AllowAutoConfirmation: v.AllowAutoConfirmation, SalesWorkflowEnabled: v.SalesWorkflowEnabled, AllowSalesInteractions: v.AllowSalesInteractions, ResourceVersion: string(v.ResourceVersion)}
 }
 func listPage[T any](items []T, cursor string, more bool) *contract.List[T] {
 	out := &contract.List[T]{}

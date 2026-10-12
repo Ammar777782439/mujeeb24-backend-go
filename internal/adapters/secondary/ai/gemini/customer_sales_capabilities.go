@@ -16,8 +16,9 @@ type customerSalesTool struct {
 }
 
 type customerSalesToolArguments struct {
-	ResponseText string                    `json:"response_text"`
-	Selected     []ports.SelectedReference `json:"selected,omitempty"`
+	Sales        *ports.SalesWorkflowProposal `json:"sales,omitempty"`
+	ResponseText string                       `json:"response_text"`
+	Selected     []ports.SelectedReference    `json:"selected,omitempty"`
 }
 
 func customerSalesTools(capabilities []ports.CustomerSalesCapability) []customerSalesTool {
@@ -31,6 +32,9 @@ func customerSalesTools(capabilities []ports.CustomerSalesCapability) []customer
 			description = "Ask only for genuinely missing customer-supplied information required to understand the goal or use an available capability. Never reconfirm a clear request, and never use a confirmation question to postpone handoff for an unsupported external operation. Do not ask for catalog facts the merchant can provide through evaluate_full_catalog."
 		case ports.CustomerSalesCapabilityHandoff:
 			description = "Use when the customer explicitly asks for a human, or when the current goal is to start, confirm, complete, or change an external operation that none of the offered executable capabilities can perform. Short confirmations inherit the prior conversational goal. Write a grounded handoff response and never claim the external operation was executed."
+		case ports.CustomerSalesCapabilityRecordLead, ports.CustomerSalesCapabilityCreateDraft, ports.CustomerSalesCapabilityUpdateDraft:
+			tools = append(tools, salesWorkflowTool(capability))
+			continue
 		case ports.CustomerSalesCapabilityFullCatalog:
 			tools = append(tools, customerSalesTool{Type: "function", Name: string(capability), Description: "Request evaluation of ALL active catalog components and relationships for this merchant when current evidence is insufficient. All token-aware batches must complete before a final capability is chosen. This is not a search; no filters, IDs, tenant, or query arguments are accepted.", Parameters: map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{}}})
 			continue
@@ -82,6 +86,20 @@ func parseCustomerSalesCapability(resp interactionResponse, tools []customerSale
 	var args customerSalesToolArguments
 	if err := decodeStrictStructuredJSON(call.Arguments, &args); err != nil {
 		return ports.CapabilityDecision{}, fmt.Errorf("decode capability arguments: %w", err)
+	}
+	definition, _ := ports.CustomerSalesCapabilityDefinitionFor(capability)
+	if definition.Executor == "sales" {
+		if args.Sales == nil || args.ResponseText != "" || len(args.Selected) > 0 {
+			return ports.CapabilityDecision{}, errors.New("sales capability requires only structured sales arguments")
+		}
+		decision := ports.CapabilityDecision{Capability: capability, Sales: args.Sales}
+		for _, line := range args.Sales.Lines {
+			decision.Selected = append(decision.Selected, ports.SelectedReference{ItemID: line.ItemID, OfferID: line.OfferID, VariantID: line.VariantID})
+		}
+		return decision, nil
+	}
+	if args.Sales != nil {
+		return ports.CapabilityDecision{}, errors.New("messaging capability cannot carry sales arguments")
 	}
 	if strings.TrimSpace(args.ResponseText) == "" {
 		return ports.CapabilityDecision{}, errors.New("capability requires response_text")

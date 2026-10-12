@@ -957,6 +957,7 @@ func buildFinalEvaluationPayload(
 	candidateProjection CatalogAIProjection,
 ) (FinalEvaluationInput, string) {
 	contextPayload := struct {
+		Sales                  *ports.SalesWorkflowContext                 `json:"sales,omitempty"`
 		Business               ports.CustomerSalesContextBusiness          `json:"business"`
 		Conversation           ports.CustomerSalesContextConversation      `json:"conversation"`
 		Customer               ports.CustomerSalesContextCustomer          `json:"customer"`
@@ -968,6 +969,7 @@ func buildFinalEvaluationPayload(
 		GeneratedAt            time.Time                                   `json:"generated_at"`
 		ExpiresAt              time.Time                                   `json:"expires_at"`
 	}{
+		Sales:                  input.ConversationContext.Sales,
 		Business:               input.ConversationContext.Business,
 		Conversation:           input.ConversationContext.Conversation,
 		Customer:               input.ConversationContext.Customer,

@@ -3,6 +3,8 @@ package ports
 import "context"
 
 type OutboundDelivery struct {
+	Channel                string
+	Buttons                []InteractiveButton
 	ConnectionID           string
 	ProviderAccountID      string
 	ProviderConversationID string

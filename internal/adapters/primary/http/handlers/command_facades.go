@@ -11,6 +11,9 @@ import (
 )
 
 func (s *Server) dispatchCommand(ctx context.Context, operationID string, input any) (any, bool) {
+	if result, handled := s.dispatchSalesWorkflow(ctx, operationID, input); handled {
+		return result, true
+	}
 	if result, handled := s.dispatchSystemCommand(ctx, operationID, input); handled {
 		return result, true
 	}
@@ -495,7 +498,7 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 		if s.deps.ApproveTransactionReview == nil {
 			return mapApplicationError(appErrors.NotImplemented()), true
 		}
-		result, err := s.deps.ApproveTransactionReview.Handle(ctx, commands.ApproveTransactionReviewCommand{Meta: commandMeta(ctx, actor, in.CommandHeaders), TransactionID: commands.TransactionID(in.TransactionID), ReviewerReference: in.Body.ReviewerReference, Reason: in.Body.Reason})
+		result, err := s.deps.ApproveTransactionReview.Handle(ctx, commands.ApproveTransactionReviewCommand{Meta: commandMeta(ctx, actor, in.CommandHeaders), TransactionID: commands.TransactionID(in.TransactionID), ReviewerReference: string(actor.PrincipalID), Reason: in.Body.Reason})
 		if err != nil {
 			return mapApplicationError(err), true
 		}
@@ -509,7 +512,7 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 		if s.deps.RejectTransactionReview == nil {
 			return mapApplicationError(appErrors.NotImplemented()), true
 		}
-		result, err := s.deps.RejectTransactionReview.Handle(ctx, commands.RejectTransactionReviewCommand{Meta: commandMeta(ctx, actor, in.CommandHeaders), TransactionID: commands.TransactionID(in.TransactionID), ReviewerReference: in.Body.ReviewerReference, Reason: in.Body.Reason})
+		result, err := s.deps.RejectTransactionReview.Handle(ctx, commands.RejectTransactionReviewCommand{Meta: commandMeta(ctx, actor, in.CommandHeaders), TransactionID: commands.TransactionID(in.TransactionID), ReviewerReference: string(actor.PrincipalID), Reason: in.Body.Reason})
 		if err != nil {
 			return mapApplicationError(err), true
 		}

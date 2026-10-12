@@ -142,6 +142,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	}
 	eventStore := postgres.NewInboundEventStore(database)
 	outboxStore := postgres.NewPostgresOutboxStore(database)
+	salesAdminWorkflow := buildSalesWorkflowService(database, outboxStore)
+	dependencies.SalesAdmin = services.SalesWorkflowAdminService{Repository: postgres.NewSalesWorkflowRepository(database), Workflow: salesAdminWorkflow}
 	var autoReply commands.AutoReplyHandler
 	// Per Item 1 + 2: hoist platformOperations to the top of the
 	// function scope so it's available to ALL branches that need
@@ -220,7 +222,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		"",
 	)
 
-	if external.AutoReplyEnabled {
+	if external.AutoReplyEnabled || external.CustomerSalesEnabled {
 		if external.GeminiHTTPClient == nil {
 			return nil, errors.New("AutoReply requires the Gemini customer-sales AI to be configured")
 		}
@@ -336,6 +338,13 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			postgres.NewPostgresCustomerSalesPolicyEvaluator(postgres.NewBusinessRepository(database)),
 			nil, // AuthorizationService: nil means PolicyDecision is final
 		)
+		sales := buildSalesWorkflowService(database, outboxStore)
+		if external.CustomerSalesEnabled {
+			service.Sales = &sales
+			contextBuilder.Sales = sales.Repository
+		}
+		service.DisableInformationalReplies = !external.AutoReplyEnabled
+		service.CustomerSalesContextBuilder = contextBuilder
 		service.StateRepository = postgres.NewConversationStateRepository(database)
 		service.MessageRepository = postgres.NewMessageRepository(database)
 		service.Conversations = postgres.NewConversationRepository(database)

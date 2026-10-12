@@ -23,6 +23,7 @@ const (
 // AutoReplyContextBuilder builds a bounded, tenant-scoped context from Mujeeb
 // records. It never calls a provider and never treats model output as evidence.
 type AutoReplyContextBuilder struct {
+	Sales         ports.SalesWorkflowRepository
 	Businesses    ports.BusinessRepository
 	Conversations ports.ConversationRepository
 	Customers     ports.CustomerRepository

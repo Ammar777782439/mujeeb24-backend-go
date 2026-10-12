@@ -245,6 +245,8 @@ type BusinessUpdateRequest struct {
 	Locale          string `json:"locale,omitempty"`
 }
 type BusinessPolicyUpdateRequest struct {
+	SalesWorkflowEnabled      *bool  `json:"sales_workflow_enabled,omitempty"`
+	AllowSalesInteractions    *bool  `json:"allow_sales_interactions,omitempty"`
 	AIMode                    string `json:"ai_mode,omitempty"`
 	DefaultHumanReview        *bool  `json:"default_human_review,omitempty"`
 	AllowAutoReply            *bool  `json:"allow_auto_reply,omitempty"`

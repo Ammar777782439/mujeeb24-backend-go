@@ -56,6 +56,8 @@ const (
 // proposal's status/action are validated but never overridden by Mujeeb
 // (per contract ⑥ §11 we do NOT re-interpret intent).
 type AutoReplyService struct {
+	Sales                       *CustomerSalesWorkflowService
+	DisableInformationalReplies bool
 	// CustomerSalesDecision is the contract ④ §8 customer-sales application port.
 	// Its Gemini implementation is GeminiCustomerSalesAdapter.
 	// Per contract ④ §8, this is the only way to call Gemini.
@@ -253,7 +255,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	if builtContext != nil && builtContext.Conversation.LastGeminiInteractionID != nil {
 		previousInteractionID = *builtContext.Conversation.LastGeminiInteractionID
 	}
-	capabilities := ports.CustomerSalesCapabilities(s.fullCatalogReady(run))
+	capabilities := ports.CustomerSalesCapabilities(s.fullCatalogReady(run), s.Sales != nil && builtContext != nil && builtContext.Sales != nil && builtContext.Sales.Enabled && builtContext.Sales.AllowInteractions)
 	out, err := s.CustomerSalesDecision.Decide(ctx, ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{
 			BusinessID:             businessID,
@@ -355,7 +357,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		// AI output never expands this trust boundary.
 
 		ed, failure := s.Validation.Validate(ctx, ValidationInput{
-			DecisionID:     "", // linked later when ai_decisions is created
+			DecisionID: "", SourceMessageReference: sourceMessageRef, // linked later when ai_decisions is created
 			BusinessID:     businessID,
 			ConversationID: conversationID,
 			Decision:       proposal,
@@ -409,6 +411,9 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
 	}
 
+	if s.DisableInformationalReplies && (effective.Capability == ports.CustomerSalesCapabilityRespondWithoutAction || (effective.Capability == ports.CustomerSalesCapabilityAsk && (builtContext == nil || builtContext.Sales == nil || len(builtContext.Sales.Active) == 0))) {
+		return commands.AutoReplyResult{Action: "no_action"}, nil
+	}
 	definition, ok := ports.CustomerSalesCapabilityDefinitionFor(effective.Capability)
 	if !ok || !definition.Terminal || effective.Capability != proposal.Capability {
 		return commands.AutoReplyResult{}, errors.New("effective capability is not the validated terminal decision")
@@ -424,7 +429,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		ConversationID:          &conversationID,
 		SourceMessageReference:  &sourceMessageRef,
 		IntentBase:              "",
-		Entities:                []byte(`{}`),
+		Entities:                encodeSalesDecisionArguments(proposal),
 		EvidenceReferences:      encodeProposalSelectedAsJSON(proposal.Selected),
 		RequestedAction:         legacyCustomerSalesAction(proposal.Capability),
 		RequestedCapability:     stringPtr(string(proposal.Capability)),
@@ -459,6 +464,25 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		}
 		result.Decision = aiDecisionView(decision)
 
+		if definition.Executor == "sales" && effective.PolicyDecision != "denied" {
+			if s.Sales == nil || proposal.Sales == nil || builtContext == nil {
+				return errors.New("sales executor unavailable")
+			}
+			if effective.PolicyDecision == "allowed" {
+				if err := s.transitionRun(txCtx, run, ports.AIRunStatusAuthorized); err != nil {
+					return err
+				}
+				if err := s.transitionRun(txCtx, run, ports.AIRunStatusExecuting); err != nil {
+					return err
+				}
+			}
+			salesResult, err := s.Sales.Execute(txCtx, ports.SalesWorkflowInput{BusinessID: businessID, CustomerID: builtContext.Customer.Reference, ConversationID: conversationID, SourceMessageID: sourceMessageRef, IdempotencyKey: "sales:" + sourceMessageRef, DecisionID: decision.ID, Capability: proposal.Capability, Proposal: *proposal.Sales, RequiresApproval: effective.PolicyDecision == "requires_approval", Now: now})
+			if err != nil {
+				return err
+			}
+			result.SalesWorkflow = &commands.SalesWorkflowOutcome{WorkflowID: commands.ID(salesResult.Workflow.ID), TransactionID: salesResult.Workflow.TransactionID, State: salesResult.Workflow.State, ResourceVersion: salesResult.Workflow.ResourceVersion}
+			return nil
+		}
 		// Per contract ⑥ §17, if Effective Decision is "denied", no execution.
 		if effective.PolicyDecision == "denied" {
 			log.Printf("[AutoReply] POLICY_DENIED run=%s decision_id=%s", run.ID, decision.ID)

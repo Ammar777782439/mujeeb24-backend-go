@@ -9,6 +9,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/authorization"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/queries"
 )
 
@@ -21,6 +22,7 @@ type PlatformAccessChecker interface {
 }
 
 type Dependencies struct {
+	SalesAdmin                   ports.SalesAdminPort
 	Scope                        ScopeProvider
 	PlatformAccess               PlatformAccessChecker
 	GetCurrentPrincipal          queries.GetCurrentPrincipalHandler
@@ -406,6 +408,9 @@ func dispatchResult(value any) (any, error) {
 var _ contract.DashboardOperationHandler = (*Server)(nil)
 
 func (s *Server) dispatchQuery(ctx context.Context, operationID string, input any) (any, bool) {
+	if result, handled := s.dispatchSalesWorkflow(ctx, operationID, input); handled {
+		return result, true
+	}
 	if result, handled := s.dispatchSystemQuery(ctx, operationID, input); handled {
 		return result, true
 	}

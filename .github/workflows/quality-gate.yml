@@ -7,6 +7,7 @@ on:
       - main
       - refactor/merchant-catalog-ai-v2-structure
       - feat/universal-catalog-ai-v3
+      - feat/customer-sales-workflow-interactive
   workflow_dispatch:
 
 permissions:

@@ -252,6 +252,8 @@ type TeamInvitationCreated struct {
 	AcceptanceToken string         `json:"acceptance_token"`
 }
 type BusinessPolicy struct {
+	SalesWorkflowEnabled      bool   `json:"sales_workflow_enabled"`
+	AllowSalesInteractions    bool   `json:"allow_sales_interactions"`
 	BusinessID                UUID   `json:"business_id"`
 	AIMode                    string `json:"ai_mode"`
 	DefaultHumanReview        bool   `json:"default_human_review"`

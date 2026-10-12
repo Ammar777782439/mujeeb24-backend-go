@@ -26,6 +26,8 @@ type BusinessRepository interface {
 }
 
 type BusinessRuntimePolicyRecord struct {
+	SalesWorkflowEnabled      bool
+	AllowSalesInteractions    bool
 	BusinessID                string
 	AIMode                    string
 	DefaultHumanReview        bool
@@ -47,6 +49,8 @@ type BusinessProfileUpdate struct {
 }
 
 type BusinessRuntimePolicyUpdate struct {
+	SalesWorkflowEnabled      *bool
+	AllowSalesInteractions    *bool
 	BusinessID                string
 	ExpectedVersion           int64
 	AIMode                    *string

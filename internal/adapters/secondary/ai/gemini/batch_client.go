@@ -318,9 +318,9 @@ func (c *BatchClient) buildFinalEvaluateRequest(input services.FinalEvaluationIn
 	return batchGeminiRequest{
 		Model:             "models/" + strings.TrimPrefix(rc.model, "models/"),
 		SystemInstruction: finalCustomerSalesInstruction(input.EntityContract),
-		Tools:             customerSalesTokenTools(customerSalesTools(ports.CustomerSalesCapabilities(false))),
+		Tools:             customerSalesTokenTools(customerSalesTools(ports.CustomerSalesCapabilities(false, input.ConversationContext.Sales != nil && input.ConversationContext.Sales.Enabled && input.ConversationContext.Sales.AllowInteractions))),
 		ToolConfig:        map[string]any{"functionCallingConfig": map[string]any{"mode": "ANY"}},
-		capabilityTools:   customerSalesTools(ports.CustomerSalesCapabilities(false)),
+		capabilityTools:   customerSalesTools(ports.CustomerSalesCapabilities(false, input.ConversationContext.Sales != nil && input.ConversationContext.Sales.Enabled && input.ConversationContext.Sales.AllowInteractions)),
 		Contents: []batchContent{
 			{Role: "user", Parts: []batchPart{{Text: userPrompt}}},
 		},

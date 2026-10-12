@@ -53,7 +53,7 @@ func buildOperationPermissions() map[string]string {
 		}
 	}
 	register(PermissionBusinessRead, "getBusiness", "getBusinessPolicy")
-	register(PermissionBusinessSettings, "updateBusinessProfile", "updateBusinessPolicy")
+	register(PermissionBusinessSettings, "createSalesRequirement", "updateBusinessProfile", "updateBusinessPolicy")
 	register(PermissionDashboardRead, "getDashboardOverview")
 	register(PermissionTeamRead, "listTeamMembers", "listTeamInvitations")
 	register(PermissionTeamManage, "createTeamInvitation", "revokeTeamInvitation", "resendTeamInvitation", "updateTeamMemberRole", "updateTeamMemberAccess", "revokeTeamMember")
@@ -64,9 +64,9 @@ func buildOperationPermissions() map[string]string {
 	register(PermissionCustomersWrite, "createCustomer", "updateCustomer", "mergeCustomer")
 	register(PermissionCatalogRead, "listCatalogs", "getCatalog", "getCatalogEntityContract", "listCatalogItems", "getCatalogItem", "listOffers", "listVariants", "listAttributeSchemas", "getAttributeSchema")
 	register(PermissionCatalogWrite, "createCatalog", "updateCatalog", "createCatalogItem", "updateCatalogItem", "createOffer", "updateOffer", "createVariant", "updateVariant", "createAttributeSchemaVersion")
-	register(PermissionSalesRead, "listLeads", "getLead", "listLeadAttributions", "listLeadScores", "listTransactions", "listCustomerTransactions", "getTransaction", "getTransactionReview")
+	register(PermissionSalesRead, "listSalesWorkflows", "getSalesWorkflow", "listSalesRequirements", "listLeads", "getLead", "listLeadAttributions", "listLeadScores", "listTransactions", "listCustomerTransactions", "getTransaction", "getTransactionReview")
 	register(PermissionSalesWrite, "createLead", "updateLead", "qualifyLead", "markLeadLost", "createTransactionDraft", "updateTransactionDraft", "confirmTransaction", "cancelTransaction", "submitTransactionReview")
-	register(PermissionSalesApprove, "approveTransactionReview", "rejectTransactionReview")
+	register(PermissionSalesApprove, "reviewSalesWorkflow", "approveTransactionReview", "rejectTransactionReview")
 	register(PermissionChannelsRead, "listChannelConnections", "getChannelConnection", "getConnectionCapabilities", "previewChannelHistoryPurge")
 	register(PermissionChannelsManage, "beginChannelConnection", "reconnectChannel", "disconnectChannel", "purgeChannelHistory")
 	register(PermissionAutomationRead, "listAutomationRules")

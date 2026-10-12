@@ -16,6 +16,8 @@ type BusinessView struct {
 	UpdatedAt       time.Time
 }
 type BusinessPolicyView struct {
+	SalesWorkflowEnabled      bool
+	AllowSalesInteractions    bool
 	BusinessID                BusinessID
 	AIMode                    string
 	DefaultHumanReview        bool

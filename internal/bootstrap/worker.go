@@ -13,6 +13,7 @@ import (
 )
 
 type WorkerRuntime struct {
+	SalesActions *services.SalesActionProcessor
 	Database     *postgres.Adapter
 	EventStore   ports.EventStore
 	Outbox       ports.OutboxStore
@@ -45,6 +46,8 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 			Owner:    runtime.WorkerOwner,
 		}
 	}
+	sales := buildSalesWorkflowService(database, outbox)
+	runtime.SalesActions = &services.SalesActionProcessor{Jobs: postgres.NewSalesActionJobs(database), Sales: sales}
 	return runtime, nil
 }
 
@@ -89,6 +92,13 @@ func (r *WorkerRuntime) RunOnce(ctx context.Context) (int, error) {
 		limit = 20
 	}
 	processed := 0
+	if r.SalesActions != nil {
+		count, err := r.SalesActions.Process(ctx, limit)
+		if err != nil {
+			return count, err
+		}
+		processed += count
+	}
 	if r.Processor != nil {
 		entries, err := r.Outbox.ListClaimable(ctx, limit)
 		if err != nil {

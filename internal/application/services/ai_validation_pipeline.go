@@ -116,6 +116,13 @@ func (p *ValidationPipeline) validateStructural(decision ports.CapabilityDecisio
 	if !ok || !definition.Terminal {
 		return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidAIOutput, Reason: fmt.Sprintf("unavailable terminal capability %q", decision.Capability)}
 	}
+	if definition.Executor == "sales" {
+		if err := validateSalesProposal(decision); err != nil {
+			return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidAIOutput, Reason: err.Error()}
+		}
+	} else if decision.Sales != nil {
+		return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidAIOutput, Reason: "sales arguments require the sales executor"}
+	}
 	if definition.SendsCustomerMessage && strings.TrimSpace(decision.ResponseText) == "" {
 		return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidAIOutput, Reason: "customer-facing capability requires response_text"}
 	}
@@ -132,6 +139,34 @@ func (p *ValidationPipeline) validateStructural(decision ports.CapabilityDecisio
 // Gemini cannot invent references; even a syntactically valid UUID fails
 // if it wasn't in the evidence sent.
 func (p *ValidationPipeline) validateReferences(ctx context.Context, input ValidationInput) *StageFailure {
+	if input.Decision.Sales != nil {
+		if input.Context == nil || input.Context.Sales == nil || !input.Context.Sales.Enabled || !input.Context.Sales.AllowInteractions {
+			return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidAIOutput, Reason: "sales executor is unavailable"}
+		}
+		known := map[string]bool{input.SourceMessageReference: true}
+		for _, m := range input.Context.RecentMessages {
+			if m.Direction == "inbound" && m.Origin == "customer" {
+				known[m.Reference] = true
+			}
+		}
+		for _, ref := range input.Decision.Sales.EvidenceMessageIDs {
+			if ref == "" || !known[ref] {
+				return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidReference, Reason: "sales evidence was not exposed as a customer message"}
+			}
+		}
+		if input.Decision.Sales.WorkflowID != "" {
+			found := false
+			for _, w := range input.Context.Sales.Active {
+				if w.ID == input.Decision.Sales.WorkflowID && w.ResourceVersion == input.Decision.Sales.ExpectedVersion {
+					found = true
+				}
+			}
+			if !found {
+				return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidReference, Reason: "workflow or version was not exposed"}
+			}
+		}
+	}
+
 	if p.ReferenceValidator == nil {
 		return &StageFailure{
 			Stage:    ports.AIRunFailureStageValidation,
@@ -292,7 +327,8 @@ func (p *ValidationPipeline) authorize(ctx context.Context, input ValidationInpu
 type ValidationInput struct {
 	// DecisionID is the ai_decisions.id that this validation is for. The
 	// resulting EffectiveDecision is linked to it.
-	DecisionID string
+	DecisionID             string
+	SourceMessageReference string
 
 	// BusinessID comes from the Authenticated Context — never from Gemini.
 	BusinessID string

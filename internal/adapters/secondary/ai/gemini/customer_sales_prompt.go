@@ -26,6 +26,7 @@ func buildUserPrompt(input ports.CustomerSalesDecisionRequest) string {
 }
 
 type customerSalesPromptContext struct {
+	Sales                  *ports.SalesWorkflowContext                 `json:"sales,omitempty"`
 	SchemaVersion          int                                         `json:"schema_version"`
 	Freshness              string                                      `json:"freshness"`
 	Business               ports.CustomerSalesContextBusiness          `json:"business"`
@@ -55,6 +56,7 @@ type customerSalesPromptCustomer struct {
 
 func customerSalesPromptContextFrom(value *ports.CustomerSalesContext) customerSalesPromptContext {
 	return customerSalesPromptContext{
+		Sales:         value.Sales,
 		SchemaVersion: value.SchemaVersion,
 		Freshness:     value.Freshness,
 		Business:      value.Business,

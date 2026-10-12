@@ -36,6 +36,7 @@ type ProcessConfig struct {
 	SocialAPIHTTPTimeout           time.Duration
 	ChannelProvisioningEnabled     bool
 	ChannelProvisioningRedirectURI string
+	CustomerSalesEnabled           bool
 	AutoReplyEnabled               bool
 	LLMEnabled                     bool
 	LLMBaseURL                     string
@@ -146,6 +147,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.ChannelProvisioningEnabled, err = boolEnv("CHANNEL_PROVISIONING_ENABLED", cfg.ChannelProvisioningEnabled); err != nil {
 		return ProcessConfig{}, err
 	}
+	if cfg.CustomerSalesEnabled, err = boolEnv("CUSTOMER_SALES_ENABLED", false); err != nil {
+		return ProcessConfig{}, err
+	}
 	if cfg.AutoReplyEnabled, err = boolEnv("AUTOREPLY_ENABLED", cfg.AutoReplyEnabled); err != nil {
 		return ProcessConfig{}, err
 	}
@@ -182,7 +186,7 @@ func LoadFromEnv() (ProcessConfig, error) {
 		return ProcessConfig{}, errors.New("HTTP_ADDR cannot be empty")
 	}
 	hasAI := cfg.LLMEnabled || strings.TrimSpace(cfg.GeminiAPIKey) != ""
-	if cfg.AutoReplyEnabled && (cfg.SocialAPIWebhookSecret == "" || cfg.SocialAPIAPIKey == "" || !hasAI) {
+	if (cfg.AutoReplyEnabled || cfg.CustomerSalesEnabled) && (cfg.SocialAPIWebhookSecret == "" || cfg.SocialAPIAPIKey == "" || !hasAI) {
 		return ProcessConfig{}, errors.New("AUTOREPLY_ENABLED requires SOCIALAPI_WEBHOOK_SECRET, SOCIALAPI_API_KEY, and LLM_ENABLED or GEMINI_API_KEY")
 	}
 	return cfg, nil

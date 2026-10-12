@@ -353,6 +353,13 @@ func customerSalesSchemaEvidence(schema ports.AttributeSchemaRecord) ports.Custo
 	return out
 }
 func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports.CustomerSalesContext, input ports.CustomerSalesContextInput, now time.Time) (ports.CustomerSalesContext, error) {
+	if b.Sales != nil {
+		sales, err := b.Sales.GetContext(ctx, input.BusinessID, input.ConversationID, base.Customer.Reference)
+		if err != nil {
+			return ports.CustomerSalesContext{}, err
+		}
+		base.Sales = &sales
+	}
 	// The manifest describes catalog shape only. Item-level evaluation is
 	// delegated to the complete catalog paging/batching path when required.
 	if b.CatalogAI != nil && base.CatalogManifest == nil {

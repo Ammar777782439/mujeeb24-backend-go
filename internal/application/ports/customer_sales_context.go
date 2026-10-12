@@ -47,6 +47,7 @@ type CustomerSalesPolicyPort interface {
 }
 
 type CustomerSalesContext struct {
+	Sales                  *SalesWorkflowContext `json:"sales,omitempty"`
 	SchemaVersion          int
 	Freshness              string
 	Business               CustomerSalesContextBusiness

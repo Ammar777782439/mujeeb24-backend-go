@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"encoding/json"
-	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -326,9 +325,9 @@ type SubmitTransactionReviewCommandService struct{ SalesCommandServices }
 
 func (s SubmitTransactionReviewCommandService) Handle(ctx context.Context, command commands.SubmitTransactionReviewCommand) (commands.TransactionReviewResult, error) {
 	var result commands.TransactionReviewResult
-	return s.submitOrDecide(ctx, command.Meta, string(command.TransactionID), command.ReasonCodes, "", false, &result)
+	return s.submitOrDecide(ctx, command.Meta, string(command.TransactionID), command.ReasonCodes, "", false, "", &result)
 }
-func (s SalesCommandServices) submitOrDecide(ctx context.Context, meta commands.CommandMeta, transactionID string, reasonCodes []string, reviewer string, approved bool, result *commands.TransactionReviewResult) (commands.TransactionReviewResult, error) {
+func (s SalesCommandServices) submitOrDecide(ctx context.Context, meta commands.CommandMeta, transactionID string, reasonCodes []string, reviewer string, approved bool, reason string, result *commands.TransactionReviewResult) (commands.TransactionReviewResult, error) {
 	if err := s.readyTransaction(); err != nil {
 		return *result, err
 	}
@@ -349,7 +348,7 @@ func (s SalesCommandServices) submitOrDecide(ctx context.Context, meta commands.
 		if reviewer == "" {
 			record, err = s.TransactionRepository.SubmitReview(txCtx, ports.TransactionReviewPatch{ID: transactionID, BusinessID: string(meta.Actor.BusinessID), ReasonCodes: reasons, ExpectedVersion: version, UpdatedAt: s.now()})
 		} else {
-			record, err = s.TransactionRepository.DecideReview(txCtx, ports.TransactionReviewDecisionPatch{ID: transactionID, BusinessID: string(meta.Actor.BusinessID), ReviewerReference: reviewer, Approved: approved, ExpectedVersion: version, UpdatedAt: s.now()})
+			record, err = s.TransactionRepository.DecideReview(txCtx, ports.TransactionReviewDecisionPatch{ID: transactionID, BusinessID: string(meta.Actor.BusinessID), ReviewerReference: reviewer, Reason: reason, Approved: approved, ExpectedVersion: version, UpdatedAt: s.now()})
 		}
 		return mapSalesRepositoryError(err)
 	})
@@ -366,14 +365,14 @@ type ApproveTransactionReviewCommandService struct{ SalesCommandServices }
 
 func (s ApproveTransactionReviewCommandService) Handle(ctx context.Context, command commands.ApproveTransactionReviewCommand) (commands.TransactionReviewResult, error) {
 	var result commands.TransactionReviewResult
-	return s.submitOrDecide(ctx, command.Meta, string(command.TransactionID), nil, command.ReviewerReference, true, &result)
+	return s.submitOrDecide(ctx, command.Meta, string(command.TransactionID), nil, command.ReviewerReference, true, command.Reason, &result)
 }
 
 type RejectTransactionReviewCommandService struct{ SalesCommandServices }
 
 func (s RejectTransactionReviewCommandService) Handle(ctx context.Context, command commands.RejectTransactionReviewCommand) (commands.TransactionReviewResult, error) {
 	var result commands.TransactionReviewResult
-	return s.submitOrDecide(ctx, command.Meta, string(command.TransactionID), nil, command.ReviewerReference, false, &result)
+	return s.submitOrDecide(ctx, command.Meta, string(command.TransactionID), nil, command.ReviewerReference, false, command.Reason, &result)
 }
 
 func expectedVersion(value *commands.ResourceVersion) (int64, error) {
@@ -431,8 +430,7 @@ func transactionLineDrafts(values []commands.TransactionLine, newID func() strin
 			return nil, appErrors.New(appErrors.CodeValidation, "catalog item is required")
 		}
 		quantity := strings.TrimSpace(string(value.Quantity))
-		rational, ok := new(big.Rat).SetString(quantity)
-		if !ok || rational.Sign() <= 0 {
+		if err := ports.ValidateSalesQuantity(quantity); err != nil {
 			return nil, appErrors.New(appErrors.CodeValidation, "quantity must be a positive decimal")
 		}
 		selected, err := objectJSON(value.SelectedAttributes)
