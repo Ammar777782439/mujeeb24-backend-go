@@ -1344,12 +1344,12 @@ components:
         attributes:
           additionalProperties: {}
           type: object
-        initial_offer:
-          $ref: "#/components/schemas/CreateOfferRequest"
         availability_mode:
           type: string
         fulfillment_mode:
           type: string
+        initial_offer:
+          $ref: "#/components/schemas/CreateOfferRequest"
         item_type:
           type: string
         long_description:
