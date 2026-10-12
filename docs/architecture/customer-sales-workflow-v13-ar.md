@@ -11,7 +11,7 @@ Gemini يفهم الرسالة ويختار قدرة واحدة. الردود و
 ## التشغيل
 
 - تطبيق migration الأمامية `000074` قبل تشغيل النسخة.
-- `CUSTOMER_SALES_ENABLED=true` يركب منفذ المبيعات؛ مستقل عن `AUTOREPLY_ENABLED`.
+- `CUSTOMER_SALES_ENABLED=true` يركب منفذ المبيعات في API ومعالج الأزرار في Worker؛ يجب ضبطه في العمليتين، وهو مستقل عن `AUTOREPLY_ENABLED`.
 - `sales_workflow_enabled` و`allow_sales_interactions` في سياسة التاجر افتراضيًا false.
 - أعلام `allow_auto_lead_creation` و`allow_auto_transaction_draft` و`allow_auto_confirmation` تحكم آثارها منفصلة. `allow_auto_reply` ليس تفويضًا تجاريًا.
 - assist/approval يحفظان اقتراحًا بانتظار اعتماد الموظف؛ الاعتماد يعيد فحص البيانات الحالية.
@@ -25,7 +25,7 @@ Gemini يفهم الرسالة ويختار قدرة واحدة. الردود و
 
 ## حواجز التأكيد
 
-اتفاق العميل له agreement_version مستقل عن resource_version. اعتماد المراجعة لا يغير تفاصيل الاتفاق. تعديل المسودة يغير agreement_version ويلغي الأزرار والمراجعة القديمة. تأكيد الصفقة يحتاج عرضًا وسعرًا وتوفرًا صالحين ومراجعة معتمدة عند طلبها.
+اتفاق العميل له agreement_version مستقل عن resource_version. اعتماد المراجعة لا يغير تفاصيل الاتفاق. تعديل المسودة يغير agreement_version ويلغي الأزرار والمراجعة القديمة. تعديل الموظف يحدّث أيضًا نسخة وحالة وبيانات المسار؛ إلغاء المعاملة يغلق المسار. أوامر الموظف وGemini والأزرار تتبع ترتيب الأقفال نفسه: المحادثة ثم المسار ثم المعاملة. تأكيد الصفقة يحتاج عرضًا وسعرًا وتوفرًا صالحين ومراجعة معتمدة عند طلبها.
 
 السعر starting_from/quote_required/dynamic لا يصبح مبلغًا نهائيًا بافتراض. مسودات الأنواع السبعة محفوظة دون ادعاء تشغيل تكامل خارجي. التأكيد الآلي الحالي محصور بعمليات order ذات always_available وfulfillment_mode من pickup/digital، مع سماح سياسة المحادثة؛ stock/schedule/supplier_check تحتاج مراجعة ولا ندّعي وجود منفذ حجز مورد. تفعيل اشتراك منصة مجيب مسار مستقل عن صفقة subscription في الكتالوج.
 
@@ -33,6 +33,6 @@ Gemini يفهم الرسالة ويختار قدرة واحدة. الردود و
 
 ## التحقق والحالة
 
-هذه دفعة تنفيذ قيد التحقق وليست تصريحًا بجاهزية live. الاختبارات المحلية لا تثبت PostgreSQL أو القنوات. Quality gate على الفرع يشغل PostgreSQL 16. فحوصات Gemini وSocialAPI الحية لم تُشغّل؛ لا استدعاءات نموذج أو رسائل عملاء أثناء التطوير.
+تم اجتياز Quality gate مع PostgreSQL 16 عند `127b83436c664ecb2408881b1c4c4fbd5429f622`؛ تُعاد البوابة عند كل تحديث. هذا ليس تصريحًا بجاهزية live. الاختبارات المحلية لا تثبت PostgreSQL أو القنوات. Quality gate على الفرع يشغل PostgreSQL 16. فحوصات Gemini وSocialAPI الحية لم تُشغّل؛ لا استدعاءات نموذج أو رسائل عملاء أثناء التطوير.
 
 مصادر المزود: https://docs.social-api.ai/guides/inbox وhttps://docs.social-api.ai/guides/webhooks وhttps://docs.social-api.ai/api-reference/inbox/send-a-message-in-a-conversation. الأزرار/quick replies لإنستجرام وفيسبوك، وmetadata.payload للأحداث. إرسال WhatsApp بالأزرار مدعوم حسب عقد endpoint؛ يلزم اختبار القناة الفعلي قبل إعلان التشغيل.

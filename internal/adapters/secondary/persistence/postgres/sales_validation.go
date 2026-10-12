@@ -211,3 +211,25 @@ func salesRequirementSchema(definitions []ports.SalesRequirementDefinition) *por
 	}
 	return s
 }
+
+// Manual commands and customer/model commands take the same locks in the same
+// order. Otherwise an API transaction can hold the agreement while a button
+// holds its workflow, each waiting for the other.
+func lockTransactionWorkflow(ctx context.Context, e SQLExecutor, business, transaction string) error {
+	for _, query := range []string{
+		`SELECT c.id FROM conversations c JOIN sales_workflows w ON w.business_id=c.business_id AND w.conversation_id=c.id WHERE w.business_id=$1::uuid AND w.transaction_id=$2::uuid ORDER BY c.id FOR UPDATE OF c`,
+		`SELECT id FROM sales_workflows WHERE business_id=$1::uuid AND transaction_id=$2::uuid ORDER BY id FOR UPDATE`,
+	} {
+		rows, err := e.Query(ctx, query, business, transaction)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+	}
+	return nil
+}

@@ -357,3 +357,45 @@ func TestSalesWorkflowRequirementsRemainPinnedAndGuardHumanConfirmationAgainstPo
 		t.Fatalf("new requirement version changed a pinned agreement: %v", err)
 	}
 }
+
+func TestSalesWorkflowManualDraftUpdateSynchronizesWorkflowAgainstPostgres(t *testing.T) {
+	f := newSalesWorkflowFixture(t)
+	r, err := f.apply(t, "manual-revision")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := NewTransactionRepository(f.a)
+	tr, err := repository.Get(context.Background(), f.business, *r.Workflow.TransactionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = f.a.Within(context.Background(), func(tx context.Context) error {
+		_, err := repository.UpdateDraft(tx, ports.TransactionPatch{BusinessID: f.business, ID: tr.ID, ExpectedVersion: tr.ResourceVersion, Lines: []ports.TransactionLineDraft{{ID: uuid.NewString(), CatalogItemID: f.item, OfferID: &f.offer, Quantity: "3", SelectedAttributes: []byte(`{}`)}}, UpdatedAt: f.now.Add(time.Minute)})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := NewSalesWorkflowRepository(f.a).GetWorkflow(context.Background(), f.business, r.Workflow.ID)
+	if err != nil || updated.State != "draft" || updated.ResourceVersion <= r.Workflow.ResourceVersion || len(updated.Proposal.Lines) != 1 || updated.Proposal.Lines[0].Quantity != "3" {
+		t.Fatalf("manual revision left old workflow context: %+v %v", updated, err)
+	}
+	if _, err := f.button(t, r, "accept"); err == nil {
+		t.Fatal("manual revision left old button usable")
+	}
+	tr, err = repository.Get(context.Background(), f.business, tr.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = f.a.Within(context.Background(), func(tx context.Context) error {
+		_, err := repository.Cancel(tx, ports.TransactionCancelPatch{BusinessID: f.business, ID: tr.ID, ExpectedVersion: tr.ResourceVersion, Reason: "cancelled by employee", UpdatedAt: f.now.Add(2 * time.Minute)})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err = NewSalesWorkflowRepository(f.a).GetWorkflow(context.Background(), f.business, r.Workflow.ID)
+	if err != nil || updated.State != "cancelled" {
+		t.Fatalf("cancelled agreement remained active: %+v %v", updated, err)
+	}
+}

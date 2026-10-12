@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -128,6 +129,9 @@ func (r *TransactionRepository) UpdateDraft(ctx context.Context, patch ports.Tra
 	if len(patch.Lines) == 0 {
 		return ports.TransactionRecord{}, invalidRepositoryInput("transaction.update", "at least one transaction line is required")
 	}
+	if err := lockTransactionWorkflow(ctx, executor, patch.BusinessID, patch.ID); err != nil {
+		return ports.TransactionRecord{}, err
+	}
 	record, err := scanTransaction(executor.QueryRow(ctx, `UPDATE commercial_transactions SET currency = COALESCE($3, currency), agreement_version=agreement_version+1, resource_version = resource_version + 1, updated_at = $4 WHERE business_id = $1::uuid AND id = $2::uuid AND state IN ('draft','awaiting_confirmation') AND resource_version = $5 RETURNING id::text, business_id::text, customer_id::text, lead_id::text, transaction_type, state, source_conversation_reference_id::text, currency, total_amount::text, schema_version, requires_human_review, cancellation_reason, resource_version, agreement_version, created_at, updated_at`, patch.BusinessID, patch.ID, patch.Currency, patch.UpdatedAt, patch.ExpectedVersion))
 	if err != nil {
 		return ports.TransactionRecord{}, classifyTransactionMutationMiss(ctx, executor, "transaction.update", patch.BusinessID, patch.ID, patch.ExpectedVersion, err, "draft can no longer be edited")
@@ -147,6 +151,19 @@ func (r *TransactionRepository) UpdateDraft(ctx context.Context, patch ports.Tra
 	if _, err := executor.Exec(ctx, `DELETE FROM transaction_reviews WHERE business_id=$1::uuid AND transaction_id=$2::uuid`, patch.BusinessID, patch.ID); err != nil {
 		return ports.TransactionRecord{}, err
 	}
+	workflowLines := make([]ports.SalesWorkflowLine, 0, len(patch.Lines))
+	for _, line := range patch.Lines {
+		var attributes map[string]any
+		if len(line.SelectedAttributes) > 0 {
+			if err := json.Unmarshal(line.SelectedAttributes, &attributes); err != nil {
+				return ports.TransactionRecord{}, err
+			}
+		}
+		workflowLines = append(workflowLines, ports.SalesWorkflowLine{ItemID: line.CatalogItemID, OfferID: line.OfferID, VariantID: line.VariantID, Quantity: line.Quantity, SelectedAttributes: attributes})
+	}
+	if _, err := executor.Exec(ctx, `UPDATE sales_workflows SET state='draft',pending_action=NULL,proposal=jsonb_set(proposal,'{lines}',$3::jsonb),resource_version=resource_version+1,updated_at=$4 WHERE business_id=$1::uuid AND transaction_id=$2::uuid`, patch.BusinessID, patch.ID, mustSalesJSON(workflowLines), patch.UpdatedAt); err != nil {
+		return ports.TransactionRecord{}, err
+	}
 	return r.refreshTotals(ctx, executor, record)
 }
 
@@ -157,6 +174,9 @@ func (r *TransactionRepository) Confirm(ctx context.Context, patch ports.Transac
 	}
 	if patch.ID == "" || patch.BusinessID == "" || strings.TrimSpace(patch.EvidenceReference) == "" || patch.ExpectedVersion <= 0 || patch.UpdatedAt.IsZero() {
 		return ports.TransactionRecord{}, invalidRepositoryInput("transaction.confirm", "id, business, evidence, updated_at, and positive expected version are required")
+	}
+	if err := lockTransactionWorkflow(ctx, executor, patch.BusinessID, patch.ID); err != nil {
+		return ports.TransactionRecord{}, err
 	}
 	if err := r.validateConfirmation(ctx, executor, patch); err != nil {
 		return ports.TransactionRecord{}, err
@@ -188,9 +208,18 @@ func (r *TransactionRepository) Cancel(ctx context.Context, patch ports.Transact
 	if patch.ID == "" || patch.BusinessID == "" || strings.TrimSpace(patch.Reason) == "" || patch.ExpectedVersion <= 0 || patch.UpdatedAt.IsZero() {
 		return ports.TransactionRecord{}, invalidRepositoryInput("transaction.cancel", "id, business, reason, updated_at, and positive expected version are required")
 	}
+	if err := lockTransactionWorkflow(ctx, executor, patch.BusinessID, patch.ID); err != nil {
+		return ports.TransactionRecord{}, err
+	}
 	record, err := scanTransaction(executor.QueryRow(ctx, `UPDATE commercial_transactions SET state = 'cancelled', cancellation_reason = $3, resource_version = resource_version + 1, updated_at = $4 WHERE business_id = $1::uuid AND id = $2::uuid AND state NOT IN ('completed', 'cancelled', 'expired') AND resource_version = $5 RETURNING id::text, business_id::text, customer_id::text, lead_id::text, transaction_type, state, source_conversation_reference_id::text, currency, total_amount::text, schema_version, requires_human_review, cancellation_reason, resource_version, agreement_version, created_at, updated_at`, patch.BusinessID, patch.ID, patch.Reason, patch.UpdatedAt, patch.ExpectedVersion))
 	if err != nil {
 		return ports.TransactionRecord{}, classifyTransactionMutationMiss(ctx, executor, "transaction.cancel", patch.BusinessID, patch.ID, patch.ExpectedVersion, err, "transaction cannot be cancelled from its current state")
+	}
+	if _, err := executor.Exec(ctx, `UPDATE sales_workflows SET state='cancelled',pending_action=NULL,resource_version=resource_version+1,updated_at=$3 WHERE business_id=$1::uuid AND transaction_id=$2::uuid`, patch.BusinessID, patch.ID, patch.UpdatedAt); err != nil {
+		return ports.TransactionRecord{}, err
+	}
+	if _, err := executor.Exec(ctx, `UPDATE sales_confirmation_requests SET status='superseded',updated_at=$3 WHERE business_id=$1::uuid AND transaction_id=$2::uuid AND status IN ('pending','accepted')`, patch.BusinessID, patch.ID, patch.UpdatedAt); err != nil {
+		return ports.TransactionRecord{}, err
 	}
 	return record, nil
 }
@@ -272,6 +301,9 @@ func (r *TransactionRepository) insertTransactionLines(ctx context.Context, exec
 }
 
 func (r *TransactionRepository) bumpTransactionForReview(ctx context.Context, executor SQLExecutor, transactionID, businessID string, expectedVersion int64, updatedAt time.Time) error {
+	if err := lockTransactionWorkflow(ctx, executor, businessID, transactionID); err != nil {
+		return err
+	}
 	var ignored string
 	err := executor.QueryRow(ctx, `UPDATE commercial_transactions SET requires_human_review = TRUE, resource_version = resource_version + 1, updated_at = $3 WHERE business_id = $1::uuid AND id = $2::uuid AND resource_version = $4 AND state NOT IN ('completed', 'cancelled', 'expired') RETURNING id::text`, businessID, transactionID, updatedAt, expectedVersion).Scan(&ignored)
 	if err == nil {

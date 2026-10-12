@@ -46,8 +46,10 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 			Owner:    runtime.WorkerOwner,
 		}
 	}
-	sales := buildSalesWorkflowService(database, outbox)
-	runtime.SalesActions = &services.SalesActionProcessor{Jobs: postgres.NewSalesActionJobs(database), Sales: sales}
+	if cfg.CustomerSalesEnabled {
+		sales := buildSalesWorkflowService(database, outbox)
+		runtime.SalesActions = &services.SalesActionProcessor{Jobs: postgres.NewSalesActionJobs(database), Sales: sales}
+	}
 	return runtime, nil
 }
 
