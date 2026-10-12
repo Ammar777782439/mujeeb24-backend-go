@@ -3,12 +3,14 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/catalogvalidation"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/jackc/pgx/v5"
 )
 
 func validateSalesSelection(ctx context.Context, e SQLExecutor, business string, line ports.TransactionLineDraft, now time.Time) error {
@@ -83,7 +85,11 @@ func (r *TransactionRepository) validateConfirmation(ctx context.Context, e SQLE
 	var state string
 	var review bool
 	var customer string
-	if err := e.QueryRow(ctx, `SELECT resource_version,agreement_version,state,requires_human_review,customer_id::text FROM commercial_transactions WHERE business_id=$1::uuid AND id=$2::uuid FOR UPDATE`, p.BusinessID, p.ID).Scan(&version, &agreement, &state, &review, &customer); err != nil {
+	var transactionType string
+	var schemaVersion int
+	var transactionData []byte
+	var leadID *string
+	if err := e.QueryRow(ctx, `SELECT resource_version,agreement_version,state,requires_human_review,customer_id::text,transaction_type,schema_version,transaction_data,lead_id::text FROM commercial_transactions WHERE business_id=$1::uuid AND id=$2::uuid FOR UPDATE`, p.BusinessID, p.ID).Scan(&version, &agreement, &state, &review, &customer, &transactionType, &schemaVersion, &transactionData, &leadID); err != nil {
 		return classifyRepositoryGetError("transaction.confirm", err)
 	}
 	if version != p.ExpectedVersion {
@@ -107,12 +113,59 @@ func (r *TransactionRepository) validateConfirmation(ctx context.Context, e SQLE
 		return err
 	}
 	if workflowCount > 0 {
+		var raw []byte
+		err := e.QueryRow(ctx, `SELECT definitions FROM sales_transaction_requirements WHERE business_id=$1::uuid AND transaction_type=$2 AND schema_version=$3`, p.BusinessID, transactionType, schemaVersion).Scan(&raw)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if errors.Is(err, pgx.ErrNoRows) && transactionType != "order" {
+			return invalidRepositoryInput("transaction.requirements", "specialized requirement schema is missing")
+		}
+		var definitions []ports.SalesRequirementDefinition
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, &definitions); err != nil {
+				return err
+			}
+		}
+		var data map[string]any
+		if err := json.Unmarshal(transactionData, &data); err != nil {
+			return err
+		}
+		if err := catalogvalidation.ValidateAttributes(salesRequirementSchema(definitions), data); err != nil {
+			return invalidRepositoryInput("transaction.requirements", err.Error())
+		}
 		var accepted bool
 		if err := e.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM sales_confirmation_requests WHERE business_id=$1::uuid AND transaction_id=$2::uuid AND customer_id=$3::uuid AND transaction_version=$4 AND status='accepted' AND expires_at>$5)`, p.BusinessID, p.ID, customer, agreement, p.UpdatedAt).Scan(&accepted); err != nil {
 			return err
 		}
 		if !accepted {
 			return invalidRepositoryInput("transaction.confirm", "current customer confirmation is missing or expired")
+		}
+	}
+	if leadID != nil {
+		var leadCustomer, leadState string
+		if err := e.QueryRow(ctx, `SELECT customer_id::text,status FROM leads WHERE business_id=$1::uuid AND id=$2::uuid FOR UPDATE`, p.BusinessID, *leadID).Scan(&leadCustomer, &leadState); err != nil {
+			return err
+		}
+		if leadCustomer != customer || leadState == "lost" {
+			return invalidRepositoryInput("transaction.lead", "lead customer changed or lead was closed as lost")
+		}
+	}
+	// Lock every mutable catalog record used by the agreement, not just its price.
+	for _, query := range []string{
+		`SELECT c.id FROM catalogs c JOIN catalog_items i ON i.business_id=c.business_id AND i.catalog_id=c.id JOIN order_lines l ON l.business_id=i.business_id AND l.catalog_item_id=i.id WHERE l.business_id=$1::uuid AND l.transaction_id=$2::uuid ORDER BY c.id FOR SHARE OF c`,
+		`SELECT i.id FROM catalog_items i JOIN order_lines l ON l.business_id=i.business_id AND l.catalog_item_id=i.id WHERE l.business_id=$1::uuid AND l.transaction_id=$2::uuid ORDER BY i.id FOR SHARE OF i`,
+		`SELECT v.id FROM variants v JOIN order_lines l ON l.business_id=v.business_id AND l.variant_id=v.id WHERE l.business_id=$1::uuid AND l.transaction_id=$2::uuid ORDER BY v.id FOR SHARE OF v`,
+	} {
+		rows, err := e.Query(ctx, query, p.BusinessID, p.ID)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
 		}
 	}
 	// Share-lock current catalog evidence until commit so an update cannot race confirmation.

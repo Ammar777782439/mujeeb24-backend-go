@@ -178,3 +178,137 @@ func TestSalesWorkflowNotificationUsesExistingOutboxAgainstPostgres(t *testing.T
 		t.Fatalf("buttons were lost before transport: %+v %v", m, err)
 	}
 }
+
+func TestSalesWorkflowRejectsExpiredAndForeignCustomerButtonsAgainstPostgres(t *testing.T) {
+	f := newSalesWorkflowFixture(t)
+	r, err := f.apply(t, "expiry")
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreign := newSalesWorkflowFixture(t)
+	if _, err := foreign.button(t, r, "accept"); err == nil {
+		t.Fatal("foreign customer accepted another tenant's request")
+	}
+	if _, err := f.a.Pool().Exec(context.Background(), `UPDATE sales_confirmation_requests SET expires_at=$2 WHERE business_id=$1::uuid`, f.business, f.now.Add(-time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.button(t, r, "accept"); err == nil {
+		t.Fatal("expired request was accepted")
+	}
+	tr, err := NewTransactionRepository(f.a).Get(context.Background(), f.business, *r.Workflow.TransactionID)
+	if err != nil || tr.State != "awaiting_confirmation" {
+		t.Fatalf("invalid action changed agreement: %+v %v", tr, err)
+	}
+}
+
+func TestSalesWorkflowIncompleteAgreementsHaveNoButtonsAgainstPostgres(t *testing.T) {
+	for _, kind := range []string{"unknown_price", "booking_schema", "booking_fields"} {
+		t.Run(kind, func(t *testing.T) {
+			f := newSalesWorkflowFixture(t)
+			proposal := ports.SalesWorkflowProposal{TransactionType: "order", EvidenceMessageIDs: []string{f.message}, Lines: []ports.SalesWorkflowLine{{ItemID: f.item, OfferID: &f.offer, Quantity: "1"}}}
+			switch kind {
+			case "unknown_price":
+				if _, err := f.a.Pool().Exec(context.Background(), `UPDATE offers SET price_verification_status='unverified' WHERE id=$1::uuid`, f.offer); err != nil {
+					t.Fatal(err)
+				}
+			case "booking_schema":
+				proposal.TransactionType = "booking"
+			case "booking_fields":
+				proposal.TransactionType = "booking"
+				err := NewSalesWorkflowRepository(f.a).PutRequirement(context.Background(), f.business, ports.SalesRequirement{TransactionType: "booking", SchemaVersion: 1, Definitions: []ports.SalesRequirementDefinition{{Key: "date", Label: "موعد الحجز", DataType: "string", Required: true}}})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			var result ports.SalesWorkflowResult
+			err := f.a.Within(context.Background(), func(tx context.Context) error {
+				var err error
+				result, err = NewSalesWorkflowRepository(f.a).Apply(tx, ports.SalesWorkflowInput{BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation, SourceMessageID: f.message, IdempotencyKey: kind, Capability: ports.CustomerSalesCapabilityCreateDraft, Proposal: proposal, Now: f.now})
+				return err
+			})
+			if err != nil || result.Workflow.State != "draft" || result.ConfirmationID != "" {
+				t.Fatalf("incomplete agreement requested a vote: %+v %v", result, err)
+			}
+		})
+	}
+}
+
+func TestSalesWorkflowDeliveryRequiresReviewAgainstPostgres(t *testing.T) {
+	f := newSalesWorkflowFixture(t)
+	if _, err := f.a.Pool().Exec(context.Background(), `UPDATE offers SET fulfillment_mode='delivery' WHERE id=$1::uuid`, f.offer); err != nil {
+		t.Fatal(err)
+	}
+	r, err := f.apply(t, "delivery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	accepted, err := f.button(t, r, "accept")
+	if err != nil || accepted.Workflow.State != "awaiting_review" {
+		t.Fatalf("delivery skipped human review: %+v %v", accepted, err)
+	}
+}
+
+func TestSalesWorkflowConcurrentIdempotencyAgainstPostgres(t *testing.T) {
+	f := newSalesWorkflowFixture(t)
+	type outcome struct {
+		result ports.SalesWorkflowResult
+		err    error
+	}
+	outcomes := make(chan outcome, 2)
+	for i := 0; i < 2; i++ {
+		go func() { r, err := f.apply(t, "concurrent"); outcomes <- outcome{r, err} }()
+	}
+	one, two := <-outcomes, <-outcomes
+	if one.err != nil || two.err != nil || one.result.Workflow.ID != two.result.Workflow.ID || one.result.Duplicate == two.result.Duplicate {
+		t.Fatalf("concurrent requests were not serialized: %+v %+v", one, two)
+	}
+	var count int
+	if err := f.a.Pool().QueryRow(context.Background(), `SELECT COUNT(*) FROM commercial_transactions WHERE business_id=$1::uuid`, f.business).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("created %d agreements: %v", count, err)
+	}
+}
+
+func TestSalesWorkflowDraftUpdateSupersedesPreviousButtonsAgainstPostgres(t *testing.T) {
+	f := newSalesWorkflowFixture(t)
+	previous, err := f.apply(t, "before-update")
+	if err != nil {
+		t.Fatal(err)
+	}
+	proposal := previous.Workflow.Proposal
+	proposal.WorkflowID = previous.Workflow.ID
+	proposal.ExpectedVersion = previous.Workflow.ResourceVersion
+	proposal.Lines[0].Quantity = "2"
+	var updated ports.SalesWorkflowResult
+	err = f.a.Within(context.Background(), func(tx context.Context) error {
+		var err error
+		updated, err = NewSalesWorkflowRepository(f.a).Apply(tx, ports.SalesWorkflowInput{BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation, SourceMessageID: f.message, IdempotencyKey: "after-update", Capability: ports.CustomerSalesCapabilityUpdateDraft, Proposal: proposal, Now: f.now})
+		return err
+	})
+	if err != nil || updated.ConfirmationID == previous.ConfirmationID || updated.TotalAmount == nil || *updated.TotalAmount != "10000.0000" {
+		t.Fatalf("invalid revised agreement: %+v %v", updated, err)
+	}
+	if _, err := f.button(t, previous, "accept"); err == nil {
+		t.Fatal("old agreement button accepted updated draft")
+	}
+	if result, err := f.button(t, updated, "accept"); err != nil || result.Workflow.State != "confirmed" {
+		t.Fatalf("current agreement could not confirm: %+v %v", result, err)
+	}
+}
+
+func TestSalesWorkflowConversationOverrideRequiresApprovalAgainstPostgres(t *testing.T) {
+	f := newSalesWorkflowFixture(t)
+	r, err := f.apply(t, "mode-change")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.a.Pool().Exec(context.Background(), `UPDATE conversations SET ai_mode_override='draft_only' WHERE id=$1::uuid`, f.conversation); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.apply(t, "new-execution"); err == nil {
+		t.Fatal("draft-only override executed automatically")
+	}
+	accepted, err := f.button(t, r, "accept")
+	if err != nil || accepted.Workflow.State != "awaiting_review" {
+		t.Fatalf("conversation override skipped review: %+v %v", accepted, err)
+	}
+}

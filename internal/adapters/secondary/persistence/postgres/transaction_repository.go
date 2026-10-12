@@ -168,7 +168,8 @@ func (r *TransactionRepository) Confirm(ctx context.Context, patch ports.Transac
 	if _, err := executor.Exec(ctx, `INSERT INTO transaction_confirmations (id, business_id, transaction_id, status, confirmed_by, confirmed_at, evidence_reference, policy_version, created_at, updated_at) VALUES (gen_random_uuid(), $1::uuid, $2::uuid, 'confirmed', COALESCE(NULLIF($6,''),'human_agent'), $3, $4, NULLIF($5, ''), $3, $3) ON CONFLICT (business_id, transaction_id) DO UPDATE SET status = EXCLUDED.status, confirmed_by = EXCLUDED.confirmed_by, confirmed_at = EXCLUDED.confirmed_at, evidence_reference = EXCLUDED.evidence_reference, policy_version = EXCLUDED.policy_version, updated_at = EXCLUDED.updated_at`, patch.BusinessID, patch.ID, patch.UpdatedAt, patch.EvidenceReference, patch.PolicyVersion, patch.ConfirmedBy); err != nil {
 		return ports.TransactionRecord{}, salesRepositoryError("transaction.confirm.confirmation", err)
 	}
-	if record.LeadID != nil {
+	// A quote is a proposal, not a completed sale.
+	if record.LeadID != nil && record.TransactionType != "quote" {
 		if _, err := executor.Exec(ctx, `UPDATE leads SET status='won',qualification_state='converted',resource_version=resource_version+1,updated_at=$3 WHERE business_id=$1::uuid AND id=$2::uuid AND customer_id=$4::uuid AND status NOT IN ('won','lost')`, patch.BusinessID, *record.LeadID, patch.UpdatedAt, record.CustomerID); err != nil {
 			return ports.TransactionRecord{}, err
 		}

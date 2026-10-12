@@ -642,7 +642,11 @@ func (c *Client) NormalizeWebhook(ctx context.Context, headers map[string]string
 	if text == "" {
 		text = envelope.Data.Text
 	}
-	event := channel.InboundEvent{ActionPayload: envelope.Data.Metadata.Payload, ActionTitle: envelope.Data.Metadata.Title, ID: uuid.NewString(), Provider: channel.ProviderSocialAPI, Channel: providerChannel, ProviderConnectionID: envelope.Data.AccountID, ProviderEventID: providerEventID, DeliveryID: deliveryID, DedupeStrategy: dedupeStrategy, EventType: normalizedEventType, InteractionKind: interaction, ProviderMessageID: providerMessageID, ProviderConversationID: providerConversationID, ExternalUserID: externalUserID, Text: text, Direction: direction, Origin: origin, DeliveryStatus: strings.ToLower(strings.TrimSpace(envelope.Data.Status)), ReceivedAt: receivedAt}
+	event := channel.InboundEvent{ID: uuid.NewString(), Provider: channel.ProviderSocialAPI, Channel: providerChannel, ProviderConnectionID: envelope.Data.AccountID, ProviderEventID: providerEventID, DeliveryID: deliveryID, DedupeStrategy: dedupeStrategy, EventType: normalizedEventType, InteractionKind: interaction, ProviderMessageID: providerMessageID, ProviderConversationID: providerConversationID, ExternalUserID: externalUserID, Text: text, Direction: direction, Origin: origin, DeliveryStatus: strings.ToLower(strings.TrimSpace(envelope.Data.Status)), ReceivedAt: receivedAt}
+	if envelope.Event == "dm.postback" {
+		event.ActionPayload = envelope.Data.Metadata.Payload
+		event.ActionTitle = envelope.Data.Metadata.Title
+	}
 	if envelope.Data.ReceivedAt != "" || envelope.Data.CreatedAt != "" {
 		timestamp := receivedAt
 		event.ExternalCreatedAt = &timestamp

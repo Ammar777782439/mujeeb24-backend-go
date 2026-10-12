@@ -19,6 +19,9 @@ func (r *SalesActionJobs) Claim(ctx context.Context, limit int, now time.Time) (
 	if err != nil {
 		return nil, err
 	}
+	if _, err := e.Exec(ctx, `UPDATE sales_action_jobs SET state='dead_letter',error_code='lease_attempts_exhausted',lease_token=NULL,lease_until=NULL,updated_at=$1 WHERE state='processing' AND lease_until<$1 AND attempts>=5`, now); err != nil {
+		return nil, err
+	}
 	rows, err := e.Query(ctx, `WITH picked AS (SELECT id FROM sales_action_jobs WHERE (state='pending' OR (state='processing' AND lease_until<$1)) AND attempts<5 ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT $2)
  UPDATE sales_action_jobs j SET state='processing',lease_token=$3::uuid,lease_until=$1+interval '2 minutes',attempts=attempts+1,updated_at=$1 FROM picked WHERE j.id=picked.id RETURNING j.id::text,j.lease_token::text,j.business_id::text,j.customer_id::text,j.conversation_id::text,j.message_id::text,j.payload`, now, limit, uuid.NewString())
 	if err != nil {

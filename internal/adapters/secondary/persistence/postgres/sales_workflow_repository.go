@@ -90,14 +90,21 @@ func (r *SalesWorkflowRepository) Apply(ctx context.Context, in ports.SalesWorkf
 	}
 	// Serialize this conversation across workers and bind it to the verified customer.
 	var conv string
-	if err := e.QueryRow(ctx, `SELECT id::text FROM conversations WHERE business_id=$1::uuid AND id=$2::uuid AND customer_id=$3::uuid AND ($4 OR (ownership<>'human' AND state<>'waiting_human')) FOR UPDATE`, in.BusinessID, in.ConversationID, in.CustomerID, in.HumanApproved).Scan(&conv); err != nil {
+	var mode string
+	if err := e.QueryRow(ctx, `SELECT id::text,COALESCE(ai_mode_override,'allowed') FROM conversations WHERE business_id=$1::uuid AND id=$2::uuid AND customer_id=$3::uuid AND ($4 OR (ownership<>'human' AND state<>'waiting_human')) FOR UPDATE`, in.BusinessID, in.ConversationID, in.CustomerID, in.HumanApproved).Scan(&conv, &mode); err != nil {
 		return result, classifyRepositoryGetError("sales.conversation", err)
+	}
+	if !in.HumanApproved && (mode == "disabled" || (mode == "draft_only" && !in.RequiresApproval)) {
+		return result, invalidRepositoryInput("sales.conversation", "conversation AI mode does not authorize execution")
 	}
 	source, err := salesSourceMessage(ctx, e, in.BusinessID, in.ConversationID, in.CustomerID, in.SourceMessageID)
 	if err != nil {
 		return result, err
 	}
-	hash := salesHash(in.Proposal)
+	hash := salesHash(struct {
+		Capability ports.CustomerSalesCapability
+		Proposal   ports.SalesWorkflowProposal
+	}{in.Capability, in.Proposal})
 	cached, found, err := readSalesCommand(ctx, e, in.BusinessID, "workflow", in.IdempotencyKey, hash)
 	if err != nil {
 		return result, err
@@ -117,6 +124,9 @@ func (r *SalesWorkflowRepository) Apply(ctx context.Context, in ports.SalesWorkf
 		return result, invalidRepositoryInput("sales.policy", "sales workflow or interactions are disabled")
 	}
 	if !in.RequiresApproval && !in.HumanApproved {
+		if policy.AIMode != "restricted_auto" || policy.DefaultHumanReview {
+			return result, invalidRepositoryInput("sales.policy", "policy changed; human approval required")
+		}
 		if in.Capability == ports.CustomerSalesCapabilityRecordLead && !policy.AllowAutoLeadCreation {
 			return result, invalidRepositoryInput("sales.policy", "automatic lead creation is disabled")
 		}
@@ -259,10 +269,15 @@ func (r *SalesWorkflowRepository) prepareDraft(ctx context.Context, e SQLExecuto
 			result.Details = append(result.Details, ports.SalesReceiptDetail{Label: d.Label, Value: v})
 		}
 	}
-	if !complete {
+	// Specialized transactions need an explicitly configured requirement schema.
+	// A complete agreement also needs a known, verified numeric price.
+	var priced bool
+	if err := e.QueryRow(ctx, `SELECT COALESCE(bool_and(o.price_verification_status='verified' AND o.pricing_mode IN ('fixed','per_unit','per_person','per_day') AND o.amount IS NOT NULL AND o.currency IS NOT NULL),false) AND COUNT(*)=COUNT(o.id) FROM order_lines l LEFT JOIN offers o ON o.business_id=l.business_id AND o.id=l.offer_id WHERE l.business_id=$1::uuid AND l.transaction_id=$2::uuid`, in.BusinessID, tr.ID).Scan(&priced); err != nil {
+		return err
+	}
+	if !complete || (len(reqJSON) == 0 && in.Proposal.TransactionType != "order") || !priced || tr.TotalAmount == nil || tr.Currency == nil {
 		return nil
 	}
-	// Missing a specialized requirement schema blocks automatic confirmation, not draft creation.
 	requestID := uuid.NewString()
 	accept := "m24.sales:" + requestID + ":accept"
 	decline := "m24.sales:" + requestID + ":decline"
@@ -323,7 +338,10 @@ func validSalesType(t string) bool {
 func salesSourceMessage(ctx context.Context, e SQLExecutor, business, conversation, customer, source string) (string, error) {
 	var id string
 	err := e.QueryRow(ctx, `SELECT m.id::text FROM communication_messages m JOIN conversation_references r ON r.business_id=m.business_id AND r.id=m.conversation_reference_id JOIN conversations c ON c.business_id=r.business_id AND c.id=r.conversation_id WHERE m.business_id=$1::uuid AND c.id=$2::uuid AND c.customer_id=$3::uuid AND m.direction='inbound' AND m.origin='customer' AND (m.id::text=$4 OR m.provider_message_id=$4) ORDER BY m.created_at DESC LIMIT 1`, business, conversation, customer, source).Scan(&id)
-	return id, classifyRepositoryGetError("sales.source", err)
+	if err != nil {
+		return "", classifyRepositoryGetError("sales.source", err)
+	}
+	return id, nil
 }
 func readSalesCommand(ctx context.Context, e SQLExecutor, business, op, key, hash string) ([]byte, bool, error) {
 	if len(key) > 250 {
@@ -369,7 +387,8 @@ func (r *SalesWorkflowRepository) ApplyButton(ctx context.Context, in ports.Sale
 	}
 	// Same lock order as model-driven updates: conversation, workflow, confirmation, transaction.
 	var id string
-	if err := e.QueryRow(ctx, `SELECT id::text FROM conversations WHERE business_id=$1::uuid AND id=$2::uuid AND customer_id=$3::uuid FOR UPDATE`, in.BusinessID, in.ConversationID, in.CustomerID).Scan(&id); err != nil {
+	var mode, ownership, conversationState string
+	if err := e.QueryRow(ctx, `SELECT id::text,COALESCE(ai_mode_override,'allowed'),ownership,state FROM conversations WHERE business_id=$1::uuid AND id=$2::uuid AND customer_id=$3::uuid FOR UPDATE`, in.BusinessID, in.ConversationID, in.CustomerID).Scan(&id, &mode, &ownership, &conversationState); err != nil {
 		return result, err
 	}
 	source, err := salesSourceMessage(ctx, e, in.BusinessID, in.ConversationID, in.CustomerID, in.SourceMessageID)
@@ -443,10 +462,10 @@ func (r *SalesWorkflowRepository) ApplyButton(ctx context.Context, in ports.Sale
 	if outcome == "accepted" {
 		var autoSafe bool
 		// Bounded stock/schedule/supplier flows need a reservation executor; none is invented here.
-		if err := e.QueryRow(ctx, `SELECT COALESCE(bool_and(o.availability_mode='always_available'),false) FROM order_lines l JOIN offers o ON o.business_id=l.business_id AND o.id=l.offer_id WHERE l.business_id=$1::uuid AND l.transaction_id=$2::uuid`, in.BusinessID, tr.ID).Scan(&autoSafe); err != nil {
+		if err := e.QueryRow(ctx, `SELECT COALESCE(bool_and(o.availability_mode='always_available' AND o.fulfillment_mode IN ('pickup','digital')),false) AND COUNT(*)=COUNT(o.id) FROM order_lines l LEFT JOIN offers o ON o.business_id=l.business_id AND o.id=l.offer_id WHERE l.business_id=$1::uuid AND l.transaction_id=$2::uuid`, in.BusinessID, tr.ID).Scan(&autoSafe); err != nil {
 			return result, err
 		}
-		autoSafe = autoSafe && tr.TransactionType == "order"
+		autoSafe = autoSafe && tr.TransactionType == "order" && mode == "allowed" && ownership != "human" && conversationState != "waiting_human"
 		if policy.AIMode == "restricted_auto" && policy.AllowAutoConfirmation && !policy.DefaultHumanReview && autoSafe {
 			_, err = repo.Confirm(ctx, ports.TransactionConfirmPatch{ID: tr.ID, BusinessID: in.BusinessID, ExpectedVersion: tr.ResourceVersion, EvidenceReference: "confirmation:" + parts[1], PolicyVersion: strconv.FormatInt(policy.ResourceVersion, 10), ConfirmedBy: "customer", UpdatedAt: in.Now})
 			if err != nil {

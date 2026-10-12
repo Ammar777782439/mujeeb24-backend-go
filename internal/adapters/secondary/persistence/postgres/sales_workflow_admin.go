@@ -143,7 +143,10 @@ func (r *SalesWorkflowRepository) PutRequirement(ctx context.Context, business s
 		return err
 	}
 	_, err = e.Exec(ctx, `INSERT INTO sales_transaction_requirements(business_id,transaction_type,schema_version,definitions) VALUES($1::uuid,$2,$3,$4::jsonb)`, business, req.TransactionType, req.SchemaVersion, mustSalesJSON(req.Definitions))
-	return classifyRepositoryWriteError("sales.requirements", err)
+	if err != nil {
+		return classifyRepositoryWriteError("sales.requirements", err)
+	}
+	return nil
 }
 func (r *SalesWorkflowRepository) ListRequirements(ctx context.Context, business string) ([]ports.SalesRequirement, error) {
 	e, err := r.adapter.Executor(ctx)

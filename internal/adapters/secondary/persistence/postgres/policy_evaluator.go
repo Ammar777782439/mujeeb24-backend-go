@@ -112,6 +112,12 @@ func (e *PostgresCustomerSalesPolicyEvaluator) Evaluate(ctx context.Context, pro
 			Reason:        "customer sales business context is missing; requiring human approval per contract ⑥ §13",
 		}
 	}
+	if contextValue.Conversation.AIModeOverride == "disabled" {
+		return ports.CustomerSalesPolicyDecision{Decision: "denied", Reason: "conversation AI is disabled"}
+	}
+	if contextValue.Conversation.AIModeOverride == "draft_only" {
+		return ports.CustomerSalesPolicyDecision{Decision: "requires_approval", RequiresHuman: true, Reason: "conversation requires human approval"}
+	}
 
 	// Evaluate per the migration 000002 columns. NO INVENTION — every
 	// rule below maps directly to a column in business_policies.
