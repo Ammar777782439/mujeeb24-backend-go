@@ -218,24 +218,24 @@ func DefaultCatalogEntityContractDescriptor() CatalogEntityContractDescriptor {
 		//                              migration does not include it in
 		//                              pricing_mode. We follow the SQL.
 		PricingModes: map[string]string{
-			"fixed":          "السعر ثابت ومحدد في العرض",
-			"starting_from":  "السعر يبدأ من هذه القيمة وقد يزيد حسب الخيارات",
-			"per_unit":       "السعر لكل وحدة؛ amount مطلوب + pricing_unit مطلوب",
-			"per_person":     "السعر لكل شخص؛ amount مطلوب + pricing_unit مطلوب",
-			"per_day":        "السعر لكل يوم؛ amount مطلوب + pricing_unit مطلوب",
-			"quote_required": "السعر يُحدد عند الطلب؛ amount غير مطلوب",
-			"dynamic":        "السعر متغير؛ amount اختياري ويحتاج مصدر تحقق",
+			"fixed":          "سعر ثابت",
+			"starting_from":  "السعر يبدأ من مبلغ",
+			"per_unit":       "سعر لكل قطعة أو وحدة",
+			"per_person":     "سعر لكل شخص",
+			"per_day":        "سعر لكل يوم",
+			"quote_required": "نحدد السعر بعد معرفة الطلب",
+			"dynamic":        "سعر متغير يحتاج تأكدًا",
 		},
 		// Per SQL migration 000016/000018 catalog_items_availability_mode_chk +
 		// offers_availability_mode_chk.
 		// Per Catalog Contract §4: "stock_quantity يمكن أن يظهر داخل Inventory
 		// Adapter عندما يكون mode هو Stock، لكنه ليس حقلًا عالميًا."
 		AvailabilityModes: map[string]string{
-			"stock":            "التوفر يعتمد على المخزون الفعلي",
-			"schedule":         "التوفر يعتمد على جدول زمني (مثل المواعيد)",
-			"supplier_check":   "التوفر يتطلب فحص المزود الفعلي (مثل السفر)",
-			"always_available": "متاح دائمًا ضمن نطاق العرض",
-			"unknown":          "التوفر غير معروف؛ لا يجوز اعتباره متاحًا",
+			"stock":            "من المخزون",
+			"schedule":         "حسب المواعيد",
+			"supplier_check":   "بعد التأكد من المورد",
+			"always_available": "متاح باستمرار",
+			"unknown":          "لم أحدد طريقة التوفر بعد",
 		},
 		// Per SQL migration 000018 offers_availability_status_chk.
 		// Per Catalog Contract §4 — the non-breakable rule:
@@ -243,11 +243,11 @@ func DefaultCatalogEntityContractDescriptor() CatalogEntityContractDescriptor {
 		//   stale ≠ confirmed
 		//   requires_check ≠ confirmed
 		AvailabilityStatuses: map[string]string{
-			"available":      "متاح حاليًا من ناحية التوفر",
-			"unavailable":    "غير متاح حاليًا",
-			"unknown":        "الحالة غير معروفة؛ لا يجوز اعتباره متاحًا (≠ available)",
-			"requires_check": "يتطلب فحصًا إضافيًا؛ ليس مؤكدًا (≠ confirmed)",
-			"stale":          "البيانات قديمة؛ ليست مؤكدة (≠ confirmed)",
+			"available":      "متوفر الآن",
+			"unavailable":    "غير متوفر الآن",
+			"unknown":        "لا أعرف حاليًا",
+			"requires_check": "يحتاج تأكدًا قبل الطلب",
+			"stale":          "التوفر يحتاج تحديثًا",
 		},
 		// Per SQL migration 000018 offers_price_verification_chk.
 		PriceVerificationStatuses: map[string]string{
@@ -260,12 +260,12 @@ func DefaultCatalogEntityContractDescriptor() CatalogEntityContractDescriptor {
 		// offers_fulfillment_mode_chk.
 		// Per Catalog Contract §5: "Fulfillment هو Default لا وعد نهائي."
 		FulfillmentModes: map[string]string{
-			"delivery":    "تسليم مادي للعميل (شحن/توصيل)",
-			"pickup":      "استلام من المتجر/الموقع",
-			"digital":     "تسليم رقمي/إلكتروني",
-			"appointment": "موعد محدد (مثل عيادة أو خدمة)",
-			"travel":      "حجز سفر/رحلة (يحتاج origin/destination/date)",
-			"manual":      "تنفيذ يدوي/مخصص",
+			"delivery":    "توصيل إلى العميل",
+			"pickup":      "استلام من المتجر",
+			"digital":     "إرسال إلكتروني",
+			"appointment": "الحضور بموعد",
+			"travel":      "رحلة أو سفر",
+			"manual":      "نتفق مع العميل على الطريقة",
 		},
 		// Per SQL migration 000016 catalog_items_status_chk + migration
 		// 000018 offers_status_chk. Both CHECK constraints use the same 5
