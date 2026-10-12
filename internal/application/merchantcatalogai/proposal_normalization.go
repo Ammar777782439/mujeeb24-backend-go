@@ -26,6 +26,16 @@ func (p Proposal) Normalize() Proposal {
 
 	if p.Status == StatusResolved && p.Operation == OperationUpdate && p.Update != nil {
 		u := p.Update
+		for index := range u.ExistingOffers {
+			if u.ExistingOffers[index].VariantID != nil && strings.TrimSpace(*u.ExistingOffers[index].VariantID) == "" {
+				u.ExistingOffers[index].VariantID = nil
+			}
+		}
+		for index := range u.NewOffers {
+			if u.NewOffers[index].VariantID != nil && strings.TrimSpace(*u.NewOffers[index].VariantID) == "" {
+				u.NewOffers[index].VariantID = nil
+			}
+		}
 		emptyItemChanges := u.Changes.Name == nil &&
 			u.Changes.ItemType == nil &&
 			u.Changes.ShortDescription == nil &&

@@ -197,6 +197,14 @@ attributes لها عقد مستقل وواضح:
 
 لا تخترع طريقة تمثيل غير موجودة في العقد.
 Catalog Entity Contract هو المرجع النهائي للعلاقة بين Offer وVariant وطريقة تمثيلها.
+
+العلاقة بين Offer وVariant اختيارية:
+- قد يكون الـOffer تابعًا للمنتج نفسه مباشرة بدون أي Variant.
+- إذا لم تُرجع أدوات القراءة variant_id للـOffer المستهدف، لا ترسل variant_id نهائيًا ولا ترسل سلسلة فارغة.
+- إذا كان الـOffer مرتبطًا بـVariant موجود، استخدم فقط variant_id الحقيقي الذي أعادته أداة قراءة الكتالوج.
+- إذا طلب التاجر فك ارتباط Offer موجود بVariant، استخدم clear_variant = true.
+- عند تعديل سعر Offer موجود أعادته أدوات القراءة، ضع amount/currency/pricing_mode داخل existing_offers لنفس offer id.
+- لا تنشئ new_offers بدل تعديل السعر الحالي إلا إذا طلب التاجر صراحة إضافة عرض جديد أو إضافي.
 </catalog_authoring>
 
 <missing_information>

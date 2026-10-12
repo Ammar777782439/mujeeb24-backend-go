@@ -404,3 +404,37 @@ func TestProposalValidateUpdateOfferUsesCreateOfferRules(t *testing.T) {
 		})
 	}
 }
+
+func TestProposalNormalizeDropsEmptyOptionalOfferVariantReferences(t *testing.T) {
+	blank := "   "
+	proposal := Proposal{
+		SchemaVersion: ProposalSchemaVersion,
+		Status:        StatusResolved,
+		Operation:     OperationUpdate,
+		ResponseText:  "أعددت اقتراح تعديل السعر.",
+		Update: &UpdateOperation{
+			ItemID: "item-1",
+			ExistingOffers: []OfferUpdate{{
+				ID: "offer-1", VariantID: &blank, Amount: stringPtr("5000"),
+			}},
+			NewOffers: []OfferCreate{{
+				VariantID: &blank,
+				Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault,
+				PricingMode: "fixed", Amount: stringPtr("5000"), Currency: stringPtr("YER"),
+				PriceSource: OfferPriceSourceMerchantStated, AvailabilityMode: "always_available",
+				AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
+			}},
+		},
+	}
+
+	normalized := proposal.Normalize()
+	if normalized.Update == nil {
+		t.Fatal("resolved update was unexpectedly removed")
+	}
+	if normalized.Update.ExistingOffers[0].VariantID != nil {
+		t.Fatalf("empty existing offer variant reference must normalize to nil: %#v", normalized.Update.ExistingOffers[0].VariantID)
+	}
+	if normalized.Update.NewOffers[0].VariantID != nil {
+		t.Fatalf("empty new offer variant reference must normalize to nil: %#v", normalized.Update.NewOffers[0].VariantID)
+	}
+}

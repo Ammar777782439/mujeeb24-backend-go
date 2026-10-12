@@ -116,3 +116,80 @@ func TestValidateProposalReferencesRequiresDiscoveredSchemaWhenSchemaIDIsPresent
 		t.Fatalf("discovered attribute schema reference must be accepted: %v", err)
 	}
 }
+
+func TestValidateProposalReferencesSupportsDirectOfferWithoutVariant(t *testing.T) {
+	registry := NewReadOnlyCapabilityRegistry(nil, "")
+	registry.evidenceReferences["item-1"] = struct{}{}
+	registry.evidenceReferences["offer-1"] = struct{}{}
+
+	blank := ""
+	proposal := Proposal{
+		SchemaVersion: ProposalSchemaVersion,
+		Status:        StatusResolved,
+		Operation:     OperationUpdate,
+		ResponseText:  "أعددت اقتراح تعديل السعر.",
+		Update: &UpdateOperation{
+			ItemID: "item-1",
+			ExistingOffers: []OfferUpdate{{
+				ID: "offer-1", VariantID: &blank, Amount: stringPtr("5000"),
+			}},
+		},
+	}.Normalize()
+
+	if proposal.Update.ExistingOffers[0].VariantID != nil {
+		t.Fatal("direct offer must not retain an empty variant reference")
+	}
+	if err := registry.ValidateProposalReferences(proposal); err != nil {
+		t.Fatalf("direct offer without variant should pass evidence validation: %v", err)
+	}
+	if err := proposal.Validate(); err != nil {
+		t.Fatalf("direct offer price update should remain a valid proposal: %v", err)
+	}
+}
+
+func TestValidateProposalReferencesAllowsEvidenceBackedOfferVariant(t *testing.T) {
+	registry := NewReadOnlyCapabilityRegistry(nil, "")
+	registry.evidenceReferences["item-1"] = struct{}{}
+	registry.evidenceReferences["offer-1"] = struct{}{}
+	registry.evidenceReferences["variant-1"] = struct{}{}
+
+	proposal := Proposal{
+		SchemaVersion: ProposalSchemaVersion,
+		Status:        StatusResolved,
+		Operation:     OperationUpdate,
+		ResponseText:  "أعددت اقتراح تعديل السعر.",
+		Update: &UpdateOperation{
+			ItemID: "item-1",
+			ExistingOffers: []OfferUpdate{{
+				ID: "offer-1", VariantID: stringPtr("variant-1"), Amount: stringPtr("5000"),
+			}},
+		},
+	}.Normalize()
+
+	if err := registry.ValidateProposalReferences(proposal); err != nil {
+		t.Fatalf("evidence-backed variant should be accepted: %v", err)
+	}
+}
+
+func TestValidateProposalReferencesRejectsInventedOfferVariant(t *testing.T) {
+	registry := NewReadOnlyCapabilityRegistry(nil, "")
+	registry.evidenceReferences["item-1"] = struct{}{}
+	registry.evidenceReferences["offer-1"] = struct{}{}
+
+	proposal := Proposal{
+		SchemaVersion: ProposalSchemaVersion,
+		Status:        StatusResolved,
+		Operation:     OperationUpdate,
+		ResponseText:  "أعددت اقتراح تعديل السعر.",
+		Update: &UpdateOperation{
+			ItemID: "item-1",
+			ExistingOffers: []OfferUpdate{{
+				ID: "offer-1", VariantID: stringPtr("variant-invented"), Amount: stringPtr("5000"),
+			}},
+		},
+	}.Normalize()
+
+	if err := registry.ValidateProposalReferences(proposal); err == nil {
+		t.Fatal("invented non-empty variant reference must remain fail-closed")
+	}
+}

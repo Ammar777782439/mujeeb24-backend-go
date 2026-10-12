@@ -118,3 +118,24 @@ func TestMerchantCatalogOfferSchemaRequiresBothProvenances(t *testing.T) {
 		t.Fatal("dynamic attributes must remain open")
 	}
 }
+
+func TestMerchantCatalogOfferVariantReferencesCannotBeEmpty(t *testing.T) {
+	root := merchantCatalogProposalSchema()["properties"].(map[string]any)
+	update := root["update"].(map[string]any)["anyOf"].([]map[string]any)[0]["properties"].(map[string]any)
+
+	existingOffer := update["existing_offers"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+	newOffer := update["new_offers"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+
+	for name, field := range map[string]map[string]any{
+		"existing_offers.variant_id": existingOffer["variant_id"].(map[string]any),
+		"new_offers.variant_id":      newOffer["variant_id"].(map[string]any),
+	} {
+		if field["minLength"] != 1 {
+			t.Fatalf("%s must reject empty strings: %#v", name, field)
+		}
+		description, _ := field["description"].(string)
+		if !strings.Contains(description, "omit") || !strings.Contains(description, "empty string") {
+			t.Fatalf("%s must explain direct-offer omission semantics: %q", name, description)
+		}
+	}
+}

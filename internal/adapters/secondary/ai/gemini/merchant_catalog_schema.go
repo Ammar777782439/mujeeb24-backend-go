@@ -11,6 +11,9 @@ import (
 func merchantCatalogProposalSchema() map[string]any {
 	stringField := func() map[string]any { return map[string]any{"type": "string"} }
 	optionalString := func() map[string]any { return map[string]any{"type": "string"} }
+	optionalReference := func(description string) map[string]any {
+		return map[string]any{"type": "string", "minLength": 1, "description": description}
+	}
 	attributeObjectField := func() map[string]any {
 		return map[string]any{
 			"type": "object",
@@ -151,12 +154,12 @@ func merchantCatalogProposalSchema() map[string]any {
 			},
 			"existing_offers": map[string]any{
 				"type":        "array",
-				"description": "Modify only the existing offer(s) the merchant identified, using evidence-backed IDs. Omit unchanged fields. Use clear_* only when the merchant explicitly removes a nullable value or when a pricing transition requires clearing it. For quote_required, clear_amount and clear_currency should be true unless the merchant explicitly supplied compatible values.",
+				"description": "Modify only the existing offer(s) the merchant identified, using evidence-backed IDs. An offer may belong directly to the catalog item and have no variant. If read evidence has no variant, omit variant_id entirely; never send an empty string. If the merchant changes the price of a returned existing offer, put amount/currency/pricing changes on that entry in existing_offers. Do not create new_offers for that price change unless the merchant explicitly requested an additional new offer. Omit unchanged fields. Use clear_* only when the merchant explicitly removes a nullable value or when a pricing transition requires clearing it. For quote_required, clear_amount and clear_currency should be true unless the merchant explicitly supplied compatible values.",
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
 						"id":                   stringField(),
-						"variant_id":           optionalString(),
+						"variant_id":           optionalReference("Existing Variant database ID returned by a catalog read tool. Offers may belong directly to the catalog item; when no variant exists, omit this field entirely. Never send an empty string."),
 						"clear_variant":        map[string]any{"type": "boolean"},
 						"name":                 optionalString(),
 						"pricing_mode":         offerPricingMode,
@@ -179,15 +182,12 @@ func merchantCatalogProposalSchema() map[string]any {
 				},
 			},
 			"new_offers": map[string]any{
-				"description": "Create additional offers only when the merchant requests a new offer. Existing offer price changes belong in existing_offers, not here.",
+				"description": "Create additional offers only when the merchant explicitly requests a new/additional offer. Existing offer price changes belong in existing_offers, not here. Offers may belong directly to the catalog item; when no existing variant is targeted, omit variant_id entirely.",
 				"type":        "array",
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"variant_id": map[string]any{
-							"type":        "string",
-							"description": "Existing Variant database ID returned by a catalog read tool. Use this only when the new offer targets an already-existing variant.",
-						},
+						"variant_id": optionalReference("Existing Variant database ID returned by a catalog read tool. Use only when the new offer targets that existing variant. If the offer belongs directly to the catalog item, omit this field entirely; never send an empty string."),
 						"variant_ref": map[string]any{
 							"type":        "string",
 							"description": "Proposal-local ref of a new variant in update.new_variants. Use this before the new variant has a database ID.",
