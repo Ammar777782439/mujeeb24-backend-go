@@ -419,7 +419,7 @@ func TestProposalNormalizeDropsEmptyOptionalOfferVariantReferences(t *testing.T)
 			}},
 			NewOffers: []OfferCreate{{
 				VariantID: &blank,
-				Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault,
+				Name:      DefaultOfferName, NameSource: OfferNameSourceSystemDefault,
 				PricingMode: "fixed", Amount: stringPtr("5000"), Currency: stringPtr("YER"),
 				PriceSource: OfferPriceSourceMerchantStated, AvailabilityMode: "always_available",
 				AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active",
