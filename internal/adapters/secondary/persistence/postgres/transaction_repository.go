@@ -21,6 +21,26 @@ func NewTransactionRepository(adapter *Adapter) *TransactionRepository {
 
 const transactionSelect = `SELECT id::text, business_id::text, customer_id::text, lead_id::text, transaction_type, state, source_conversation_reference_id::text, currency, total_amount::text, schema_version, requires_human_review, cancellation_reason, resource_version, agreement_version, created_at, updated_at FROM commercial_transactions`
 
+const transactionLinesSnapshotSQL = `COALESCE((SELECT jsonb_agg(jsonb_build_object('id',l.id::text,'business_id',l.business_id::text,'transaction_id',l.transaction_id::text,'catalog_item_id',l.catalog_item_id::text,'offer_id',l.offer_id::text,'variant_id',l.variant_id::text,'item_name_snapshot',l.item_name_snapshot,'quantity',l.quantity::text,'unit_price_snapshot',l.unit_price_snapshot::text,'line_total_snapshot',l.line_total_snapshot::text,'currency',l.currency) ORDER BY l.created_at,l.id) FROM order_lines l WHERE l.business_id=commercial_transactions.business_id AND l.transaction_id=commercial_transactions.id),'[]'::jsonb)`
+
+var transactionReceiptSelect = strings.Replace(transactionSelect, " FROM commercial_transactions", ", "+transactionLinesSnapshotSQL+" FROM commercial_transactions", 1)
+
+type transactionReceiptRow struct {
+	row   interface{ Scan(...any) error }
+	lines *[]byte
+}
+
+func (r transactionReceiptRow) Scan(dest ...any) error { return r.row.Scan(append(dest, r.lines)...) }
+func scanTransactionReceipt(row interface{ Scan(...any) error }) (ports.TransactionRecord, error) {
+	var raw []byte
+	record, err := scanTransaction(transactionReceiptRow{row, &raw})
+	if err != nil {
+		return record, err
+	}
+	err = json.Unmarshal(raw, &record.Lines)
+	return record, err
+}
+
 func (r *TransactionRepository) List(ctx context.Context, businessID, state, transactionType, customerID string, limit int, cursor string) (ports.TransactionPage, error) {
 	executor, err := r.salesExecutor(ctx, "transaction.list")
 	if err != nil {
@@ -35,14 +55,14 @@ func (r *TransactionRepository) List(ctx context.Context, businessID, state, tra
 	if decoded != nil {
 		at, id = decoded.At, decoded.ID
 	}
-	rows, err := executor.Query(ctx, transactionSelect+` WHERE business_id = $1::uuid AND ($2 = '' OR state = $2) AND ($3 = '' OR transaction_type = $3) AND ($4 = '' OR customer_id = $4::uuid) AND ($5::timestamptz IS NULL OR (updated_at, id) < ($5::timestamptz, $6::uuid)) ORDER BY updated_at DESC, id DESC LIMIT $7`, businessID, state, transactionType, customerID, at, id, limit+1)
+	rows, err := executor.Query(ctx, transactionReceiptSelect+` WHERE business_id = $1::uuid AND ($2 = '' OR state = $2) AND ($3 = '' OR transaction_type = $3) AND ($4 = '' OR customer_id = $4::uuid) AND ($5::timestamptz IS NULL OR (updated_at, id) < ($5::timestamptz, $6::uuid)) ORDER BY updated_at DESC, id DESC LIMIT $7`, businessID, state, transactionType, customerID, at, id, limit+1)
 	if err != nil {
 		return ports.TransactionPage{}, salesRepositoryError("transaction.list", err)
 	}
 	defer rows.Close()
 	items := make([]ports.TransactionRecord, 0, limit)
 	for rows.Next() {
-		item, scanErr := scanTransaction(rows)
+		item, scanErr := scanTransactionReceipt(rows)
 		if scanErr != nil {
 			return ports.TransactionPage{}, scanErr
 		}
@@ -69,7 +89,7 @@ func (r *TransactionRepository) Get(ctx context.Context, businessID, transaction
 	if businessID == "" || transactionID == "" {
 		return ports.TransactionRecord{}, invalidRepositoryInput("transaction.get", "business and transaction ids are required")
 	}
-	return scanTransaction(executor.QueryRow(ctx, transactionSelect+` WHERE business_id = $1::uuid AND id = $2::uuid`, businessID, transactionID))
+	return scanTransactionReceipt(executor.QueryRow(ctx, transactionReceiptSelect+` WHERE business_id = $1::uuid AND id = $2::uuid`, businessID, transactionID))
 }
 
 func (r *TransactionRepository) GetReview(ctx context.Context, businessID, transactionID string) (ports.TransactionReviewRecord, error) {
@@ -197,7 +217,7 @@ func (r *TransactionRepository) Confirm(ctx context.Context, patch ports.Transac
 	if _, err := executor.Exec(ctx, `UPDATE sales_workflows SET state='confirmed',resource_version=resource_version+1,updated_at=$3 WHERE business_id=$1::uuid AND transaction_id=$2::uuid`, patch.BusinessID, patch.ID, patch.UpdatedAt); err != nil {
 		return ports.TransactionRecord{}, err
 	}
-	return record, nil
+	return r.Get(ctx, patch.BusinessID, record.ID)
 }
 
 func (r *TransactionRepository) Cancel(ctx context.Context, patch ports.TransactionCancelPatch) (ports.TransactionRecord, error) {
@@ -221,7 +241,7 @@ func (r *TransactionRepository) Cancel(ctx context.Context, patch ports.Transact
 	if _, err := executor.Exec(ctx, `UPDATE sales_confirmation_requests SET status='superseded',updated_at=$3 WHERE business_id=$1::uuid AND transaction_id=$2::uuid AND status IN ('pending','accepted')`, patch.BusinessID, patch.ID, patch.UpdatedAt); err != nil {
 		return ports.TransactionRecord{}, err
 	}
-	return record, nil
+	return r.Get(ctx, patch.BusinessID, record.ID)
 }
 
 func (r *TransactionRepository) SubmitReview(ctx context.Context, patch ports.TransactionReviewPatch) (ports.TransactionReviewRecord, error) {

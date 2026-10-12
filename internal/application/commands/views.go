@@ -180,12 +180,29 @@ type LeadView struct {
 	ResourceVersion ResourceVersion
 }
 type TransactionView struct {
+	LeadID          *LeadID
+	Currency        *string
+	TotalAmount     *string
+	SchemaVersion   int
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	Lines           []TransactionLineSnapshotView
 	ID              TransactionID
 	BusinessID      BusinessID
 	CustomerID      CustomerID
 	State           string
 	TransactionType string
 	ResourceVersion ResourceVersion
+}
+type TransactionLineSnapshotView struct {
+	ID                ID
+	CatalogItemID     CatalogItemID
+	OfferID           *string
+	VariantID         *string
+	ItemNameSnapshot  string
+	Quantity          string
+	UnitPriceSnapshot *string
+	Currency          *string
 }
 type AIDecisionView struct {
 	ID                  AIDecisionID

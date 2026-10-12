@@ -722,8 +722,30 @@ func leadScoreList(v commands.ListResult[queries.LeadScoreView]) *contract.List[
 	return listPage(items, v.NextCursor, v.HasMore)
 }
 func transactionProjection(v commands.TransactionView) contract.CommercialTransaction {
-	return contract.CommercialTransaction{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), CustomerID: contract.UUID(v.CustomerID), TransactionType: v.TransactionType, State: v.State, ResourceVersion: string(v.ResourceVersion)}
+	result := contract.CommercialTransaction{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), CustomerID: contract.UUID(v.CustomerID), TransactionType: v.TransactionType, State: v.State, ResourceVersion: string(v.ResourceVersion), Currency: v.Currency, TotalAmount: decimalFloat(v.TotalAmount), SchemaVersion: v.SchemaVersion, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt, Lines: []contract.OrderLineSnapshot{}}
+	if v.LeadID != nil {
+		id := contract.UUID(*v.LeadID)
+		result.LeadID = &id
+	}
+	for _, line := range v.Lines {
+		quantity := decimalFloat(&line.Quantity)
+		if quantity == nil {
+			continue
+		}
+		var offerID, variantID *contract.UUID
+		if line.OfferID != nil {
+			id := contract.UUID(*line.OfferID)
+			offerID = &id
+		}
+		if line.VariantID != nil {
+			id := contract.UUID(*line.VariantID)
+			variantID = &id
+		}
+		result.Lines = append(result.Lines, contract.OrderLineSnapshot{ID: contract.UUID(line.ID), CatalogItemID: contract.UUID(line.CatalogItemID), OfferID: offerID, VariantID: variantID, ItemNameSnapshot: line.ItemNameSnapshot, Quantity: *quantity, UnitPriceSnapshot: decimalFloat(line.UnitPriceSnapshot), Currency: line.Currency})
+	}
+	return result
 }
+
 func aiDecisionProjection(v commands.AIDecisionView) contract.AIDecision {
 	var conversationID *contract.UUID
 	if v.ConversationID != nil {

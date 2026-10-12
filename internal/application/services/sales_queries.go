@@ -125,8 +125,17 @@ func leadView(record ports.LeadRecord) commands.LeadView {
 	return commands.LeadView{ID: commands.LeadID(record.ID), BusinessID: commands.BusinessID(record.BusinessID), CustomerID: commands.CustomerID(record.CustomerID), Status: record.Status, ResourceVersion: commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10))}
 }
 func transactionView(record ports.TransactionRecord) commands.TransactionView {
-	return commands.TransactionView{ID: commands.TransactionID(record.ID), BusinessID: commands.BusinessID(record.BusinessID), CustomerID: commands.CustomerID(record.CustomerID), State: record.State, TransactionType: record.TransactionType, ResourceVersion: commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10))}
+	view := commands.TransactionView{ID: commands.TransactionID(record.ID), BusinessID: commands.BusinessID(record.BusinessID), CustomerID: commands.CustomerID(record.CustomerID), State: record.State, TransactionType: record.TransactionType, ResourceVersion: commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10)), Currency: record.Currency, TotalAmount: record.TotalAmount, SchemaVersion: record.SchemaVersion, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt, Lines: []commands.TransactionLineSnapshotView{}}
+	if record.LeadID != nil {
+		id := commands.LeadID(*record.LeadID)
+		view.LeadID = &id
+	}
+	for _, line := range record.Lines {
+		view.Lines = append(view.Lines, commands.TransactionLineSnapshotView{ID: commands.ID(line.ID), CatalogItemID: commands.CatalogItemID(line.CatalogItemID), OfferID: line.OfferID, VariantID: line.VariantID, ItemNameSnapshot: line.ItemNameSnapshot, Quantity: line.Quantity, UnitPriceSnapshot: line.UnitPriceSnapshot, Currency: line.Currency})
+	}
+	return view
 }
+
 func optionalIDString(value *commands.CustomerID) string {
 	if value == nil {
 		return ""

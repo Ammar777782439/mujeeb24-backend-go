@@ -399,3 +399,30 @@ func TestSalesWorkflowManualDraftUpdateSynchronizesWorkflowAgainstPostgres(t *te
 		t.Fatalf("cancelled agreement remained active: %+v %v", updated, err)
 	}
 }
+
+func TestSalesWorkflowReadPreservesOriginalAgreementSnapshotAgainstPostgres(t *testing.T) {
+	f := newSalesWorkflowFixture(t)
+	r, err := f.apply(t, "snapshot-read")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.a.Pool().Exec(context.Background(), `UPDATE catalog_items SET name='اسم جديد' WHERE id=$1::uuid`, f.item); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.a.Pool().Exec(context.Background(), `UPDATE offers SET amount=6000,resource_version=resource_version+1 WHERE id=$1::uuid`, f.offer); err != nil {
+		t.Fatal(err)
+	}
+	repo := NewTransactionRepository(f.a)
+	tr, err := repo.Get(context.Background(), f.business, *r.Workflow.TransactionID)
+	if err != nil || len(tr.Lines) != 1 || tr.Lines[0].ItemNameSnapshot != "سماعة" || tr.Lines[0].UnitPriceSnapshot == nil || *tr.Lines[0].UnitPriceSnapshot != "5000.0000" || tr.TotalAmount == nil || *tr.TotalAmount != "5000.0000" {
+		t.Fatalf("read used current catalog instead of agreement: %+v %v", tr, err)
+	}
+	page, err := repo.List(context.Background(), f.business, "", "", "", 20, "")
+	if err != nil || len(page.Items) != 1 || len(page.Items[0].Lines) != 1 || page.Items[0].Lines[0].ItemNameSnapshot != "سماعة" {
+		t.Fatalf("list lost saved agreement: %+v %v", page, err)
+	}
+	foreign := newSalesWorkflowFixture(t)
+	if _, err := repo.Get(context.Background(), foreign.business, tr.ID); err == nil {
+		t.Fatal("another tenant read the agreement")
+	}
+}
