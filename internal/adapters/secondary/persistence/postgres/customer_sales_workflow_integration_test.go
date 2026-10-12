@@ -215,7 +215,7 @@ func TestSalesWorkflowIncompleteAgreementsHaveNoButtonsAgainstPostgres(t *testin
 				proposal.TransactionType = "booking"
 			case "booking_fields":
 				proposal.TransactionType = "booking"
-				err := NewSalesWorkflowRepository(f.a).PutRequirement(context.Background(), f.business, ports.SalesRequirement{TransactionType: "booking", SchemaVersion: 1, Definitions: []ports.SalesRequirementDefinition{{Key: "date", Label: "موعد الحجز", DataType: "string", Required: true}}})
+				err := NewSalesWorkflowRepository(f.a).PutRequirement(context.Background(), f.business, ports.SalesRequirement{TransactionType: "booking", SchemaVersion: 1, Definitions: []ports.SalesRequirementDefinition{{Key: "date", Label: "موعد الحجز", DataType: "date", Required: true}}})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -310,5 +310,50 @@ func TestSalesWorkflowConversationOverrideRequiresApprovalAgainstPostgres(t *tes
 	accepted, err := f.button(t, r, "accept")
 	if err != nil || accepted.Workflow.State != "awaiting_review" {
 		t.Fatalf("conversation override skipped review: %+v %v", accepted, err)
+	}
+}
+
+func TestSalesWorkflowRequirementsRemainPinnedAndGuardHumanConfirmationAgainstPostgres(t *testing.T) {
+	f := newSalesWorkflowFixture(t)
+	repo := NewSalesWorkflowRepository(f.a)
+	req := ports.SalesRequirement{TransactionType: "booking", SchemaVersion: 1, Definitions: []ports.SalesRequirementDefinition{{Key: "date", Label: "موعد الحجز", DataType: "date", Required: true}}}
+	if err := repo.PutRequirement(context.Background(), f.business, req); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.PutRequirement(context.Background(), f.business, req); err == nil {
+		t.Fatal("replaced immutable requirement version")
+	}
+	var r ports.SalesWorkflowResult
+	err := f.a.Within(context.Background(), func(tx context.Context) error {
+		var err error
+		r, err = repo.Apply(tx, ports.SalesWorkflowInput{BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation, SourceMessageID: f.message, IdempotencyKey: "booking", Capability: ports.CustomerSalesCapabilityCreateDraft, Proposal: ports.SalesWorkflowProposal{TransactionType: "booking", TransactionData: map[string]any{"date": "2026-11-01"}, EvidenceMessageIDs: []string{f.message}, Lines: []ports.SalesWorkflowLine{{ItemID: f.item, OfferID: &f.offer, Quantity: "1"}}}, Now: f.now})
+		return err
+	})
+	if err != nil || r.ConfirmationID == "" {
+		t.Fatalf("complete booking not ready: %+v %v", r, err)
+	}
+	accepted, err := f.button(t, r, "accept")
+	if err != nil || accepted.Workflow.State != "awaiting_review" {
+		t.Fatalf("booking bypassed review: %+v %v", accepted, err)
+	}
+	req.SchemaVersion = 2
+	req.Definitions = append(req.Definitions, ports.SalesRequirementDefinition{Key: "phone", Label: "هاتف", DataType: "text", Required: true})
+	if err := repo.PutRequirement(context.Background(), f.business, req); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.a.Pool().Exec(context.Background(), `UPDATE commercial_transactions SET transaction_data='{}' WHERE id=$1::uuid`, *r.Workflow.TransactionID); err != nil {
+		t.Fatal(err)
+	}
+	review := ports.SalesWorkflowReview{BusinessID: f.business, WorkflowID: r.Workflow.ID, ActorReference: uuid.NewString(), ExpectedVersion: accepted.Workflow.ResourceVersion, Approved: true, Now: f.now.Add(2 * time.Minute)}
+	err = f.a.Within(context.Background(), func(tx context.Context) error { _, err := repo.ReviewWorkflow(tx, review); return err })
+	if err == nil {
+		t.Fatal("employee confirmation skipped missing required fields")
+	}
+	if _, err := f.a.Pool().Exec(context.Background(), `UPDATE commercial_transactions SET transaction_data='{"date":"2026-11-01"}' WHERE id=$1::uuid`, *r.Workflow.TransactionID); err != nil {
+		t.Fatal(err)
+	}
+	err = f.a.Within(context.Background(), func(tx context.Context) error { _, err := repo.ReviewWorkflow(tx, review); return err })
+	if err != nil {
+		t.Fatalf("new requirement version changed a pinned agreement: %v", err)
 	}
 }

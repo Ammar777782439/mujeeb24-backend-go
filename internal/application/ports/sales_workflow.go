@@ -63,13 +63,15 @@ type SalesWorkflowInput struct {
 	Now                                                                     time.Time
 }
 type SalesWorkflowResult struct {
-	Lines          []SalesReceiptLine   `json:"lines,omitempty"`
-	Details        []SalesReceiptDetail `json:"details,omitempty"`
-	Workflow       SalesWorkflowRecord  `json:"workflow"`
-	Duplicate      bool                 `json:"-"`
-	ConfirmationID string               `json:"confirmation_id,omitempty"`
-	TotalAmount    *string              `json:"total_amount,omitempty"`
-	Currency       *string              `json:"currency,omitempty"`
+	MissingFields       []string             `json:"missing_fields,omitempty"`
+	NeedsMerchantReview bool                 `json:"needs_merchant_review,omitempty"`
+	Lines               []SalesReceiptLine   `json:"lines,omitempty"`
+	Details             []SalesReceiptDetail `json:"details,omitempty"`
+	Workflow            SalesWorkflowRecord  `json:"workflow"`
+	Duplicate           bool                 `json:"-"`
+	ConfirmationID      string               `json:"confirmation_id,omitempty"`
+	TotalAmount         *string              `json:"total_amount,omitempty"`
+	Currency            *string              `json:"currency,omitempty"`
 }
 type SalesButtonAction struct {
 	BusinessID, CustomerID, ConversationID, SourceMessageID, Payload string

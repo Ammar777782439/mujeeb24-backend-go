@@ -125,13 +125,22 @@ func renderSalesReceipt(r ports.SalesWorkflowResult) ports.InteractiveMessage {
 		m.Text = "تفاصيل طلبك:\n" + details.String() + "الإجمالي: " + amount + ". هل تؤكد الطلب؟"
 		m.Buttons = []ports.InteractiveButton{{Title: "نعم، أؤكد", Payload: "m24.sales:" + r.ConfirmationID + ":accept"}, {Title: "لا، لا أؤكد", Payload: "m24.sales:" + r.ConfirmationID + ":decline"}}
 	case "awaiting_review":
-		m.Text = "وصلت موافقتك على الطلب، وهو بانتظار مراجعة الموظف واعتماده."
+		m.Text = "طلبك بانتظار مراجعة الموظف واعتماده."
+		if r.Workflow.PendingAction == "confirm_transaction" {
+			m.Text = "وصلت موافقتك على الطلب، وهو بانتظار مراجعة الموظف واعتماده."
+		}
 	case "confirmed":
 		m.Text = "تم اعتماد طلبك."
 	case "declined":
 		m.Text = "لم يتم اعتماد الطلب بناءً على اختيارك."
 	case "draft":
 		m.Text = "تم حفظ مسودة طلبك، وتحتاج استكمال البيانات المطلوبة."
+		if len(r.MissingFields) > 0 {
+			m.Text = "لاستكمال طلبك، نحتاج: " + strings.Join(r.MissingFields, "، ") + "."
+		}
+		if r.NeedsMerchantReview {
+			m.Text += " السعر أو تفاصيل الخدمة تحتاج مراجعة الموظف قبل عرض التأكيد."
+		}
 	default:
 		m.Text = "تم تسجيل طلبك للمتابعة."
 	}

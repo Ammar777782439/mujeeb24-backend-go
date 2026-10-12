@@ -88,6 +88,9 @@ func (r *SalesWorkflowRepository) Apply(ctx context.Context, in ports.SalesWorkf
 	if in.BusinessID == "" || in.CustomerID == "" || in.ConversationID == "" || in.SourceMessageID == "" || in.IdempotencyKey == "" || in.Now.IsZero() {
 		return result, invalidRepositoryInput("sales.apply", "trusted identity, source, idempotency and time required")
 	}
+	if in.Capability != ports.CustomerSalesCapabilityRecordLead && in.Capability != ports.CustomerSalesCapabilityCreateDraft && in.Capability != ports.CustomerSalesCapabilityUpdateDraft {
+		return result, invalidRepositoryInput("sales.capability", "unsupported sales executor capability")
+	}
 	// Serialize this conversation across workers and bind it to the verified customer.
 	var conv string
 	var mode string
@@ -102,9 +105,10 @@ func (r *SalesWorkflowRepository) Apply(ctx context.Context, in ports.SalesWorkf
 		return result, err
 	}
 	hash := salesHash(struct {
-		Capability ports.CustomerSalesCapability
-		Proposal   ports.SalesWorkflowProposal
-	}{in.Capability, in.Proposal})
+		CustomerID, ConversationID, SourceMessageID string
+		Capability                                  ports.CustomerSalesCapability
+		Proposal                                    ports.SalesWorkflowProposal
+	}{in.CustomerID, in.ConversationID, source, in.Capability, in.Proposal})
 	cached, found, err := readSalesCommand(ctx, e, in.BusinessID, "workflow", in.IdempotencyKey, hash)
 	if err != nil {
 		return result, err
@@ -267,6 +271,8 @@ func (r *SalesWorkflowRepository) prepareDraft(ctx context.Context, e SQLExecuto
 	for _, d := range definitions {
 		if v, ok := in.Proposal.TransactionData[d.Key]; ok {
 			result.Details = append(result.Details, ports.SalesReceiptDetail{Label: d.Label, Value: v})
+		} else if d.Required {
+			result.MissingFields = append(result.MissingFields, d.Label)
 		}
 	}
 	// Specialized transactions need an explicitly configured requirement schema.
@@ -276,6 +282,7 @@ func (r *SalesWorkflowRepository) prepareDraft(ctx context.Context, e SQLExecuto
 		return err
 	}
 	if !complete || (len(reqJSON) == 0 && in.Proposal.TransactionType != "order") || !priced || tr.TotalAmount == nil || tr.Currency == nil {
+		result.NeedsMerchantReview = !priced || tr.TotalAmount == nil || tr.Currency == nil || (len(reqJSON) == 0 && in.Proposal.TransactionType != "order")
 		return nil
 	}
 	requestID := uuid.NewString()

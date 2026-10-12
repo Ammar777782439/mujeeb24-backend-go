@@ -2,6 +2,7 @@ package services
 
 import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"strings"
 	"testing"
 )
 
@@ -38,5 +39,16 @@ func TestSalesProposalRejectsPreExecutionClaimsAndUnmatchedSelections(t *testing
 	d.Selected[0].ItemID = "other"
 	if err := validateSalesProposal(d); err == nil {
 		t.Fatal("accepted a different selection than the draft line")
+	}
+}
+
+func TestIncompleteSalesReceiptExplainsNextStepWithoutConfirmation(t *testing.T) {
+	m := renderSalesReceipt(ports.SalesWorkflowResult{Workflow: ports.SalesWorkflowRecord{State: "draft"}, MissingFields: []string{"موعد الحجز"}, NeedsMerchantReview: true})
+	if len(m.Buttons) != 0 || !strings.Contains(m.Text, "موعد الحجز") || !strings.Contains(m.Text, "مراجعة الموظف") {
+		t.Fatalf("incomplete draft did not explain next step: %+v", m)
+	}
+	pending := renderSalesReceipt(ports.SalesWorkflowResult{Workflow: ports.SalesWorkflowRecord{State: "awaiting_review", PendingAction: "create_transaction_draft"}})
+	if strings.Contains(pending.Text, "وصلت موافقتك") {
+		t.Fatal("proposal review claimed a customer confirmation")
 	}
 }
