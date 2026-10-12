@@ -274,24 +274,24 @@ func DefaultCatalogEntityContractDescriptor() CatalogEntityContractDescriptor {
 		// badges (and the archived-state restore flow).
 		CatalogStatuses: map[string]string{
 			"draft":    "مسودة",
-			"active":   "نشط",
+			"active":   "مفعّل",
 			"archived": "مؤرشف",
 		},
 		ItemStatuses: map[string]string{
 			"draft":    "مسودة",
-			"active":   "نشط",
-			"inactive": "غير نشط",
+			"active":   "مفعّل",
+			"inactive": "غير مفعّل",
 			"archived": "مؤرشف",
 		},
 		VariantStatuses: map[string]string{
-			"active":   "نشط",
-			"inactive": "غير نشط",
+			"active":   "مفعّل",
+			"inactive": "غير مفعّل",
 			"archived": "مؤرشف",
 		},
 		OfferStatuses: map[string]string{
 			"draft":    "مسودة",
-			"active":   "نشط",
-			"inactive": "غير نشط",
+			"active":   "مفعّل",
+			"inactive": "غير مفعّل",
 			"expired":  "منتهي",
 			"archived": "مؤرشف",
 		},
