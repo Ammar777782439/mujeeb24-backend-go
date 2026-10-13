@@ -33,9 +33,9 @@ type CapabilityDecision struct {
 	ResponseText string                  `json:"response_text,omitempty"`
 	// Presentation is chosen by Gemini only for evaluate_full_catalog.
 	// "hierarchy" displays every active catalog item without reduction.
-	Presentation string                  `json:"presentation,omitempty"`
-	Selected     []SelectedReference     `json:"selected,omitempty"`
-	Sales        *SalesWorkflowProposal  `json:"sales,omitempty"`
+	Presentation string                 `json:"presentation,omitempty"`
+	Selected     []SelectedReference    `json:"selected,omitempty"`
+	Sales        *SalesWorkflowProposal `json:"sales,omitempty"`
 }
 
 // CustomerSalesCapabilityDefinition describes an executable operation, not intent.
