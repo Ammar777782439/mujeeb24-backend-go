@@ -11,6 +11,22 @@ Copy-Item deploy/litellm/.env.example deploy/litellm/.env
 notepad deploy/litellm/.env
 ```
 
+لإنشاء ثلاث قيم عشوائية على Windows PowerShell دون تثبيت OpenSSL:
+
+```powershell
+function New-LocalSecret {
+    $bytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+    return ([BitConverter]::ToString($bytes)).Replace('-', '').ToLowerInvariant()
+}
+"Master key: sk-$(New-LocalSecret)"
+"Salt key:   sk-$(New-LocalSecret)"
+"DB secret:  $(New-LocalSecret)"
+```
+
+انسخ القيم إلى ملف `deploy/litellm/.env` المحلي فقط. لا تنسخها إلى GitHub أو المحادثات.
+
 ضع قيمًا **سرية عشوائية مختلفة** في `LITELLM_MASTER_KEY` و`LITELLM_SALT_KEY` و`LITELLM_POSTGRES_PASSWORD`.
 يبدأ مفتاحا LiteLLM بـ `sk-`. لا تستخدم أمثلة ثابتة، ولا ترسل أسرارك في المحادثة، ولا تغيّر `LITELLM_SALT_KEY` بعد إضافة مفاتيح المزودين المشفرة.
 
