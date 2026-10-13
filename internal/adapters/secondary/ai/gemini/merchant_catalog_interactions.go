@@ -144,20 +144,6 @@ func (r *GeminiMerchantCatalogAuthoringAdapter) sendInteraction(ctx context.Cont
 	return merchantCatalogInteractionResponse{}, lastErr
 }
 
-func isRetryableGeminiStatus(status int) bool {
-	switch status {
-	case http.StatusRequestTimeout,
-		http.StatusTooManyRequests,
-		http.StatusInternalServerError,
-		http.StatusBadGateway,
-		http.StatusServiceUnavailable,
-		http.StatusGatewayTimeout:
-		return true
-	default:
-		return false
-	}
-}
-
 func merchantCatalogThinkingLevel(model string) string {
 	name := strings.ToLower(strings.TrimSpace(model))
 	switch {
