@@ -69,18 +69,35 @@ func (e *HTTPError) Retryable() bool {
 // SendInteraction invokes a single proxy request, without nested retries.
 // LiteLLM owns upstream routing. Context cancellation is authoritative.
 func (c *Client) SendInteraction(ctx context.Context, payload any) (json.RawMessage, error) {
+	return c.sendJSON(ctx, c.endpoint, payload)
+}
+
+// SendChatCompletion is used for stateless, explicitly replayed B2B tool
+// exchanges. All provider credentials and routing stay inside LiteLLM.
+func (c *Client) SendChatCompletion(ctx context.Context, payload any) (json.RawMessage, error) {
+	if c == nil {
+		return nil, errors.New("LiteLLM client is not configured")
+	}
+	endpoint := strings.TrimSuffix(c.endpoint, "/v1beta/interactions") + "/v1/chat/completions"
+	return c.sendJSON(ctx, endpoint, payload)
+}
+
+func (c *Client) sendJSON(ctx context.Context, endpoint string, payload any) (json.RawMessage, error) {
+	if c == nil {
+		return nil, errors.New("LiteLLM client is not configured")
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("marshal LiteLLM interaction: %w", err)
+		return nil, fmt.Errorf("marshal LiteLLM request: %w", err)
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, c.endpoint, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("build LiteLLM interaction: %w", err)
+		return nil, fmt.Errorf("build LiteLLM request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
@@ -89,7 +106,7 @@ func (c *Client) SendInteraction(ctx context.Context, payload any) (json.RawMess
 		if requestCtx.Err() != nil {
 			return nil, requestCtx.Err()
 		}
-		return nil, fmt.Errorf("send LiteLLM interaction: %w", err)
+		return nil, fmt.Errorf("send LiteLLM request: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
