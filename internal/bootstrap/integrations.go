@@ -15,6 +15,7 @@ type ExternalAdapters struct {
 	SocialWebhook                  ports.WebhookReceiver
 	GeminiHTTPClient               *gemini.GeminiHTTPClient
 	LiteLLMCustomerFallback        ports.CustomerSalesDecisionPort
+	LiteLLMCatalogClient            *gemini.LiteLLMCatalogAdapter
 	SocialAPIHealthProbe           ports.HealthCheckProbe
 	LLMConfigError                 error
 	CustomerSalesEnabled           bool
@@ -34,6 +35,7 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 		"channel_provisioning": "disabled",
 		"llm_runtime":          "disabled",
 		"litellm_fallback":     "disabled",
+		"litellm_catalog":      "disabled",
 	}
 	if a.SocialWebhook != nil {
 		checks["socialapi_webhook"] = "configured"
@@ -56,6 +58,9 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 	}
 	if a.LiteLLMCustomerFallback != nil {
 		checks["litellm_fallback"] = "configured"
+	}
+	if a.LiteLLMCatalogClient != nil {
+		checks["litellm_catalog"] = "configured"
 	}
 	return checks
 }
@@ -108,6 +113,15 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 				adapters.LLMConfigError = adapterErr
 			} else {
 				adapters.LiteLLMCustomerFallback = adapter
+				if cfg.LiteLLMCatalogEnabled {
+					catalogAdapter, catalogErr := gemini.NewLiteLLMCatalogAdapter(gateway, cfg.LiteLLMCatalogModel,
+						cfg.LiteLLMMaxOutputTokens, cfg.LiteLLMMaxContextTokens)
+					if catalogErr != nil {
+						adapters.LLMConfigError = catalogErr
+					} else {
+						adapters.LiteLLMCatalogClient = catalogAdapter
+					}
+				}
 			}
 		}
 	}
