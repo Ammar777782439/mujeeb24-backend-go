@@ -1,6 +1,8 @@
 package gemini
 
 import (
+	"bytes"
+	"log"
 	"context"
 	"errors"
 	"io"
@@ -181,5 +183,64 @@ func TestGeminiBatchEvaluationRetriesOnlyFailedBatch(t *testing.T) {
 	result, err := batch.EvaluateBatch(context.Background(), input)
 	if err != nil || attempts.Load() != 2 || len(result.Candidates) != 0 {
 		t.Fatalf("batch=%+v err=%v calls=%d", result, err, attempts.Load())
+	}
+}
+
+func TestGeminiRetryLogsFullAttemptLifecycle(t *testing.T) {
+	var attempts atomic.Int32
+	var output bytes.Buffer
+	original := log.Writer()
+	log.SetOutput(&output)
+	defer log.SetOutput(original)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if attempts.Add(1) == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	resp, err := doGeminiPOSTWithRetry(context.Background(), srv.Client(), srv.URL, "private-test-key", []byte("{}"),
+		fastGeminiRetryPolicy(), true, geminiRetryTrace{stage: "customer_decision", model: "gemini-test", source: "db_active"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	logs := output.String()
+	for _, expected := range []string{
+		"REQUEST_START", "stage=customer_decision", "model=gemini-test", "config_source=db_active",
+		"ATTEMPT_START", "ATTEMPT_RESULT", "status=503", "RETRY_SCHEDULED",
+		"attempt=2/4", "REQUEST_END", "outcome=success", "attempts=2/4",
+	} {
+		if !strings.Contains(logs, expected) {
+			t.Errorf("missing %s in lifecycle logs: %s", expected, logs)
+		}
+	}
+	if strings.Contains(logs, "private-test-key") {
+		t.Fatal("retry logs leaked provider API key")
+	}
+}
+
+func TestGeminiRetryLogsWhyProviderWaitStopsRetry(t *testing.T) {
+	var output bytes.Buffer
+	original := log.Writer()
+	log.SetOutput(&output)
+	defer log.SetOutput(original)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "60")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+	resp, err := doGeminiPOSTWithRetry(context.Background(), srv.Client(), srv.URL, "private-test-key", []byte("{}"),
+		fastGeminiRetryPolicy(), true, geminiRetryTrace{stage: "catalog_evaluation", model: "gemini-test", source: "env_bootstrap"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	logs := output.String()
+	for _, expected := range []string{"RETRY_SKIPPED", "reason=retry_after_exceeds_max_delay", "outcome=failed", "attempts=1/4"} {
+		if !strings.Contains(logs, expected) {
+			t.Errorf("missing %s from stop reason logs: %s", expected, logs)
+		}
 	}
 }
