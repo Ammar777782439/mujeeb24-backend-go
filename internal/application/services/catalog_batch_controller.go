@@ -918,6 +918,8 @@ func (c *CatalogBatchController) runFinalEvaluation(
 		budget = 8000
 	}
 	lastOversizeTokens := 0
+	reductionRounds := 0
+	const maxReductionRounds = 3
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -945,6 +947,10 @@ func (c *CatalogBatchController) runFinalEvaluation(
 					)
 				}
 				lastOversizeTokens = tokens
+				if reductionRounds >= maxReductionRounds {
+					return ports.CapabilityDecision{}, CatalogAIProjection{}, fmt.Errorf("candidate reduction exceeded %d bounded rounds with %d estimated tokens; use a validated larger-context route for complete comparison", maxReductionRounds, tokens)
+				}
+				reductionRounds++
 
 				reducedCandidates, reducedProjection, nextNumber, err := c.reduceCandidateRound(
 					ctx,
