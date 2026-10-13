@@ -53,7 +53,17 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 			return mapApplicationError(appErrors.NotImplemented()), true
 		}
 		body := in.Body
-		result, err := s.deps.UpdateBusinessPolicy.Handle(ctx, commands.UpdateBusinessPolicyCommand{Meta: commandMeta(ctx, actor, in.CommandHeaders), AIMode: optionalStringPtr(body.AIMode), DefaultHumanReview: body.DefaultHumanReview, AllowAutoReply: body.AllowAutoReply, AllowAutoLeadCreation: body.AllowAutoLeadCreation, AllowAutoTransactionDraft: body.AllowAutoTransactionDraft, AllowAutoConfirmation: body.AllowAutoConfirmation})
+		result, err := s.deps.UpdateBusinessPolicy.Handle(ctx, commands.UpdateBusinessPolicyCommand{
+			Meta:                      commandMeta(ctx, actor, in.CommandHeaders),
+			AIMode:                    optionalStringPtr(body.AIMode),
+			DefaultHumanReview:        body.DefaultHumanReview,
+			AllowAutoReply:            body.AllowAutoReply,
+			AllowAutoLeadCreation:     body.AllowAutoLeadCreation,
+			AllowAutoTransactionDraft: body.AllowAutoTransactionDraft,
+			AllowAutoConfirmation:     body.AllowAutoConfirmation,
+			SalesWorkflowEnabled:      body.SalesWorkflowEnabled,
+			AllowSalesInteractions:    body.AllowSalesInteractions,
+		})
 		if err != nil {
 			return mapApplicationError(err), true
 		}

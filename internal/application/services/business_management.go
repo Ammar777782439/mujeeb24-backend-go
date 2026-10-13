@@ -69,7 +69,18 @@ func (s BusinessManagementService) UpdatePolicy(ctx context.Context, command com
 	}
 	var result commands.UpdateBusinessPolicyResult
 	err = s.Transactions.Within(ctx, func(txCtx context.Context) error {
-		record, updateErr := s.Repository.UpdateRuntimePolicy(txCtx, ports.BusinessRuntimePolicyUpdate{BusinessID: string(command.Meta.Actor.BusinessID), ExpectedVersion: expected, AIMode: command.AIMode, DefaultHumanReview: command.DefaultHumanReview, AllowAutoReply: command.AllowAutoReply, AllowAutoLeadCreation: command.AllowAutoLeadCreation, AllowAutoTransactionDraft: command.AllowAutoTransactionDraft, AllowAutoConfirmation: command.AllowAutoConfirmation})
+		record, updateErr := s.Repository.UpdateRuntimePolicy(txCtx, ports.BusinessRuntimePolicyUpdate{
+			BusinessID:                string(command.Meta.Actor.BusinessID),
+			ExpectedVersion:           expected,
+			AIMode:                    command.AIMode,
+			DefaultHumanReview:        command.DefaultHumanReview,
+			AllowAutoReply:            command.AllowAutoReply,
+			AllowAutoLeadCreation:     command.AllowAutoLeadCreation,
+			AllowAutoTransactionDraft: command.AllowAutoTransactionDraft,
+			AllowAutoConfirmation:     command.AllowAutoConfirmation,
+			SalesWorkflowEnabled:      command.SalesWorkflowEnabled,
+			AllowSalesInteractions:    command.AllowSalesInteractions,
+		})
 		if updateErr != nil {
 			return updateErr
 		}
