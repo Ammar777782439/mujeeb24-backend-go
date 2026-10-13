@@ -360,8 +360,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// item count). 8000 is a sensible default per runtime config.
 		if geminiClient := external.GeminiHTTPClient; geminiClient != nil {
 			batchTokenCounter, err := gemini.NewTokenCounter(gemini.TokenCounterConfig{
-				BaseURL: geminiClient.BaseURL(),
-				APIKey:  geminiClient.APIKey(),
+				BaseURL:        geminiClient.BaseURL(),
+				APIKey:         geminiClient.APIKey(),
 				Model:   geminiClient.Model(),
 			})
 			if err != nil {
