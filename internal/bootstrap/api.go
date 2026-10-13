@@ -347,14 +347,14 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// item count). 8000 is a sensible default per runtime config.
 		if external.LiteLLMCatalogClient != nil && external.GeminiHTTPClient == nil {
 			service.CatalogBatch = &services.CatalogBatchController{
-				CatalogAI: postgres.NewCatalogAIReadRepository(database),
-				Gemini: external.LiteLLMCatalogClient,
-				RunRepo: postgres.NewAIRunTraceRepository(database),
-				TokenBudget: 8000,
-				Now: func() time.Time { return time.Now().UTC() },
-				NewID: uuid.NewString,
-				AIUsage: postgres.NewAIUsageRepository(database),
-				AIPricing: postgres.NewAIProviderPricingRepository(database),
+				CatalogAI:     postgres.NewCatalogAIReadRepository(database),
+				Gemini:        external.LiteLLMCatalogClient,
+				RunRepo:       postgres.NewAIRunTraceRepository(database),
+				TokenBudget:   8000,
+				Now:           func() time.Time { return time.Now().UTC() },
+				NewID:         uuid.NewString,
+				AIUsage:       postgres.NewAIUsageRepository(database),
+				AIPricing:     postgres.NewAIProviderPricingRepository(database),
 				Subscriptions: postgres.NewSubscriptionRepository(database),
 			}
 		} else if geminiClient := external.GeminiHTTPClient; geminiClient != nil {

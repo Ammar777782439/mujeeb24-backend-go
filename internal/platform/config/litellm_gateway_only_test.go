@@ -18,25 +18,35 @@ func setLiteLLMGatewayConfig(t *testing.T) {
 }
 func TestGatewayOnlyConfigNeedsNoGeminiKey(t *testing.T) {
 	setLiteLLMGatewayConfig(t)
-	cfg,err:=LoadFromEnv()
-	if err!=nil {t.Fatalf("valid gateway-only config: %v",err)}
-	if !cfg.LiteLLMGatewayOnly || cfg.GeminiAPIKey!="" {t.Fatal("gateway-only mode still requires Gemini")}
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("valid gateway-only config: %v", err)
+	}
+	if !cfg.LiteLLMGatewayOnly || cfg.GeminiAPIKey != "" {
+		t.Fatal("gateway-only mode still requires Gemini")
+	}
 }
 func TestGatewayOnlyRequiresCompleteRoutes(t *testing.T) {
 	setLiteLLMGatewayConfig(t)
-	t.Setenv("LITELLM_CATALOG_MODEL","")
-	if _,err:=LoadFromEnv();err==nil {t.Fatal("gateway-only accepted missing catalog route")}
+	t.Setenv("LITELLM_CATALOG_MODEL", "")
+	if _, err := LoadFromEnv(); err == nil {
+		t.Fatal("gateway-only accepted missing catalog route")
+	}
 }
 func TestGatewayOnlyRequiresGatewayKey(t *testing.T) {
 	setLiteLLMGatewayConfig(t)
-	t.Setenv("LITELLM_API_KEY","")
-	if _,err:=LoadFromEnv();err==nil {t.Fatal("gateway-only accepted missing virtual key")}
+	t.Setenv("LITELLM_API_KEY", "")
+	if _, err := LoadFromEnv(); err == nil {
+		t.Fatal("gateway-only accepted missing virtual key")
+	}
 }
 func TestGatewayOnlyCanEnableAutoReplyWithoutGemini(t *testing.T) {
 	setLiteLLMGatewayConfig(t)
-	t.Setenv("AUTOREPLY_ENABLED","true")
-	t.Setenv("SOCIALAPI_API_KEY","test-key")
-	t.Setenv("SOCIALAPI_WEBHOOK_SECRET","test-secret")
-	cfg,err:=LoadFromEnv()
-	if err!=nil || !cfg.AutoReplyEnabled {t.Fatalf("cannot enable gateway-only auto reply: %v",err)}
+	t.Setenv("AUTOREPLY_ENABLED", "true")
+	t.Setenv("SOCIALAPI_API_KEY", "test-key")
+	t.Setenv("SOCIALAPI_WEBHOOK_SECRET", "test-secret")
+	cfg, err := LoadFromEnv()
+	if err != nil || !cfg.AutoReplyEnabled {
+		t.Fatalf("cannot enable gateway-only auto reply: %v", err)
+	}
 }
