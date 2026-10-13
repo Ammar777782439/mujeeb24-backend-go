@@ -1151,7 +1151,7 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 	// holdout still writing cost=0 as "success".
 	pricingFailed := false
 	if c.AIPricing != nil {
-		pricing, err := c.AIPricing.GetCurrentForProvider(ctx, "google_gemini", usage.Model)
+		pricing, err := c.AIPricing.GetCurrentForProvider(ctx, usageProvider(usage.Provider), usage.Model)
 		if err == nil {
 			pricingVersion = pricing.PricingVersion
 			inputCost := int64(nonCachedInput) * int64(pricing.InputPerMillionYER) / 1_000_000
@@ -1187,7 +1187,7 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 		ID:                recordID,
 		BusinessID:        businessID,
 		SubscriptionID:    subscriptionID,
-		Provider:          "google_gemini",
+		Provider:          usageProvider(usage.Provider),
 		Model:             usage.Model,
 		InputTokens:       int64(nonCachedInput),
 		CachedInputTokens: int64(cachedInput),
