@@ -343,14 +343,19 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// complete coverage, or selects references outside current evidence:
 		// page catalog → exact-token batches → evaluate → aggregate → final.
 		//
-		// Per contract ② §2, TokenBudget is token-based (no hardcoded
-		// item count). 8000 is a sensible default per runtime config.
+		// Per contract ② §2, batching retains full commercial evidence.
+		// LiteLLM uses a route-capacity budget; legacy direct Gemini
+		// keeps its existing 8000-token budget.
 		if external.LiteLLMCatalogClient != nil && external.GeminiHTTPClient == nil {
+			catalogBudget, err := external.LiteLLMCatalogClient.BatchTokenBudget()
+			if err != nil {
+				return nil, fmt.Errorf("configure LiteLLM catalog token budget: %w", err)
+			}
 			service.CatalogBatch = &services.CatalogBatchController{
 				CatalogAI:     postgres.NewCatalogAIReadRepository(database),
 				Gemini:        external.LiteLLMCatalogClient,
 				RunRepo:       postgres.NewAIRunTraceRepository(database),
-				TokenBudget:   8000,
+				TokenBudget:   catalogBudget,
 				Now:           func() time.Time { return time.Now().UTC() },
 				NewID:         uuid.NewString,
 				AIUsage:       postgres.NewAIUsageRepository(database),

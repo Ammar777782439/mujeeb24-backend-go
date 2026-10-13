@@ -73,6 +73,16 @@ func (c *LiteLLMCatalogAdapter) count(ctx context.Context, request interactionRe
 	return count, nil
 }
 
+// BatchTokenBudget reserves output and a safety margin inside the smallest
+// actual context window across every deployment and fallback in this route.
+// The operator MUST configure maxInputTokens against that minimum capacity.
+func (c *LiteLLMCatalogAdapter) BatchTokenBudget() (int, error) {
+	if c == nil {
+		return 0, errors.New("LiteLLM catalog adapter is nil")
+	}
+	return services.LiteLLMCatalogTokenBudget(c.maxInputTokens, c.maxOutputTokens)
+}
+
 // Splitting must receive the oversized count so the CatalogBatchController
 // can divide the projection. Actual sends are separately blocked if unsafe.
 func (c *LiteLLMCatalogAdapter) ensureModelCapacity(count int) error {
