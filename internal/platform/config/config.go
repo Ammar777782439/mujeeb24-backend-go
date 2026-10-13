@@ -52,6 +52,9 @@ type ProcessConfig struct {
 	GeminiHTTPTimeout              time.Duration
 	LiteLLMFallbackEnabled         bool
 	LiteLLMCatalogEnabled          bool
+	LiteLLMMerchantEnabled         bool
+	LiteLLMMerchantModel           string
+	LiteLLMMerchantMaxRequestBytes int
 	LiteLLMCatalogModel            string
 	LiteLLMMaxContextTokens        int
 	LiteLLMBaseURL                 string
@@ -111,6 +114,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 		GeminiHTTPTimeout:              30 * time.Second,
 		LiteLLMFallbackEnabled:         false,
 		LiteLLMCatalogEnabled:          false,
+		LiteLLMMerchantEnabled:         false,
+		LiteLLMMerchantModel:           strings.TrimSpace(os.Getenv("LITELLM_MERCHANT_MODEL")),
+		LiteLLMMerchantMaxRequestBytes: 524288,
 		LiteLLMCatalogModel:            strings.TrimSpace(os.Getenv("LITELLM_CATALOG_MODEL")),
 		LiteLLMMaxContextTokens:        32768,
 		LiteLLMBaseURL:                 strings.TrimRight(strings.TrimSpace(os.Getenv("LITELLM_BASE_URL")), "/"),
@@ -188,6 +194,12 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.GeminiHTTPTimeout, err = durationEnv("GEMINI_HTTP_TIMEOUT", cfg.GeminiHTTPTimeout); err != nil {
 		return ProcessConfig{}, err
 	}
+	if cfg.LiteLLMMerchantEnabled, err = boolEnv("LITELLM_MERCHANT_ENABLED", false); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.LiteLLMMerchantMaxRequestBytes, err = intEnv("LITELLM_MERCHANT_MAX_REQUEST_BYTES", cfg.LiteLLMMerchantMaxRequestBytes); err != nil {
+		return ProcessConfig{}, err
+	}
 	if cfg.LiteLLMCatalogEnabled, err = boolEnv("LITELLM_CATALOG_ENABLED", false); err != nil {
 		return ProcessConfig{}, err
 	}
@@ -219,6 +231,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 		if cfg.LLMMaxOutputTokens <= 0 || cfg.LLMMaxInputCharacters <= 0 {
 			return ProcessConfig{}, errors.New("LLM token and input limits must be positive")
 		}
+	}
+	if cfg.LiteLLMMerchantEnabled && (!cfg.LiteLLMFallbackEnabled || cfg.LiteLLMMerchantModel == "" || cfg.LiteLLMMerchantMaxRequestBytes <= 0) {
+		return ProcessConfig{}, errors.New("LITELLM_MERCHANT_ENABLED requires LITELLM_FALLBACK_ENABLED, LITELLM_MERCHANT_MODEL, and a positive request byte limit")
 	}
 	if cfg.LiteLLMCatalogEnabled && (!cfg.LiteLLMFallbackEnabled || cfg.LiteLLMCatalogModel == "" || cfg.LiteLLMMaxContextTokens <= cfg.LiteLLMMaxOutputTokens) {
 		return ProcessConfig{}, errors.New("LITELLM_CATALOG_ENABLED requires LITELLM_FALLBACK_ENABLED, LITELLM_CATALOG_MODEL, and sufficient model context")
