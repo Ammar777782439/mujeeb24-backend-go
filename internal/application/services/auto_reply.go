@@ -1152,7 +1152,7 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
 		nonCachedInput = 0 // defensive — Gemini shouldn't return cached > total
 	}
 	if s.AIPricing != nil {
-		pricing, err := s.AIPricing.GetCurrentForProvider(ctx, "google_gemini", out.Usage.Model)
+		pricing, err := s.AIPricing.GetCurrentForProvider(ctx, usageProvider(out.Usage.Provider), out.Usage.Model)
 		if err == nil {
 			pricingVersion = pricing.PricingVersion
 			// Cost per 1M tokens → scale to actual token count.
@@ -1227,7 +1227,7 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
 		ID:                recordID,
 		BusinessID:        businessID,
 		SubscriptionID:    subscriptionID,
-		Provider:          "google_gemini",
+		Provider:          usageProvider(out.Usage.Provider),
 		Model:             out.Usage.Model,
 		InputTokens:       int64(nonCachedInput),
 		CachedInputTokens: int64(cachedInput),
