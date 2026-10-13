@@ -88,7 +88,7 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 			adapters.ChannelProvisioningError = errors.New("channel provisioning adapters are not configured")
 		}
 	}
-	if cfg.GeminiAPIKey != "" {
+	if cfg.GeminiAPIKey != "" && !cfg.LiteLLMGatewayOnly {
 		client, err := gemini.NewGeminiHTTPClient(gemini.GeminiHTTPClientConfig{
 			BaseURL:            cfg.GeminiBaseURL,
 			APIKey:             cfg.GeminiAPIKey,
