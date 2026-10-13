@@ -520,7 +520,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	})
 
 	var merchantCatalogErr error
-	dashboardServer, merchantCatalogErr = wireMerchantCatalogAuthoringAI(dashboardServer, database, external.GeminiHTTPClient, aiConfigCache)
+	dashboardServer, merchantCatalogErr = wireMerchantCatalogAuthoringAI(dashboardServer, database, external.GeminiHTTPClient, aiConfigCache, external.LiteLLMMerchantAuthoring)
 	if merchantCatalogErr != nil {
 		return nil, merchantCatalogErr
 	}
