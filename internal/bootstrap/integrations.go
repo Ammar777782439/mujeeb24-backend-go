@@ -15,7 +15,7 @@ type ExternalAdapters struct {
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
 	GeminiHTTPClient               *gemini.GeminiHTTPClient
-	LiteLLMCustomerFallback        ports.CustomerSalesDecisionPort
+	LiteLLMCustomerDecision        ports.CustomerSalesDecisionPort
 	LiteLLMCatalogClient           *gemini.LiteLLMCatalogAdapter
 	LiteLLMMerchantAuthoring       merchantcatalogai.MerchantCatalogAuthoringPort
 	SocialAPIHealthProbe           ports.HealthCheckProbe
@@ -36,7 +36,7 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 		"auto_reply":           "disabled",
 		"channel_provisioning": "disabled",
 		"llm_runtime":          "disabled",
-		"litellm_fallback":     "disabled",
+		"litellm_customer":     "disabled",
 		"litellm_catalog":      "disabled",
 		"litellm_merchant":     "disabled",
 	}
@@ -59,8 +59,8 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 	if a.GeminiHTTPClient != nil {
 		checks["llm_runtime"] = "configured"
 	}
-	if a.LiteLLMCustomerFallback != nil {
-		checks["litellm_fallback"] = "configured"
+	if a.LiteLLMCustomerDecision != nil {
+		checks["litellm_customer"] = "configured"
 	}
 	if a.LiteLLMCatalogClient != nil {
 		checks["litellm_catalog"] = "configured"
@@ -106,7 +106,7 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 		adapters.LLMConfigError = errors.New("the configured non-Gemini AI provider is not wired to a customer AI capability")
 
 	}
-	if cfg.LiteLLMFallbackEnabled && adapters.LLMConfigError == nil {
+	if (cfg.LiteLLMFallbackEnabled || cfg.LiteLLMGatewayOnly) && adapters.LLMConfigError == nil {
 		gateway, err := litellm.NewClient(litellm.Config{
 			BaseURL: cfg.LiteLLMBaseURL, APIKey: cfg.LiteLLMAPIKey, Timeout: cfg.LiteLLMHTTPTimeout,
 		})
@@ -118,8 +118,8 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 			if adapterErr != nil {
 				adapters.LLMConfigError = adapterErr
 			} else {
-				adapters.LiteLLMCustomerFallback = adapter
-				if cfg.LiteLLMMerchantEnabled {
+				adapters.LiteLLMCustomerDecision = adapter
+				if cfg.LiteLLMMerchantEnabled || cfg.LiteLLMGatewayOnly {
 					merchantAdapter, merchantErr := gemini.NewLiteLLMMerchantCatalogAuthoringAdapter(gateway, cfg.LiteLLMMerchantModel,
 						cfg.LiteLLMMaxOutputTokens, cfg.LiteLLMMerchantMaxRequestBytes)
 					if merchantErr != nil {
@@ -128,7 +128,7 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 						adapters.LiteLLMMerchantAuthoring = merchantAdapter
 					}
 				}
-				if cfg.LiteLLMCatalogEnabled {
+				if cfg.LiteLLMCatalogEnabled || cfg.LiteLLMGatewayOnly {
 					catalogAdapter, catalogErr := gemini.NewLiteLLMCatalogAdapter(gateway, cfg.LiteLLMCatalogModel,
 						cfg.LiteLLMMaxOutputTokens, cfg.LiteLLMMaxContextTokens)
 					if catalogErr != nil {
