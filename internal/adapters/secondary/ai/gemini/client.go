@@ -60,6 +60,7 @@ type GeminiHTTPClient struct {
 	requestTimeout     time.Duration
 	maxOutputTokens    int
 	maxInputCharacters int
+	retryPolicy        geminiRetryPolicy
 }
 
 // NewGeminiHTTPClient creates a Gemini HTTP client with the given config.
@@ -93,6 +94,10 @@ func NewGeminiHTTPClient(cfg GeminiHTTPClientConfig) (*GeminiHTTPClient, error) 
 	if maxInputCharacters <= 0 {
 		maxInputCharacters = 48000
 	}
+	retryPolicy, err := loadGeminiRetryPolicy()
+	if err != nil {
+		return nil, err
+	}
 	client := cfg.HTTPClient
 	if client == nil {
 		client = &http.Client{}
@@ -105,6 +110,7 @@ func NewGeminiHTTPClient(cfg GeminiHTTPClientConfig) (*GeminiHTTPClient, error) 
 		requestTimeout:     requestTimeout,
 		maxOutputTokens:    maxOutputTokens,
 		maxInputCharacters: maxInputCharacters,
+		retryPolicy:        retryPolicy,
 	}, nil
 }
 
