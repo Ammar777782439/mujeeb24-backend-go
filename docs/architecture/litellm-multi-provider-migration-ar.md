@@ -1,3 +1,12 @@
+## Stage 3.5 — Gateway-only runtime and local operation (2026-10-13)
+
+- A single backend switch `LITELLM_GATEWAY_ONLY=true` makes Mujeeb use LiteLLM for B2C/customer-sales, conversation summaries, full catalog batch+final, and B2B merchant catalog authoring. It does not require `GEMINI_API_KEY`; the optional direct Gemini client is not instantiated in this mode.
+- Removed the obsolete Go `FailoverCustomerSalesDecisionPort` and the three legacy `LITELLM_*_ENABLED` toggles. **Model fallback now belongs only in LiteLLM**. Keep the remaining old Gemini code until it can be removed with successful live provider acceptance; gateway-only operation bypasses it.
+- Added a local LiteLLM+Postgres Compose stack, `deploy/litellm/.env.example`, operator instructions at `deploy/litellm/README-ar.md`, and gateway parameters in root and local backend `.env.example`. Secrets are local and excluded by Git.
+- Runtime configuration check and bootstrap tests cover no-Gemini operation. All real customer-channel actions must remain disabled until live route/schema/capability tests and spending/reporting fixes are complete.
+- **Known gap:** Platform Admin AI model/credential configuration and live model discovery still contain Google-centric code. Pricing ledger and B2B model usage, retry-level costs, durable message recovery and gateway privacy/security hardening remain pending. This is NOT a final removal of all old provider code.
+- Never merge this branch. See top-level AGENTS.md for the owner's persistent no-merge requirement.
+
 ## Permanent project decisions — 2026-10-13
 
 1. **NO MERGE:** Do not merge `feat/ai-litellm-multi-provider-gateway` into the source branch, `main`, or any other branch even when ALL migration phases are complete. No auto-merge and no PR merge without a fresh explicit instruction from the owner. Continue commits **on this isolated branch only**.
