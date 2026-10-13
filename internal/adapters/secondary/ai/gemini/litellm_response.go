@@ -68,7 +68,6 @@ func normalizeLiteLLMResponse(raw []byte) (normalizedLiteLLMResponse, error) {
 			if strings.TrimSpace(item.Text)!="" {textParts=append(textParts,item.Text)}
 		}
 	}
-	out.Text=strings.TrimSpace(strings.Join(textParts,"
-"))
+	out.Text=strings.TrimSpace(strings.Join(textParts, "\n"))
 	return out,nil
 }
