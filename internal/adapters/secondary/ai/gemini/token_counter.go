@@ -21,7 +21,6 @@
 package gemini
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -60,6 +59,7 @@ type TokenCounter struct {
 	model          string
 	httpClient     *http.Client
 	requestTimeout time.Duration
+	retryPolicy    geminiRetryPolicy
 	// configProvider, when set, is called at the start of every CountTokens
 	// call to read the ACTIVE runtime config. Per P1-4: this is the same
 	// AIConfigurationProvider that GeminiCustomerSalesAdapter + BatchClient use, so
@@ -116,6 +116,10 @@ func NewTokenCounter(cfg TokenCounterConfig) (*TokenCounter, error) {
 	if timeout <= 0 {
 		timeout = 15 * time.Second
 	}
+	retryPolicy, err := loadGeminiRetryPolicy()
+	if err != nil {
+		return nil, err
+	}
 	client := cfg.HTTPClient
 	if client == nil {
 		client = &http.Client{Timeout: timeout}
@@ -126,6 +130,7 @@ func NewTokenCounter(cfg TokenCounterConfig) (*TokenCounter, error) {
 		model:          model,
 		httpClient:     client,
 		requestTimeout: timeout,
+		retryPolicy:    retryPolicy,
 	}, nil
 }
 
@@ -186,14 +191,7 @@ func (c *TokenCounter) CountTokens(ctx context.Context, payload any) (int, error
 	reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
 
-	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(buf))
-	if err != nil {
-		return 0, fmt.Errorf("build countTokens request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-goog-api-key", rc.apiKey)
-
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := doGeminiPOSTWithRetry(reqCtx, c.httpClient, url, rc.apiKey, buf, c.retryPolicy, true)
 	if err != nil {
 		return 0, fmt.Errorf("send countTokens request: %w", err)
 	}
