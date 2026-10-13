@@ -90,3 +90,31 @@ func TestAutoReplyHierarchicalCatalogSkipsCandidateReduction(t *testing.T) {
 		t.Fatalf("hierarchy should enqueue grounded reply without reduction: %+v err=%v outbound=%d", result, err, outbox.calls)
 	}
 }
+
+type verboseHierarchyCatalogRepo struct {
+	*capabilityCatalogRepo
+}
+
+func (r *verboseHierarchyCatalogRepo) ListProjectionPage(ctx context.Context, request ports.CatalogAIProjectionRequest) (ports.CatalogAIProjectionPage, error) {
+	page, err := r.capabilityCatalogRepo.ListProjectionPage(ctx, request)
+	if err == nil && len(page.Items) > 0 && request.Cursor == "" {
+		description := strings.Repeat("كامل وصف المنتج بدون إسقاط البيانات ", 140)
+		page.Items[0].Item.LongDescription = &description
+	}
+	return page, err
+}
+
+func TestAutoReplyHierarchyEnqueuesAllPartsAtomically(t *testing.T) {
+	service, runtime, outbox, runs := capabilityService()
+	runtime.Decision = ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityFullCatalog, Presentation: "hierarchy"}
+	catalog := &verboseHierarchyCatalogRepo{capabilityCatalogRepo: &capabilityCatalogRepo{}}
+	service.CatalogBatch = &CatalogBatchController{CatalogAI: catalog, Gemini: &capabilityBatchModel{}, RunRepo: runs, TokenBudget: 100, Now: service.now, NewID: service.NewID}
+	service.EntityContractPayload = mustMarshal(BuildCatalogEntityContractPayload())
+	result, err := service.Handle(context.Background(), capabilityCommand())
+	if err != nil || !result.Enqueued || outbox.calls < 2 {
+		t.Fatalf("hierarchical multi-part output was not fully enqueued: parts=%d result=%+v err=%v", outbox.calls, result, err)
+	}
+	if !strings.Contains(outbox.record.DedupeKey, ":part:") {
+		t.Fatalf("last part lost its independent delivery key: %q", outbox.record.DedupeKey)
+	}
+}
