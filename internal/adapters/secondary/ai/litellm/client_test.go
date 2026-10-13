@@ -55,7 +55,9 @@ func TestSendInteractionDoesNotLeakProviderBodyOrSecrets(t *testing.T) {
 	}))
 	defer server.Close()
 	client, err := NewClient(Config{BaseURL: server.URL, APIKey: "secret-key"})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, err = client.SendInteraction(context.Background(), map[string]any{"input": "customer secrets"})
 	var status *HTTPError
 	if !errors.As(err, &status) || !status.Retryable() || status.StatusCode != 503 {
@@ -71,7 +73,9 @@ func TestSendInteractionDoesNotLeakProviderBodyOrSecrets(t *testing.T) {
 
 func TestSendInteractionRespectsCanceledContext(t *testing.T) {
 	client, err := NewClient(Config{BaseURL: "https://example.com", APIKey: "key", Timeout: time.Millisecond})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := client.SendInteraction(ctx, map[string]any{}); !errors.Is(err, context.Canceled) {

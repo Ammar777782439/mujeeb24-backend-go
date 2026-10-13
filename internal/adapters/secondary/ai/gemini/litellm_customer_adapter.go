@@ -33,7 +33,9 @@ func NewLiteLLMCustomerSalesAdapter(client *litellm.Client, model string, maxOut
 }
 
 func (c *LiteLLMCustomerSalesAdapter) Decide(ctx context.Context, input ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
-	if err := ctx.Err(); err != nil { return ports.CustomerSalesDecisionOutput{}, err }
+	if err := ctx.Err(); err != nil {
+		return ports.CustomerSalesDecisionOutput{}, err
+	}
 	if strings.TrimSpace(input.Request.Text) == "" {
 		return ports.CustomerSalesDecisionOutput{}, errors.New("AI input text is required")
 	}
@@ -54,7 +56,9 @@ func (c *LiteLLMCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cu
 	}
 	userPrompt := buildUserPrompt(input.Request)
 	encodedTools, err := json.Marshal(tools)
-	if err != nil { return ports.CustomerSalesDecisionOutput{}, err }
+	if err != nil {
+		return ports.CustomerSalesDecisionOutput{}, err
+	}
 	if len([]rune(systemInstruction))+len([]rune(userPrompt))+len([]rune(string(encodedTools))) > c.maxInputCharacters {
 		return ports.CustomerSalesDecisionOutput{}, errors.New("LiteLLM customer sales request exceeds configured context limit")
 	}
@@ -67,7 +71,9 @@ func (c *LiteLLMCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cu
 	}
 	started := time.Now()
 	raw, err := c.client.SendInteraction(ctx, req)
-	if err != nil { return ports.CustomerSalesDecisionOutput{}, err }
+	if err != nil {
+		return ports.CustomerSalesDecisionOutput{}, err
+	}
 
 	var resp liteLLMDecisionResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
@@ -84,7 +90,9 @@ func (c *LiteLLMCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cu
 			continue
 		}
 		callID := output.ID
-		if callID == "" { callID = output.CallID }
+		if callID == "" {
+			callID = output.CallID
+		}
 		args := output.Arguments
 		if len(args) > 0 && args[0] == '"' {
 			var argumentsString string
@@ -98,11 +106,13 @@ func (c *LiteLLMCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cu
 		})
 	}
 	decision, err := parseCustomerSalesCapability(interactionResponse{Steps: steps}, tools)
-	if err != nil { return ports.CustomerSalesDecisionOutput{}, err }
+	if err != nil {
+		return ports.CustomerSalesDecisionOutput{}, err
+	}
 
 	latencyMs := time.Since(started).Milliseconds()
 	return ports.CustomerSalesDecisionOutput{
-		Decision: decision,
+		Decision:          decision,
 		GeminiInteraction: ports.GeminiInteractionContext{Store: false},
 		Usage: ports.CustomerSalesUsageTelemetry{
 			Provider: "litellm", InputTokens: resp.Usage.TotalInputTokens,

@@ -15,13 +15,15 @@ import (
 func TestLiteLLMCustomerSalesUsesExistingCapabilityBoundary(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request struct {
-			Model string `json:"model"`
-			Store bool `json:"store"`
-			Tools []customerSalesTool `json:"tools"`
-			GenerationConfig interactionGenerationConfig `json:"generation_config"`
-			SystemInstruction string `json:"system_instruction"`
+			Model             string                      `json:"model"`
+			Store             bool                        `json:"store"`
+			Tools             []customerSalesTool         `json:"tools"`
+			GenerationConfig  interactionGenerationConfig `json:"generation_config"`
+			SystemInstruction string                      `json:"system_instruction"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil { t.Error(err) }
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+		}
 		if request.Model != "mujeeb-customer" || request.Store || request.GenerationConfig.ToolChoice != "any" {
 			t.Errorf("contract changed: %+v", request)
 		}
@@ -35,15 +37,21 @@ func TestLiteLLMCustomerSalesUsesExistingCapabilityBoundary(t *testing.T) {
 	defer server.Close()
 
 	client, err := litellm.NewClient(litellm.Config{BaseURL: server.URL, APIKey: "test-secret"})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	adapter, err := NewLiteLLMCustomerSalesAdapter(client, "mujeeb-customer", 4096, 48000)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	out, err := adapter.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		Capabilities: []ports.CustomerSalesCapability{ports.CustomerSalesCapabilityRespondWithoutAction},
-		Request: ports.CustomerSalesDecisionRequest{Text: "السلام عليكم"},
+		Capabilities:          []ports.CustomerSalesCapability{ports.CustomerSalesCapabilityRespondWithoutAction},
+		Request:               ports.CustomerSalesDecisionRequest{Text: "السلام عليكم"},
 		EntityContractPayload: []byte(`{"catalog":"contract"}`),
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if out.Decision.Capability != ports.CustomerSalesCapabilityRespondWithoutAction ||
 		out.Decision.ResponseText != "وعليكم السلام" || out.Usage.Provider != "litellm" ||
 		out.Usage.Model != "mujeeb-customer" || out.Usage.InputTokens != 23 || out.Usage.OutputTokens != 8 {
@@ -69,14 +77,20 @@ func TestLiteLLMCustomerSalesRejectsUnknownAndParallelTools(t *testing.T) {
 			}))
 			defer server.Close()
 			client, err := litellm.NewClient(litellm.Config{BaseURL: server.URL, APIKey: "test-key"})
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			adapter, err := NewLiteLLMCustomerSalesAdapter(client, "mujeeb-customer", 4096, 48000)
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			_, err = adapter.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 				Capabilities: []ports.CustomerSalesCapability{ports.CustomerSalesCapabilityRespondWithoutAction},
-				Request: ports.CustomerSalesDecisionRequest{Text: "Test"},
+				Request:      ports.CustomerSalesDecisionRequest{Text: "Test"},
 			})
-			if err == nil { t.Fatalf("unsafe model output was accepted: %s", test.body) }
+			if err == nil {
+				t.Fatalf("unsafe model output was accepted: %s", test.body)
+			}
 		})
 	}
 }

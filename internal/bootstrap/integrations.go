@@ -14,7 +14,7 @@ type ExternalAdapters struct {
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
 	GeminiHTTPClient               *gemini.GeminiHTTPClient
-	LiteLLMCustomerFallback         ports.CustomerSalesDecisionPort
+	LiteLLMCustomerFallback        ports.CustomerSalesDecisionPort
 	SocialAPIHealthProbe           ports.HealthCheckProbe
 	LLMConfigError                 error
 	CustomerSalesEnabled           bool
@@ -33,7 +33,7 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 		"auto_reply":           "disabled",
 		"channel_provisioning": "disabled",
 		"llm_runtime":          "disabled",
-		"litellm_fallback":      "disabled",
+		"litellm_fallback":     "disabled",
 	}
 	if a.SocialWebhook != nil {
 		checks["socialapi_webhook"] = "configured"
