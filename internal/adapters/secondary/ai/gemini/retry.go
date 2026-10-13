@@ -19,9 +19,9 @@ import (
 // geminiRetryPolicy is infrastructure configuration, not a domain or AI decision.
 // Retries are bounded by both MaxAttempts and the caller's overall context deadline.
 type geminiRetryPolicy struct {
-	maxAttempts int
+	maxAttempts  int
 	initialDelay time.Duration
-	maxDelay time.Duration
+	maxDelay     time.Duration
 }
 
 func loadGeminiRetryPolicy() (geminiRetryPolicy, error) {
@@ -34,7 +34,7 @@ func loadGeminiRetryPolicy() (geminiRetryPolicy, error) {
 		p.maxAttempts = n
 	}
 	for _, setting := range []struct {
-		name string
+		name   string
 		target *time.Duration
 	}{
 		{"GEMINI_RETRY_INITIAL_DELAY", &p.initialDelay},
