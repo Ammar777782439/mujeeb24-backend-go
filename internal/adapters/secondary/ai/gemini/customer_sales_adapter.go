@@ -234,7 +234,7 @@ func (c *GeminiCustomerSalesAdapter) sendInteractionRequest(
 		return interactionResponse{}, fmt.Errorf("read interaction response: %w", err)
 	}
 	if httpResp.StatusCode >= 400 {
-		return interactionResponse{}, fmt.Errorf("gemini interactions http %d: %s", httpResp.StatusCode, string(body))
+		return interactionResponse{}, &GeminiInteractionHTTPError{StatusCode: httpResp.StatusCode}
 	}
 
 	var out interactionResponse
