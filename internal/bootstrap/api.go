@@ -370,7 +370,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			batchClient, err := gemini.NewBatchClient(gemini.BatchClientConfig{
 				BaseURL: geminiClient.BaseURL(),
 				APIKey:  geminiClient.APIKey(),
-				Model:   geminiClient.Model(),
+				Model:          geminiClient.Model(),
+				HTTPClient:     geminiClient.HTTPClient(),
+				RequestTimeout: geminiClient.RequestTimeout(),
 			})
 			if err != nil {
 				return nil, fmt.Errorf("build Gemini catalog batch client: %w", err)
