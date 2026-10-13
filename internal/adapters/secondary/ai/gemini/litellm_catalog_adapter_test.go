@@ -35,6 +35,19 @@ func TestLiteLLMCatalogBatchPreservesSchemaAndAllCommercialRelations(t *testing.
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Error(err)
 			}
+			if req.ResponseFormat != nil && req.ResponseFormat.Schema != nil {
+				props := req.ResponseFormat.Schema["properties"].(map[string]any)["candidates"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+				for key, want := range map[string]string{"item_id": itemID, "variant_ids": "v1", "offer_ids": "o1"} {
+					prop := props[key].(map[string]any)
+					if key != "item_id" {
+						prop = prop["items"].(map[string]any)
+					}
+					values, ok := prop["enum"].([]any)
+					if !ok || len(values) != 1 || values[0] != want {
+						t.Errorf("%s not restricted to batch: %#v", key, prop["enum"])
+					}
+				}
+			}
 			if req.Model != "mujeeb-catalog" ||
 				!strings.Contains(req.Input, "attribute_schemas") ||
 				!strings.Contains(req.Input, "attr_1") ||

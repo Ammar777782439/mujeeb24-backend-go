@@ -187,7 +187,7 @@ func (c *BatchClient) buildEvaluateBatchRequest(input services.BatchEvaluationIn
 		},
 		GenerationConfig: batchGenerationConfig{
 			ResponseMimeType: "application/json",
-			ResponseSchema:   batchCandidateResponseSchema(),
+			ResponseSchema:   batchCandidateResponseSchemaForBatch(input.Batch),
 			MaxOutputTokens:  rc.maxOutputTokens,
 		},
 	}, nil
@@ -504,6 +504,47 @@ func batchCandidateResponseSchema() map[string]any {
 		},
 		"required": []string{"candidates"},
 	}
+}
+
+// Restrict structured-output references to exact identifiers present in this
+// batch. Go still validates every item/variant/offer relationship.
+func batchCandidateResponseSchemaForBatch(batch services.CatalogAIBatchPayload) map[string]any {
+	schema := batchCandidateResponseSchema()
+	props := schema["properties"].(map[string]any)["candidates"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+	itemIDs := make([]string, 0, len(batch.Items))
+	variantIDs := make([]string, 0)
+	offerIDs := make([]string, 0)
+	itemSeen := make(map[string]struct{})
+	variantSeen := make(map[string]struct{})
+	offerSeen := make(map[string]struct{})
+	for _, item := range batch.Items {
+		if _, seen := itemSeen[item.ID]; !seen {
+			itemIDs = append(itemIDs, item.ID)
+			itemSeen[item.ID] = struct{}{}
+		}
+		for _, variant := range item.Variants {
+			if _, seen := variantSeen[variant.ID]; !seen {
+				variantIDs = append(variantIDs, variant.ID)
+				variantSeen[variant.ID] = struct{}{}
+			}
+		}
+		for _, offer := range item.Offers {
+			if _, seen := offerSeen[offer.ID]; !seen {
+				offerIDs = append(offerIDs, offer.ID)
+				offerSeen[offer.ID] = struct{}{}
+			}
+		}
+	}
+	if len(itemIDs) > 0 {
+		props["item_id"].(map[string]any)["enum"] = itemIDs
+	}
+	if len(variantIDs) > 0 {
+		props["variant_ids"].(map[string]any)["items"].(map[string]any)["enum"] = variantIDs
+	}
+	if len(offerIDs) > 0 {
+		props["offer_ids"].(map[string]any)["items"].(map[string]any)["enum"] = offerIDs
+	}
+	return schema
 }
 
 type batchGeminiRequest struct {
