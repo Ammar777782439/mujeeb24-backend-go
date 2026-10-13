@@ -7,6 +7,7 @@
 package gemini
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
