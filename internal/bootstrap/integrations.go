@@ -15,7 +15,7 @@ type ExternalAdapters struct {
 	SocialWebhook                  ports.WebhookReceiver
 	GeminiHTTPClient               *gemini.GeminiHTTPClient
 	LiteLLMCustomerFallback        ports.CustomerSalesDecisionPort
-	LiteLLMCatalogClient            *gemini.LiteLLMCatalogAdapter
+	LiteLLMCatalogClient           *gemini.LiteLLMCatalogAdapter
 	SocialAPIHealthProbe           ports.HealthCheckProbe
 	LLMConfigError                 error
 	CustomerSalesEnabled           bool

@@ -55,8 +55,8 @@ func (c *Client) CountInteractionTokens(ctx context.Context, model, system, inpu
 		return 0, fmt.Errorf("read LiteLLM token count: %w", err)
 	}
 	var result struct {
-		TotalTokens int `json:"total_tokens"`
-		Error bool `json:"error"`
+		TotalTokens int  `json:"total_tokens"`
+		Error       bool `json:"error"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
 		return 0, errors.New("invalid LiteLLM token count response")
