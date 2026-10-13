@@ -196,7 +196,7 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 			appendCatalogRecordsToProjection(&pageProjection, page.Catalogs)
 			batches, err := c.splitIntoBatches(ctx, pageProjection, input, nextBatchNumber)
 			if err != nil {
-				return CatalogEvaluationResult{}, fmt.Errorf("split catalog page into exact-token batches: %w", err)
+				return CatalogEvaluationResult{}, fmt.Errorf("split catalog page into budgeted batches: %w", err)
 			}
 			pageCandidates := make([]ports.CatalogBatchCandidate, 0)
 
@@ -732,7 +732,7 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 				return nil
 			}
 			if len(part) == 1 {
-				return fmt.Errorf("catalog item %s contains a single commercial fragment exceeding token budget %d with exact request size %d", item.ID, budget, tokens)
+				return fmt.Errorf("catalog item %s contains an indivisible commercial fragment exceeding token budget %d with conservative request estimate %d; use a validated larger-context route, not truncation", item.ID, budget, tokens)
 			}
 			mid := len(part) / 2
 			if err := splitUnits(part[:mid]); err != nil {
@@ -770,6 +770,11 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 
 	if err := split(projection.Items); err != nil {
 		return nil, err
+	}
+	// Check every original commercial field, schema, variant and offer
+	// before handing a single batch to the AI provider.
+	if err := validateCatalogBatchCoverage(projection, batches); err != nil {
+		return nil, fmt.Errorf("catalog batch coverage: %w", err)
 	}
 	return batches, nil
 }
