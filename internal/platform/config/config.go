@@ -50,10 +50,7 @@ type ProcessConfig struct {
 	GeminiBaseURL                  string
 	GeminiModel                    string
 	GeminiHTTPTimeout              time.Duration
-	LiteLLMFallbackEnabled         bool
 	LiteLLMGatewayOnly             bool
-	LiteLLMCatalogEnabled          bool
-	LiteLLMMerchantEnabled         bool
 	LiteLLMMerchantModel           string
 	LiteLLMMerchantMaxRequestBytes int
 	LiteLLMCatalogModel            string
@@ -113,10 +110,7 @@ func LoadFromEnv() (ProcessConfig, error) {
 		GeminiBaseURL:                  strings.TrimRight(strings.TrimSpace(os.Getenv("GEMINI_BASE_URL")), "/"),
 		GeminiModel:                    strings.TrimSpace(os.Getenv("GEMINI_MODEL")),
 		GeminiHTTPTimeout:              30 * time.Second,
-		LiteLLMFallbackEnabled:         false,
 		LiteLLMGatewayOnly:             false,
-		LiteLLMCatalogEnabled:          false,
-		LiteLLMMerchantEnabled:         false,
 		LiteLLMMerchantModel:           strings.TrimSpace(os.Getenv("LITELLM_MERCHANT_MODEL")),
 		LiteLLMMerchantMaxRequestBytes: 524288,
 		LiteLLMCatalogModel:            strings.TrimSpace(os.Getenv("LITELLM_CATALOG_MODEL")),
@@ -196,22 +190,13 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.GeminiHTTPTimeout, err = durationEnv("GEMINI_HTTP_TIMEOUT", cfg.GeminiHTTPTimeout); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.LiteLLMMerchantEnabled, err = boolEnv("LITELLM_MERCHANT_ENABLED", false); err != nil {
-		return ProcessConfig{}, err
-	}
 	if cfg.LiteLLMMerchantMaxRequestBytes, err = intEnv("LITELLM_MERCHANT_MAX_REQUEST_BYTES", cfg.LiteLLMMerchantMaxRequestBytes); err != nil {
-		return ProcessConfig{}, err
-	}
-	if cfg.LiteLLMCatalogEnabled, err = boolEnv("LITELLM_CATALOG_ENABLED", false); err != nil {
 		return ProcessConfig{}, err
 	}
 	if cfg.LiteLLMMaxContextTokens, err = intEnv("LITELLM_MAX_CONTEXT_TOKENS", cfg.LiteLLMMaxContextTokens); err != nil {
 		return ProcessConfig{}, err
 	}
 	if cfg.LiteLLMGatewayOnly, err = boolEnv("LITELLM_GATEWAY_ONLY", false); err != nil {
-		return ProcessConfig{}, err
-	}
-	if cfg.LiteLLMFallbackEnabled, err = boolEnv("LITELLM_FALLBACK_ENABLED", false); err != nil {
 		return ProcessConfig{}, err
 	}
 	if cfg.LiteLLMHTTPTimeout, err = durationEnv("LITELLM_HTTP_TIMEOUT", cfg.LiteLLMHTTPTimeout); err != nil {
@@ -223,20 +208,11 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.LiteLLMMaxInputCharacters, err = intEnv("LITELLM_MAX_INPUT_CHARACTERS", cfg.LiteLLMMaxInputCharacters); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.LiteLLMFallbackEnabled && !cfg.LiteLLMGatewayOnly {
-		if cfg.LiteLLMBaseURL == "" || cfg.LiteLLMAPIKey == "" || cfg.LiteLLMCustomerModel == "" || cfg.GeminiAPIKey == "" ||
-			cfg.LiteLLMMaxInputCharacters <= 0 || cfg.LiteLLMMaxOutputTokens <= 0 {
-			return ProcessConfig{}, errors.New("LITELLM_FALLBACK_ENABLED requires Gemini, LITELLM_BASE_URL, LITELLM_API_KEY, LITELLM_CUSTOMER_MODEL, and positive token limits")
-		}
-	}
 	if cfg.LiteLLMGatewayOnly {
 		if cfg.LiteLLMBaseURL == "" || cfg.LiteLLMAPIKey == "" || cfg.LiteLLMCustomerModel == "" || cfg.LiteLLMCatalogModel == "" || cfg.LiteLLMMerchantModel == "" ||
 			cfg.LiteLLMMaxOutputTokens <= 0 || cfg.LiteLLMMaxInputCharacters <= 0 || cfg.LiteLLMMerchantMaxRequestBytes <= 0 ||
 			cfg.LiteLLMMaxContextTokens <= cfg.LiteLLMMaxOutputTokens {
 			return ProcessConfig{}, errors.New("LITELLM_GATEWAY_ONLY requires LITELLM_BASE_URL, LITELLM_API_KEY, customer/catalog/merchant models and positive limits")
-		}
-		if cfg.LiteLLMFallbackEnabled || cfg.LiteLLMCatalogEnabled || cfg.LiteLLMMerchantEnabled {
-			return ProcessConfig{}, errors.New("LITELLM_GATEWAY_ONLY must not be combined with legacy LITELLM_*_ENABLED or LITELLM_FALLBACK_ENABLED flags")
 		}
 		if cfg.LLMEnabled {
 			return ProcessConfig{}, errors.New("LITELLM_GATEWAY_ONLY must not be combined with legacy LLM_ENABLED")
@@ -249,12 +225,6 @@ func LoadFromEnv() (ProcessConfig, error) {
 		if cfg.LLMMaxOutputTokens <= 0 || cfg.LLMMaxInputCharacters <= 0 {
 			return ProcessConfig{}, errors.New("LLM token and input limits must be positive")
 		}
-	}
-	if cfg.LiteLLMMerchantEnabled && (!cfg.LiteLLMFallbackEnabled || cfg.LiteLLMMerchantModel == "" || cfg.LiteLLMMerchantMaxRequestBytes <= 0) {
-		return ProcessConfig{}, errors.New("LITELLM_MERCHANT_ENABLED requires LITELLM_FALLBACK_ENABLED, LITELLM_MERCHANT_MODEL, and a positive request byte limit")
-	}
-	if cfg.LiteLLMCatalogEnabled && (!cfg.LiteLLMFallbackEnabled || cfg.LiteLLMCatalogModel == "" || cfg.LiteLLMMaxContextTokens <= cfg.LiteLLMMaxOutputTokens) {
-		return ProcessConfig{}, errors.New("LITELLM_CATALOG_ENABLED requires LITELLM_FALLBACK_ENABLED, LITELLM_CATALOG_MODEL, and sufficient model context")
 	}
 	if cfg.AuthEnabled && (cfg.JWTEd25519PrivateKey == "" || cfg.JWTEd25519PublicKey == "" || strings.TrimSpace(cfg.JWTIssuer) == "" || cfg.JWTAccessTTL <= 0 || cfg.RefreshSessionTTL <= 0) {
 		return ProcessConfig{}, errors.New("AUTH_ENABLED requires JWT_ED25519_PRIVATE_KEY, JWT_ED25519_PUBLIC_KEY, JWT_ISSUER, and positive token lifetimes")
