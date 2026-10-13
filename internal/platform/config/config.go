@@ -51,6 +51,7 @@ type ProcessConfig struct {
 	GeminiModel                    string
 	GeminiHTTPTimeout              time.Duration
 	LiteLLMFallbackEnabled         bool
+	LiteLLMGatewayOnly             bool
 	LiteLLMCatalogEnabled          bool
 	LiteLLMMerchantEnabled         bool
 	LiteLLMMerchantModel           string
@@ -113,6 +114,7 @@ func LoadFromEnv() (ProcessConfig, error) {
 		GeminiModel:                    strings.TrimSpace(os.Getenv("GEMINI_MODEL")),
 		GeminiHTTPTimeout:              30 * time.Second,
 		LiteLLMFallbackEnabled:         false,
+		LiteLLMGatewayOnly:             false,
 		LiteLLMCatalogEnabled:          false,
 		LiteLLMMerchantEnabled:         false,
 		LiteLLMMerchantModel:           strings.TrimSpace(os.Getenv("LITELLM_MERCHANT_MODEL")),
@@ -206,6 +208,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.LiteLLMMaxContextTokens, err = intEnv("LITELLM_MAX_CONTEXT_TOKENS", cfg.LiteLLMMaxContextTokens); err != nil {
 		return ProcessConfig{}, err
 	}
+	if cfg.LiteLLMGatewayOnly, err = boolEnv("LITELLM_GATEWAY_ONLY", false); err != nil {
+		return ProcessConfig{}, err
+	}
 	if cfg.LiteLLMFallbackEnabled, err = boolEnv("LITELLM_FALLBACK_ENABLED", false); err != nil {
 		return ProcessConfig{}, err
 	}
@@ -218,10 +223,23 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.LiteLLMMaxInputCharacters, err = intEnv("LITELLM_MAX_INPUT_CHARACTERS", cfg.LiteLLMMaxInputCharacters); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.LiteLLMFallbackEnabled {
+	if cfg.LiteLLMFallbackEnabled && !cfg.LiteLLMGatewayOnly {
 		if cfg.LiteLLMBaseURL == "" || cfg.LiteLLMAPIKey == "" || cfg.LiteLLMCustomerModel == "" || cfg.GeminiAPIKey == "" ||
 			cfg.LiteLLMMaxInputCharacters <= 0 || cfg.LiteLLMMaxOutputTokens <= 0 {
 			return ProcessConfig{}, errors.New("LITELLM_FALLBACK_ENABLED requires Gemini, LITELLM_BASE_URL, LITELLM_API_KEY, LITELLM_CUSTOMER_MODEL, and positive token limits")
+		}
+	}
+	if cfg.LiteLLMGatewayOnly {
+		if cfg.LiteLLMBaseURL == "" || cfg.LiteLLMAPIKey == "" || cfg.LiteLLMCustomerModel == "" || cfg.LiteLLMCatalogModel == "" || cfg.LiteLLMMerchantModel == "" ||
+			cfg.LiteLLMMaxOutputTokens <= 0 || cfg.LiteLLMMaxInputCharacters <= 0 || cfg.LiteLLMMerchantMaxRequestBytes <= 0 ||
+			cfg.LiteLLMMaxContextTokens <= cfg.LiteLLMMaxOutputTokens {
+			return ProcessConfig{}, errors.New("LITELLM_GATEWAY_ONLY requires LITELLM_BASE_URL, LITELLM_API_KEY, customer/catalog/merchant models and positive limits")
+		}
+		if cfg.LiteLLMFallbackEnabled || cfg.LiteLLMCatalogEnabled || cfg.LiteLLMMerchantEnabled {
+			return ProcessConfig{}, errors.New("LITELLM_GATEWAY_ONLY must not be combined with legacy LITELLM_*_ENABLED or LITELLM_FALLBACK_ENABLED flags")
+		}
+		if cfg.LLMEnabled {
+			return ProcessConfig{}, errors.New("LITELLM_GATEWAY_ONLY must not be combined with legacy LLM_ENABLED")
 		}
 	}
 	if cfg.LLMEnabled {
@@ -247,9 +265,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if strings.TrimSpace(cfg.HTTPAddr) == "" {
 		return ProcessConfig{}, errors.New("HTTP_ADDR cannot be empty")
 	}
-	hasAI := cfg.LLMEnabled || strings.TrimSpace(cfg.GeminiAPIKey) != ""
+	hasAI := cfg.LiteLLMGatewayOnly || cfg.LLMEnabled || strings.TrimSpace(cfg.GeminiAPIKey) != ""
 	if (cfg.AutoReplyEnabled || cfg.CustomerSalesEnabled) && (cfg.SocialAPIWebhookSecret == "" || cfg.SocialAPIAPIKey == "" || !hasAI) {
-		return ProcessConfig{}, errors.New("AUTOREPLY_ENABLED requires SOCIALAPI_WEBHOOK_SECRET, SOCIALAPI_API_KEY, and LLM_ENABLED or GEMINI_API_KEY")
+		return ProcessConfig{}, errors.New("AUTOREPLY_ENABLED requires SOCIALAPI_WEBHOOK_SECRET, SOCIALAPI_API_KEY, and a configured AI runtime (LiteLLM/Gemini)")
 	}
 	return cfg, nil
 }
