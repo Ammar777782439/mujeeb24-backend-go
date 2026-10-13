@@ -62,10 +62,16 @@ func (c *LiteLLMCatalogAdapter) count(ctx context.Context, request interactionRe
 	if err != nil { return 0, err }
 	// A catalog route is configured for the SMALLEST supported provider
 	// context; require headroom for the final model output.
-	if count+c.maxOutputTokens > c.maxInputTokens {
-		return count, fmt.Errorf("LiteLLM catalog request exceeds configured minimum model context: estimate=%d reserved_output=%d context=%d", count,c.maxOutputTokens,c.maxInputTokens)
-	}
 	return count, nil
+}
+
+// Splitting must receive the oversized count so the CatalogBatchController
+// can divide the projection. Actual sends are separately blocked if unsafe.
+func (c *LiteLLMCatalogAdapter) ensureModelCapacity(count int) error {
+	if count+c.maxOutputTokens > c.maxInputTokens {
+		return fmt.Errorf("LiteLLM catalog request exceeds configured minimum model context: estimate=%d reserved_output=%d context=%d", count,c.maxOutputTokens,c.maxInputTokens)
+	}
+	return nil
 }
 
 func (c *LiteLLMCatalogAdapter) CountBatchTokens(ctx context.Context, input services.BatchEvaluationInput) (int,error) {
@@ -82,7 +88,9 @@ func (c *LiteLLMCatalogAdapter) EvaluateBatch(ctx context.Context, input service
 	if len(input.Batch.Items)==0 {return ports.CatalogBatchResult{BatchNumber:input.BatchNumber},nil}
 	req,err:=c.batchRequest(input)
 	if err!=nil {return ports.CatalogBatchResult{},err}
-	if _,err=c.count(ctx,req);err!=nil{return ports.CatalogBatchResult{},err}
+	tokens,err:=c.count(ctx,req)
+	if err!=nil{return ports.CatalogBatchResult{},err}
+	if err:=c.ensureModelCapacity(tokens);err!=nil{return ports.CatalogBatchResult{},err}
 	started:=time.Now()
 	raw,err:=c.client.SendInteraction(ctx,req)
 	if err!=nil{return ports.CatalogBatchResult{},fmt.Errorf("send catalog batch %d: %w",input.BatchNumber,err)}
@@ -107,7 +115,9 @@ func (c *LiteLLMCatalogAdapter) EvaluateBatch(ctx context.Context, input service
 
 func (c *LiteLLMCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context,input services.FinalEvaluationInput,userPrompt string)(ports.CapabilityDecision,ports.CustomerSalesUsageTelemetry,error){
 	req:=c.finalRequest(input,userPrompt)
-	if _,err:=c.count(ctx,req);err!=nil{return ports.CapabilityDecision{},ports.CustomerSalesUsageTelemetry{},err}
+	tokens,err:=c.count(ctx,req)
+	if err!=nil{return ports.CapabilityDecision{},ports.CustomerSalesUsageTelemetry{},err}
+	if err:=c.ensureModelCapacity(tokens);err!=nil{return ports.CapabilityDecision{},ports.CustomerSalesUsageTelemetry{},err}
 	started:=time.Now()
 	raw,err:=c.client.SendInteraction(ctx,req)
 	if err!=nil{return ports.CapabilityDecision{},ports.CustomerSalesUsageTelemetry{},fmt.Errorf("send final catalog evaluation: %w",err)}
