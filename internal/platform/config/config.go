@@ -50,6 +50,13 @@ type ProcessConfig struct {
 	GeminiBaseURL                  string
 	GeminiModel                    string
 	GeminiHTTPTimeout              time.Duration
+	LiteLLMFallbackEnabled         bool
+	LiteLLMBaseURL                 string
+	LiteLLMAPIKey                  string
+	LiteLLMCustomerModel           string
+	LiteLLMHTTPTimeout             time.Duration
+	LiteLLMMaxOutputTokens         int
+	LiteLLMMaxInputCharacters      int
 	FrontendURL                    string
 }
 
@@ -99,6 +106,13 @@ func LoadFromEnv() (ProcessConfig, error) {
 		GeminiBaseURL:                  strings.TrimRight(strings.TrimSpace(os.Getenv("GEMINI_BASE_URL")), "/"),
 		GeminiModel:                    strings.TrimSpace(os.Getenv("GEMINI_MODEL")),
 		GeminiHTTPTimeout:              30 * time.Second,
+		LiteLLMFallbackEnabled:         false,
+		LiteLLMBaseURL:                 strings.TrimRight(strings.TrimSpace(os.Getenv("LITELLM_BASE_URL")), "/"),
+		LiteLLMAPIKey:                  strings.TrimSpace(os.Getenv("LITELLM_API_KEY")),
+		LiteLLMCustomerModel:           strings.TrimSpace(os.Getenv("LITELLM_CUSTOMER_MODEL")),
+		LiteLLMHTTPTimeout:             20 * time.Second,
+		LiteLLMMaxOutputTokens:         4096,
+		LiteLLMMaxInputCharacters:      48000,
 		FrontendURL:                    strings.TrimRight(strings.TrimSpace(os.Getenv("FRONTEND_URL")), "/"),
 	}
 	if cfg.DatabaseURL == "" {
@@ -167,6 +181,24 @@ func LoadFromEnv() (ProcessConfig, error) {
 	}
 	if cfg.GeminiHTTPTimeout, err = durationEnv("GEMINI_HTTP_TIMEOUT", cfg.GeminiHTTPTimeout); err != nil {
 		return ProcessConfig{}, err
+	}
+	if cfg.LiteLLMFallbackEnabled, err = boolEnv("LITELLM_FALLBACK_ENABLED", false); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.LiteLLMHTTPTimeout, err = durationEnv("LITELLM_HTTP_TIMEOUT", cfg.LiteLLMHTTPTimeout); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.LiteLLMMaxOutputTokens, err = intEnv("LITELLM_MAX_OUTPUT_TOKENS", cfg.LiteLLMMaxOutputTokens); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.LiteLLMMaxInputCharacters, err = intEnv("LITELLM_MAX_INPUT_CHARACTERS", cfg.LiteLLMMaxInputCharacters); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.LiteLLMFallbackEnabled {
+		if cfg.LiteLLMBaseURL == "" || cfg.LiteLLMAPIKey == "" || cfg.LiteLLMCustomerModel == "" || cfg.GeminiAPIKey == "" ||
+			cfg.LiteLLMMaxInputCharacters <= 0 || cfg.LiteLLMMaxOutputTokens <= 0 {
+			return ProcessConfig{}, errors.New("LITELLM_FALLBACK_ENABLED requires Gemini, LITELLM_BASE_URL, LITELLM_API_KEY, LITELLM_CUSTOMER_MODEL, and positive token limits")
+		}
 	}
 	if cfg.LLMEnabled {
 		if cfg.LLMBaseURL == "" || cfg.LLMAPIKey == "" || cfg.LLMModel == "" {
