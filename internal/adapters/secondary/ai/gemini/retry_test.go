@@ -154,7 +154,7 @@ func TestGeminiCustomerSelectionRetriesAndPreservesStatelessRequest(t *testing.T
 	}
 	adapter.retryPolicy = fastGeminiRetryPolicy()
 	output, err := adapter.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		Request: ports.CustomerSalesDecisionRequest{Text: "أريد الاشتراك"},
+		Request:      ports.CustomerSalesDecisionRequest{Text: "أريد الاشتراك"},
 		Capabilities: ports.CustomerSalesCapabilities(true),
 	})
 	if err != nil || output.Decision.Capability != ports.CustomerSalesCapabilityFullCatalog || attempts.Load() != 2 {
