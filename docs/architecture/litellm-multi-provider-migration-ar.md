@@ -35,8 +35,9 @@
 
 ## Remaining work (must not be forgotten)
 
-### Stage 2 — Full catalog correctness
-- Implement LiteLLM-side batch evaluation and final-evaluation adapter using unchanged `CatalogBatchController` ports and schemas.
+### Stage 2 — Full catalog correctness (implemented behind explicit opt-in; production acceptance pending)
+- Implemented `LiteLLMCatalogAdapter` for batch and final evaluation, reusing the existing Gemini prompt/schema/capability builders and the existing complete `CatalogBatchController` paging, coverage and revision checks.
+- Added `/utils/token_counter` with conservative safety allowance; **not an exact tokenizer** for every provider and still requires live route/model fit verification. Exact counting must not be claimed. The controller can split oversized pages; send fails closed when the model-context cap is exceeded.
 - Budget **every actual target-model request** correctly, not by assuming Gemini `countTokens` is universally exact; enforce context limits with fail-closed margin when estimates are used.
 - Preserve all candidate references, complete coverage, revision consistency, and evidence; fallback for a batch must never skip or silently narrow the catalog.
 - Add tests for multipage catalogs, schema definitions, variants/offers, batch failure, catalog revision changes, and model context limits.
@@ -70,6 +71,9 @@ LITELLM_FALLBACK_ENABLED=false
 LITELLM_BASE_URL=http://127.0.0.1:4000
 LITELLM_API_KEY=<gateway-virtual-key>
 LITELLM_CUSTOMER_MODEL=mujeeb-customer
+LITELLM_CATALOG_ENABLED=false
+LITELLM_CATALOG_MODEL=mujeeb-catalog
+LITELLM_MAX_CONTEXT_TOKENS=32768
 LITELLM_HTTP_TIMEOUT=20s
 LITELLM_MAX_OUTPUT_TOKENS=4096
 LITELLM_MAX_INPUT_CHARACTERS=48000
@@ -78,3 +82,5 @@ LITELLM_MAX_INPUT_CHARACTERS=48000
 The key is a **LiteLLM gateway virtual key**, not an upstream model-provider key. Configure actual model routes and ordered fallbacks in LiteLLM separately. A new provider is configuration-only **only if** it passes Mujeeb's supported API features and contract tests.
 
 Docs: https://docs.litellm.ai/docs/interactions
+
+**Stage 2 flag behavior:** With `LITELLM_CATALOG_ENABLED=false`, Gemini catalog evaluation is unchanged. With `true`, the complete catalog evaluation for that run (batch, reduction and final) is handled by the configured LiteLLM catalog route; the application still owns coverage, schema evidence, candidate validation and permissions. Do not enable until end-to-end tests with live model routes and pricing pass.
