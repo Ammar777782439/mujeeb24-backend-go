@@ -11,9 +11,6 @@ func setLiteLLMGatewayConfig(t *testing.T) {
 	t.Setenv("LITELLM_CUSTOMER_MODEL", "mujeeb-customer")
 	t.Setenv("LITELLM_CATALOG_MODEL", "mujeeb-catalog")
 	t.Setenv("LITELLM_MERCHANT_MODEL", "mujeeb-merchant")
-	t.Setenv("LITELLM_FALLBACK_ENABLED", "false")
-	t.Setenv("LITELLM_CATALOG_ENABLED", "false")
-	t.Setenv("LITELLM_MERCHANT_ENABLED", "false")
 	t.Setenv("LLM_ENABLED", "false")
 	t.Setenv("GEMINI_API_KEY", "")
 	t.Setenv("AUTOREPLY_ENABLED", "false")
@@ -30,10 +27,10 @@ func TestGatewayOnlyRequiresCompleteRoutes(t *testing.T) {
 	t.Setenv("LITELLM_CATALOG_MODEL","")
 	if _,err:=LoadFromEnv();err==nil {t.Fatal("gateway-only accepted missing catalog route")}
 }
-func TestGatewayOnlyRejectsObsoleteGoFallbackSwitch(t *testing.T) {
+func TestGatewayOnlyRequiresGatewayKey(t *testing.T) {
 	setLiteLLMGatewayConfig(t)
-	t.Setenv("LITELLM_FALLBACK_ENABLED","true")
-	if _,err:=LoadFromEnv();err==nil {t.Fatal("gateway-only accepted legacy fallback overlay")}
+	t.Setenv("LITELLM_API_KEY","")
+	if _,err:=LoadFromEnv();err==nil {t.Fatal("gateway-only accepted missing virtual key")}
 }
 func TestGatewayOnlyCanEnableAutoReplyWithoutGemini(t *testing.T) {
 	setLiteLLMGatewayConfig(t)
