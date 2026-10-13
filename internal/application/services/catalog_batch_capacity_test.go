@@ -36,8 +36,8 @@ func TestCatalogBatchingPreservesLargeItemCollection(t *testing.T) {
 	projection := CatalogAIProjection{}
 	for i := 0; i < items; i++ {
 		projection.Items = append(projection.Items, CatalogAIItem{
-			ID: fmt.Sprintf("item-%05d", i),
-			Name: fmt.Sprintf("Catalog item %d", i),
+			ID:         fmt.Sprintf("item-%05d", i),
+			Name:       fmt.Sprintf("Catalog item %d", i),
 			Attributes: map[string]any{"size": i},
 		})
 	}
