@@ -12,13 +12,8 @@ import (
 func TestHierarchicalCatalogIncludesAllPagesWithoutReduction(t *testing.T) {
 	catalog := &capabilityCatalogRepo{}
 	model := &capabilityBatchModel{}
-	controller := &CatalogBatchController{
-		CatalogAI: catalog, Gemini: model, RunRepo: &capabilityRunRepo{},
-		TokenBudget: 100, Now: time.Now, NewID: func() string { return "id" },
-	}
-	result, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{
-		AIRunID: "run", BusinessID: "business-1", Presentation: "hierarchy",
-	})
+	controller := &CatalogBatchController{CatalogAI: catalog, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 100, Now: time.Now, NewID: func() string { return "id" }}
+	result, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{AIRunID: "run", BusinessID: "business-1", Presentation: "hierarchy"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,12 +38,7 @@ func TestHierarchicalCatalogNeverTruncatesLongArabicDescriptions(t *testing.T) {
 	original := strings.Repeat("تفاصيل الباقة العربية الكاملة ", 270)
 	price, currency, variantID := "12000.0000", "YER", "variant-1"
 	lines := &catalogHierarchyLines{}
-	item := CatalogAIItem{
-		ID: "item-1", Name: "الباقة الأساسية", CatalogID: "catalog-1",
-		LongDescription: &original,
-		Variants: []CatalogAIVariant{{ID: variantID, CatalogItemID: "item-1", Name: "سنوي"}},
-		Offers: []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1", VariantID: &variantID, Name: "سعر السنة", Amount: &price, Currency: &currency}},
-	}
+	item := CatalogAIItem{ID: "item-1", Name: "الباقة الأساسية", CatalogID: "catalog-1", LongDescription: &original, Variants: []CatalogAIVariant{{ID: variantID, CatalogItemID: "item-1", Name: "سنوي"}}, Offers: []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1", VariantID: &variantID, Name: "سعر السنة", Amount: &price, Currency: &currency}}}
 	if err := lines.appendItem("باقات مجيب", item, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -78,9 +68,7 @@ func TestHierarchicalCatalogNeverTruncatesLongArabicDescriptions(t *testing.T) {
 func TestHierarchicalCatalogRejectsDetachedOfferAndOverlongListing(t *testing.T) {
 	wrong := "variant-from-another-item"
 	lines := &catalogHierarchyLines{}
-	err := lines.appendItem("C", CatalogAIItem{
-		ID: "item-1", Offers: []CatalogAIOffer{{ID: "offer", CatalogItemID: "item-1", VariantID: &wrong}},
-	}, nil)
+	err := lines.appendItem("C", CatalogAIItem{ID: "item-1", Offers: []CatalogAIOffer{{ID: "offer", CatalogItemID: "item-1", VariantID: &wrong}}}, nil)
 	if err == nil {
 		t.Fatal("detached offer incorrectly accepted")
 	}
@@ -93,14 +81,9 @@ func TestHierarchicalCatalogRejectsDetachedOfferAndOverlongListing(t *testing.T)
 
 func TestAutoReplyHierarchicalCatalogSkipsCandidateReduction(t *testing.T) {
 	service, runtime, outbox, runs := capabilityService()
-	runtime.Decision = ports.CapabilityDecision{
-		Capability: ports.CustomerSalesCapabilityFullCatalog, Presentation: "hierarchy",
-	}
+	runtime.Decision = ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityFullCatalog, Presentation: "hierarchy"}
 	model := &capabilityBatchModel{}
-	service.CatalogBatch = &CatalogBatchController{
-		CatalogAI: &capabilityCatalogRepo{}, Gemini: model, RunRepo: runs,
-		TokenBudget: 100, Now: service.now, NewID: service.NewID,
-	}
+	service.CatalogBatch = &CatalogBatchController{CatalogAI: &capabilityCatalogRepo{}, Gemini: model, RunRepo: runs, TokenBudget: 100, Now: service.now, NewID: service.NewID}
 	service.EntityContractPayload = mustMarshal(BuildCatalogEntityContractPayload())
 	result, err := service.Handle(context.Background(), capabilityCommand())
 	if err != nil || !result.Enqueued || outbox.calls == 0 || model.finalCalls != 0 || len(model.seen) != 0 {
