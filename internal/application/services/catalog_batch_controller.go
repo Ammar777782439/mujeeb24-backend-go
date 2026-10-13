@@ -226,6 +226,9 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 					_ = c.markBatchFailed(ctx, rec.ID, err.Error())
 					return CatalogEvaluationResult{}, fmt.Errorf("batch %d evaluation: %w", batch.BatchNumber, err)
 				}
+				// Successful model calls incur usage even if their output is
+				// rejected by the evidence validator.
+				c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, result.Usage, fmt.Sprintf("batch_%d", batch.BatchNumber))
 				if err := validateBatchCandidates(batch, result.Candidates); err != nil {
 					_ = c.markBatchFailed(ctx, rec.ID, err.Error())
 					return CatalogEvaluationResult{}, fmt.Errorf("batch %d returned invalid candidate evidence: %w", batch.BatchNumber, err)
@@ -234,7 +237,6 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 					return CatalogEvaluationResult{}, err
 				}
 				batchRecords[recordIndex].Status = "completed"
-				c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, result.Usage, fmt.Sprintf("batch_%d", batch.BatchNumber))
 				candidateSet = append(candidateSet, result.Candidates...)
 				pageCandidates = append(pageCandidates, result.Candidates...)
 				log.Printf("[CatalogBatch] BATCH_DONE batch=%d items=%d candidates=%d", batch.BatchNumber, len(batch.Items), len(result.Candidates))
@@ -1057,6 +1059,9 @@ func (c *CatalogBatchController) reduceCandidateRound(
 			_ = c.markBatchFailed(ctx, rec.ID, err.Error())
 			return nil, CatalogAIProjection{}, startBatchNumber, fmt.Errorf("candidate reduction batch %d: %w", batch.BatchNumber, err)
 		}
+		// Meter successful provider calls before checking their references.
+		// In particular, rejected candidate IDs must not hide spent tokens.
+		c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, result.Usage, fmt.Sprintf("candidate_reduction_batch_%d", batch.BatchNumber))
 		if err := validateBatchCandidates(batch, result.Candidates); err != nil {
 			_ = c.markBatchFailed(ctx, rec.ID, err.Error())
 			return nil, CatalogAIProjection{}, startBatchNumber, fmt.Errorf("candidate reduction batch %d returned invalid evidence: %w", batch.BatchNumber, err)
@@ -1067,13 +1072,6 @@ func (c *CatalogBatchController) reduceCandidateRound(
 
 		reducedCandidates = append(reducedCandidates, result.Candidates...)
 		appendCandidateProjection(&reducedProjection, batch, result.Candidates, seenItems)
-		c.recordBatchUsage(
-			ctx,
-			input.BusinessID,
-			input.AIRunID,
-			result.Usage,
-			fmt.Sprintf("candidate_reduction_batch_%d", batch.BatchNumber),
-		)
 		log.Printf(
 			"[CatalogBatch] REDUCTION_DONE batch=%d items=%d candidates=%d",
 			batch.BatchNumber,
