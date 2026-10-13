@@ -242,6 +242,11 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			customerSalesAdapter.SetConfigurationProvider(aiConfigCache)
 			runRepo = postgres.NewAIRunTraceRepository(database)
 			customerSalesDecision = customerSalesAdapter
+			if external.LiteLLMCustomerFallback != nil {
+				customerSalesDecision = services.FailoverCustomerSalesDecisionPort{
+					Primary: customerSalesAdapter, Fallback: external.LiteLLMCustomerFallback,
+				}
+			}
 		} else {
 			// OpenAI-compatible providers do not implement the Customer Sales decision port yet.
 			// There is no generic AI fallback path; AutoReply requires the Gemini customer-sales adapter.
