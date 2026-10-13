@@ -16,18 +16,18 @@ func TestBatchCandidateSchemaRestrictsReferencesToBatch(t *testing.T) {
 		{
 			name: "first batch",
 			batch: services.CatalogAIBatchPayload{Items: []services.CatalogAIItem{{
-				ID: "item-a",
+				ID:       "item-a",
 				Variants: []services.CatalogAIVariant{{ID: a}},
-				Offers: []services.CatalogAIOffer{{ID: "offer-a", VariantID: &a}},
+				Offers:   []services.CatalogAIOffer{{ID: "offer-a", VariantID: &a}},
 			}}},
 			expected: []string{"item-a", "variant-a", "offer-a"},
 		},
 		{
 			name: "later reduction batch",
 			batch: services.CatalogAIBatchPayload{Items: []services.CatalogAIItem{{
-				ID: "item-b",
+				ID:       "item-b",
 				Variants: []services.CatalogAIVariant{{ID: b}},
-				Offers: []services.CatalogAIOffer{{ID: "offer-b", VariantID: &b}},
+				Offers:   []services.CatalogAIOffer{{ID: "offer-b", VariantID: &b}},
 			}}},
 			expected: []string{"item-b", "variant-b", "offer-b"},
 		},
