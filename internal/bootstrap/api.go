@@ -382,10 +382,14 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			if err != nil {
 				return nil, fmt.Errorf("build Gemini catalog batch client: %w", err)
 			}
+			var catalogEvaluator services.BatchGeminiClient = batchClient
+			if external.LiteLLMCatalogClient != nil {
+				catalogEvaluator = external.LiteLLMCatalogClient
+			}
 			service.CatalogBatch = &services.CatalogBatchController{
 				CatalogAI:     postgres.NewCatalogAIReadRepository(database),
 				TokenCounter:  batchTokenCounter,
-				Gemini:        batchClient,
+				Gemini:        catalogEvaluator,
 				RunRepo:       postgres.NewAIRunTraceRepository(database),
 				TokenBudget:   8000,
 				Now:           func() time.Time { return time.Now().UTC() },
