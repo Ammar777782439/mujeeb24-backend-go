@@ -32,7 +32,7 @@ func TestLiteLLMCustomerSalesUsesExistingCapabilityBoundary(t *testing.T) {
 			t.Errorf("capability or system contract changed")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"completed","outputs":[{"type":"function_call","id":"call-1","name":"respond_without_action","arguments":"{"response_text":"وعليكم السلام"}"}],"usage":{"total_input_tokens":23,"total_output_tokens":8}}`))
+		_, _ = w.Write([]byte(`{"status":"completed","outputs":[{"type":"function_call","id":"call-1","name":"respond_without_action","arguments":{"response_text":"وعليكم السلام"}}],"usage":{"total_input_tokens":23,"total_output_tokens":8}}`))
 	}))
 	defer server.Close()
 
@@ -64,12 +64,12 @@ func TestLiteLLMCustomerSalesRejectsUnknownAndParallelTools(t *testing.T) {
 		name string
 		body string
 	}{
-		{"unknown", `{"status":"completed","outputs":[{"type":"function_call","id":"id-1","name":"unsupported_tool","arguments":"{}"}]}`},
-		{"parallel", `{"status":"completed","outputs":[{"type":"function_call","id":"id-1","name":"respond_without_action","arguments":"{"response_text":"yes"}"},{"type":"function_call","id":"id-2","name":"respond_without_action","arguments":"{"response_text":"yes"}"}]}`},
+		{"unknown", `{"status":"completed","outputs":[{"type":"function_call","id":"id-1","name":"unsupported_tool","arguments":{}}]}`},
+		{"parallel", `{"status":"completed","outputs":[{"type":"function_call","id":"id-1","name":"respond_without_action","arguments":{"response_text":"yes"}},{"type":"function_call","id":"id-2","name":"respond_without_action","arguments":{"response_text":"yes"}}]}`},
 		{"text_only", `{"status":"completed","outputs":[{"type":"text","text":"unverified"}]}`},
-		{"incomplete", `{"status":"incomplete","outputs":[{"type":"function_call","id":"id-1","name":"respond_without_action","arguments":"{"response_text":"hi"}"}]}`},
-		{"extra_arguments", `{"status":"completed","outputs":[{"type":"function_call","id":"id-1","name":"respond_without_action","arguments":"{"response_text":"hi","business_id":"other"}"}]}`},
-		{"missing_call_id", `{"status":"completed","outputs":[{"type":"function_call","name":"respond_without_action","arguments":"{"response_text":"hi"}"}]}`},
+		{"incomplete", `{"status":"incomplete","outputs":[{"type":"function_call","id":"id-1","name":"respond_without_action","arguments":{"response_text":"hi"}}]}`},
+		{"extra_arguments", `{"status":"completed","outputs":[{"type":"function_call","id":"id-1","name":"respond_without_action","arguments":{"response_text":"hi","business_id":"other"}}]}`},
+		{"missing_call_id", `{"status":"completed","outputs":[{"type":"function_call","name":"respond_without_action","arguments":{"response_text":"hi"}}]}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
