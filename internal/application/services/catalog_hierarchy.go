@@ -116,6 +116,7 @@ type catalogHierarchyLines struct {
 	lines []string
 	runes int
 }
+
 func (p *catalogHierarchyLines) add(value string) {
 	p.lines = append(p.lines, value)
 	p.runes += utf8.RuneCountInString(value) + 1
@@ -252,7 +253,7 @@ func formatHierarchyAttributes(attributes map[string]any, schema *CatalogAIAttri
 		if err != nil {
 			value = []byte("null")
 		}
-		parts = append(parts, label+": "+strings.Trim(string(value), "\"" ))
+		parts = append(parts, label+": "+strings.Trim(string(value), "\""))
 	}
 	return strings.Join(parts, "، ")
 }
