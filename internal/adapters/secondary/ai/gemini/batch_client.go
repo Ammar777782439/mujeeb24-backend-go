@@ -51,6 +51,7 @@ type BatchClient struct {
 	model          string
 	httpClient     *http.Client
 	requestTimeout time.Duration
+	retryPolicy geminiRetryPolicy
 	systemPrompt   string
 	// configProvider, when set, is called at the start of every batch call
 	// to get the ACTIVE runtime configuration. Per §1-2: the runtime gets
@@ -106,6 +107,10 @@ func NewBatchClient(cfg BatchClientConfig) (*BatchClient, error) {
 	if client == nil {
 		client = &http.Client{Timeout: timeout}
 	}
+	retryPolicy, err := loadGeminiRetryPolicy()
+	if err != nil {
+		return nil, err
+	}
 	systemPrompt := strings.TrimSpace(cfg.SystemPrompt)
 	if systemPrompt == "" {
 		systemPrompt = prompts.BatchEvaluationSystemPrompt
@@ -116,6 +121,7 @@ func NewBatchClient(cfg BatchClientConfig) (*BatchClient, error) {
 		model:          model,
 		httpClient:     client,
 		requestTimeout: timeout,
+		retryPolicy: retryPolicy,
 		systemPrompt:   systemPrompt,
 	}, nil
 }
@@ -420,13 +426,7 @@ func (c *BatchClient) sendRequestWithConfig(ctx context.Context, reqBody batchGe
 	url := strings.TrimRight(rc.baseURL, "/") + "/v1/interactions"
 	reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
-	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(buf))
-	if err != nil {
-		return batchGeminiResponse{}, fmt.Errorf("build request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-goog-api-key", rc.apiKey)
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := doGeminiPOSTWithRetry(reqCtx, c.httpClient, url, rc.apiKey, buf, c.retryPolicy, true)
 	if err != nil {
 		return batchGeminiResponse{}, fmt.Errorf("send request: %w", err)
 	}
