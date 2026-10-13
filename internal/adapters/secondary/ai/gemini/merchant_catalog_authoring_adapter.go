@@ -2,7 +2,6 @@ package gemini
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/prompts"
 )
 
 type GeminiMerchantCatalogAuthoringAdapter struct {
@@ -71,34 +69,16 @@ func (r *GeminiMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 		return merchantcatalogai.Proposal{}, fmt.Errorf("merchant message exceeds %d characters", maxInput)
 	}
 
-	contextPayload := map[string]any{
-		"business_id":      input.BusinessID,
-		"principal_id":     input.PrincipalID,
-		"session_id":       input.SessionID,
-		"default_currency": input.DefaultCurrency,
-		"catalog": map[string]any{
-			"id":     input.SelectedCatalog.ID,
-			"name":   input.SelectedCatalog.Name,
-			"status": input.SelectedCatalog.Status,
-		},
-		"conversation_history": input.History,
-		"merchant_message":     input.Message,
-	}
-	encodedContext, err := json.Marshal(contextPayload)
+	systemText, encodedContext, err := buildMerchantCatalogAuthoringPrompt(input)
 	if err != nil {
-		return merchantcatalogai.Proposal{}, fmt.Errorf("encode merchant catalog AI context: %w", err)
-	}
-
-	systemText := prompts.MerchantCatalogAIV2SystemPrompt
-	if len(input.EntityContract) > 0 {
-		systemText += "\n\n# Catalog Entity Contract\n" + string(input.EntityContract)
+		return merchantcatalogai.Proposal{}, err
 	}
 
 	tools := merchantCatalogInteractionTools(input.Capabilities)
 	req := merchantCatalogInteractionRequest{
 		Model:             model,
 		Store:             true,
-		Input:             string(encodedContext),
+		Input:             encodedContext,
 		SystemInstruction: systemText,
 		Tools:             tools,
 		ResponseFormat: &merchantCatalogInteractionFormat{
