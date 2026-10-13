@@ -280,6 +280,16 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 	if err != nil {
 		return CatalogEvaluationResult{}, err
 	}
+	// The final LLM call (including any candidate-reduction rounds) may run
+	// after the first revision check. A merchant can change an offer or price
+	// during that time. Never publish a decision from a stale catalog.
+	revisionAfterFinal, err := c.CatalogAI.GetRevision(ctx, input.BusinessID)
+	if err != nil {
+		return CatalogEvaluationResult{}, fmt.Errorf("read catalog revision after final evaluation: %w", err)
+	}
+	if revisionAfterFinal != revisionStart {
+		return CatalogEvaluationResult{}, errors.New("catalog changed during final evaluation; refusing stale commercial AI result")
+	}
 	return CatalogEvaluationResult{
 		Decision: proposal,
 		// Validation trusts exactly the projection exposed to the final model
