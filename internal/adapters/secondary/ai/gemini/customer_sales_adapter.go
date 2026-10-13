@@ -39,7 +39,7 @@ type GeminiCustomerSalesAdapter struct {
 
 // resolvedAIConfig holds the effective values for one Gemini call.
 type resolvedAIConfig struct {
-	configVersion int
+	configVersion      int
 	apiKey             string
 	model              string
 	baseURL            string
