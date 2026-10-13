@@ -73,6 +73,7 @@ func (c *BatchClient) resolveConfig(ctx context.Context) (*resolvedAIConfig, err
 		return &resolvedAIConfig{
 			apiKey:             cfg.APIKey,
 			model:              cfg.Model,
+			configVersion:      cfg.ConfigurationVersion,
 			baseURL:            cfg.BaseURL,
 			maxOutputTokens:    cfg.MaxOutputTokens,
 			maxInputCharacters: cfg.MaxInputCharacters,
@@ -218,7 +219,7 @@ func (c *BatchClient) CountBatchTokens(ctx context.Context, input services.Batch
 	url := fmt.Sprintf("%s/v1beta/models/%s:countTokens", rc.baseURL, rc.model)
 	reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
-	resp, err := doGeminiPOSTWithRetry(reqCtx, c.httpClient, url, rc.apiKey, buf, c.retryPolicy, true)
+	resp, err := doGeminiPOSTWithRetry(reqCtx, c.httpClient, url, rc.apiKey, buf, c.retryPolicy, true, geminiRetryTrace{stage: "catalog_batch_token_count", model: rc.model, source: geminiConfigSource(rc.configVersion)})
 	if err != nil {
 		return 0, fmt.Errorf("send token count request: %w", err)
 	}
@@ -348,7 +349,7 @@ func (c *BatchClient) CountFinalTokens(ctx context.Context, input services.Final
 	url := fmt.Sprintf("%s/v1beta/models/%s:countTokens", rc.baseURL, rc.model)
 	reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
-	resp, err := doGeminiPOSTWithRetry(reqCtx, c.httpClient, url, rc.apiKey, buf, c.retryPolicy, true)
+	resp, err := doGeminiPOSTWithRetry(reqCtx, c.httpClient, url, rc.apiKey, buf, c.retryPolicy, true, geminiRetryTrace{stage: "catalog_final_token_count", model: rc.model, source: geminiConfigSource(rc.configVersion)})
 	if err != nil {
 		return 0, fmt.Errorf("send token count request: %w", err)
 	}
@@ -413,7 +414,7 @@ func (c *BatchClient) sendRequestWithConfig(ctx context.Context, reqBody batchGe
 	url := strings.TrimRight(rc.baseURL, "/") + "/v1/interactions"
 	reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
-	resp, err := doGeminiPOSTWithRetry(reqCtx, c.httpClient, url, rc.apiKey, buf, c.retryPolicy, true)
+	resp, err := doGeminiPOSTWithRetry(reqCtx, c.httpClient, url, rc.apiKey, buf, c.retryPolicy, true, geminiRetryTrace{stage: "catalog_evaluation", model: rc.model, source: geminiConfigSource(rc.configVersion)})
 	if err != nil {
 		return batchGeminiResponse{}, fmt.Errorf("send request: %w", err)
 	}
