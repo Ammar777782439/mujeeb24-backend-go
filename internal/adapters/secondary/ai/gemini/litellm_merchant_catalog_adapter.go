@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/litellm"
@@ -193,6 +192,3 @@ func (a *LiteLLMMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, in
 
 var _ merchantcatalogai.MerchantCatalogAuthoringPort = (*LiteLLMMerchantCatalogAuthoringAdapter)(nil)
 
-// Keep io imported only when using a strict JSON decoder at the business boundary.
-// The underlying parseMerchantCatalogProposal currently uses io.EOF for this check.
-var _ = io.EOF
