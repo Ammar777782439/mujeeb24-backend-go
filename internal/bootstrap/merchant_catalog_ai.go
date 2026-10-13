@@ -15,16 +15,21 @@ func wireMerchantCatalogAuthoringAI(
 	database *postgres.Adapter,
 	geminiHTTPClient *gemini.GeminiHTTPClient,
 	configProvider ports.AIConfigurationProvider,
+	merchantOverride merchantcatalogai.MerchantCatalogAuthoringPort,
 ) (*handlers.Server, error) {
-	if geminiHTTPClient == nil {
+	if geminiHTTPClient == nil && merchantOverride == nil {
 		return dashboardServer, nil
 	}
 
-	merchantCatalogAuthoring, err := gemini.NewGeminiMerchantCatalogAuthoringAdapter(geminiHTTPClient)
-	if err != nil {
-		return nil, fmt.Errorf("build Gemini merchant catalog authoring adapter: %w", err)
+	var merchantCatalogAuthoring merchantcatalogai.MerchantCatalogAuthoringPort = merchantOverride
+	if merchantCatalogAuthoring == nil {
+		geminiAuthoring, err := gemini.NewGeminiMerchantCatalogAuthoringAdapter(geminiHTTPClient)
+		if err != nil {
+			return nil, fmt.Errorf("build Gemini merchant catalog authoring adapter: %w", err)
+		}
+		geminiAuthoring.SetConfigurationProvider(configProvider)
+		merchantCatalogAuthoring = geminiAuthoring
 	}
-	merchantCatalogAuthoring.SetConfigurationProvider(configProvider)
 
 	catalogRepo := postgres.NewCatalogRepository(database)
 	merchantCatalogAuthoringAgent := &merchantcatalogai.Agent{
