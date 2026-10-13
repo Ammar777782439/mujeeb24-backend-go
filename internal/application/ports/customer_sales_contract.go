@@ -149,6 +149,7 @@ type CustomerSalesUsageTelemetry struct {
 	InputTokens         int
 	CachedTokens        int
 	OutputTokens        int
+	Provider            string
 	Model               string
 	EstimatedCostMicros int64
 	// LatencyMs is the wall-clock duration of the Gemini call.
