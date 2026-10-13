@@ -191,6 +191,7 @@ func (c *GeminiCustomerSalesAdapter) decideInteraction(
 			InputTokens:         resp.Usage.TotalInputTokens,
 			CachedTokens:        resp.Usage.TotalCachedTokens,
 			OutputTokens:        resp.Usage.TotalOutputTokens,
+			Provider:            "google_gemini",
 			Model:               rc.model,
 			EstimatedCostMicros: 0,
 			LatencyMs:           latencyMs,
