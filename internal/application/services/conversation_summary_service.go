@@ -378,7 +378,7 @@ func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, bus
 		nonCachedInput = 0
 	}
 	if s.AIPricing != nil {
-		pricing, err := s.AIPricing.GetCurrentForProvider(ctx, "google_gemini", usage.Model)
+		pricing, err := s.AIPricing.GetCurrentForProvider(ctx, usageProvider(usage.Provider), usage.Model)
 		if err == nil {
 			pricingVersion = pricing.PricingVersion
 			inputCost := int64(nonCachedInput) * int64(pricing.InputPerMillionYER) / 1_000_000
@@ -410,7 +410,7 @@ func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, bus
 		ID:                recordID,
 		BusinessID:        businessID,
 		SubscriptionID:    subscriptionID,
-		Provider:          "google_gemini",
+		Provider:          usageProvider(usage.Provider),
 		Model:             usage.Model,
 		InputTokens:       int64(nonCachedInput),
 		CachedInputTokens: int64(cachedInput),
