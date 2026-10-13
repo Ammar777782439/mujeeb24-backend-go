@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -106,59 +107,125 @@ func geminiRetryAfter(header string, now time.Time) time.Duration {
 	return 0
 }
 
+// geminiRetryTrace carries safe observability metadata. Never attach credentials,
+// user input, prompt text, or raw provider errors to these logs.
+type geminiRetryTrace struct {
+	stage  string
+	model  string
+	source string
+}
+
+var geminiRequestSequence atomic.Uint64
+
+func geminiConfigSource(version int) string {
+	if version > 0 {
+		return "db_active"
+	}
+	return "env_bootstrap"
+}
+
+func safeGeminiLogText(s string) string {
+	if s == "" {
+		return "unspecified"
+	}
+	return strings.NewReplacer("\n", "_", "\r", "_", "\t", "_", " ", "_").Replace(s)
+}
+
 // doGeminiPOSTWithRetry retries provider failures only. The payload and API key
 // are never logged. Callers MUST close the returned response body.
 // retryTransport is allowed only for stateless, non-executing Gemini requests;
 // ambiguous network failures of stateful interactions are not replayed.
 func doGeminiPOSTWithRetry(
 	ctx context.Context, client *http.Client, url, apiKey string, payload []byte,
-	policy geminiRetryPolicy, retryTransport bool,
+	policy geminiRetryPolicy, retryTransport bool, metadata ...geminiRetryTrace,
 ) (*http.Response, error) {
+	trace := geminiRetryTrace{stage: "unspecified", model: "unspecified", source: "unspecified"}
+	if len(metadata) > 0 {
+		trace = metadata[0]
+	}
+	trace.stage = safeGeminiLogText(trace.stage)
+	trace.model = safeGeminiLogText(trace.model)
+	trace.source = safeGeminiLogText(trace.source)
+	requestID := geminiRequestSequence.Add(1)
+	started := time.Now()
+	log.Printf("[Gemini] REQUEST_START request=%d stage=%s model=%s config_source=%s max_attempts=%d", requestID, trace.stage, trace.model, trace.source, policy.maxAttempts)
+	logEnd := func(outcome, reason string, attempt, status int) {
+		log.Printf("[Gemini] REQUEST_END request=%d stage=%s model=%s outcome=%s reason=%s attempts=%d/%d status=%d elapsed_ms=%d",
+			requestID, trace.stage, trace.model, outcome, reason, attempt, policy.maxAttempts, status, time.Since(started).Milliseconds())
+	}
 	for attempt := 1; attempt <= policy.maxAttempts; attempt++ {
 		if err := ctx.Err(); err != nil {
+			logEnd("failed", "context_cancelled", attempt-1, 0)
 			return nil, err
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 		if err != nil {
+			logEnd("failed", "invalid_request", attempt-1, 0)
 			return nil, fmt.Errorf("build Gemini request: %w", err)
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("x-goog-api-key", apiKey)
+		log.Printf("[Gemini] ATTEMPT_START request=%d stage=%s attempt=%d/%d", requestID, trace.stage, attempt, policy.maxAttempts)
+		attemptStarted := time.Now()
 		resp, err := client.Do(req)
 		if err != nil {
-			if !retryTransport || !retryableGeminiTransportError(err) || attempt == policy.maxAttempts || ctx.Err() != nil {
-				if ctx.Err() != nil {
-					return nil, ctx.Err()
-				}
+			log.Printf("[Gemini] ATTEMPT_RESULT request=%d stage=%s attempt=%d/%d result=transport_error elapsed_ms=%d",
+				requestID, trace.stage, attempt, policy.maxAttempts, time.Since(attemptStarted).Milliseconds())
+			if ctx.Err() != nil {
+				logEnd("failed", "context_cancelled", attempt, 0)
+				return nil, ctx.Err()
+			}
+			if !retryTransport || !retryableGeminiTransportError(err) {
+				logEnd("failed", "transport_not_retryable", attempt, 0)
 				return nil, fmt.Errorf("Gemini transport: %w", err)
 			}
-		} else {
-			if !isRetryableGeminiStatus(resp.StatusCode) || attempt == policy.maxAttempts {
-				return resp, nil
+			if attempt == policy.maxAttempts {
+				logEnd("failed", "attempt_limit", attempt, 0)
+				return nil, fmt.Errorf("Gemini transport: %w", err)
 			}
 			delay := geminiRetryDelay(policy, attempt)
-			if serverDelay := geminiRetryAfter(resp.Header.Get("Retry-After"), time.Now()); serverDelay > delay {
-				delay = serverDelay
-			}
-			// A Retry-After beyond our bounded policy is not permission to hammer
-			// the provider earlier. Surface the HTTP error to the caller instead.
-			if delay > policy.maxDelay {
-				return resp, nil
-			}
-			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 16<<10))
-			_ = resp.Body.Close()
-			log.Printf("[Gemini] RETRY status=%d attempt=%d/%d delay=%s", resp.StatusCode, attempt, policy.maxAttempts, delay)
+			log.Printf("[Gemini] RETRY_SCHEDULED request=%d stage=%s after_attempt=%d reason=transport_error delay=%s",
+				requestID, trace.stage, attempt, delay)
 			if err := sleepGeminiRetry(ctx, delay); err != nil {
+				logEnd("failed", "context_cancelled_during_backoff", attempt, 0)
 				return nil, err
 			}
 			continue
 		}
+		log.Printf("[Gemini] ATTEMPT_RESULT request=%d stage=%s attempt=%d/%d status=%d elapsed_ms=%d",
+			requestID, trace.stage, attempt, policy.maxAttempts, resp.StatusCode, time.Since(attemptStarted).Milliseconds())
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			logEnd("success", "http_success", attempt, resp.StatusCode)
+			return resp, nil
+		}
+		if !isRetryableGeminiStatus(resp.StatusCode) {
+			logEnd("failed", "status_not_retryable", attempt, resp.StatusCode)
+			return resp, nil
+		}
+		if attempt == policy.maxAttempts {
+			logEnd("failed", "attempt_limit", attempt, resp.StatusCode)
+			return resp, nil
+		}
 		delay := geminiRetryDelay(policy, attempt)
-		log.Printf("[Gemini] RETRY transport attempt=%d/%d delay=%s", attempt, policy.maxAttempts, delay)
+		if serverDelay := geminiRetryAfter(resp.Header.Get("Retry-After"), time.Now()); serverDelay > delay {
+			delay = serverDelay
+		}
+		if delay > policy.maxDelay {
+			log.Printf("[Gemini] RETRY_SKIPPED request=%d stage=%s attempt=%d reason=retry_after_exceeds_max_delay required_delay=%s max_delay=%s",
+				requestID, trace.stage, attempt, delay, policy.maxDelay)
+			logEnd("failed", "retry_after_exceeds_max_delay", attempt, resp.StatusCode)
+			return resp, nil
+		}
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 16<<10))
+		_ = resp.Body.Close()
+		log.Printf("[Gemini] RETRY_SCHEDULED request=%d stage=%s after_attempt=%d status=%d delay=%s",
+			requestID, trace.stage, attempt, resp.StatusCode, delay)
 		if err := sleepGeminiRetry(ctx, delay); err != nil {
+			logEnd("failed", "context_cancelled_during_backoff", attempt, 0)
 			return nil, err
 		}
 	}
+	logEnd("failed", "attempt_limit", policy.maxAttempts, 0)
 	return nil, errors.New("Gemini retry attempts exhausted")
 }
 
