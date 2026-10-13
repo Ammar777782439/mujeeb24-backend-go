@@ -7,6 +7,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/litellm"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/providers/socialapi"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
 )
 
@@ -16,6 +17,7 @@ type ExternalAdapters struct {
 	GeminiHTTPClient               *gemini.GeminiHTTPClient
 	LiteLLMCustomerFallback        ports.CustomerSalesDecisionPort
 	LiteLLMCatalogClient           *gemini.LiteLLMCatalogAdapter
+	LiteLLMMerchantAuthoring       merchantcatalogai.MerchantCatalogAuthoringPort
 	SocialAPIHealthProbe           ports.HealthCheckProbe
 	LLMConfigError                 error
 	CustomerSalesEnabled           bool
@@ -36,6 +38,7 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 		"llm_runtime":          "disabled",
 		"litellm_fallback":     "disabled",
 		"litellm_catalog":      "disabled",
+		"litellm_merchant":     "disabled",
 	}
 	if a.SocialWebhook != nil {
 		checks["socialapi_webhook"] = "configured"
@@ -61,6 +64,9 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 	}
 	if a.LiteLLMCatalogClient != nil {
 		checks["litellm_catalog"] = "configured"
+	}
+	if a.LiteLLMMerchantAuthoring != nil {
+		checks["litellm_merchant"] = "configured"
 	}
 	return checks
 }
@@ -113,6 +119,15 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 				adapters.LLMConfigError = adapterErr
 			} else {
 				adapters.LiteLLMCustomerFallback = adapter
+				if cfg.LiteLLMMerchantEnabled {
+					merchantAdapter, merchantErr := gemini.NewLiteLLMMerchantCatalogAuthoringAdapter(gateway, cfg.LiteLLMMerchantModel,
+						cfg.LiteLLMMaxOutputTokens, cfg.LiteLLMMerchantMaxRequestBytes)
+					if merchantErr != nil {
+						adapters.LLMConfigError = merchantErr
+					} else {
+						adapters.LiteLLMMerchantAuthoring = merchantAdapter
+					}
+				}
 				if cfg.LiteLLMCatalogEnabled {
 					catalogAdapter, catalogErr := gemini.NewLiteLLMCatalogAdapter(gateway, cfg.LiteLLMCatalogModel,
 						cfg.LiteLLMMaxOutputTokens, cfg.LiteLLMMaxContextTokens)
