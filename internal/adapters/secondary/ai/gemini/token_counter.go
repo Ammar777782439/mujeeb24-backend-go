@@ -87,10 +87,10 @@ func (c *TokenCounter) resolveConfig(ctx context.Context) (*resolvedAIConfig, er
 			return nil, fmt.Errorf("resolve AI config for token counting: %w", err)
 		}
 		return &resolvedAIConfig{
-			apiKey:  cfg.APIKey,
-			model:   cfg.Model,
-			configVersion: cfg.ConfigurationVersion,
-			baseURL: cfg.BaseURL,
+			apiKey:         cfg.APIKey,
+			model:          cfg.Model,
+			configVersion:  cfg.ConfigurationVersion,
+			baseURL:        cfg.BaseURL,
 		}, nil
 	}
 	return &resolvedAIConfig{
