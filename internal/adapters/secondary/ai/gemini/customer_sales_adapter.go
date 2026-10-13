@@ -39,6 +39,7 @@ type GeminiCustomerSalesAdapter struct {
 
 // resolvedAIConfig holds the effective values for one Gemini call.
 type resolvedAIConfig struct {
+	configVersion int
 	apiKey             string
 	model              string
 	baseURL            string
@@ -66,6 +67,7 @@ func (c *GeminiCustomerSalesAdapter) resolveConfig(ctx context.Context) (*resolv
 		return &resolvedAIConfig{
 			apiKey:             cfg.APIKey,
 			model:              cfg.Model,
+			configVersion:      cfg.ConfigurationVersion,
 			baseURL:            cfg.BaseURL,
 			maxOutputTokens:    cfg.MaxOutputTokens,
 			maxInputCharacters: cfg.MaxInputCharacters,
@@ -220,7 +222,7 @@ func (c *GeminiCustomerSalesAdapter) sendInteractionRequest(
 	defer cancel()
 
 	url := strings.TrimRight(rc.baseURL, "/") + "/v1/interactions"
-	httpResp, err := doGeminiPOSTWithRetry(reqCtx, c.httpClient, url, rc.apiKey, buf, c.retryPolicy, true)
+	httpResp, err := doGeminiPOSTWithRetry(reqCtx, c.httpClient, url, rc.apiKey, buf, c.retryPolicy, true, geminiRetryTrace{stage: "customer_decision", model: rc.model, source: geminiConfigSource(rc.configVersion)})
 	if err != nil {
 		return interactionResponse{}, fmt.Errorf("send interaction request: %w", err)
 	}
