@@ -1,3 +1,10 @@
+## Permanent project decisions — 2026-10-13
+
+1. **NO MERGE:** Do not merge `feat/ai-litellm-multi-provider-gateway` into the source branch, `main`, or any other branch even when ALL migration phases are complete. No auto-merge and no PR merge without a fresh explicit instruction from the owner. Continue commits **on this isolated branch only**.
+2. **AFTER COMPLETION:** Once the full LiteLLM-only architecture passes B2C, full Universal Catalog, B2B, billing, runtime recovery and live model acceptance checks, **remove the obsolete direct-provider/fallback code, unused adapters, duplicate config, stale docs and dead tests**, then retain the new unified LiteLLM gateway. This cleanup must happen **on this same feature branch**, not as a merge. Do not delete old code before all equivalents work.
+3. **Keep LiteLLM's own multi-provider failover:** "Remove old fallbacks" means removing obsolete Mujeeb Go fallback paths and dual integrations, **NOT** removing the desired multi-provider failover configured in LiteLLM.
+4. The owner explicitly requires these rules to remain in the repository as handoff/continuation constraints.
+
 # Mujeeb 24 — LiteLLM multi-provider migration
 
 **Branch:** `feat/ai-litellm-multi-provider-gateway`  
