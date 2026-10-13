@@ -18,7 +18,6 @@
 package gemini
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -219,15 +218,9 @@ func (c *BatchClient) CountBatchTokens(ctx context.Context, input services.Batch
 	url := fmt.Sprintf("%s/v1beta/models/%s:countTokens", rc.baseURL, rc.model)
 	reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
-	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(buf))
+	resp, err := doGeminiPOSTWithRetry(reqCtx, c.httpClient, url, rc.apiKey, buf, c.retryPolicy, true)
 	if err != nil {
-		return 0, fmt.Errorf("build exact countTokens request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-goog-api-key", rc.apiKey)
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return 0, fmt.Errorf("send exact countTokens request: %w", err)
+		return 0, fmt.Errorf("send token count request: %w", err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
@@ -355,15 +348,9 @@ func (c *BatchClient) CountFinalTokens(ctx context.Context, input services.Final
 	url := fmt.Sprintf("%s/v1beta/models/%s:countTokens", rc.baseURL, rc.model)
 	reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
-	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(buf))
+	resp, err := doGeminiPOSTWithRetry(reqCtx, c.httpClient, url, rc.apiKey, buf, c.retryPolicy, true)
 	if err != nil {
-		return 0, fmt.Errorf("build final countTokens request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-goog-api-key", rc.apiKey)
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return 0, fmt.Errorf("send final countTokens request: %w", err)
+		return 0, fmt.Errorf("send token count request: %w", err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
