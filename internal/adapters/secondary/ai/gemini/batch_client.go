@@ -51,7 +51,7 @@ type BatchClient struct {
 	model          string
 	httpClient     *http.Client
 	requestTimeout time.Duration
-	retryPolicy geminiRetryPolicy
+	retryPolicy    geminiRetryPolicy
 	systemPrompt   string
 	// configProvider, when set, is called at the start of every batch call
 	// to get the ACTIVE runtime configuration. Per §1-2: the runtime gets
@@ -121,7 +121,7 @@ func NewBatchClient(cfg BatchClientConfig) (*BatchClient, error) {
 		model:          model,
 		httpClient:     client,
 		requestTimeout: timeout,
-		retryPolicy: retryPolicy,
+		retryPolicy:    retryPolicy,
 		systemPrompt:   systemPrompt,
 	}, nil
 }
