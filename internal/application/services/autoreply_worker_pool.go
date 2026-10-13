@@ -79,7 +79,7 @@ func (p *AutoReplyWorkerPool) runTask(task autoReplyTask) {
 	}()
 	timeout := task.executionTimeout
 	if timeout <= 0 {
-		timeout = 120 * time.Second
+		timeout = 300 * time.Second
 	}
 	autoReplyCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()

@@ -130,6 +130,25 @@ func (r *AIDecisionRepository) RequestHumanReview(ctx context.Context, patch por
 	return record, classifyAIDecisionMutationMiss(ctx, executor, patch, err)
 }
 
+func (r *AIDecisionRepository) MarkExecuted(ctx context.Context, patch ports.AIDecisionExecutionPatch) (ports.AIDecisionRecord, error) {
+	executor, err := r.executor(ctx)
+	if err != nil {
+		return ports.AIDecisionRecord{}, err
+	}
+	if patch.BusinessID == "" || patch.DecisionID == "" || patch.ExecutionReference == "" || patch.ExecutedAt.IsZero() {
+		return ports.AIDecisionRecord{}, invalidRepositoryInput("ai_decision.mark_executed", "business, decision, execution reference, and timestamp are required")
+	}
+	outcome := patch.Outcome
+	if outcome == "" {
+		outcome = "enqueued"
+	}
+	record, err := scanAIDecision(executor.QueryRow(ctx, `UPDATE ai_decisions SET lifecycle = 'executed', executed_at = $3, execution_reference = $4, outcome = $5, resource_version = resource_version + 1, updated_at = $3 WHERE business_id = $1::uuid AND id = $2::uuid AND lifecycle IN ('proposed', 'validated', 'authorized') RETURNING id::text, business_id::text, conversation_id::text, source_message_reference, intent_base, domain_context, entities, evidence_references, requested_action, confidence_value::text, confidence_band, requires_human, missing_information, reason_codes, policy_reference, policy_version, knowledge_version, model_reference, schema_version, lifecycle, policy_decision, outcome, execution_reference, correlation_id::text, causation_id::text, expires_at, human_review_reason, human_review_requested_at, human_review_requested_by, decided_at, resource_version, created_at, updated_at, ai_run_id::text, effective_action, effective_decision_reason, authorized_at, executed_at, requested_capability, effective_capability`, patch.BusinessID, patch.DecisionID, patch.ExecutedAt, patch.ExecutionReference, outcome), "ai_decision.mark_executed")
+	if err == nil {
+		return record, nil
+	}
+	return record, classifyAIDecisionMutationMiss(ctx, executor, ports.HumanReviewPatch{BusinessID: patch.BusinessID, DecisionID: patch.DecisionID}, err)
+}
+
 func (r *AIDecisionRepository) executor(ctx context.Context) (SQLExecutor, error) {
 	if r == nil || r.adapter == nil {
 		return nil, ErrPoolClosed

@@ -598,6 +598,20 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		result.OutboundMessageID = commands.MessageID(outbound.ID)
 		result.OutboxEntryID = commands.ID(outboxEntry.ID)
 		result.Enqueued = true
+
+		if s.DecisionRepository != nil {
+			executedRecord, execErr := s.DecisionRepository.MarkExecuted(txCtx, ports.AIDecisionExecutionPatch{
+				BusinessID:         businessID,
+				DecisionID:         decision.ID,
+				ExecutionReference: outbound.ID,
+				Outcome:            "enqueued",
+				ExecutedAt:         now,
+			})
+			if execErr != nil {
+				return mapAIRepositoryError(execErr)
+			}
+			result.Decision = aiDecisionView(executedRecord)
+		}
 		return nil
 	})
 	if err != nil {

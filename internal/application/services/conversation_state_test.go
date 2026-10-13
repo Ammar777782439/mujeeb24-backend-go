@@ -69,6 +69,9 @@ func (stubDecisionRepo) Get(_ context.Context, _, _ string) (ports.AIDecisionRec
 func (stubDecisionRepo) RequestHumanReview(_ context.Context, _ ports.HumanReviewPatch) (ports.AIDecisionRecord, error) {
 	return ports.AIDecisionRecord{}, nil
 }
+func (stubDecisionRepo) MarkExecuted(_ context.Context, patch ports.AIDecisionExecutionPatch) (ports.AIDecisionRecord, error) {
+	return ports.AIDecisionRecord{ID: patch.DecisionID, Lifecycle: "executed"}, nil
+}
 
 type stubRefRepo struct{}
 

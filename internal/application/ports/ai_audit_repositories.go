@@ -7,6 +7,7 @@ import (
 
 type AIDecisionRepository interface {
 	CreateProposed(ctx context.Context, draft AIDecisionDraft) (AIDecisionRecord, error)
+	MarkExecuted(ctx context.Context, patch AIDecisionExecutionPatch) (AIDecisionRecord, error)
 	List(ctx context.Context, filter AIDecisionFilter) (AIDecisionPage, error)
 	Get(ctx context.Context, businessID, decisionID string) (AIDecisionRecord, error)
 	RequestHumanReview(ctx context.Context, patch HumanReviewPatch) (AIDecisionRecord, error)
@@ -141,6 +142,14 @@ type HumanReviewPatch struct {
 	RequestedBy     string
 	RequestedAt     time.Time
 	ExpectedVersion int64
+}
+
+type AIDecisionExecutionPatch struct {
+	BusinessID         string
+	DecisionID         string
+	ExecutionReference string
+	Outcome            string
+	ExecutedAt         time.Time
 }
 
 type AuditEventRepository interface {
