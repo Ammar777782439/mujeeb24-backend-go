@@ -7,7 +7,6 @@
 package gemini
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -29,6 +28,7 @@ type GeminiCustomerSalesAdapter struct {
 	apiKey         string
 	model          string
 	requestTimeout time.Duration
+	retryPolicy    geminiRetryPolicy
 	// configProvider, when set, is called at the start of every Decide
 	// call to get the ACTIVE runtime configuration (API key, model, limits).
 	// Per §2: the runtime gets the active config from Configuration abstraction,
@@ -94,6 +94,7 @@ func NewGeminiCustomerSalesAdapter(base *GeminiHTTPClient) (*GeminiCustomerSales
 		apiKey:         base.apiKey,
 		model:          base.model,
 		requestTimeout: base.requestTimeout,
+		retryPolicy:    base.retryPolicy,
 	}, nil
 }
 
@@ -218,14 +219,7 @@ func (c *GeminiCustomerSalesAdapter) sendInteractionRequest(
 	defer cancel()
 
 	url := strings.TrimRight(rc.baseURL, "/") + "/v1/interactions"
-	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(buf))
-	if err != nil {
-		return interactionResponse{}, fmt.Errorf("build interaction request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-goog-api-key", rc.apiKey)
-
-	httpResp, err := c.httpClient.Do(httpReq)
+	httpResp, err := doGeminiPOSTWithRetry(reqCtx, c.httpClient, url, rc.apiKey, buf, c.retryPolicy, true)
 	if err != nil {
 		return interactionResponse{}, fmt.Errorf("send interaction request: %w", err)
 	}
