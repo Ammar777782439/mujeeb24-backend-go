@@ -2,10 +2,10 @@ package gemini
 
 import (
 	"bytes"
-	"log"
 	"context"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
