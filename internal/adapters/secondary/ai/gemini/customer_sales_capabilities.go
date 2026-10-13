@@ -36,7 +36,7 @@ func customerSalesTools(capabilities []ports.CustomerSalesCapability) []customer
 			tools = append(tools, salesWorkflowTool(capability))
 			continue
 		case ports.CustomerSalesCapabilityFullCatalog:
-			tools = append(tools, customerSalesTool{Type: "function", Name: string(capability), Description: "Request full catalog access. Use presentation=hierarchy when the customer asks to see ALL products/services or the whole assortment organized by catalog, item, variant and offer. Use presentation=compare when the customer wants matching options, comparisons, suitability, or commercial decisions. Do not send merchant IDs or filtering/query arguments.", Parameters: map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{"presentation": map[string]any{"type": "string", "enum": []string{"hierarchy", "compare"}}}}})
+			tools = append(tools, customerSalesTool{Type: "function", Name: string(capability), Description: "Request full catalog access. Use presentation=hierarchy when the customer asks to see ALL products/services or the whole assortment organized by catalog, item, variant and offer. Use presentation=compare when the customer wants matching options, comparisons, suitability, or commercial decisions. Do not send merchant IDs or filtering/query arguments.", Parameters: map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{"presentation": map[string]any{"type": "string", "enum": []string{"hierarchy", "compare"}}}, "required": []string{"presentation"}}})
 			continue
 		default:
 			continue
