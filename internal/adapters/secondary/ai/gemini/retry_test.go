@@ -169,7 +169,7 @@ func TestGeminiBatchEvaluationRetriesOnlyFailedBatch(t *testing.T) {
 			w.WriteHeader(503)
 			return
 		}
-		_, _ = w.Write([]byte(`{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{\\"candidates\\":[]}"}]}],"usage":{"total_input_tokens":125,"total_output_tokens":9}}`))
+		_, _ = w.Write([]byte(`{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{\"candidates\":[]}"}]}],"usage":{"total_input_tokens":125,"total_output_tokens":9}}`))
 	}))
 	defer srv.Close()
 	batch, err := NewBatchClient(BatchClientConfig{BaseURL: srv.URL, APIKey: "test", Model: "test"})
