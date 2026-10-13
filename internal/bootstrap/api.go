@@ -368,8 +368,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 				return nil, fmt.Errorf("build Gemini token counter: %w", err)
 			}
 			batchClient, err := gemini.NewBatchClient(gemini.BatchClientConfig{
-				BaseURL: geminiClient.BaseURL(),
-				APIKey:  geminiClient.APIKey(),
+				BaseURL:        geminiClient.BaseURL(),
+				APIKey:         geminiClient.APIKey(),
 				Model:          geminiClient.Model(),
 				HTTPClient:     geminiClient.HTTPClient(),
 				RequestTimeout: geminiClient.RequestTimeout(),
