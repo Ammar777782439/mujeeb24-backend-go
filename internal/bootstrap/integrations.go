@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gemini"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/litellm"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/providers/socialapi"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
@@ -13,6 +14,7 @@ type ExternalAdapters struct {
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
 	GeminiHTTPClient               *gemini.GeminiHTTPClient
+	LiteLLMCustomerFallback         ports.CustomerSalesDecisionPort
 	SocialAPIHealthProbe           ports.HealthCheckProbe
 	LLMConfigError                 error
 	CustomerSalesEnabled           bool
@@ -31,6 +33,7 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 		"auto_reply":           "disabled",
 		"channel_provisioning": "disabled",
 		"llm_runtime":          "disabled",
+		"litellm_fallback":      "disabled",
 	}
 	if a.SocialWebhook != nil {
 		checks["socialapi_webhook"] = "configured"
@@ -50,6 +53,9 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 	}
 	if a.GeminiHTTPClient != nil {
 		checks["llm_runtime"] = "configured"
+	}
+	if a.LiteLLMCustomerFallback != nil {
+		checks["litellm_fallback"] = "configured"
 	}
 	return checks
 }
@@ -88,6 +94,22 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 	} else if cfg.LLMEnabled {
 		adapters.LLMConfigError = errors.New("the configured non-Gemini AI provider is not wired to a customer AI capability")
 
+	}
+	if cfg.LiteLLMFallbackEnabled && adapters.LLMConfigError == nil {
+		gateway, err := litellm.NewClient(litellm.Config{
+			BaseURL: cfg.LiteLLMBaseURL, APIKey: cfg.LiteLLMAPIKey, Timeout: cfg.LiteLLMHTTPTimeout,
+		})
+		if err != nil {
+			adapters.LLMConfigError = err
+		} else {
+			adapter, adapterErr := gemini.NewLiteLLMCustomerSalesAdapter(gateway, cfg.LiteLLMCustomerModel,
+				cfg.LiteLLMMaxOutputTokens, cfg.LiteLLMMaxInputCharacters)
+			if adapterErr != nil {
+				adapters.LLMConfigError = adapterErr
+			} else {
+				adapters.LiteLLMCustomerFallback = adapter
+			}
+		}
 	}
 	adapters.CustomerSalesEnabled = cfg.CustomerSalesEnabled
 	adapters.AutoReplyEnabled = cfg.AutoReplyEnabled
