@@ -6,8 +6,8 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gemini"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/litellm"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/providers/socialapi"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
 )
 
