@@ -159,7 +159,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	// is stateless except for its runtime flag, so creating it early
 	// is safe.
 	platformOperations := services.NewInMemoryPlatformOperationsRepository(
-		external.GeminiHTTPClient != nil && external.LLMConfigError == nil,
+		(external.GeminiHTTPClient != nil || external.LiteLLMCustomerDecision != nil) && external.LLMConfigError == nil,
 		external.SocialAPI != nil,
 	)
 	if external.GeminiHTTPClient != nil && external.LLMConfigError == nil {
@@ -223,34 +223,21 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	)
 
 	if external.AutoReplyEnabled || external.CustomerSalesEnabled {
-		if external.GeminiHTTPClient == nil {
-			return nil, errors.New("AutoReply requires the Gemini customer-sales AI to be configured")
-		}
-		// Per contract ④ §8, adapt the Gemini provider client to the
-		// CustomerSalesDecisionPort used by AutoReply and conversation summaries.
+		// One customer-sales decision interface owns B2C and summary requests.
+		// In gateway-only mode there is NO direct Gemini dependency or Go fallback.
 		var customerSalesDecision ports.CustomerSalesDecisionPort
-		var geminiClient *gemini.GeminiHTTPClient
-		var runRepo ports.AIRunRepository
-		if external.GeminiHTTPClient != nil {
-			geminiClient = external.GeminiHTTPClient
-			customerSalesAdapter, err := gemini.NewGeminiCustomerSalesAdapter(geminiClient)
+		if external.LiteLLMCustomerDecision != nil && external.GeminiHTTPClient == nil {
+			customerSalesDecision = external.LiteLLMCustomerDecision
+		} else if external.GeminiHTTPClient != nil {
+			customerSalesAdapter, err := gemini.NewGeminiCustomerSalesAdapter(external.GeminiHTTPClient)
 			if err != nil {
 				return nil, fmt.Errorf("build customer sales AI adapter: %w", err)
 			}
-			// Per §1: wire the dynamic config provider so every customer-sales Decide
-			// call reads the ACTIVE config from cache/DB.
 			customerSalesAdapter.SetConfigurationProvider(aiConfigCache)
-			runRepo = postgres.NewAIRunTraceRepository(database)
 			customerSalesDecision = customerSalesAdapter
-			if external.LiteLLMCustomerFallback != nil {
-				customerSalesDecision = services.FailoverCustomerSalesDecisionPort{
-					Primary: customerSalesAdapter, Fallback: external.LiteLLMCustomerFallback,
-				}
-			}
-		} else {
-			// OpenAI-compatible providers do not implement the Customer Sales decision port yet.
-			// There is no generic AI fallback path; AutoReply requires the Gemini customer-sales adapter.
-			return nil, errors.New("AutoReply requires a gemini.Client (contract-aligned); OpenAI-compatible provider not yet supported")
+		}
+		if customerSalesDecision == nil {
+			return nil, errors.New("AutoReply requires a configured customer-sales AI decision provider")
 		}
 		referenceRepository := postgres.NewConversationReferenceRepository(database)
 		service := services.NewAutoReplyService(
@@ -261,13 +248,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			outboxStore,
 			database,
 		)
-		// Per contract ⑧ §5, wire the AI Run trace repository
-		// (reuse the one created above for the GeminiCustomerSalesAdapter).
-		if runRepo != nil {
-			service.RunRepository = runRepo
-		} else {
-			service.RunRepository = postgres.NewAIRunTraceRepository(database)
-		}
+		// Both AI routes use the same canonical run trace lifecycle.
+		service.RunRepository = postgres.NewAIRunTraceRepository(database)
 		// Per AIUsageTokenTelemetry.md §6: wire the telemetry pipeline so
 		// every Gemini call's tokens + cost are recorded to ai_usage_records
 		// and flow through to the Platform Admin AI Usage view.
@@ -363,7 +345,19 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		//
 		// Per contract ② §2, TokenBudget is token-based (no hardcoded
 		// item count). 8000 is a sensible default per runtime config.
-		if geminiClient := external.GeminiHTTPClient; geminiClient != nil {
+		if external.LiteLLMCatalogClient != nil && external.GeminiHTTPClient == nil {
+			service.CatalogBatch = &services.CatalogBatchController{
+				CatalogAI: postgres.NewCatalogAIReadRepository(database),
+				Gemini: external.LiteLLMCatalogClient,
+				RunRepo: postgres.NewAIRunTraceRepository(database),
+				TokenBudget: 8000,
+				Now: func() time.Time { return time.Now().UTC() },
+				NewID: uuid.NewString,
+				AIUsage: postgres.NewAIUsageRepository(database),
+				AIPricing: postgres.NewAIProviderPricingRepository(database),
+				Subscriptions: postgres.NewSubscriptionRepository(database),
+			}
+		} else if geminiClient := external.GeminiHTTPClient; geminiClient != nil {
 			batchTokenCounter, err := gemini.NewTokenCounter(gemini.TokenCounterConfig{
 				BaseURL: geminiClient.BaseURL(),
 				APIKey:  geminiClient.APIKey(),
@@ -430,7 +424,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	// PlatformDeps wire-up). The previous local declaration here has
 	// been removed. The flags below remain here for the
 	// aiConfigured/channelConfigured dashboard view.
-	aiConfigured := external.GeminiHTTPClient != nil && external.LLMConfigError == nil
+	aiConfigured := (external.GeminiHTTPClient != nil || external.LiteLLMCustomerDecision != nil) && external.LLMConfigError == nil
 	channelConfigured := external.SocialAPI != nil
 	_ = aiConfigured
 	_ = channelConfigured
