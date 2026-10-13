@@ -89,6 +89,7 @@ func (c *TokenCounter) resolveConfig(ctx context.Context) (*resolvedAIConfig, er
 		return &resolvedAIConfig{
 			apiKey:  cfg.APIKey,
 			model:   cfg.Model,
+			configVersion: cfg.ConfigurationVersion,
 			baseURL: cfg.BaseURL,
 		}, nil
 	}
@@ -191,7 +192,7 @@ func (c *TokenCounter) CountTokens(ctx context.Context, payload any) (int, error
 	reqCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
 
-	resp, err := doGeminiPOSTWithRetry(reqCtx, c.httpClient, url, rc.apiKey, buf, c.retryPolicy, true)
+	resp, err := doGeminiPOSTWithRetry(reqCtx, c.httpClient, url, rc.apiKey, buf, c.retryPolicy, true, geminiRetryTrace{stage: "catalog_token_count", model: rc.model, source: geminiConfigSource(rc.configVersion)})
 	if err != nil {
 		return 0, fmt.Errorf("send countTokens request: %w", err)
 	}
