@@ -42,10 +42,12 @@
 - Preserve all candidate references, complete coverage, revision consistency, and evidence; fallback for a batch must never skip or silently narrow the catalog.
 - Add tests for multipage catalogs, schema definitions, variants/offers, batch failure, catalog revision changes, and model context limits.
 
-### Stage 3 — B2B merchant authoring
-- Migrate the B2B tool loop to a provider-independent exchange carrying each tool call/result. Never forward a Google `previous_interaction_id` to another vendor.
-- Preserve read-only tool authority, strict proposal schema (including unions / nested structures), and explicit user approval.
-- Add tests for multi-turn tool use, failures between tools, and catalog item/variant/offer proposal correctness.
+### Stage 3 — B2B merchant authoring (implementation added; gateway capability and price tests pending)
+- Added `LiteLLMMerchantCatalogAuthoringAdapter` behind **`LITELLM_MERCHANT_ENABLED=false` by default**. It uses the unified gateway's `/v1/chat/completions` endpoint for **stateless multi-turn read tool exchanges**, rather than assuming Google's `previous_interaction_id` can be shared between providers. This is still **one LiteLLM provider integration**, not a model-specific Go integration.
+- Kept the exact merchant authoring system prompt and contextual JSON shared with the original Gemini adapter; use the same canonical `merchantCatalogProposalSchema()`, strict proposal parser, `Normalize()`, `Validate()`, and scoped read-only `MerchantCatalogDiscoveryPort`.
+- Preserve tool-call ID/result pairing and the full assistant/tool transcript per request; reject unauthorized tools, malformed arguments, parallel call budget breaches, mixed tool/text messages, invalid proposals and oversized contexts. Cap each round and the number of tool calls to avoid unbounded API costs.
+- Mocked tests cover tool execution and replay, business/principal/session scoping, invalid proposals, unauthorized read tools, and request size. No live provider claim yet.
+- **Pending:** verify each selected LiteLLM model supports *both* JSON Schema and tools in this endpoint; test real proposal mutations (item attributes, variants/offers, update/delete), ensure model access/bytes fit context; wire all B2B model attempts into platform AI usage and spending caps. Maintain merchant approval/execution as the current Go service.
 
 ### Stage 4 — AI telemetry and pricing
 - Store the **actual upstream provider and model per attempt**, not just a LiteLLM alias; price each attempt using immutable versioned prices and model usage, including unsuccessful attempts where billed.
@@ -73,6 +75,9 @@ LITELLM_API_KEY=<gateway-virtual-key>
 LITELLM_CUSTOMER_MODEL=mujeeb-customer
 LITELLM_CATALOG_ENABLED=false
 LITELLM_CATALOG_MODEL=mujeeb-catalog
+LITELLM_MERCHANT_ENABLED=false
+LITELLM_MERCHANT_MODEL=mujeeb-merchant
+LITELLM_MERCHANT_MAX_REQUEST_BYTES=524288
 LITELLM_MAX_CONTEXT_TOKENS=32768
 LITELLM_HTTP_TIMEOUT=20s
 LITELLM_MAX_OUTPUT_TOKENS=4096
@@ -84,3 +89,5 @@ The key is a **LiteLLM gateway virtual key**, not an upstream model-provider key
 Docs: https://docs.litellm.ai/docs/interactions
 
 **Stage 2 flag behavior:** With `LITELLM_CATALOG_ENABLED=false`, Gemini catalog evaluation is unchanged. With `true`, the complete catalog evaluation for that run (batch, reduction and final) is handled by the configured LiteLLM catalog route; the application still owns coverage, schema evidence, candidate validation and permissions. Do not enable until end-to-end tests with live model routes and pricing pass.
+
+**Stage 3 flag behavior:** `LITELLM_MERCHANT_ENABLED=false` preserves the existing Gemini B2B authoring path. When enabled together with the configured LiteLLM connection, B2B authoring requests go through the gateway, but the existing `merchantcatalogai.Agent` still owns history/session isolation and its existing `ExecutionService` owns commit/mutation and approval. Do not enable in production before spending/telemetry and live model-feature acceptance.
