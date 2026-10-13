@@ -295,6 +295,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	// Exact relational evidence exposed in the normal customer-sales context.
 	// Batch evaluation evidence is merged only after complete batch coverage.
 	catalogEvidence := EvidenceFromCustomerSalesContext(builtContext)
+	var catalogMessages []string
 
 	// Only Gemini's explicit capability request starts full catalog evaluation.
 	// Invalid references are rejected by validation; they never expand evidence.
@@ -325,6 +326,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			ConversationID:      conversationID,
 			CatalogScope:        "", // evaluate all active catalogs for the business
 			CustomerMessage:     command.Text,
+			Presentation:        out.Decision.Presentation,
 			ConversationContext: derefCustomerSalesContext(builtContext),
 			EntityContract:      entityContract,
 		})
@@ -335,6 +337,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		} else {
 			log.Printf("[AutoReply] CATALOG_EVAL_OK run=%s capability=%s", run.ID, catalogResult.Decision.Capability)
 			proposal = catalogResult.Decision
+			catalogMessages = catalogResult.Messages
 			catalogEvidence.Merge(catalogResult.Evidence)
 		}
 	}

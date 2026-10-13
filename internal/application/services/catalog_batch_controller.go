@@ -131,6 +131,9 @@ type FinalEvaluationInput struct {
 type CatalogEvaluationResult struct {
 	Decision ports.CapabilityDecision
 	Evidence ports.CatalogAIEvidenceSet
+	// Messages contains the complete ordered hierarchy parts if requested.
+	// It is empty for the existing AI comparison/recommendation path.
+	Messages []string
 }
 
 // CatalogAIBatchPayload is one batch's content.
@@ -165,6 +168,9 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 		return CatalogEvaluationResult{}, errors.New("business_id and ai_run_id are required for Catalog Evaluation per contract ② §1")
 	}
 
+	if input.Presentation == "hierarchy" {
+		return c.runHierarchicalCatalog(ctx, input)
+	}
 	return c.runPagedCatalogEvaluation(ctx, input)
 }
 
@@ -1100,6 +1106,7 @@ type CatalogEvaluationInput struct {
 	ConversationID      string
 	CatalogScope        string // the catalog scope to evaluate (e.g., a specific catalog_id)
 	CustomerMessage     string
+	Presentation        string
 	ConversationContext ports.CustomerSalesContext
 	EntityContract      CatalogEntityContractPayload
 }

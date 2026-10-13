@@ -36,7 +36,7 @@ func customerSalesTools(capabilities []ports.CustomerSalesCapability) []customer
 			tools = append(tools, salesWorkflowTool(capability))
 			continue
 		case ports.CustomerSalesCapabilityFullCatalog:
-			tools = append(tools, customerSalesTool{Type: "function", Name: string(capability), Description: "Request evaluation of ALL active catalog components and relationships for this merchant when current evidence is insufficient. All token-aware batches must complete before a final capability is chosen. This is not a search; no filters, IDs, tenant, or query arguments are accepted.", Parameters: map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{}}})
+			tools = append(tools, customerSalesTool{Type: "function", Name: string(capability), Description: "Request full catalog access. Use presentation=hierarchy when the customer asks to see ALL products/services or the whole assortment organized by catalog, item, variant and offer. Use presentation=compare when the customer wants matching options, comparisons, suitability, or commercial decisions. Do not send merchant IDs or filtering/query arguments.", Parameters: map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{"presentation": map[string]any{"type": "string", "enum": []string{"hierarchy", "compare"}}}}})
 			continue
 		default:
 			continue
@@ -77,11 +77,16 @@ func parseCustomerSalesCapability(resp interactionResponse, tools []customerSale
 	}
 	capability := ports.CustomerSalesCapability(call.Name)
 	if capability == ports.CustomerSalesCapabilityFullCatalog {
-		var args struct{}
+		var args struct {
+			Presentation string `json:"presentation,omitempty"`
+		}
 		if err := decodeStrictStructuredJSON(call.Arguments, &args); err != nil {
 			return ports.CapabilityDecision{}, fmt.Errorf("decode catalog capability: %w", err)
 		}
-		return ports.CapabilityDecision{Capability: capability}, nil
+		if args.Presentation != "" && args.Presentation != "hierarchy" && args.Presentation != "compare" {
+			return ports.CapabilityDecision{}, errors.New("unsupported catalog presentation")
+		}
+		return ports.CapabilityDecision{Capability: capability, Presentation: args.Presentation}, nil
 	}
 	var args customerSalesToolArguments
 	if err := decodeStrictStructuredJSON(call.Arguments, &args); err != nil {
