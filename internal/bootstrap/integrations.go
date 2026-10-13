@@ -106,35 +106,31 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 		adapters.LLMConfigError = errors.New("the configured non-Gemini AI provider is not wired to a customer AI capability")
 
 	}
-	if (cfg.LiteLLMFallbackEnabled || cfg.LiteLLMGatewayOnly) && adapters.LLMConfigError == nil {
+	if cfg.LiteLLMGatewayOnly && adapters.LLMConfigError == nil {
 		gateway, err := litellm.NewClient(litellm.Config{
 			BaseURL: cfg.LiteLLMBaseURL, APIKey: cfg.LiteLLMAPIKey, Timeout: cfg.LiteLLMHTTPTimeout,
 		})
 		if err != nil {
 			adapters.LLMConfigError = err
 		} else {
-			adapter, adapterErr := gemini.NewLiteLLMCustomerSalesAdapter(gateway, cfg.LiteLLMCustomerModel,
+			customer, customerErr := gemini.NewLiteLLMCustomerSalesAdapter(gateway, cfg.LiteLLMCustomerModel,
 				cfg.LiteLLMMaxOutputTokens, cfg.LiteLLMMaxInputCharacters)
-			if adapterErr != nil {
-				adapters.LLMConfigError = adapterErr
+			if customerErr != nil {
+				adapters.LLMConfigError = customerErr
 			} else {
-				adapters.LiteLLMCustomerDecision = adapter
-				if cfg.LiteLLMMerchantEnabled || cfg.LiteLLMGatewayOnly {
-					merchantAdapter, merchantErr := gemini.NewLiteLLMMerchantCatalogAuthoringAdapter(gateway, cfg.LiteLLMMerchantModel,
-						cfg.LiteLLMMaxOutputTokens, cfg.LiteLLMMerchantMaxRequestBytes)
-					if merchantErr != nil {
-						adapters.LLMConfigError = merchantErr
-					} else {
-						adapters.LiteLLMMerchantAuthoring = merchantAdapter
-					}
-				}
-				if cfg.LiteLLMCatalogEnabled || cfg.LiteLLMGatewayOnly {
-					catalogAdapter, catalogErr := gemini.NewLiteLLMCatalogAdapter(gateway, cfg.LiteLLMCatalogModel,
+				merchant, merchantErr := gemini.NewLiteLLMMerchantCatalogAuthoringAdapter(gateway, cfg.LiteLLMMerchantModel,
+					cfg.LiteLLMMaxOutputTokens, cfg.LiteLLMMerchantMaxRequestBytes)
+				if merchantErr != nil {
+					adapters.LLMConfigError = merchantErr
+				} else {
+					catalog, catalogErr := gemini.NewLiteLLMCatalogAdapter(gateway, cfg.LiteLLMCatalogModel,
 						cfg.LiteLLMMaxOutputTokens, cfg.LiteLLMMaxContextTokens)
 					if catalogErr != nil {
 						adapters.LLMConfigError = catalogErr
 					} else {
-						adapters.LiteLLMCatalogClient = catalogAdapter
+						adapters.LiteLLMCustomerDecision = customer
+						adapters.LiteLLMMerchantAuthoring = merchant
+						adapters.LiteLLMCatalogClient = catalog
 					}
 				}
 			}
