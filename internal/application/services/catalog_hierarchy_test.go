@@ -12,11 +12,13 @@ import (
 
 type aiCatalogReplyFixture struct {
 	*capabilityBatchModel
-	parts    []CatalogReplyInput
-	omit     bool
-	external bool
-	tooLong  bool
-	failPart int
+	parts     []CatalogReplyInput
+	omit      bool
+	external  bool
+	tooLong   bool
+	failPart  int
+	wrongLink bool
+	emptyText bool
 }
 
 func (m *aiCatalogReplyFixture) CountCatalogReplyTokens(_ context.Context, in CatalogReplyInput) (int, error) {
@@ -28,19 +30,33 @@ func (m *aiCatalogReplyFixture) ComposeCatalogReply(_ context.Context, in Catalo
 	if m.failPart > 0 && len(m.parts) == m.failPart {
 		return CatalogReplyOutput{}, fmt.Errorf("Gemini failed during part %d", m.failPart)
 	}
-	out := CatalogReplyOutput{Text: "بحسب المنتجات المتاحة، الخيارات والأسعار مختلفة. "}
+	out := CatalogReplyOutput{Introduction: "بحسب المنتجات المتاحة، الخيارات والأسعار مختلفة."}
+	byCatalog := map[string]int{}
 	for _, item := range in.Projection.Items {
-		out.CoveredItemIDs = append(out.CoveredItemIDs, item.ID)
-		out.Text += item.Name + "؛ "
-	}
-	if m.omit && len(out.CoveredItemIDs) > 0 {
-		out.CoveredItemIDs = out.CoveredItemIDs[1:]
-	}
-	if m.external {
-		out.CoveredItemIDs = append(out.CoveredItemIDs, "from-another-business")
+		index, exists := byCatalog[item.CatalogID]
+		if !exists {
+			index = len(out.Sections)
+			byCatalog[item.CatalogID] = index
+			out.Sections = append(out.Sections, CatalogReplySection{CatalogID: item.CatalogID, Heading: "هذه الفئة تشمل الخيارات الآتية:"})
+		}
+		if m.omit && len(out.Sections[index].Items) == 0 {
+			continue
+		}
+		if m.wrongLink {
+			out.Sections[index].CatalogID = "wrong-catalog"
+		}
+		itemID := item.ID
+		if m.external {
+			itemID = "from-another-business"
+		}
+		text := "الخيار " + item.Name + " له تفاصيل وأسعار في الكتالوج."
+		if m.emptyText {
+			text = ""
+		}
+		out.Sections[index].Items = append(out.Sections[index].Items, CatalogReplyItem{ItemID: itemID, Text: text})
 	}
 	if m.tooLong {
-		out.Text = strings.Repeat("ب", catalogReplyMaxRunes+1)
+		out.Introduction = strings.Repeat("ب", catalogReplyMaxRunes+1)
 	}
 	return out, nil
 }
@@ -60,27 +76,27 @@ func TestCatalogHierarchyUsesGeminiForEveryCustomerReply(t *testing.T) {
 		t.Fatalf("expected two Gemini-authored messages, got %d messages and %d model calls", len(result.Messages), len(model.parts))
 	}
 	if result.Decision.Capability != ports.CustomerSalesCapabilityRespondWithoutAction || result.Decision.ResponseText != result.Messages[0] {
-		t.Fatal("Gemini reply not propagated through normal validated capability")
+		t.Fatal("Gemini reply not propagated through validated capability")
 	}
 	for i, message := range result.Messages {
-		if !strings.Contains(message, "بحسب المنتجات") || message != "بحسب المنتجات المتاحة، الخيارات والأسعار مختلفة. "+model.parts[i].Projection.Items[0].Name+"؛ "+model.parts[i].Projection.Items[1].Name+"؛ " {
-			t.Fatalf("customer-facing message was not taken verbatim from Gemini: %q", message)
+		if !strings.Contains(message, "بحسب المنتجات") || !strings.Contains(message, model.parts[i].Projection.Items[0].Name) {
+			t.Fatalf("Gemini text not present in customer reply: %q", message)
 		}
 		if model.parts[i].CustomerMessage != "قارن لي كل الخيارات" || len(model.parts[i].Projection.Catalogs) != 1 || len(model.parts[i].Projection.AttributeSchemas) != 1 {
-			t.Fatal("model missing tenant-scoped catalog, schema, or customer intent")
+			t.Fatal("Gemini missing customer intent, tenant catalog or attribute schema")
 		}
 		for _, item := range model.parts[i].Projection.Items {
 			if len(item.Variants) != 1 || len(item.Offers) != 1 {
-				t.Fatal("model missing a commercial offer or its variant")
+				t.Fatal("Gemini missing commercial offers or variants")
 			}
 		}
 	}
 }
 
 func TestCatalogHierarchyRejectsMissingOrForeignGeminiItemCoverage(t *testing.T) {
-	for _, mode := range []string{"omitted", "foreign", "overlong", "provider_failure"} {
+	for _, mode := range []string{"omitted", "foreign", "overlong", "provider_failure", "wrong_catalog", "empty_text"} {
 		t.Run(mode, func(t *testing.T) {
-			model := &aiCatalogReplyFixture{capabilityBatchModel: &capabilityBatchModel{}, omit: mode == "omitted", external: mode == "foreign", tooLong: mode == "overlong"}
+			model := &aiCatalogReplyFixture{capabilityBatchModel: &capabilityBatchModel{}, omit: mode == "omitted", external: mode == "foreign", tooLong: mode == "overlong", wrongLink: mode == "wrong_catalog", emptyText: mode == "empty_text"}
 			if mode == "provider_failure" {
 				model.failPart = 2
 			}
@@ -91,6 +107,19 @@ func TestCatalogHierarchyRejectsMissingOrForeignGeminiItemCoverage(t *testing.T)
 				t.Fatal("invalid Gemini output must fail closed without a partial reply")
 			}
 		})
+	}
+}
+
+func TestStructuredCatalogReplyAllowsNaturalProductNames(t *testing.T) {
+	projection := CatalogAIProjection{Items: []CatalogAIItem{{ID: "i-1", CatalogID: "c-1", Name: "باقة مجيب الأساسية"}}}
+	got, err := assembleCatalogReply(projection, CatalogReplyOutput{
+		Introduction: "أهلًا بك!",
+		Sections: []CatalogReplySection{{CatalogID: "c-1", Heading: "خدمات الاشتراك",
+			Items: []CatalogReplyItem{{ItemID: "i-1", Text: "مجيب الأساسي يقدم خيارات الاشتراك والميزات حسب الحاجة."}}}},
+		Conclusion: "أي ميزة تهمك أكثر؟",
+	})
+	if err != nil || !strings.Contains(got, "مجيب الأساسي") || !strings.Contains(got, "أي ميزة") {
+		t.Fatalf("valid natural-language product description rejected: %q, %v", got, err)
 	}
 }
 
