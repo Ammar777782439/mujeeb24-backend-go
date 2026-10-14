@@ -185,6 +185,10 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 	candidateSet := make([]ports.CatalogBatchCandidate, 0)
 	candidateProjection := CatalogAIProjection{}
 	candidateItemsSeen := make(map[string]struct{})
+	// Full linked commercial facts for Gemini-selected informational answers.
+	// Candidate IDs decide relevance, never which variants/offers are removed.
+	selectedProjection := CatalogAIProjection{}
+	selectedItemsSeen := make(map[string]struct{})
 
 	for {
 		page, err := c.CatalogAI.ListProjectionPage(ctx, ports.CatalogAIProjectionRequest{
@@ -247,6 +251,22 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 				pageCandidates = append(pageCandidates, result.Candidates...)
 				log.Printf("[CatalogBatch] BATCH_DONE batch=%d items=%d candidates=%d", batch.BatchNumber, len(batch.Items), len(result.Candidates))
 			}
+			if len(pageCandidates) > 0 && (input.Presentation == "detail" || input.Presentation == "compare") {
+				// Gemini chooses relevant item IDs after examining the full
+				// tenant-scoped catalog batches. Rehydrate each selected item
+				// from the original page, not its potentially narrowed
+				// candidate variant/offer evidence.
+				wholeItemCandidates := make([]ports.CatalogBatchCandidate, 0, len(pageCandidates))
+				for _, candidate := range normalizeBatchCandidates(pageCandidates) {
+					wholeItemCandidates = append(wholeItemCandidates, ports.CatalogBatchCandidate{ItemID: candidate.ItemID})
+				}
+				appendCandidateProjection(
+					&selectedProjection,
+					CatalogAIBatchPayload{Catalogs: pageProjection.Catalogs, AttributeSchemas: pageProjection.AttributeSchemas, Items: pageProjection.Items},
+					wholeItemCandidates,
+					selectedItemsSeen,
+				)
+			}
 			if len(pageCandidates) > 0 {
 				appendCandidateProjection(
 					&candidateProjection,
@@ -282,6 +302,24 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 	}
 	if revisionEnd != revisionStart {
 		return CatalogEvaluationResult{}, errors.New("catalog changed during full evaluation; refusing mixed-snapshot AI result")
+	}
+
+	if input.Presentation == "detail" || input.Presentation == "compare" {
+		// An information request needs Gemini-authored explanation, not a
+		// final commercial capability decision or repeated candidate reduction.
+		// All catalog pages were evaluated first and selection came from Gemini.
+		result, err := c.composeCatalogProjection(ctx, input, selectedProjection)
+		if err != nil {
+			return CatalogEvaluationResult{}, err
+		}
+		revisionAfterReply, err := c.CatalogAI.GetRevision(ctx, input.BusinessID)
+		if err != nil {
+			return CatalogEvaluationResult{}, fmt.Errorf("read catalog revision after Gemini detail reply: %w", err)
+		}
+		if revisionAfterReply != revisionStart {
+			return CatalogEvaluationResult{}, errors.New("catalog changed during Gemini detail reply; refusing stale commercial facts")
+		}
+		return result, nil
 	}
 
 	proposal, finalProjection, err := c.runFinalEvaluation(ctx, input, candidateSet, candidateProjection, nextBatchNumber)
