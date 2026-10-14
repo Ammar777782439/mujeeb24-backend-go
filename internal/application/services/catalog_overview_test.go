@@ -54,8 +54,8 @@ type overviewModelFixture struct {
 	mergeCalls      int
 	finalCalls      int
 	items           map[string]struct{}
-	missingCoverage bool
-	oversized       bool
+	emptyDigest bool
+	oversized   bool
 }
 
 func (*overviewModelFixture) CountOverviewTokens(_ context.Context, request CatalogOverviewRequest) (int, error) {
@@ -75,10 +75,9 @@ func (m *overviewModelFixture) ComposeOverview(_ context.Context, request Catalo
 		out := CatalogOverviewResponse{Text: "ملخص أقسام الخدمات المتاحة"}
 		for _, item := range request.Batch.Items {
 			m.items[item.ID] = struct{}{}
-			out.CoveredItemIDs = append(out.CoveredItemIDs, item.ID)
 		}
-		if m.missingCoverage && len(out.CoveredItemIDs) > 0 {
-			out.CoveredItemIDs = out.CoveredItemIDs[:len(out.CoveredItemIDs)-1]
+		if m.emptyDigest {
+			out.Text = " "
 		}
 		return out, nil
 	case "merge":
@@ -121,9 +120,9 @@ func TestHundredCatalogOverviewReviewsEveryItemAndSendsSingleReply(t *testing.T)
 	}
 }
 
-func TestCatalogOverviewFailsClosedIfBatchClaimsIncompleteCoverage(t *testing.T) {
+func TestCatalogOverviewFailsClosedIfGeminiReturnsEmptyIntermediateDigest(t *testing.T) {
 	repo := &largeOverviewCatalogRepo{capabilityCatalogRepo: &capabilityCatalogRepo{}}
-	model := &overviewModelFixture{capabilityBatchModel: &capabilityBatchModel{}, missingCoverage: true}
+	model := &overviewModelFixture{capabilityBatchModel: &capabilityBatchModel{}, emptyDigest: true}
 	controller := &CatalogBatchController{
 		CatalogAI: repo, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 1000,
 		Now: time.Now, NewID: func() string { return "id" },
@@ -131,7 +130,7 @@ func TestCatalogOverviewFailsClosedIfBatchClaimsIncompleteCoverage(t *testing.T)
 	_, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{
 		AIRunID: "run-1", BusinessID: "business-1", Presentation: "overview",
 	})
-	if err == nil || !strings.Contains(err.Error(), "coverage") {
+	if err == nil || !strings.Contains(err.Error(), "empty or oversized") {
 		t.Fatalf("incomplete Gemini evaluation incorrectly accepted: %v", err)
 	}
 	if model.finalCalls != 0 {
@@ -154,14 +153,22 @@ func TestCatalogOverviewRejectsOversizedCustomerResponse(t *testing.T) {
 	}
 }
 
-func TestCatalogOverviewRejectsRepeatedOrUnknownItemIDs(t *testing.T) {
-	batch := CatalogAIBatchPayload{Items: []CatalogAIItem{{ID: "a"}, {ID: "b"}}}
-	for _, ids := range [][]string{{"a"}, {"a", "a"}, {"a", "b", "foreign"}} {
-		if err := validateOverviewItemCoverage(batch, ids); err == nil {
-			t.Fatalf("invalid AI coverage accepted: %v", ids)
-		}
+// Overview stage proves input coverage from the merchant projection, not
+// from Gemini echoing UUIDs. The model writes a semantic digest only.
+func TestCatalogOverviewSuccessfulSummaryNeedsNoModelUUIDEcho(t *testing.T) {
+	repo := &largeOverviewCatalogRepo{capabilityCatalogRepo: &capabilityCatalogRepo{}}
+	model := &overviewModelFixture{capabilityBatchModel: &capabilityBatchModel{}}
+	controller := &CatalogBatchController{
+		CatalogAI: repo, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 1000,
+		Now: time.Now, NewID: func() string { return "id" },
 	}
-	if err := validateOverviewItemCoverage(batch, []string{"b", "a"}); err != nil {
-		t.Fatalf("out-of-order but complete coverage incorrectly rejected: %v", err)
+	result, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{
+		AIRunID: "run-no-ids", BusinessID: "business-1", Presentation: "overview",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(model.items) != 100 || len(result.Messages) != 1 {
+		t.Fatalf("missing covered input items or final customer reply: scanned=%d messages=%d", len(model.items), len(result.Messages))
 	}
 }
