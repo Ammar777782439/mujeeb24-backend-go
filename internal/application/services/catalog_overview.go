@@ -20,11 +20,11 @@ type CatalogOverviewClient interface {
 }
 
 type CatalogOverviewRequest struct {
-	Stage               string
-	CustomerMessage     string
-	ConversationContext ports.CustomerSalesContext
-	Batch               *CatalogAIBatchPayload
-	Summaries           []string
+	Stage                 string
+	CustomerMessage       string
+	ConversationContext   ports.CustomerSalesContext
+	Batch                 *CatalogAIBatchPayload
+	Summaries             []string
 	RequestedPresentation string
 }
 
@@ -35,9 +35,9 @@ type CatalogOverviewResponse struct {
 }
 
 const (
-	overviewBatchMaxRunes = 700
-	overviewMergeMaxRunes = 700
-	overviewFinalMaxRunes = 1800
+	overviewBatchMaxRunes  = 700
+	overviewMergeMaxRunes  = 700
+	overviewFinalMaxRunes  = 1800
 	overviewMaxMergeRounds = 12
 )
 
@@ -100,7 +100,7 @@ func (c *CatalogBatchController) runCatalogOverview(ctx context.Context, input C
 					request := CatalogOverviewRequest{
 						Stage: "batch", CustomerMessage: input.CustomerMessage,
 						ConversationContext: input.ConversationContext,
-						Batch: &chunk, RequestedPresentation: input.Presentation,
+						Batch:               &chunk, RequestedPresentation: input.Presentation,
 					}
 					result, err := ai.ComposeOverview(ctx, request)
 					if err != nil {
@@ -156,7 +156,7 @@ func (c *CatalogBatchController) runCatalogOverview(ctx context.Context, input C
 			request := CatalogOverviewRequest{
 				Stage: "merge", CustomerMessage: input.CustomerMessage,
 				ConversationContext: input.ConversationContext,
-				Summaries: summaries[i : i+end], RequestedPresentation: input.Presentation,
+				Summaries:           summaries[i : i+end], RequestedPresentation: input.Presentation,
 			}
 			result, err := ai.ComposeOverview(ctx, request)
 			if err != nil {
@@ -177,7 +177,7 @@ func (c *CatalogBatchController) runCatalogOverview(ctx context.Context, input C
 	final := CatalogOverviewRequest{
 		Stage: "final", CustomerMessage: input.CustomerMessage,
 		ConversationContext: input.ConversationContext,
-		Summaries: summaries, RequestedPresentation: input.Presentation,
+		Summaries:           summaries, RequestedPresentation: input.Presentation,
 	}
 	count, err := ai.CountOverviewTokens(ctx, final)
 	if err != nil {
@@ -215,7 +215,7 @@ func (c *CatalogBatchController) fitOverviewBatch(ctx context.Context, ai Catalo
 		request := CatalogOverviewRequest{
 			Stage: "batch", CustomerMessage: input.CustomerMessage,
 			ConversationContext: input.ConversationContext,
-			Batch: &part, RequestedPresentation: input.Presentation,
+			Batch:               &part, RequestedPresentation: input.Presentation,
 		}
 		count, err := ai.CountOverviewTokens(ctx, request)
 		if err != nil {
@@ -249,7 +249,7 @@ func (c *CatalogBatchController) fitOverviewSummaries(ctx context.Context, ai Ca
 		request := CatalogOverviewRequest{
 			Stage: "merge", CustomerMessage: input.CustomerMessage,
 			ConversationContext: input.ConversationContext,
-			Summaries: group[:n], RequestedPresentation: input.Presentation,
+			Summaries:           group[:n], RequestedPresentation: input.Presentation,
 		}
 		count, err := ai.CountOverviewTokens(ctx, request)
 		if err != nil {

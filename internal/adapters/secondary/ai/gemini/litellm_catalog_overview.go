@@ -33,7 +33,7 @@ func catalogOverviewResponseSchema(input services.CatalogOverviewRequest) map[st
 	return map[string]any{
 		"type": "object", "additionalProperties": false,
 		"properties": map[string]any{
-			"text": map[string]any{"type": "string"},
+			"text":             map[string]any{"type": "string"},
 			"covered_item_ids": map[string]any{"type": "array", "items": idSchema},
 		},
 		"required": []string{"text", "covered_item_ids"},
@@ -54,12 +54,12 @@ func (c *LiteLLMCatalogAdapter) overviewRequest(input services.CatalogOverviewRe
 		return interactionRequest{}, errors.New("catalog overview merging cannot accept raw unverified batch evidence")
 	}
 	payload := struct {
-		Stage          string                          `json:"stage"`
-		Request        string                          `json:"customer_message"`
-		Conversation   any                             `json:"conversation_context"`
-		Presentation   string                          `json:"requested_presentation"`
-		CatalogBatch   *services.CatalogAIBatchPayload `json:"catalog_batch,omitempty"`
-		Summaries      []string                        `json:"reviewed_summaries,omitempty"`
+		Stage        string                          `json:"stage"`
+		Request      string                          `json:"customer_message"`
+		Conversation any                             `json:"conversation_context"`
+		Presentation string                          `json:"requested_presentation"`
+		CatalogBatch *services.CatalogAIBatchPayload `json:"catalog_batch,omitempty"`
+		Summaries    []string                        `json:"reviewed_summaries,omitempty"`
 	}{
 		Stage: input.Stage, Request: input.CustomerMessage,
 		Conversation: catalogBatchPromptContextFrom(&input.ConversationContext),
@@ -72,7 +72,7 @@ func (c *LiteLLMCatalogAdapter) overviewRequest(input services.CatalogOverviewRe
 	}
 	return interactionRequest{
 		Model: c.model, Store: false,
-		Input: string(data),
+		Input:             string(data),
 		SystemInstruction: prompts.CatalogOverviewSystemPrompt,
 		ResponseFormat: &interactionResponseFormat{
 			Type: "text", MimeType: "application/json",

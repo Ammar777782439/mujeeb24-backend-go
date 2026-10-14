@@ -32,7 +32,7 @@ func (r *largeOverviewCatalogRepo) ListProjectionPage(_ context.Context, request
 	if result.HasMore {
 		result.NextCursor = fmt.Sprintf("page-%d", page+1)
 	}
-	for i := page*25; i < (page+1)*25; i++ {
+	for i := page * 25; i < (page+1)*25; i++ {
 		catalogID := fmt.Sprintf("catalog-%03d", i)
 		itemID := fmt.Sprintf("item-%03d", i)
 		result.Catalogs = append(result.Catalogs, ports.CatalogRecord{
@@ -50,12 +50,12 @@ func (r *largeOverviewCatalogRepo) ListProjectionPage(_ context.Context, request
 
 type overviewModelFixture struct {
 	*capabilityBatchModel
-	batchCalls int
-	mergeCalls int
-	finalCalls int
-	items map[string]struct{}
+	batchCalls      int
+	mergeCalls      int
+	finalCalls      int
+	items           map[string]struct{}
 	missingCoverage bool
-	oversized bool
+	oversized       bool
 }
 
 func (*overviewModelFixture) CountOverviewTokens(_ context.Context, request CatalogOverviewRequest) (int, error) {
