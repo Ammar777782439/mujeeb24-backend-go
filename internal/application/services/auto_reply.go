@@ -248,8 +248,8 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	s.markRunningSafe(ctx, run)
 	log.Printf("[AutoReply] STATE→RUNNING run=%s", run.ID)
 
-	// Per contract ④ §8, call Gemini via the CustomerSalesDecisionPort.
-	log.Printf("[AutoReply] GEMINI_CALL business=%s conversation=%s run=%s", businessID, conversationID, run.ID)
+	// Per contract ④ §8, call the AI gateway via the CustomerSalesDecisionPort.
+	log.Printf("[AutoReply] AI_GATEWAY_CALL business=%s conversation=%s run=%s", businessID, conversationID, run.ID)
 	// Per contract ③ §4 + Item 8: carry previous_interaction_id
 	// from the conversation's last Gemini call. Empty for the
 	// first turn (or after Gemini history expiry). The context
@@ -282,14 +282,14 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		Capabilities: capabilities,
 	})
 	if err != nil {
-		log.Printf("[AutoReply] GEMINI_FAILED business=%s err=%v", businessID, err)
-		s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), err.Error())
+		log.Printf("[AutoReply] AI_GATEWAY_FAILED business=%s err=%v", businessID, err)
+		s.markFailedSafe(ctx, run, ports.AIRunFailureStageProviderRequest, classifyAIProviderError(err), err.Error())
 		return commands.AutoReplyResult{}, err
 	}
 	proposal := out.Decision
 	interactionIDToPersist := strings.TrimSpace(out.GeminiInteraction.ResultingInteractionID)
 	resetGeminiInteraction := out.Decision.Capability != ""
-	log.Printf("[AutoReply] GEMINI_OK business=%s capability=%s presentation=%s tokens_in=%d tokens_out=%d latency=%dms",
+	log.Printf("[AutoReply] AI_GATEWAY_OK business=%s capability=%s presentation=%s tokens_in=%d tokens_out=%d latency=%dms",
 		businessID, proposal.Capability, proposal.Presentation, out.Usage.InputTokens, out.Usage.OutputTokens, out.LatencyMs)
 
 	// Gemini continuity is persisted only after the effective action is known.
@@ -306,7 +306,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	fullCatalogRequired := out.Decision.Capability == ports.CustomerSalesCapabilityFullCatalog
 	if fullCatalogRequired && !s.fullCatalogReady(run) {
 		err := errors.New("Gemini requested full catalog evaluation but CatalogBatchController is not configured")
-		s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), err.Error())
+		s.markFailedSafe(ctx, run, ports.AIRunFailureStageProviderRequest, classifyAIProviderError(err), err.Error())
 		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
 	}
 	if fullCatalogRequired {
@@ -336,7 +336,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		})
 		if err != nil {
 			log.Printf("[AutoReply] CATALOG_EVAL_FAILED run=%s err=%v", run.ID, err)
-			s.markFailedSafe(ctx, run, ports.AIRunFailureStageGeminiRequest, string(ports.AIRunFailureCategoryProviderPermanent), "catalog evaluation: "+err.Error())
+			s.markFailedSafe(ctx, run, ports.AIRunFailureStageProviderRequest, classifyAIProviderError(err), "catalog evaluation: "+err.Error())
 			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, fmt.Errorf("catalog evaluation failed: %w", err)
 		} else {
 			log.Printf("[AutoReply] CATALOG_EVAL_OK run=%s capability=%s", run.ID, catalogResult.Decision.Capability)
@@ -679,11 +679,11 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		switch {
 		case resetGeminiInteraction:
 			if err := s.Conversations.UpdateLastGeminiInteractionID(ctx, businessID, conversationID, ""); err != nil {
-				log.Printf("[AutoReply] GEMINI_INTERACTION_ID_RESET_FAILED business=%s conversation=%s err=%v", businessID, conversationID, err)
+				log.Printf("[AutoReply] AI_GATEWAY_INTERACTION_ID_RESET_FAILED business=%s conversation=%s err=%v", businessID, conversationID, err)
 			}
 		case result.Enqueued && interactionIDToPersist != "":
 			if err := s.Conversations.UpdateLastGeminiInteractionID(ctx, businessID, conversationID, interactionIDToPersist); err != nil {
-				log.Printf("[AutoReply] GEMINI_INTERACTION_ID_PERSIST_FAILED business=%s conversation=%s err=%v", businessID, conversationID, err)
+				log.Printf("[AutoReply] AI_GATEWAY_INTERACTION_ID_PERSIST_FAILED business=%s conversation=%s err=%v", businessID, conversationID, err)
 			}
 		}
 	}
@@ -865,8 +865,13 @@ func (s AutoReplyService) markFailedSafe(ctx context.Context, run ports.AIRunRec
 	if s.RunRepository == nil || run.ID == "" {
 		return
 	}
+	// Even if the caller was canceled by the model transport, the failure
+	// state must be persisted. This short deadline only bounds database
+	// finalization; it does not shorten LiteLLM's request timeout.
+	persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
 	lc := NewAIRunLifecycle(s.RunRepository)
-	if _, err := lc.MarkFailed(ctx, run.BusinessID, run.ID, stage, category, reason); err != nil {
+	if _, err := lc.MarkFailed(persistCtx, run.BusinessID, run.ID, stage, category, reason); err != nil {
 		// CRITICAL: if MarkFailed itself fails, the run stays in its prior
 		// state forever — the contract ⑧ §13-14 promise that every run has
 		// a terminal status is broken. Log loudly so operators can manually

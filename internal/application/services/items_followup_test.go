@@ -79,7 +79,6 @@ func TestWorkerPoolConcurrentSubmitStopNoPanic(t *testing.T) {
 	pool := NewAutoReplyWorkerPool(2, 10)
 	task := autoReplyTask{
 		handler:          &fakeAutoReplyHandler{},
-		executionTimeout: 1 * time.Second,
 	}
 	var submitCount int64
 	var submitOK int64

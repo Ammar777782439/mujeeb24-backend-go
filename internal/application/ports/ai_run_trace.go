@@ -47,7 +47,10 @@ const (
 // AIRunFailureStage per contract ⑨ §30 — pinpoints where the run failed.
 const (
 	AIRunFailureStageContextBuild  = "context_build"
-	AIRunFailureStageGeminiRequest = "gemini_request"
+	// Keep the historical DB value to preserve existing trace and check constraints.
+	// New gateway code should use the provider-neutral alias.
+	AIRunFailureStageGeminiRequest  = "gemini_request"
+	AIRunFailureStageProviderRequest = AIRunFailureStageGeminiRequest
 	AIRunFailureStageToolCall      = "tool_call"
 	AIRunFailureStageValidation    = "validation"
 	AIRunFailureStagePolicy        = "policy"
