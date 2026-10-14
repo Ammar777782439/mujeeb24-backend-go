@@ -38,14 +38,14 @@ type CatalogReplyOutput struct {
 }
 
 type CatalogReplySection struct {
-	CatalogID string
-	Heading   string
-	Items     []CatalogReplyItem
+	CatalogID string             `json:"catalog_id"`
+	Heading   string             `json:"heading"`
+	Items     []CatalogReplyItem `json:"items"`
 }
 
 type CatalogReplyItem struct {
-	ItemID string
-	Text   string
+	ItemID string `json:"item_id"`
+	Text   string `json:"text"`
 }
 
 // Catalog replies must stay inside the text transport limit, including UTF-8
