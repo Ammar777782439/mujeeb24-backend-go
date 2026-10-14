@@ -5,13 +5,21 @@ components:
       properties:
         activated_at:
           type: string
+        catalog_model:
+          type: string
+        configuration_source:
+          type: string
         credential_id:
           type: string
         credential_status:
           type: string
+        customer_model:
+          type: string
         effective_max_output:
           format: int64
           type: integer
+        merchant_model:
+          type: string
         model:
           type: string
         mujeeb_max_input_chars:
