@@ -106,6 +106,26 @@ func TestCatalogHierarchyRejectsDetachedOfferAndOversizedItem(t *testing.T) {
 	}
 }
 
+func TestCatalogHierarchyNeverLeaksRawMachineAttributeKeys(t *testing.T) {
+	attrs := map[string]any{
+		"direct_trips": true,
+		"wifi": true,
+		"features": []any{"مرشد محلي", "وجبات مشمولة"},
+		"الضمان": "سنة واحدة",
+	}
+	rendered := formatHierarchyAttributes(attrs, nil)
+	for _, forbidden := range []string{"direct_trips", "wifi", "features", "true", "[", "]"} {
+		if strings.Contains(rendered, forbidden) {
+			t.Fatalf("machine-facing catalog values leaked into reply: %q", rendered)
+		}
+	}
+	for _, grounded := range []string{"مرشد محلي", "وجبات مشمولة", "الضمان", "سنة واحدة"} {
+		if !strings.Contains(rendered, grounded) {
+			t.Fatalf("customer-readable catalog fact %q lost: %q", grounded, rendered)
+		}
+	}
+}
+
 func TestAutoReplyHierarchicalCatalogSkipsCandidateReduction(t *testing.T) {
 	service, runtime, outbox, runs := capabilityService()
 	runtime.Decision = ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityFullCatalog, Presentation: "hierarchy"}
