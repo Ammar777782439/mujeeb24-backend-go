@@ -11,7 +11,6 @@ func setLiteLLMGatewayConfig(t *testing.T) {
 	t.Setenv("LITELLM_CUSTOMER_MODEL", "mujeeb-customer")
 	t.Setenv("LITELLM_CATALOG_MODEL", "mujeeb-catalog")
 	t.Setenv("LITELLM_MERCHANT_MODEL", "mujeeb-merchant")
-	t.Setenv("LLM_ENABLED", "false")
 	t.Setenv("GEMINI_API_KEY", "")
 	t.Setenv("AUTOREPLY_ENABLED", "false")
 	t.Setenv("CUSTOMER_SALES_ENABLED", "false")
@@ -22,7 +21,7 @@ func TestGatewayOnlyConfigNeedsNoGeminiKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("valid gateway-only config: %v", err)
 	}
-	if !cfg.LiteLLMGatewayOnly || cfg.GeminiAPIKey != "" {
+	if !cfg.LiteLLMGatewayOnly || cfg.LiteLLMCustomerModel != "mujeeb-customer" {
 		t.Fatal("gateway-only mode still requires Gemini")
 	}
 }

@@ -38,18 +38,6 @@ type ProcessConfig struct {
 	ChannelProvisioningRedirectURI string
 	CustomerSalesEnabled           bool
 	AutoReplyEnabled               bool
-	LLMEnabled                     bool
-	LLMBaseURL                     string
-	LLMAPIKey                      string
-	LLMModel                       string
-	LLMHTTPTimeout                 time.Duration
-	LLMMaxOutputTokens             int
-	LLMMaxInputCharacters          int
-	LLMOutputTokensField           string
-	GeminiAPIKey                   string
-	GeminiBaseURL                  string
-	GeminiModel                    string
-	GeminiHTTPTimeout              time.Duration
 	LiteLLMGatewayOnly             bool
 	LiteLLMMerchantModel           string
 	LiteLLMMerchantMaxRequestBytes int
@@ -98,18 +86,6 @@ func LoadFromEnv() (ProcessConfig, error) {
 		ChannelProvisioningEnabled:     false,
 		ChannelProvisioningRedirectURI: strings.TrimSpace(os.Getenv("CHANNEL_PROVISIONING_REDIRECT_URI")),
 		AutoReplyEnabled:               false,
-		LLMEnabled:                     false,
-		LLMBaseURL:                     strings.TrimRight(strings.TrimSpace(os.Getenv("LLM_BASE_URL")), "/"),
-		LLMAPIKey:                      strings.TrimSpace(os.Getenv("LLM_API_KEY")),
-		LLMModel:                       strings.TrimSpace(os.Getenv("LLM_MODEL")),
-		LLMHTTPTimeout:                 30 * time.Second,
-		LLMMaxOutputTokens:             4096,
-		LLMMaxInputCharacters:          12000,
-		LLMOutputTokensField:           envOr("LLM_OUTPUT_TOKENS_FIELD", "max_completion_tokens"),
-		GeminiAPIKey:                   strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
-		GeminiBaseURL:                  strings.TrimRight(strings.TrimSpace(os.Getenv("GEMINI_BASE_URL")), "/"),
-		GeminiModel:                    strings.TrimSpace(os.Getenv("GEMINI_MODEL")),
-		GeminiHTTPTimeout:              30 * time.Second,
 		LiteLLMGatewayOnly:             false,
 		LiteLLMMerchantModel:           strings.TrimSpace(os.Getenv("LITELLM_MERCHANT_MODEL")),
 		LiteLLMMerchantMaxRequestBytes: 524288,
@@ -175,21 +151,6 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.AutoReplyEnabled, err = boolEnv("AUTOREPLY_ENABLED", cfg.AutoReplyEnabled); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.LLMEnabled, err = boolEnv("LLM_ENABLED", cfg.LLMEnabled); err != nil {
-		return ProcessConfig{}, err
-	}
-	if cfg.LLMHTTPTimeout, err = durationEnv("LLM_HTTP_TIMEOUT", cfg.LLMHTTPTimeout); err != nil {
-		return ProcessConfig{}, err
-	}
-	if cfg.LLMMaxOutputTokens, err = intEnv("LLM_MAX_OUTPUT_TOKENS", cfg.LLMMaxOutputTokens); err != nil {
-		return ProcessConfig{}, err
-	}
-	if cfg.LLMMaxInputCharacters, err = intEnv("LLM_MAX_INPUT_CHARACTERS", cfg.LLMMaxInputCharacters); err != nil {
-		return ProcessConfig{}, err
-	}
-	if cfg.GeminiHTTPTimeout, err = durationEnv("GEMINI_HTTP_TIMEOUT", cfg.GeminiHTTPTimeout); err != nil {
-		return ProcessConfig{}, err
-	}
 	if cfg.LiteLLMMerchantMaxRequestBytes, err = intEnv("LITELLM_MERCHANT_MAX_REQUEST_BYTES", cfg.LiteLLMMerchantMaxRequestBytes); err != nil {
 		return ProcessConfig{}, err
 	}
@@ -214,17 +175,6 @@ func LoadFromEnv() (ProcessConfig, error) {
 			cfg.LiteLLMMaxContextTokens <= cfg.LiteLLMMaxOutputTokens {
 			return ProcessConfig{}, errors.New("LITELLM_GATEWAY_ONLY requires LITELLM_BASE_URL, LITELLM_API_KEY, customer/catalog/merchant models and positive limits")
 		}
-		if cfg.LLMEnabled {
-			return ProcessConfig{}, errors.New("LITELLM_GATEWAY_ONLY must not be combined with legacy LLM_ENABLED")
-		}
-	}
-	if cfg.LLMEnabled {
-		if cfg.LLMBaseURL == "" || cfg.LLMAPIKey == "" || cfg.LLMModel == "" {
-			return ProcessConfig{}, errors.New("LLM_ENABLED requires LLM_BASE_URL, LLM_API_KEY, and LLM_MODEL")
-		}
-		if cfg.LLMMaxOutputTokens <= 0 || cfg.LLMMaxInputCharacters <= 0 {
-			return ProcessConfig{}, errors.New("LLM token and input limits must be positive")
-		}
 	}
 	if cfg.AuthEnabled && (cfg.JWTEd25519PrivateKey == "" || cfg.JWTEd25519PublicKey == "" || strings.TrimSpace(cfg.JWTIssuer) == "" || cfg.JWTAccessTTL <= 0 || cfg.RefreshSessionTTL <= 0) {
 		return ProcessConfig{}, errors.New("AUTH_ENABLED requires JWT_ED25519_PRIVATE_KEY, JWT_ED25519_PUBLIC_KEY, JWT_ISSUER, and positive token lifetimes")
@@ -235,9 +185,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if strings.TrimSpace(cfg.HTTPAddr) == "" {
 		return ProcessConfig{}, errors.New("HTTP_ADDR cannot be empty")
 	}
-	hasAI := cfg.LiteLLMGatewayOnly || cfg.LLMEnabled || strings.TrimSpace(cfg.GeminiAPIKey) != ""
+	hasAI := cfg.LiteLLMGatewayOnly
 	if (cfg.AutoReplyEnabled || cfg.CustomerSalesEnabled) && (cfg.SocialAPIWebhookSecret == "" || cfg.SocialAPIAPIKey == "" || !hasAI) {
-		return ProcessConfig{}, errors.New("AUTOREPLY_ENABLED requires SOCIALAPI_WEBHOOK_SECRET, SOCIALAPI_API_KEY, and a configured AI runtime (LiteLLM/Gemini)")
+		return ProcessConfig{}, errors.New("AUTOREPLY_ENABLED and CUSTOMER_SALES_ENABLED require SOCIALAPI_WEBHOOK_SECRET, SOCIALAPI_API_KEY and LITELLM_GATEWAY_ONLY=true")
 	}
 	return cfg, nil
 }

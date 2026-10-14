@@ -41,7 +41,6 @@ func TestBuildExternalAdaptersKeepsAutoReplyDisabledByDefault(t *testing.T) {
 func TestBuildExternalAdaptersRejectsLegacyAIWhenCustomerSalesEnabled(t *testing.T) {
 	adapters := BuildExternalAdapters(config.ProcessConfig{
 		AutoReplyEnabled: true,
-		GeminiAPIKey:     "test-only-direct-provider-key",
 	})
 	if adapters.LLMConfigError == nil || adapters.LiteLLMCustomerDecision != nil {
 		t.Fatal("legacy direct AI must never serve customer replies")
