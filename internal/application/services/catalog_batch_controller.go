@@ -168,10 +168,14 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 		return CatalogEvaluationResult{}, errors.New("business_id and ai_run_id are required for Catalog Evaluation per contract ② §1")
 	}
 
-	if input.Presentation == "hierarchy" {
+	switch input.Presentation {
+	case "overview":
+		return c.runCatalogOverview(ctx, input)
+	case "hierarchy":
 		return c.runHierarchicalCatalog(ctx, input)
+	default:
+		return c.runPagedCatalogEvaluation(ctx, input)
 	}
-	return c.runPagedCatalogEvaluation(ctx, input)
 }
 
 func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, input CatalogEvaluationInput) (CatalogEvaluationResult, error) {
