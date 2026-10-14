@@ -26,11 +26,34 @@ func TestGatewayOnlyConfigNeedsNoGeminiKey(t *testing.T) {
 		t.Fatal("gateway-only mode still requires Gemini")
 	}
 }
-func TestGatewayOnlyRequiresCompleteRoutes(t *testing.T) {
+func TestGatewayOnlyAppliesAgreedModelRouteDefaults(t *testing.T) {
 	setLiteLLMGatewayConfig(t)
+	t.Setenv("LITELLM_CUSTOMER_MODEL", "")
 	t.Setenv("LITELLM_CATALOG_MODEL", "")
-	if _, err := LoadFromEnv(); err == nil {
-		t.Fatal("gateway-only accepted missing catalog route")
+	t.Setenv("LITELLM_MERCHANT_MODEL", "")
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("gateway-only should use agreed route names: %v", err)
+	}
+	if cfg.LiteLLMCustomerModel != "mujeeb-customer" ||
+		cfg.LiteLLMCatalogModel != "mujeeb-catalog" ||
+		cfg.LiteLLMMerchantModel != "mujeeb-merchant" {
+		t.Fatalf("wrong LiteLLM route defaults: customer=%q catalog=%q merchant=%q",
+			cfg.LiteLLMCustomerModel, cfg.LiteLLMCatalogModel, cfg.LiteLLMMerchantModel)
+	}
+}
+
+func TestGatewayOnlyRespectsExplicitModelRoutes(t *testing.T) {
+	setLiteLLMGatewayConfig(t)
+	t.Setenv("LITELLM_CUSTOMER_MODEL", "my-customer")
+	t.Setenv("LITELLM_CATALOG_MODEL", "my-catalog")
+	t.Setenv("LITELLM_MERCHANT_MODEL", "my-merchant")
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("explicit model routes should be accepted: %v", err)
+	}
+	if cfg.LiteLLMCustomerModel != "my-customer" || cfg.LiteLLMCatalogModel != "my-catalog" || cfg.LiteLLMMerchantModel != "my-merchant" {
+		t.Fatal("explicit LiteLLM route names were overwritten by defaults")
 	}
 }
 func TestGatewayOnlyRequiresGatewayKey(t *testing.T) {
