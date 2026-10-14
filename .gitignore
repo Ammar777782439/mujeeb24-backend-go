@@ -15,3 +15,6 @@ tmp/
 .DS_Store
 .idea/
 .vscode/
+
+# Local compiled AI debug probe; never commit executable build artifacts.
+/universal_ai_probe.exe
