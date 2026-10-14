@@ -193,7 +193,11 @@ func (c *CatalogBatchController) partitionCatalogForReply(
 		if err != nil {
 			return fmt.Errorf("count Gemini reply tokens: %w", err)
 		}
-		if count <= c.TokenBudget {
+		// Input tokens alone do not protect the output channel. Reserve room
+		// for Gemini to explain every item and its linked offers in Arabic.
+		// The estimate only decides chunk size; the real model output is
+		// still validated against the strict transport limit before enqueue.
+		if count <= c.TokenBudget && estimateCatalogReplyRunes(items) <= catalogReplyMaxRunes*3/4 {
 			output = append(output, subset)
 			if len(output) > catalogReplyMaxParts {
 				return errors.New("too many complete AI-authored catalog messages for one conversation reply")
@@ -224,6 +228,18 @@ func (c *CatalogBatchController) partitionCatalogForReply(
 		}
 	}
 	return output, nil
+}
+
+func estimateCatalogReplyRunes(items []CatalogAIItem) int {
+	// This is transport planning, not a merchant-domain heuristic. It
+	// reserves text space for Gemini's natural descriptions and comparisons.
+	reserved := 180
+	for _, item := range items {
+		reserved += 150 + utf8.RuneCountInString(item.Name)
+		reserved += 55 * len(item.Variants)
+		reserved += 70 * len(item.Offers)
+	}
+	return reserved
 }
 
 func subsetCatalogForReply(full CatalogAIProjection, items []CatalogAIItem) CatalogAIProjection {
