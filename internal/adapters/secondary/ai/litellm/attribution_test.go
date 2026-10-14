@@ -20,9 +20,11 @@ func TestSpendAttributionIsAppliedToGatewayRequests(t *testing.T) {
 	}))
 	defer server.Close()
 	client, err := NewClient(Config{BaseURL: server.URL, APIKey: "test-virtual-key"})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx := WithSpendAttribution(context.Background(), "business-1", "run-123", "catalog_batch")
-	if _, _, err := client.SendInteractionWithMetadata(ctx, map[string]any{"model":"mujeeb-catalog"}); err != nil {
+	if _, _, err := client.SendInteractionWithMetadata(ctx, map[string]any{"model": "mujeeb-catalog"}); err != nil {
 		t.Fatal(err)
 	}
 	if gotCustomer != "business-1" || gotMetadata["mujeeb_business_id"] != "business-1" ||
@@ -33,7 +35,9 @@ func TestSpendAttributionIsAppliedToGatewayRequests(t *testing.T) {
 
 func TestSpendAttributionDoesNotInventCustomer(t *testing.T) {
 	req, err := http.NewRequestWithContext(context.Background(), "POST", "http://localhost", nil)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	applySpendAttribution(req)
 	if req.Header.Get("x-litellm-customer-id") != "" ||
 		req.Header.Get("x-litellm-spend-logs-metadata") != "" {

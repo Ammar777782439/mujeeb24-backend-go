@@ -24,8 +24,8 @@ func WithSpendAttribution(ctx context.Context, businessID, traceID, operation st
 	}
 	return context.WithValue(ctx, spendAttributionKey{}, spendAttribution{
 		BusinessID: businessID,
-		TraceID: traceID,
-		Operation: operation,
+		TraceID:    traceID,
+		Operation:  operation,
 	})
 }
 
