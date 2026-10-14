@@ -12,6 +12,7 @@ import (
 )
 
 type ExternalAdapters struct {
+	LiteLLMPlatformConfig         *ports.LiteLLMPlatformConfig
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
 	LiteLLMCustomerDecision        ports.CustomerSalesDecisionPort
@@ -72,6 +73,14 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 
 func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 	adapters := ExternalAdapters{}
+	if cfg.LiteLLMGatewayOnly {
+		adapters.LiteLLMPlatformConfig = &ports.LiteLLMPlatformConfig{
+			BaseURL: cfg.LiteLLMBaseURL, APIKey: cfg.LiteLLMAPIKey,
+			CustomerModel: cfg.LiteLLMCustomerModel, CatalogModel: cfg.LiteLLMCatalogModel,
+			MerchantModel: cfg.LiteLLMMerchantModel,
+			MaxOutputTokens: cfg.LiteLLMMaxOutputTokens, MaxInputCharacters: cfg.LiteLLMMaxInputCharacters,
+		}
+	}
 	if cfg.SocialAPIAPIKey != "" || cfg.SocialAPIWebhookSecret != "" {
 		client := socialapi.NewClient(socialapi.Config{BaseURL: cfg.SocialAPIBaseURL, APIKey: cfg.SocialAPIAPIKey, WebhookSecret: cfg.SocialAPIWebhookSecret, HTTPTimeout: cfg.SocialAPIHTTPTimeout})
 		adapters.SocialAPI = client
