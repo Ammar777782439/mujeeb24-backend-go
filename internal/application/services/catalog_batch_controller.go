@@ -1232,7 +1232,7 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 	// (which was always 0, resulting in StartedAt == CompletedAt +
 	// latency=0 for every batch record).
 	startedAt := now.Add(-time.Duration(usage.LatencyMs) * time.Millisecond)
-	_, err := c.AIUsage.AppendRecord(ctx, ports.AIUsageAppend{
+	usageRecord := ports.AIUsageAppend{
 		ID:                recordID,
 		BusinessID:        businessID,
 		SubscriptionID:    subscriptionID,
@@ -1246,7 +1246,6 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 		FinalAIReplies:    0, // batch calls never count as final replies
 		ProviderCostYER:   providerCostYER,
 
-		GatewayCostUSD: gatewayCostUSD, GatewayFXRateYER: gatewayFXRate, GatewayCallID: usage.GatewayCallID, GatewayDeploymentID: usage.GatewayDeploymentID,
 
 		PricingVersion:    pricingVersion,
 		Status:            recordStatus,
@@ -1254,7 +1253,10 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 		StartedAt:         startedAt,
 		CompletedAt:       now,
 		Now:               now,
-	})
+	}
+	usageRecord.GatewayCostUSD, usageRecord.GatewayFXRateYER = gatewayCostUSD, gatewayFXRate
+	usageRecord.GatewayCallID, usageRecord.GatewayDeploymentID = usage.GatewayCallID, usage.GatewayDeploymentID
+	_, err := c.AIUsage.AppendRecord(ctx, usageRecord)
 	if err != nil {
 		log.Printf("[CatalogBatch] AI_USAGE_RECORD_FAILED business=%s phase=%s err=%v", businessID, phase, err)
 		return

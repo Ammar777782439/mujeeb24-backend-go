@@ -1226,7 +1226,7 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
 			toolCallCount = len(toolCalls)
 		}
 	}
-	_, err := s.AIUsage.AppendRecord(ctx, ports.AIUsageAppend{
+	usageRecord := ports.AIUsageAppend{
 		ID:                recordID,
 		BusinessID:        businessID,
 		SubscriptionID:    subscriptionID,
@@ -1240,7 +1240,6 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
 		FinalAIReplies:    finalAIReplies,
 		ProviderCostYER:   providerCostYER,
 
-		GatewayCostUSD: gatewayCostUSD, GatewayFXRateYER: gatewayFXRate, GatewayCallID: out.Usage.GatewayCallID, GatewayDeploymentID: out.Usage.GatewayDeploymentID,
 
 		PricingVersion:    pricingVersion,
 		Status:            recordStatus,
@@ -1248,7 +1247,10 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
 		StartedAt:         now.Add(-time.Duration(out.LatencyMs) * time.Millisecond),
 		CompletedAt:       now,
 		Now:               now,
-	})
+	}
+	usageRecord.GatewayCostUSD, usageRecord.GatewayFXRateYER = gatewayCostUSD, gatewayFXRate
+	usageRecord.GatewayCallID, usageRecord.GatewayDeploymentID = out.Usage.GatewayCallID, out.Usage.GatewayDeploymentID
+	_, err := s.AIUsage.AppendRecord(ctx, usageRecord)
 	if err != nil {
 		// Per Item 4: do NOT silently swallow this error. Return it
 		// so the caller (Handle) propagates it — the reply was

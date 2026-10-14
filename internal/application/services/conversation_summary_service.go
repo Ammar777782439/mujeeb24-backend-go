@@ -393,7 +393,7 @@ func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, bus
 		recordStatus = "pricing_failed"
 	}
 	recordID := s.newID()
-	_, err := s.AIUsage.AppendRecord(ctx, ports.AIUsageAppend{
+	usageRecord := ports.AIUsageAppend{
 		ID:                recordID,
 		BusinessID:        businessID,
 		SubscriptionID:    subscriptionID,
@@ -407,7 +407,6 @@ func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, bus
 		FinalAIReplies:    finalAIReplies,
 		ProviderCostYER:   providerCostYER,
 
-		GatewayCostUSD: gatewayCostUSD, GatewayFXRateYER: gatewayFXRate, GatewayCallID: usage.GatewayCallID, GatewayDeploymentID: usage.GatewayDeploymentID,
 
 		PricingVersion:    pricingVersion,
 		Status:            recordStatus,
@@ -415,7 +414,10 @@ func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, bus
 		StartedAt:         startedAt,
 		CompletedAt:       now,
 		Now:               now,
-	})
+	}
+	usageRecord.GatewayCostUSD, usageRecord.GatewayFXRateYER = gatewayCostUSD, gatewayFXRate
+	usageRecord.GatewayCallID, usageRecord.GatewayDeploymentID = usage.GatewayCallID, usage.GatewayDeploymentID
+	_, err := s.AIUsage.AppendRecord(ctx, usageRecord)
 	if err != nil {
 		log.Printf("[SummaryService] AI_USAGE_RECORD_FAILED business=%s subscription=%s err=%v", businessID, subscriptionID, err)
 		return

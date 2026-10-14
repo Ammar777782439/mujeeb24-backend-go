@@ -354,10 +354,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			AIUsage:       postgres.NewAIUsageRepository(database),
 
 			Subscriptions: postgres.NewSubscriptionRepository(database),
-
-			GatewayFXRateYER: service.GatewayFXRateYER,
 		}
 
+		service.CatalogBatch.GatewayFXRateYER = service.GatewayFXRateYER
 		autoReply = service
 	}
 	inboundAutomation := services.InboundAutomationService{
