@@ -9,6 +9,7 @@ import (
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/litellm"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
 // LiteLLMMerchantCatalogAuthoringAdapter uses stateless Chat Completions through
@@ -19,6 +20,8 @@ type LiteLLMMerchantCatalogAuthoringAdapter struct {
 	model           string
 	maxOutputTokens int
 	maxRequestBytes int
+
+	usageReporter func(context.Context, string, string, ports.CustomerSalesUsageTelemetry) error
 }
 
 const (
@@ -32,6 +35,14 @@ func NewLiteLLMMerchantCatalogAuthoringAdapter(client *litellm.Client, model str
 		return nil, errors.New("LiteLLM merchant catalog requires gateway, model, and positive limits")
 	}
 	return &LiteLLMMerchantCatalogAuthoringAdapter{client: client, model: model, maxOutputTokens: maxOutputTokens, maxRequestBytes: maxRequestBytes}, nil
+}
+
+// SetUsageReporter persists one native gateway charge for every successful
+// Chat Completions round, including tool rounds that precede the proposal.
+func (a *LiteLLMMerchantCatalogAuthoringAdapter) SetUsageReporter(report func(context.Context, string, string, ports.CustomerSalesUsageTelemetry) error) {
+	if a != nil {
+		a.usageReporter = report
+	}
 }
 
 type merchantChatFunction struct {
@@ -59,6 +70,11 @@ type merchantChatRequest struct {
 	Stream         bool                  `json:"stream"`
 }
 type merchantChatResponse struct {
+	Usage struct {
+		PromptTokens int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+		PromptTokensDetails struct { CachedTokens int `json:"cached_tokens"` } `json:"prompt_tokens_details"`
+	} `json:"usage"`
 	Choices []struct {
 		FinishReason string `json:"finish_reason"`
 		Message      struct {
@@ -123,13 +139,28 @@ func (a *LiteLLMMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, in
 		if len(body) > a.maxRequestBytes {
 			return merchantcatalogai.Proposal{}, fmt.Errorf("merchant catalog request exceeds context byte limit: %d > %d", len(body), a.maxRequestBytes)
 		}
-		raw, err := a.client.SendChatCompletion(ctx, req)
+		raw, meta, err := a.client.SendChatCompletionWithMetadata(ctx, req)
 		if err != nil {
 			return merchantcatalogai.Proposal{}, fmt.Errorf("merchant catalog gateway request: %w", err)
 		}
 		var response merchantChatResponse
 		if err := json.Unmarshal(raw, &response); err != nil {
 			return merchantcatalogai.Proposal{}, errors.New("merchant catalog gateway returned invalid chat schema")
+		}
+		if a.usageReporter != nil {
+			tokens := response.Usage.PromptTokensDetails.CachedTokens
+			if tokens > response.Usage.PromptTokens { tokens = response.Usage.PromptTokens }
+			usage := ports.CustomerSalesUsageTelemetry{
+				Provider: "litellm", Model: a.model,
+				InputTokens: response.Usage.PromptTokens,
+				CachedTokens: tokens, OutputTokens: response.Usage.CompletionTokens,
+				ModelRequests: 1,
+				GatewayCallID: meta.CallID, GatewayDeploymentID: meta.DeploymentID,
+				GatewayCostUSD: meta.CostUSD, GatewayCostKnown: meta.HasCost,
+			}
+			if err := a.usageReporter(ctx, input.BusinessID, input.SessionID, usage); err != nil {
+				return merchantcatalogai.Proposal{}, fmt.Errorf("record merchant gateway spend: %w", err)
+			}
 		}
 		if len(response.Choices) != 1 {
 			return merchantcatalogai.Proposal{}, errors.New("merchant catalog requires exactly one model choice")
