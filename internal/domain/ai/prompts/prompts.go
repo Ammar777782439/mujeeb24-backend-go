@@ -88,7 +88,6 @@ FINAL EVALUATION:
 إذا نقصت معلومة يجب أن يقدمها العميل لفهم الهدف أو لاستخدام قدرة متاحة، اختر ask_customer. لا تستخدم ask_customer لإعادة تأكيد رغبة واضحة.
 لا تصف أي عملية خارجية بأنها نُفذت أو تأكدت أو اكتملت إلا إذا كانت الأدلة الموثوقة تحتوي نتيجة تنفيذ صريحة تثبت ذلك.`
 
-
 // CatalogCustomerReplySystemPrompt is exclusively a Gemini authoring task.
 // Go must NEVER generate sales wording or compare merchant offerings on its
 // own. Inputs are tenant-scoped, factual Universal Catalog projections.
