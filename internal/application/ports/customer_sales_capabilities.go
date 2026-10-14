@@ -32,7 +32,8 @@ type CapabilityDecision struct {
 	Capability   CustomerSalesCapability `json:"capability"`
 	ResponseText string                  `json:"response_text,omitempty"`
 	// Presentation is chosen by Gemini only for evaluate_full_catalog.
-	// "hierarchy" displays every active catalog item without reduction.
+	// "hierarchy" displays all items; "detail" and "compare" let Gemini
+	// select relevant items from complete tenant-scoped catalog evaluation.
 	Presentation string                 `json:"presentation,omitempty"`
 	Selected     []SelectedReference    `json:"selected,omitempty"`
 	Sales        *SalesWorkflowProposal `json:"sales,omitempty"`

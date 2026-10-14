@@ -36,7 +36,7 @@ func customerSalesTools(capabilities []ports.CustomerSalesCapability) []customer
 			tools = append(tools, salesWorkflowTool(capability))
 			continue
 		case ports.CustomerSalesCapabilityFullCatalog:
-			tools = append(tools, customerSalesTool{Type: "function", Name: string(capability), Description: "Request full catalog access. Use presentation=hierarchy when the customer asks to see ALL products/services or the whole assortment organized by catalog, item, variant and offer. Use presentation=compare when the customer wants matching options, comparisons, suitability, or commercial decisions. Do not send merchant IDs or filtering/query arguments.", Parameters: map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{"presentation": map[string]any{"type": "string", "enum": []string{"hierarchy", "compare"}}}, "required": []string{"presentation"}}})
+			tools = append(tools, customerSalesTool{Type: "function", Name: string(capability), Description: "Request full catalog access. Use presentation=hierarchy when the customer asks to see ALL products/services or the whole assortment organized by catalog, item, variant and offer. Use presentation=detail when the customer asks for details of a named product, service or subscription mentioned in this or earlier messages. Use presentation=compare when the customer wants advice between SELECTED matching options, not all products. For a request to list ALL products even with prices, features and comparison, use hierarchy. Gemini's catalog evaluation will identify relevant items from all merchant catalogs; never assume their IDs or send search filters. Do not send merchant IDs or filtering/query arguments.", Parameters: map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{"presentation": map[string]any{"type": "string", "enum": []string{"hierarchy", "detail", "compare"}}}, "required": []string{"presentation"}}})
 			continue
 		default:
 			continue
@@ -83,7 +83,7 @@ func parseCustomerSalesCapability(resp interactionResponse, tools []customerSale
 		if err := decodeStrictStructuredJSON(call.Arguments, &args); err != nil {
 			return ports.CapabilityDecision{}, fmt.Errorf("decode catalog capability: %w", err)
 		}
-		if args.Presentation != "" && args.Presentation != "hierarchy" && args.Presentation != "compare" {
+		if args.Presentation != "" && args.Presentation != "hierarchy" && args.Presentation != "detail" && args.Presentation != "compare" {
 			return ports.CapabilityDecision{}, errors.New("unsupported catalog presentation")
 		}
 		return ports.CapabilityDecision{Capability: capability, Presentation: args.Presentation}, nil
