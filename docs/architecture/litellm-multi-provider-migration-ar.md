@@ -1,3 +1,12 @@
+## Stage 3.6 — بدء تنظيف مسار Gemini المباشر (2026-10-14)
+
+- **اعتماد Gateway في Bootstrap:** أزيل إنشاء عميل Gemini المباشر وفروع التبديل القديمة من `BuildExternalAdapters` و`BuildAPI`. كل من B2C، الملخص، تقييم Universal Catalog، وتأليف كتالوج التاجر يستخدم فقط مهايئات LiteLLM عند تمكين التشغيل؛ لا يوجد fallback داخل Go إلى Gemini.
+- **حذف تشغيلي فعلي:** أزيلت متغيرات `LLM_ENABLED`، `LLM_BASE_URL`، `LLM_API_KEY`، `LLM_MODEL` ونظائرها من ProcessConfig وملفات البيئة النموذجية، وكذلك مفاتيح Gemini التشغيلية غير المستخدمة من ProcessConfig. أزيل كذلك `cmd/test-autoreply/main.go` الذي كان يتصل بـGoogle Gemini مباشرة. أي إعدادات LLM قديمة بقيت في ملف `.env` محلي لا تُستخدم في اختيار المسار.
+- **عزل إدارة المنصة:** لا تزال واجهات Platform Admin لإدارة موفري الذكاء واستكشاف الموديلات وبعض مخزون `AIConfigurationCache.LoadFromEnv(GEMINI_*)` مرتبطة بعقد Google القديم. **لم تُحذف هذه الواجهات أو بياناتها** لحين توفير عقد بوابة حديث وتحديث DTO/OpenAPI/الفرونت بأمان.
+- **لا تحذف بعد:** بعض الملفات الموجودة في `internal/adapters/secondary/ai/gemini` هي عقود مساعدة ومخططات JSON وقوالب Prompts مشتركة مع LiteLLM، وبعضها مهايئات Google غير مستخدمة في Bootstrap لكن اختباراتُها لم تُستبدل بالكامل. حذف الحزمة بالجملة يكسر LiteLLM؛ يجب فصل المشترك أولاً ثم حذف الملفات الميتة المثبتة.
+- **موانع اعتماد الإنتاج:** تسعير `pricing_failed`، تكاليف الاستدعاءات غير الناجحة، التوافق الفعلي لجميع موديلات B2B والمزود البديل، استعادة المهام، ضبط مهلات الطلبات، وأمان اتصال البوابة؛ هذه ليست مسائل اختفت بحذف العميل القديم.
+- يحتفظ Gateway نفسه بتعدد المزودين وFallback، بينما تبقى هذه الـPR **Draft** والفرع معزولًا، بلا دمج ولا نشر تلقائي.
+
 ## Stage 3.5 — Gateway-only runtime and local operation (2026-10-13)
 
 - A single backend switch `LITELLM_GATEWAY_ONLY=true` makes Mujeeb use LiteLLM for B2C/customer-sales, conversation summaries, full catalog batch+final, and B2B merchant catalog authoring. It does not require `GEMINI_API_KEY`; the optional direct Gemini client is not instantiated in this mode.
