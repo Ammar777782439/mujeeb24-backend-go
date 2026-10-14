@@ -110,7 +110,7 @@ func (a *LiteLLMMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, in
 	}
 	allowed := map[string]struct{}{}
 	if input.Capabilities != nil {
-		for _, def := range merchantCatalogInteractionTools(input.Capabilities) {
+		for _, def := range input.Capabilities.Definitions() {
 			if def.Name == "" {
 				return merchantcatalogai.Proposal{}, errors.New("unnamed merchant discovery tool")
 			}
