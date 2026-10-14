@@ -10,156 +10,109 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
-func TestHierarchicalCatalogIncludesAllPagesWithoutReduction(t *testing.T) {
+type aiCatalogReplyFixture struct {
+	*capabilityBatchModel
+	parts     []CatalogReplyInput
+	omit      bool
+	external  bool
+	tooLong   bool
+	failPart  int
+}
+
+func (m *aiCatalogReplyFixture) CountCatalogReplyTokens(_ context.Context, in CatalogReplyInput) (int, error) {
+	return 100 + 200*len(in.Projection.Items), nil
+}
+
+func (m *aiCatalogReplyFixture) ComposeCatalogReply(_ context.Context, in CatalogReplyInput) (CatalogReplyOutput, error) {
+	m.parts = append(m.parts, in)
+	if m.failPart > 0 && len(m.parts) == m.failPart {
+		return CatalogReplyOutput{}, fmt.Errorf("Gemini failed during part %d", m.failPart)
+	}
+	out := CatalogReplyOutput{Text: "بحسب المنتجات المتاحة، الخيارات والأسعار مختلفة. "}
+	for _, item := range in.Projection.Items {
+		out.CoveredItemIDs = append(out.CoveredItemIDs, item.ID)
+		out.Text += item.Name + "؛ "
+	}
+	if m.omit && len(out.CoveredItemIDs) > 0 {
+		out.CoveredItemIDs = out.CoveredItemIDs[1:]
+	}
+	if m.external {
+		out.CoveredItemIDs = append(out.CoveredItemIDs, "from-another-business")
+	}
+	if m.tooLong {
+		out.Text = strings.Repeat("ب", catalogReplyMaxRunes+1)
+	}
+	return out, nil
+}
+
+func TestCatalogHierarchyUsesGeminiForEveryCustomerReply(t *testing.T) {
 	catalog := &capabilityCatalogRepo{}
-	model := &capabilityBatchModel{}
-	controller := &CatalogBatchController{CatalogAI: catalog, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 100, Now: time.Now, NewID: func() string { return "id" }}
-	result, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{AIRunID: "run", BusinessID: "business-1", Presentation: "hierarchy"})
+	model := &aiCatalogReplyFixture{capabilityBatchModel: &capabilityBatchModel{}}
+	controller := &CatalogBatchController{CatalogAI: catalog, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 550, Now: time.Now, NewID: func() string { return "id" }}
+	result, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{AIRunID: "run", BusinessID: "business-1", Presentation: "hierarchy", CustomerMessage: "قارن لي كل الخيارات"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if catalog.reads != 2 || catalog.revisionReads != 2 || model.finalCalls != 0 || len(model.seen) != 0 {
-		t.Fatalf("hierarchy must read complete catalog without AI reduction: reads=%d revisions=%d final=%d evaluated=%d", catalog.reads, catalog.revisionReads, model.finalCalls, len(model.seen))
+		t.Fatalf("unexpected catalog read or legacy reduction: pages=%d revisions=%d", catalog.reads, catalog.revisionReads)
 	}
-	if result.Decision.Capability != ports.CustomerSalesCapabilityRespondWithoutAction || len(result.Messages) == 0 {
-		t.Fatalf("invalid hierarchy terminal decision: %+v", result.Decision)
+	if len(result.Messages) != 2 || len(model.parts) != 2 {
+		t.Fatalf("expected two Gemini-authored messages, got %d messages and %d model calls", len(result.Messages), len(model.parts))
 	}
-	text := strings.Join(result.Messages, "\n")
-	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "📂 Main", "• "} {
-		if !strings.Contains(text, id) {
-			t.Fatalf("hierarchy omitted %q", id)
+	if result.Decision.Capability != ports.CustomerSalesCapabilityRespondWithoutAction || result.Decision.ResponseText != result.Messages[0] {
+		t.Fatal("Gemini reply not propagated through normal validated capability")
+	}
+	for i, message := range result.Messages {
+		if !strings.Contains(message, "بحسب المنتجات") || message != "بحسب المنتجات المتاحة، الخيارات والأسعار مختلفة. "+model.parts[i].Projection.Items[0].Name+"؛ "+model.parts[i].Projection.Items[1].Name+"؛ " {
+			t.Fatalf("customer-facing message was not taken verbatim from Gemini: %q", message)
 		}
-	}
-	if result.Decision.ResponseText != result.Messages[0] {
-		t.Fatal("first message differs from validated response")
-	}
-}
-
-func TestCatalogHierarchyIsHumanReadableAndNeverSplitsProduct(t *testing.T) {
-	original := strings.Repeat("تفاصيل الخدمة العربية الطويلة ", 100)
-	price, currency, variantID := "12000.0000", "YER", "variant-1"
-	lines := &catalogHierarchyLines{}
-	item := CatalogAIItem{ID: "item-1", Name: "الباقة الأساسية", CatalogID: "catalog-1", LongDescription: &original, Variants: []CatalogAIVariant{{ID: variantID, CatalogItemID: "item-1", Name: "سنوي"}}, Offers: []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1", VariantID: &variantID, Name: "سعر السنة", Amount: &price, Currency: &currency}}}
-	if err := lines.appendItem("باقات مجيب", item, nil); err != nil {
-		t.Fatal(err)
-	}
-	messages, err := lines.messages()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(messages) != 1 {
-		t.Fatalf("one short product should be one customer reply, got %d messages", len(messages))
-	}
-	got := messages[0]
-	for _, want := range []string{"أهلًا وسهلًا", "📂 باقات مجيب", "• الباقة الأساسية", "سنوي: 12,000 ريال يمني"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("missing customer-facing value %q: %q", want, got)
+		if model.parts[i].CustomerMessage != "قارن لي كل الخيارات" || len(model.parts[i].Projection.Catalogs) != 1 || len(model.parts[i].Projection.AttributeSchemas) != 1 {
+			t.Fatal("model missing tenant-scoped catalog, schema, or customer intent")
 		}
-	}
-	if strings.Contains(got, "12000.0000") || strings.Contains(got, "catalog-1") || strings.Contains(got, "variant-1") || strings.Contains(got, original) {
-		t.Fatal("customer-facing summary leaked raw/oversized commercial projection")
-	}
-	if item.LongDescription == nil || *item.LongDescription != original {
-		t.Fatal("source product description was modified")
-	}
-}
-
-func TestCatalogHierarchyGroupsCategoriesAndItems(t *testing.T) {
-	lines := &catalogHierarchyLines{}
-	price, currency := "250.0000", "SAR"
-	for i := 0; i < 8; i++ {
-		item := CatalogAIItem{ID: fmt.Sprintf("item-%d", i), Name: fmt.Sprintf("خيار رقم %d", i), CatalogID: "catalog-1", Offers: []CatalogAIOffer{{ID: fmt.Sprintf("offer-%d", i), CatalogItemID: fmt.Sprintf("item-%d", i), Amount: &price, Currency: &currency}}}
-		if err := lines.appendItem("باقات السفر", item, nil); err != nil {
-			t.Fatal(err)
-		}
-	}
-	messages, err := lines.messages()
-	if err != nil {
-		t.Fatal(err)
-	}
-	all := strings.Join(messages, "\n")
-	if strings.Count(all, "📂 باقات السفر") != 1 {
-		t.Fatalf("section header repeated per product: %q", all)
-	}
-	for i := 0; i < 8; i++ {
-		if strings.Count(all, fmt.Sprintf("• خيار رقم %d", i)) != 1 {
-			t.Fatalf("item %d is missing or repeated", i)
+		for _, item := range model.parts[i].Projection.Items {
+			if len(item.Variants) != 1 || len(item.Offers) != 1 {
+				t.Fatal("model missing a commercial offer or its variant")
+			}
 		}
 	}
 }
 
-func TestCatalogHierarchyRejectsDetachedOfferAndOversizedItem(t *testing.T) {
-	wrong := "variant-from-another-item"
-	lines := &catalogHierarchyLines{}
-	err := lines.appendItem("C", CatalogAIItem{ID: "item-1", Name: "Item", Offers: []CatalogAIOffer{{ID: "offer", CatalogItemID: "item-1", VariantID: &wrong}}}, nil)
-	if err == nil {
-		t.Fatal("detached offer incorrectly accepted")
-	}
-	lines = &catalogHierarchyLines{}
-	long := strings.Repeat("اسم طويل جدا ", 180)
-	item := CatalogAIItem{ID: "item-2", Name: "Item", Offers: []CatalogAIOffer{{ID: "offer", CatalogItemID: "item-2", Name: long}}}
-	if err := lines.appendItem("Catalog", item, nil); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := lines.messages(); err == nil {
-		t.Fatal("overlong product must not be split into incoherent fragments")
-	}
-}
-
-func TestCatalogHierarchyNeverLeaksRawMachineAttributeKeys(t *testing.T) {
-	attrs := map[string]any{"direct_trips": true, "wifi": true, "features": []any{"مرشد محلي", "وجبات مشمولة"}, "الضمان": "سنة واحدة"}
-	rendered := formatHierarchyAttributes(attrs, nil)
-	for _, forbidden := range []string{"direct_trips", "wifi", "features", "true", "[", "]"} {
-		if strings.Contains(rendered, forbidden) {
-			t.Fatalf("machine-facing catalog values leaked into reply: %q", rendered)
-		}
-	}
-	for _, grounded := range []string{"مرشد محلي", "وجبات مشمولة", "الضمان", "سنة واحدة"} {
-		if !strings.Contains(rendered, grounded) {
-			t.Fatalf("customer-readable catalog fact %q lost: %q", grounded, rendered)
-		}
+func TestCatalogHierarchyRejectsMissingOrForeignGeminiItemCoverage(t *testing.T) {
+	for _, mode := range []string{"omitted", "foreign", "overlong", "provider_failure"} {
+		t.Run(mode, func(t *testing.T) {
+			model := &aiCatalogReplyFixture{capabilityBatchModel: &capabilityBatchModel{}, omit: mode == "omitted", external: mode == "foreign", tooLong: mode == "overlong"}
+			if mode == "provider_failure" {
+				model.failPart = 2
+			}
+			catalog := &capabilityCatalogRepo{}
+			controller := &CatalogBatchController{CatalogAI: catalog, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 550, Now: time.Now, NewID: func() string { return "id" }}
+			_, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{AIRunID: "run", BusinessID: "business-1", Presentation: "hierarchy"})
+			if err == nil {
+				t.Fatal("invalid Gemini output must fail closed without a partial reply")
+			}
+		})
 	}
 }
 
-func TestAutoReplyHierarchicalCatalogSkipsCandidateReduction(t *testing.T) {
+func TestCatalogHierarchyRejectsCatalogRevisionChanges(t *testing.T) {
+	model := &aiCatalogReplyFixture{capabilityBatchModel: &capabilityBatchModel{}}
+	controller := &CatalogBatchController{CatalogAI: &capabilityCatalogRepo{changed: true}, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 550, Now: time.Now, NewID: func() string { return "id" }}
+	if _, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{AIRunID: "run", BusinessID: "business-1", Presentation: "hierarchy"}); err == nil {
+		t.Fatal("stale commercial evidence accepted")
+	}
+}
+
+func TestAutoReplyEnqueuesEveryGeminiAuthoredCatalogPart(t *testing.T) {
 	service, runtime, outbox, runs := capabilityService()
 	runtime.Decision = ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityFullCatalog, Presentation: "hierarchy"}
-	model := &capabilityBatchModel{}
-	service.CatalogBatch = &CatalogBatchController{CatalogAI: &capabilityCatalogRepo{}, Gemini: model, RunRepo: runs, TokenBudget: 100, Now: service.now, NewID: service.NewID}
+	model := &aiCatalogReplyFixture{capabilityBatchModel: &capabilityBatchModel{}}
+	service.CatalogBatch = &CatalogBatchController{CatalogAI: &capabilityCatalogRepo{}, Gemini: model, RunRepo: runs, TokenBudget: 550, Now: service.now, NewID: service.NewID}
 	service.EntityContractPayload = mustMarshal(BuildCatalogEntityContractPayload())
 	result, err := service.Handle(context.Background(), capabilityCommand())
-	if err != nil || !result.Enqueued || outbox.calls == 0 || model.finalCalls != 0 || len(model.seen) != 0 {
-		t.Fatalf("hierarchy should enqueue grounded reply without reduction: %+v err=%v outbound=%d", result, err, outbox.calls)
-	}
-}
-
-type verboseHierarchyCatalogRepo struct {
-	*capabilityCatalogRepo
-}
-
-func (r *verboseHierarchyCatalogRepo) ListProjectionPage(ctx context.Context, request ports.CatalogAIProjectionRequest) (ports.CatalogAIProjectionPage, error) {
-	page, err := r.capabilityCatalogRepo.ListProjectionPage(ctx, request)
-	if err == nil && len(page.Items) > 0 && request.Cursor == "" {
-		for i := 0; i < 8; i++ {
-			id := fmt.Sprintf("extra-%d", i)
-			description := strings.Repeat("معلومات الخدمة المفيدة ", 12)
-			page.Items = append(page.Items, ports.CatalogAIProjectionBundle{Item: ports.CatalogItemRecord{ID: id, BusinessID: request.BusinessID, CatalogID: "catalog", Name: id, ItemType: "service", Status: "active", ShortDescription: &description}})
-		}
-	}
-	return page, err
-}
-
-func TestAutoReplyHierarchyEnqueuesAllPartsAtomically(t *testing.T) {
-	service, runtime, outbox, runs := capabilityService()
-	runtime.Decision = ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityFullCatalog, Presentation: "hierarchy"}
-	catalog := &verboseHierarchyCatalogRepo{capabilityCatalogRepo: &capabilityCatalogRepo{}}
-	service.CatalogBatch = &CatalogBatchController{CatalogAI: catalog, Gemini: &capabilityBatchModel{}, RunRepo: runs, TokenBudget: 100, Now: service.now, NewID: service.NewID}
-	service.EntityContractPayload = mustMarshal(BuildCatalogEntityContractPayload())
-	result, err := service.Handle(context.Background(), capabilityCommand())
-	if err != nil || !result.Enqueued || outbox.calls < 2 {
-		t.Fatalf("hierarchical multi-part output was not fully enqueued: parts=%d result=%+v err=%v", outbox.calls, result, err)
+	if err != nil || !result.Enqueued || outbox.calls != 2 || len(model.parts) != 2 {
+		t.Fatalf("complete Gemini-authored reply not enqueued: result=%+v err=%v outbox=%d", result, err, outbox.calls)
 	}
 	if !strings.Contains(outbox.record.DedupeKey, ":part:") {
-		t.Fatalf("last part lost its independent delivery key: %q", outbox.record.DedupeKey)
+		t.Fatal("multipart Gemini answer lost per-message idempotency key")
 	}
 }
