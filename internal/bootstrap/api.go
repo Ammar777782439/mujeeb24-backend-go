@@ -204,20 +204,26 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	}
 	aiConfigRepo := postgres.NewAIProviderConfigRepository(database, encryptionKey)
 	aiConfigCache := services.NewAIConfigurationCache(aiConfigRepo, aiConfigRepo)
+	// LiteLLM gateway mode uses env-backed, distinct customer/catalog/merchant
+	// aliases. The legacy Gemini cache is not authoritative and must not
+	// be seeded from GEMINI_API_KEY when gateway-only mode is enabled.
+	if external.LiteLLMPlatformConfig == nil {
 	aiConfigCache.LoadFromEnv(
-		os.Getenv("GEMINI_API_KEY"),
-		func() string {
-			m := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
-			if m == "" {
-				m = "gemini-3.8-flash"
-			}
-			return m
-		}(),
-		"https://generativelanguage.googleapis.com",
-		4096,  // LLMMaxOutputTokens default
-		48000, // LLMMaxInputCharacters default; bounded app guard below Gemini 3.8 context capacity
-		"",
-	)
+			os.Getenv("GEMINI_API_KEY"),
+			func() string {
+				m := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
+				if m == "" {
+					m = "gemini-3.8-flash"
+				}
+				return m
+			}(),
+			"https://generativelanguage.googleapis.com",
+			4096,  // LLMMaxOutputTokens default
+			48000, // LLMMaxInputCharacters default; bounded app guard below Gemini 3.8 context capacity
+			"",
+		)
+	}
+	
 
 	if external.AutoReplyEnabled || external.CustomerSalesEnabled {
 		// One customer-sales decision interface owns B2C and summary requests.
@@ -438,6 +444,10 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		}
 	}
 	dashboardServer := handlers.NewServer(dependencies)
+	var modelDiscovery ports.ModelDiscoveryClient
+	if external.LiteLLMPlatformConfig != nil {
+		modelDiscovery = litellm.NewModelsClient()
+	}
 	dashboardServer = dashboardServer.WithPlatformDeps(handlers.PlatformDeps{
 		Plans:               postgres.NewPlanRepository(database),
 		PlatformBusiness:    postgres.NewPlatformBusinessRepository(database),
@@ -451,7 +461,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		ChannelReader:       postgres.NewPlatformChannelReadRepository(database),
 		AIConfigRepo:        aiConfigRepo,
 		AIConfigCache:       aiConfigCache,
-		ModelDiscovery:      litellm.NewModelsClient(),
+		ModelDiscovery:      modelDiscovery,
 		LiteLLMSettings:     external.LiteLLMPlatformConfig,
 		AssignBusinessOwner: assignBusinessOwner,
 	})
