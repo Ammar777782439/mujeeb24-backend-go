@@ -12,6 +12,8 @@ services:
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?set a random stable salt key}
       DATABASE_URL: postgresql://litellm:${LITELLM_POSTGRES_PASSWORD:?set a database password}@db:5432/litellm
       STORE_MODEL_IN_DB: "True"
+      UI_USERNAME: ${UI_USERNAME:-admin}
+      UI_PASSWORD: ${UI_PASSWORD:-}
     depends_on:
       db:
         condition: service_healthy

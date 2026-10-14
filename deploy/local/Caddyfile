@@ -9,8 +9,8 @@
 	handle @socialapi_oauth_callback {
 		reverse_proxy host.docker.internal:3001
 	}
-
+	# 2. توجيه جميع الطلبات الأخرى إلى LiteLLM (الواجهة Dashboard والـ API)
 	handle {
-		respond "not found" 404
+		reverse_proxy host.docker.internal:4000
 	}
 }
