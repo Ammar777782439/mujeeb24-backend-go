@@ -37,7 +37,7 @@ func TestLiteLLMComposesCatalogReplyWithWholeCommercialEvidence(t *testing.T) {
 			}
 			if req.Model != "mujeeb-catalog" || !strings.Contains(req.SystemInstruction, "اكتب جوابًا طبيعيًا") ||
 				!strings.Contains(req.Input, "special-feature") || !strings.Contains(req.Input, "offer-price") ||
-				!strings.Contains(req.Input, "variants") || !strings.Contains(req.Input, "السعر") ||
+				!strings.Contains(req.Input, "variants") || !strings.Contains(req.Input, `"amount":"250.0000"`) || !strings.Contains(req.Input, `"currency":"SAR"`) ||
 				req.ResponseFormat == nil || req.ResponseFormat.Schema == nil {
 				t.Errorf("Gemini narration lost commercial facts or its grounded-output contract: %+v", req)
 			}
