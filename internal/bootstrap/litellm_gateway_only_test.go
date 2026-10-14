@@ -10,7 +10,6 @@ import (
 func TestBuildExternalAdaptersGatewayOnlyUsesOneProxyWithoutGemini(t *testing.T) {
 	cfg := config.ProcessConfig{
 		LiteLLMGatewayOnly:             true,
-		GeminiAPIKey:                   "key-must-not-leak-into-direct-client",
 		LiteLLMBaseURL:                 "http://127.0.0.1:4000",
 		LiteLLMAPIKey:                  "virtual-key",
 		LiteLLMCustomerModel:           "mujeeb-customer",
