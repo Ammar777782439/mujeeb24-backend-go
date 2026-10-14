@@ -47,7 +47,7 @@ func TestCatalogEvaluationChecksRevisionAfterFinalModelDecision(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			probe := &catalogRevisionProbe{revisions: tc.revisions}
-			client := &exactTokenBatchGeminiStub{}
+			client := &catalogTokenEstimatorStub{}
 			controller := &CatalogBatchController{CatalogAI: probe, Evaluator: client}
 			out, err := controller.runPagedCatalogEvaluation(context.Background(), CatalogEvaluationInput{
 				AIRunID: "run-1", BusinessID: "business-1", CustomerMessage: "What is available?",
