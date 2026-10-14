@@ -305,7 +305,9 @@ func (p *catalogHierarchyLines) appendItem(catalogName string, item CatalogAIIte
 		info.lines = append(info.lines, "  "+catalogPreview(*item.LongDescription, 150))
 	}
 	if len(item.Attributes) > 0 {
-		info.lines = append(info.lines, "  أبرز المواصفات: "+formatHierarchyAttributes(item.Attributes, schema))
+		if detail := formatHierarchyAttributes(item.Attributes, schema); detail != "" {
+			info.lines = append(info.lines, "  أبرز المواصفات: "+detail)
+		}
 	}
 	variants := map[string]CatalogAIVariant{}
 	for _, v := range item.Variants {
@@ -382,24 +384,56 @@ func formatHierarchyAttributes(attributes map[string]any, schema *CatalogAIAttri
 	sort.Strings(keys)
 	parts := make([]string, 0, len(keys))
 	for _, key := range keys {
-		value, err := json.Marshal(attributes[key])
-		if err != nil {
+		label := strings.TrimSpace(labels[key])
+		if label == "" && catalogHasArabic(key) {
+			label = key
+		}
+		if label != "" {
+			value, err := json.Marshal(attributes[key])
+			if err != nil {
+				continue
+			}
+			rendered := strings.Trim(string(value), "\"")
+			switch rendered {
+			case "true":
+				rendered = "نعم"
+			case "false":
+				rendered = "لا"
+			}
+			parts = append(parts, label+": "+rendered)
 			continue
 		}
-		label := labels[key]
-		if label == "" {
-			label = strings.ReplaceAll(key, "_", " ")
+		// Universal Catalog permits merchant-defined machine keys. Without a
+		// schema label, never expose raw keys such as direct_trips or
+		// processing_time to an Arabic-speaking customer. Descriptive Arabic
+		// values can still be shown faithfully as standalone facts.
+		switch values := attributes[key].(type) {
+		case string:
+			if catalogHasArabic(values) {
+				parts = append(parts, values)
+			}
+		case []any:
+			texts := make([]string, 0, len(values))
+			for _, v := range values {
+				if value, ok := v.(string); ok && catalogHasArabic(value) {
+					texts = append(texts, value)
+				}
+			}
+			if len(texts) > 0 {
+				parts = append(parts, strings.Join(texts, "، "))
+			}
 		}
-		rendered := strings.Trim(string(value), "\"")
-		switch rendered {
-		case "true":
-			rendered = "نعم"
-		case "false":
-			rendered = "لا"
-		}
-		parts = append(parts, label+": "+rendered)
 	}
 	return catalogPreview(strings.Join(parts, "، "), 170)
+}
+
+func catalogHasArabic(text string) bool {
+	for _, r := range text {
+		if r >= '\u0600' && r <= '\u06ff' {
+			return true
+		}
+	}
+	return false
 }
 
 func formatCatalogCustomerPrice(amount, currency *string) string {
