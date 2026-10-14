@@ -208,7 +208,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	// aliases. The legacy Gemini cache is not authoritative and must not
 	// be seeded from GEMINI_API_KEY when gateway-only mode is enabled.
 	if external.LiteLLMPlatformConfig == nil {
-	aiConfigCache.LoadFromEnv(
+		aiConfigCache.LoadFromEnv(
 			os.Getenv("GEMINI_API_KEY"),
 			func() string {
 				m := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
@@ -223,7 +223,6 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			"",
 		)
 	}
-	
 
 	if external.AutoReplyEnabled || external.CustomerSalesEnabled {
 		// One customer-sales decision interface owns B2C and summary requests.
