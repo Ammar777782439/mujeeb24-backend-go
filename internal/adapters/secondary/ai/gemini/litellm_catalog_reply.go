@@ -15,28 +15,57 @@ import (
 )
 
 type catalogReplyJSON struct {
-	ResponseText   string   `json:"response_text"`
-	CoveredItemIDs []string `json:"covered_item_ids"`
+	Introduction string                         `json:"introduction"`
+	Sections     []services.CatalogReplySection `json:"sections"`
+	Conclusion   string                         `json:"conclusion"`
 }
 
 // The schema restricts Gemini's item references to those in its own chunk.
 // Go also checks exact item coverage and limits the response length.
 func catalogCustomerReplySchema(projection services.CatalogAIProjection) map[string]any {
-	ids := make([]string, 0, len(projection.Items))
+	itemIDs := make([]string, 0, len(projection.Items))
+	catalogsSeen := make(map[string]struct{})
+	catalogIDs := make([]string, 0, len(projection.Catalogs))
 	for _, item := range projection.Items {
-		ids = append(ids, item.ID)
+		itemIDs = append(itemIDs, item.ID)
+		if _, seen := catalogsSeen[item.CatalogID]; !seen {
+			catalogsSeen[item.CatalogID] = struct{}{}
+			catalogIDs = append(catalogIDs, item.CatalogID)
+		}
 	}
-	idSchema := map[string]any{"type": "string"}
-	if len(ids) > 0 {
-		idSchema["enum"] = ids
+	itemIDSchema := map[string]any{"type": "string"}
+	catalogIDSchema := map[string]any{"type": "string"}
+	if len(itemIDs) > 0 {
+		itemIDSchema["enum"] = itemIDs
+		catalogIDSchema["enum"] = catalogIDs
 	}
 	return map[string]any{
 		"type": "object", "additionalProperties": false,
 		"properties": map[string]any{
-			"response_text":    map[string]any{"type": "string"},
-			"covered_item_ids": map[string]any{"type": "array", "items": idSchema},
+			"introduction": map[string]any{"type": "string"},
+			"sections": map[string]any{
+				"type": "array", "items": map[string]any{
+					"type": "object", "additionalProperties": false,
+					"properties": map[string]any{
+						"catalog_id": catalogIDSchema,
+						"heading": map[string]any{"type": "string"},
+						"items": map[string]any{
+							"type": "array", "items": map[string]any{
+								"type": "object", "additionalProperties": false,
+								"properties": map[string]any{
+									"item_id": itemIDSchema,
+									"text": map[string]any{"type": "string"},
+								},
+								"required": []string{"item_id", "text"},
+							},
+						},
+					},
+					"required": []string{"catalog_id", "heading", "items"},
+				},
+			},
+			"conclusion": map[string]any{"type": "string"},
 		},
-		"required": []string{"response_text", "covered_item_ids"},
+		"required": []string{"introduction", "sections", "conclusion"},
 	}
 }
 
@@ -48,11 +77,13 @@ func (c *LiteLLMCatalogAdapter) catalogCustomerReplyRequest(input services.Catal
 		CustomerMessage string                       `json:"customer_message"`
 		Conversation    any                          `json:"conversation_context"`
 		PartNumber      int                          `json:"part_number"`
+		TotalParts      int                          `json:"total_parts"`
 		Catalog         services.CatalogAIProjection `json:"catalog_projection"`
 	}{
 		CustomerMessage: input.CustomerMessage,
 		Conversation:    catalogBatchPromptContextFrom(&input.ConversationContext),
 		PartNumber:      input.PartNumber,
+		TotalParts:      input.TotalParts,
 		Catalog:         input.Projection,
 	}
 	body, err := json.Marshal(payload)
@@ -117,11 +148,8 @@ func (c *LiteLLMCatalogAdapter) ComposeCatalogReply(ctx context.Context, input s
 	if err := decoder.Decode(&extra); err != io.EOF {
 		return services.CatalogReplyOutput{}, errors.New("unexpected extra content in Gemini catalog response")
 	}
-	if strings.TrimSpace(result.ResponseText) == "" {
-		return services.CatalogReplyOutput{}, errors.New("Gemini returned an empty catalog reply")
-	}
 	return services.CatalogReplyOutput{
-		Text: result.ResponseText, CoveredItemIDs: result.CoveredItemIDs,
+		Introduction: result.Introduction, Sections: result.Sections, Conclusion: result.Conclusion,
 		Usage: ports.CustomerSalesUsageTelemetry{
 			Provider: "litellm", Model: c.model,
 			InputTokens:   normalized.Usage.TotalInputTokens,
