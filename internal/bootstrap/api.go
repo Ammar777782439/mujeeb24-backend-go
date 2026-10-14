@@ -159,12 +159,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	// is stateless except for its runtime flag, so creating it early
 	// is safe.
 	platformOperations := services.NewInMemoryPlatformOperationsRepository(
-		(external.GeminiHTTPClient != nil || external.LiteLLMCustomerDecision != nil) && external.LLMConfigError == nil,
+		external.LiteLLMCustomerDecision != nil && external.LLMConfigError == nil,
 		external.SocialAPI != nil,
 	)
-	if external.GeminiHTTPClient != nil && external.LLMConfigError == nil {
-		platformOperations.RegisterProbe("google_gemini", gemini.NewHealthCheckProbe(external.GeminiHTTPClient))
-	}
 	if external.SocialAPIHealthProbe != nil {
 		platformOperations.RegisterProbe("socialapi", external.SocialAPIHealthProbe)
 	}
@@ -225,19 +222,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	if external.AutoReplyEnabled || external.CustomerSalesEnabled {
 		// One customer-sales decision interface owns B2C and summary requests.
 		// In gateway-only mode there is NO direct Gemini dependency or Go fallback.
-		var customerSalesDecision ports.CustomerSalesDecisionPort
-		if external.LiteLLMCustomerDecision != nil && external.GeminiHTTPClient == nil {
-			customerSalesDecision = external.LiteLLMCustomerDecision
-		} else if external.GeminiHTTPClient != nil {
-			customerSalesAdapter, err := gemini.NewGeminiCustomerSalesAdapter(external.GeminiHTTPClient)
-			if err != nil {
-				return nil, fmt.Errorf("build customer sales AI adapter: %w", err)
-			}
-			customerSalesAdapter.SetConfigurationProvider(aiConfigCache)
-			customerSalesDecision = customerSalesAdapter
-		}
+		customerSalesDecision := external.LiteLLMCustomerDecision
 		if customerSalesDecision == nil {
-			return nil, errors.New("AutoReply requires a configured customer-sales AI decision provider")
+			return nil, errors.New("AutoReply requires a configured LiteLLM customer-sales decision provider")
 		}
 		referenceRepository := postgres.NewConversationReferenceRepository(database)
 		service := services.NewAutoReplyService(
@@ -346,70 +333,23 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// Per contract ② §2, batching retains full commercial evidence.
 		// LiteLLM uses a route-capacity budget; legacy direct Gemini
 		// keeps its existing 8000-token budget.
-		if external.LiteLLMCatalogClient != nil && external.GeminiHTTPClient == nil {
-			catalogBudget, err := external.LiteLLMCatalogClient.BatchTokenBudget()
-			if err != nil {
-				return nil, fmt.Errorf("configure LiteLLM catalog token budget: %w", err)
-			}
-			service.CatalogBatch = &services.CatalogBatchController{
-				CatalogAI:     postgres.NewCatalogAIReadRepository(database),
-				Gemini:        external.LiteLLMCatalogClient,
-				RunRepo:       postgres.NewAIRunTraceRepository(database),
-				TokenBudget:   catalogBudget,
-				Now:           func() time.Time { return time.Now().UTC() },
-				NewID:         uuid.NewString,
-				AIUsage:       postgres.NewAIUsageRepository(database),
-				AIPricing:     postgres.NewAIProviderPricingRepository(database),
-				Subscriptions: postgres.NewSubscriptionRepository(database),
-			}
-		} else if geminiClient := external.GeminiHTTPClient; geminiClient != nil {
-			batchTokenCounter, err := gemini.NewTokenCounter(gemini.TokenCounterConfig{
-				BaseURL: geminiClient.BaseURL(),
-				APIKey:  geminiClient.APIKey(),
-				Model:   geminiClient.Model(),
-			})
-			if err != nil {
-				return nil, fmt.Errorf("build Gemini token counter: %w", err)
-			}
-			batchClient, err := gemini.NewBatchClient(gemini.BatchClientConfig{
-				BaseURL:        geminiClient.BaseURL(),
-				APIKey:         geminiClient.APIKey(),
-				Model:          geminiClient.Model(),
-				HTTPClient:     geminiClient.HTTPClient(),
-				RequestTimeout: geminiClient.RequestTimeout(),
-			})
-			if err != nil {
-				return nil, fmt.Errorf("build Gemini catalog batch client: %w", err)
-			}
-			var catalogEvaluator services.BatchGeminiClient = batchClient
-			if external.LiteLLMCatalogClient != nil {
-				catalogEvaluator = external.LiteLLMCatalogClient
-			}
-			service.CatalogBatch = &services.CatalogBatchController{
-				CatalogAI:     postgres.NewCatalogAIReadRepository(database),
-				TokenCounter:  batchTokenCounter,
-				Gemini:        catalogEvaluator,
-				RunRepo:       postgres.NewAIRunTraceRepository(database),
-				TokenBudget:   8000,
-				Now:           func() time.Time { return time.Now().UTC() },
-				NewID:         uuid.NewString,
-				AIUsage:       postgres.NewAIUsageRepository(database),
-				AIPricing:     postgres.NewAIProviderPricingRepository(database),
-				Subscriptions: postgres.NewSubscriptionRepository(database),
-			}
-			// Per §1: wire the dynamic config provider into BatchClient.
-			batchClient.SetConfigurationProvider(aiConfigCache)
-			// Per P1-4: wire the SAME dynamic config provider into
-			// TokenCounter so the countTokens call uses the same
-			// active model/apiKey/baseURL as the actual generateContent
-			// call. Without this, a model switch via the Platform
-			// Admin API would update BatchClient but leave
-			// TokenCounter pinned to the old static model — causing
-			// token counts to be computed against the wrong tokenizer
-			// (different models have different tokenizers).
-			if batchTokenCounter != nil {
-				batchTokenCounter.SetConfigurationProvider(aiConfigCache)
-			}
+		if external.LiteLLMCatalogClient == nil {
+			return nil, errors.New("AutoReply requires a configured LiteLLM catalog model")
+		}
+		catalogBudget, err := external.LiteLLMCatalogClient.BatchTokenBudget()
+		if err != nil {
+			return nil, fmt.Errorf("configure LiteLLM catalog token budget: %w", err)
+		}
+		service.CatalogBatch = &services.CatalogBatchController{
+			CatalogAI:     postgres.NewCatalogAIReadRepository(database),
+			Gemini:        external.LiteLLMCatalogClient,
+			RunRepo:       postgres.NewAIRunTraceRepository(database),
+			TokenBudget:   catalogBudget,
+			Now:           func() time.Time { return time.Now().UTC() },
+			NewID:         uuid.NewString,
+			AIUsage:       postgres.NewAIUsageRepository(database),
+			AIPricing:     postgres.NewAIProviderPricingRepository(database),
+			Subscriptions: postgres.NewSubscriptionRepository(database),
 		}
 
 		autoReply = service
@@ -429,7 +369,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	// PlatformDeps wire-up). The previous local declaration here has
 	// been removed. The flags below remain here for the
 	// aiConfigured/channelConfigured dashboard view.
-	aiConfigured := (external.GeminiHTTPClient != nil || external.LiteLLMCustomerDecision != nil) && external.LLMConfigError == nil
+	aiConfigured := external.LiteLLMCustomerDecision != nil && external.LLMConfigError == nil
 	channelConfigured := external.SocialAPI != nil
 	_ = aiConfigured
 	_ = channelConfigured
@@ -519,7 +459,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	})
 
 	var merchantCatalogErr error
-	dashboardServer, merchantCatalogErr = wireMerchantCatalogAuthoringAI(dashboardServer, database, external.GeminiHTTPClient, aiConfigCache, external.LiteLLMMerchantAuthoring)
+	dashboardServer, merchantCatalogErr = wireMerchantCatalogAuthoringAI(dashboardServer, database, external.LiteLLMMerchantAuthoring)
 	if merchantCatalogErr != nil {
 		return nil, merchantCatalogErr
 	}

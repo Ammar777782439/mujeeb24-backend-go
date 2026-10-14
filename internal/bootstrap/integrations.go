@@ -14,7 +14,6 @@ import (
 type ExternalAdapters struct {
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
-	GeminiHTTPClient               *gemini.GeminiHTTPClient
 	LiteLLMCustomerDecision        ports.CustomerSalesDecisionPort
 	LiteLLMCatalogClient           *gemini.LiteLLMCatalogAdapter
 	LiteLLMMerchantAuthoring       merchantcatalogai.MerchantCatalogAuthoringPort
@@ -56,7 +55,7 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 			checks["channel_provisioning"] = "configured"
 		}
 	}
-	if a.GeminiHTTPClient != nil {
+	if a.LiteLLMCustomerDecision != nil && a.LiteLLMCatalogClient != nil && a.LiteLLMMerchantAuthoring != nil {
 		checks["llm_runtime"] = "configured"
 	}
 	if a.LiteLLMCustomerDecision != nil {
@@ -88,23 +87,8 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 			adapters.ChannelProvisioningError = errors.New("channel provisioning adapters are not configured")
 		}
 	}
-	if cfg.GeminiAPIKey != "" && !cfg.LiteLLMGatewayOnly {
-		client, err := gemini.NewGeminiHTTPClient(gemini.GeminiHTTPClientConfig{
-			BaseURL:            cfg.GeminiBaseURL,
-			APIKey:             cfg.GeminiAPIKey,
-			Model:              cfg.GeminiModel,
-			RequestTimeout:     cfg.GeminiHTTPTimeout,
-			MaxOutputTokens:    cfg.LLMMaxOutputTokens,
-			MaxInputCharacters: cfg.LLMMaxInputCharacters,
-		})
-		if err != nil {
-			adapters.LLMConfigError = errors.New("Gemini adapter configuration: " + err.Error())
-		} else {
-			adapters.GeminiHTTPClient = client
-		}
-	} else if cfg.LLMEnabled {
-		adapters.LLMConfigError = errors.New("the configured non-Gemini AI provider is not wired to a customer AI capability")
-
+	if !cfg.LiteLLMGatewayOnly && (cfg.AutoReplyEnabled || cfg.CustomerSalesEnabled) {
+		adapters.LLMConfigError = errors.New("customer AI requires LiteLLM Gateway; direct Gemini and legacy LLM runtimes were retired")
 	}
 	if cfg.LiteLLMGatewayOnly && adapters.LLMConfigError == nil {
 		gateway, err := litellm.NewClient(litellm.Config{

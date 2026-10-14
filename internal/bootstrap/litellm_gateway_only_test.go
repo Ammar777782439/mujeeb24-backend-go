@@ -26,8 +26,8 @@ func TestBuildExternalAdaptersGatewayOnlyUsesOneProxyWithoutGemini(t *testing.T)
 	if out.LLMConfigError != nil {
 		t.Fatalf("gateway-only setup failed: %v", out.LLMConfigError)
 	}
-	if out.GeminiHTTPClient != nil {
-		t.Fatal("direct Gemini client exists in gateway-only mode")
+	if out.ReadinessChecks()["llm_runtime"] != "configured" {
+		t.Fatal("gateway-only runtime not reported as configured")
 	}
 	if out.LiteLLMCustomerDecision == nil || out.LiteLLMCatalogClient == nil || out.LiteLLMMerchantAuthoring == nil {
 		t.Fatal("gateway-only mode did not configure all B2C, catalog and B2B paths")

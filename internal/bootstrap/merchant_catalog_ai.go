@@ -1,34 +1,19 @@
 package bootstrap
 
 import (
-	"fmt"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/handlers"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gemini"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
 func wireMerchantCatalogAuthoringAI(
 	dashboardServer *handlers.Server,
 	database *postgres.Adapter,
-	geminiHTTPClient *gemini.GeminiHTTPClient,
-	configProvider ports.AIConfigurationProvider,
-	merchantOverride merchantcatalogai.MerchantCatalogAuthoringPort,
+	authoring merchantcatalogai.MerchantCatalogAuthoringPort,
 ) (*handlers.Server, error) {
-	if geminiHTTPClient == nil && merchantOverride == nil {
+	if authoring == nil {
 		return dashboardServer, nil
-	}
-
-	var merchantCatalogAuthoring merchantcatalogai.MerchantCatalogAuthoringPort = merchantOverride
-	if merchantCatalogAuthoring == nil {
-		geminiAuthoring, err := gemini.NewGeminiMerchantCatalogAuthoringAdapter(geminiHTTPClient)
-		if err != nil {
-			return nil, fmt.Errorf("build Gemini merchant catalog authoring adapter: %w", err)
-		}
-		geminiAuthoring.SetConfigurationProvider(configProvider)
-		merchantCatalogAuthoring = geminiAuthoring
 	}
 
 	catalogRepo := postgres.NewCatalogRepository(database)
@@ -37,7 +22,7 @@ func wireMerchantCatalogAuthoringAI(
 		Selector:       merchantcatalogai.DeterministicCatalogSelector{Repository: catalogRepo},
 		Business:       postgres.NewBusinessRepository(database),
 		EntityContract: merchantcatalogai.CanonicalEntityContractProvider{},
-		Authoring:      merchantCatalogAuthoring,
+		Authoring:      authoring,
 		CapabilitiesFactory: func(selectedCatalogID string) merchantcatalogai.MerchantCatalogDiscoveryPort {
 			return merchantcatalogai.NewReadOnlyCapabilityRegistry(catalogRepo, selectedCatalogID)
 		},

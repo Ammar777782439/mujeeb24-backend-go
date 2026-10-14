@@ -38,18 +38,13 @@ func TestBuildExternalAdaptersKeepsAutoReplyDisabledByDefault(t *testing.T) {
 	}
 }
 
-func TestBuildExternalAdaptersRejectsUnwiredNonGeminiProvider(t *testing.T) {
+func TestBuildExternalAdaptersRejectsLegacyAIWhenCustomerSalesEnabled(t *testing.T) {
 	adapters := BuildExternalAdapters(config.ProcessConfig{
-		LLMEnabled: true,
-		LLMBaseURL: "https://example.invalid/v1",
-		LLMAPIKey:  "test-only-key",
-		LLMModel:   "test-model",
+		AutoReplyEnabled: true,
+		GeminiAPIKey:     "test-only-direct-provider-key",
 	})
-	if adapters.LLMConfigError == nil {
-		t.Fatal("expected unsupported non-Gemini AI provider error")
-	}
-	if adapters.GeminiHTTPClient != nil {
-		t.Fatal("non-Gemini provider must not construct the Gemini client")
+	if adapters.LLMConfigError == nil || adapters.LiteLLMCustomerDecision != nil {
+		t.Fatal("legacy direct AI must never serve customer replies")
 	}
 }
 
