@@ -16,6 +16,7 @@ import (
 type workerContextInspection struct {
 	deadline chan bool
 }
+
 func (h workerContextInspection) Handle(ctx context.Context, _ commands.AutoReplyCommand) (commands.AutoReplyResult, error) {
 	_, hasDeadline := ctx.Deadline()
 	h.deadline <- hasDeadline
@@ -44,7 +45,7 @@ func TestWorkerDoesNotImposeDeadlineOnGateway(t *testing.T) {
 func TestAIProviderErrorClassification(t *testing.T) {
 	cases := []struct {
 		name string
-		err error
+		err  error
 		want string
 	}{
 		{"deadline", fmt.Errorf("gateway call: %w", context.DeadlineExceeded), string(ports.AIRunFailureCategoryTimeout)},
@@ -67,8 +68,9 @@ func TestAIProviderErrorClassification(t *testing.T) {
 type canceledContextRunRepo struct {
 	ports.AIRunRepository
 	persisted bool
-	category string
+	category  string
 }
+
 func (r *canceledContextRunRepo) GetRun(ctx context.Context, _, _ string) (ports.AIRunRecord, error) {
 	if err := ctx.Err(); err != nil {
 		return ports.AIRunRecord{}, err

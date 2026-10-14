@@ -39,10 +39,10 @@ type AutoReplyWorkerPool struct {
 }
 
 type autoReplyTask struct {
-	cmd              commands.AutoReplyCommand
-	businessID       string
-	conversationID   string
-	handler          commands.AutoReplyHandler
+	cmd            commands.AutoReplyCommand
+	businessID     string
+	conversationID string
+	handler        commands.AutoReplyHandler
 }
 
 func NewAutoReplyWorkerPool(concurrency, queueDepth int) *AutoReplyWorkerPool {

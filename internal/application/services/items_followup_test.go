@@ -78,7 +78,7 @@ func TestPersistenceFailurePropagatesError(t *testing.T) {
 func TestWorkerPoolConcurrentSubmitStopNoPanic(t *testing.T) {
 	pool := NewAutoReplyWorkerPool(2, 10)
 	task := autoReplyTask{
-		handler:          &fakeAutoReplyHandler{},
+		handler: &fakeAutoReplyHandler{},
 	}
 	var submitCount int64
 	var submitOK int64
