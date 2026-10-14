@@ -77,7 +77,7 @@ func TestLiteLLMComposesCatalogReplyWithWholeCommercialEvidence(t *testing.T) {
 		Items: []services.CatalogAIItem{{
 			ID: itemID, CatalogID: "catalog", Name: "هاتف", Attributes: map[string]any{"special-feature": "مقاوم للماء"},
 			Variants: []services.CatalogAIVariant{{ID: variant, CatalogItemID: itemID}},
-			Offers: []services.CatalogAIOffer{{ID: "offer-price", CatalogItemID: itemID, VariantID: &variant, Amount: &amount, Currency: &currency}},
+			Offers:   []services.CatalogAIOffer{{ID: "offer-price", CatalogItemID: itemID, VariantID: &variant, Amount: &amount, Currency: &currency}},
 		}},
 	}
 	input := services.CatalogReplyInput{CustomerMessage: "أريد شرح المنتجات", Projection: projection}

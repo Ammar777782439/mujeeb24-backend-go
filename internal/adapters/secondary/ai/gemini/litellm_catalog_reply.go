@@ -15,7 +15,7 @@ import (
 )
 
 type catalogReplyJSON struct {
-	ResponseText    string   `json:"response_text"`
+	ResponseText   string   `json:"response_text"`
 	CoveredItemIDs []string `json:"covered_item_ids"`
 }
 
@@ -33,7 +33,7 @@ func catalogCustomerReplySchema(projection services.CatalogAIProjection) map[str
 	return map[string]any{
 		"type": "object", "additionalProperties": false,
 		"properties": map[string]any{
-			"response_text": map[string]any{"type": "string"},
+			"response_text":    map[string]any{"type": "string"},
 			"covered_item_ids": map[string]any{"type": "array", "items": idSchema},
 		},
 		"required": []string{"response_text", "covered_item_ids"},
@@ -45,15 +45,15 @@ func (c *LiteLLMCatalogAdapter) catalogCustomerReplyRequest(input services.Catal
 		return interactionRequest{}, errors.New("LiteLLM catalog adapter not configured")
 	}
 	payload := struct {
-		CustomerMessage string                        `json:"customer_message"`
-		Conversation    any                           `json:"conversation_context"`
-		PartNumber      int                           `json:"part_number"`
-		Catalog         services.CatalogAIProjection   `json:"catalog_projection"`
+		CustomerMessage string                       `json:"customer_message"`
+		Conversation    any                          `json:"conversation_context"`
+		PartNumber      int                          `json:"part_number"`
+		Catalog         services.CatalogAIProjection `json:"catalog_projection"`
 	}{
 		CustomerMessage: input.CustomerMessage,
-		Conversation: catalogBatchPromptContextFrom(&input.ConversationContext),
-		PartNumber: input.PartNumber,
-		Catalog: input.Projection,
+		Conversation:    catalogBatchPromptContextFrom(&input.ConversationContext),
+		PartNumber:      input.PartNumber,
+		Catalog:         input.Projection,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -61,7 +61,7 @@ func (c *LiteLLMCatalogAdapter) catalogCustomerReplyRequest(input services.Catal
 	}
 	return interactionRequest{
 		Model: c.model, Store: false,
-		Input: string(body),
+		Input:             string(body),
 		SystemInstruction: prompts.CatalogCustomerReplySystemPrompt,
 		ResponseFormat: &interactionResponseFormat{
 			Type: "text", MimeType: "application/json",
@@ -124,9 +124,9 @@ func (c *LiteLLMCatalogAdapter) ComposeCatalogReply(ctx context.Context, input s
 		Text: result.ResponseText, CoveredItemIDs: result.CoveredItemIDs,
 		Usage: ports.CustomerSalesUsageTelemetry{
 			Provider: "litellm", Model: c.model,
-			InputTokens: normalized.Usage.TotalInputTokens,
-			CachedTokens: normalized.Usage.TotalCachedTokens,
-			OutputTokens: normalized.Usage.TotalOutputTokens,
+			InputTokens:   normalized.Usage.TotalInputTokens,
+			CachedTokens:  normalized.Usage.TotalCachedTokens,
+			OutputTokens:  normalized.Usage.TotalOutputTokens,
 			ModelRequests: 1, LatencyMs: time.Since(started).Milliseconds(),
 		},
 	}, nil

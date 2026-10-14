@@ -12,11 +12,11 @@ import (
 
 type aiCatalogReplyFixture struct {
 	*capabilityBatchModel
-	parts     []CatalogReplyInput
-	omit      bool
-	external  bool
-	tooLong   bool
-	failPart  int
+	parts    []CatalogReplyInput
+	omit     bool
+	external bool
+	tooLong  bool
+	failPart int
 }
 
 func (m *aiCatalogReplyFixture) CountCatalogReplyTokens(_ context.Context, in CatalogReplyInput) (int, error) {

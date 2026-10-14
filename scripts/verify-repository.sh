@@ -30,12 +30,7 @@ while IFS= read -r file; do
   [[ -f "$file" ]] && go_files+=("$file")
 done < <(git ls-files '*.go')
 mapfile -t unformatted < <("$gofmt_bin" -l "${go_files[@]}")
-if (( ${#unformatted[@]} > 0 )); then
-  for source in "${unformatted[@]}"; do
-    "$gofmt_bin" -d "$source"
-  done
-  fail "gofmt required: ${unformatted[*]}"
-fi
+(( ${#unformatted[@]} == 0 )) || fail "gofmt required: ${unformatted[*]}"
 git diff --check
 
 printf '%s\n' '[4/6] validating generated OpenAPI contract'
