@@ -107,12 +107,7 @@ func TestCatalogHierarchyRejectsDetachedOfferAndOversizedItem(t *testing.T) {
 }
 
 func TestCatalogHierarchyNeverLeaksRawMachineAttributeKeys(t *testing.T) {
-	attrs := map[string]any{
-		"direct_trips": true,
-		"wifi": true,
-		"features": []any{"مرشد محلي", "وجبات مشمولة"},
-		"الضمان": "سنة واحدة",
-	}
+	attrs := map[string]any{"direct_trips": true, "wifi": true, "features": []any{"مرشد محلي", "وجبات مشمولة"}, "الضمان": "سنة واحدة"}
 	rendered := formatHierarchyAttributes(attrs, nil)
 	for _, forbidden := range []string{"direct_trips", "wifi", "features", "true", "[", "]"} {
 		if strings.Contains(rendered, forbidden) {
