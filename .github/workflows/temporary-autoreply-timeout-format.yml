@@ -1,0 +1,36 @@
+name: Temporary AutoReply timeout formatting
+on:
+  push:
+    branches:
+      - feat/ai-litellm-multi-provider-gateway
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Format timeout and failure-handling code
+        run: |
+          gofmt -w \
+            internal/application/ports/ai_run_trace.go \
+            internal/application/services/ai_provider_failure.go \
+            internal/application/services/ai_provider_failure_test.go \
+            internal/application/services/autoreply_worker_pool.go \
+            internal/application/services/items_followup_test.go \
+            internal/application/services/auto_reply.go \
+            internal/application/services/webhook_ingestion.go
+      - name: Commit formatter changes
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -u
+            git commit -m "style(autoreply): gofmt provider timeout lifecycle changes"
+            git push origin HEAD:feat/ai-litellm-multi-provider-gateway
+          fi
