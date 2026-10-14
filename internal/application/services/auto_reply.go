@@ -285,8 +285,8 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	proposal := out.Decision
 	interactionIDToPersist := strings.TrimSpace(out.GeminiInteraction.ResultingInteractionID)
 	resetGeminiInteraction := out.Decision.Capability != ""
-	log.Printf("[AutoReply] GEMINI_OK business=%s capability=%s tokens_in=%d tokens_out=%d latency=%dms",
-		businessID, proposal.Capability, out.Usage.InputTokens, out.Usage.OutputTokens, out.LatencyMs)
+	log.Printf("[AutoReply] GEMINI_OK business=%s capability=%s presentation=%s tokens_in=%d tokens_out=%d latency=%dms",
+		businessID, proposal.Capability, proposal.Presentation, out.Usage.InputTokens, out.Usage.OutputTokens, out.LatencyMs)
 
 	// Gemini continuity is persisted only after the effective action is known.
 	// An internal evaluate_full_catalog interaction is never stored as the previous
