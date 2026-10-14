@@ -125,8 +125,11 @@ type verboseHierarchyCatalogRepo struct {
 func (r *verboseHierarchyCatalogRepo) ListProjectionPage(ctx context.Context, request ports.CatalogAIProjectionRequest) (ports.CatalogAIProjectionPage, error) {
 	page, err := r.capabilityCatalogRepo.ListProjectionPage(ctx, request)
 	if err == nil && len(page.Items) > 0 && request.Cursor == "" {
-		description := strings.Repeat("كامل وصف المنتج بدون إسقاط البيانات ", 140)
-		page.Items[0].Item.LongDescription = &description
+		for i := 0; i < 8; i++ {
+			id := fmt.Sprintf("extra-%d", i)
+			description := strings.Repeat("معلومات الخدمة المفيدة ", 12)
+			page.Items = append(page.Items, ports.CatalogAIProjectionBundle{Item: ports.CatalogItemRecord{ID: id, BusinessID: request.BusinessID, CatalogID: "catalog", Name: id, ItemType: "service", Status: "active", ShortDescription: &description}})
+		}
 	}
 	return page, err
 }
