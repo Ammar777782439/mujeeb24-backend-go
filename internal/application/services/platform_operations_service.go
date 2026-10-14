@@ -148,23 +148,38 @@ func (r *InMemoryPlatformOperationsRepository) GetProvider(_ context.Context, pr
 // merchant data. If no probe is registered, the health state is set to
 // UNKNOWN with a failure_code of "NO_PROBE_REGISTERED".
 func (r *InMemoryPlatformOperationsRepository) RunHealthCheck(ctx context.Context, providerID string, now time.Time) (ports.ProviderRecord, error) {
+	providerID = strings.TrimSpace(providerID)
+	r.mu.RLock()
+	_, exists := r.providers[providerID]
+	probe := r.probes[providerID]
+	r.mu.RUnlock()
+	if !exists {
+		return ports.ProviderRecord{}, fmt.Errorf("provider %q not found", providerID)
+	}
+
+	// Network I/O must NEVER hold the runtime registry lock: an emergency AI
+	// disable must work even when the LiteLLM provider is timing out.
+	healthState := ports.ProviderHealthUnknown
+	var failureCode *string
+	if probe == nil {
+		code := "NO_PROBE_REGISTERED"
+		failureCode = &code
+	} else {
+		var latencyMs int64
+		healthState, latencyMs, failureCode = probe.Probe(ctx)
+		_ = latencyMs // Reserved for dashboard latency telemetry.
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	providerID = strings.TrimSpace(providerID)
 	provider, ok := r.providers[providerID]
 	if !ok {
 		return ports.ProviderRecord{}, fmt.Errorf("provider %q not found", providerID)
 	}
-	probe, hasProbe := r.probes[providerID]
-	if !hasProbe || probe == nil {
-		provider.HealthState = ports.ProviderHealthUnknown
-		noProbeCode := "NO_PROBE_REGISTERED"
-		provider.LastHealthCheck = &now
-		provider.LastFailureCode = &noProbeCode
-		r.providers[providerID] = provider
+	// Do not overwrite a more recent concurrent health check.
+	if provider.LastHealthCheck != nil && provider.LastHealthCheck.After(now) {
 		return provider, nil
 	}
-	healthState, latencyNanos, failureCode := probe.Probe(ctx)
 	provider.LastHealthCheck = &now
 	provider.HealthState = healthState
 	switch healthState {
@@ -174,8 +189,9 @@ func (r *InMemoryPlatformOperationsRepository) RunHealthCheck(ctx context.Contex
 	case ports.ProviderHealthDegraded, ports.ProviderHealthDown:
 		provider.LastFailure = &now
 		provider.LastFailureCode = failureCode
+	default:
+		provider.LastFailureCode = failureCode
 	}
-	_ = latencyNanos // reserved for future latency metrics surface
 	r.providers[providerID] = provider
 	return provider, nil
 }
