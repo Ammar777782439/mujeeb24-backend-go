@@ -1,21 +1,18 @@
-# LiteLLM ضمن Blueprint مجيب API الموحدة
+# بوابة LiteLLM — Blueprint مستقلة بجانب باك إند مجيب
 
-## إعداد Render من ملف واحد
+## على Render: ملفان لخدمتين، من المستودع والفرع نفسهما
 
-**Blueprint واحدة اسمها `مجيب API` في لوحة Render**، ومصدر تعريفها الوحيد في الفرع `feat/ai-litellm-multi-provider-gateway` هو ملف الجذر **`render.yaml`**. لا تستخدم Blueprint Path ثانياً. لا توجد نسخة ثانية من باك إند مجيب.
+- **Blueprint البوابة الجديدة** (يمكن تسميتها `mujeep-api-litellm` في لوحة Render): اختر الفرع `feat/ai-litellm-multi-provider-gateway` و**Blueprint Path: `deploy/litellm/render.blueprint.yaml`**. الملف ينشئ **خدمة واحدة** باسم `mujeeb24-litellm` باستخدام `deploy/litellm/Dockerfile.render`. لا تنشئ نسخة ثانية من `mujeeb24-api`.
+- **Blueprint باك إند مجيب الموجودة:** تظل تستخدم **Blueprint Path: `render.yaml`** في جذر المستودع، وتحتوي الآن خدمة `mujeeb24-api` فقط باستخدام `./Dockerfile` المعتاد لبناء Go. لا تنشئ Blueprint ثانية للباك، ولا تغيّر `DATABASE_URL` وJWT ومفتاح تشفير مجيب القديم.
+- **أسرار جديدة تُنشأ تلقائياً في Blueprint البوابة فقط:** `UI_PASSWORD` و`LITELLM_MASTER_KEY_SEED` و`LITELLM_SALT_KEY_SEED` مع `generateValue: true`. سكربت البوابة يحول البذور إلى مفاتيح إدارة فعلية، ولا تطبع القيم في السجلات. القيم ليست متغيرات داخل باك مجيب.
+- **ما تدخله بنفسك:** `DATABASE_URL` للبوابة (قاعدة PostgreSQL مستقلة دائمة لإعدادات LiteLLM، لا قاعدة مجيب)، مفاتيح النماذج التي تضيفها من لوحة LiteLLM، وإنشاء Virtual Key لمجيب. في Environment لخدمة `mujeeb24-api` ضع `LITELLM_BASE_URL` بالرابط الفعلي لبوابة LiteLLM دون `/v1`، و`LITELLM_API_KEY` بالـVirtual Key، و`LITELLM_USD_TO_YER_RATE` بقيمتك المحاسبية المعتمدة.
+- **لماذا الربط يدوي:** الخدمتان في Blueprint مختلفتين، لذا أزلنا `fromService` من ملف الجذر؛ هذه الإعدادات `sync: false` في الخدمة الأصلية. متغيرات باك مجيب الحساسة الحالية تبقى محفوظة في Render.
+- أسماء نماذج `mujeeb-customer` و`mujeeb-catalog` و`mujeeb-merchant` لها قيم افتراضية في كود Go، لكن يجب **إنشاء وتعريف النماذج والأسماء فعلياً في LiteLLM**. لا تشغل ردود العملاء قبل نجاح الربط واختبار Function Calling وJSON Schema والكتالوج.
+- خدمة Render المجانية قد تدخل وضع النوم، وقد لا تكفي ذاكرتها لبوابة LiteLLM. **تم تعديل GitHub فقط؛ لم ننشر على Render أو نؤكد الإقلاع.**
 
-- `mujeeb24-api`: **الخدمة الأصلية**، بنفس اسمها وقاعدة بياناتها الحالية، مع Dockerfile `./Dockerfile` وفرع LiteLLM الجديد.
-- `mujeeb24-litellm`: **بوابة النماذج**، داخل الـBlueprint نفسها لكن بخدمة Docker مختلفة باستخدام `./deploy/litellm/Dockerfile.render`.
-- Render يولد ويحفظ تلقائياً في خدمة البوابة: `UI_PASSWORD` و`LITELLM_MASTER_KEY_SEED` و`LITELLM_SALT_KEY_SEED` عبر `generateValue: true`. سكربت الإقلاع الحالي يشتق مفتاحي LiteLLM من البذور المخزنة دون طباعتها.
-- Render يربط عنوان البوابة تلقائياً بباك مجيب عبر `fromService` من `RENDER_EXTERNAL_URL` في نفس الـBlueprint.
-- الأسماء `mujeeb-customer` و`mujeeb-catalog` و`mujeeb-merchant` والحدود ومدة الطلب محددة في Blueprint؛ يجب إضافة هذه المسارات/النماذج فعلياً في LiteLLM، لأن الاسم وحده لا ينشئ مزوداً.
-- **بيانات مجيب القديمة**: تحفظها Render للخدمة الحالية ما لم تعمد إلى استبدالها. لا تعيد توليد `DATABASE_URL` أو مفاتيح JWT أو `AI_CONFIG_ENCRYPTION_KEY`، ولا تعيد نشر القيم السرية في Git أو المحادثات. أدرجنا قيم أعلام التشغيل التي زوّدتنا بها (`AUTOREPLY_ENABLED=true` و`CUSTOMER_SALES_ENABLED=false` و`CHANNEL_PROVISIONING_ENABLED=true`) وإعدادات DB/Worker داخل الـBlueprint الواحد. أي Sync لاحق سيعيد تطبيق هذه القيم المحددة؛ عدّلها في `render.yaml` إذا أردت تغييرها دائمًا.
-- **متطلبات لا يمكن اختلاقها:** قاعدة مستقلة دائمة لإعدادات LiteLLM (متغير `DATABASE_URL` في خدمة البوابة)، وVirtual Key صالح تصدره LiteLLM وتضعه في `LITELLM_API_KEY` لدى مجيب، وسعر USD إلى YER الذي تعتمده أنت. `sync: false` لا يولد قيم هذه المتغيرات ولا يحدّثها تلقائياً عند مزامنة Blueprint موجودة. لا تستخدم قاعدة بيانات تجار مجيب للبوابة.
-- إذا لم تكن البوابة والنماذج والـVirtual Key جاهزة، فإن `LITELLM_GATEWAY_ONLY=true` مع `AUTOREPLY_ENABLED=true` سيمنع بدء الباك عند نقص الإعدادات. قبل مزامنة الإنتاج وفّر المتطلبات أو عطّل الرد الآلي **مؤقتاً وبقرار واضح**، ثم اختبر قبل إعادة التفعيل. لا نبتكر كلمة مرور ثابتة أو مفتاحاً غير مسجل لإخفاء الخطأ.
-- من Render افتح **Blueprint الموجودة باسم مجيب API**، اضبط Blueprint Path إلى `render.yaml` مع نفس الفرع، وراجع أن المعاينة تحتوي خدمة `mujeeb24-api` الحالية دون نسخة مكررة وخدمة `mujeeb24-litellm`. لا تنشئ Blueprint ثانية، ولا تربط الخدمة الواحدة بأكثر من Blueprint. عند الشك استخدم خيار Render **Generate Blueprint** من الخدمة الحالية لمطابقة تفاصيلها قبل اعتماد Sync.
-- لا تعتبر رفع الملفات نشرًا فعليًا. تحقق من Logs وصحة LiteLLM عبر `/health/readiness` واتصال باك مجيب، ومن توافق Function Calling والكتالوج ومساعد التاجر قبل السماح بردود العملاء الحية.
+الخطوة التالية في الصورة التي عرضتها: في **Blueprint Path** امسح `deploy/litellm/` وحدها واختر الملف الكامل **`deploy/litellm/render.blueprint.yaml`** بعد تحديث قائمة الملفات/الصفحة. اختيار `deploy/litellm/Dockerfile.render` هنا غير صحيح؛ هذا Dockerfile وليس Blueprint YAML.
 
-المراجع: https://render.com/docs/infrastructure-as-code و https://render.com/docs/blueprint-spec و https://docs.litellm.ai/docs/proxy/deploy
+المراجع: https://render.com/docs/blueprint-spec و https://docs.litellm.ai/docs/proxy/deploy
 
 ---
 
