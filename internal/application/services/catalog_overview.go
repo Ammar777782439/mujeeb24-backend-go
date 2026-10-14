@@ -283,10 +283,10 @@ func (c *CatalogBatchController) fitOverviewSummaries(ctx context.Context, ai Ca
 func validateOverviewDigest(stage string, number int, digest string, maxRunes int) error {
 	count := utf8.RuneCountInString(digest)
 	if strings.TrimSpace(digest) == "" {
- 		return fmt.Errorf("overview %s %d returned empty evidence summary (runes=%d)", stage, number, count)
- 	}
+		return fmt.Errorf("overview %s %d returned empty evidence summary (runes=%d)", stage, number, count)
+	}
 	if count > maxRunes {
- 		return fmt.Errorf("overview %s %d exceeded internal digest limit (runes=%d max=%d)", stage, number, count, maxRunes)
- 	}
+		return fmt.Errorf("overview %s %d exceeded internal digest limit (runes=%d max=%d)", stage, number, count, maxRunes)
+	}
 	return nil
 }
