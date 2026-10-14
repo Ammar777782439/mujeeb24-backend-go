@@ -7,7 +7,6 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/dto"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
 // Platform AI configuration is currently deployment-owned in LiteLLM gateway
@@ -120,6 +119,3 @@ func (s *Server) platformGatewayUpdateAIConfiguration(_ context.Context, _ *dto.
 		"LiteLLM model routes are deployment-managed. Update the LITELLM_CUSTOMER_MODEL, LITELLM_CATALOG_MODEL and LITELLM_MERCHANT_MODEL settings and restart the API; database-only activation cannot change live routes")), true
 }
 
-// Defensive compile-time assertion: the gateway model discovery remains a
-// ports.ModelDiscoveryClient so PlatformDeps never depends on HTTP details.
-var _ ports.ModelDiscoveryClient = (ports.ModelDiscoveryClient)(nil)
