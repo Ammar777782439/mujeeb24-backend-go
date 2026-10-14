@@ -25,12 +25,27 @@ type CatalogReplyInput struct {
 	ConversationContext ports.CustomerSalesContext
 	Projection          CatalogAIProjection
 	PartNumber          int
+	TotalParts          int
 }
 
+// All customer-facing words are authored by Gemini. Go only joins the
+// structured prose in catalog/item order and verifies the supplied IDs.
 type CatalogReplyOutput struct {
-	Text           string
-	CoveredItemIDs []string
-	Usage          ports.CustomerSalesUsageTelemetry
+	Introduction string
+	Sections     []CatalogReplySection
+	Conclusion   string
+	Usage        ports.CustomerSalesUsageTelemetry
+}
+
+type CatalogReplySection struct {
+	CatalogID string
+	Heading   string
+	Items     []CatalogReplyItem
+}
+
+type CatalogReplyItem struct {
+	ItemID string
+	Text   string
 }
 
 // Catalog replies must stay inside the text transport limit, including UTF-8
@@ -107,7 +122,7 @@ func (c *CatalogBatchController) runHierarchicalCatalog(ctx context.Context, inp
 	for i, projection := range parts {
 		request := CatalogReplyInput{
 			CustomerMessage: input.CustomerMessage, ConversationContext: input.ConversationContext,
-			Projection: projection, PartNumber: i + 1,
+			Projection: projection, PartNumber: i + 1, TotalParts: len(parts),
 		}
 		result, err := composer.ComposeCatalogReply(ctx, request)
 		if err != nil {
@@ -115,13 +130,14 @@ func (c *CatalogBatchController) runHierarchicalCatalog(ctx context.Context, inp
 		}
 		// Meter every successful call, even when its response is rejected.
 		c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, result.Usage, fmt.Sprintf("catalog_reply_part_%d", i+1))
-		if err := validateCatalogReplyCoverage(projection, result); err != nil {
-			return CatalogEvaluationResult{}, fmt.Errorf("Gemini reply part %d failed coverage: %w", i+1, err)
+		text, err := assembleCatalogReply(projection, result)
+		if err != nil {
+			return CatalogEvaluationResult{}, fmt.Errorf("Gemini reply part %d failed structured coverage: %w", i+1, err)
 		}
-		if utf8.RuneCountInString(result.Text) > catalogReplyMaxRunes {
+		if utf8.RuneCountInString(text) > catalogReplyMaxRunes {
 			return CatalogEvaluationResult{}, fmt.Errorf("Gemini reply part %d is longer than the channel text limit", i+1)
 		}
-		messages = append(messages, result.Text)
+		messages = append(messages, text)
 	}
 	after, err := c.CatalogAI.GetRevision(ctx, input.BusinessID)
 	if err != nil {
@@ -233,31 +249,76 @@ func subsetCatalogForReply(full CatalogAIProjection, items []CatalogAIItem) Cata
 	return subset
 }
 
-func validateCatalogReplyCoverage(source CatalogAIProjection, out CatalogReplyOutput) error {
-	if strings.TrimSpace(out.Text) == "" {
-		return errors.New("empty Gemini customer reply")
+// assembleCatalogReply only joins text written by Gemini. It never invents
+// sales wording, titles, prices, comparisons or merchant attributes.
+// Structured coverage is checked against the exact source projection rather
+// than brittle substring checks of natural-language product names.
+func assembleCatalogReply(source CatalogAIProjection, output CatalogReplyOutput) (string, error) {
+	type catalogItemRef struct {
+		catalogID string
 	}
-	expected := make(map[string]struct{}, len(source.Items))
+	expected := make(map[string]catalogItemRef, len(source.Items))
+	expectedCatalogs := make(map[string]struct{})
 	for _, item := range source.Items {
-		expected[item.ID] = struct{}{}
+		if strings.TrimSpace(item.ID) == "" {
+			return "", errors.New("catalog contains item without ID")
+		}
+		if _, duplicate := expected[item.ID]; duplicate {
+			return "", fmt.Errorf("source contains repeated item %s", item.ID)
+		}
+		expected[item.ID] = catalogItemRef{catalogID: item.CatalogID}
+		expectedCatalogs[item.CatalogID] = struct{}{}
 	}
-	seen := make(map[string]struct{}, len(out.CoveredItemIDs))
-	for _, id := range out.CoveredItemIDs {
-		if _, exists := expected[id]; !exists {
-			return fmt.Errorf("Gemini referenced item %s outside this catalog page", id)
-		}
-		if _, exists := seen[id]; exists {
-			return fmt.Errorf("Gemini repeated item evidence %s", id)
-		}
-		seen[id] = struct{}{}
+	var pieces []string
+	if text := strings.TrimSpace(output.Introduction); text != "" {
+		pieces = append(pieces, text)
 	}
-	for _, item := range source.Items {
-		if _, covered := seen[item.ID]; !covered {
-			return fmt.Errorf("Gemini omitted item %s from its customer response", item.ID)
+	seenCatalogs := make(map[string]struct{}, len(output.Sections))
+	seenItems := make(map[string]struct{}, len(source.Items))
+	for _, section := range output.Sections {
+		if _, exists := expectedCatalogs[section.CatalogID]; !exists {
+			return "", fmt.Errorf("Gemini returned unknown catalog %s", section.CatalogID)
 		}
-		if strings.TrimSpace(item.Name) == "" || !strings.Contains(out.Text, item.Name) {
-			return fmt.Errorf("Gemini claimed coverage but omitted the exact product name for item %s", item.ID)
+		if _, exists := seenCatalogs[section.CatalogID]; exists {
+			return "", fmt.Errorf("Gemini repeated catalog %s", section.CatalogID)
+		}
+		seenCatalogs[section.CatalogID] = struct{}{}
+		if strings.TrimSpace(section.Heading) == "" || len(section.Items) == 0 {
+			return "", fmt.Errorf("Gemini returned empty catalog section %s", section.CatalogID)
+		}
+		pieces = append(pieces, strings.TrimSpace(section.Heading))
+		for _, item := range section.Items {
+			actual, exists := expected[item.ItemID]
+			if !exists {
+				return "", fmt.Errorf("Gemini referenced item %s outside supplied evidence", item.ItemID)
+			}
+			if actual.catalogID != section.CatalogID {
+				return "", fmt.Errorf("Gemini attached item %s to wrong catalog", item.ItemID)
+			}
+			if _, repeated := seenItems[item.ItemID]; repeated {
+				return "", fmt.Errorf("Gemini duplicated item %s in customer reply", item.ItemID)
+			}
+			if strings.TrimSpace(item.Text) == "" {
+				return "", fmt.Errorf("Gemini omitted customer explanation for item %s", item.ItemID)
+			}
+			seenItems[item.ItemID] = struct{}{}
+			pieces = append(pieces, strings.TrimSpace(item.Text))
 		}
 	}
-	return nil
+	for id := range expected {
+		if _, covered := seenItems[id]; !covered {
+			return "", fmt.Errorf("Gemini omitted item %s from structured customer reply", id)
+		}
+	}
+	if len(seenCatalogs) != len(expectedCatalogs) {
+		return "", errors.New("Gemini omitted a catalog section from the reply")
+	}
+	if text := strings.TrimSpace(output.Conclusion); text != "" {
+		pieces = append(pieces, text)
+	}
+	reply := strings.Join(pieces, "\n\n")
+	if strings.TrimSpace(reply) == "" {
+		return "", errors.New("Gemini returned an empty customer reply")
+	}
+	return reply, nil
 }
