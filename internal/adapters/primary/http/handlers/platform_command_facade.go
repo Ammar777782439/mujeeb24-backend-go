@@ -26,13 +26,13 @@ import (
 // handler with Platform Audit logging.
 type PlatformDeps struct {
 	// Lifecycle repositories
-	Plans             ports.PlanRepository
-	PlatformBusiness  ports.PlatformBusinessLifecyclePort
-	PlatformAudit     ports.PlatformAuditRepository
-	Subscriptions     ports.SubscriptionRepository
-	Payments          ports.PaymentRepository
-	Support           ports.SupportRepository
-	AIUsage           ports.AIUsageRepository
+	Plans            ports.PlanRepository
+	PlatformBusiness ports.PlatformBusinessLifecyclePort
+	PlatformAudit    ports.PlatformAuditRepository
+	Subscriptions    ports.SubscriptionRepository
+	Payments         ports.PaymentRepository
+	Support          ports.SupportRepository
+	AIUsage          ports.AIUsageRepository
 	// Platform Operations (AI kill switch + provider/channel health) — in-memory
 	Operations ports.PlatformOperationsPort
 	// Channel Reader — platform-scoped read of channel_connections (no secrets)
@@ -2001,7 +2001,6 @@ func aiModelProjection(m ports.AIProviderModel) dto.AIModelView {
 		Version: m.Version, BaseModel: m.BaseModel,
 	}
 }
-
 
 func (s *Server) platformListAIProvidersConfig(ctx context.Context) (any, bool) {
 	return s.platformGatewayListAIProvidersConfig(ctx)

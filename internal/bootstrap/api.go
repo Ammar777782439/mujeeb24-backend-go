@@ -160,7 +160,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	platformOperations := services.NewInMemoryPlatformOperationsRepository(
 		external.LiteLLMCustomerDecision != nil && external.LLMConfigError == nil,
 		external.SocialAPI != nil,
-	) 
+	)
 	if external.LiteLLMPlatformConfig != nil {
 		platformOperations.SetAIModel(external.LiteLLMPlatformConfig.CustomerModel)
 	}
@@ -399,7 +399,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	if external.LiteLLMPlatformConfig != nil {
 		modelDiscovery = litellm.NewModelsClient()
 		platformOperations.RegisterProbe("litellm", gatewayHealthProbe{
-			settings: external.LiteLLMPlatformConfig,
+			settings:  external.LiteLLMPlatformConfig,
 			discovery: modelDiscovery,
 		})
 	}

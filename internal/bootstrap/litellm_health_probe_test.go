@@ -8,11 +8,12 @@ import (
 )
 
 type fakeGatewayDiscovery struct {
-	success bool
-	code string
+	success       bool
+	code          string
 	observedModel string
-	observedKey string
+	observedKey   string
 }
+
 func (f *fakeGatewayDiscovery) DiscoverModels(context.Context, string, string) ([]ports.AIProviderModel, error) {
 	return nil, nil
 }

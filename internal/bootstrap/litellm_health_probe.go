@@ -9,7 +9,7 @@ import (
 // gatewayHealthProbe uses the already-configured LiteLLM model discovery
 // connection tester; it does not issue merchant-bound AI requests.
 type gatewayHealthProbe struct {
-	settings *ports.LiteLLMPlatformConfig
+	settings  *ports.LiteLLMPlatformConfig
 	discovery ports.ModelDiscoveryClient
 }
 

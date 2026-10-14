@@ -9,6 +9,7 @@ import (
 )
 
 type gatewayRegistryProbe struct{}
+
 func (gatewayRegistryProbe) Probe(context.Context) (ports.ProviderHealthState, int64, *string) {
 	return ports.ProviderHealthHealthy, 0, nil
 }

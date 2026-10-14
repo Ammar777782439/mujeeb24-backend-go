@@ -8,37 +8,37 @@ import (
 // LiteLLMPlatformConfig describes gateway-owned route settings. APIKey is
 // secret server-side configuration and MUST never be returned to HTTP clients.
 type LiteLLMPlatformConfig struct {
-	BaseURL string
-	APIKey string
-	CustomerModel string
-	CatalogModel string
-	MerchantModel string
-	MaxOutputTokens int
+	BaseURL            string
+	APIKey             string
+	CustomerModel      string
+	CatalogModel       string
+	MerchantModel      string
+	MaxOutputTokens    int
 	MaxInputCharacters int
-	USDToYERRate string
+	USDToYERRate       string
 }
 
 // AIProviderModel is provider-neutral model discovery metadata. It is retained
 // to preserve Platform Admin's existing model-list DTO and API contract.
 type AIProviderModel struct {
-	ID string
-	Provider string
-	ModelName string
-	DisplayName *string
-	Description *string
-	InputTokenLimit *int
-	OutputTokenLimit *int
-	SupportedMethods []string
+	ID                string
+	Provider          string
+	ModelName         string
+	DisplayName       *string
+	Description       *string
+	InputTokenLimit   *int
+	OutputTokenLimit  *int
+	SupportedMethods  []string
 	ThinkingSupported bool
-	TemperatureMin *float64
-	TemperatureMax *float64
-	TopPMin *float64
-	TopPMax *float64
-	TopKMin *int
-	TopKMax *int
-	Version *string
-	BaseModel *string
-	DiscoveredAt time.Time
+	TemperatureMin    *float64
+	TemperatureMax    *float64
+	TopPMin           *float64
+	TopPMax           *float64
+	TopKMin           *int
+	TopKMax           *int
+	Version           *string
+	BaseModel         *string
+	DiscoveredAt      time.Time
 }
 
 // ModelDiscoveryClient queries LiteLLM's model catalog and tests a configured
