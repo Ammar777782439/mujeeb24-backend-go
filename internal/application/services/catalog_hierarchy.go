@@ -54,10 +54,6 @@ const catalogReplyMaxRunes = 1800
 const catalogReplyMaxParts = 12
 
 func (c *CatalogBatchController) runHierarchicalCatalog(ctx context.Context, input CatalogEvaluationInput) (CatalogEvaluationResult, error) {
-	composer, ok := c.Gemini.(CatalogReplyComposer)
-	if !ok {
-		return CatalogEvaluationResult{}, errors.New("catalog model does not support AI-authored customer replies; refusing hardcoded hierarchy")
-	}
 	revision, err := c.CatalogAI.GetRevision(ctx, input.BusinessID)
 	if err != nil {
 		return CatalogEvaluationResult{}, fmt.Errorf("read catalog revision before AI reply: %w", err)
@@ -103,13 +99,35 @@ func (c *CatalogBatchController) runHierarchicalCatalog(ctx context.Context, inp
 		// evidence rather than a hardcoded customer message.
 		all.Catalogs = nil
 	}
+	result, err := c.composeCatalogProjection(ctx, input, all)
+	if err != nil {
+		return CatalogEvaluationResult{}, err
+	}
+	after, err := c.CatalogAI.GetRevision(ctx, input.BusinessID)
+	if err != nil {
+		return CatalogEvaluationResult{}, fmt.Errorf("read catalog revision after AI reply: %w", err)
+	}
+	if after != revision {
+		return CatalogEvaluationResult{}, errors.New("catalog changed while Gemini was composing the reply; refusing stale prices or offers")
+	}
+	return result, nil
+}
+
+// composeCatalogProjection lets Gemini author the response for a full-catalog
+// hierarchy or Gemini-selected product details. It does not read merchant data
+// or infer customer intent; the caller verifies catalog revision after
+// composition, before approving any messages.
+func (c *CatalogBatchController) composeCatalogProjection(ctx context.Context, input CatalogEvaluationInput, all CatalogAIProjection) (CatalogEvaluationResult, error) {
+	composer, ok := c.Gemini.(CatalogReplyComposer)
+	if !ok {
+		return CatalogEvaluationResult{}, errors.New("catalog model cannot compose AI-authored commercial replies")
+	}
 	sort.SliceStable(all.Items, func(i, j int) bool {
 		if all.Items[i].CatalogID != all.Items[j].CatalogID {
 			return all.Items[i].CatalogID < all.Items[j].CatalogID
 		}
 		return all.Items[i].Name < all.Items[j].Name
 	})
-
 	parts, err := c.partitionCatalogForReply(ctx, composer, input, all)
 	if err != nil {
 		return CatalogEvaluationResult{}, err
@@ -139,14 +157,11 @@ func (c *CatalogBatchController) runHierarchicalCatalog(ctx context.Context, inp
 		}
 		messages = append(messages, text)
 	}
-	after, err := c.CatalogAI.GetRevision(ctx, input.BusinessID)
-	if err != nil {
-		return CatalogEvaluationResult{}, fmt.Errorf("read catalog revision after AI reply: %w", err)
+
+	if len(messages) == 0 {
+		return CatalogEvaluationResult{}, errors.New("catalog composer returned no messages")
 	}
-	if after != revision {
-		return CatalogEvaluationResult{}, errors.New("catalog changed while Gemini was composing the reply; refusing stale prices or offers")
-	}
-	log.Printf("[CatalogBatch] HIERARCHY_AI_READY items=%d parts=%d", len(all.Items), len(messages))
+	log.Printf("[CatalogBatch] CATALOG_AI_READY presentation=%s items=%d parts=%d", input.Presentation, len(all.Items), len(messages))
 	return CatalogEvaluationResult{
 		Decision: ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityRespondWithoutAction, ResponseText: messages[0]},
 		Evidence: EvidenceFromProjection(all),
