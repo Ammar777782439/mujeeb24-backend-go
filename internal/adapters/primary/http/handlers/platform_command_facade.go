@@ -42,6 +42,7 @@ type PlatformDeps struct {
 	AIConfigRepo        ports.AIProviderConfigService
 	AIConfigCache       *services.AIConfigurationCache
 	ModelDiscovery      ports.ModelDiscoveryClient
+	LiteLLMSettings     *ports.LiteLLMPlatformConfig
 	AssignBusinessOwner *services.AssignBusinessOwnerService
 }
 
