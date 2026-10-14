@@ -30,14 +30,14 @@ func TestCatalogBatchCoverageRetainsCommercialFacts(t *testing.T) {
 			},
 		}},
 	}
-	stub := &exactTokenBatchGeminiStub{countFn: func(input BatchEvaluationInput) (int, error) {
+	stub := &catalogTokenEstimatorStub{countFn: func(input BatchEvaluationInput) (int, error) {
 		count := 200
 		for _, item := range input.Batch.Items {
 			count += 100 * (len(item.Variants) + len(item.Offers))
 		}
 		return count, nil
 	}}
-	controller := &CatalogBatchController{Gemini: stub, TokenBudget: 450}
+	controller := &CatalogBatchController{Evaluator: stub, TokenBudget: 450}
 	batches, err := controller.splitIntoBatches(context.Background(), source, CatalogEvaluationInput{AIRunID: "run", BusinessID: "business"}, 1)
 	if err != nil {
 		t.Fatal(err)

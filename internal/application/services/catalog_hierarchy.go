@@ -126,7 +126,7 @@ func (c *CatalogBatchController) runHierarchicalCatalog(ctx context.Context, inp
 // or infer customer intent; the caller verifies catalog revision after
 // composition, before approving any messages.
 func (c *CatalogBatchController) composeCatalogProjection(ctx context.Context, input CatalogEvaluationInput, all CatalogAIProjection) (CatalogEvaluationResult, error) {
-	composer, ok := c.Gemini.(CatalogReplyComposer)
+	composer, ok := c.Evaluator.(CatalogReplyComposer)
 	if !ok {
 		return CatalogEvaluationResult{}, errors.New("catalog model cannot compose AI-authored commercial replies")
 	}

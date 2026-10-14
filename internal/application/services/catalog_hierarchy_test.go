@@ -64,7 +64,7 @@ func (m *aiCatalogReplyFixture) ComposeCatalogReply(_ context.Context, in Catalo
 func TestCatalogHierarchyUsesGeminiForEveryCustomerReply(t *testing.T) {
 	catalog := &capabilityCatalogRepo{}
 	model := &aiCatalogReplyFixture{capabilityBatchModel: &capabilityBatchModel{}}
-	controller := &CatalogBatchController{CatalogAI: catalog, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 550, Now: time.Now, NewID: func() string { return "id" }}
+	controller := &CatalogBatchController{CatalogAI: catalog, Evaluator: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 550, Now: time.Now, NewID: func() string { return "id" }}
 	result, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{AIRunID: "run", BusinessID: "business-1", Presentation: "hierarchy", CustomerMessage: "قارن لي كل الخيارات"})
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +101,7 @@ func TestCatalogHierarchyRejectsMissingOrForeignGeminiItemCoverage(t *testing.T)
 				model.failPart = 2
 			}
 			catalog := &capabilityCatalogRepo{}
-			controller := &CatalogBatchController{CatalogAI: catalog, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 550, Now: time.Now, NewID: func() string { return "id" }}
+			controller := &CatalogBatchController{CatalogAI: catalog, Evaluator: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 550, Now: time.Now, NewID: func() string { return "id" }}
 			_, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{AIRunID: "run", BusinessID: "business-1", Presentation: "hierarchy"})
 			if err == nil {
 				t.Fatal("invalid Gemini output must fail closed without a partial reply")
@@ -117,7 +117,7 @@ func TestTargetedCatalogDetailAndComparisonSkipReductionAndKeepAllOffers(t *test
 			runtime.Decision = ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityFullCatalog, Presentation: presentation}
 			catalog := &capabilityCatalogRepo{}
 			model := &aiCatalogReplyFixture{capabilityBatchModel: &capabilityBatchModel{}}
-			service.CatalogBatch = &CatalogBatchController{CatalogAI: catalog, Gemini: model, RunRepo: runs, TokenBudget: 550, Now: service.now, NewID: service.NewID}
+			service.CatalogBatch = &CatalogBatchController{CatalogAI: catalog, Evaluator: model, RunRepo: runs, TokenBudget: 550, Now: service.now, NewID: service.NewID}
 			service.EntityContractPayload = mustMarshal(BuildCatalogEntityContractPayload())
 			command := capabilityCommand()
 			command.Text = "تفاصيل باقة سنوية"
@@ -141,7 +141,7 @@ func TestTargetedCatalogDetailAndComparisonSkipReductionAndKeepAllOffers(t *test
 
 func TestCatalogReplyPartitionReservesCustomerFacingOutputSpace(t *testing.T) {
 	model := &aiCatalogReplyFixture{capabilityBatchModel: &capabilityBatchModel{}}
-	controller := &CatalogBatchController{Gemini: model, TokenBudget: 20000}
+	controller := &CatalogBatchController{Evaluator: model, TokenBudget: 20000}
 	projection := CatalogAIProjection{Catalogs: []CatalogAICatalog{{ID: "c1", Name: "المنتجات", Status: "active"}}}
 	for i := 0; i < 12; i++ {
 		id := fmt.Sprintf("item-%d", i)
@@ -186,7 +186,7 @@ func TestStructuredCatalogReplyAllowsNaturalProductNames(t *testing.T) {
 
 func TestCatalogHierarchyRejectsCatalogRevisionChanges(t *testing.T) {
 	model := &aiCatalogReplyFixture{capabilityBatchModel: &capabilityBatchModel{}}
-	controller := &CatalogBatchController{CatalogAI: &capabilityCatalogRepo{changed: true}, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 550, Now: time.Now, NewID: func() string { return "id" }}
+	controller := &CatalogBatchController{CatalogAI: &capabilityCatalogRepo{changed: true}, Evaluator: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 550, Now: time.Now, NewID: func() string { return "id" }}
 	if _, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{AIRunID: "run", BusinessID: "business-1", Presentation: "hierarchy"}); err == nil {
 		t.Fatal("stale commercial evidence accepted")
 	}
@@ -196,7 +196,7 @@ func TestAutoReplyEnqueuesEveryGeminiAuthoredCatalogPart(t *testing.T) {
 	service, runtime, outbox, runs := capabilityService()
 	runtime.Decision = ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityFullCatalog, Presentation: "hierarchy"}
 	model := &aiCatalogReplyFixture{capabilityBatchModel: &capabilityBatchModel{}}
-	service.CatalogBatch = &CatalogBatchController{CatalogAI: &capabilityCatalogRepo{}, Gemini: model, RunRepo: runs, TokenBudget: 550, Now: service.now, NewID: service.NewID}
+	service.CatalogBatch = &CatalogBatchController{CatalogAI: &capabilityCatalogRepo{}, Evaluator: model, RunRepo: runs, TokenBudget: 550, Now: service.now, NewID: service.NewID}
 	service.EntityContractPayload = mustMarshal(BuildCatalogEntityContractPayload())
 	result, err := service.Handle(context.Background(), capabilityCommand())
 	if err != nil || !result.Enqueued || outbox.calls != 2 || len(model.parts) != 2 {

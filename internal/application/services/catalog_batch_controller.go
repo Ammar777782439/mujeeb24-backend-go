@@ -6,13 +6,13 @@
 // Per contract ② §3, every item enters evaluation AT LEAST ONCE; the
 // Controller guarantees coverage (Sent == Completed == Total).
 // Per contract ② §4, each batch carries the AttributeSchemas its items use.
-// Per contract ② §5, Gemini returns ONLY candidates (item_id, variant_ids,
+// Per contract ② §5, AI model returns ONLY candidates (item_id, variant_ids,
 // offer_ids, reason) — not the full items back.
-// Per contract ② §6, after all batches complete, a Final Gemini Evaluation
+// Per contract ② §6, after all batches complete, a Final AI model Evaluation
 // runs over the candidate set + customer message + context.
 // Per contract ② §7, candidates are split by token budget, not by count.
 // Per contract ② §8, batches are NOT chained via previous_interaction_id;
-// they are independent stateless Gemini requests over the same verified Conversation Context.
+// they are independent stateless AI model requests over the same verified Conversation Context.
 //
 // Per contract ⑨ §22, each batch has state PENDING/RUNNING/COMPLETED/FAILED
 // so the Controller can resume from where it left off after partial failure.
@@ -33,25 +33,25 @@ import (
 
 // CatalogBatchController drives a contract ② §9 evaluation.
 //
-// It is invoked when Gemini's first Interaction indicates that catalog data
+// It is invoked when AI model's first Interaction indicates that catalog data
 // is needed. The Controller:
 //  1. Builds the Catalog AI Projection (per contract ①) for the business scope.
 //  2. Token-counts the serialized Projection.
 //  3. Splits into batches by token budget.
-//  4. Sends each batch as an independent stateless Gemini request.
+//  4. Sends each batch as an independent stateless AI model request.
 //  5. Collects candidates per batch.
 //  6. Enforces coverage (Total == Sent == Completed).
-//  7. Hands the candidate set to the Final Gemini Evaluation.
+//  7. Hands the candidate set to the Final AI model Evaluation.
 //
 // Per contract ② §1, Mujeeb:
 //   - Determines the Catalog scope allowed for the merchant
 //   - Builds the Projection
 //   - Splits into Batches by TOKENS
-//   - Guarantees every Item in scope was sent to Gemini
+//   - Guarantees every Item in scope was sent to AI model
 //   - Tracks which Batches completed
 //   - Aggregates evaluation results
 //
-// Gemini:
+// Evaluator:
 //   - Understands the customer message
 //   - Understands each Batch's data
 //   - Infers and compares
@@ -61,7 +61,7 @@ type CatalogBatchController struct {
 	// CatalogAI supplies complete tenant-scoped projection pages.
 	CatalogAI    ports.CatalogAIReadRepository
 	TokenCounter TokenCounter
-	Gemini       BatchGeminiClient
+	Evaluator    CatalogEvaluationClient
 	RunRepo      ports.AIRunRepository
 	Now          func() time.Time
 	NewID        func() string
@@ -71,7 +71,7 @@ type CatalogBatchController struct {
 	TokenBudget int
 
 	// AIUsageRepository records per-batch telemetry to ai_usage_records.
-	// Per AIUsageTokenTelemetry.md §6: every Gemini call's tokens + cost
+	// Per AIUsageTokenTelemetry.md §6: every AI model call's tokens + cost
 	// must be persisted. Batch calls record final_ai_replies=0.
 	AIUsage   ports.AIUsageRepository
 	AIPricing ports.AIProviderPricingRepository
@@ -81,29 +81,29 @@ type CatalogBatchController struct {
 	Subscriptions ports.SubscriptionRepository
 }
 
-// BatchGeminiClient is the per-batch Gemini interaction contract.
-// Each batch is one independent stateless Gemini request per contract ② §8 — no
+// CatalogEvaluationClient is the per-batch AI model interaction contract.
+// Each batch is one independent stateless AI model request per contract ② §8 — no
 // previous_interaction_id chaining between batches.
-type BatchGeminiClient interface {
-	// EvaluateBatch sends one batch to Gemini and returns the candidate set.
+type CatalogEvaluationClient interface {
+	// EvaluateBatch sends one batch to AI model and returns the candidate set.
 	EvaluateBatch(ctx context.Context, input BatchEvaluationInput) (ports.CatalogBatchResult, error)
 
 	// FinalEvaluate runs the contract ② §6 final evaluation with a custom
 	// user prompt that includes BOTH candidate IDs AND full product details.
-	// This allows Gemini to compose a response with names, prices, descriptions.
+	// This allows AI model to compose a response with names, prices, descriptions.
 	// Returns the proposal + usage telemetry for cost recording.
 	FinalEvaluateWithDetails(ctx context.Context, input FinalEvaluationInput, userPrompt string) (ports.CapabilityDecision, ports.CustomerSalesUsageTelemetry, error)
 }
 
-type ExactBatchTokenCounter interface {
+type BatchRequestTokenEstimator interface {
 	CountBatchTokens(ctx context.Context, input BatchEvaluationInput) (int, error)
 }
 
-type ExactFinalTokenCounter interface {
+type FinalRequestTokenEstimator interface {
 	CountFinalTokens(ctx context.Context, input FinalEvaluationInput, userPrompt string) (int, error)
 }
 
-// BatchEvaluationInput is one batch's input to Gemini.
+// BatchEvaluationInput is one batch's input to AI model.
 type BatchEvaluationInput struct {
 	AIRunID             string
 	AttemptID           string
@@ -119,7 +119,7 @@ type BatchEvaluationInput struct {
 	Reduction bool
 }
 
-// FinalEvaluationInput is the post-batch final Gemini call.
+// FinalEvaluationInput is the post-batch final AI model call.
 type FinalEvaluationInput struct {
 	AIRunID             string
 	AttemptID           string
@@ -150,11 +150,10 @@ type CatalogAIBatchPayload struct {
 	Items            []CatalogAIItem            `json:"items,omitempty"`
 }
 
-// TokenCounter returns the token count of a serialized payload.
-//
-// Per contract ② §2, Google provides count_tokens for exactly this purpose.
-// Implementations wrap that API. The Contract is token-based, not character
-// or byte based, so the model's own tokenizer is authoritative.
+// TokenCounter is an optional compatibility counter for catalog payloads.
+// A gateway estimator is preferred because it counts the assembled model
+// request. LiteLLM may estimate tokens for some upstream deployments, so all
+// results are bounded conservatively and must never be described as exact.
 type TokenCounter interface {
 	CountTokens(ctx context.Context, payload any) (int, error)
 }
@@ -192,7 +191,7 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 	candidateSet := make([]ports.CatalogBatchCandidate, 0)
 	candidateProjection := CatalogAIProjection{}
 	candidateItemsSeen := make(map[string]struct{})
-	// Full linked commercial facts for Gemini-selected informational answers.
+	// Full linked commercial facts for AI model-selected informational answers.
 	// Candidate IDs decide relevance, never which variants/offers are removed.
 	selectedProjection := CatalogAIProjection{}
 	selectedItemsSeen := make(map[string]struct{})
@@ -228,7 +227,7 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 				if err := c.markBatchRunning(ctx, rec.ID); err != nil {
 					return CatalogEvaluationResult{}, err
 				}
-				result, err := c.Gemini.EvaluateBatch(ctx, BatchEvaluationInput{
+				result, err := c.Evaluator.EvaluateBatch(ctx, BatchEvaluationInput{
 					AIRunID:             input.AIRunID,
 					AttemptID:           input.AttemptID,
 					BatchNumber:         batch.BatchNumber,
@@ -259,7 +258,7 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 				log.Printf("[CatalogBatch] BATCH_DONE batch=%d items=%d candidates=%d", batch.BatchNumber, len(batch.Items), len(result.Candidates))
 			}
 			if len(pageCandidates) > 0 && (input.Presentation == "detail" || input.Presentation == "compare") {
-				// Gemini chooses relevant item IDs after examining the full
+				// AI model chooses relevant item IDs after examining the full
 				// tenant-scoped catalog batches. Rehydrate each selected item
 				// from the original page, not its potentially narrowed
 				// candidate variant/offer evidence.
@@ -312,19 +311,19 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 	}
 
 	if input.Presentation == "detail" || input.Presentation == "compare" {
-		// An information request needs Gemini-authored explanation, not a
+		// An information request needs AI model-authored explanation, not a
 		// final commercial capability decision or repeated candidate reduction.
-		// All catalog pages were evaluated first and selection came from Gemini.
+		// All catalog pages were evaluated first and selection came from AI model.
 		result, err := c.composeCatalogProjection(ctx, input, selectedProjection)
 		if err != nil {
 			return CatalogEvaluationResult{}, err
 		}
 		revisionAfterReply, err := c.CatalogAI.GetRevision(ctx, input.BusinessID)
 		if err != nil {
-			return CatalogEvaluationResult{}, fmt.Errorf("read catalog revision after Gemini detail reply: %w", err)
+			return CatalogEvaluationResult{}, fmt.Errorf("read catalog revision after AI model detail reply: %w", err)
 		}
 		if revisionAfterReply != revisionStart {
-			return CatalogEvaluationResult{}, errors.New("catalog changed during Gemini detail reply; refusing stale commercial facts")
+			return CatalogEvaluationResult{}, errors.New("catalog changed during AI model detail reply; refusing stale commercial facts")
 		}
 		return result, nil
 	}
@@ -409,7 +408,7 @@ func appendCandidateProjection(target *CatalogAIProjection, batch CatalogAIBatch
 		if !ok {
 			continue
 		}
-		// If Gemini narrowed a candidate to specific variants/offers, expose
+		// If AI model narrowed a candidate to specific variants/offers, expose
 		// only those nested records to the next stage. Empty child lists mean
 		// the whole item remains the candidate and its nested facts stay visible.
 		filtered := item
@@ -668,8 +667,8 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 		budget = 8000
 	}
 
-	exactCounter, hasExactCounter := c.Gemini.(ExactBatchTokenCounter)
-	if !hasExactCounter && c.TokenCounter == nil {
+	estimator, hasEstimator := c.Evaluator.(BatchRequestTokenEstimator)
+	if !hasEstimator && c.TokenCounter == nil {
 		return nil, errors.New("batch token counter is not configured")
 	}
 
@@ -700,8 +699,8 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 	}
 	batches := make([]CatalogAIBatchPayload, 0)
 	countBatch := func(batch CatalogAIBatchPayload) (int, error) {
-		if hasExactCounter {
-			return exactCounter.CountBatchTokens(ctx, BatchEvaluationInput{
+		if hasEstimator {
+			return estimator.CountBatchTokens(ctx, BatchEvaluationInput{
 				AIRunID:             input.AIRunID,
 				AttemptID:           input.AttemptID,
 				BatchNumber:         batch.BatchNumber,
@@ -714,8 +713,8 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 				Reduction:           reduction,
 			})
 		}
-		// Compatibility fallback for unit tests. Production BatchClient
-		// implements ExactBatchTokenCounter.
+		// Compatibility fallback for unit tests. Production LiteLLM adapter
+		// implements BatchRequestTokenEstimator.
 		return c.TokenCounter.CountTokens(ctx, batch)
 	}
 
@@ -925,14 +924,14 @@ func (c *CatalogBatchController) coverageComplete(records []ports.AICatalogBatch
 	return true
 }
 
-// runFinalEvaluation calls the contract ② §6 final Gemini evaluation.
-// Per contract ② §6, the Final Gemini sees:
+// runFinalEvaluation calls the contract ② §6 final AI model evaluation.
+// Per contract ② §6, the Final AI model sees:
 //   - Customer Message
 //   - Conversation Context
 //   - Candidate Results (IDs + reason)
 //   - الدليل التجاري المرتبط بالمرشحين (full product details for each candidate)
 //
-// Without the full product details, Gemini only sees IDs and cannot
+// Without the full product details, AI model only sees IDs and cannot
 // compose a response with names, prices, descriptions.
 func (c *CatalogBatchController) runFinalEvaluation(
 	ctx context.Context,
@@ -973,15 +972,15 @@ func (c *CatalogBatchController) runFinalEvaluation(
 
 		finalInput, userPrompt := buildFinalEvaluationPayload(input, candidates, candidateProjection)
 
-		if exact, ok := c.Gemini.(ExactFinalTokenCounter); ok {
-			tokens, err := exact.CountFinalTokens(ctx, finalInput, userPrompt)
+		if estimator, ok := c.Evaluator.(FinalRequestTokenEstimator); ok {
+			tokens, err := estimator.CountFinalTokens(ctx, finalInput, userPrompt)
 			if err != nil {
 				return ports.CapabilityDecision{}, CatalogAIProjection{}, fmt.Errorf("count final evaluation tokens: %w", err)
 			}
 			if tokens > budget {
 				if len(candidateProjection.Items) == 0 {
 					return ports.CapabilityDecision{}, CatalogAIProjection{}, fmt.Errorf(
-						"final evaluation base context exceeds token budget %d with exact request size %d",
+						"final evaluation base context exceeds token budget %d with estimated request size %d",
 						budget, tokens,
 					)
 				}
@@ -1013,7 +1012,7 @@ func (c *CatalogBatchController) runFinalEvaluation(
 			}
 		}
 
-		proposal, usage, err := c.Gemini.FinalEvaluateWithDetails(ctx, finalInput, userPrompt)
+		proposal, usage, err := c.Evaluator.FinalEvaluateWithDetails(ctx, finalInput, userPrompt)
 		if err != nil {
 			return ports.CapabilityDecision{}, CatalogAIProjection{}, err
 		}
@@ -1100,7 +1099,7 @@ func (c *CatalogBatchController) reduceCandidateRound(
 			return nil, CatalogAIProjection{}, startBatchNumber, err
 		}
 
-		result, err := c.Gemini.EvaluateBatch(ctx, BatchEvaluationInput{
+		result, err := c.Evaluator.EvaluateBatch(ctx, BatchEvaluationInput{
 			AIRunID:             input.AIRunID,
 			AttemptID:           input.AttemptID,
 			BatchNumber:         batch.BatchNumber,
@@ -1173,13 +1172,13 @@ func countCompleted(records []ports.AICatalogBatchRecord) int {
 	return count
 }
 
-// recordBatchUsage persists per-batch Gemini call telemetry to ai_usage_records.
+// recordBatchUsage persists per-batch AI model call telemetry to ai_usage_records.
 //
-// Per AIUsageTokenTelemetry.md §6: every Gemini call's tokens + cost must be
+// Per AIUsageTokenTelemetry.md §6: every AI model call's tokens + cost must be
 // recorded. Batch calls and the final evaluation call record:
 //   - model_requests = 1
 //   - final_ai_replies = 0 (the final reply is counted by AutoReply.recordAIUsage)
-//   - tokens (input/cached/output) from Gemini's usageMetadata
+//   - tokens (input/cached/output) from AI model's usageMetadata
 //   - provider_cost_yer computed from the pricing table
 //   - correlation_id = runID + "|" + phase (for dedup)
 //
@@ -1227,7 +1226,7 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 	correlationID := runID + "|" + phase
 	recordID := c.NewID()
 	now := c.Now()
-	// Per P2-13: use the REAL latency from the Gemini call
+	// Per P2-13: use the REAL latency from the AI model call
 	// (usage.LatencyMs) to compute StartedAt — NOT EstimatedCostMicros
 	// (which was always 0, resulting in StartedAt == CompletedAt +
 	// latency=0 for every batch record).
@@ -1266,9 +1265,9 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 
 // Ready is the same local dependency check used when offering the capability.
 func (c *CatalogBatchController) Ready() bool {
-	if c == nil || c.Gemini == nil || c.RunRepo == nil || c.CatalogAI == nil || c.Now == nil || c.NewID == nil {
+	if c == nil || c.Evaluator == nil || c.RunRepo == nil || c.CatalogAI == nil || c.Now == nil || c.NewID == nil {
 		return false
 	}
-	_, exact := c.Gemini.(ExactBatchTokenCounter)
-	return exact || c.TokenCounter != nil
+	_, estimated := c.Evaluator.(BatchRequestTokenEstimator)
+	return estimated || c.TokenCounter != nil
 }

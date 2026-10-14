@@ -47,7 +47,7 @@ const (
 // digests are summarized in a bounded tree, then Gemini writes exactly
 // ONE customer response. Batches are never sent as customer messages.
 func (c *CatalogBatchController) runCatalogOverview(ctx context.Context, input CatalogEvaluationInput) (CatalogEvaluationResult, error) {
-	ai, ok := c.Gemini.(CatalogOverviewClient)
+	ai, ok := c.Evaluator.(CatalogOverviewClient)
 	if !ok {
 		return CatalogEvaluationResult{}, errors.New("configured catalog model cannot author full-catalog overviews")
 	}

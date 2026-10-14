@@ -31,7 +31,7 @@ func NewLiteLLMCatalogAdapter(client *litellm.Client, model string, maxOutputTok
 	return &LiteLLMCatalogAdapter{client: client, model: model, maxOutputTokens: maxOutputTokens, maxInputTokens: maxInputTokens}, nil
 }
 
-// Reuse the exact current Gemini payload builders rather than maintain an
+// Reuse the existing catalog payload builders rather than maintain an
 // independently drifting catalog prompt/schema implementation.
 func (c *LiteLLMCatalogAdapter) builder() *catalogRequestBuilder {
 	return &catalogRequestBuilder{systemPrompt: prompts.BatchEvaluationSystemPrompt}
@@ -193,6 +193,6 @@ func (c *LiteLLMCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, in
 	}, nil
 }
 
-var _ services.BatchGeminiClient = (*LiteLLMCatalogAdapter)(nil)
-var _ services.ExactBatchTokenCounter = (*LiteLLMCatalogAdapter)(nil)
-var _ services.ExactFinalTokenCounter = (*LiteLLMCatalogAdapter)(nil)
+var _ services.CatalogEvaluationClient = (*LiteLLMCatalogAdapter)(nil)
+var _ services.BatchRequestTokenEstimator = (*LiteLLMCatalogAdapter)(nil)
+var _ services.FinalRequestTokenEstimator = (*LiteLLMCatalogAdapter)(nil)

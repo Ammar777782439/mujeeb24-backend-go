@@ -295,7 +295,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		}
 		service.CatalogBatch = &services.CatalogBatchController{
 			CatalogAI:   postgres.NewCatalogAIReadRepository(database),
-			Gemini:      external.LiteLLMCatalogClient,
+			Evaluator:      external.LiteLLMCatalogClient,
 			RunRepo:     postgres.NewAIRunTraceRepository(database),
 			TokenBudget: catalogBudget,
 			Now:         func() time.Time { return time.Now().UTC() },

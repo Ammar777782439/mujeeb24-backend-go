@@ -18,10 +18,10 @@ func TestCatalogBatchBudgetAccommodatesObserved9625Estimate(t *testing.T) {
 	for i := 0; i < 12; i++ {
 		projection.Items = append(projection.Items, CatalogAIItem{ID: fmt.Sprintf("item-%02d", i)})
 	}
-	adapter := &exactTokenBatchGeminiStub{countFn: func(BatchEvaluationInput) (int, error) {
+	adapter := &catalogTokenEstimatorStub{countFn: func(BatchEvaluationInput) (int, error) {
 		return 9625, nil
 	}}
-	controller := &CatalogBatchController{Gemini: adapter, TokenBudget: budget}
+	controller := &CatalogBatchController{Evaluator: adapter, TokenBudget: budget}
 	batches, err := controller.splitIntoBatches(context.Background(), projection, CatalogEvaluationInput{AIRunID: "run", BusinessID: "business"}, 1)
 	if err != nil {
 		t.Fatalf("safe context budget rejected observed request: %v", err)
@@ -41,10 +41,10 @@ func TestCatalogBatchingPreservesLargeItemCollection(t *testing.T) {
 			Attributes: map[string]any{"size": i},
 		})
 	}
-	adapter := &exactTokenBatchGeminiStub{countFn: func(input BatchEvaluationInput) (int, error) {
+	adapter := &catalogTokenEstimatorStub{countFn: func(input BatchEvaluationInput) (int, error) {
 		return 350 + 75*len(input.Batch.Items), nil
 	}}
-	controller := &CatalogBatchController{Gemini: adapter, TokenBudget: 900}
+	controller := &CatalogBatchController{Evaluator: adapter, TokenBudget: 900}
 	batches, err := controller.splitIntoBatches(context.Background(), projection, CatalogEvaluationInput{AIRunID: "run", BusinessID: "business"}, 1)
 	if err != nil {
 		t.Fatalf("large catalog batching failed: %v", err)

@@ -109,7 +109,7 @@ func TestHundredCatalogOverviewReviewsEveryItemAndSendsSingleReply(t *testing.T)
 	service, runtime, outbox, runs := capabilityService()
 	runtime.Decision = ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityFullCatalog, Presentation: "overview"}
 	service.CatalogBatch = &CatalogBatchController{
-		CatalogAI: repo, Gemini: model, RunRepo: runs, TokenBudget: 1000,
+		CatalogAI: repo, Evaluator: model, RunRepo: runs, TokenBudget: 1000,
 		Now: time.Now, NewID: func() string { return fmt.Sprintf("id-%d", time.Now().UnixNano()) },
 	}
 	service.EntityContractPayload = mustMarshal(BuildCatalogEntityContractPayload())
@@ -132,7 +132,7 @@ func TestCatalogOverviewFailsClosedIfGeminiReturnsEmptyIntermediateDigest(t *tes
 	repo := &largeOverviewCatalogRepo{capabilityCatalogRepo: &capabilityCatalogRepo{}}
 	model := &overviewModelFixture{capabilityBatchModel: &capabilityBatchModel{}, emptyDigest: true}
 	controller := &CatalogBatchController{
-		CatalogAI: repo, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 1000,
+		CatalogAI: repo, Evaluator: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 1000,
 		Now: time.Now, NewID: func() string { return "id" },
 	}
 	_, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{
@@ -150,7 +150,7 @@ func TestCatalogOverviewRejectsOversizedCustomerResponse(t *testing.T) {
 	repo := &largeOverviewCatalogRepo{capabilityCatalogRepo: &capabilityCatalogRepo{}}
 	model := &overviewModelFixture{capabilityBatchModel: &capabilityBatchModel{}, oversized: true}
 	controller := &CatalogBatchController{
-		CatalogAI: repo, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 1000,
+		CatalogAI: repo, Evaluator: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 1000,
 		Now: time.Now, NewID: func() string { return "id" },
 	}
 	_, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{
@@ -167,7 +167,7 @@ func TestCatalogOverviewSuccessfulSummaryNeedsNoModelUUIDEcho(t *testing.T) {
 	repo := &largeOverviewCatalogRepo{capabilityCatalogRepo: &capabilityCatalogRepo{}}
 	model := &overviewModelFixture{capabilityBatchModel: &capabilityBatchModel{}}
 	controller := &CatalogBatchController{
-		CatalogAI: repo, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 1000,
+		CatalogAI: repo, Evaluator: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 1000,
 		Now: time.Now, NewID: func() string { return "id" },
 	}
 	result, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{
@@ -188,7 +188,7 @@ func TestHundredCatalogOverviewAcceptsLongInternalGeminiDigests(t *testing.T) {
 		batchDigestRunes:     1500, mergeDigestRunes: 1500,
 	}
 	controller := &CatalogBatchController{
-		CatalogAI: repo, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 1000,
+		CatalogAI: repo, Evaluator: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 1000,
 		Now: time.Now, NewID: func() string { return "id" },
 	}
 	result, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{
@@ -209,7 +209,7 @@ func TestCatalogOverviewRejectsTrulyOversizedInternalDigestWithSize(t *testing.T
 		batchDigestRunes:     overviewBatchMaxRunes + 1,
 	}
 	controller := &CatalogBatchController{
-		CatalogAI: repo, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 1000,
+		CatalogAI: repo, Evaluator: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 1000,
 		Now: time.Now, NewID: func() string { return "id" },
 	}
 	_, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{

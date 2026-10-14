@@ -8,13 +8,13 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
-type exactTokenBatchGeminiStub struct {
+type catalogTokenEstimatorStub struct {
 	countFn       func(BatchEvaluationInput) (int, error)
 	seen          []BatchEvaluationInput
 	finalProposal ports.CapabilityDecision
 }
 
-func (s *exactTokenBatchGeminiStub) CountBatchTokens(_ context.Context, input BatchEvaluationInput) (int, error) {
+func (s *catalogTokenEstimatorStub) CountBatchTokens(_ context.Context, input BatchEvaluationInput) (int, error) {
 	s.seen = append(s.seen, input)
 	if s.countFn != nil {
 		return s.countFn(input)
@@ -22,11 +22,11 @@ func (s *exactTokenBatchGeminiStub) CountBatchTokens(_ context.Context, input Ba
 	return 0, nil
 }
 
-func (s *exactTokenBatchGeminiStub) EvaluateBatch(_ context.Context, input BatchEvaluationInput) (ports.CatalogBatchResult, error) {
+func (s *catalogTokenEstimatorStub) EvaluateBatch(_ context.Context, input BatchEvaluationInput) (ports.CatalogBatchResult, error) {
 	return ports.CatalogBatchResult{BatchNumber: input.BatchNumber}, nil
 }
 
-func (s *exactTokenBatchGeminiStub) FinalEvaluateWithDetails(_ context.Context, _ FinalEvaluationInput, _ string) (ports.CapabilityDecision, ports.CustomerSalesUsageTelemetry, error) {
+func (s *catalogTokenEstimatorStub) FinalEvaluateWithDetails(_ context.Context, _ FinalEvaluationInput, _ string) (ports.CapabilityDecision, ports.CustomerSalesUsageTelemetry, error) {
 	decision := s.finalProposal
 	if decision.Capability == "" {
 		decision = ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityRespondWithoutAction, ResponseText: "ok"}
@@ -34,15 +34,15 @@ func (s *exactTokenBatchGeminiStub) FinalEvaluateWithDetails(_ context.Context, 
 	return decision, ports.CustomerSalesUsageTelemetry{}, nil
 }
 
-func TestSplitIntoBatchesUsesExactRequestTokensAndSequentialNumbers(t *testing.T) {
-	gemini := &exactTokenBatchGeminiStub{
+func TestSplitIntoBatchesUsesEstimatedRequestTokensAndSequentialNumbers(t *testing.T) {
+	model := &catalogTokenEstimatorStub{
 		countFn: func(input BatchEvaluationInput) (int, error) {
 			// Simulate fixed prompt/contract overhead + per-item payload.
 			return 100 + 100*len(input.Batch.Items), nil
 		},
 	}
 	controller := &CatalogBatchController{
-		Gemini:      gemini,
+		Evaluator:      model,
 		TokenBudget: 250,
 	}
 	schemaID := "schema-1"
@@ -86,18 +86,18 @@ func TestSplitIntoBatchesUsesExactRequestTokensAndSequentialNumbers(t *testing.T
 			t.Fatalf("batch[%d] lost used schema: %+v", i, batch.AttributeSchemas)
 		}
 	}
-	if len(gemini.seen) == 0 || gemini.seen[0].CustomerMessage != input.CustomerMessage {
+	if len(model.seen) == 0 || model.seen[0].CustomerMessage != input.CustomerMessage {
 		t.Fatal("exact token counter did not receive the real BatchEvaluationInput")
 	}
 }
 
 func TestSplitIntoBatchesRejectsSingleOversizedItem(t *testing.T) {
-	gemini := &exactTokenBatchGeminiStub{
+	model := &catalogTokenEstimatorStub{
 		countFn: func(input BatchEvaluationInput) (int, error) {
 			return 9999, nil
 		},
 	}
-	controller := &CatalogBatchController{Gemini: gemini, TokenBudget: 500}
+	controller := &CatalogBatchController{Evaluator: model, TokenBudget: 500}
 	projection := CatalogAIProjection{
 		Items: []CatalogAIItem{{ID: "huge-item", CatalogID: "catalog-1"}},
 	}
@@ -168,12 +168,12 @@ func TestValidateBatchCandidatesEnforcesItemVariantOfferRelationships(t *testing
 }
 
 func TestReductionSplitUsesReductionRequestShape(t *testing.T) {
-	gemini := &exactTokenBatchGeminiStub{
+	model := &catalogTokenEstimatorStub{
 		countFn: func(input BatchEvaluationInput) (int, error) {
 			return 100, nil
 		},
 	}
-	controller := &CatalogBatchController{Gemini: gemini, TokenBudget: 500}
+	controller := &CatalogBatchController{Evaluator: model, TokenBudget: 500}
 	projection := CatalogAIProjection{
 		Items: []CatalogAIItem{{ID: "item-1", CatalogID: "catalog-1"}},
 	}
@@ -183,11 +183,11 @@ func TestReductionSplitUsesReductionRequestShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("splitIntoBatchesMode: %v", err)
 	}
-	if len(gemini.seen) == 0 || !gemini.seen[0].Reduction {
+	if len(model.seen) == 0 || !model.seen[0].Reduction {
 		t.Fatal("exact token counter must count the reduction request shape, not the normal batch prompt")
 	}
-	if gemini.seen[0].BatchNumber != 4 {
-		t.Fatalf("reduction batch number=%d, want 4", gemini.seen[0].BatchNumber)
+	if model.seen[0].BatchNumber != 4 {
+		t.Fatalf("reduction batch number=%d, want 4", model.seen[0].BatchNumber)
 	}
 }
 
@@ -228,7 +228,7 @@ func TestAppendCandidateProjectionPrunesUnselectedNestedEvidence(t *testing.T) {
 
 func TestSplitIntoBatchesFragmentsOversizedItemWithoutLosingNestedEvidence(t *testing.T) {
 	v1, v2 := "variant-1", "variant-2"
-	gemini := &exactTokenBatchGeminiStub{
+	model := &catalogTokenEstimatorStub{
 		countFn: func(input BatchEvaluationInput) (int, error) {
 			if len(input.Batch.Items) == 0 {
 				return 0, nil
@@ -237,7 +237,7 @@ func TestSplitIntoBatchesFragmentsOversizedItemWithoutLosingNestedEvidence(t *te
 			return 200 + 100*(len(item.Variants)+len(item.Offers)), nil
 		},
 	}
-	controller := &CatalogBatchController{Gemini: gemini, TokenBudget: 450}
+	controller := &CatalogBatchController{Evaluator: model, TokenBudget: 450}
 	projection := CatalogAIProjection{
 		Catalogs: []CatalogAICatalog{{ID: "catalog-1", Name: "Main", Status: "active"}},
 		Items: []CatalogAIItem{{
@@ -319,12 +319,12 @@ func TestAppendCandidateProjectionMergesSameItemFragments(t *testing.T) {
 }
 
 func TestFinalEvaluationRejectsRetrievalAfterCoverage(t *testing.T) {
-	gemini := &exactTokenBatchGeminiStub{
+	model := &catalogTokenEstimatorStub{
 		finalProposal: ports.CapabilityDecision{
 			Capability: ports.CustomerSalesCapabilityFullCatalog,
 		},
 	}
-	controller := &CatalogBatchController{Gemini: gemini, TokenBudget: 8000}
+	controller := &CatalogBatchController{Evaluator: model, TokenBudget: 8000}
 	_, _, err := controller.runFinalEvaluation(context.Background(), CatalogEvaluationInput{
 		AIRunID: "run-1", BusinessID: "business-1", CustomerMessage: "test",
 	}, nil, CatalogAIProjection{}, 1)
