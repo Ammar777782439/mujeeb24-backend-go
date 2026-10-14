@@ -143,7 +143,7 @@ func TestGeminiCustomerSelectionRetriesAndPreservesStatelessRequest(t *testing.T
 			w.WriteHeader(503)
 			return
 		}
-		_, _ = w.Write([]byte(`{"status":"requires_action","steps":[{"type":"function_call","id":"catalog","name":"evaluate_full_catalog","arguments":{}}],"usage":{"total_input_tokens":31,"total_output_tokens":8}}`))
+		_, _ = w.Write([]byte(`{"status":"requires_action","steps":[{"type":"function_call","id":"catalog","name":"evaluate_full_catalog","arguments":{"presentation":"detail"}}],"usage":{"total_input_tokens":31,"total_output_tokens":8}}`))
 	}))
 	defer srv.Close()
 	base, err := NewGeminiHTTPClient(GeminiHTTPClientConfig{BaseURL: srv.URL, APIKey: "test", Model: "test"})
