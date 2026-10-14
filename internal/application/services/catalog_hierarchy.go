@@ -164,7 +164,6 @@ func (p *catalogHierarchyLines) messages() ([]string, error) {
 			return p.catalogs[name][i].name < p.catalogs[name][j].name
 		})
 	}
-	const maximumMessages = 4
 	var chunks []string
 	var current strings.Builder
 	begin := func() {
@@ -199,8 +198,13 @@ func (p *catalogHierarchyLines) messages() ([]string, error) {
 	if current.Len() > 0 {
 		chunks = append(chunks, strings.TrimSpace(current.String()))
 	}
-	if len(chunks) == 0 || len(chunks) > maximumMessages {
-		return nil, fmt.Errorf("complete customer-facing catalog requires %d messages; use a paginated category overview instead of a multi-message flood", len(chunks))
+	if len(chunks) == 0 {
+		return nil, errors.New("no customer-facing catalog content")
+	}
+	if len(chunks) > 2 {
+		// Offer every item name in a compact category index instead of
+		// flooding Messenger with long technical descriptions.
+		return p.compactMessages(names, total)
 	}
 	footer := "\nالأسعار المعروضة من بيانات المتجر؛ السعر أو التوفر الذي لم يُتحقق منه يحتاج تأكيدًا قبل إتمام الطلب. إذا رغبت، أشرح لك الفروقات والمميزات التفصيلية لأي قسم أو منتج."
 	if utf8.RuneCountInString(chunks[len(chunks)-1])+utf8.RuneCountInString(footer) <= catalogHierarchyPartRunes {
@@ -214,6 +218,75 @@ func (p *catalogHierarchyLines) messages() ([]string, error) {
 		}
 	}
 	return chunks, nil
+}
+
+// compactMessages is a bounded overview, never an incomplete "full details"
+// claim. The verified Universal Catalog remains authoritative for a follow-up
+// question about any displayed item.
+func (p *catalogHierarchyLines) compactMessages(names []string, total int) ([]string, error) {
+	parts := []string{}
+	var msg strings.Builder
+	msg.WriteString(fmt.Sprintf("أهلًا بك! عندنا %d خيارًا، وهذه قائمة الأسماء والأسعار بحسب القسم:\n", total))
+	for _, name := range names {
+		section := "\n📂 " + name + "\n"
+		for _, item := range p.catalogs[name] {
+			price := "اسأل عن السعر"
+			if len(item.prices) > 0 {
+				currency := item.prices[0].currency
+				consistent := true
+				for _, next := range item.prices {
+					if next.currency != currency {
+						consistent = false
+					}
+				}
+				if consistent {
+					amount, cc := item.prices[0].amount, currency
+					price = formatCatalogCustomerPrice(&amount, &cc)
+					if len(item.prices) > 1 {
+						price = "ابتداءً من " + price
+					}
+				} else {
+					price = "أسعار بعملات مختلفة"
+				}
+			}
+			entry := "• " + item.name + " — " + price + "\n"
+			size := utf8.RuneCountInString(section + entry)
+			if size > catalogHierarchyPartRunes {
+				return nil, errors.New("catalog item name exceeds messenger reply limit")
+			}
+			if utf8.RuneCountInString(msg.String())+size > catalogHierarchyPartRunes {
+				parts = append(parts, strings.TrimSpace(msg.String()))
+				msg.Reset()
+			}
+			if !strings.Contains(msg.String(), section) {
+				msg.WriteString(section)
+			}
+			msg.WriteString(entry)
+			section = ""
+		}
+	}
+	if msg.Len() > 0 {
+		parts = append(parts, strings.TrimSpace(msg.String()))
+	}
+	if len(parts) > 2 {
+		// Very large catalogs require interactive category/page navigation.
+		// Sending dozens of parts automatically is not acceptable customer UX.
+		var overview strings.Builder
+		overview.WriteString(fmt.Sprintf("أهلًا بك! لدينا %d منتجًا وخدمة موزعة على الأقسام التالية:\n", total))
+		for _, name := range names {
+			overview.WriteString(fmt.Sprintf("• %s (%d خيار)\n", name, len(p.catalogs[name])))
+		}
+		overview.WriteString("الخيارات كثيرة لرسالة واحدة. اذكر اسم القسم الذي تريد البدء به وسأعرض خياراته.")
+		if utf8.RuneCountInString(overview.String()) > catalogHierarchyPartRunes {
+			return nil, errors.New("catalog category index exceeds safe message limit")
+		}
+		return []string{overview.String()}, nil
+	}
+	if len(parts) > 0 {
+		last := len(parts) - 1
+		parts[last] += "\nهذه نظرة سريعة؛ للمقارنة التفصيلية بين المميزات والشروط، اختر القسم الذي يهمك."
+	}
+	return parts, nil
 }
 
 func (p *catalogHierarchyLines) appendItem(catalogName string, item CatalogAIItem, schema *CatalogAIAttributeSchema) error {
