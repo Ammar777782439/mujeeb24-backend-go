@@ -251,9 +251,12 @@ func validateCatalogReplyCoverage(source CatalogAIProjection, out CatalogReplyOu
 		}
 		seen[id] = struct{}{}
 	}
-	for id := range expected {
-		if _, covered := seen[id]; !covered {
-			return fmt.Errorf("Gemini omitted item %s from its customer response", id)
+	for _, item := range source.Items {
+		if _, covered := seen[item.ID]; !covered {
+			return fmt.Errorf("Gemini omitted item %s from its customer response", item.ID)
+		}
+		if strings.TrimSpace(item.Name) == "" || !strings.Contains(out.Text, item.Name) {
+			return fmt.Errorf("Gemini claimed coverage but omitted the exact product name for item %s", item.ID)
 		}
 	}
 	return nil
