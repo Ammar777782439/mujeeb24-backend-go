@@ -1,14 +1,9 @@
-# The ONE Render Blueprint for Mujeeb API.
-# Set its DISPLAY NAME to "مجيب API" (or "Mujeeb API") in the Render Dashboard.
-# Do not create another Blueprint for these same resources.
-#
-# This attaches to the existing mujeeb24-api service and adds the LiteLLM
-# gateway service alongside it. There is only ONE Mujeeb backend.
-#
-# Render retains environment variables already present on an existing service
-# when not overridden here. Do not regenerate Mujeeb DB/JWT/encryption secrets.
-# The credentials marked sync:false are required from an existing secure value
-# or must be entered in Render; they cannot be guessed safely.
+# Mujeeb 24 API ONLY: existing backend service, NOT LiteLLM.
+# Gateway is managed by an independent Blueprint at
+# deploy/litellm/render.blueprint.yaml in the SAME GitHub branch.
+# Keep existing DATABASE_URL/JWT/encryption/SocialAPI secrets in Render.
+# LiteLLM_BASE_URL and LITELLM_API_KEY are supplied manually in API Environment.
+# Do NOT sync this root Blueprint to create a gateway.
 services:
   - type: web
     name: mujeeb24-api
@@ -85,12 +80,10 @@ services:
         value: 10s
       - key: LITELLM_GATEWAY_ONLY
         value: "true"
-      # Render supplies the URL of the sibling gateway in this SAME Blueprint.
+      # LiteLLM has its OWN Blueprint; set its Render URL in this API service.
+      # Example: https://<your-litellm-service>.onrender.com (no /v1 suffix)
       - key: LITELLM_BASE_URL
-        fromService:
-          name: mujeeb24-litellm
-          type: web
-          envVarKey: RENDER_EXTERNAL_URL
+        sync: false
       # Must be a valid Virtual Key created in LiteLLM (not an arbitrary secret).
       - key: LITELLM_API_KEY
         sync: false
@@ -113,31 +106,3 @@ services:
       # Explicit accounting decision; never invent a USD/YER rate.
       - key: LITELLM_USD_TO_YER_RATE
         sync: false
-
-  - type: web
-    name: mujeeb24-litellm
-    runtime: docker
-    plan: free
-    branch: feat/ai-litellm-multi-provider-gateway
-    dockerfilePath: ./deploy/litellm/Dockerfile.render
-    autoDeployTrigger: off
-    healthCheckPath: /health/readiness
-    envVars:
-      - key: PORT
-        value: "4000"
-      # Persistent LiteLLM settings/key/spend DB. NOT the Mujeeb business DB.
-      - key: DATABASE_URL
-        sync: false
-      # Generated once and retained by Render across redeployments.
-      - key: LITELLM_MASTER_KEY_SEED
-        generateValue: true
-      - key: LITELLM_SALT_KEY_SEED
-        generateValue: true
-      - key: STORE_MODEL_IN_DB
-        value: "True"
-      - key: UI_USERNAME
-        value: admin
-      - key: UI_PASSWORD
-        generateValue: true
-      - key: LITELLM_HIDE_DEFAULT_CREDENTIALS_HINT
-        value: "true"
