@@ -1,5 +1,18 @@
 # LiteLLM Gateway — تشغيل تجريبي منفصل عن مجيب
 
+
+## Render Blueprint: إضافة البوابة بجانب API (تجريبي، 2026-10-14)
+
+- يضم ملف الجذر `render.yaml` خدمتين مستقلتين: `mujeeb24-api` الموجودة، و`mujeeb24-litellm` الجديدة من الصورة الرسمية المثبتة `ghcr.io/berriai/litellm:v1.103.0` (نوع `runtime: image`، خطة `free`). لا يغيّر هذا التعديل فرع خدمة API الموجودة أو يفعّل الردود تلقائيًا.
+- أنشئ **قاعدة PostgreSQL مستقلة ودائمة** للبوابة خارج قاعدة مجيب التجارية (مثل Neon)، ثم ضع رابطها المشفّر في متغير خدمة `mujeeb24-litellm` المسمى `DATABASE_URL` داخل Render Dashboard. لا تستخدم `DATABASE_URL` الخاص بمجيب. لا تتضمن هذه الـBlueprint قاعدة PostgreSQL.
+- اضبط على خدمة LiteLLM أربعة أسرار من Render Dashboard: `DATABASE_URL` و`LITELLM_MASTER_KEY` و`LITELLM_SALT_KEY` و`UI_PASSWORD`. استخدم مفتاحين عشوائيين منفصلين للمفتاح الرئيسي وSalt ولا تغيّر Salt بعد حفظ مفاتيح المزودين. اسم مستخدم UI هو `admin` في Blueprint.
+- **إذا كانت Blueprint موجودة مسبقًا:** Render لا يطالبك تلقائيًا بقيم `sync: false` الجديدة عند مزامنتها لاحقًا. افتح خدمة البوابة الجديدة `Environment` وأدخل القيم يدويًا، ثم انشرها. إن كانت هذه أول Blueprint جديدة، قد تظهر مطالبة بالقيم ضمن خطوات الإنشاء.
+- مزامنة `render.yaml` تتم من صفحة Blueprint في Render، وليست من GitHub وحده. لا تفترض أن رفع هذا التعديل أنشأ الخدمة أو بدأ تشغيلها. افحص Logs وتحقق من `https://<gateway-host>/health/readiness` ثم أنشئ النماذج الثلاثة `mujeeb-customer` و`mujeeb-catalog` و`mujeeb-merchant` من لوحة LiteLLM وأنشئ **Virtual Key** لمجيب.
+- الخدمة الحالية `mujeeb24-api` تشير داخل Blueprint إلى الفرع `refactor/merchant-catalog-ai-v2-structure`. لم نغيّر فرعها عمدًا. قبل ربطها بالبوابة، انشر نسخة باك تدعم LiteLLM بموافقة صريحة، ثم اضبط `LITELLM_BASE_URL` على رابط البوابة الفعلي و`LITELLM_API_KEY` على Virtual Key (ليس Master Key)، مع بقية متغيرات `LITELLM_*` في ملف الجذر `.env.example`.
+- **تحذير الباقة المجانية:** كل خدمة Render Free تنام عند الخمول وتملك ذاكرة محدودة. ربما لا يقلع LiteLLM ضمن 512 MB. البوابة العامة تتطلب تقييد المفاتيح والميزانيات وتدقيق أمان واجهة الإدارة؛ هذا إعداد تجربة لا ضمان إنتاج. صورة `runtime: image` لا تحدث نفسها تلقائيًا بمجرد صدور إصدار جديد.
+- المرجع الرسمي: https://render.com/docs/blueprint-spec و https://docs.litellm.ai/docs/proxy/deploy
+
+
 هذا المجلد يشغّل **LiteLLM + PostgreSQL خاص بإعدادات البوابة**. لا ينشئ قاعدة بيانات تجارية ثانية ولا يغيّر PostgreSQL الخاص بمجيب.
 
 ## 1. تشغيل LiteLLM (Windows PowerShell من جذر مستودع الباك)
