@@ -44,6 +44,20 @@ type AIConfigurationProvider interface {
 	Invalidate()
 }
 
+// LiteLLMPlatformConfig is a read-only view of the gateway runtime routes.
+// APIKey is private server-side configuration, NEVER part of an HTTP DTO.
+// Deployment owns these aliases; legacy DB AIConfigurationVersion is not a
+// runtime model selector for the LiteLLM customer/catalog/merchant adapters.
+type LiteLLMPlatformConfig struct {
+	BaseURL           string
+	APIKey            string
+	CustomerModel     string
+	CatalogModel      string
+	MerchantModel     string
+	MaxOutputTokens   int
+	MaxInputCharacters int
+}
+
 // ----------------------------------------------------------------------------
 // Credential Management (§1)
 // ----------------------------------------------------------------------------
