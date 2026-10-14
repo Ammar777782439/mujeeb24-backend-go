@@ -16,7 +16,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/handlers"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/middleware"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gemini"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/litellm"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/auth/ed25519jwt"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
 	realtimePostgres "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/realtime/postgres"
@@ -451,7 +451,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		ChannelReader:       postgres.NewPlatformChannelReadRepository(database),
 		AIConfigRepo:        aiConfigRepo,
 		AIConfigCache:       aiConfigCache,
-		ModelDiscovery:      gemini.NewModelsClient(),
+		ModelDiscovery:      litellm.NewModelsClient(),
+		LiteLLMSettings:     external.LiteLLMPlatformConfig,
 		AssignBusinessOwner: assignBusinessOwner,
 	})
 
