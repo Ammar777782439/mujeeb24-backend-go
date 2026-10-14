@@ -86,7 +86,7 @@ func (c *CatalogBatchController) runHierarchicalCatalog(ctx context.Context, inp
 		// conversationally manageable. For a large store, the safe
 		// presentation is a Gemini-authored overview followed by category
 		// exploration, never dozens of automatic Messenger messages.
-		if len(all.Items) > 24 {
+		if len(all.Items) > 8 {
 			log.Printf("[CatalogBatch] HIERARCHY_TOO_LARGE fallback=overview")
 			return c.runCatalogOverview(ctx, input)
 		}
