@@ -1238,8 +1238,10 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
 		ToolCalls:         toolCallCount,
 		FinalAIReplies:    finalAIReplies,
 		ProviderCostYER:   providerCostYER,
+
 		GatewayCostUSD: gatewayCostUSD, GatewayFXRateYER: gatewayFXRate,
 		GatewayCallID: out.Usage.GatewayCallID, GatewayDeploymentID: out.Usage.GatewayDeploymentID,
+
 		PricingVersion:    pricingVersion,
 		Status:            recordStatus,
 		CorrelationID:     &correlationID,

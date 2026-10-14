@@ -1244,8 +1244,10 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 		ToolCalls:         0,
 		FinalAIReplies:    0, // batch calls never count as final replies
 		ProviderCostYER:   providerCostYER,
+
 		GatewayCostUSD: gatewayCostUSD, GatewayFXRateYER: gatewayFXRate,
 		GatewayCallID: usage.GatewayCallID, GatewayDeploymentID: usage.GatewayDeploymentID,
+
 		PricingVersion:    pricingVersion,
 		Status:            recordStatus,
 		CorrelationID:     &correlationID,

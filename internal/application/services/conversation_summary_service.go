@@ -405,8 +405,10 @@ func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, bus
 		ToolCalls:         0,
 		FinalAIReplies:    finalAIReplies,
 		ProviderCostYER:   providerCostYER,
+
 		GatewayCostUSD: gatewayCostUSD, GatewayFXRateYER: gatewayFXRate,
 		GatewayCallID: usage.GatewayCallID, GatewayDeploymentID: usage.GatewayDeploymentID,
+
 		PricingVersion:    pricingVersion,
 		Status:            recordStatus,
 		CorrelationID:     summaryStrPtr("summary-" + businessID),
