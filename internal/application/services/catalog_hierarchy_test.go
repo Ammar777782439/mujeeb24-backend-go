@@ -39,9 +39,7 @@ func TestCatalogHierarchyIsHumanReadableAndNeverSplitsProduct(t *testing.T) {
 	original := strings.Repeat("تفاصيل الخدمة العربية الطويلة ", 100)
 	price, currency, variantID := "12000.0000", "YER", "variant-1"
 	lines := &catalogHierarchyLines{}
-	item := CatalogAIItem{ID: "item-1", Name: "الباقة الأساسية", CatalogID: "catalog-1", LongDescription: &original,
-		Variants: []CatalogAIVariant{{ID: variantID, CatalogItemID: "item-1", Name: "سنوي"}},
-		Offers: []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1", VariantID: &variantID, Name: "سعر السنة", Amount: &price, Currency: &currency}}}
+	item := CatalogAIItem{ID: "item-1", Name: "الباقة الأساسية", CatalogID: "catalog-1", LongDescription: &original, Variants: []CatalogAIVariant{{ID: variantID, CatalogItemID: "item-1", Name: "سنوي"}}, Offers: []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1", VariantID: &variantID, Name: "سعر السنة", Amount: &price, Currency: &currency}}}
 	if err := lines.appendItem("باقات مجيب", item, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -70,8 +68,7 @@ func TestCatalogHierarchyGroupsCategoriesAndItems(t *testing.T) {
 	lines := &catalogHierarchyLines{}
 	price, currency := "250.0000", "SAR"
 	for i := 0; i < 8; i++ {
-		item := CatalogAIItem{ID: fmt.Sprintf("item-%d", i), Name: fmt.Sprintf("خيار رقم %d", i), CatalogID: "catalog-1",
-			Offers: []CatalogAIOffer{{ID: fmt.Sprintf("offer-%d", i), CatalogItemID: fmt.Sprintf("item-%d", i), Amount: &price, Currency: &currency}}}
+		item := CatalogAIItem{ID: fmt.Sprintf("item-%d", i), Name: fmt.Sprintf("خيار رقم %d", i), CatalogID: "catalog-1", Offers: []CatalogAIOffer{{ID: fmt.Sprintf("offer-%d", i), CatalogItemID: fmt.Sprintf("item-%d", i), Amount: &price, Currency: &currency}}}
 		if err := lines.appendItem("باقات السفر", item, nil); err != nil {
 			t.Fatal(err)
 		}
