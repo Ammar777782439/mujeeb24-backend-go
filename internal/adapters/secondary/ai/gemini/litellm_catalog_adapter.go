@@ -120,6 +120,7 @@ func (c *LiteLLMCatalogAdapter) EvaluateBatch(ctx context.Context, input service
 		return ports.CatalogBatchResult{}, err
 	}
 	started := time.Now()
+	ctx = litellm.WithSpendAttribution(ctx, input.BusinessID, input.AIRunID, "catalog_batch")
 	raw, meta, err := c.client.SendInteractionWithMetadata(ctx, req)
 	if err != nil {
 		return ports.CatalogBatchResult{}, fmt.Errorf("send catalog batch %d: %w", input.BatchNumber, err)
@@ -161,6 +162,7 @@ func (c *LiteLLMCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, in
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
 	}
 	started := time.Now()
+	ctx = litellm.WithSpendAttribution(ctx, input.BusinessID, input.AIRunID, "catalog_final")
 	raw, meta, err := c.client.SendInteractionWithMetadata(ctx, req)
 	if err != nil {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, fmt.Errorf("send final catalog evaluation: %w", err)

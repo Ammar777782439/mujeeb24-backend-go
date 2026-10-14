@@ -70,6 +70,7 @@ func (c *LiteLLMCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cu
 		GenerationConfig: interactionGenerationConfig{MaxOutputTokens: c.maxOutputTokens, ToolChoice: "any"},
 	}
 	started := time.Now()
+	ctx = litellm.WithSpendAttribution(ctx, input.Request.BusinessID, input.AIRunID, "customer_decision")
 	raw, meta, err := c.client.SendInteractionWithMetadata(ctx, req)
 	if err != nil {
 		return ports.CustomerSalesDecisionOutput{}, err

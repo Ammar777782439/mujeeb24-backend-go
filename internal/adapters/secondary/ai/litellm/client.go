@@ -126,6 +126,7 @@ func (c *Client) sendJSONWithMetadata(ctx context.Context, endpoint string, payl
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
+	applySpendAttribution(req)
 	resp, err := c.client.Do(req)
 	if err != nil {
 		if requestCtx.Err() != nil {

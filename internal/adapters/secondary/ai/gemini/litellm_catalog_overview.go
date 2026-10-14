@@ -94,6 +94,7 @@ func (c *LiteLLMCatalogAdapter) ComposeOverview(ctx context.Context, input servi
 		return services.CatalogOverviewResponse{}, err
 	}
 	started := time.Now()
+	ctx = litellm.WithSpendAttribution(ctx, input.ConversationContext.Business.Reference, "", "catalog_overview")
 	raw, meta, err := c.client.SendInteractionWithMetadata(ctx, req)
 	if err != nil {
 		return services.CatalogOverviewResponse{}, fmt.Errorf("Gemini catalog overview: %w", err)

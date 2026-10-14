@@ -141,7 +141,8 @@ func (a *LiteLLMMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, in
 		if len(body) > a.maxRequestBytes {
 			return merchantcatalogai.Proposal{}, fmt.Errorf("merchant catalog request exceeds context byte limit: %d > %d", len(body), a.maxRequestBytes)
 		}
-		raw, meta, err := a.client.SendChatCompletionWithMetadata(ctx, req)
+		roundCtx := litellm.WithSpendAttribution(ctx, input.BusinessID, input.SessionID, "merchant_authoring")
+		raw, meta, err := a.client.SendChatCompletionWithMetadata(roundCtx, req)
 		if err != nil {
 			return merchantcatalogai.Proposal{}, fmt.Errorf("merchant catalog gateway request: %w", err)
 		}
