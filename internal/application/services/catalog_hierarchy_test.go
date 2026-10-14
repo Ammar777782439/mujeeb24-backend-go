@@ -110,6 +110,35 @@ func TestCatalogHierarchyRejectsMissingOrForeignGeminiItemCoverage(t *testing.T)
 	}
 }
 
+func TestTargetedCatalogDetailAndComparisonSkipReductionAndKeepAllOffers(t *testing.T) {
+	for _, presentation := range []string{"detail", "compare"} {
+		t.Run(presentation, func(t *testing.T) {
+			service, runtime, outbox, runs := capabilityService()
+			runtime.Decision = ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityFullCatalog, Presentation: presentation}
+			catalog := &capabilityCatalogRepo{}
+			model := &aiCatalogReplyFixture{capabilityBatchModel: &capabilityBatchModel{}}
+			service.CatalogBatch = &CatalogBatchController{CatalogAI: catalog, Gemini: model, RunRepo: runs, TokenBudget: 550, Now: service.now, NewID: service.NewID}
+			service.EntityContractPayload = mustMarshal(BuildCatalogEntityContractPayload())
+			command := capabilityCommand()
+			command.Text = "تفاصيل باقة سنوية"
+			result, err := service.Handle(context.Background(), command)
+			if err != nil || !result.Enqueued {
+				t.Fatalf("targeted model-selected catalog answer not queued: %+v %v", result, err)
+			}
+			if outbox.calls != 1 || model.finalCalls != 0 || len(model.parts) != 1 || catalog.reads != 2 {
+				t.Fatalf("targeted detail used legacy reduction or replied with all items: outbox=%d final=%d replies=%d pages=%d", outbox.calls, model.finalCalls, len(model.parts), catalog.reads)
+			}
+			if len(model.seen) != 4 || len(model.parts[0].Projection.Items) != 1 {
+				t.Fatalf("Gemini did not evaluate all pages then select one item: scanned=%v selected=%d", model.seen, len(model.parts[0].Projection.Items))
+			}
+			item := model.parts[0].Projection.Items[0]
+			if item.ID != "item-4" || len(item.Variants) != 1 || len(item.Offers) != 1 {
+				t.Fatalf("selected item lost its commercial children: %+v", item)
+			}
+		})
+	}
+}
+
 func TestCatalogReplyPartitionReservesCustomerFacingOutputSpace(t *testing.T) {
 	model := &aiCatalogReplyFixture{capabilityBatchModel: &capabilityBatchModel{}}
 	controller := &CatalogBatchController{Gemini: model, TokenBudget: 20000}
