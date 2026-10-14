@@ -25,8 +25,8 @@ func classifyAIProviderError(err error) string {
 		}
 		return string(ports.AIRunFailureCategoryNetwork)
 	}
-	var temporary interface{ IsTemporary() bool }
-	if errors.As(err, &temporary) && temporary.IsTemporary() {
+	var temporary interface{ Retryable() bool }
+	if errors.As(err, &temporary) && temporary.Retryable() {
 		return string(ports.AIRunFailureCategoryProviderTemporary)
 	}
 	return string(ports.AIRunFailureCategoryProviderPermanent)
