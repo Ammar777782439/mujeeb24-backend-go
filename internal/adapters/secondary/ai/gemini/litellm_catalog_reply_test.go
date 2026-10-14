@@ -43,16 +43,22 @@ func TestLiteLLMComposesCatalogReplyWithWholeCommercialEvidence(t *testing.T) {
 			}
 			if req.ResponseFormat != nil {
 				properties := req.ResponseFormat.Schema["properties"].(map[string]any)
-				allowed := properties["covered_item_ids"].(map[string]any)["items"].(map[string]any)["enum"].([]any)
+				sections := properties["sections"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+				itemProps := sections["items"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+				allowed := itemProps["item_id"].(map[string]any)["enum"].([]any)
 				if len(allowed) != 1 || allowed[0] != itemID {
 					t.Errorf("Gemini coverage IDs not confined to supplied items: %+v", allowed)
+				}
+				catalogs := sections["catalog_id"].(map[string]any)["enum"].([]any)
+				if len(catalogs) != 1 || catalogs[0] != "catalog" {
+					t.Errorf("Gemini catalog IDs not constrained: %+v", catalogs)
 				}
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"status": "completed",
 				"outputs": []any{map[string]any{
 					"type": "message", "content": []any{map[string]any{
-						"type": "output_text", "text": `{"response_text":"متوفر لدينا هاتف بميزة خاصة وسعر 250 ريال سعودي.","covered_item_ids":["item-1"]}`,
+						"type": "output_text", "text": `{"introduction":"متوفر لدينا خيارات متنوعة.","sections":[{"catalog_id":"catalog","heading":"الهواتف المتوفرة","items":[{"item_id":"item-1","text":"هاتف مقاوم للماء بسعر 250 ريال سعودي."}]}],"conclusion":"هل تريد معرفة المزيد؟"}`,
 					}},
 				}},
 				"usage": map[string]any{"total_input_tokens": 321, "total_output_tokens": 43},
@@ -86,8 +92,10 @@ func TestLiteLLMComposesCatalogReplyWithWholeCommercialEvidence(t *testing.T) {
 		t.Fatalf("token counter failed: %d %v", count, err)
 	}
 	out, err := adapter.ComposeCatalogReply(context.Background(), input)
-	if err != nil || out.Text != "متوفر لدينا هاتف بميزة خاصة وسعر 250 ريال سعودي." ||
-		len(out.CoveredItemIDs) != 1 || out.CoveredItemIDs[0] != itemID ||
+	if err != nil || out.Introduction != "متوفر لدينا خيارات متنوعة." ||
+		len(out.Sections) != 1 || out.Sections[0].CatalogID != "catalog" ||
+		len(out.Sections[0].Items) != 1 || out.Sections[0].Items[0].ItemID != itemID ||
+		out.Sections[0].Items[0].Text != "هاتف مقاوم للماء بسعر 250 ريال سعودي." ||
 		out.Usage.OutputTokens != 43 || out.Usage.Provider != "litellm" ||
 		counted < 2 || composed != 1 {
 		t.Fatalf("Gemini catalog composer failed: %+v, count=%d compose=%d err=%v", out, counted, composed, err)
