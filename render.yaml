@@ -1,63 +1,85 @@
+# The ONE Render Blueprint for Mujeeb API.
+# Set its DISPLAY NAME to "مجيب API" (or "Mujeeb API") in the Render Dashboard.
+# Do not create another Blueprint for these same resources.
+#
+# This attaches to the existing mujeeb24-api service and adds the LiteLLM
+# gateway service alongside it. There is only ONE Mujeeb backend.
+#
+# Render retains environment variables already present on an existing service
+# when not overridden here. Do not regenerate Mujeeb DB/JWT/encryption secrets.
+# The credentials marked sync:false are required from an existing secure value
+# or must be entered in Render; they cannot be guessed safely.
 services:
   - type: web
     name: mujeeb24-api
     runtime: docker
     plan: free
-    branch: refactor/merchant-catalog-ai-v2-structure
+    branch: feat/ai-litellm-multi-provider-gateway
     dockerfilePath: ./Dockerfile
-    autoDeployTrigger: checksPass
+    autoDeployTrigger: off
     healthCheckPath: /
     maxShutdownDelaySeconds: 60
-
     envVars:
       - key: APP_ENV
         value: production
-
+      # Keep the ORIGINAL Mujeeb merchant/business database.
       - key: DATABASE_URL
         sync: false
-
       - key: AUTH_ENABLED
         value: "true"
-
       - key: JWT_ISSUER
         value: mujeeb24
-
       - key: JWT_ED25519_PRIVATE_KEY
         sync: false
-
       - key: JWT_ED25519_PUBLIC_KEY
         sync: false
-
+      # Do not auto-rotate the existing encryption key: existing records use it.
       - key: AI_CONFIG_ENCRYPTION_KEY
         sync: false
-
       - key: SOCIALAPI_BASE_URL
         value: https://api.social-api.ai
-
       - key: SOCIALAPI_API_KEY
         sync: false
-
       - key: SOCIALAPI_WEBHOOK_SECRET
         sync: false
-
       - key: FRONTEND_URL
-        value: https://mujeeb24-frontend.ai.studio/landing
-
-      - key: CHANNEL_PROVISIONING_ENABLED
-        value: "false"
-
-      - key: AUTOREPLY_ENABLED
-        value: "false"
-
+        value: https://mujeeb24.com/landing
       - key: LLM_ENABLED
         value: "false"
+      # Do not set AUTOREPLY_ENABLED, CUSTOMER_SALES_ENABLED or
+      # CHANNEL_PROVISIONING_ENABLED here: keep current production values.
+      # Activate customer AI only after the gateway's models and key work.
+      - key: LITELLM_GATEWAY_ONLY
+        value: "true"
+      # Render supplies the URL of the sibling gateway in this SAME Blueprint.
+      - key: LITELLM_BASE_URL
+        fromService:
+          name: mujeeb24-litellm
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      # Must be a valid Virtual Key created in LiteLLM (not an arbitrary secret).
+      - key: LITELLM_API_KEY
+        sync: false
+      - key: LITELLM_CUSTOMER_MODEL
+        value: mujeeb-customer
+      - key: LITELLM_CATALOG_MODEL
+        value: mujeeb-catalog
+      - key: LITELLM_MERCHANT_MODEL
+        value: mujeeb-merchant
+      - key: LITELLM_HTTP_TIMEOUT
+        value: 200s
+      - key: LITELLM_MAX_CONTEXT_TOKENS
+        value: "32768"
+      - key: LITELLM_MAX_OUTPUT_TOKENS
+        value: "4096"
+      - key: LITELLM_MAX_INPUT_CHARACTERS
+        value: "48000"
+      - key: LITELLM_MERCHANT_MAX_REQUEST_BYTES
+        value: "524288"
+      # Explicit accounting decision; never invent a USD/YER rate.
+      - key: LITELLM_USD_TO_YER_RATE
+        sync: false
 
-  # LiteLLM gateway is a separate Render web service; do not change the
-  # existing API deployment branch or turn on live customer replies here.
-  # Uses a dedicated EXTERNAL PostgreSQL database for keys, models, and spend.
-  # Render-managed 256-bit secrets are never committed to Git.
-  # A tiny wrapper adds the sk- prefix and invokes the official entrypoint.
-  # Keep the existing API service's branch and settings unchanged.
   - type: web
     name: mujeeb24-litellm
     runtime: docker
@@ -66,30 +88,22 @@ services:
     dockerfilePath: ./deploy/litellm/Dockerfile.render
     autoDeployTrigger: off
     healthCheckPath: /health/readiness
-
     envVars:
       - key: PORT
         value: "4000"
-
-      # Neon database dedicated to LiteLLM, NEVER Mujeeb's own DATABASE_URL.
+      # Persistent LiteLLM settings/key/spend DB. NOT the Mujeeb business DB.
       - key: DATABASE_URL
         sync: false
-
-      # Created once by Render on first Blueprint sync; retained on redeploy.
+      # Generated once and retained by Render across redeployments.
       - key: LITELLM_MASTER_KEY_SEED
         generateValue: true
-
       - key: LITELLM_SALT_KEY_SEED
         generateValue: true
-
       - key: STORE_MODEL_IN_DB
         value: "True"
-
       - key: UI_USERNAME
         value: admin
-
       - key: UI_PASSWORD
         generateValue: true
-
       - key: LITELLM_HIDE_DEFAULT_CREDENTIALS_HINT
         value: "true"
