@@ -37,9 +37,9 @@ func TestLiteLLMOverviewReadsWholeBatchAndProducesOneFinalCustomerReply(t *testi
 				return
 			}
 			var input struct {
-				Stage      string `json:"stage"`
-				Batch      any    `json:"catalog_batch"`
-				Summaries  any    `json:"reviewed_summaries"`
+				Stage     string `json:"stage"`
+				Batch     any    `json:"catalog_batch"`
+				Summaries any    `json:"reviewed_summaries"`
 			}
 			if err := json.Unmarshal([]byte(body.Input), &input); err != nil {
 				t.Error(err)
@@ -93,7 +93,7 @@ func TestLiteLLMOverviewReadsWholeBatchAndProducesOneFinalCustomerReply(t *testi
 		Items: []services.CatalogAIItem{{
 			ID: "item-1", CatalogID: "catalog", Name: "هاتف",
 			Variants: []services.CatalogAIVariant{{ID: variant, CatalogItemID: "item-1"}},
-			Offers: []services.CatalogAIOffer{{ID: "offer", CatalogItemID: "item-1", VariantID: &variant, Amount: &price, Currency: &currency}},
+			Offers:   []services.CatalogAIOffer{{ID: "offer", CatalogItemID: "item-1", VariantID: &variant, Amount: &price, Currency: &currency}},
 		}},
 	}
 	request := services.CatalogOverviewRequest{Stage: "batch", CustomerMessage: "ما المتوفر عندكم؟", Batch: &batch, RequestedPresentation: "overview"}
