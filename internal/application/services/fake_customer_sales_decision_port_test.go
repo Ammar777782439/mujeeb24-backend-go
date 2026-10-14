@@ -21,9 +21,9 @@ import (
 // It returns the configured Proposal on every call, recording the input
 // arguments for assertions. Tests may set Error to simulate a provider failure.
 type FakeCustomerSalesDecisionPort struct {
-	Decision            ports.CapabilityDecision
-	Error               error
-	LastInput           ports.CustomerSalesDecisionInput
+	Decision  ports.CapabilityDecision
+	Error     error
+	LastInput ports.CustomerSalesDecisionInput
 }
 
 // NewFakeCustomerSalesDecisionPort returns a fake that produces a contract-aligned

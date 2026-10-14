@@ -42,7 +42,7 @@ func TestSplitIntoBatchesUsesEstimatedRequestTokensAndSequentialNumbers(t *testi
 		},
 	}
 	controller := &CatalogBatchController{
-		Evaluator:      model,
+		Evaluator:   model,
 		TokenBudget: 250,
 	}
 	schemaID := "schema-1"

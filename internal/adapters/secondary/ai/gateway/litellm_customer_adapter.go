@@ -113,7 +113,7 @@ func (c *LiteLLMCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cu
 
 	latencyMs := time.Since(started).Milliseconds()
 	return ports.CustomerSalesDecisionOutput{
-		Decision:          decision,
+		Decision: decision,
 		Usage: ports.CustomerSalesUsageTelemetry{
 			Provider: "litellm", InputTokens: resp.Usage.TotalInputTokens,
 			CachedTokens: resp.Usage.TotalCachedTokens, OutputTokens: resp.Usage.TotalOutputTokens,

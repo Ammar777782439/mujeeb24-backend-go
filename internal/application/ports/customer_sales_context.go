@@ -102,7 +102,6 @@ type CustomerSalesContextConversation struct {
 	Priority            string
 	AIModeOverride      string
 	AssignmentReference string
-
 }
 
 type CustomerSalesContextCustomer struct {

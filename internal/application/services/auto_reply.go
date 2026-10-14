@@ -704,13 +704,13 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	// Per contract ⑧ §5, publish realtime events for the dashboard.
 	if s.Realtime != nil && result.Enqueued {
 		data, _ := json.Marshal(map[string]any{
-			"decision_id":           result.Decision.ID,
-			"outbound_message_id":   result.OutboundMessageID,
-			"conversation_id":       conversationID,
-			"text":                  proposal.ResponseText,
-			"action":                result.Action,
-			"capability":            result.Capability,
-			"ai_run_id":             run.ID,
+			"decision_id":         result.Decision.ID,
+			"outbound_message_id": result.OutboundMessageID,
+			"conversation_id":     conversationID,
+			"text":                proposal.ResponseText,
+			"action":              result.Action,
+			"capability":          result.Capability,
+			"ai_run_id":           run.ID,
 		})
 		var correlationID *string
 		if command.Meta.CorrelationID != "" {
