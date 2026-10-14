@@ -2015,6 +2015,9 @@ func aiModelProjection(m ports.AIProviderModel) dto.AIModelView {
 }
 
 func (s *Server) platformListAIProvidersConfig(ctx context.Context) (any, bool) {
+	if s.platformDeps.LiteLLMSettings != nil {
+		return s.platformGatewayListAIProvidersConfig(ctx)
+	}
 	if s.platformDeps.AIConfigRepo == nil {
 		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config repo not wired")), true
 	}
@@ -2032,6 +2035,9 @@ func (s *Server) platformListAIProvidersConfig(ctx context.Context) (any, bool) 
 }
 
 func (s *Server) platformAddAICredential(ctx context.Context, in *dto.AddCredentialInput) (any, bool) {
+	if s.platformDeps.LiteLLMSettings != nil {
+		return s.platformGatewayAddAICredential(ctx, in)
+	}
 	if s.platformDeps.AIConfigRepo == nil {
 		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config repo not wired")), true
 	}
@@ -2148,6 +2154,9 @@ func (s *Server) platformAddAICredential(ctx context.Context, in *dto.AddCredent
 }
 
 func (s *Server) platformTestAIConnection(ctx context.Context, in *dto.TestConnectionInput) (any, bool) {
+	if s.platformDeps.LiteLLMSettings != nil {
+		return s.platformGatewayTestAIConnection(ctx, in)
+	}
 	if s.platformDeps.AIConfigCache == nil {
 		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config cache not wired")), true
 	}
@@ -2206,6 +2215,9 @@ func (s *Server) platformTestAIConnection(ctx context.Context, in *dto.TestConne
 // Per §10: discovered models are upserted into ai_provider_models so the
 // Platform Admin can later activate one via platformUpdateAIConfiguration.
 func (s *Server) platformDiscoverAIModels(ctx context.Context, in *dto.DiscoverModelsInput) (any, bool) {
+	if s.platformDeps.LiteLLMSettings != nil {
+		return s.platformGatewayDiscoverAIModels(ctx, in)
+	}
 	if s.platformDeps.AIConfigCache == nil {
 		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config cache not wired")), true
 	}
@@ -2268,6 +2280,9 @@ func (s *Server) platformDiscoverAIModels(ctx context.Context, in *dto.DiscoverM
 }
 
 func (s *Server) platformGetAIConfiguration(ctx context.Context) (any, bool) {
+	if s.platformDeps.LiteLLMSettings != nil {
+		return s.platformGatewayGetAIConfiguration(ctx)
+	}
 	if s.platformDeps.AIConfigCache == nil {
 		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config cache not wired")), true
 	}
@@ -2312,6 +2327,9 @@ func (s *Server) platformGetAIConfiguration(ctx context.Context) (any, bool) {
 // failure. The OLD active configuration remains ACTIVE — the runtime is
 // unaffected.
 func (s *Server) platformUpdateAIConfiguration(ctx context.Context, in *dto.UpdateConfigurationInput) (any, bool) {
+	if s.platformDeps.LiteLLMSettings != nil {
+		return s.platformGatewayUpdateAIConfiguration(ctx, in)
+	}
 	if s.platformDeps.AIConfigRepo == nil || s.platformDeps.AIConfigCache == nil {
 		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config not wired")), true
 	}
