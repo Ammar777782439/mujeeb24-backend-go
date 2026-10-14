@@ -21,7 +21,7 @@ func (s *Server) platformGatewayListAIProvidersConfig(_ context.Context) (any, b
 		credentials = append(credentials, dto.AICredentialView{
 			ID: "litellm-environment", Provider: "litellm",
 			DisplayName: "LiteLLM gateway (environment-managed)",
-			KeyHint: "", Status: "CONFIGURED",
+			KeyHint:     "", Status: "CONFIGURED",
 			CreatedAt: "",
 		})
 	}
@@ -105,8 +105,8 @@ func (s *Server) platformGatewayGetAIConfiguration(_ context.Context) (any, bool
 		MerchantModel: cfg.MerchantModel, ConfigurationSource: "environment",
 		CredentialID: "", CredentialStatus: "CONFIGURED",
 		MujeebMaxOutputTokens: cfg.MaxOutputTokens,
-		EffectiveMaxOutput: cfg.MaxOutputTokens,
-		MujeebMaxInputChars: cfg.MaxInputCharacters, Status: "ACTIVE",
+		EffectiveMaxOutput:    cfg.MaxOutputTokens,
+		MujeebMaxInputChars:   cfg.MaxInputCharacters, Status: "ACTIVE",
 	}
 	return out, true
 }
@@ -118,4 +118,3 @@ func (s *Server) platformGatewayUpdateAIConfiguration(_ context.Context, _ *dto.
 	return mapApplicationError(appErrors.New(appErrors.CodeConflict,
 		"LiteLLM model routes are deployment-managed. Update the LITELLM_CUSTOMER_MODEL, LITELLM_CATALOG_MODEL and LITELLM_MERCHANT_MODEL settings and restart the API; database-only activation cannot change live routes")), true
 }
-

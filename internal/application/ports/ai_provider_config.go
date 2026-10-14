@@ -49,12 +49,12 @@ type AIConfigurationProvider interface {
 // Deployment owns these aliases; legacy DB AIConfigurationVersion is not a
 // runtime model selector for the LiteLLM customer/catalog/merchant adapters.
 type LiteLLMPlatformConfig struct {
-	BaseURL           string
-	APIKey            string
-	CustomerModel     string
-	CatalogModel      string
-	MerchantModel     string
-	MaxOutputTokens   int
+	BaseURL            string
+	APIKey             string
+	CustomerModel      string
+	CatalogModel       string
+	MerchantModel      string
+	MaxOutputTokens    int
 	MaxInputCharacters int
 }
 

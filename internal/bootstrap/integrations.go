@@ -12,7 +12,7 @@ import (
 )
 
 type ExternalAdapters struct {
-	LiteLLMPlatformConfig         *ports.LiteLLMPlatformConfig
+	LiteLLMPlatformConfig          *ports.LiteLLMPlatformConfig
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
 	LiteLLMCustomerDecision        ports.CustomerSalesDecisionPort
@@ -77,7 +77,7 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 		adapters.LiteLLMPlatformConfig = &ports.LiteLLMPlatformConfig{
 			BaseURL: cfg.LiteLLMBaseURL, APIKey: cfg.LiteLLMAPIKey,
 			CustomerModel: cfg.LiteLLMCustomerModel, CatalogModel: cfg.LiteLLMCatalogModel,
-			MerchantModel: cfg.LiteLLMMerchantModel,
+			MerchantModel:   cfg.LiteLLMMerchantModel,
 			MaxOutputTokens: cfg.LiteLLMMaxOutputTokens, MaxInputCharacters: cfg.LiteLLMMaxInputCharacters,
 		}
 	}

@@ -59,7 +59,7 @@ func TestLiteLLMModelConnectionProbesRuntimeInteractions(t *testing.T) {
 func TestLiteLLMModelDiscoveryRejectsFailuresAndDoesNotLeakResponse(t *testing.T) {
 	for _, tc := range []struct {
 		name, response string
-		status int
+		status         int
 	}{
 		{"unauthorized", "PRIVATE_UPSTREAM_KEY", http.StatusUnauthorized},
 		{"invalid schema", `{"models":[{"name":"gemini"}]}`, http.StatusOK},
@@ -82,8 +82,8 @@ func TestLiteLLMModelDiscoveryRejectsFailuresAndDoesNotLeakResponse(t *testing.T
 func TestLiteLLMModelProbeRejectsIncompleteAndAuthenticationFailure(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string
-		status int
-		code string
+		status     int
+		code       string
 	}{
 		{"incomplete", `{"status":"incomplete"}`, 200, "LITELLM_INCOMPLETE_RESPONSE"},
 		{"unauthorized", "credential detail should remain private", 401, "LITELLM_HTTP_401"},

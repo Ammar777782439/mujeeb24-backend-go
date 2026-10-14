@@ -92,7 +92,7 @@ func TestGatewayPlatformAISettingsUseRuntimeAliasesNotLegacyGeminiCredentials(t 
 func TestGatewayPlatformProviderRejectsGeminiAlias(t *testing.T) {
 	s := &Server{}
 	s.WithPlatformDeps(PlatformDeps{
-		ModelDiscovery: litellm.NewModelsClient(),
+		ModelDiscovery:  litellm.NewModelsClient(),
 		LiteLLMSettings: &ports.LiteLLMPlatformConfig{BaseURL: "http://localhost:4000", APIKey: "test", CustomerModel: "mujeeb-customer"},
 	})
 	for _, provider := range []string{"google_gemini", "openai"} {
