@@ -152,6 +152,11 @@ type CustomerSalesUsageTelemetry struct {
 	Provider            string
 	Model               string
 	EstimatedCostMicros int64
+	// Native LiteLLM spend metadata; USD is a decimal string, not a token estimate.
+	GatewayCallID       string
+	GatewayDeploymentID string
+	GatewayCostUSD      string
+	GatewayCostKnown    bool
 	// LatencyMs is the wall-clock duration of the Gemini call.
 	// Per P2-13: the controller uses this to compute StartedAt =
 	// CompletedAt - LatencyMs for the usage record. Before this field,

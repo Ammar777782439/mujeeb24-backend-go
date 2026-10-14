@@ -70,7 +70,7 @@ func (c *LiteLLMCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cu
 		GenerationConfig: interactionGenerationConfig{MaxOutputTokens: c.maxOutputTokens, ToolChoice: "any"},
 	}
 	started := time.Now()
-	raw, err := c.client.SendInteraction(ctx, req)
+	raw, meta, err := c.client.SendInteractionWithMetadata(ctx, req)
 	if err != nil {
 		return ports.CustomerSalesDecisionOutput{}, err
 	}
@@ -118,6 +118,8 @@ func (c *LiteLLMCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cu
 			Provider: "litellm", InputTokens: resp.Usage.TotalInputTokens,
 			CachedTokens: resp.Usage.TotalCachedTokens, OutputTokens: resp.Usage.TotalOutputTokens,
 			Model: c.model, LatencyMs: latencyMs, ModelRequests: 1,
+			GatewayCallID: meta.CallID, GatewayDeploymentID: meta.DeploymentID,
+			GatewayCostUSD: meta.CostUSD, GatewayCostKnown: meta.HasCost,
 		},
 		LatencyMs: latencyMs,
 	}, nil

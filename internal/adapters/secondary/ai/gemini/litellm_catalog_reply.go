@@ -124,7 +124,7 @@ func (c *LiteLLMCatalogAdapter) ComposeCatalogReply(ctx context.Context, input s
 		return services.CatalogReplyOutput{}, err
 	}
 	started := time.Now()
-	raw, err := c.client.SendInteraction(ctx, req)
+	raw, meta, err := c.client.SendInteractionWithMetadata(ctx, req)
 	if err != nil {
 		return services.CatalogReplyOutput{}, fmt.Errorf("compose customer catalog message via Gemini: %w", err)
 	}
@@ -156,6 +156,8 @@ func (c *LiteLLMCatalogAdapter) ComposeCatalogReply(ctx context.Context, input s
 			CachedTokens:  normalized.Usage.TotalCachedTokens,
 			OutputTokens:  normalized.Usage.TotalOutputTokens,
 			ModelRequests: 1, LatencyMs: time.Since(started).Milliseconds(),
+			GatewayCallID: meta.CallID, GatewayDeploymentID: meta.DeploymentID,
+			GatewayCostUSD: meta.CostUSD, GatewayCostKnown: meta.HasCost,
 		},
 	}, nil
 }

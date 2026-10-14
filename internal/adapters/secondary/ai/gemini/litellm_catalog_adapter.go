@@ -120,7 +120,7 @@ func (c *LiteLLMCatalogAdapter) EvaluateBatch(ctx context.Context, input service
 		return ports.CatalogBatchResult{}, err
 	}
 	started := time.Now()
-	raw, err := c.client.SendInteraction(ctx, req)
+	raw, meta, err := c.client.SendInteractionWithMetadata(ctx, req)
 	if err != nil {
 		return ports.CatalogBatchResult{}, fmt.Errorf("send catalog batch %d: %w", input.BatchNumber, err)
 	}
@@ -146,6 +146,8 @@ func (c *LiteLLMCatalogAdapter) EvaluateBatch(ctx context.Context, input service
 			Provider: "litellm", Model: c.model, InputTokens: normalized.Usage.TotalInputTokens,
 			CachedTokens: normalized.Usage.TotalCachedTokens, OutputTokens: normalized.Usage.TotalOutputTokens,
 			ModelRequests: 1, LatencyMs: latency,
+			GatewayCallID: meta.CallID, GatewayDeploymentID: meta.DeploymentID,
+			GatewayCostUSD: meta.CostUSD, GatewayCostKnown: meta.HasCost,
 		},
 		LatencyMs: latency,
 	}, nil
@@ -161,7 +163,7 @@ func (c *LiteLLMCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, in
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
 	}
 	started := time.Now()
-	raw, err := c.client.SendInteraction(ctx, req)
+	raw, meta, err := c.client.SendInteractionWithMetadata(ctx, req)
 	if err != nil {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, fmt.Errorf("send final catalog evaluation: %w", err)
 	}
@@ -188,6 +190,8 @@ func (c *LiteLLMCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, in
 		Provider: "litellm", Model: c.model, InputTokens: normalized.Usage.TotalInputTokens,
 		CachedTokens: normalized.Usage.TotalCachedTokens, OutputTokens: normalized.Usage.TotalOutputTokens,
 		ModelRequests: 1, LatencyMs: time.Since(started).Milliseconds(),
+			GatewayCallID: meta.CallID, GatewayDeploymentID: meta.DeploymentID,
+			GatewayCostUSD: meta.CostUSD, GatewayCostKnown: meta.HasCost,
 	}, nil
 }
 

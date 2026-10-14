@@ -94,7 +94,7 @@ func (c *LiteLLMCatalogAdapter) ComposeOverview(ctx context.Context, input servi
 		return services.CatalogOverviewResponse{}, err
 	}
 	started := time.Now()
-	raw, err := c.client.SendInteraction(ctx, req)
+	raw, meta, err := c.client.SendInteractionWithMetadata(ctx, req)
 	if err != nil {
 		return services.CatalogOverviewResponse{}, fmt.Errorf("Gemini catalog overview: %w", err)
 	}
@@ -125,6 +125,8 @@ func (c *LiteLLMCatalogAdapter) ComposeOverview(ctx context.Context, input servi
 			InputTokens: out.Usage.TotalInputTokens, CachedTokens: out.Usage.TotalCachedTokens,
 			OutputTokens: out.Usage.TotalOutputTokens, ModelRequests: 1,
 			LatencyMs: time.Since(started).Milliseconds(),
+			GatewayCallID: meta.CallID, GatewayDeploymentID: meta.DeploymentID,
+			GatewayCostUSD: meta.CostUSD, GatewayCostKnown: meta.HasCost,
 		},
 	}, nil
 }
