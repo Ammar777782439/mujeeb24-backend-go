@@ -83,7 +83,7 @@ func parseCustomerSalesCapability(resp interactionResponse, tools []customerSale
 		if err := decodeStrictStructuredJSON(call.Arguments, &args); err != nil {
 			return ports.CapabilityDecision{}, fmt.Errorf("decode catalog capability: %w", err)
 		}
-		if args.Presentation != "" && args.Presentation != "hierarchy" && args.Presentation != "detail" && args.Presentation != "compare" {
+		if args.Presentation != "hierarchy" && args.Presentation != "detail" && args.Presentation != "compare" {
 			return ports.CapabilityDecision{}, errors.New("unsupported catalog presentation")
 		}
 		return ports.CapabilityDecision{Capability: capability, Presentation: args.Presentation}, nil
