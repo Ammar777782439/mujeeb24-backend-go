@@ -168,7 +168,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 
 	// Customer Sales deliberately has no catalog tool registry. The catalog has
 	// one authoritative AI path: bounded manifest on the initial turn, then
-	// complete catalog paging/batching when Gemini returns needs_more_data.
+	// complete catalog paging/batching only when the model requests it.
 	// This prevents competing catalog-read paths and keeps evidence deterministic.
 	// Per §1-2: create the AIConfigurationCache + AIProviderConfigRepository
 	// unconditionally — the Platform Admin can manage credentials and models
@@ -238,7 +238,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// Both AI routes use the same canonical run trace lifecycle.
 		service.RunRepository = postgres.NewAIRunTraceRepository(database)
 		// Per AIUsageTokenTelemetry.md §6: wire the telemetry pipeline so
-		// every Gemini call's tokens + cost are recorded to ai_usage_records
+		// every model request's tokens + cost are recorded to ai_usage_records
 		// and flow through to the Platform Admin AI Usage view.
 		service.AIUsage = postgres.NewAIUsageRepository(database)
 		service.AIPricing = postgres.NewAIProviderPricingRepository(database)
@@ -264,10 +264,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		contextBuilder.Knowledge = postgres.NewKnowledgeDocumentRepository(database)
 		contextBuilder.Policies = postgres.NewBusinessPolicyRepository(database)
 		service.CustomerSalesContextBuilder = contextBuilder
-		// Per ADR-039 + P1-5: summaries use the SAME GeminiCustomerSalesAdapter
-		// instance as AutoReply. No generic AI fallback is used.
-		// The GeminiCustomerSalesAdapter reads the active AI configuration through
-		// the AIConfigurationCache and provides usage telemetry.
+		// Summaries use the same LiteLLM customer decision port as AutoReply.
+		// Provider fallback belongs to the gateway, not this application.
 		service.SummaryService = services.NewConversationSummaryService(
 			postgres.NewConversationStateRepository(database),
 			postgres.NewMessageRepository(database),
@@ -331,8 +329,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// page catalog → exact-token batches → evaluate → aggregate → final.
 		//
 		// Per contract ② §2, batching retains full commercial evidence.
-		// LiteLLM uses a route-capacity budget; legacy direct Gemini
-		// keeps its existing 8000-token budget.
+		// LiteLLM uses the configured route capacity to budget catalog batches.
 		if external.LiteLLMCatalogClient == nil {
 			return nil, errors.New("AutoReply requires a configured LiteLLM catalog model")
 		}
@@ -417,7 +414,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// registry. This connects the platformAIDisable/platformAIEnable
 		// kill switch (Contract §81) to the actual AutoReply execution
 		// path. It also enforces the merchant AI Reply entitlement
-		// (Contract §33) before Gemini is called.
+		// (Contract §33) before the gateway model is called.
 		webhookService.AICostProtectionChecker = &services.AICostProtectionService{
 			Subscriptions:      postgres.NewSubscriptionRepository(database),
 			AIUsage:            postgres.NewAIUsageRepository(database),
@@ -425,9 +422,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		}
 		// Per P1-10: wire the bounded AutoReplyWorkerPool so a viral
 		// DM burst doesn't spawn unbounded goroutines (each consuming
-		// Gemini quota + DB conns). 4 concurrent workers + 64-deep
+		// gateway quota + DB conns). 4 concurrent workers + 64-deep
 		// queue absorbs a burst; larger values can be tuned via env
-		// when the Gemini rate limit allows.
+		// when gateway capacity allows.
 		webhookService.AutoReplyWorkerPool = services.NewAutoReplyWorkerPool(4, 64)
 		autoReplyPool = webhookService.AutoReplyWorkerPool
 		dependencies.IngestSocialAPIWebhook = webhookService
@@ -629,7 +626,7 @@ func (r *APIRuntime) Shutdown(ctx context.Context) error {
 		// the HTTP server + database. The pool's Stop() closes the
 		// tasks channel + waits for all workers to finish their
 		// in-flight + queued tasks. Without this, in-flight AutoReply
-		// work (which calls Gemini + writes to Postgres) would be
+		// work (which invokes LiteLLM + writes to Postgres) would be
 		// dropped silently when the database closes.
 		if r.AutoReplyWorkerPool != nil {
 			r.AutoReplyWorkerPool.Stop()
