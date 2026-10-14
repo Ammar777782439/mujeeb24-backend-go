@@ -51,3 +51,39 @@ services:
 
       - key: LLM_ENABLED
         value: "false"
+
+  # LiteLLM gateway is a separate Render web service; do not change the
+  # existing API deployment branch or turn on live customer replies here.
+  # Uses a dedicated EXTERNAL PostgreSQL database for keys, models, and spend.
+  - type: web
+    name: mujeeb24-litellm
+    runtime: image
+    plan: free
+    image:
+      url: ghcr.io/berriai/litellm:v1.103.0
+    healthCheckPath: /health/readiness
+
+    envVars:
+      - key: PORT
+        value: "4000"
+
+      - key: HOST
+        value: 0.0.0.0
+
+      - key: DATABASE_URL
+        sync: false
+
+      - key: LITELLM_MASTER_KEY
+        sync: false
+
+      - key: LITELLM_SALT_KEY
+        sync: false
+
+      - key: STORE_MODEL_IN_DB
+        value: "True"
+
+      - key: UI_USERNAME
+        value: admin
+
+      - key: UI_PASSWORD
+        sync: false
