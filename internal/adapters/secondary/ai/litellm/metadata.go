@@ -20,7 +20,7 @@ type ResponseMetadata struct {
 
 func metadataFromHeaders(headers http.Header) (ResponseMetadata, error) {
 	m := ResponseMetadata{
-		CallID: strings.TrimSpace(headers.Get("x-litellm-call-id")),
+		CallID:       strings.TrimSpace(headers.Get("x-litellm-call-id")),
 		DeploymentID: strings.TrimSpace(headers.Get("x-litellm-model-id")),
 	}
 	cost := strings.TrimSpace(headers.Get("x-litellm-response-cost"))

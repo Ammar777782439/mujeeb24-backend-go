@@ -124,9 +124,7 @@ func (c *LiteLLMCatalogAdapter) ComposeOverview(ctx context.Context, input servi
 			Provider: "litellm", Model: c.model,
 			InputTokens: out.Usage.TotalInputTokens, CachedTokens: out.Usage.TotalCachedTokens,
 			OutputTokens: out.Usage.TotalOutputTokens, ModelRequests: 1,
-			LatencyMs: time.Since(started).Milliseconds(),
-			GatewayCallID: meta.CallID, GatewayDeploymentID: meta.DeploymentID,
-			GatewayCostUSD: meta.CostUSD, GatewayCostKnown: meta.HasCost,
+			LatencyMs: time.Since(started).Milliseconds(), GatewayCallID: meta.CallID, GatewayDeploymentID: meta.DeploymentID, GatewayCostUSD: meta.CostUSD, GatewayCostKnown: meta.HasCost,
 		},
 	}, nil
 }

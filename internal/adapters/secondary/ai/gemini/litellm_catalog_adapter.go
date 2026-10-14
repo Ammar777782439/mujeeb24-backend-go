@@ -145,9 +145,7 @@ func (c *LiteLLMCatalogAdapter) EvaluateBatch(ctx context.Context, input service
 		Usage: ports.CustomerSalesUsageTelemetry{
 			Provider: "litellm", Model: c.model, InputTokens: normalized.Usage.TotalInputTokens,
 			CachedTokens: normalized.Usage.TotalCachedTokens, OutputTokens: normalized.Usage.TotalOutputTokens,
-			ModelRequests: 1, LatencyMs: latency,
-			GatewayCallID: meta.CallID, GatewayDeploymentID: meta.DeploymentID,
-			GatewayCostUSD: meta.CostUSD, GatewayCostKnown: meta.HasCost,
+			ModelRequests: 1, LatencyMs: latency, GatewayCallID: meta.CallID, GatewayDeploymentID: meta.DeploymentID, GatewayCostUSD: meta.CostUSD, GatewayCostKnown: meta.HasCost,
 		},
 		LatencyMs: latency,
 	}, nil
@@ -189,9 +187,7 @@ func (c *LiteLLMCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, in
 	return decision, ports.CustomerSalesUsageTelemetry{
 		Provider: "litellm", Model: c.model, InputTokens: normalized.Usage.TotalInputTokens,
 		CachedTokens: normalized.Usage.TotalCachedTokens, OutputTokens: normalized.Usage.TotalOutputTokens,
-		ModelRequests: 1, LatencyMs: time.Since(started).Milliseconds(),
-			GatewayCallID: meta.CallID, GatewayDeploymentID: meta.DeploymentID,
-			GatewayCostUSD: meta.CostUSD, GatewayCostKnown: meta.HasCost,
+		ModelRequests: 1, LatencyMs: time.Since(started).Milliseconds(), GatewayCallID: meta.CallID, GatewayDeploymentID: meta.DeploymentID, GatewayCostUSD: meta.CostUSD, GatewayCostKnown: meta.HasCost,
 	}, nil
 }
 
