@@ -23,7 +23,8 @@ func TestCustomerCapabilityBoundary(t *testing.T) {
 		{"greeting", `{"steps":[{"type":"function_call","id":"c","name":"respond_without_action","arguments":{"response_text":"وعليكم السلام"}}]}`, ports.CustomerSalesCapabilityRespondWithoutAction, false},
 		{"clarify", `{"steps":[{"type":"function_call","id":"c","name":"ask_customer","arguments":{"response_text":"ما العدد؟"}}]}`, ports.CustomerSalesCapabilityAsk, false},
 		{"handoff", `{"steps":[{"type":"function_call","id":"c","name":"handoff_to_human","arguments":{"response_text":"سأحوّل طلبك إلى الفريق"}}]}`, ports.CustomerSalesCapabilityHandoff, false},
-		{"catalog", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{}}]}`, ports.CustomerSalesCapabilityFullCatalog, false},
+		{"catalog", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{"presentation":"hierarchy"}}]}`, ports.CustomerSalesCapabilityFullCatalog, false},
+		{"missing presentation", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{}}]}`, "", true},
 		{"targeted product details", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{"presentation":"detail"}}]}`, ports.CustomerSalesCapabilityFullCatalog, false},
 		{"no call", `{"steps":[{"type":"model_output","content":[{"type":"text","text":"hello"}]}]}`, "", true},
 		{"unknown", `{"steps":[{"type":"function_call","id":"c","name":"create_order_draft","arguments":{}}]}`, "", true},
@@ -93,7 +94,7 @@ func TestFullCatalogCapabilityIsAnInternalRequest(t *testing.T) {
 		if len(request.Tools) != 4 || request.GenerationConfig.ToolChoice != "any" {
 			t.Fatalf("wrong capabilities: %+v", request)
 		}
-		_, _ = w.Write([]byte(`{"status":"requires_action","steps":[{"type":"function_call","id":"catalog-call","name":"evaluate_full_catalog","arguments":{}}],"usage":{"total_input_tokens":31,"total_output_tokens":8}}`))
+		_, _ = w.Write([]byte(`{"status":"requires_action","steps":[{"type":"function_call","id":"catalog-call","name":"evaluate_full_catalog","arguments":{"presentation":"hierarchy"}}],"usage":{"total_input_tokens":31,"total_output_tokens":8}}`))
 	}))
 	defer server.Close()
 	base, _ := NewGeminiHTTPClient(GeminiHTTPClientConfig{BaseURL: server.URL, APIKey: "test", Model: "test"})
