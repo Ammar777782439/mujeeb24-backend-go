@@ -110,7 +110,6 @@ func TestCatalogHierarchyRejectsMissingOrForeignGeminiItemCoverage(t *testing.T)
 	}
 }
 
-
 func TestCatalogReplyPartitionReservesCustomerFacingOutputSpace(t *testing.T) {
 	model := &aiCatalogReplyFixture{capabilityBatchModel: &capabilityBatchModel{}}
 	controller := &CatalogBatchController{Gemini: model, TokenBudget: 20000}
