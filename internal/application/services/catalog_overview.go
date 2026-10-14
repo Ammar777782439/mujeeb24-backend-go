@@ -29,9 +29,8 @@ type CatalogOverviewRequest struct {
 }
 
 type CatalogOverviewResponse struct {
-	Text           string
-	CoveredItemIDs []string
-	Usage          ports.CustomerSalesUsageTelemetry
+	Text  string
+	Usage ports.CustomerSalesUsageTelemetry
 }
 
 const (
@@ -63,6 +62,10 @@ func (c *CatalogBatchController) runCatalogOverview(ctx context.Context, input C
 	var summaries []string
 	batchNumber := 0
 	itemCount := 0
+	// Coverage is proved by Go's lossless batch validation and successful
+	// submission of EVERY original item fragment, never by Gemini echoing
+	// UUIDs in a JSON array.
+	reviewedItems := make(map[string]struct{})
 	for {
 		if err := ctx.Err(); err != nil {
 			return CatalogEvaluationResult{}, err
@@ -95,6 +98,12 @@ func (c *CatalogBatchController) runCatalogOverview(ctx context.Context, input C
 				if err != nil {
 					return CatalogEvaluationResult{}, err
 				}
+				if err := validateCatalogBatchCoverage(
+					CatalogAIProjection{Catalogs: batch.Catalogs, AttributeSchemas: batch.AttributeSchemas, Items: batch.Items},
+					chunks,
+				); err != nil {
+					return CatalogEvaluationResult{}, fmt.Errorf("overview re-batching changed commercial evidence: %w", err)
+				}
 				for _, chunk := range chunks {
 					batchNumber++
 					request := CatalogOverviewRequest{
@@ -107,11 +116,13 @@ func (c *CatalogBatchController) runCatalogOverview(ctx context.Context, input C
 						return CatalogEvaluationResult{}, fmt.Errorf("Gemini catalog overview batch %d: %w", batchNumber, err)
 					}
 					c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, result.Usage, fmt.Sprintf("overview_batch_%d", batchNumber))
-					if err := validateOverviewItemCoverage(chunk, result.CoveredItemIDs); err != nil {
-						return CatalogEvaluationResult{}, fmt.Errorf("overview batch %d coverage: %w", batchNumber, err)
-					}
 					if strings.TrimSpace(result.Text) == "" || utf8.RuneCountInString(result.Text) > overviewBatchMaxRunes {
 						return CatalogEvaluationResult{}, fmt.Errorf("overview batch %d returned empty or oversized evidence summary", batchNumber)
+					}
+					// Only mark these input facts reviewed after the provider
+					// successfully returns a usable intermediate summary.
+					for _, item := range chunk.Items {
+						reviewedItems[item.ID] = struct{}{}
 					}
 					summaries = append(summaries, result.Text)
 				}
@@ -129,7 +140,10 @@ func (c *CatalogBatchController) runCatalogOverview(ctx context.Context, input C
 		seenCursors[page.NextCursor] = struct{}{}
 		cursor = page.NextCursor
 	}
-	log.Printf("[CatalogBatch] OVERVIEW_COVERAGE items=%d batches=%d", itemCount, batchNumber)
+	if len(reviewedItems) != len(seenItems) {
+		return CatalogEvaluationResult{}, fmt.Errorf("overview input coverage incomplete: reviewed=%d expected=%d", len(reviewedItems), len(seenItems))
+	}
+	log.Printf("[CatalogBatch] OVERVIEW_COVERAGE items=%d reviewed=%d batches=%d", itemCount, len(reviewedItems), batchNumber)
 	// Keep intermediate reduction strictly bounded. A 100-catalog store
 	// produces many AI *processing* calls but one customer-facing answer.
 	for round := 0; len(summaries) > 1; round++ {
@@ -163,7 +177,7 @@ func (c *CatalogBatchController) runCatalogOverview(ctx context.Context, input C
 				return CatalogEvaluationResult{}, fmt.Errorf("merge catalog overview round %d: %w", round+1, err)
 			}
 			c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, result.Usage, fmt.Sprintf("overview_merge_round_%d_group_%d", round+1, i))
-			if strings.TrimSpace(result.Text) == "" || utf8.RuneCountInString(result.Text) > overviewMergeMaxRunes || len(result.CoveredItemIDs) > 0 {
+			if strings.TrimSpace(result.Text) == "" || utf8.RuneCountInString(result.Text) > overviewMergeMaxRunes {
 				return CatalogEvaluationResult{}, errors.New("Gemini returned an invalid intermediate overview digest")
 			}
 			next = append(next, result.Text)
@@ -191,7 +205,7 @@ func (c *CatalogBatchController) runCatalogOverview(ctx context.Context, input C
 		return CatalogEvaluationResult{}, fmt.Errorf("Gemini final customer overview: %w", err)
 	}
 	c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, response.Usage, "overview_final")
-	if strings.TrimSpace(response.Text) == "" || utf8.RuneCountInString(response.Text) > overviewFinalMaxRunes || len(response.CoveredItemIDs) != 0 {
+	if strings.TrimSpace(response.Text) == "" || utf8.RuneCountInString(response.Text) > overviewFinalMaxRunes {
 		return CatalogEvaluationResult{}, errors.New("Gemini final overview exceeded reply limit or returned invalid references")
 	}
 	after, err := c.CatalogAI.GetRevision(ctx, input.BusinessID)
@@ -262,25 +276,3 @@ func (c *CatalogBatchController) fitOverviewSummaries(ctx context.Context, ai Ca
 	return 0, errors.New("a single catalog digest exceeds the verified overview context")
 }
 
-func validateOverviewItemCoverage(batch CatalogAIBatchPayload, returned []string) error {
-	expected := make(map[string]struct{}, len(batch.Items))
-	for _, item := range batch.Items {
-		expected[item.ID] = struct{}{}
-	}
-	seen := make(map[string]struct{}, len(returned))
-	for _, id := range returned {
-		if _, exists := expected[id]; !exists {
-			return fmt.Errorf("Gemini returned item %s outside the current overview batch", id)
-		}
-		if _, duplicate := seen[id]; duplicate {
-			return fmt.Errorf("Gemini duplicated overview item %s", id)
-		}
-		seen[id] = struct{}{}
-	}
-	for id := range expected {
-		if _, ok := seen[id]; !ok {
-			return fmt.Errorf("Gemini omitted catalog overview item %s", id)
-		}
-	}
-	return nil
-}
