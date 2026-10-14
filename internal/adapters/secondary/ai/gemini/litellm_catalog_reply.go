@@ -48,13 +48,13 @@ func catalogCustomerReplySchema(projection services.CatalogAIProjection) map[str
 					"type": "object", "additionalProperties": false,
 					"properties": map[string]any{
 						"catalog_id": catalogIDSchema,
-						"heading": map[string]any{"type": "string"},
+						"heading":    map[string]any{"type": "string"},
 						"items": map[string]any{
 							"type": "array", "items": map[string]any{
 								"type": "object", "additionalProperties": false,
 								"properties": map[string]any{
 									"item_id": itemIDSchema,
-									"text": map[string]any{"type": "string"},
+									"text":    map[string]any{"type": "string"},
 								},
 								"required": []string{"item_id", "text"},
 							},
