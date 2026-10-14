@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"errors"
 
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gemini"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gateway"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/litellm"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/providers/socialapi"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
@@ -16,7 +16,7 @@ type ExternalAdapters struct {
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
 	LiteLLMCustomerDecision        ports.CustomerSalesDecisionPort
-	LiteLLMCatalogClient           *gemini.LiteLLMCatalogAdapter
+	LiteLLMCatalogClient           *gateway.LiteLLMCatalogAdapter
 	LiteLLMMerchantAuthoring       merchantcatalogai.MerchantCatalogAuthoringPort
 	SocialAPIHealthProbe           ports.HealthCheckProbe
 	LLMConfigError                 error
@@ -107,17 +107,17 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 		if err != nil {
 			adapters.LLMConfigError = err
 		} else {
-			customer, customerErr := gemini.NewLiteLLMCustomerSalesAdapter(gateway, cfg.LiteLLMCustomerModel,
+			customer, customerErr := gateway.NewLiteLLMCustomerSalesAdapter(gateway, cfg.LiteLLMCustomerModel,
 				cfg.LiteLLMMaxOutputTokens, cfg.LiteLLMMaxInputCharacters)
 			if customerErr != nil {
 				adapters.LLMConfigError = customerErr
 			} else {
-				merchant, merchantErr := gemini.NewLiteLLMMerchantCatalogAuthoringAdapter(gateway, cfg.LiteLLMMerchantModel,
+				merchant, merchantErr := gateway.NewLiteLLMMerchantCatalogAuthoringAdapter(gateway, cfg.LiteLLMMerchantModel,
 					cfg.LiteLLMMaxOutputTokens, cfg.LiteLLMMerchantMaxRequestBytes)
 				if merchantErr != nil {
 					adapters.LLMConfigError = merchantErr
 				} else {
-					catalog, catalogErr := gemini.NewLiteLLMCatalogAdapter(gateway, cfg.LiteLLMCatalogModel,
+					catalog, catalogErr := gateway.NewLiteLLMCatalogAdapter(gateway, cfg.LiteLLMCatalogModel,
 						cfg.LiteLLMMaxOutputTokens, cfg.LiteLLMMaxContextTokens)
 					if catalogErr != nil {
 						adapters.LLMConfigError = catalogErr

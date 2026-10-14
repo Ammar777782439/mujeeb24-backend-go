@@ -1,4 +1,4 @@
-package gemini
+package gateway
 
 import "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 
