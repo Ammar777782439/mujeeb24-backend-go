@@ -59,8 +59,8 @@ type AutoReplyService struct {
 	Sales                       *CustomerSalesWorkflowService
 	DisableInformationalReplies bool
 	// CustomerSalesDecision is the contract ④ §8 customer-sales application port.
-	// Its AI model implementation is AI modelCustomerSalesAdapter.
-	// Per contract ④ §8, this is the only way to call AI model.
+	// Its current implementation is LiteLLMCustomerSalesAdapter.
+	// Per contract ④ §8, this is the only port for customer AI decisions.
 	CustomerSalesDecision ports.CustomerSalesDecisionPort
 
 	// ContextBuilder per contract ③ §2 builds the CustomerSalesContext.
