@@ -15,28 +15,19 @@ import (
 )
 
 type catalogOverviewJSON struct {
-	Text           string   `json:"text"`
-	CoveredItemIDs []string `json:"covered_item_ids"`
+	Text string `json:"text"`
 }
 
-func catalogOverviewResponseSchema(input services.CatalogOverviewRequest) map[string]any {
-	ids := make([]string, 0)
-	if input.Batch != nil {
-		for _, item := range input.Batch.Items {
-			ids = append(ids, item.ID)
-		}
-	}
-	idSchema := map[string]any{"type": "string"}
-	if len(ids) > 0 {
-		idSchema["enum"] = ids
-	}
+func catalogOverviewResponseSchema() map[string]any {
+	// Overview is a semantic digest, not an item-by-item customer listing.
+	// Merchant item coverage is enforced by the Go controller from the
+	// original projection and completed provider calls.
 	return map[string]any{
 		"type": "object", "additionalProperties": false,
 		"properties": map[string]any{
-			"text":             map[string]any{"type": "string"},
-			"covered_item_ids": map[string]any{"type": "array", "items": idSchema},
+			"text": map[string]any{"type": "string"},
 		},
-		"required": []string{"text", "covered_item_ids"},
+		"required": []string{"text"},
 	}
 }
 
@@ -76,7 +67,7 @@ func (c *LiteLLMCatalogAdapter) overviewRequest(input services.CatalogOverviewRe
 		SystemInstruction: prompts.CatalogOverviewSystemPrompt,
 		ResponseFormat: &interactionResponseFormat{
 			Type: "text", MimeType: "application/json",
-			Schema: catalogOverviewResponseSchema(input),
+			Schema: catalogOverviewResponseSchema(),
 		},
 		GenerationConfig: interactionGenerationConfig{MaxOutputTokens: c.maxOutputTokens},
 	}, nil
@@ -127,11 +118,8 @@ func (c *LiteLLMCatalogAdapter) ComposeOverview(ctx context.Context, input servi
 	if strings.TrimSpace(body.Text) == "" {
 		return services.CatalogOverviewResponse{}, errors.New("empty Gemini overview text")
 	}
-	if input.Stage != "batch" && len(body.CoveredItemIDs) > 0 {
-		return services.CatalogOverviewResponse{}, errors.New("Gemini invented item references during overview synthesis")
-	}
 	return services.CatalogOverviewResponse{
-		Text: body.Text, CoveredItemIDs: body.CoveredItemIDs,
+		Text: body.Text,
 		Usage: ports.CustomerSalesUsageTelemetry{
 			Provider: "litellm", Model: c.model,
 			InputTokens: out.Usage.TotalInputTokens, CachedTokens: out.Usage.TotalCachedTokens,
