@@ -53,17 +53,16 @@ func TestLiteLLMOverviewReadsWholeBatchAndProducesOneFinalCustomerReply(t *testi
 					t.Errorf("overview batch missing original commercial evidence: %s", body.Input)
 				}
 				properties := body.ResponseFormat.Schema["properties"].(map[string]any)
-				ids := properties["covered_item_ids"].(map[string]any)["items"].(map[string]any)["enum"].([]any)
-				if len(ids) != 1 || ids[0] != "item-1" {
-					t.Errorf("batch IDs not confined to current evidence: %v", ids)
+				if len(properties) != 1 || properties["text"] == nil || properties["covered_item_ids"] != nil {
+					t.Errorf("overview schema must only request a semantic digest: %v", properties)
 				}
-				reply = `{"text":"المتجر يعرض هاتفًا وخيارات تقنية بسعر 250 ريال سعودي.","covered_item_ids":["item-1"]}`
+				reply = `{"text":"المتجر يعرض هاتفًا وخيارات تقنية بسعر 250 ريال سعودي."}`
 			case "final":
 				finalCalls++
 				if input.Batch != nil || !strings.Contains(body.Input, "reviewed_summaries") {
 					t.Error("Gemini final synthesis received raw catalog or no reviewed summary")
 				}
-				reply = `{"text":"أهلًا بك! لدينا أجهزة وخدمات متنوعة. أي قسم ترغب في استكشافه؟","covered_item_ids":[]}`
+				reply = `{"text":"أهلًا بك! لدينا أجهزة وخدمات متنوعة. أي قسم ترغب في استكشافه؟"}`
 			default:
 				t.Errorf("unexpected stage %q", input.Stage)
 			}
@@ -102,14 +101,14 @@ func TestLiteLLMOverviewReadsWholeBatchAndProducesOneFinalCustomerReply(t *testi
 		t.Fatalf("exact overview token counter: %d %v", count, err)
 	}
 	result, err := adapter.ComposeOverview(context.Background(), request)
-	if err != nil || len(result.CoveredItemIDs) != 1 || result.CoveredItemIDs[0] != "item-1" || result.Usage.OutputTokens != 70 {
+	if err != nil || result.Text == "" || result.Usage.OutputTokens != 70 {
 		t.Fatalf("Gemini batch response invalid: %+v %v", result, err)
 	}
 	final, err := adapter.ComposeOverview(context.Background(), services.CatalogOverviewRequest{
 		Stage: "final", CustomerMessage: "ما المتوفر عندكم؟",
 		RequestedPresentation: "overview", Summaries: []string{result.Text},
 	})
-	if err != nil || len(final.CoveredItemIDs) != 0 || !strings.Contains(final.Text, "أي قسم") || counted < 3 || batchCalls != 1 || finalCalls != 1 {
+	if err != nil || !strings.Contains(final.Text, "أي قسم") || counted < 3 || batchCalls != 1 || finalCalls != 1 {
 		t.Fatalf("final AI customer summary missing: %+v err=%v counted=%d batch=%d final=%d", final, err, counted, batchCalls, finalCalls)
 	}
 }
