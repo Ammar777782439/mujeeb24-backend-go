@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/handlers"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
