@@ -1,16 +1,16 @@
 // Package services — AutoReplyService refactored to contract-aligned flow.
 //
 // Implements contracts ③ §1 (Mujeeb = canonical conversation state),
-// ADR capability amendment (Gemini chooses a bounded tool; internal proposal preserves storage),
+// ADR capability amendment (AI model chooses a bounded tool; internal proposal preserves storage),
 // ⑥ §2 (Structural→Reference→Tenant→Ownership→Policy→Authorization→EffectiveDecision),
 // ⑨ §2 (AI Run lifecycle),
 // ⑧ §5 (operational trace via ai_runs + ai_run_attempts + ai_tool_calls).
 //
-// Per contract ④ §5, Gemini does NOT decide requires_approval; that's
+// Per contract ④ §5, AI model does NOT decide requires_approval; that's
 // PolicyEvaluator's job (now part of ValidationPipeline).
 //
 // Per contract ⑥ §11, Mujeeb does NOT re-interpret customer intent during
-// validation; that is Gemini's role.
+// validation; that is AI model's role.
 //
 // Per contract ⑥ §19, Execution only happens after Authorization succeeds;
 // the AI never has a direct execution channel.
@@ -43,12 +43,12 @@ const (
 	AutoReplyActionClarification = "clarification"
 )
 
-// AutoReplyService drives the contract ⑥ post-Gemini flow for one customer turn.
+// AutoReplyService drives the contract ⑥ post-AI model flow for one customer turn.
 //
 // Per contract ⑨ §1, each Handle() call is one AI Run.
 // Per contract ⑨ §2, the Run progresses: RECEIVED → CONTEXT_BUILT → RUNNING
 // → VALIDATING → AUTHORIZED → EXECUTING → COMPLETED (or FAILED/CANCELLED).
-// Per contract ⑥ §2, after Gemini produces CapabilityDecision, the ValidationPipeline
+// Per contract ⑥ §2, after AI model produces CapabilityDecision, the ValidationPipeline
 // runs Structural→Reference→Tenant→Ownership→Policy→Authorization.
 // Per contract ⑥ §19, Execution happens only after Authorization succeeds.
 //
@@ -59,8 +59,8 @@ type AutoReplyService struct {
 	Sales                       *CustomerSalesWorkflowService
 	DisableInformationalReplies bool
 	// CustomerSalesDecision is the contract ④ §8 customer-sales application port.
-	// Its Gemini implementation is GeminiCustomerSalesAdapter.
-	// Per contract ④ §8, this is the only way to call Gemini.
+	// Its AI model implementation is AI modelCustomerSalesAdapter.
+	// Per contract ④ §8, this is the only way to call AI model.
 	CustomerSalesDecision ports.CustomerSalesDecisionPort
 
 	// ContextBuilder per contract ③ §2 builds the CustomerSalesContext.
@@ -75,8 +75,8 @@ type AutoReplyService struct {
 	RunRepository ports.AIRunRepository
 
 	// CatalogBatch *CatalogBatchController drives the contract ② token-aware batching
-	// when Gemini's first response indicates catalog data is needed.
-	// Per contract ② §9, the flow is: Gemini → needs_catalog → build
+	// when AI model's first response indicates catalog data is needed.
+	// Per contract ② §9, the flow is: AI model → needs_catalog → build
 	// projection → token-count → batch → evaluate → aggregate candidates
 	// → final evaluate → CapabilityDecision.
 	// If nil, evaluate_full_catalog is not offered; unsupported requests cannot expand evidence.
@@ -112,7 +112,7 @@ type AutoReplyService struct {
 	Realtime ports.RealtimePublisher
 
 	// AIUsageRepository records per-execution telemetry to ai_usage_records.
-	// Per AIUsageTokenTelemetry.md §6: every Gemini call's tokens + cost
+	// Per AIUsageTokenTelemetry.md §6: every AI model call's tokens + cost
 	// must be persisted. If nil, telemetry is logged but not recorded.
 	AIUsage ports.AIUsageRepository
 	// AIProviderPricingRepository looks up the current pricing version for
@@ -157,7 +157,7 @@ func NewAutoReplyService(customerSalesDecision ports.CustomerSalesDecisionPort, 
 //  2. Start AI Run (RECEIVED) per contract ⑨ §1. Idempotent on
 //     (business_id, source_message_reference).
 //  3. Build context (CONTEXT_BUILT) per contract ③ §2.
-//  4. Call Gemini via CustomerSalesDecision.Decide (RUNNING) per contract ④ §8.
+//  4. Call AI model via CustomerSalesDecision.Decide (RUNNING) per contract ④ §8.
 //  5. Run ValidationPipeline (VALIDATING) per contract ⑥ §2.
 //  6. If validation fails → Mark FAILED per contract ⑨ §18; no execution.
 //  7. If policy denied → Mark FAILED; no execution.
@@ -250,15 +250,6 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 
 	// Per contract ④ §8, call the AI gateway via the CustomerSalesDecisionPort.
 	log.Printf("[AutoReply] AI_GATEWAY_CALL business=%s conversation=%s run=%s", businessID, conversationID, run.ID)
-	// Per contract ③ §4 + Item 8: carry previous_interaction_id
-	// from the conversation's last Gemini call. Empty for the
-	// first turn (or after Gemini history expiry). The context
-	// builder loaded this from the conversations table
-	// (last_gemini_interaction_id column, migration 000057).
-	var previousInteractionID string
-	if builtContext != nil && builtContext.Conversation.LastGeminiInteractionID != nil {
-		previousInteractionID = *builtContext.Conversation.LastGeminiInteractionID
-	}
 	capabilities := ports.CustomerSalesCapabilities(s.fullCatalogReady(run), s.Sales != nil && builtContext != nil && builtContext.Sales != nil && builtContext.Sales.Enabled && builtContext.Sales.AllowInteractions)
 	out, err := s.CustomerSalesDecision.Decide(ctx, ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{
@@ -269,10 +260,6 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			Channel:                command.Channel,
 			PolicyVersion:          policyVersion,
 			Context:                builtContext,
-		},
-		GeminiInteraction: ports.GeminiInteractionContext{
-			PreviousInteractionID: previousInteractionID,
-			Store:                 true,
 		},
 		// Per contract ⑤ §7, pass the Catalog Entity Contract payload (may be nil).
 		EntityContractPayload: s.EntityContractPayload,
@@ -287,30 +274,23 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		return commands.AutoReplyResult{}, err
 	}
 	proposal := out.Decision
-	interactionIDToPersist := strings.TrimSpace(out.GeminiInteraction.ResultingInteractionID)
-	resetGeminiInteraction := out.Decision.Capability != ""
 	log.Printf("[AutoReply] AI_GATEWAY_OK business=%s capability=%s presentation=%s tokens_in=%d tokens_out=%d latency=%dms",
 		businessID, proposal.Capability, proposal.Presentation, out.Usage.InputTokens, out.Usage.OutputTokens, out.LatencyMs)
-
-	// Gemini continuity is persisted only after the effective action is known.
-	// An internal evaluate_full_catalog interaction is never stored as the previous
-	// customer-facing turn; the full-catalog path below resets the chain.
 
 	// Exact relational evidence exposed in the normal customer-sales context.
 	// Batch evaluation evidence is merged only after complete batch coverage.
 	catalogEvidence := EvidenceFromCustomerSalesContext(builtContext)
 	var catalogMessages []string
 
-	// Only Gemini's explicit capability request starts full catalog evaluation.
+	// Only AI model's explicit capability request starts full catalog evaluation.
 	// Invalid references are rejected by validation; they never expand evidence.
 	fullCatalogRequired := out.Decision.Capability == ports.CustomerSalesCapabilityFullCatalog
 	if fullCatalogRequired && !s.fullCatalogReady(run) {
-		err := errors.New("Gemini requested full catalog evaluation but CatalogBatchController is not configured")
+		err := errors.New("AI model requested full catalog evaluation but CatalogBatchController is not configured")
 		s.markFailedSafe(ctx, run, ports.AIRunFailureStageProviderRequest, classifyAIProviderError(err), err.Error())
 		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
 	}
 	if fullCatalogRequired {
-		resetGeminiInteraction = true
 		log.Printf("[AutoReply] CATALOG_EVAL_TRIGGER run=%s capability=%s", run.ID, out.Decision.Capability)
 		// Per contract ② §9, run the full catalog evaluation pipeline.
 		entityContract := CatalogEntityContractPayload{}
@@ -353,9 +333,9 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	log.Printf("[AutoReply] STATE→VALIDATING run=%s", run.ID)
 
 	// Per contract ⑥ §2, run the validation pipeline.
-	// Per contract ⑥ §10, evidence IDs = what was actually sent to Gemini.
+	// Per contract ⑥ §10, evidence IDs = what was actually sent to AI model.
 	// When the CatalogBatchController ran, it sent the FULL catalog projection
-	// (items + variants + offers) to Gemini. The evidence set must include
+	// (items + variants + offers) to AI model. The evidence set must include
 	// ALL of those — not only the initial context evidence.
 	var effective ports.EffectiveDecision
 	if s.Validation != nil {
@@ -671,23 +651,6 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		}
 	}
 
-	// Persist Gemini server-side continuity only when it matches the canonical
-	// customer-facing history. The full-catalog final response is generated by
-	// a separate provider call, so its initial evaluate_full_catalog interaction must
-	// not become the next turn's previous_interaction_id.
-	if s.Conversations != nil {
-		switch {
-		case resetGeminiInteraction:
-			if err := s.Conversations.UpdateLastGeminiInteractionID(ctx, businessID, conversationID, ""); err != nil {
-				log.Printf("[AutoReply] AI_GATEWAY_INTERACTION_ID_RESET_FAILED business=%s conversation=%s err=%v", businessID, conversationID, err)
-			}
-		case result.Enqueued && interactionIDToPersist != "":
-			if err := s.Conversations.UpdateLastGeminiInteractionID(ctx, businessID, conversationID, interactionIDToPersist); err != nil {
-				log.Printf("[AutoReply] AI_GATEWAY_INTERACTION_ID_PERSIST_FAILED business=%s conversation=%s err=%v", businessID, conversationID, err)
-			}
-		}
-	}
-
 	// Per contract ⑨ §31, Mark COMPLETED.
 	s.markCompletedSafe(ctx, run)
 	log.Printf("[AutoReply] COMPLETED business=%s action=%s enqueued=%v outbound=%s outbox=%s",
@@ -748,7 +711,6 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			"action":                result.Action,
 			"capability":            result.Capability,
 			"ai_run_id":             run.ID,
-			"gemini_interaction_id": out.GeminiInteraction.ResultingInteractionID,
 		})
 		var correlationID *string
 		if command.Meta.CorrelationID != "" {
@@ -1071,7 +1033,7 @@ var _ commands.AutoReplyHandler = AutoReplyService{}
 //
 // This is the END-TO-END wiring that connects:
 //
-//	Gemini API response (usageMetadata)
+//	AI model API response (usageMetadata)
 //	→ token extraction (CustomerSalesUsageTelemetry)
 //	→ pricing lookup (AIProviderPricingRepository)
 //	→ provider_cost computation
@@ -1148,7 +1110,7 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
 	// Per AIUsageTokenTelemetry.md §10 + §31: cost is computed from actual
 	// token consumption + pricing version, NOT from (AI Replies × fixed cost).
 	//
-	// Gemini's UsageMetadata fields:
+	// AI model's UsageMetadata fields:
 	//   promptTokenCount        = TOTAL input tokens (INCLUDING cached)
 	//   cachedContentTokenCount = the subset served from cache
 	//   candidatesTokenCount    = output tokens

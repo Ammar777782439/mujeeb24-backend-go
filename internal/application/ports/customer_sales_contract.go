@@ -5,12 +5,12 @@ package ports
 import "context"
 
 // CustomerSales contract types are B2C-specific. They define the customer-facing
-// proposal, catalog-evaluation results, Gemini conversation continuity, and the
+// proposal, catalog-evaluation results, AI provider conversation continuity, and the
 // application port consumed by Customer Sales AI.
 
 // SelectedReference is a per-contract ④ §4 reference to a catalog entity that
-// Gemini's proposal depends on. All three IDs are required to be UUIDs that
-// were actually present in the evidence Mujeeb sent — never invented by Gemini.
+// AI provider's proposal depends on. All three IDs are required to be UUIDs that
+// were actually present in the evidence Mujeeb sent — never invented by AI provider.
 //
 // variant_id and offer_id may be nil when the relation does not apply or is
 // not required (e.g., a service-type item with no variants).
@@ -21,7 +21,7 @@ type SelectedReference struct {
 }
 
 // CatalogBatchCandidate is per-contract ② §5 — the per-batch evaluation result
-// Gemini returns. Mujeeb already knows which items it sent, so Gemini only
+// AI provider returns. Mujeeb already knows which items it sent, so AI provider only
 // returns the IDs it considered candidates plus a short reason.
 //
 // variant_ids and offer_ids are plural because one item may produce multiple
@@ -35,18 +35,18 @@ type CatalogBatchCandidate struct {
 
 // CatalogBatchResult is the contract ② §5 per-batch evaluation output.
 //
-// Per contract ② §7, Gemini does NOT decide whether a batch was "skipped" or
-// "completed". Mujeeb (the Catalog Batch Controller) owns coverage; Gemini only
+// Per contract ② §7, AI provider does NOT decide whether a batch was "skipped" or
+// "completed". Mujeeb (the Catalog Batch Controller) owns coverage; AI provider only
 // returns the candidates it inferred from the items in this batch.
 type CatalogBatchResult struct {
 	BatchNumber int                     `json:"batch_number"`
 	Candidates  []CatalogBatchCandidate `json:"candidates"`
-	// Usage telemetry from the Gemini response for this batch call.
-	// Per AIUsageTokenTelemetry.md §6: every Gemini call's tokens must be
+	// Usage telemetry from the AI provider response for this batch call.
+	// Per AIUsageTokenTelemetry.md §6: every AI provider call's tokens must be
 	// recorded. This field carries the usageMetadata from the batch's
-	// Gemini response so the CatalogBatchController can persist it.
+	// AI provider response so the CatalogBatchController can persist it.
 	Usage CustomerSalesUsageTelemetry `json:"-"`
-	// LatencyMs is the wall-clock duration of the Gemini batch call.
+	// LatencyMs is the wall-clock duration of the AI provider batch call.
 	// Per P2-13: this is the REAL latency from start-of-request to
 	// end-of-response, NOT derived from EstimatedCostMicros (which is
 	// always 0 — see client_contracts.go). The controller uses this to
@@ -55,42 +55,10 @@ type CatalogBatchResult struct {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Contract ③ §4 — Gemini Interaction Continuity
-// ════════════════════════════════════════════════════════════════════════════
-
-// GeminiInteractionContext carries the previous_interaction_id (if any) for
-// the current customer turn. Mujeeb stores it on the conversation row; the
-// The customer-sales adapter passes it to Gemini for continuity.
-//
-// Per contract ③ §4, last_gemini_interaction_id is NOT the source of truth —
-// Mujeeb's canonical conversation state is. This ID is only for Gemini's
-// internal continuity; if Gemini is unavailable, Mujeeb does not lose any
-// conversation, message, state, or business context.
-type GeminiInteractionContext struct {
-	// PreviousInteractionID is the gemini_interaction_id returned by the
-	// previous successful customer-facing Gemini call for this conversation.
-	// Empty for the first turn of a new conversation or after Gemini history
-	// expiry (1 day free tier, 55 days paid tier per contract ③ §9).
-	PreviousInteractionID string
-
-	// ResultingInteractionID is populated by the customer-sales adapter after a successful
-	// Gemini call. Mujeeb persists this as the new last_gemini_interaction_id
-	// on the conversation row, to be used as PreviousInteractionID in the
-	// next turn.
-	ResultingInteractionID string
-
-	// Store controls whether Gemini server-side history is used. Per contract
-	// ③ §9, Mujeeb uses store=true to enable previous_interaction_id chaining.
-	// When store=false, PreviousInteractionID MUST be empty and chaining is
-	// disabled for that interaction.
-	Store bool
-}
-
-// ════════════════════════════════════════════════════════════════════════════
 // Contract ④ §8 — CustomerSalesDecisionPort
 // ════════════════════════════════════════════════════════════════════════════
 
-// CustomerSalesDecisionPort is the contract ④ §8 mapping of Mujeeb Contract to Gemini API.
+// CustomerSalesDecisionPort is the contract ④ §8 mapping of Mujeeb Contract to AI provider API.
 //
 // Per contract ④ §8:
 //
@@ -100,9 +68,6 @@ type GeminiInteractionContext struct {
 //	Mujeeb Output Contract → one offered Function Call
 //
 // CustomerSalesDecisionPort is the application port for customer-facing sales decisions.
-//
-// Per contract ③ §4, this interface carries GeminiInteractionContext with
-// previous_interaction_id chaining.
 //
 // Per contract ⑤ §7, the Catalog Entity Contract is sent as part of system
 // instruction; it is passed through as opaque JSON.
@@ -117,10 +82,7 @@ type CustomerSalesDecisionInput struct {
 	// Request is the customer-facing business request and grounded Mujeeb context.
 	Request CustomerSalesDecisionRequest
 
-	// GeminiInteraction carries the previous interaction identifier for continuity.
-	GeminiInteraction GeminiInteractionContext
-
-	// EntityContractPayload is the Catalog Entity Contract sent to Gemini.
+	// EntityContractPayload is the Catalog Entity Contract sent to AI provider.
 	EntityContractPayload []byte
 
 	// AIRunID links customer-sales tool calls to the current AI Run trace.
@@ -132,15 +94,10 @@ type CustomerSalesDecisionOutput struct {
 	// Decision remains authoritative through validation, policy and execution.
 	Decision CapabilityDecision
 
-	// GeminiInteraction echoes the input and is populated with the
-	// ResultingInteractionID returned by Gemini. Caller persists this as the
-	// new last_gemini_interaction_id on the conversation row per contract ③ §4.
-	GeminiInteraction GeminiInteractionContext
-
 	// Usage per contract ⑧ §8 (token counts + estimated cost).
 	Usage CustomerSalesUsageTelemetry
 
-	// LatencyMs per contract ⑧ §9 (the Gemini API call latency).
+	// LatencyMs per contract ⑧ §9 (the AI provider API call latency).
 	LatencyMs int64
 }
 
@@ -157,13 +114,13 @@ type CustomerSalesUsageTelemetry struct {
 	GatewayDeploymentID string
 	GatewayCostUSD      string
 	GatewayCostKnown    bool
-	// LatencyMs is the wall-clock duration of the Gemini call.
+	// LatencyMs is the wall-clock duration of the AI provider call.
 	// Per P2-13: the controller uses this to compute StartedAt =
 	// CompletedAt - LatencyMs for the usage record. Before this field,
 	// the controller derived latency from EstimatedCostMicros (always 0)
 	// — resulting in StartedAt == CompletedAt + latency=0.
 	LatencyMs int64
-	// ModelRequests is the actual count of Gemini API calls made during
+	// ModelRequests is the actual count of AI provider API calls made during
 	// this customer-sales Decide invocation. Per fix #1: 1 for non-tool path,
 	// N for tool loop (one per sendContractRequest call).
 	// The caller (recordAIUsage) uses this instead of hardcoding 1.

@@ -14,8 +14,8 @@ import (
 )
 
 // LiteLLMCustomerSalesAdapter reuses the EXACT B2C tools, prompt and strict
-// capability parser from Gemini. No provider may execute Mujeeb capabilities.
-// This lives beside Gemini until the rest of the AI execution ports are migrated.
+// capability parser shared by all gateway models. Models cannot execute Mujeeb capabilities.
+// All execution uses the provider-neutral gateway contracts.
 type LiteLLMCustomerSalesAdapter struct {
 	client             *litellm.Client
 	model              string
@@ -114,7 +114,6 @@ func (c *LiteLLMCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cu
 	latencyMs := time.Since(started).Milliseconds()
 	return ports.CustomerSalesDecisionOutput{
 		Decision:          decision,
-		GeminiInteraction: ports.GeminiInteractionContext{Store: false},
 		Usage: ports.CustomerSalesUsageTelemetry{
 			Provider: "litellm", InputTokens: resp.Usage.TotalInputTokens,
 			CachedTokens: resp.Usage.TotalCachedTokens, OutputTokens: resp.Usage.TotalOutputTokens,

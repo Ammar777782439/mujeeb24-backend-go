@@ -118,8 +118,7 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 			// interaction ID so AutoReply can pass it as
 			// PreviousInteractionID to the next DecideContract
 			// call (Gemini Interactions API chaining per §9).
-			LastGeminiInteractionID: conversation.LastGeminiInteractionID,
-		},
+			},
 		Customer: ports.CustomerSalesContextCustomer{
 			Reference:        customer.ID,
 			LocalePreference: stringValue(customer.LocalePreference),
