@@ -380,7 +380,7 @@ func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, bus
 	if nonCachedInput < 0 {
 		nonCachedInput = 0
 	}
-		// Per §3: summary calls do NOT count as final AI Replies —
+	// Per §3: summary calls do NOT count as final AI Replies —
 	// they're internal background work, not customer-facing responses.
 	// The customer-facing entitlement is incremented only by the
 	// AutoReply.recordAIUsage path. The summary record is persisted
@@ -407,13 +407,12 @@ func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, bus
 		FinalAIReplies:    finalAIReplies,
 		ProviderCostYER:   providerCostYER,
 
-
-		PricingVersion:    pricingVersion,
-		Status:            recordStatus,
-		CorrelationID:     summaryStrPtr("summary-" + businessID),
-		StartedAt:         startedAt,
-		CompletedAt:       now,
-		Now:               now,
+		PricingVersion: pricingVersion,
+		Status:         recordStatus,
+		CorrelationID:  summaryStrPtr("summary-" + businessID),
+		StartedAt:      startedAt,
+		CompletedAt:    now,
+		Now:            now,
 	}
 	usageRecord.GatewayCostUSD, usageRecord.GatewayFXRateYER = gatewayCostUSD, gatewayFXRate
 	usageRecord.GatewayCallID, usageRecord.GatewayDeploymentID = usage.GatewayCallID, usage.GatewayDeploymentID

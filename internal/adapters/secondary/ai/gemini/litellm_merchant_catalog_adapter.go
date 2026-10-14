@@ -71,9 +71,11 @@ type merchantChatRequest struct {
 }
 type merchantChatResponse struct {
 	Usage struct {
-		PromptTokens int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		PromptTokensDetails struct { CachedTokens int `json:"cached_tokens"` } `json:"prompt_tokens_details"`
+		PromptTokens        int `json:"prompt_tokens"`
+		CompletionTokens    int `json:"completion_tokens"`
+		PromptTokensDetails struct {
+			CachedTokens int `json:"cached_tokens"`
+		} `json:"prompt_tokens_details"`
 	} `json:"usage"`
 	Choices []struct {
 		FinishReason string `json:"finish_reason"`
@@ -149,10 +151,12 @@ func (a *LiteLLMMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, in
 		}
 		if a.usageReporter != nil {
 			tokens := response.Usage.PromptTokensDetails.CachedTokens
-			if tokens > response.Usage.PromptTokens { tokens = response.Usage.PromptTokens }
+			if tokens > response.Usage.PromptTokens {
+				tokens = response.Usage.PromptTokens
+			}
 			usage := ports.CustomerSalesUsageTelemetry{
 				Provider: "litellm", Model: a.model,
-				InputTokens: response.Usage.PromptTokens,
+				InputTokens:  response.Usage.PromptTokens,
 				CachedTokens: tokens, OutputTokens: response.Usage.CompletionTokens,
 				ModelRequests: 1,
 				GatewayCallID: meta.CallID, GatewayDeploymentID: meta.DeploymentID,

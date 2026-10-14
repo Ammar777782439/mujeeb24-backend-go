@@ -1177,7 +1177,7 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
 	if nonCachedInput < 0 {
 		nonCachedInput = 0
 	}
-		// Per §3 + Item 3: final_ai_replies = 1 when a Final AI Response was
+	// Per §3 + Item 3: final_ai_replies = 1 when a Final AI Response was
 	// produced and enqueued (sent to the customer). This is the
 	// COMMERCIAL metric — it counts toward the merchant's AI Reply
 	// entitlement. Pricing failure is a COST-CALCULATION failure, NOT
@@ -1240,13 +1240,12 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
 		FinalAIReplies:    finalAIReplies,
 		ProviderCostYER:   providerCostYER,
 
-
-		PricingVersion:    pricingVersion,
-		Status:            recordStatus,
-		CorrelationID:     &correlationID,
-		StartedAt:         now.Add(-time.Duration(out.LatencyMs) * time.Millisecond),
-		CompletedAt:       now,
-		Now:               now,
+		PricingVersion: pricingVersion,
+		Status:         recordStatus,
+		CorrelationID:  &correlationID,
+		StartedAt:      now.Add(-time.Duration(out.LatencyMs) * time.Millisecond),
+		CompletedAt:    now,
+		Now:            now,
 	}
 	usageRecord.GatewayCostUSD, usageRecord.GatewayFXRateYER = gatewayCostUSD, gatewayFXRate
 	usageRecord.GatewayCallID, usageRecord.GatewayDeploymentID = out.Usage.GatewayCallID, out.Usage.GatewayDeploymentID

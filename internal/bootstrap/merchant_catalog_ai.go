@@ -26,9 +26,9 @@ func wireMerchantCatalogAuthoringAI(
 			SetUsageReporter(func(context.Context, string, string, ports.CustomerSalesUsageTelemetry) error)
 		}); ok {
 			recorder := services.GatewayMerchantUsageRecorder{
-				Usage: postgres.NewAIUsageRepository(database),
+				Usage:         postgres.NewAIUsageRepository(database),
 				Subscriptions: postgres.NewSubscriptionRepository(database),
-				FXRateYER: gatewaySettings[0].USDToYERRate,
+				FXRateYER:     gatewaySettings[0].USDToYERRate,
 			}
 			reporter.SetUsageReporter(recorder.Record)
 		}

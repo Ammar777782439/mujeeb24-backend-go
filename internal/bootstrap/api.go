@@ -345,13 +345,13 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			return nil, fmt.Errorf("configure LiteLLM catalog token budget: %w", err)
 		}
 		service.CatalogBatch = &services.CatalogBatchController{
-			CatalogAI:     postgres.NewCatalogAIReadRepository(database),
-			Gemini:        external.LiteLLMCatalogClient,
-			RunRepo:       postgres.NewAIRunTraceRepository(database),
-			TokenBudget:   catalogBudget,
-			Now:           func() time.Time { return time.Now().UTC() },
-			NewID:         uuid.NewString,
-			AIUsage:       postgres.NewAIUsageRepository(database),
+			CatalogAI:   postgres.NewCatalogAIReadRepository(database),
+			Gemini:      external.LiteLLMCatalogClient,
+			RunRepo:     postgres.NewAIRunTraceRepository(database),
+			TokenBudget: catalogBudget,
+			Now:         func() time.Time { return time.Now().UTC() },
+			NewID:       uuid.NewString,
+			AIUsage:     postgres.NewAIUsageRepository(database),
 
 			Subscriptions: postgres.NewSubscriptionRepository(database),
 		}

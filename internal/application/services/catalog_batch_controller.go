@@ -73,8 +73,8 @@ type CatalogBatchController struct {
 	// AIUsageRepository records per-batch telemetry to ai_usage_records.
 	// Per AIUsageTokenTelemetry.md §6: every Gemini call's tokens + cost
 	// must be persisted. Batch calls record final_ai_replies=0.
-	AIUsage       ports.AIUsageRepository
-	AIPricing     ports.AIProviderPricingRepository
+	AIUsage   ports.AIUsageRepository
+	AIPricing ports.AIProviderPricingRepository
 
 	GatewayFXRateYER string
 
@@ -1219,7 +1219,7 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 	if pricingFailed {
 		recordStatus = "pricing_failed"
 	}
-		// Use correlation_id = runID + "|" + phase for dedup.
+	// Use correlation_id = runID + "|" + phase for dedup.
 	// If the same phase is recorded twice for the same run, it's a retry —
 	// the AppendRecord generates a new UUID so we rely on the caller not
 	// calling recordBatchUsage twice for the same phase. The catalog batch
@@ -1246,13 +1246,12 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 		FinalAIReplies:    0, // batch calls never count as final replies
 		ProviderCostYER:   providerCostYER,
 
-
-		PricingVersion:    pricingVersion,
-		Status:            recordStatus,
-		CorrelationID:     &correlationID,
-		StartedAt:         startedAt,
-		CompletedAt:       now,
-		Now:               now,
+		PricingVersion: pricingVersion,
+		Status:         recordStatus,
+		CorrelationID:  &correlationID,
+		StartedAt:      startedAt,
+		CompletedAt:    now,
+		Now:            now,
 	}
 	usageRecord.GatewayCostUSD, usageRecord.GatewayFXRateYER = gatewayCostUSD, gatewayFXRate
 	usageRecord.GatewayCallID, usageRecord.GatewayDeploymentID = usage.GatewayCallID, usage.GatewayDeploymentID

@@ -13,9 +13,9 @@ import (
 // token pricing, while Mujeeb owns subscription association and entitlement.
 // Tool-round calls are internal expenses, never customer AI replies.
 type GatewayMerchantUsageRecorder struct {
-	Usage ports.AIUsageRepository
+	Usage         ports.AIUsageRepository
 	Subscriptions ports.SubscriptionRepository
-	FXRateYER string
+	FXRateYER     string
 }
 
 func (r GatewayMerchantUsageRecorder) Record(ctx context.Context, businessID, sessionID string, usage ports.CustomerSalesUsageTelemetry) error {
@@ -23,23 +23,31 @@ func (r GatewayMerchantUsageRecorder) Record(ctx context.Context, businessID, se
 		return errors.New("merchant AI accounting is not configured")
 	}
 	page, err := r.Subscriptions.List(ctx, ports.SubscriptionListFilter{BusinessID: businessID, Status: "ACTIVE", Limit: 1})
-	if err != nil { return err }
-	if len(page.Items) == 0 { return errors.New("merchant AI has no active subscription for usage accounting") }
+	if err != nil {
+		return err
+	}
+	if len(page.Items) == 0 {
+		return errors.New("merchant AI has no active subscription for usage accounting")
+	}
 	version, usd, rate, failed := gatewayNativeSpend(usage, r.FXRateYER)
 	status := "success"
-	if failed { status = "pricing_failed" }
+	if failed {
+		status = "pricing_failed"
+	}
 	now := time.Now().UTC()
 	correlation := "merchant:" + sessionID + ":" + usage.GatewayCallID
 	input := ports.AIUsageAppend{
 		ID: uuid.NewString(), BusinessID: businessID, SubscriptionID: page.Items[0].ID,
 		Provider: usageProvider(usage.Provider), Model: usage.Model,
-		InputTokens: int64(usage.InputTokens - usage.CachedTokens),
+		InputTokens:       int64(usage.InputTokens - usage.CachedTokens),
 		CachedInputTokens: int64(usage.CachedTokens), OutputTokens: int64(usage.OutputTokens),
 		ModelRequests: 1, ToolCalls: 0, FinalAIReplies: 0,
 		ProviderCostYER: 0, PricingVersion: version, Status: status,
 		CorrelationID: &correlation, StartedAt: now, CompletedAt: now, Now: now,
 	}
-	if input.InputTokens < 0 { input.InputTokens = 0 }
+	if input.InputTokens < 0 {
+		input.InputTokens = 0
+	}
 	input.GatewayCostUSD, input.GatewayFXRateYER = usd, rate
 	input.GatewayCallID, input.GatewayDeploymentID = usage.GatewayCallID, usage.GatewayDeploymentID
 	_, err = r.Usage.AppendRecord(ctx, input)
