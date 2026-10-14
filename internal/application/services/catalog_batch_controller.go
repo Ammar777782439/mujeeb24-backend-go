@@ -77,6 +77,7 @@ type CatalogBatchController struct {
 	AIPricing     ports.AIProviderPricingRepository
 
 	GatewayFXRateYER string
+
 	Subscriptions ports.SubscriptionRepository
 }
 
@@ -1245,8 +1246,7 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 		FinalAIReplies:    0, // batch calls never count as final replies
 		ProviderCostYER:   providerCostYER,
 
-		GatewayCostUSD: gatewayCostUSD, GatewayFXRateYER: gatewayFXRate,
-		GatewayCallID: usage.GatewayCallID, GatewayDeploymentID: usage.GatewayDeploymentID,
+		GatewayCostUSD: gatewayCostUSD, GatewayFXRateYER: gatewayFXRate, GatewayCallID: usage.GatewayCallID, GatewayDeploymentID: usage.GatewayDeploymentID,
 
 		PricingVersion:    pricingVersion,
 		Status:            recordStatus,

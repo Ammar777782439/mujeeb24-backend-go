@@ -100,6 +100,7 @@ type ConversationSummaryService struct {
 
 	// Currency conversion for gateway native spend; not a token cost estimator.
 	GatewayFXRateYER string
+
 	// Subscriptions looks up the business's active subscription ID so
 	// the summary usage record is associated with the correct
 	// subscription (same as AutoReply.recordAIUsage).
@@ -406,8 +407,7 @@ func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, bus
 		FinalAIReplies:    finalAIReplies,
 		ProviderCostYER:   providerCostYER,
 
-		GatewayCostUSD: gatewayCostUSD, GatewayFXRateYER: gatewayFXRate,
-		GatewayCallID: usage.GatewayCallID, GatewayDeploymentID: usage.GatewayDeploymentID,
+		GatewayCostUSD: gatewayCostUSD, GatewayFXRateYER: gatewayFXRate, GatewayCallID: usage.GatewayCallID, GatewayDeploymentID: usage.GatewayDeploymentID,
 
 		PricingVersion:    pricingVersion,
 		Status:            recordStatus,

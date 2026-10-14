@@ -2,8 +2,8 @@ package config
 
 import (
 	"errors"
-	"math/big"
 	"fmt"
+	"math/big"
 	"net/url"
 	"os"
 	"strconv"

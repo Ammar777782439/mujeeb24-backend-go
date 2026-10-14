@@ -121,6 +121,7 @@ type AutoReplyService struct {
 
 	// Currency conversion for LiteLLM native USD spend, supplied by deployment.
 	GatewayFXRateYER string
+
 	// SubscriptionRepository looks up the business's active subscription ID
 	// so usage records can be associated with the correct subscription.
 	Subscriptions ports.SubscriptionRepository
@@ -1239,8 +1240,7 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
 		FinalAIReplies:    finalAIReplies,
 		ProviderCostYER:   providerCostYER,
 
-		GatewayCostUSD: gatewayCostUSD, GatewayFXRateYER: gatewayFXRate,
-		GatewayCallID: out.Usage.GatewayCallID, GatewayDeploymentID: out.Usage.GatewayDeploymentID,
+		GatewayCostUSD: gatewayCostUSD, GatewayFXRateYER: gatewayFXRate, GatewayCallID: out.Usage.GatewayCallID, GatewayDeploymentID: out.Usage.GatewayDeploymentID,
 
 		PricingVersion:    pricingVersion,
 		Status:            recordStatus,

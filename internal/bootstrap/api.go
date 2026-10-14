@@ -353,8 +353,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			NewID:         uuid.NewString,
 			AIUsage:       postgres.NewAIUsageRepository(database),
 
-			GatewayFXRateYER: service.GatewayFXRateYER,
 			Subscriptions: postgres.NewSubscriptionRepository(database),
+
+			GatewayFXRateYER: service.GatewayFXRateYER,
 		}
 
 		autoReply = service
