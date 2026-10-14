@@ -11,9 +11,9 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/prompts"
 )
 
-type catalogRequestBuilder struct { systemPrompt string }
+type catalogRequestBuilder struct{ systemPrompt string }
 type catalogRequestConfig struct {
-	model string
+	model           string
 	maxOutputTokens int
 }
 
@@ -95,7 +95,6 @@ func (c *catalogRequestBuilder) buildFinalEvaluateRequest(input services.FinalEv
 		},
 	}
 }
-
 
 func parseBatchCandidates(resp catalogCandidateResponse) ([]ports.CatalogBatchCandidate, error) {
 	if len(resp.Candidates) == 0 {
@@ -195,9 +194,9 @@ type catalogPromptRequest struct {
 	Tools             []map[string]any `json:"tools,omitempty"`
 	ToolConfig        map[string]any   `json:"toolConfig,omitempty"`
 	capabilityTools   []customerSalesTool
-	Model             string                `json:"model,omitempty"`
-	SystemInstruction *batchContent         `json:"systemInstruction,omitempty"`
-	Contents          []batchContent        `json:"contents"`
+	Model             string                  `json:"model,omitempty"`
+	SystemInstruction *batchContent           `json:"systemInstruction,omitempty"`
+	Contents          []batchContent          `json:"contents"`
 	GenerationConfig  catalogGenerationConfig `json:"generationConfig"`
 }
 
@@ -232,8 +231,6 @@ type batchUsageMetadata struct {
 	CachedContentTokenCount int `json:"cachedContentTokenCount,omitempty"`
 	TotalTokenCount         int `json:"totalTokenCount,omitempty"`
 }
-
-
 
 func batchInteractionRequest(request catalogPromptRequest, model string) interactionRequest {
 	var system, input []string
