@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -23,6 +24,7 @@ func TestCustomerCapabilityBoundary(t *testing.T) {
 		{"clarify", `{"steps":[{"type":"function_call","id":"c","name":"ask_customer","arguments":{"response_text":"ما العدد؟"}}]}`, ports.CustomerSalesCapabilityAsk, false},
 		{"handoff", `{"steps":[{"type":"function_call","id":"c","name":"handoff_to_human","arguments":{"response_text":"سأحوّل طلبك إلى الفريق"}}]}`, ports.CustomerSalesCapabilityHandoff, false},
 		{"catalog", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{}}]}`, ports.CustomerSalesCapabilityFullCatalog, false},
+		{"targeted product details", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{"presentation":"detail"}}]}`, ports.CustomerSalesCapabilityFullCatalog, false},
 		{"no call", `{"steps":[{"type":"model_output","content":[{"type":"text","text":"hello"}]}]}`, "", true},
 		{"unknown", `{"steps":[{"type":"function_call","id":"c","name":"create_order_draft","arguments":{}}]}`, "", true},
 		{"tenant argument", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{"business_id":"other"}}]}`, "", true},
@@ -57,6 +59,26 @@ func TestCustomerCapabilityBoundary(t *testing.T) {
 	_ = json.Unmarshal([]byte(tests[3].response), &response)
 	if _, err := parseCustomerSalesCapability(response, customerSalesTools(ports.CustomerSalesCapabilities(false))); err == nil {
 		t.Fatal("catalog call accepted when unavailable or after complete coverage")
+	}
+}
+
+func TestGeminiCatalogDetailCapabilityContract(t *testing.T) {
+	tools := customerSalesTools([]ports.CustomerSalesCapability{ports.CustomerSalesCapabilityFullCatalog})
+	if len(tools) != 1 {
+		t.Fatal("catalog capability is unavailable")
+	}
+	props := tools[0].Parameters["properties"].(map[string]any)
+	presentation := props["presentation"].(map[string]any)["enum"].([]string)
+	if !slices.Contains(presentation, "detail") || !slices.Contains(presentation, "hierarchy") || !slices.Contains(presentation, "compare") {
+		t.Fatalf("catalog intent modes missing: %v", presentation)
+	}
+	var response interactionResponse
+	if err := json.Unmarshal([]byte(`{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{"presentation":"detail"}}]}`), &response); err != nil {
+		t.Fatal(err)
+	}
+	decision, err := parseCustomerSalesCapability(response, tools)
+	if err != nil || decision.Presentation != "detail" || decision.Capability != ports.CustomerSalesCapabilityFullCatalog {
+		t.Fatalf("Gemini's requested detail mode was lost: %+v %v", decision, err)
 	}
 }
 
