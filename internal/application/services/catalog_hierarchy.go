@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"math/big"
 	"errors"
 	"fmt"
 	"log"
@@ -113,137 +114,185 @@ func (c *CatalogBatchController) runHierarchicalCatalog(ctx context.Context, inp
 }
 
 type catalogHierarchyLines struct {
-	lines []string
-	runes int
+	catalogs map[string][]catalogCustomerItem
+	empty    string
+	runes    int
 }
 
-func (p *catalogHierarchyLines) add(value string) {
-	p.lines = append(p.lines, value)
-	p.runes += utf8.RuneCountInString(value) + 1
+type catalogCustomerItem struct {
+	name   string
+	lines  []string
+	prices []catalogCustomerPrice
 }
+
+type catalogCustomerPrice struct {
+	amount   string
+	currency string
+}
+
+func (p *catalogHierarchyLines) add(message string) {
+	p.empty = message
+	p.runes += utf8.RuneCountInString(message)
+}
+
 func (p *catalogHierarchyLines) tooLong() bool {
-	return p.runes > catalogHierarchyPartRunes*catalogHierarchyMaxParts
+	// The overview is bounded before enqueueing; avoid a huge per-turn
+	// response. Source catalog facts remain available in the repository.
+	return p.runes > 300000
 }
 
-// messages preserves all generated facts. Text exceeding one part is split
-// on rune boundaries (not byte boundaries), without truncating descriptions.
+// messages forms coherent customer-facing sections. A product is never
+// split across messages: when a product doesn't fit, we continue from
+// that product in the next part with the catalog heading repeated.
 func (p *catalogHierarchyLines) messages() ([]string, error) {
-	chunks := make([]string, 0, 4)
-	var part strings.Builder
-	flush := func() {
-		if part.Len() > 0 {
-			chunks = append(chunks, part.String())
-			part.Reset()
+	if len(p.catalogs) == 0 {
+		text := p.empty
+		if text == "" {
+			text = "لا توجد منتجات أو خدمات معروضة حاليًا."
 		}
+		return []string{text}, nil
 	}
-	partRunes := 0
-	for _, line := range p.lines {
-		remaining := []rune(line + "\n")
-		// Keep a complete commercial line in one message whenever it fits.
-		// Only oversized original descriptions may cross part boundaries.
-		if partRunes > 0 && len(remaining) <= catalogHierarchyPartRunes && len(remaining) > catalogHierarchyPartRunes-partRunes {
-			flush()
-			partRunes = 0
-		}
-		for len(remaining) > 0 {
-			room := catalogHierarchyPartRunes - partRunes
-			if room == 0 {
-				flush()
-				partRunes = 0
-				room = catalogHierarchyPartRunes
+	names := make([]string, 0, len(p.catalogs))
+	total := 0
+	for name, items := range p.catalogs {
+		names = append(names, name)
+		total += len(items)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		sort.SliceStable(p.catalogs[name], func(i, j int) bool {
+			return p.catalogs[name][i].name < p.catalogs[name][j].name
+		})
+	}
+	const maximumMessages = 4
+	var chunks []string
+	var current strings.Builder
+	begin := func() {
+		current.WriteString(fmt.Sprintf("أهلًا وسهلًا! لدينا %d منتجًا وخدمة، وهذه نظرة مرتبة حسب الأقسام وأسعار الخيارات.\n", total))
+	}
+	begin()
+	for _, name := range names {
+		items := p.catalogs[name]
+		header := "\n📂 " + name + "\n"
+		headerWritten := false
+		for _, item := range items {
+			block := "• " + item.name + "\n" + strings.Join(item.lines, "\n") + "\n"
+			if utf8.RuneCountInString(block)+utf8.RuneCountInString(header) > catalogHierarchyPartRunes {
+				return nil, fmt.Errorf("catalog item %q cannot fit in one customer-facing message without splitting its commercial offers", item.name)
 			}
-			take := len(remaining)
-			if take > room {
-				take = room
+			needed := utf8.RuneCountInString(block)
+			if !headerWritten {
+				needed += utf8.RuneCountInString(header)
 			}
-			part.WriteString(string(remaining[:take]))
-			partRunes += take
-			remaining = remaining[take:]
+			if current.Len() > 0 && utf8.RuneCountInString(current.String())+needed > catalogHierarchyPartRunes {
+				chunks = append(chunks, strings.TrimSpace(current.String()))
+				current.Reset()
+				headerWritten = false
+			}
+			if !headerWritten {
+				current.WriteString(header)
+				headerWritten = true
+			}
+			current.WriteString(block)
 		}
 	}
-	flush()
-	if len(chunks) == 0 || len(chunks) > catalogHierarchyMaxParts {
-		return nil, errors.New("hierarchical catalog exceeds safe multi-message limit")
+	if current.Len() > 0 {
+		chunks = append(chunks, strings.TrimSpace(current.String()))
 	}
-	out := make([]string, 0, len(chunks))
-	for i, chunk := range chunks {
-		header := "📚 الكتالوج الكامل"
+	if len(chunks) == 0 || len(chunks) > maximumMessages {
+		return nil, fmt.Errorf("complete customer-facing catalog requires %d messages; use a paginated category overview instead of a multi-message flood", len(chunks))
+	}
+	footer := "\nالأسعار المعروضة من بيانات المتجر؛ السعر أو التوفر الذي لم يُتحقق منه يحتاج تأكيدًا قبل إتمام الطلب. إذا رغبت، أشرح لك الفروقات والمميزات التفصيلية لأي قسم أو منتج."
+	if utf8.RuneCountInString(chunks[len(chunks)-1])+utf8.RuneCountInString(footer) <= catalogHierarchyPartRunes {
+		chunks[len(chunks)-1] += footer
+	} else {
+		chunks[len(chunks)-1] += "\nللمعلومات التفصيلية أو التأكيد، اسألني عن القسم الذي يهمك."
+	}
+	for i := range chunks {
 		if len(chunks) > 1 {
-			header = fmt.Sprintf("📚 الكتالوج الكامل — الجزء %d من %d", i+1, len(chunks))
+			chunks[i] = fmt.Sprintf("الخيارات المتاحة (%d/%d)\n%s", i+1, len(chunks), chunks[i])
 		}
-		out = append(out, header+"\n"+chunk)
 	}
-	return out, nil
+	return chunks, nil
 }
 
 func (p *catalogHierarchyLines) appendItem(catalogName string, item CatalogAIItem, schema *CatalogAIAttributeSchema) error {
-	p.add("")
-	p.add("📁 " + catalogName)
-	p.add("  ◉ " + item.Name)
-	if item.ItemType != "" {
-		p.add("    النوع: " + item.ItemType)
+	if strings.TrimSpace(catalogName) == "" || strings.TrimSpace(item.Name) == "" {
+		return errors.New("catalog or item has no customer-facing name")
 	}
-	if item.PricingMode != "" {
-		p.add("    سياسة التسعير: " + item.PricingMode)
+	if p.catalogs == nil {
+		p.catalogs = make(map[string][]catalogCustomerItem)
 	}
-	if item.AvailabilityMode != "" {
-		p.add("    آلية التوفر: " + item.AvailabilityMode)
-	}
-	if item.FulfillmentMode != "" {
-		p.add("    طريقة التنفيذ: " + item.FulfillmentMode)
-	}
-	if item.ShortDescription != nil && *item.ShortDescription != "" {
-		p.add("    الوصف: " + *item.ShortDescription)
-	}
-	if item.LongDescription != nil && *item.LongDescription != "" {
-		p.add("    التفاصيل: " + *item.LongDescription)
+	info := catalogCustomerItem{name: item.Name}
+	if item.ShortDescription != nil && strings.TrimSpace(*item.ShortDescription) != "" {
+		info.lines = append(info.lines, "  "+strings.TrimSpace(*item.ShortDescription))
+	} else if item.LongDescription != nil && strings.TrimSpace(*item.LongDescription) != "" {
+		// Avoid sending hundreds of description words. The complete merchant
+		// description remains in the catalog and can be requested explicitly.
+		info.lines = append(info.lines, "  "+catalogPreview(*item.LongDescription, 150))
 	}
 	if len(item.Attributes) > 0 {
-		p.add("    المواصفات: " + formatHierarchyAttributes(item.Attributes, schema))
+		info.lines = append(info.lines, "  أبرز المواصفات: "+formatHierarchyAttributes(item.Attributes, schema))
 	}
-	if item.RequiresConfirmation {
-		p.add("    يتطلب التأكيد قبل التنفيذ")
-	}
-	variantByID := make(map[string]CatalogAIVariant, len(item.Variants))
-	for _, variant := range item.Variants {
-		if variant.CatalogItemID != item.ID {
-			return fmt.Errorf("variant %s has wrong parent item", variant.ID)
+	variants := map[string]CatalogAIVariant{}
+	for _, v := range item.Variants {
+		if v.CatalogItemID != item.ID {
+			return fmt.Errorf("variant %s belongs to another catalog item", v.ID)
 		}
-		variantByID[variant.ID] = variant
+		if _, found := variants[v.ID]; found {
+			return fmt.Errorf("duplicate catalog variant %s", v.ID)
+		}
+		variants[v.ID] = v
 	}
 	for _, offer := range item.Offers {
 		if offer.CatalogItemID != item.ID {
-			return fmt.Errorf("offer %s has wrong parent item", offer.ID)
+			return fmt.Errorf("offer %s belongs to another catalog item", offer.ID)
 		}
+		name := strings.TrimSpace(offer.Name)
 		if offer.VariantID != nil && *offer.VariantID != "" {
-			if _, ok := variantByID[*offer.VariantID]; !ok {
-				return fmt.Errorf("offer %s references missing item variant", offer.ID)
+			v, found := variants[*offer.VariantID]
+			if !found {
+				return fmt.Errorf("offer %s has no valid item variant", offer.ID)
+			}
+			if strings.TrimSpace(v.Name) != "" {
+				name = strings.TrimSpace(v.Name)
 			}
 		}
-	}
-	for _, variant := range item.Variants {
-		name := variant.Name
 		if name == "" {
-			name = "خيار"
+			name = "العرض"
 		}
-		p.add("    ├─ " + name)
-		if len(variant.Attributes) > 0 {
-			p.add("    │  المواصفات: " + formatHierarchyAttributes(variant.Attributes, schema))
-		}
-		for _, offer := range item.Offers {
-			if offer.VariantID != nil && *offer.VariantID == variant.ID {
-				p.add("    │  └─ " + formatHierarchyOffer(offer))
-			}
+		price := formatCatalogCustomerPrice(offer.Amount, offer.Currency)
+		info.lines = append(info.lines, "  - "+name+": "+price+catalogOfferQualifier(offer))
+		if offer.Amount != nil && offer.Currency != nil {
+			info.prices = append(info.prices, catalogCustomerPrice{amount: *offer.Amount, currency: *offer.Currency})
 		}
 	}
-	for _, offer := range item.Offers {
-		if offer.VariantID == nil || *offer.VariantID == "" {
-			p.add("    └─ " + formatHierarchyOffer(offer))
-		}
+	if len(item.Offers) == 0 {
+		info.lines = append(info.lines, "  السعر غير معلن؛ يمكن الاستفسار عنه.")
+	}
+	if item.RequiresConfirmation {
+		info.lines = append(info.lines, "  يحتاج تأكيدًا قبل إتمام الطلب.")
+	}
+	p.catalogs[catalogName] = append(p.catalogs[catalogName], info)
+	p.runes += utf8.RuneCountInString(item.Name)
+	for _, line := range info.lines {
+		p.runes += utf8.RuneCountInString(line) + 1
 	}
 	return nil
 }
 
+func catalogPreview(text string, max int) string {
+	text = strings.Join(strings.Fields(text), " ")
+	if utf8.RuneCountInString(text) <= max {
+		return text
+	}
+	r := []rune(text)
+	return strings.TrimSpace(string(r[:max])) + "…"
+}
+
+// Attribute labels come from Universal Catalog schema definitions, never from
+// an industry-specific keyword classifier. Fallback keys are converted into
+// readable words rather than exposing snake_case.
 func formatHierarchyAttributes(attributes map[string]any, schema *CatalogAIAttributeSchema) string {
 	labels := make(map[string]string)
 	if schema != nil {
@@ -260,58 +309,97 @@ func formatHierarchyAttributes(attributes map[string]any, schema *CatalogAIAttri
 	sort.Strings(keys)
 	parts := make([]string, 0, len(keys))
 	for _, key := range keys {
-		label := key
-		if known := labels[key]; known != "" {
-			label = known
-		}
 		value, err := json.Marshal(attributes[key])
 		if err != nil {
-			value = []byte("null")
+			continue
 		}
-		parts = append(parts, label+": "+strings.Trim(string(value), "\""))
+		label := labels[key]
+		if label == "" {
+			label = strings.ReplaceAll(key, "_", " ")
+		}
+		rendered := strings.Trim(string(value), "\"")
+		switch rendered {
+		case "true":
+			rendered = "نعم"
+		case "false":
+			rendered = "لا"
+		}
+		parts = append(parts, label+": "+rendered)
 	}
-	return strings.Join(parts, "، ")
+	return catalogPreview(strings.Join(parts, "، "), 170)
 }
 
-func formatHierarchyOffer(offer CatalogAIOffer) string {
-	var p []string
-	if offer.Name != "" {
-		p = append(p, offer.Name)
-	} else {
-		p = append(p, "عرض")
+func formatCatalogCustomerPrice(amount, currency *string) string {
+	if amount == nil || strings.TrimSpace(*amount) == "" {
+		return "السعر حسب الطلب"
 	}
-	if offer.Amount != nil && *offer.Amount != "" {
-		price := *offer.Amount
-		if offer.Currency != nil && *offer.Currency != "" {
-			price += " " + *offer.Currency
+	v := strings.TrimSpace(*amount)
+	n := new(big.Rat)
+	if _, ok := n.SetString(v); ok {
+		bits := strings.SplitN(v, ".", 2)
+		intPart := bits[0]
+		sign := ""
+		if strings.HasPrefix(intPart, "-") {
+			sign, intPart = "-", strings.TrimPrefix(intPart, "-")
 		}
-		p = append(p, "السعر: "+price)
-	} else {
-		p = append(p, "السعر: غير محدد")
-	}
-	if offer.PricingMode != "" {
-		p = append(p, "نوع التسعير: "+offer.PricingMode)
-	}
-	if offer.PricingUnit != nil && *offer.PricingUnit != "" {
-		p = append(p, "وحدة السعر: "+*offer.PricingUnit)
-	}
-	if offer.PriceVerificationStatus == nil || *offer.PriceVerificationStatus != "verified" {
-		status := "غير مؤكد"
-		if offer.PriceVerificationStatus != nil && *offer.PriceVerificationStatus != "" {
-			status = *offer.PriceVerificationStatus
+		for i := len(intPart)-3; i > 0; i -= 3 {
+			intPart = intPart[:i] + "," + intPart[i:]
 		}
-		p = append(p, "تحقق السعر: "+status)
+		v = sign + intPart
+		if len(bits) == 2 {
+			decimal := strings.TrimRight(bits[1], "0")
+			if decimal != "" {
+				v += "." + decimal
+			}
+		}
 	}
-	if offer.AvailabilityStatus != nil && *offer.AvailabilityStatus != "" {
-		p = append(p, "التوفر: "+*offer.AvailabilityStatus)
-	} else {
-		p = append(p, "التوفر: غير مؤكد")
+	unit := ""
+	if currency != nil {
+		switch strings.ToUpper(*currency) {
+		case "YER":
+			unit = " ريال يمني"
+		case "SAR":
+			unit = " ريال سعودي"
+		case "USD":
+			unit = " دولار أمريكي"
+		default:
+			if *currency != "" {
+				unit = " " + *currency
+			}
+		}
 	}
-	if offer.ValidityUntil != nil && *offer.ValidityUntil != "" {
-		p = append(p, "صالح حتى: "+*offer.ValidityUntil)
+	return v + unit
+}
+
+func catalogOfferQualifier(offer CatalogAIOffer) string {
+	var labels []string
+	if offer.PricingUnit != nil && strings.TrimSpace(*offer.PricingUnit) != "" {
+		switch *offer.PricingUnit {
+		case "person", "per_person":
+			labels = append(labels, "للشخص")
+		case "per_day", "day":
+			labels = append(labels, "لليوم")
+		case "each":
+			labels = append(labels, "للوحدة")
+		case "per_unit":
+			labels = append(labels, "لكل وحدة")
+		default:
+			// Unknown merchant-defined units are not interpreted as promises.
+		}
 	}
-	if offer.FulfillmentMode != nil && *offer.FulfillmentMode != "" {
-		p = append(p, "التسليم: "+*offer.FulfillmentMode)
+	if offer.PriceVerificationStatus != nil && *offer.PriceVerificationStatus != "verified" {
+		labels = append(labels, "السعر يحتاج تأكيدًا")
 	}
-	return strings.Join(p, " | ")
+	switch {
+	case offer.AvailabilityStatus == nil:
+		labels = append(labels, "التوفر يحتاج تأكيدًا")
+	case *offer.AvailabilityStatus == "requires_check", *offer.AvailabilityStatus == "stale", *offer.AvailabilityStatus == "unknown":
+		labels = append(labels, "التوفر يحتاج تأكيدًا")
+	case *offer.AvailabilityStatus == "unavailable":
+		labels = append(labels, "غير متوفر حاليًا")
+	}
+	if len(labels) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(labels, "، ") + ")"
 }
