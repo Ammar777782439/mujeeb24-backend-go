@@ -1,4 +1,4 @@
-// Package gemini — JSON serialization contract tests for CustomerSalesOfferEvidence.
+// Package gateway — JSON serialization contract tests for CustomerSalesOfferEvidence.
 //
 // Per ADR-046: verifies that the JSON sent to Gemini via customerSalesPromptContext
 // uses "availability_status" (snake_case) as the field key — matching
@@ -9,7 +9,7 @@
 // — mismatching the Contract's "availability_status" and the prompt
 // references "availability_state". This test proves the fix and prevents
 // regression.
-package gemini
+package gateway
 
 import (
 	"encoding/json"
