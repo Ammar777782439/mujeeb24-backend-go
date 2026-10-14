@@ -246,7 +246,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// every model request's tokens + cost are recorded to ai_usage_records
 		// and flow through to the Platform Admin AI Usage view.
 		service.AIUsage = postgres.NewAIUsageRepository(database)
-		service.AIPricing = postgres.NewAIProviderPricingRepository(database)
+		if external.LiteLLMPlatformConfig != nil {
+			service.GatewayFXRateYER = external.LiteLLMPlatformConfig.USDToYERRate
+		}
 		service.Subscriptions = postgres.NewSubscriptionRepository(database)
 		// Per contract ⑤ §7, build the Catalog Entity Contract payload
 		// once and reuse for every call.
@@ -277,7 +279,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			customerSalesDecision,
 		)
 		service.SummaryService.AIUsage = postgres.NewAIUsageRepository(database)
-		service.SummaryService.AIPricing = postgres.NewAIProviderPricingRepository(database)
+		service.SummaryService.GatewayFXRateYER = service.GatewayFXRateYER
 		service.SummaryService.Subscriptions = postgres.NewSubscriptionRepository(database)
 		service.SummaryService.NewID = uuid.NewString
 		// Per Item 2 (Kill Switch applies to Summary): wire the
@@ -350,7 +352,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			Now:           func() time.Time { return time.Now().UTC() },
 			NewID:         uuid.NewString,
 			AIUsage:       postgres.NewAIUsageRepository(database),
-			AIPricing:     postgres.NewAIProviderPricingRepository(database),
+			GatewayFXRateYER: service.GatewayFXRateYER,
 			Subscriptions: postgres.NewSubscriptionRepository(database),
 		}
 

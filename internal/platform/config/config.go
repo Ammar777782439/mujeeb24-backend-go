@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"math/big"
 	"fmt"
 	"net/url"
 	"os"
@@ -50,6 +51,9 @@ type ProcessConfig struct {
 	LiteLLMMaxOutputTokens         int
 	LiteLLMMaxInputCharacters      int
 	FrontendURL                    string
+
+	// Exchange rate selected by deployment for native LiteLLM USD spend.
+	LiteLLMUSDToYERRate string
 }
 
 func LoadFromEnv() (ProcessConfig, error) {
@@ -98,6 +102,8 @@ func LoadFromEnv() (ProcessConfig, error) {
 		LiteLLMMaxOutputTokens:         4096,
 		LiteLLMMaxInputCharacters:      48000,
 		FrontendURL:                    strings.TrimRight(strings.TrimSpace(os.Getenv("FRONTEND_URL")), "/"),
+
+		LiteLLMUSDToYERRate: strings.TrimSpace(os.Getenv("LITELLM_USD_TO_YER_RATE")),
 	}
 	if cfg.DatabaseURL == "" {
 		return ProcessConfig{}, errors.New("DATABASE_URL is required")
@@ -170,6 +176,10 @@ func LoadFromEnv() (ProcessConfig, error) {
 		return ProcessConfig{}, err
 	}
 	if cfg.LiteLLMGatewayOnly {
+		rate, ok := new(big.Rat).SetString(cfg.LiteLLMUSDToYERRate)
+		if !ok || rate.Sign() <= 0 {
+			return ProcessConfig{}, errors.New("LITELLM_USD_TO_YER_RATE must be an explicit positive decimal rate")
+		}
 		if cfg.LiteLLMBaseURL == "" || cfg.LiteLLMAPIKey == "" || cfg.LiteLLMCustomerModel == "" || cfg.LiteLLMCatalogModel == "" || cfg.LiteLLMMerchantModel == "" ||
 			cfg.LiteLLMMaxOutputTokens <= 0 || cfg.LiteLLMMaxInputCharacters <= 0 || cfg.LiteLLMMerchantMaxRequestBytes <= 0 ||
 			cfg.LiteLLMMaxContextTokens <= cfg.LiteLLMMaxOutputTokens {

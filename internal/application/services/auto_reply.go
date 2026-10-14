@@ -118,6 +118,9 @@ type AutoReplyService struct {
 	// AIProviderPricingRepository looks up the current pricing version for
 	// computing provider_cost_yer. If nil, cost is recorded as 0.
 	AIPricing ports.AIProviderPricingRepository
+
+	// Currency conversion for LiteLLM native USD spend, supplied by deployment.
+	GatewayFXRateYER string
 	// SubscriptionRepository looks up the business's active subscription ID
 	// so usage records can be associated with the correct subscription.
 	Subscriptions ports.SubscriptionRepository
@@ -1166,42 +1169,14 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
 	// The frontend Platform Admin AI Usage view shows the failed pricing
 	// records separately so operators can investigate pricing gaps.
 	providerCostYER := 0
-	pricingVersion := "unknown"
-	pricingFailed := false
-	// Also fix the stored token counts: input_tokens should be non-cached
-	// input (promptTokenCount - cachedContentTokenCount), and cached_input_tokens
-	// is the cached portion. This matches the contract's intent that the two
-	// fields are mutually exclusive.
+	pricingVersion, gatewayCostUSD, gatewayFXRate, pricingFailed := gatewayNativeSpend(out.Usage, s.GatewayFXRateYER)
 	totalInput := out.Usage.InputTokens
 	cachedInput := out.Usage.CachedTokens
 	nonCachedInput := totalInput - cachedInput
 	if nonCachedInput < 0 {
-		nonCachedInput = 0 // defensive — Gemini shouldn't return cached > total
+		nonCachedInput = 0
 	}
-	if s.AIPricing != nil {
-		pricing, err := s.AIPricing.GetCurrentForProvider(ctx, usageProvider(out.Usage.Provider), out.Usage.Model)
-		if err == nil {
-			pricingVersion = pricing.PricingVersion
-			// Cost per 1M tokens → scale to actual token count.
-			// inputCost = nonCachedInput * InputPerMillionYER / 1M
-			// cachedCost = cachedInput * CachedInputPerMillionYER / 1M
-			// outputCost = outputTokens * OutputPerMillionYER / 1M
-			inputCost := int64(nonCachedInput) * int64(pricing.InputPerMillionYER) / 1_000_000
-			cachedCost := int64(cachedInput) * int64(pricing.CachedInputPerMillionYER) / 1_000_000
-			outputCost := int64(out.Usage.OutputTokens) * int64(pricing.OutputPerMillionYER) / 1_000_000
-			providerCostYER = int(inputCost + cachedCost + outputCost)
-		} else {
-			// P1-6: pricing lookup failed — mark the record so the
-			// aggregate does NOT count this as a successful AI Reply.
-			log.Printf("[AutoReply] AI_USAGE_PRICING_LOOKUP_FAILED business=%s model=%s err=%v", businessID, out.Usage.Model, err)
-			pricingFailed = true
-		}
-	} else {
-		// P1-6: pricing repository not wired — same as lookup failure.
-		log.Printf("[AutoReply] AI_USAGE_PRICING_REPO_NOT_WIRED business=%s model=%s", businessID, out.Usage.Model)
-		pricingFailed = true
-	}
-	// Per §3 + Item 3: final_ai_replies = 1 when a Final AI Response was
+		// Per §3 + Item 3: final_ai_replies = 1 when a Final AI Response was
 	// produced and enqueued (sent to the customer). This is the
 	// COMMERCIAL metric — it counts toward the merchant's AI Reply
 	// entitlement. Pricing failure is a COST-CALCULATION failure, NOT
@@ -1263,6 +1238,8 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
 		ToolCalls:         toolCallCount,
 		FinalAIReplies:    finalAIReplies,
 		ProviderCostYER:   providerCostYER,
+		GatewayCostUSD: gatewayCostUSD, GatewayFXRateYER: gatewayFXRate,
+		GatewayCallID: out.Usage.GatewayCallID, GatewayDeploymentID: out.Usage.GatewayDeploymentID,
 		PricingVersion:    pricingVersion,
 		Status:            recordStatus,
 		CorrelationID:     &correlationID,

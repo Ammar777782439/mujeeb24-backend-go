@@ -75,6 +75,8 @@ type CatalogBatchController struct {
 	// must be persisted. Batch calls record final_ai_replies=0.
 	AIUsage       ports.AIUsageRepository
 	AIPricing     ports.AIProviderPricingRepository
+
+	GatewayFXRateYER string
 	Subscriptions ports.SubscriptionRepository
 }
 
@@ -1211,34 +1213,12 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 		nonCachedInput = 0
 	}
 	providerCostYER := 0
-	pricingVersion := "unknown"
-	// Per P1-6: when pricing lookup fails, mark the record with
-	// status="pricing_failed" so the aggregate does NOT silently
-	// understate provider cost. Same fail-safe applied to AutoReply
-	// + ConversationSummary — the catalog batch path was the last
-	// holdout still writing cost=0 as "success".
-	pricingFailed := false
-	if c.AIPricing != nil {
-		pricing, err := c.AIPricing.GetCurrentForProvider(ctx, usageProvider(usage.Provider), usage.Model)
-		if err == nil {
-			pricingVersion = pricing.PricingVersion
-			inputCost := int64(nonCachedInput) * int64(pricing.InputPerMillionYER) / 1_000_000
-			cachedCost := int64(cachedInput) * int64(pricing.CachedInputPerMillionYER) / 1_000_000
-			outputCost := int64(usage.OutputTokens) * int64(pricing.OutputPerMillionYER) / 1_000_000
-			providerCostYER = int(inputCost + cachedCost + outputCost)
-		} else {
-			log.Printf("[CatalogBatch] AI_USAGE_PRICING_LOOKUP_FAILED business=%s model=%s phase=%s err=%v", businessID, usage.Model, phase, err)
-			pricingFailed = true
-		}
-	} else {
-		log.Printf("[CatalogBatch] AI_USAGE_PRICING_REPO_NOT_WIRED business=%s model=%s phase=%s", businessID, usage.Model, phase)
-		pricingFailed = true
-	}
+	pricingVersion, gatewayCostUSD, gatewayFXRate, pricingFailed := gatewayNativeSpend(usage, c.GatewayFXRateYER)
 	recordStatus := "success"
 	if pricingFailed {
 		recordStatus = "pricing_failed"
 	}
-	// Use correlation_id = runID + "|" + phase for dedup.
+		// Use correlation_id = runID + "|" + phase for dedup.
 	// If the same phase is recorded twice for the same run, it's a retry —
 	// the AppendRecord generates a new UUID so we rely on the caller not
 	// calling recordBatchUsage twice for the same phase. The catalog batch
@@ -1264,6 +1244,8 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 		ToolCalls:         0,
 		FinalAIReplies:    0, // batch calls never count as final replies
 		ProviderCostYER:   providerCostYER,
+		GatewayCostUSD: gatewayCostUSD, GatewayFXRateYER: gatewayFXRate,
+		GatewayCallID: usage.GatewayCallID, GatewayDeploymentID: usage.GatewayDeploymentID,
 		PricingVersion:    pricingVersion,
 		Status:            recordStatus,
 		CorrelationID:     &correlationID,

@@ -79,6 +79,7 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 			CustomerModel: cfg.LiteLLMCustomerModel, CatalogModel: cfg.LiteLLMCatalogModel,
 			MerchantModel:   cfg.LiteLLMMerchantModel,
 			MaxOutputTokens: cfg.LiteLLMMaxOutputTokens, MaxInputCharacters: cfg.LiteLLMMaxInputCharacters,
+			USDToYERRate: cfg.LiteLLMUSDToYERRate,
 		}
 	}
 	if cfg.SocialAPIAPIKey != "" || cfg.SocialAPIWebhookSecret != "" {

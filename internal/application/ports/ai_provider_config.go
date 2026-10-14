@@ -56,6 +56,9 @@ type LiteLLMPlatformConfig struct {
 	MerchantModel      string
 	MaxOutputTokens    int
 	MaxInputCharacters int
+
+	// An explicit YER per USD rate; not a native LiteLLM model price.
+	USDToYERRate string
 }
 
 // ----------------------------------------------------------------------------
