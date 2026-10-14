@@ -54,8 +54,10 @@ type overviewModelFixture struct {
 	mergeCalls  int
 	finalCalls  int
 	items       map[string]struct{}
-	emptyDigest bool
-	oversized   bool
+	emptyDigest     bool
+	oversized       bool
+	batchDigestRunes int
+	mergeDigestRunes int
 }
 
 func (*overviewModelFixture) CountOverviewTokens(_ context.Context, request CatalogOverviewRequest) (int, error) {
@@ -79,9 +81,15 @@ func (m *overviewModelFixture) ComposeOverview(_ context.Context, request Catalo
 		if m.emptyDigest {
 			out.Text = " "
 		}
+		if m.batchDigestRunes > 0 {
+			out.Text = strings.Repeat("م", m.batchDigestRunes)
+		}
 		return out, nil
 	case "merge":
 		m.mergeCalls++
+		if m.mergeDigestRunes > 0 {
+			return CatalogOverviewResponse{Text: strings.Repeat("م", m.mergeDigestRunes)}, nil
+		}
 		return CatalogOverviewResponse{Text: "ملخص شامل لأقسام السفر والاشتراكات والتقنية"}, nil
 	case "final":
 		m.finalCalls++
@@ -130,7 +138,7 @@ func TestCatalogOverviewFailsClosedIfGeminiReturnsEmptyIntermediateDigest(t *tes
 	_, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{
 		AIRunID: "run-1", BusinessID: "business-1", Presentation: "overview",
 	})
-	if err == nil || !strings.Contains(err.Error(), "empty or oversized") {
+	if err == nil || !strings.Contains(err.Error(), "empty evidence summary") {
 		t.Fatalf("incomplete Gemini evaluation incorrectly accepted: %v", err)
 	}
 	if model.finalCalls != 0 {
@@ -170,5 +178,47 @@ func TestCatalogOverviewSuccessfulSummaryNeedsNoModelUUIDEcho(t *testing.T) {
 	}
 	if len(model.items) != 100 || len(result.Messages) != 1 {
 		t.Fatalf("missing covered input items or final customer reply: scanned=%d messages=%d", len(model.items), len(result.Messages))
+	}
+}
+
+func TestHundredCatalogOverviewAcceptsLongInternalGeminiDigests(t *testing.T) {
+	repo := &largeOverviewCatalogRepo{capabilityCatalogRepo: &capabilityCatalogRepo{}}
+	model := &overviewModelFixture{
+		capabilityBatchModel: &capabilityBatchModel{},
+		batchDigestRunes: 1500, mergeDigestRunes: 1500,
+	}
+	controller := &CatalogBatchController{
+		CatalogAI: repo, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 1000,
+		Now: time.Now, NewID: func() string { return "id" },
+	}
+	result, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{
+		AIRunID: "long-overview", BusinessID: "business-1", Presentation: "overview",
+	})
+	if err != nil {
+		t.Fatalf("overview rejected a valid digest above former 700-rune limit: %v", err)
+	}
+	if len(model.items) != 100 || len(result.Messages) != 1 || model.mergeCalls == 0 || model.finalCalls != 1 {
+		t.Fatalf("failed complete overview: scanned=%d messages=%d merge=%d final=%d", len(model.items), len(result.Messages), model.mergeCalls, model.finalCalls)
+	}
+}
+
+func TestCatalogOverviewRejectsTrulyOversizedInternalDigestWithSize(t *testing.T) {
+	repo := &largeOverviewCatalogRepo{capabilityCatalogRepo: &capabilityCatalogRepo{}}
+	model := &overviewModelFixture{
+		capabilityBatchModel: &capabilityBatchModel{},
+		batchDigestRunes: overviewBatchMaxRunes + 1,
+	}
+	controller := &CatalogBatchController{
+		CatalogAI: repo, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 1000,
+		Now: time.Now, NewID: func() string { return "id" },
+	}
+	_, err := controller.RunCatalogEvaluation(context.Background(), CatalogEvaluationInput{
+		AIRunID: "oversized-overview", BusinessID: "business-1", Presentation: "overview",
+	})
+	if err == nil || !strings.Contains(err.Error(), "runes=3201 max=3200") {
+		t.Fatalf("invalid intermediate Gemini output should be rejected with measured limit: %v", err)
+	}
+	if model.finalCalls != 0 {
+		t.Fatal("oversized overview was incorrectly approved for a final AI reply")
 	}
 }
