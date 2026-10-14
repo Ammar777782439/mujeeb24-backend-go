@@ -69,7 +69,17 @@ func (e *HTTPError) Retryable() bool {
 // SendInteraction invokes a single proxy request, without nested retries.
 // LiteLLM owns upstream routing. Context cancellation is authoritative.
 func (c *Client) SendInteraction(ctx context.Context, payload any) (json.RawMessage, error) {
-	return c.sendJSON(ctx, c.endpoint, payload)
+	body, _, err := c.SendInteractionWithMetadata(ctx, payload)
+	return body, err
+}
+
+// SendInteractionWithMetadata returns the gateway's native accounting headers.
+// A missing cost header means unknown cost, never a free request.
+func (c *Client) SendInteractionWithMetadata(ctx context.Context, payload any) (json.RawMessage, ResponseMetadata, error) {
+	if c == nil {
+		return nil, ResponseMetadata{}, errors.New("LiteLLM client is not configured")
+	}
+	return c.sendJSONWithMetadata(ctx, c.endpoint, payload)
 }
 
 // SendChatCompletion is used for stateless, explicitly replayed B2B tool
@@ -79,49 +89,68 @@ func (c *Client) SendChatCompletion(ctx context.Context, payload any) (json.RawM
 		return nil, errors.New("LiteLLM client is not configured")
 	}
 	endpoint := strings.TrimSuffix(c.endpoint, "/v1beta/interactions") + "/v1/chat/completions"
-	return c.sendJSON(ctx, endpoint, payload)
+	body, _, err := c.sendJSONWithMetadata(ctx, endpoint, payload)
+	return body, err
+}
+
+// SendChatCompletionWithMetadata serves B2B tool loops without hiding gateway spend.
+func (c *Client) SendChatCompletionWithMetadata(ctx context.Context, payload any) (json.RawMessage, ResponseMetadata, error) {
+	if c == nil {
+		return nil, ResponseMetadata{}, errors.New("LiteLLM client is not configured")
+	}
+	endpoint := strings.TrimSuffix(c.endpoint, "/v1beta/interactions") + "/v1/chat/completions"
+	return c.sendJSONWithMetadata(ctx, endpoint, payload)
 }
 
 func (c *Client) sendJSON(ctx context.Context, endpoint string, payload any) (json.RawMessage, error) {
+	body, _, err := c.sendJSONWithMetadata(ctx, endpoint, payload)
+	return body, err
+}
+
+func (c *Client) sendJSONWithMetadata(ctx context.Context, endpoint string, payload any) (json.RawMessage, ResponseMetadata, error) {
 	if c == nil {
-		return nil, errors.New("LiteLLM client is not configured")
+		return nil, ResponseMetadata{}, errors.New("LiteLLM client is not configured")
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, ResponseMetadata{}, err
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("marshal LiteLLM request: %w", err)
+		return nil, ResponseMetadata{}, fmt.Errorf("marshal LiteLLM request: %w", err)
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("build LiteLLM request: %w", err)
+		return nil, ResponseMetadata{}, fmt.Errorf("build LiteLLM request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.client.Do(req)
 	if err != nil {
 		if requestCtx.Err() != nil {
-			return nil, requestCtx.Err()
+			return nil, ResponseMetadata{}, requestCtx.Err()
 		}
-		return nil, fmt.Errorf("send LiteLLM request: %w", err)
+		return nil, ResponseMetadata{}, fmt.Errorf("send LiteLLM request: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Never log or return raw upstream error bodies (they may contain user text).
-		return nil, &HTTPError{StatusCode: resp.StatusCode}
+		return nil, ResponseMetadata{}, &HTTPError{StatusCode: resp.StatusCode}
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("read LiteLLM response: %w", err)
+		return nil, ResponseMetadata{}, fmt.Errorf("read LiteLLM response: %w", err)
 	}
 	if len(raw) > maxResponseBytes {
-		return nil, errors.New("LiteLLM response exceeds size limit")
+		return nil, ResponseMetadata{}, errors.New("LiteLLM response exceeds size limit")
 	}
 	if !json.Valid(raw) {
-		return nil, errors.New("LiteLLM response is not JSON")
+		return nil, ResponseMetadata{}, errors.New("LiteLLM response is not JSON")
 	}
-	return raw, nil
+	meta, err := metadataFromHeaders(resp.Header)
+	if err != nil {
+		return nil, ResponseMetadata{}, err
+	}
+	return raw, meta, nil
 }
