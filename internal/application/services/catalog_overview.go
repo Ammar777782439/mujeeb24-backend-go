@@ -34,8 +34,10 @@ type CatalogOverviewResponse struct {
 }
 
 const (
-	overviewBatchMaxRunes  = 700
-	overviewMergeMaxRunes  = 700
+	// Intermediate evidence digests aren't customer-facing messages.
+	// The final reply retains its independent 1800-rune transport limit.
+	overviewBatchMaxRunes  = 3200
+	overviewMergeMaxRunes  = 3200
 	overviewFinalMaxRunes  = 1800
 	overviewMaxMergeRounds = 12
 )
@@ -116,9 +118,9 @@ func (c *CatalogBatchController) runCatalogOverview(ctx context.Context, input C
 						return CatalogEvaluationResult{}, fmt.Errorf("Gemini catalog overview batch %d: %w", batchNumber, err)
 					}
 					c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, result.Usage, fmt.Sprintf("overview_batch_%d", batchNumber))
-					if strings.TrimSpace(result.Text) == "" || utf8.RuneCountInString(result.Text) > overviewBatchMaxRunes {
-						return CatalogEvaluationResult{}, fmt.Errorf("overview batch %d returned empty or oversized evidence summary", batchNumber)
-					}
+					if err := validateOverviewDigest("batch", batchNumber, result.Text, overviewBatchMaxRunes); err != nil {
+					return CatalogEvaluationResult{}, err
+				}
 					// Only mark these input facts reviewed after the provider
 					// successfully returns a usable intermediate summary.
 					for _, item := range chunk.Items {
@@ -177,8 +179,8 @@ func (c *CatalogBatchController) runCatalogOverview(ctx context.Context, input C
 				return CatalogEvaluationResult{}, fmt.Errorf("merge catalog overview round %d: %w", round+1, err)
 			}
 			c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, result.Usage, fmt.Sprintf("overview_merge_round_%d_group_%d", round+1, i))
-			if strings.TrimSpace(result.Text) == "" || utf8.RuneCountInString(result.Text) > overviewMergeMaxRunes {
-				return CatalogEvaluationResult{}, errors.New("Gemini returned an invalid intermediate overview digest")
+			if err := validateOverviewDigest("merge", round+1, result.Text, overviewMergeMaxRunes); err != nil {
+				return CatalogEvaluationResult{}, err
 			}
 			next = append(next, result.Text)
 			i += end
@@ -274,4 +276,17 @@ func (c *CatalogBatchController) fitOverviewSummaries(ctx context.Context, ai Ca
 		}
 	}
 	return 0, errors.New("a single catalog digest exceeds the verified overview context")
+}
+
+// validateOverviewDigest never truncates merchant evidence. Diagnostics
+// include only sizes (not business/private catalog data).
+func validateOverviewDigest(stage string, number int, digest string, maxRunes int) error {
+	count := utf8.RuneCountInString(digest)
+	if strings.TrimSpace(digest) == "" {
+ 		return fmt.Errorf("overview %s %d returned empty evidence summary (runes=%d)", stage, number, count)
+ 	}
+	if count > maxRunes {
+ 		return fmt.Errorf("overview %s %d exceeded internal digest limit (runes=%d max=%d)", stage, number, count, maxRunes)
+ 	}
+	return nil
 }
