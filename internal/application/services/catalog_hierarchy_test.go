@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -24,7 +25,7 @@ func TestHierarchicalCatalogIncludesAllPagesWithoutReduction(t *testing.T) {
 		t.Fatalf("invalid hierarchy terminal decision: %+v", result.Decision)
 	}
 	text := strings.Join(result.Messages, "\n")
-	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "📁 Main", "├─"} {
+	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "📂 Main", "• "} {
 		if !strings.Contains(text, id) {
 			t.Fatalf("hierarchy omitted %q", id)
 		}
@@ -34,11 +35,13 @@ func TestHierarchicalCatalogIncludesAllPagesWithoutReduction(t *testing.T) {
 	}
 }
 
-func TestHierarchicalCatalogNeverTruncatesLongArabicDescriptions(t *testing.T) {
-	original := strings.Repeat("تفاصيل الباقة العربية الكاملة ", 270)
+func TestCatalogHierarchyIsHumanReadableAndNeverSplitsProduct(t *testing.T) {
+	original := strings.Repeat("تفاصيل الخدمة العربية الطويلة ", 100)
 	price, currency, variantID := "12000.0000", "YER", "variant-1"
 	lines := &catalogHierarchyLines{}
-	item := CatalogAIItem{ID: "item-1", Name: "الباقة الأساسية", CatalogID: "catalog-1", LongDescription: &original, Variants: []CatalogAIVariant{{ID: variantID, CatalogItemID: "item-1", Name: "سنوي"}}, Offers: []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1", VariantID: &variantID, Name: "سعر السنة", Amount: &price, Currency: &currency}}}
+	item := CatalogAIItem{ID: "item-1", Name: "الباقة الأساسية", CatalogID: "catalog-1", LongDescription: &original,
+		Variants: []CatalogAIVariant{{ID: variantID, CatalogItemID: "item-1", Name: "سنوي"}},
+		Offers: []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1", VariantID: &variantID, Name: "سعر السنة", Amount: &price, Currency: &currency}}}
 	if err := lines.appendItem("باقات مجيب", item, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -46,36 +49,63 @@ func TestHierarchicalCatalogNeverTruncatesLongArabicDescriptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(messages) < 2 {
-		t.Fatal("long hierarchy should be broken into safe transport messages")
+	if len(messages) != 1 {
+		t.Fatalf("one short product should be one customer reply, got %d messages", len(messages))
 	}
-	var parts []string
-	for i, msg := range messages {
-		if !strings.Contains(msg, "الجزء") {
-			t.Fatalf("part %d is not labeled", i+1)
+	got := messages[0]
+	for _, want := range []string{"أهلًا وسهلًا", "📂 باقات مجيب", "• الباقة الأساسية", "سنوي: 12,000 ريال يمني"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing customer-facing value %q: %q", want, got)
 		}
-		if len([]rune(msg)) > catalogHierarchyPartRunes+90 {
-			t.Fatal("provider message exceeds safe length")
-		}
-		parts = append(parts, strings.SplitN(msg, "\n", 2)[1])
 	}
-	reconstructed := strings.Join(parts, "")
-	if !strings.Contains(reconstructed, original) || !strings.Contains(reconstructed, "12000.0000 YER") || !strings.Contains(reconstructed, "سنوي") {
-		t.Fatal("hierarchy text was truncated or commercial relations were lost")
+	if strings.Contains(got, "12000.0000") || strings.Contains(got, "catalog-1") || strings.Contains(got, "variant-1") || strings.Contains(got, original) {
+		t.Fatal("customer-facing summary leaked raw/oversized commercial projection")
+	}
+	if item.LongDescription == nil || *item.LongDescription != original {
+		t.Fatal("source product description was modified")
 	}
 }
 
-func TestHierarchicalCatalogRejectsDetachedOfferAndOverlongListing(t *testing.T) {
+func TestCatalogHierarchyGroupsCategoriesAndItems(t *testing.T) {
+	lines := &catalogHierarchyLines{}
+	price, currency := "250.0000", "SAR"
+	for i := 0; i < 8; i++ {
+		item := CatalogAIItem{ID: fmt.Sprintf("item-%d", i), Name: fmt.Sprintf("خيار رقم %d", i), CatalogID: "catalog-1",
+			Offers: []CatalogAIOffer{{ID: fmt.Sprintf("offer-%d", i), CatalogItemID: fmt.Sprintf("item-%d", i), Amount: &price, Currency: &currency}}}
+		if err := lines.appendItem("باقات السفر", item, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	messages, err := lines.messages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	all := strings.Join(messages, "\n")
+	if strings.Count(all, "📂 باقات السفر") != 1 {
+		t.Fatalf("section header repeated per product: %q", all)
+	}
+	for i := 0; i < 8; i++ {
+		if strings.Count(all, fmt.Sprintf("• خيار رقم %d", i)) != 1 {
+			t.Fatalf("item %d is missing or repeated", i)
+		}
+	}
+}
+
+func TestCatalogHierarchyRejectsDetachedOfferAndOversizedItem(t *testing.T) {
 	wrong := "variant-from-another-item"
 	lines := &catalogHierarchyLines{}
-	err := lines.appendItem("C", CatalogAIItem{ID: "item-1", Offers: []CatalogAIOffer{{ID: "offer", CatalogItemID: "item-1", VariantID: &wrong}}}, nil)
+	err := lines.appendItem("C", CatalogAIItem{ID: "item-1", Name: "Item", Offers: []CatalogAIOffer{{ID: "offer", CatalogItemID: "item-1", VariantID: &wrong}}}, nil)
 	if err == nil {
 		t.Fatal("detached offer incorrectly accepted")
 	}
-	veryLong := &catalogHierarchyLines{}
-	veryLong.add(strings.Repeat("ف", catalogHierarchyPartRunes*catalogHierarchyMaxParts+1))
-	if _, err := veryLong.messages(); err == nil {
-		t.Fatal("unsafe number of messages accepted")
+	lines = &catalogHierarchyLines{}
+	long := strings.Repeat("اسم طويل جدا ", 180)
+	item := CatalogAIItem{ID: "item-2", Name: "Item", Offers: []CatalogAIOffer{{ID: "offer", CatalogItemID: "item-2", Name: long}}}
+	if err := lines.appendItem("Catalog", item, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lines.messages(); err == nil {
+		t.Fatal("overlong product must not be split into incoherent fragments")
 	}
 }
 
