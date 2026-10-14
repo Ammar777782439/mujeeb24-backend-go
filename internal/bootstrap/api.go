@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -161,7 +160,10 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	platformOperations := services.NewInMemoryPlatformOperationsRepository(
 		external.LiteLLMCustomerDecision != nil && external.LLMConfigError == nil,
 		external.SocialAPI != nil,
-	)
+	) 
+	if external.LiteLLMPlatformConfig != nil {
+		platformOperations.SetAIModel(external.LiteLLMPlatformConfig.CustomerModel)
+	}
 	if external.SocialAPIHealthProbe != nil {
 		platformOperations.RegisterProbe("socialapi", external.SocialAPIHealthProbe)
 	}
@@ -170,59 +172,6 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	// one authoritative AI path: bounded manifest on the initial turn, then
 	// complete catalog paging/batching only when the model requests it.
 	// This prevents competing catalog-read paths and keeps evidence deterministic.
-	// Per §1-2: create the AIConfigurationCache + AIProviderConfigRepository
-	// unconditionally — the Platform Admin can manage credentials and models
-	// even when AutoReply is disabled. The cache seeds from env on first
-	// start, then switches to DB-backed dynamic config after the admin
-	// stores a configuration via the Platform Admin API.
-	//
-	// Per P1-9: AI_CONFIG_ENCRYPTION_KEY is MANDATORY when AI Provider
-	// Configuration is in use (i.e., when AIConfigRepo will be wired into
-	// PlatformDeps below). Without it, the repository refuses to encrypt
-	// or decrypt API keys — see ErrEncryptionKeyNotConfigured. We fail
-	// fast at startup rather than silently falling back to base64.
-	//
-	// The check is enforced here (not in the repository constructor) so
-	// the error message is actionable: the operator knows exactly which
-	// env var to set. The repository remains a pure data layer.
-	encryptionKey := []byte(os.Getenv("AI_CONFIG_ENCRYPTION_KEY"))
-	if len(encryptionKey) == 0 {
-		return nil, errors.New("AI_CONFIG_ENCRYPTION_KEY is not set — encrypted credential storage is mandatory. Set AI_CONFIG_ENCRYPTION_KEY to a 32-byte (or longer) random value before starting the API. Example: openssl rand -base64 32 | tr -d '\\n'")
-	}
-	// Per Item 11: do NOT pad short keys. The previous implementation
-	// padded keys shorter than 32 bytes with zeros — that's a security
-	// anti-pattern (reduces effective key entropy). The key MUST be
-	// 32 bytes (AES-256) or longer. If the operator provides a short
-	// key, fail fast with a clear message.
-	if len(encryptionKey) < 32 {
-		return nil, fmt.Errorf("AI_CONFIG_ENCRYPTION_KEY must be at least 32 bytes (AES-256), got %d bytes. Generate a proper key: openssl rand -base64 32 | tr -d '\\n'", len(encryptionKey))
-	}
-	// If the key is longer than 32 bytes, truncate to 32 (AES-256 block size).
-	// This is safe — the key is still full-entropy.
-	if len(encryptionKey) > 32 {
-		encryptionKey = encryptionKey[:32]
-	}
-	aiConfigRepo := postgres.NewAIProviderConfigRepository(database, encryptionKey)
-	aiConfigCache := services.NewAIConfigurationCache(aiConfigRepo, aiConfigRepo)
-	// LiteLLM gateway mode uses env-backed, distinct customer/catalog/merchant
-	// aliases. The legacy Gemini cache is not authoritative and must not
-	// be seeded from GEMINI_API_KEY when gateway-only mode is enabled.
-	if external.LiteLLMPlatformConfig == nil {
-		aiConfigCache.LoadFromEnv(
-			os.Getenv("GEMINI_API_KEY"),
-			func() string {
-				m := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
-				if m == "" {
-					m = "gemini-3.8-flash"
-				}
-				return m
-			}(),
-			"https://generativelanguage.googleapis.com",
-			4096,  // LLMMaxOutputTokens default
-			48000, // LLMMaxInputCharacters default; bounded app guard below Gemini 3.8 context capacity
-			"",
-		)
-	}
 
 	if external.AutoReplyEnabled || external.CustomerSalesEnabled {
 		// One customer-sales decision interface owns B2C and summary requests.
@@ -449,6 +398,10 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	var modelDiscovery ports.ModelDiscoveryClient
 	if external.LiteLLMPlatformConfig != nil {
 		modelDiscovery = litellm.NewModelsClient()
+		platformOperations.RegisterProbe("litellm", gatewayHealthProbe{
+			settings: external.LiteLLMPlatformConfig,
+			discovery: modelDiscovery,
+		})
 	}
 	dashboardServer = dashboardServer.WithPlatformDeps(handlers.PlatformDeps{
 		Plans:               postgres.NewPlanRepository(database),
@@ -458,11 +411,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		Payments:            postgres.NewPaymentRepository(database),
 		Support:             postgres.NewSupportRepository(database),
 		AIUsage:             postgres.NewAIUsageRepository(database),
-		AIProviderPricing:   postgres.NewAIProviderPricingRepository(database),
 		Operations:          platformOperations,
 		ChannelReader:       postgres.NewPlatformChannelReadRepository(database),
-		AIConfigRepo:        aiConfigRepo,
-		AIConfigCache:       aiConfigCache,
 		ModelDiscovery:      modelDiscovery,
 		LiteLLMSettings:     external.LiteLLMPlatformConfig,
 		AssignBusinessOwner: assignBusinessOwner,
