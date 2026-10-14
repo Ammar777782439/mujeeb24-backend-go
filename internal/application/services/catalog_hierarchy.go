@@ -177,6 +177,15 @@ func (p *catalogHierarchyLines) appendItem(catalogName string, item CatalogAIIte
 	if item.ItemType != "" {
 		p.add("    النوع: " + item.ItemType)
 	}
+	if item.PricingMode != "" {
+		p.add("    سياسة التسعير: " + item.PricingMode)
+	}
+	if item.AvailabilityMode != "" {
+		p.add("    آلية التوفر: " + item.AvailabilityMode)
+	}
+	if item.FulfillmentMode != "" {
+		p.add("    طريقة التنفيذ: " + item.FulfillmentMode)
+	}
 	if item.ShortDescription != nil && *item.ShortDescription != "" {
 		p.add("    الوصف: " + *item.ShortDescription)
 	}
