@@ -119,8 +119,8 @@ func (c *CatalogBatchController) runCatalogOverview(ctx context.Context, input C
 					}
 					c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, result.Usage, fmt.Sprintf("overview_batch_%d", batchNumber))
 					if err := validateOverviewDigest("batch", batchNumber, result.Text, overviewBatchMaxRunes); err != nil {
-					return CatalogEvaluationResult{}, err
-				}
+						return CatalogEvaluationResult{}, err
+					}
 					// Only mark these input facts reviewed after the provider
 					// successfully returns a usable intermediate summary.
 					for _, item := range chunk.Items {

@@ -50,12 +50,12 @@ func (r *largeOverviewCatalogRepo) ListProjectionPage(_ context.Context, request
 
 type overviewModelFixture struct {
 	*capabilityBatchModel
-	batchCalls  int
-	mergeCalls  int
-	finalCalls  int
-	items       map[string]struct{}
-	emptyDigest     bool
-	oversized       bool
+	batchCalls       int
+	mergeCalls       int
+	finalCalls       int
+	items            map[string]struct{}
+	emptyDigest      bool
+	oversized        bool
 	batchDigestRunes int
 	mergeDigestRunes int
 }
@@ -185,7 +185,7 @@ func TestHundredCatalogOverviewAcceptsLongInternalGeminiDigests(t *testing.T) {
 	repo := &largeOverviewCatalogRepo{capabilityCatalogRepo: &capabilityCatalogRepo{}}
 	model := &overviewModelFixture{
 		capabilityBatchModel: &capabilityBatchModel{},
-		batchDigestRunes: 1500, mergeDigestRunes: 1500,
+		batchDigestRunes:     1500, mergeDigestRunes: 1500,
 	}
 	controller := &CatalogBatchController{
 		CatalogAI: repo, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 1000,
@@ -206,7 +206,7 @@ func TestCatalogOverviewRejectsTrulyOversizedInternalDigestWithSize(t *testing.T
 	repo := &largeOverviewCatalogRepo{capabilityCatalogRepo: &capabilityCatalogRepo{}}
 	model := &overviewModelFixture{
 		capabilityBatchModel: &capabilityBatchModel{},
-		batchDigestRunes: overviewBatchMaxRunes + 1,
+		batchDigestRunes:     overviewBatchMaxRunes + 1,
 	}
 	controller := &CatalogBatchController{
 		CatalogAI: repo, Gemini: model, RunRepo: &capabilityRunRepo{}, TokenBudget: 1000,
