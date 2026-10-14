@@ -139,6 +139,12 @@ func (p *catalogHierarchyLines) messages() ([]string, error) {
 	partRunes := 0
 	for _, line := range p.lines {
 		remaining := []rune(line + "\n")
+		// Keep a complete commercial line in one message whenever it fits.
+		// Only oversized original descriptions may cross part boundaries.
+		if partRunes > 0 && len(remaining) <= catalogHierarchyPartRunes && len(remaining) > catalogHierarchyPartRunes-partRunes {
+			flush()
+			partRunes = 0
+		}
 		for len(remaining) > 0 {
 			room := catalogHierarchyPartRunes - partRunes
 			if room == 0 {
