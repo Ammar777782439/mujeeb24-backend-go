@@ -275,4 +275,3 @@ func (c *CatalogBatchController) fitOverviewSummaries(ctx context.Context, ai Ca
 	}
 	return 0, errors.New("a single catalog digest exceeds the verified overview context")
 }
-

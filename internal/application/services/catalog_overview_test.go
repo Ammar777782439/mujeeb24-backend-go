@@ -50,10 +50,10 @@ func (r *largeOverviewCatalogRepo) ListProjectionPage(_ context.Context, request
 
 type overviewModelFixture struct {
 	*capabilityBatchModel
-	batchCalls      int
-	mergeCalls      int
-	finalCalls      int
-	items           map[string]struct{}
+	batchCalls  int
+	mergeCalls  int
+	finalCalls  int
+	items       map[string]struct{}
 	emptyDigest bool
 	oversized   bool
 }
