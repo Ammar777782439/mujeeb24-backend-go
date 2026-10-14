@@ -415,7 +415,7 @@ func formatCatalogCustomerPrice(amount, currency *string) string {
 		if strings.HasPrefix(intPart, "-") {
 			sign, intPart = "-", strings.TrimPrefix(intPart, "-")
 		}
-		for i := len(intPart)-3; i > 0; i -= 3 {
+		for i := len(intPart) - 3; i > 0; i -= 3 {
 			intPart = intPart[:i] + "," + intPart[i:]
 		}
 		v = sign + intPart
