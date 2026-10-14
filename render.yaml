@@ -55,29 +55,32 @@ services:
   # LiteLLM gateway is a separate Render web service; do not change the
   # existing API deployment branch or turn on live customer replies here.
   # Uses a dedicated EXTERNAL PostgreSQL database for keys, models, and spend.
+  # Render-managed 256-bit secrets are never committed to Git.
+  # A tiny wrapper adds the sk- prefix and invokes the official entrypoint.
+  # Keep the existing API service's branch and settings unchanged.
   - type: web
     name: mujeeb24-litellm
-    runtime: image
+    runtime: docker
     plan: free
-    image:
-      url: ghcr.io/berriai/litellm:v1.103.0
+    branch: feat/ai-litellm-multi-provider-gateway
+    dockerfilePath: ./deploy/litellm/Dockerfile.render
+    autoDeployTrigger: off
     healthCheckPath: /health/readiness
 
     envVars:
       - key: PORT
         value: "4000"
 
-      - key: HOST
-        value: 0.0.0.0
-
+      # Neon database dedicated to LiteLLM, NEVER Mujeeb's own DATABASE_URL.
       - key: DATABASE_URL
         sync: false
 
-      - key: LITELLM_MASTER_KEY
-        sync: false
+      # Created once by Render on first Blueprint sync; retained on redeploy.
+      - key: LITELLM_MASTER_KEY_SEED
+        generateValue: true
 
-      - key: LITELLM_SALT_KEY
-        sync: false
+      - key: LITELLM_SALT_KEY_SEED
+        generateValue: true
 
       - key: STORE_MODEL_IN_DB
         value: "True"
@@ -86,4 +89,7 @@ services:
         value: admin
 
       - key: UI_PASSWORD
-        sync: false
+        generateValue: true
+
+      - key: LITELLM_HIDE_DEFAULT_CREDENTIALS_HINT
+        value: "true"
