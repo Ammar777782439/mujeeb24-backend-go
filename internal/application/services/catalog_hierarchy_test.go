@@ -110,6 +110,39 @@ func TestCatalogHierarchyRejectsMissingOrForeignGeminiItemCoverage(t *testing.T)
 	}
 }
 
+
+func TestCatalogReplyPartitionReservesCustomerFacingOutputSpace(t *testing.T) {
+	model := &aiCatalogReplyFixture{capabilityBatchModel: &capabilityBatchModel{}}
+	controller := &CatalogBatchController{Gemini: model, TokenBudget: 20000}
+	projection := CatalogAIProjection{Catalogs: []CatalogAICatalog{{ID: "c1", Name: "المنتجات", Status: "active"}}}
+	for i := 0; i < 12; i++ {
+		id := fmt.Sprintf("item-%d", i)
+		projection.Items = append(projection.Items, CatalogAIItem{ID: id, CatalogID: "c1", Name: fmt.Sprintf("منتج رقم %d", i)})
+	}
+	parts, err := controller.partitionCatalogForReply(context.Background(), model, CatalogEvaluationInput{CustomerMessage: "أريد جميع المنتجات"}, projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parts) < 2 {
+		t.Fatalf("large all-options response was not split to reserve Gemini output space: %d parts", len(parts))
+	}
+	covered := map[string]bool{}
+	for _, part := range parts {
+		if estimateCatalogReplyRunes(part.Items) > catalogReplyMaxRunes*3/4 {
+			t.Fatal("part exceeded AI prose output budget")
+		}
+		for _, item := range part.Items {
+			if covered[item.ID] {
+				t.Fatalf("item appeared in multiple model parts: %s", item.ID)
+			}
+			covered[item.ID] = true
+		}
+	}
+	if len(covered) != 12 {
+		t.Fatalf("catalog splitting lost product information: %d of 12", len(covered))
+	}
+}
+
 func TestStructuredCatalogReplyAllowsNaturalProductNames(t *testing.T) {
 	projection := CatalogAIProjection{Items: []CatalogAIItem{{ID: "i-1", CatalogID: "c-1", Name: "باقة مجيب الأساسية"}}}
 	got, err := assembleCatalogReply(projection, CatalogReplyOutput{
