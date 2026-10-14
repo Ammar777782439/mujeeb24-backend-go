@@ -257,6 +257,8 @@ func (p *catalogHierarchyLines) compactMessages(names []string, total int) ([]st
 			if utf8.RuneCountInString(msg.String())+size > catalogHierarchyPartRunes {
 				parts = append(parts, strings.TrimSpace(msg.String()))
 				msg.Reset()
+				// Repeat the category heading in the continuation part.
+				section = "\n📂 " + name + "\n"
 			}
 			if !strings.Contains(msg.String(), section) {
 				msg.WriteString(section)
