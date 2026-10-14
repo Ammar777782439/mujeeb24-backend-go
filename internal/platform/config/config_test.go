@@ -59,6 +59,7 @@ func TestLoadFromEnvDisablesAutoReplyByDefaultAndReadsOverride(t *testing.T) {
 	t.Setenv("LITELLM_GATEWAY_ONLY", "true")
 	t.Setenv("LITELLM_BASE_URL", "http://127.0.0.1:4000")
 	t.Setenv("LITELLM_API_KEY", "test-gateway-virtual-key")
+	t.Setenv("LITELLM_USD_TO_YER_RATE", "500")
 	t.Setenv("LITELLM_CUSTOMER_MODEL", "mujeeb-customer")
 	t.Setenv("LITELLM_CATALOG_MODEL", "mujeeb-catalog")
 	t.Setenv("LITELLM_MERCHANT_MODEL", "mujeeb-merchant")

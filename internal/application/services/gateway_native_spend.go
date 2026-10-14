@@ -12,7 +12,7 @@ import (
 func gatewayNativeSpend(usage ports.CustomerSalesUsageTelemetry, fxRate string) (string, string, string, bool) {
 	if usage.Provider != "litellm" || !usage.GatewayCostKnown ||
 		strings.TrimSpace(usage.GatewayCostUSD) == "" || strings.TrimSpace(fxRate) == "" {
-		return "litellm_native_usd", "", "", true
+		return "unknown", "", "", true
 	}
 	return "litellm_native_usd", usage.GatewayCostUSD, fxRate, false
 }
