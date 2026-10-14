@@ -34,7 +34,7 @@ func TestMerchantCatalogUpdateSchemaMatchesSupportedChanges(t *testing.T) {
 }
 
 func TestParseMerchantCatalogExistingOfferPriceAndDescriptionUpdate(t *testing.T) {
-	proposal, err := parseMerchantCatalogProposal(merchantCatalogInteractionResponse{Steps: []merchantCatalogInteractionStep{{Type: "model_output", Content: []merchantCatalogOutputPart{{Type: "text", Text: `{"schema_version":3,"status":"resolved","operation":"update","response_text":"اقتراح تعديل السعر والوصف","create":null,"delete":null,"update":{"item_id":"item-1","changes":{"long_description":"رحلة تشمل وجبة الغداء"},"existing_offers":[{"id":"offer-1","amount":"450.0000"}]}}`}}}}})
+	proposal, err := parseMerchantCatalogProposal(`{"schema_version":3,"status":"resolved","operation":"update","response_text":"اقتراح تعديل السعر والوصف","create":null,"delete":null,"update":{"item_id":"item-1","changes":{"long_description":"رحلة تشمل وجبة الغداء"},"existing_offers":[{"id":"offer-1","amount":"450.0000"}]}}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,11 +91,11 @@ func TestParseMerchantCatalogProposalRejectsUnknownFieldsAndTrailingJSON(t *test
 		`{"schema_version":3,"delete":{"item_id":"wrong-contract"}}`,
 		`{"schema_version":3} {"operation":"delete"}`,
 	} {
-		if _, err := parseMerchantCatalogProposal(merchantCatalogInteractionResponse{OutputText: raw}); err == nil {
+		if _, err := parseMerchantCatalogProposal(raw); err == nil {
 			t.Fatalf("accepted unsupported or trailing data: %s", raw)
 		}
 	}
-	if _, err := parseMerchantCatalogProposal(merchantCatalogInteractionResponse{OutputText: `{"schema_version":3,"create":{"attributes":{"discount_label":{"text":"informational only"},"custom_array":[1,false,null]}}}`}); err != nil {
+	if _, err := parseMerchantCatalogProposal(`{"schema_version":3,"create":{"attributes":{"discount_label":{"text":"informational only"},"custom_array":[1,false,null]}}}`); err != nil {
 		t.Fatalf("dynamic JSON attributes rejected: %v", err)
 	}
 }

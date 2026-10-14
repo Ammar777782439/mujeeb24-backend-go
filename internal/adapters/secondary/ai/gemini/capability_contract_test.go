@@ -1,16 +1,12 @@
 package gemini
 
 import (
-	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 )
 
 func TestCustomerCapabilityBoundary(t *testing.T) {
@@ -63,7 +59,7 @@ func TestCustomerCapabilityBoundary(t *testing.T) {
 	}
 }
 
-func TestGeminiCatalogDetailCapabilityContract(t *testing.T) {
+func TestCatalogDetailCapabilityContract(t *testing.T) {
 	tools := customerSalesTools([]ports.CustomerSalesCapability{ports.CustomerSalesCapabilityFullCatalog})
 	if len(tools) != 1 {
 		t.Fatal("catalog capability is unavailable")
@@ -80,80 +76,6 @@ func TestGeminiCatalogDetailCapabilityContract(t *testing.T) {
 	decision, err := parseCustomerSalesCapability(response, tools)
 	if err != nil || decision.Presentation != "detail" || decision.Capability != ports.CustomerSalesCapabilityFullCatalog {
 		t.Fatalf("Gemini's requested detail mode was lost: %+v %v", decision, err)
-	}
-}
-
-func TestFullCatalogCapabilityIsAnInternalRequest(t *testing.T) {
-	calls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls++
-		var request interactionRequest
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			t.Fatal(err)
-		}
-		if len(request.Tools) != 4 || request.GenerationConfig.ToolChoice != "any" {
-			t.Fatalf("wrong capabilities: %+v", request)
-		}
-		_, _ = w.Write([]byte(`{"status":"requires_action","steps":[{"type":"function_call","id":"catalog-call","name":"evaluate_full_catalog","arguments":{"presentation":"hierarchy"}}],"usage":{"total_input_tokens":31,"total_output_tokens":8}}`))
-	}))
-	defer server.Close()
-	base, _ := NewGeminiHTTPClient(GeminiHTTPClientConfig{BaseURL: server.URL, APIKey: "test", Model: "test"})
-	adapter, _ := NewGeminiCustomerSalesAdapter(base)
-	out, err := adapter.Decide(context.Background(), ports.CustomerSalesDecisionInput{Request: ports.CustomerSalesDecisionRequest{Text: "شيء مناسب للعائلة"}, Capabilities: ports.CustomerSalesCapabilities(true)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out.Decision.Capability != ports.CustomerSalesCapabilityFullCatalog || out.Decision.ResponseText != "" || calls != 1 || out.Usage.ModelRequests != 1 {
-		t.Fatalf("catalog request must not become final reply: %+v", out)
-	}
-}
-
-func TestFinalCatalogDecisionUsesOnlyTerminalCapabilitiesAndCountsTools(t *testing.T) {
-	calls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls++
-		var request map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			t.Fatal(err)
-		}
-		if strings.HasSuffix(r.URL.Path, ":countTokens") {
-			envelope := request["generateContentRequest"].(map[string]any)
-			if len(envelope["tools"].([]any)) != 1 {
-				t.Fatal("token count omitted function declarations")
-			}
-			if _, ok := envelope["generationConfig"].(map[string]any)["responseJsonSchema"]; ok {
-				t.Fatal("final tokenizer uses obsolete output schema")
-			}
-			_, _ = w.Write([]byte(`{"totalTokens":125}`))
-			return
-		}
-		tools := request["tools"].([]any)
-		if len(tools) != 3 {
-			t.Fatalf("unexpected final tools: %+v", tools)
-		}
-		for _, tool := range tools {
-			if tool.(map[string]any)["name"] == "evaluate_full_catalog" {
-				t.Fatal("final evaluation must not restart retrieval")
-			}
-		}
-		if _, ok := request["response_format"]; ok {
-			t.Fatal("final still uses proposal schema")
-		}
-		system := request["system_instruction"].(string)
-		if !strings.Contains(system, "FINAL EVALUATION") || strings.Contains(system, "لا تصدر الرد النهائي للعميل") {
-			t.Fatal("final prompt has conflicting batch instructions")
-		}
-		_, _ = w.Write([]byte(`{"status":"requires_action","steps":[{"type":"function_call","id":"final","name":"handoff_to_human","arguments":{"response_text":"سأحوّل طلبك للفريق"}}],"usage":{"total_input_tokens":125,"total_output_tokens":20}}`))
-	}))
-	defer server.Close()
-	client, _ := NewBatchClient(BatchClientConfig{BaseURL: server.URL, APIKey: "test", Model: "test"})
-	input := services.FinalEvaluationInput{EntityContract: services.BuildCatalogEntityContractPayload()}
-	if tokens, err := client.CountFinalTokens(context.Background(), input, "verified candidates"); err != nil || tokens != 125 {
-		t.Fatalf("count %d %v", tokens, err)
-	}
-	proposal, usage, err := client.FinalEvaluateWithDetails(context.Background(), input, "verified candidates")
-	if err != nil || proposal.Capability != ports.CustomerSalesCapabilityHandoff || proposal.ResponseText != "سأحوّل طلبك للفريق" || usage.InputTokens != 125 || calls != 2 {
-		t.Fatalf("final %+v usage %+v err %v", proposal, usage, err)
 	}
 }
 
@@ -187,5 +109,68 @@ func TestCustomerCapabilityDescriptionsEnforceOperationBoundary(t *testing.T) {
 	if !strings.Contains(handoff.Description, "start, confirm, complete, or change an external operation") ||
 		!strings.Contains(handoff.Description, "Short confirmations inherit the prior conversational goal") {
 		t.Fatalf("handoff_to_human description lost unsupported-operation boundary: %q", handoff.Description)
+	}
+}
+
+func TestStrictCustomerProposalRejectsUnknownFields(t *testing.T) {
+	var proposal ports.CapabilityDecision
+	err := decodeStrictStructuredJSON([]byte(`{"status":"resolved","action":"answer","response_text":"ok","authorized":true}`), &proposal)
+	if err == nil {
+		t.Fatal("unknown top-level proposal field must be rejected")
+	}
+}
+
+func TestStrictCustomerProposalRejectsUnknownSelectedFields(t *testing.T) {
+	var proposal ports.CapabilityDecision
+	err := decodeStrictStructuredJSON([]byte(`{"status":"resolved","action":"answer","response_text":"ok","selected":[{"item_id":"item-1","payment_confirmed":true}]}`), &proposal)
+	if err == nil {
+		t.Fatal("unknown selected[] field must be rejected")
+	}
+}
+
+func TestCustomerCapabilitySchemaDisallowsAdditionalProperties(t *testing.T) {
+	schema := customerSalesResponseParameters(ports.CustomerSalesCapabilityRespondWithoutAction)
+	if schema["additionalProperties"] != false {
+		t.Fatalf("proposal schema must close top-level properties: %#v", schema["additionalProperties"])
+	}
+	selected := schema["properties"].(map[string]any)["selected"].(map[string]any)
+	item := selected["items"].(map[string]any)
+	if item["additionalProperties"] != false {
+		t.Fatalf("selected item schema must close additional properties: %#v", item["additionalProperties"])
+	}
+}
+
+func TestBatchCandidateParserRejectsUnknownFields(t *testing.T) {
+	resp := catalogCandidateResponse{
+		Candidates: []batchCandidate{{
+			Content: batchContent{Parts: []batchPart{{
+				Text: `{"candidates":[{"item_id":"item-1","authorized":true}]}`,
+			}}},
+		}},
+	}
+	if _, err := parseBatchCandidates(resp); err == nil {
+		t.Fatal("unknown batch candidate field must be rejected")
+	}
+}
+
+func TestFinalCapabilityRejectsUnknownFields(t *testing.T) {
+	var response interactionResponse
+	if err := json.Unmarshal([]byte(`{"steps":[{"type":"function_call","id":"c","name":"respond_without_action","arguments":{"response_text":"ok","requires_approval":true}}]}`), &response); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parseCustomerSalesCapability(response, customerSalesTools(ports.CustomerSalesCapabilities(false))); err == nil {
+		t.Fatal("unknown final authority accepted")
+	}
+}
+
+func TestBatchCandidateSchemaDisallowsAdditionalProperties(t *testing.T) {
+	schema := batchCandidateResponseSchema()
+	if schema["additionalProperties"] != false {
+		t.Fatalf("batch schema must close top-level properties: %#v", schema["additionalProperties"])
+	}
+	candidates := schema["properties"].(map[string]any)["candidates"].(map[string]any)
+	item := candidates["items"].(map[string]any)
+	if item["additionalProperties"] != false {
+		t.Fatalf("candidate schema must close additional properties: %#v", item["additionalProperties"])
 	}
 }

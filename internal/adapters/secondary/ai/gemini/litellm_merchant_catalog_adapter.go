@@ -232,7 +232,7 @@ func (a *LiteLLMMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, in
 			return merchantcatalogai.Proposal{}, errors.New("merchant catalog model returned no structured proposal")
 		}
 		// The unchanged canonical parser rejects unknown fields and trailing data.
-		proposal, err := parseMerchantCatalogProposal(merchantCatalogInteractionResponse{OutputText: content})
+		proposal, err := parseMerchantCatalogProposal(content)
 		if err != nil {
 			return merchantcatalogai.Proposal{}, err
 		}

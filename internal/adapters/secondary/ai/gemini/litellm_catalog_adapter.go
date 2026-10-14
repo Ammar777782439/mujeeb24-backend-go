@@ -33,12 +33,12 @@ func NewLiteLLMCatalogAdapter(client *litellm.Client, model string, maxOutputTok
 
 // Reuse the exact current Gemini payload builders rather than maintain an
 // independently drifting catalog prompt/schema implementation.
-func (c *LiteLLMCatalogAdapter) builder() *BatchClient {
-	return &BatchClient{systemPrompt: prompts.BatchEvaluationSystemPrompt}
+func (c *LiteLLMCatalogAdapter) builder() *catalogRequestBuilder {
+	return &catalogRequestBuilder{systemPrompt: prompts.BatchEvaluationSystemPrompt}
 }
 
 func (c *LiteLLMCatalogAdapter) batchRequest(input services.BatchEvaluationInput) (interactionRequest, error) {
-	rc := &resolvedAIConfig{model: c.model, maxOutputTokens: c.maxOutputTokens}
+	rc := &catalogRequestConfig{model: c.model, maxOutputTokens: c.maxOutputTokens}
 	request, err := c.builder().buildEvaluateBatchRequest(input, rc)
 	if err != nil {
 		return interactionRequest{}, err
@@ -47,7 +47,7 @@ func (c *LiteLLMCatalogAdapter) batchRequest(input services.BatchEvaluationInput
 }
 
 func (c *LiteLLMCatalogAdapter) finalRequest(input services.FinalEvaluationInput, userPrompt string) interactionRequest {
-	rc := &resolvedAIConfig{model: c.model, maxOutputTokens: c.maxOutputTokens}
+	rc := &catalogRequestConfig{model: c.model, maxOutputTokens: c.maxOutputTokens}
 	return batchInteractionRequest(c.builder().buildFinalEvaluateRequest(input, userPrompt, rc), c.model)
 }
 
@@ -135,7 +135,7 @@ func (c *LiteLLMCatalogAdapter) EvaluateBatch(ctx context.Context, input service
 	if len(normalized.FunctionCalls) > 0 {
 		return ports.CatalogBatchResult{}, errors.New("catalog batch returned unexpected function call")
 	}
-	candidates, err := parseBatchCandidates(batchGeminiResponse{Candidates: []batchCandidate{{Content: batchContent{Parts: []batchPart{{Text: normalized.Text}}}}}})
+	candidates, err := parseBatchCandidates(catalogCandidateResponse{Candidates: []batchCandidate{{Content: batchContent{Parts: []batchPart{{Text: normalized.Text}}}}}})
 	if err != nil {
 		return ports.CatalogBatchResult{}, err
 	}
