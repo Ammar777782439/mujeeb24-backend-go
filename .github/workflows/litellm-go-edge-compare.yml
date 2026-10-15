@@ -1,0 +1,36 @@
+name: Compare LiteLLM Go versus Python client fingerprints
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/catalog-complete-commercial-entity-atomic
+    paths:
+      - docs/testing/litellm-go-edge.trigger
+
+permissions:
+  contents: read
+
+jobs:
+  compare-http-clients:
+    name: External Go net/http vs Python urllib without model calls
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      LITELLM_API_KEY: ${{ secrets.LITELLM_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+      - name: Confirm virtual key is present
+        shell: bash
+        run: |
+          if [[ -z "${LITELLM_API_KEY}" ]]; then
+            echo "::error::Missing LITELLM_API_KEY repository secret"
+            exit 1
+          fi
+      - name: Go net/http (matches Mujeeb backend transport)
+        run: go run scripts/litellm-go-edge-probe/main.go
+      - name: Python urllib (the previously blocked test client)
+        run: python3 scripts/diagnose-litellm-auth.py
