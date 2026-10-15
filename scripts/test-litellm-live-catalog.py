@@ -37,9 +37,30 @@ def request_json(path, payload=None):
                 raise RuntimeError(f"{path}: unexpected status {response.status}")
             return json.load(response)
     except urllib.error.HTTPError as err:
-        # Error response bodies can echo request details or gateway metadata.
-        # Never print them: status is sufficient to diagnose auth/routing.
-        raise RuntimeError(f"{path}: HTTP {err.code}") from None
+        # Diagnose the issuing layer without exposing messages, credentials,
+        # request headers, response headers or arbitrary provider error text.
+        import re
+        content_type = (err.headers.get("Content-Type") or "").split(";")[0].lower().strip()
+        mit = (err.headers.get("cf-mitigated") or "").lower().strip()
+        def safe_identifier(value):
+            raw = str(value or "")
+            return raw[:80] if re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", raw) else "unavailable"
+        classification = "html_or_gateway" if "html" in content_type else "json_or_api" if "json" in content_type else "unknown"
+        error_type = "unavailable"
+        error_code = "unavailable"
+        if "json" in content_type:
+            try:
+                payload = json.loads(err.read(4096))
+                error = payload.get("error", {}) if isinstance(payload, dict) else {}
+                if isinstance(error, dict):
+                    error_type = safe_identifier(error.get("type"))
+                    error_code = safe_identifier(error.get("code"))
+            except (ValueError, UnicodeError):
+                pass
+        details = f"response_layer={classification} error_type={error_type} error_code={error_code}"
+        if mit == "challenge":
+            details += " cloudflare_challenge=true"
+        raise RuntimeError(f"{path}: HTTP {err.code} {details}") from None
     except urllib.error.URLError as err:
         # Do not dump arbitrary remote error content.
         raise RuntimeError(f"{path}: HTTPS connection failed ({type(err.reason).__name__})") from None
@@ -48,7 +69,7 @@ def main():
     try:
         models = request_json("/v1/models")
     except RuntimeError as exc:
-        if str(exc) != "/v1/models: HTTP 403":
+        if not str(exc).startswith("/v1/models: HTTP 403 "):
             raise
         # Some LiteLLM virtual keys can invoke an allowed model without
         # permission to enumerate the model registry. This is NOT evidence
