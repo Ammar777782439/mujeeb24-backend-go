@@ -60,7 +60,6 @@ import (
 type CatalogBatchController struct {
 	// CatalogAI supplies complete tenant-scoped projection pages.
 	CatalogAI    ports.CatalogAIReadRepository
-	TokenCounter TokenCounter
 	Evaluator    CatalogEvaluationClient
 	RunRepo      ports.AIRunRepository
 	Now          func() time.Time
@@ -148,13 +147,6 @@ type CatalogAIBatchPayload struct {
 	Catalogs         []CatalogAICatalog         `json:"catalogs,omitempty"`
 	AttributeSchemas []CatalogAIAttributeSchema `json:"attribute_schemas,omitempty"`
 	Items            []CatalogAIItem            `json:"items,omitempty"`
-}
-
-// TokenCounter counts an assembled catalog payload when an exact provider
-// request estimator is unavailable. It cannot authorize item fragmentation.
-// Estimates must include the full request overhead for production routes.
-type TokenCounter interface {
-	CountTokens(ctx context.Context, payload any) (int, error)
 }
 
 // RunCatalogEvaluation drives the full contract ② §9 evaluation pipeline.
@@ -589,8 +581,8 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 	}
 
 	estimator, hasEstimator := c.Evaluator.(BatchRequestTokenEstimator)
-	if !hasEstimator && c.TokenCounter == nil {
-		return nil, errors.New("batch token counter is not configured")
+	if !hasEstimator {
+		return nil, errors.New("full provider request token estimator is required; no legacy payload-only counter")
 	}
 
 	buildBatch := func(items []CatalogAIItem, batchNumber int) CatalogAIBatchPayload {
@@ -620,8 +612,7 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 	}
 	batches := make([]CatalogAIBatchPayload, 0)
 	countBatch := func(batch CatalogAIBatchPayload) (int, error) {
-		if hasEstimator {
-			return estimator.CountBatchTokens(ctx, BatchEvaluationInput{
+		return estimator.CountBatchTokens(ctx, BatchEvaluationInput{
 				AIRunID:             input.AIRunID,
 				AttemptID:           input.AttemptID,
 				BatchNumber:         batch.BatchNumber,
@@ -632,11 +623,7 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 				EntityContract:      input.EntityContract,
 				Batch:               batch,
 				Reduction:           reduction,
-			})
-		}
-		// Compatibility fallback for unit tests. Production LiteLLM adapter
-		// implements BatchRequestTokenEstimator.
-		return c.TokenCounter.CountTokens(ctx, batch)
+		})
 	}
 
 	var split func([]CatalogAIItem) error
@@ -1103,5 +1090,5 @@ func (c *CatalogBatchController) Ready() bool {
 		return false
 	}
 	_, estimated := c.Evaluator.(BatchRequestTokenEstimator)
-	return estimated || c.TokenCounter != nil
+	return estimated
 }
