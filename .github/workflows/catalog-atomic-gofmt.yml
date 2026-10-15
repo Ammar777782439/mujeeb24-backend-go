@@ -6,6 +6,7 @@ on:
       - feat/catalog-complete-commercial-entity-atomic
     paths:
       - 'internal/application/services/*.go'
+      - 'internal/adapters/secondary/persistence/postgres/ai_context_builder_integration_test.go'
 
 permissions:
   contents: write
@@ -35,13 +36,14 @@ jobs:
             internal/application/services/catalog_semantic_projection_test.go \
             internal/application/services/catalog_hierarchy.go \
             internal/application/services/ai_context_retrieval.go \
-            internal/application/services/auto_reply_capabilities_test.go
+            internal/application/services/auto_reply_capabilities_test.go \
+            internal/adapters/secondary/persistence/postgres/ai_context_builder_integration_test.go
           if git diff --quiet; then
             echo 'All Go files already formatted'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add internal/application/services/
+          git add internal/application/services/ internal/adapters/secondary/persistence/postgres/ai_context_builder_integration_test.go
           git commit -m 'chore(catalog): apply gofmt to atomic entity change'
           git push origin HEAD:feat/catalog-complete-commercial-entity-atomic
