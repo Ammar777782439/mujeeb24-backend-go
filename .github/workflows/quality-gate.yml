@@ -8,6 +8,7 @@ on:
       - refactor/merchant-catalog-ai-v2-structure
       - feat/universal-catalog-ai-v3
       - feat/customer-sales-workflow-interactive
+      - feat/catalog-complete-commercial-entity-atomic
   workflow_dispatch:
 
 permissions:
