@@ -20,6 +20,10 @@ func TestCompleteCommercialEntityResolvesSchemaMeaningAndVariantInheritance(t *t
 			{ID: "red", CatalogItemID: "phone", Attributes: map[string]any{"attr_m92": "red"}},
 			{ID: "black", CatalogItemID: "phone"},
 		},
+		Offers: []CatalogAIOffer{
+			{ID: "red-offer", CatalogItemID: "phone", VariantID: func() *string { v := "red"; return &v }()},
+			{ID: "standalone-offer", CatalogItemID: "phone"},
+		},
 	}
 	attachItemSchemaMeaning(&item, &schema)
 	projection := CatalogAIProjection{Catalogs: []CatalogAICatalog{catalog}, AttributeSchemas: []CatalogAIAttributeSchema{schema}, Items: []CatalogAIItem{item}}
@@ -29,6 +33,15 @@ func TestCompleteCommercialEntityResolvesSchemaMeaningAndVariantInheritance(t *t
 	}
 	if projection.Items[0].Schema == nil || projection.Items[0].Schema.Version != version {
 		t.Fatal("product missing its versioned schema")
+	}
+	if len(projection.Items[0].ItemLevelOffers) != 1 || projection.Items[0].ItemLevelOffers[0].ID != "standalone-offer" {
+		t.Fatalf("item-level offer not directly linked: %+v", projection.Items[0].ItemLevelOffers)
+	}
+	if len(projection.Items[0].Variants[0].Offers) != 1 || projection.Items[0].Variants[0].Offers[0].ID != "red-offer" {
+		t.Fatalf("variant offer not directly linked: %+v", projection.Items[0].Variants[0].Offers)
+	}
+	if len(projection.Items[0].Variants[1].Offers) != 0 {
+		t.Fatalf("offer incorrectly leaked between variants: %+v", projection.Items[0].Variants[1].Offers)
 	}
 	for _, variant := range projection.Items[0].Variants {
 		if got := variant.EffectiveAttributes["attr_k71"]; got != "256GB" {
