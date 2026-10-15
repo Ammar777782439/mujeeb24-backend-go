@@ -88,7 +88,7 @@ func (r *capabilityCatalogRepo) ListProjectionPage(_ context.Context, request po
 	for i := start; i < start+2; i++ {
 		id := fmt.Sprintf("item-%d", i)
 		page.Items = append(page.Items, ports.CatalogAIProjectionBundle{
-			Item:            ports.CatalogItemRecord{ID: id, BusinessID: "business-1", CatalogID: "catalog", Name: id, Status: "active", ItemType: "service", AttributeSchemaID: stringPtr("schema")},
+			Item:            ports.CatalogItemRecord{ID: id, BusinessID: "business-1", CatalogID: "catalog", Name: id, Status: "active", ItemType: "service", AttributeSchemaID: stringPtr("schema"), AttributeSchemaVersion: func() *int { v := 1; return &v }()},
 			AttributeSchema: &ports.AttributeSchemaRecord{ID: "schema", BusinessID: "business-1", Name: "Schema", Version: 1},
 			Variants:        []ports.VariantRecord{{ID: "variant-" + id, BusinessID: "business-1", CatalogItemID: id, Status: "active"}},
 			Offers:          []ports.OfferRecord{{ID: "offer-" + id, BusinessID: "business-1", CatalogItemID: id, VariantID: stringPtr("variant-" + id), Status: "active", PricingMode: "fixed"}},
