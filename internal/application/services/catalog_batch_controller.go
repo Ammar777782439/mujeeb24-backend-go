@@ -59,11 +59,11 @@ import (
 //   - Explains why each candidate is in the candidate set
 type CatalogBatchController struct {
 	// CatalogAI supplies complete tenant-scoped projection pages.
-	CatalogAI    ports.CatalogAIReadRepository
-	Evaluator    CatalogEvaluationClient
-	RunRepo      ports.AIRunRepository
-	Now          func() time.Time
-	NewID        func() string
+	CatalogAI ports.CatalogAIReadRepository
+	Evaluator CatalogEvaluationClient
+	RunRepo   ports.AIRunRepository
+	Now       func() time.Time
+	NewID     func() string
 
 	// TokenBudget is the per-batch token cap. Per contract ② §2, this is
 	// token-based not item-count-based. Set via runtime config.
@@ -613,16 +613,16 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 	batches := make([]CatalogAIBatchPayload, 0)
 	countBatch := func(batch CatalogAIBatchPayload) (int, error) {
 		return estimator.CountBatchTokens(ctx, BatchEvaluationInput{
-				AIRunID:             input.AIRunID,
-				AttemptID:           input.AttemptID,
-				BatchNumber:         batch.BatchNumber,
-				BusinessID:          input.BusinessID,
-				ConversationID:      input.ConversationID,
-				CustomerMessage:     input.CustomerMessage,
-				ConversationContext: input.ConversationContext,
-				EntityContract:      input.EntityContract,
-				Batch:               batch,
-				Reduction:           reduction,
+			AIRunID:             input.AIRunID,
+			AttemptID:           input.AttemptID,
+			BatchNumber:         batch.BatchNumber,
+			BusinessID:          input.BusinessID,
+			ConversationID:      input.ConversationID,
+			CustomerMessage:     input.CustomerMessage,
+			ConversationContext: input.ConversationContext,
+			EntityContract:      input.EntityContract,
+			Batch:               batch,
+			Reduction:           reduction,
 		})
 	}
 
