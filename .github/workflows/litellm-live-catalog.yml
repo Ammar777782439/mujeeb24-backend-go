@@ -1,0 +1,34 @@
+name: Live LiteLLM catalog model acceptance
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/catalog-complete-commercial-entity-atomic
+    paths:
+      - .github/workflows/litellm-live-catalog.yml
+      - scripts/test-litellm-live-catalog.py
+
+permissions:
+  contents: read
+
+jobs:
+  live-model:
+    name: Real catalog model via public LiteLLM virtual key
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      LITELLM_BASE_URL: https://webhook.mujeeb24.com
+      LITELLM_CATALOG_MODEL: mujeeb-catalog
+      LITELLM_API_KEY: ${{ secrets.LITELLM_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require a GitHub Actions encrypted virtual key
+        shell: bash
+        run: |
+          if [[ -z "${LITELLM_API_KEY}" ]]; then
+            echo "::error::LIVE MODEL NOT TESTED: Set encrypted repository secret LITELLM_API_KEY (fresh virtual key). No key is stored in source."
+            exit 1
+          fi
+      - name: Test actual LiteLLM model API with a synthetic complete catalog entity
+        run: python3 scripts/test-litellm-live-catalog.py
