@@ -124,6 +124,7 @@ func TestAutoReplyContextBuilderGroundsCatalogAgainstPostgres(t *testing.T) {
 	}
 	// Real PostgreSQL pagination test: exceed the 200-record cursor limit.
 	// All 206 options and 206 offers must reach the scoped AI context.
+	extraOfferIDs := make([]string, 0, 205)
 	for n := 0; n < 205; n++ {
 		extraVariantID := uuid.NewString()
 		extraOfferID := uuid.NewString()
@@ -133,6 +134,7 @@ func TestAutoReplyContextBuilderGroundsCatalogAgainstPostgres(t *testing.T) {
 			extraVariantID, businessID, itemID, fmt.Sprintf("Variant %d", n), base); err != nil {
 			t.Fatalf("insert additional variant %d: %v", n, err)
 		}
+		extraOfferIDs = append(extraOfferIDs, extraOfferID)
 		if _, err := adapter.Pool().Exec(ctx, `INSERT INTO offers
 			(id, business_id, catalog_item_id, variant_id, name, pricing_mode, amount, currency,
 			 availability_mode, availability_status, fulfillment_mode, price_verification_status,
@@ -156,6 +158,64 @@ func TestAutoReplyContextBuilderGroundsCatalogAgainstPostgres(t *testing.T) {
 		t.Fatalf("truncated complete entity: items=%d variants=%d offers=%d",
 			len(complete.CatalogEvidence), len(complete.VariantEvidence), len(complete.OfferEvidence))
 	}
+
+	// Locate a target offer that is definitively OUTSIDE the original
+	// first five database rows, then verify focused retrieval uses the exact
+	// record while still hydrating its full 206-offer commercial parent.
+	firstPage, err := NewCatalogRepository(adapter).ListOffers(ctx, businessID, itemID, "active", 5, "")
+	if err != nil {
+		t.Fatalf("load first real offer page: %v", err)
+	}
+	firstFive := map[string]bool{}
+	for _, record := range firstPage.Items {
+		firstFive[record.ID] = true
+	}
+	targetOfferID := ""
+	for _, id := range extraOfferIDs {
+		if !firstFive[id] {
+			targetOfferID = id
+			break
+		}
+	}
+	if targetOfferID == "" {
+		t.Fatal("test did not find an offer beyond first five rows")
+	}
+	focused, err := builder.Build(ctx, ports.CustomerSalesContextInput{
+		BusinessID: businessID, ConversationID: conversationID, Text: "تفاصيل هذا العرض",
+		ConversationState: &ports.ConversationStateRecord{
+			BusinessID: businessID, ConversationID: conversationID,
+			Focus: &ports.ConversationFocus{Type: "offer", ID: targetOfferID, ItemID: &itemID, CatalogID: &catalogID},
+		},
+	})
+	if err != nil {
+		t.Fatalf("focused offer beyond first page was not resolved: %v", err)
+	}
+	if len(focused.CatalogEvidence) != 1 || len(focused.OfferEvidence) != 206 || len(focused.VariantEvidence) != 206 {
+		t.Fatalf("focused offer lost siblings: items=%d offers=%d variants=%d",
+			len(focused.CatalogEvidence), len(focused.OfferEvidence), len(focused.VariantEvidence))
+	}
+	found := false
+	for _, evidence := range focused.OfferEvidence {
+		if evidence.Reference == targetOfferID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("focused commercial offer was missing despite complete context")
+	}
+	wrongItemID := uuid.NewString()
+	_, mismatchErr := builder.Build(ctx, ports.CustomerSalesContextInput{
+		BusinessID: businessID, ConversationID: conversationID, Text: "تفاصيل العرض",
+		ConversationState: &ports.ConversationStateRecord{
+			BusinessID: businessID, ConversationID: conversationID,
+			Focus: &ports.ConversationFocus{Type: "offer", ID: targetOfferID, ItemID: &wrongItemID},
+		},
+	})
+	if mismatchErr == nil {
+		t.Fatal("mismatched item ID was permitted to own a focused offer")
+	}
+
 
 	// A same-count, unchanged-timestamp commercial edit must still change the
 	// content revision. PostgreSQL is real, not a stubbed repository.
