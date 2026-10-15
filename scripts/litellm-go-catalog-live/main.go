@@ -205,42 +205,46 @@ func main() {
 	// The production controller rehydrates every selected Item from the full
 	// source projection. Offer IDs selected by the first LLM are relevance hints,
 	// never authorization to remove offers from the final model request.
-	fullProjection:=services.CatalogAIProjection{
-		Catalogs:[]services.CatalogAICatalog{catalog},
-		AttributeSchemas:[]services.CatalogAIAttributeSchema{schema},
-		Items:[]services.CatalogAIItem{item},
+	fullProjection := services.CatalogAIProjection{
+		Catalogs:         []services.CatalogAICatalog{catalog},
+		AttributeSchemas: []services.CatalogAIAttributeSchema{schema},
+		Items:            []services.CatalogAIItem{item},
 	}
-	candidateJSON,err:=json.Marshal(result.Candidates)
-	must("marshal-candidates",err)
-	projectionJSON,err:=json.Marshal(fullProjection)
-	must("marshal-full-final-evidence",err)
-	finalPrompt:=fmt.Sprintf("Customer message: %s\n\nVerified conversation context:\n{}\n\nAggregated candidates:\n%s\n\nCandidate catalog projection:\n%s",
-		input.CustomerMessage, string(candidateJSON),string(projectionJSON))
-	finalInput:=services.FinalEvaluationInput{
-		AIRunID:input.AIRunID,CustomerMessage:input.CustomerMessage,
-		EntityContract:input.EntityContract,CandidateResults:result.Candidates,
+	candidateJSON, err := json.Marshal(result.Candidates)
+	must("marshal-candidates", err)
+	projectionJSON, err := json.Marshal(fullProjection)
+	must("marshal-full-final-evidence", err)
+	finalPrompt := fmt.Sprintf("Customer message: %s\n\nVerified conversation context:\n{}\n\nAggregated candidates:\n%s\n\nCandidate catalog projection:\n%s",
+		input.CustomerMessage, string(candidateJSON), string(projectionJSON))
+	finalInput := services.FinalEvaluationInput{
+		AIRunID: input.AIRunID, CustomerMessage: input.CustomerMessage,
+		EntityContract: input.EntityContract, CandidateResults: result.Candidates,
 	}
-	finalTokens,err:=adapter.CountFinalTokens(ctx,finalInput,finalPrompt)
-	must("real-final-token-counter",err)
-	fmt.Printf("PASS: real final model request token-counter returned %d tokens\n",finalTokens)
-	decision,finalUsage,err:=adapter.FinalEvaluateWithDetails(ctx,finalInput,finalPrompt)
-	must("real-final-capability",err)
+	finalTokens, err := adapter.CountFinalTokens(ctx, finalInput, finalPrompt)
+	must("real-final-token-counter", err)
+	fmt.Printf("PASS: real final model request token-counter returned %d tokens\n", finalTokens)
+	decision, finalUsage, err := adapter.FinalEvaluateWithDetails(ctx, finalInput, finalPrompt)
+	must("real-final-capability", err)
 	if !capture.seen || !capture.complete {
-		fmt.Fprintln(os.Stderr,"FAIL: final model was not shown the original complete product")
+		fmt.Fprintln(os.Stderr, "FAIL: final model was not shown the original complete product")
 		os.Exit(1)
 	}
 	fmt.Printf("PASS: final Go HTTP request retained all 3 offers, both variants, schemas and source prices (model=%s, tokens_in=%d, tokens_out=%d)\n",
-		finalUsage.Model,finalUsage.InputTokens,finalUsage.OutputTokens)
+		finalUsage.Model, finalUsage.InputTokens, finalUsage.OutputTokens)
 	// A real completion can choose any allowed terminal capability, but for
 	// this unambiguous price-comparison request it should answer with evidence.
-	answer:=strings.ReplaceAll(decision.ResponseText,",","")
-	prices:=[]string{"10000","12000","15000"}
-	included:=0
-	for _,price:=range prices {if strings.Contains(answer,price){included++}}
+	answer := strings.ReplaceAll(decision.ResponseText, ",", "")
+	prices := []string{"10000", "12000", "15000"}
+	included := 0
+	for _, price := range prices {
+		if strings.Contains(answer, price) {
+			included++
+		}
+	}
 	fmt.Printf("OBSERVED: final capability=%s, reply_chars=%d, source_prices_mentioned=%d/3\n",
-		decision.Capability,len([]rune(decision.ResponseText)),included)
-	if included!=3 {
-		fmt.Fprintln(os.Stderr,"FAIL: model did not explicitly mention all three verified offer prices in its final answer")
+		decision.Capability, len([]rune(decision.ResponseText)), included)
+	if included != 3 {
+		fmt.Fprintln(os.Stderr, "FAIL: model did not explicitly mention all three verified offer prices in its final answer")
 		os.Exit(1)
 	}
 	fmt.Println("PASS: full real catalog evaluation returned all three prices without truncating commercial evidence")
@@ -254,4 +258,3 @@ func contains(xs []string, v string) bool {
 	}
 	return false
 }
-
