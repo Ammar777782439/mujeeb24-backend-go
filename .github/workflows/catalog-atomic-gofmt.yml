@@ -1,0 +1,43 @@
+name: Format atomic catalog change
+
+on:
+  push:
+    branches:
+      - feat/catalog-complete-commercial-entity-atomic
+    paths:
+      - 'internal/application/services/*.go'
+
+permissions:
+  contents: write
+
+jobs:
+  gofmt:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/catalog-complete-commercial-entity-atomic
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.2'
+      - name: Apply gofmt to touched catalog files
+        run: |
+          set -euo pipefail
+          gofmt -w internal/application/services/catalog_ai_projection.go \
+            internal/application/services/catalog_ai_runtime.go \
+            internal/application/services/catalog_semantic_projection.go \
+            internal/application/services/catalog_batch_controller.go \
+            internal/application/services/catalog_batch_coverage.go \
+            internal/application/services/catalog_batch_controller_test.go \
+            internal/application/services/catalog_batch_coverage_test.go
+          if git diff --quiet; then
+            echo 'All Go files already formatted'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add internal/application/services/
+          git commit -m 'chore(catalog): apply gofmt to atomic entity change'
+          git push origin HEAD:feat/catalog-complete-commercial-entity-atomic
