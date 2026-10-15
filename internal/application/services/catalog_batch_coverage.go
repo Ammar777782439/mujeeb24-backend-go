@@ -5,17 +5,22 @@ import (
 	"reflect"
 )
 
-// validateCatalogBatchCoverage proves that each source page has been
-// transported losslessly into its AI batches BEFORE sending any requests.
-// It compares commercial values and schemas, not just item/offer counts.
-// Understanding those facts correctly remains the model's responsibility.
+// validateCatalogBatchCoverage proves BEFORE provider invocation that each item
+// is transported exactly once and unchanged. A complete commercial entity is
+// indivisible: partial variants/offers and duplicate fragments are rejected.
 func validateCatalogBatchCoverage(source CatalogAIProjection, batches []CatalogAIBatchPayload) error {
 	catalogs := make(map[string]CatalogAICatalog, len(source.Catalogs))
 	for _, catalog := range source.Catalogs {
+		if _, exists := catalogs[catalog.ID]; exists {
+			return fmt.Errorf("duplicate source catalog %s", catalog.ID)
+		}
 		catalogs[catalog.ID] = catalog
 	}
 	schemas := make(map[string]CatalogAIAttributeSchema, len(source.AttributeSchemas))
 	for _, schema := range source.AttributeSchemas {
+		if _, exists := schemas[schema.ID]; exists {
+			return fmt.Errorf("duplicate source schema %s", schema.ID)
+		}
 		schemas[schema.ID] = schema
 	}
 	items := make(map[string]CatalogAIItem, len(source.Items))
@@ -23,106 +28,93 @@ func validateCatalogBatchCoverage(source CatalogAIProjection, batches []CatalogA
 		if _, exists := items[item.ID]; exists {
 			return fmt.Errorf("duplicate source catalog item %s", item.ID)
 		}
+		if err := validateCatalogItemRelationships(item); err != nil {
+			return err
+		}
 		items[item.ID] = item
 	}
 
-	seenItems := make(map[string]bool, len(items))
-	seenVariants := make(map[string]map[string]bool, len(items))
-	seenOffers := make(map[string]map[string]bool, len(items))
+	seen := make(map[string]bool, len(items))
 	for _, batch := range batches {
 		batchCatalogs := make(map[string]CatalogAICatalog, len(batch.Catalogs))
 		for _, catalog := range batch.Catalogs {
+			if _, exists := batchCatalogs[catalog.ID]; exists {
+				return fmt.Errorf("batch %d duplicated catalog %s", batch.BatchNumber, catalog.ID)
+			}
 			batchCatalogs[catalog.ID] = catalog
 		}
 		batchSchemas := make(map[string]CatalogAIAttributeSchema, len(batch.AttributeSchemas))
 		for _, schema := range batch.AttributeSchemas {
+			if _, exists := batchSchemas[schema.ID]; exists {
+				return fmt.Errorf("batch %d duplicated schema %s", batch.BatchNumber, schema.ID)
+			}
 			batchSchemas[schema.ID] = schema
 		}
-		for _, fragment := range batch.Items {
-			original, ok := items[fragment.ID]
+		for _, entity := range batch.Items {
+			original, ok := items[entity.ID]
 			if !ok {
-				return fmt.Errorf("batch %d contains unknown item %s", batch.BatchNumber, fragment.ID)
+				return fmt.Errorf("batch %d contains unknown item %s", batch.BatchNumber, entity.ID)
 			}
-			parent := fragment
-			parent.Variants, parent.Offers = nil, nil
-			expected := original
-			expected.Variants, expected.Offers = nil, nil
-			if !reflect.DeepEqual(parent, expected) {
-				return fmt.Errorf("batch %d changed commercial fields of item %s", batch.BatchNumber, fragment.ID)
+			if seen[entity.ID] {
+				return fmt.Errorf("catalog item %s was duplicated or fragmented across batches", entity.ID)
 			}
-
-			if original.CatalogID != "" && len(source.Catalogs) > 0 {
-				catalog, exists := catalogs[original.CatalogID]
-				if !exists {
-					return fmt.Errorf("source lacks catalog %s for item %s", original.CatalogID, fragment.ID)
-				}
-				if !reflect.DeepEqual(batchCatalogs[original.CatalogID], catalog) {
-					return fmt.Errorf("batch %d lost catalog %s for item %s", batch.BatchNumber, original.CatalogID, fragment.ID)
-				}
+			seen[entity.ID] = true
+			if !reflect.DeepEqual(original, entity) {
+				return fmt.Errorf("batch %d lost or changed commercial fields, variants or offers of item %s", batch.BatchNumber, entity.ID)
 			}
-			if original.AttributeSchemaID != nil && *original.AttributeSchemaID != "" {
-				schemaID := *original.AttributeSchemaID
-				schema, exists := schemas[schemaID]
-				if !exists {
-					return fmt.Errorf("source lacks schema %s for item %s", schemaID, fragment.ID)
+			if len(source.Catalogs) > 0 {
+				catalog, ok := catalogs[entity.CatalogID]
+				if !ok {
+					return fmt.Errorf("source lacks catalog %s for item %s", entity.CatalogID, entity.ID)
 				}
-				if !reflect.DeepEqual(batchSchemas[schemaID], schema) {
-					return fmt.Errorf("batch %d lost schema definitions %s for item %s", batch.BatchNumber, schemaID, fragment.ID)
+				if !reflect.DeepEqual(batchCatalogs[entity.CatalogID], catalog) {
+					return fmt.Errorf("batch %d lost catalog %s for item %s", batch.BatchNumber, entity.CatalogID, entity.ID)
 				}
 			}
-			seenItems[fragment.ID] = true
-			if seenVariants[fragment.ID] == nil {
-				seenVariants[fragment.ID] = make(map[string]bool)
-			}
-			if seenOffers[fragment.ID] == nil {
-				seenOffers[fragment.ID] = make(map[string]bool)
-			}
-			originalVariants := make(map[string]CatalogAIVariant, len(original.Variants))
-			fragmentVariantIDs := make(map[string]bool, len(fragment.Variants))
-			for _, v := range original.Variants {
-				originalVariants[v.ID] = v
-			}
-			for _, v := range fragment.Variants {
-				expectedVariant, exists := originalVariants[v.ID]
-				if !exists || !reflect.DeepEqual(v, expectedVariant) {
-					return fmt.Errorf("batch %d lost or changed variant %s of item %s", batch.BatchNumber, v.ID, fragment.ID)
+			if entity.AttributeSchemaID != nil && *entity.AttributeSchemaID != "" {
+				schema, ok := schemas[*entity.AttributeSchemaID]
+				if !ok {
+					return fmt.Errorf("source lacks schema %s for item %s", *entity.AttributeSchemaID, entity.ID)
 				}
-				fragmentVariantIDs[v.ID] = true
-				seenVariants[fragment.ID][v.ID] = true
-			}
-			originalOffers := make(map[string]CatalogAIOffer, len(original.Offers))
-			for _, offer := range original.Offers {
-				originalOffers[offer.ID] = offer
-			}
-			for _, offer := range fragment.Offers {
-				expectedOffer, exists := originalOffers[offer.ID]
-				if !exists || !reflect.DeepEqual(offer, expectedOffer) {
-					return fmt.Errorf("batch %d lost or changed offer %s of item %s", batch.BatchNumber, offer.ID, fragment.ID)
+				if entity.AttributeSchemaVersion == nil || *entity.AttributeSchemaVersion != schema.Version {
+					return fmt.Errorf("schema version mismatch for item %s", entity.ID)
 				}
-				if offer.VariantID != nil && *offer.VariantID != "" {
-					// A real variant may not be separated from its offer.
-					if _, exists := originalVariants[*offer.VariantID]; exists && !fragmentVariantIDs[*offer.VariantID] {
-						return fmt.Errorf("batch %d separated offer %s from variant %s", batch.BatchNumber, offer.ID, *offer.VariantID)
-					}
+				if !reflect.DeepEqual(batchSchemas[schema.ID], schema) {
+					return fmt.Errorf("batch %d lost schema definitions %s for item %s", batch.BatchNumber, schema.ID, entity.ID)
 				}
-				seenOffers[fragment.ID][offer.ID] = true
 			}
 		}
 	}
-
 	for _, item := range source.Items {
-		if !seenItems[item.ID] {
+		if !seen[item.ID] {
 			return fmt.Errorf("catalog item %s was not covered by any batch", item.ID)
 		}
-		for _, variant := range item.Variants {
-			if !seenVariants[item.ID][variant.ID] {
-				return fmt.Errorf("catalog item %s lost variant %s in batching", item.ID, variant.ID)
-			}
+	}
+	return nil
+}
+
+func validateCatalogItemRelationships(item CatalogAIItem) error {
+	variants := make(map[string]bool, len(item.Variants))
+	for _, variant := range item.Variants {
+		if variant.CatalogItemID != item.ID {
+			return fmt.Errorf("variant %s belongs to another item, not %s", variant.ID, item.ID)
 		}
-		for _, offer := range item.Offers {
-			if !seenOffers[item.ID][offer.ID] {
-				return fmt.Errorf("catalog item %s lost offer %s in batching", item.ID, offer.ID)
-			}
+		if variants[variant.ID] {
+			return fmt.Errorf("duplicate variant %s in item %s", variant.ID, item.ID)
+		}
+		variants[variant.ID] = true
+	}
+	offers := make(map[string]bool, len(item.Offers))
+	for _, offer := range item.Offers {
+		if offer.CatalogItemID != item.ID {
+			return fmt.Errorf("offer %s belongs to another item, not %s", offer.ID, item.ID)
+		}
+		if offers[offer.ID] {
+			return fmt.Errorf("duplicate offer %s in item %s", offer.ID, item.ID)
+		}
+		offers[offer.ID] = true
+		if offer.VariantID != nil && *offer.VariantID != "" && !variants[*offer.VariantID] {
+			return fmt.Errorf("offer %s references unavailable variant %s in item %s", offer.ID, *offer.VariantID, item.ID)
 		}
 	}
 	return nil
