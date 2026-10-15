@@ -23,7 +23,7 @@ The canonical PostgreSQL hierarchy remains:
 
 The AI projection is a **read model**, never a second database/domain. It embeds the relevant Catalog and versioned Schema beside each Item, while retaining source IDs and the existing top-level arrays. Resolution exposes both original `attributes` and `resolved_attributes`: canonical key, schema label, declared type, origin and unchanged value. Variants also expose `effective_attributes` and resolved values after explicit variant overrides. Unknown free attributes preserve their literal keys; Go never invents merchant meanings.
 
-Active offers without `variant_id` belong directly to their item; an offer with a referenced missing/inactive variant is **invalid evidence**, not an item-level offer.
+Active offers without `variant_id` belong directly to their item; an offer with a referenced missing/inactive variant is **invalid evidence**, not an item-level offer. The read model also exposes `variant.offers[]` and `item.item_level_offers[]` to remove cross-array joining from the model, while retaining the canonical `item.offers[]` and original IDs for exact evidence verification. Duplicated representation is transport-only, not a second commercial source of truth.
 
 ## Atomic token batching
 
@@ -50,6 +50,7 @@ When focusing an item, offer, variant or comparison, retrieve every active varia
 ## Test acceptance (real runs required)
 
 - `gofmt`, `go build ./...`, `go vet ./...`, `go test ./... -count=1` and repository Quality gate, including the configured PostgreSQL 16 integration service.
+- Real PostgreSQL integration must cover >200 variants/offers of one item and must detect a price change even when item/offer counts remain unchanged.
 - Tests must assert: exactly one occurrence of each original item; full equality of item and nested facts; no splitting of an oversize item; semantic key-label/type resolution and variant inheritance; all paginated options/offers in scoped AI context; rejection of orphan offers, changed prices, duplicate IDs or missing definitions.
 - Live LiteLLM/provider model behavior requires real configured credentials and a separate reproducible run; a stubbed adapter is never described as a successful live provider test.
 
