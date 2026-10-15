@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -155,7 +154,7 @@ func main() {
 		EntityContract:  services.BuildCatalogEntityContractPayload(),
 		Batch:           batch,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 95*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 	tokens, err := adapter.CountBatchTokens(ctx, input)
 	must("real-token-counter", err)
@@ -176,29 +175,75 @@ func main() {
 		os.Exit(1)
 	}
 	var selected bool
-	for _, c := range result.Candidates {
-		if c.ItemID != itemID {
-			fmt.Fprintln(os.Stderr, "FAIL: unexpected candidate item")
+	for _, candidate := range result.Candidates {
+		if candidate.ItemID != itemID {
+			fmt.Fprintln(os.Stderr, "FAIL: model invented an item not in verified batch")
 			os.Exit(1)
 		}
 		selected = true
-		if !includesAll(c.VariantIDs, []string{vBlue, vBlack}) {
-			fmt.Fprintln(os.Stderr, "FAIL: provider candidate did not cover both variants")
-			os.Exit(1)
+		for _, id := range candidate.VariantIDs {
+			if id != vBlue && id != vBlack {
+				fmt.Fprintln(os.Stderr, "FAIL: model invented a variant ID")
+				os.Exit(1)
+			}
 		}
-		fmt.Printf("OBSERVED: provider selected %d variant IDs and %d offer IDs; item-level offer included=%t\n",
-			len(c.VariantIDs), len(c.OfferIDs), contains(c.OfferIDs, oBase))
-		if !includesAll(c.OfferIDs, []string{oBlue, oBlack, oBase}) {
-			fmt.Fprintln(os.Stderr, "FAIL: provider candidate did not cover all three offers")
-			os.Exit(1)
+		for _, id := range candidate.OfferIDs {
+			if id != oBlue && id != oBlack && id != oBase {
+				fmt.Fprintln(os.Stderr, "FAIL: model invented an offer ID")
+				os.Exit(1)
+			}
 		}
+		fmt.Printf("OBSERVED: optional candidate selection: %d variant IDs, %d offer IDs, item-level offer included=%t\n",
+			len(candidate.VariantIDs), len(candidate.OfferIDs), contains(candidate.OfferIDs, oBase))
 	}
 	if !selected {
 		fmt.Fprintln(os.Stderr, "FAIL: original item not selected")
 		os.Exit(1)
 	}
-	fmt.Printf("PASS: real LiteLLM batch evaluated complete item, 2 variants, 3 offers (provider=%s, model=%s, requests=%d, tokens_in=%d, tokens_out=%d)\n",
-		result.Usage.Provider, result.Usage.Model, result.Usage.ModelRequests, result.Usage.InputTokens, result.Usage.OutputTokens)
+	fmt.Printf("PASS: real LiteLLM batch evaluated complete item; candidate selection is optional (provider=%s, model=%s, tokens_in=%d, tokens_out=%d)\n",
+		result.Usage.Provider, result.Usage.Model, result.Usage.InputTokens, result.Usage.OutputTokens)
+	// The production controller rehydrates every selected Item from the full
+	// source projection. Offer IDs selected by the first LLM are relevance hints,
+	// never authorization to remove offers from the final model request.
+	fullProjection:=services.CatalogAIProjection{
+		Catalogs:[]services.CatalogAICatalog{catalog},
+		AttributeSchemas:[]services.CatalogAIAttributeSchema{schema},
+		Items:[]services.CatalogAIItem{item},
+	}
+	candidateJSON,err:=json.Marshal(result.Candidates)
+	must("marshal-candidates",err)
+	projectionJSON,err:=json.Marshal(fullProjection)
+	must("marshal-full-final-evidence",err)
+	finalPrompt:=fmt.Sprintf("Customer message: %s\n\nVerified conversation context:\n{}\n\nAggregated candidates:\n%s\n\nCandidate catalog projection:\n%s",
+		input.CustomerMessage, string(candidateJSON),string(projectionJSON))
+	finalInput:=services.FinalEvaluationInput{
+		AIRunID:input.AIRunID,CustomerMessage:input.CustomerMessage,
+		EntityContract:input.EntityContract,CandidateResults:result.Candidates,
+	}
+	finalTokens,err:=adapter.CountFinalTokens(ctx,finalInput,finalPrompt)
+	must("real-final-token-counter",err)
+	fmt.Printf("PASS: real final model request token-counter returned %d tokens\n",finalTokens)
+	decision,finalUsage,err:=adapter.FinalEvaluateWithDetails(ctx,finalInput,finalPrompt)
+	must("real-final-capability",err)
+	if !capture.seen || !capture.complete {
+		fmt.Fprintln(os.Stderr,"FAIL: final model was not shown the original complete product")
+		os.Exit(1)
+	}
+	fmt.Printf("PASS: final Go HTTP request retained all 3 offers, both variants, schemas and source prices (model=%s, tokens_in=%d, tokens_out=%d)\n",
+		finalUsage.Model,finalUsage.InputTokens,finalUsage.OutputTokens)
+	// A real completion can choose any allowed terminal capability, but for
+	// this unambiguous price-comparison request it should answer with evidence.
+	answer:=strings.ReplaceAll(decision.ResponseText,",","")
+	prices:=[]string{"10000","12000","15000"}
+	included:=0
+	for _,price:=range prices {if strings.Contains(answer,price){included++}}
+	fmt.Printf("OBSERVED: final capability=%s, reply_chars=%d, source_prices_mentioned=%d/3\n",
+		decision.Capability,len([]rune(decision.ResponseText)),included)
+	if included!=3 {
+		fmt.Fprintln(os.Stderr,"FAIL: model did not explicitly mention all three verified offer prices in its final answer")
+		os.Exit(1)
+	}
+	fmt.Println("PASS: full real catalog evaluation returned all three prices without truncating commercial evidence")
 }
 
 func contains(xs []string, v string) bool {
@@ -210,14 +255,3 @@ func contains(xs []string, v string) bool {
 	return false
 }
 
-func includesAll(got, expected []string) bool {
-	sort.Strings(got)
-	sort.Strings(expected)
-	for _, e := range expected {
-		i := sort.SearchStrings(got, e)
-		if i >= len(got) || got[i] != e {
-			return false
-		}
-	}
-	return true
-}
