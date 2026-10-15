@@ -99,6 +99,7 @@ type CatalogAIItem struct {
 	Attributes             map[string]any               `json:"attributes,omitempty"`
 	Variants               []CatalogAIVariant           `json:"variants,omitempty"`
 	Offers                 []CatalogAIOffer             `json:"offers,omitempty"`
+	ItemLevelOffers        []CatalogAIOffer             `json:"item_level_offers,omitempty"`
 }
 
 // CatalogAIVariant is contract ① §1 — one variant under a CatalogAIItem.
@@ -107,6 +108,7 @@ type CatalogAIVariant struct {
 	// where this variant carries an explicit different value.
 	EffectiveAttributes map[string]any               `json:"effective_attributes,omitempty"`
 	ResolvedAttributes  []CatalogAIResolvedAttribute `json:"resolved_attributes,omitempty"`
+	Offers              []CatalogAIOffer             `json:"offers,omitempty"`
 	ID                  string                       `json:"id"`
 	CatalogItemID       string                       `json:"catalog_item_id"`
 	Name                string                       `json:"name"`
