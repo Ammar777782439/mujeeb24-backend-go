@@ -157,6 +157,27 @@ func TestAutoReplyContextBuilderGroundsCatalogAgainstPostgres(t *testing.T) {
 			len(complete.CatalogEvidence), len(complete.VariantEvidence), len(complete.OfferEvidence))
 	}
 
+	// A same-count, unchanged-timestamp commercial edit must still change the
+	// content revision. PostgreSQL is real, not a stubbed repository.
+	catalogReader := NewCatalogAIReadRepository(adapter)
+	originalRevision, err := catalogReader.GetRevision(ctx, businessID)
+	if err != nil {
+		t.Fatalf("revision before offer change: %v", err)
+	}
+	if _, err := adapter.Pool().Exec(ctx, `UPDATE offers SET amount=250001 WHERE id=$1::uuid`, offerID); err != nil {
+		t.Fatalf("edit price without timestamp update: %v", err)
+	}
+	changedRevision, err := catalogReader.GetRevision(ctx, businessID)
+	if err != nil {
+		t.Fatalf("revision after offer change: %v", err)
+	}
+	if changedRevision == originalRevision {
+		t.Fatal("commercial price changed but catalog revision did not")
+	}
+	if _, err := adapter.Pool().Exec(ctx, `UPDATE offers SET amount=250000 WHERE id=$1::uuid`, offerID); err != nil {
+		t.Fatalf("restore test offer price: %v", err)
+	}
+
 	if len(contextValue.RecentMessages) != 1 || contextValue.RecentMessages[0].Text != "أريد هاتفًا" {
 		t.Fatalf("history mismatch: %#v", contextValue.RecentMessages)
 	}
