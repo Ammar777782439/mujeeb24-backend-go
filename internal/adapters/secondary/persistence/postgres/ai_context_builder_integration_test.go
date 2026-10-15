@@ -4,6 +4,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -121,6 +122,41 @@ func TestAutoReplyContextBuilderGroundsCatalogAgainstPostgres(t *testing.T) {
 	if len(contextValue.CatalogEvidence) != 1 || contextValue.CatalogEvidence[0].Reference != itemID || len(contextValue.OfferEvidence) != 1 || contextValue.OfferEvidence[0].Reference != offerID || contextValue.OfferEvidence[0].AvailabilityStatus != "available" || contextValue.OfferEvidence[0].Amount != "250000.0000" || len(contextValue.VariantEvidence) != 1 || contextValue.VariantEvidence[0].Reference != variantID {
 		t.Fatalf("grounding mismatch: %#v", contextValue)
 	}
+	// Real PostgreSQL pagination test: exceed the 200-record cursor limit.
+	// All 206 options and 206 offers must reach the scoped AI context.
+	for n := 0; n < 205; n++ {
+		extraVariantID := uuid.NewString()
+		extraOfferID := uuid.NewString()
+		if _, err := adapter.Pool().Exec(ctx, `INSERT INTO variants
+			(id, business_id, catalog_item_id, name, attributes, status, created_at, updated_at)
+			VALUES ($1::uuid, $2::uuid, $3::uuid, $4, '{}'::jsonb, 'active', $5, $5)`,
+			extraVariantID, businessID, itemID, fmt.Sprintf("Variant %d", n), base); err != nil {
+			t.Fatalf("insert additional variant %d: %v", n, err)
+		}
+		if _, err := adapter.Pool().Exec(ctx, `INSERT INTO offers
+			(id, business_id, catalog_item_id, variant_id, name, pricing_mode, amount, currency,
+			 availability_mode, availability_status, fulfillment_mode, price_verification_status,
+			 status, created_at, updated_at)
+			VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, 'fixed', 100, 'YER',
+			 'stock', 'available', 'delivery', 'verified', 'active', $6, $6)`,
+			extraOfferID, businessID, itemID, extraVariantID, fmt.Sprintf("Offer %d", n), base); err != nil {
+			t.Fatalf("insert additional offer %d: %v", n, err)
+		}
+	}
+	complete, err := builder.Build(ctx, ports.CustomerSalesContextInput{
+		BusinessID: businessID, ConversationID: conversationID, SourceMessageReference: "incoming-current",
+		Text: "قارن جميع خيارات الهاتف", Channel: "whatsapp",
+		ConversationState: &ports.ConversationStateRecord{BusinessID: businessID, ConversationID: conversationID,
+			Focus: &ports.ConversationFocus{Type: "item", ID: itemID, CatalogID: &catalogID}},
+	})
+	if err != nil {
+		t.Fatalf("real PostgreSQL complete catalog entity retrieval: %v", err)
+	}
+	if len(complete.CatalogEvidence) != 1 || len(complete.VariantEvidence) != 206 || len(complete.OfferEvidence) != 206 {
+		t.Fatalf("truncated complete entity: items=%d variants=%d offers=%d",
+			len(complete.CatalogEvidence), len(complete.VariantEvidence), len(complete.OfferEvidence))
+	}
+
 	if len(contextValue.RecentMessages) != 1 || contextValue.RecentMessages[0].Text != "أريد هاتفًا" {
 		t.Fatalf("history mismatch: %#v", contextValue.RecentMessages)
 	}
