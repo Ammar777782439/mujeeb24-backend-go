@@ -1,6 +1,6 @@
 //go:build ignore
 
-// One real catalog batch through the same LiteLLM Go adapter as Mujeeb.
+// One real catalog batch through the production LiteLLM Go adapter used by Mujeeb.
 // All records are synthetic. No database writes, outbound messages or mocks.
 // The encrypted virtual key is provided by GitHub Actions; it is never printed.
 package main
