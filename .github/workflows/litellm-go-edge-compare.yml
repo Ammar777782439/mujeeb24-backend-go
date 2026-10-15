@@ -2,11 +2,6 @@ name: Compare LiteLLM Go versus Python client fingerprints
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - feat/catalog-complete-commercial-entity-atomic
-    paths:
-      - docs/testing/litellm-go-edge.trigger
 
 permissions:
   contents: read
