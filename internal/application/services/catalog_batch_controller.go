@@ -403,26 +403,13 @@ func appendCandidateProjection(target *CatalogAIProjection, batch CatalogAIBatch
 	}
 
 	for _, item := range batch.Items {
-		candidate, ok := candidateByItem[item.ID]
-		if !ok {
+		if _, selected := candidateByItem[item.ID]; !selected {
 			continue
 		}
-		// Candidate child IDs signal relevance only. Never prune the complete
-		// commercial entity before a second model evaluation.
-		filtered := item
-
-		merged := false
-		for i := range target.Items {
-			if target.Items[i].ID != filtered.ID {
-				continue
-			}
-			mergeCatalogAIItemChildren(&target.Items[i], filtered)
-			merged = true
-			break
+		if _, exists := seen[item.ID]; exists {
+			continue // already included as an indivisible complete item
 		}
-		if !merged {
-			target.Items = append(target.Items, filtered)
-		}
+		target.Items = append(target.Items, item)
 		seen[item.ID] = struct{}{}
 	}
 
@@ -458,35 +445,6 @@ func appendCandidateProjection(target *CatalogAIProjection, batch CatalogAIBatch
 				break
 			}
 		}
-	}
-}
-
-func mergeCatalogAIItemChildren(target *CatalogAIItem, incoming CatalogAIItem) {
-	if target == nil {
-		return
-	}
-	variantSeen := make(map[string]struct{}, len(target.Variants))
-	for _, variant := range target.Variants {
-		variantSeen[variant.ID] = struct{}{}
-	}
-	for _, variant := range incoming.Variants {
-		if _, ok := variantSeen[variant.ID]; ok {
-			continue
-		}
-		target.Variants = append(target.Variants, variant)
-		variantSeen[variant.ID] = struct{}{}
-	}
-
-	offerSeen := make(map[string]struct{}, len(target.Offers))
-	for _, offer := range target.Offers {
-		offerSeen[offer.ID] = struct{}{}
-	}
-	for _, offer := range incoming.Offers {
-		if _, ok := offerSeen[offer.ID]; ok {
-			continue
-		}
-		target.Offers = append(target.Offers, offer)
-		offerSeen[offer.ID] = struct{}{}
 	}
 }
 
