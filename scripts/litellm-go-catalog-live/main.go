@@ -17,6 +17,7 @@ import (
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gateway"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/litellm"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 )
 
@@ -122,13 +123,13 @@ func main() {
 			{ID: "definition-storage", SchemaID: schemaID, AttributeKey: "attr_storage", Label: "سعة التخزين", DataType: "text", IsRequired: true},
 			{ID: "definition-color", SchemaID: schemaID, AttributeKey: "attr_color", Label: "اللون", DataType: "text", IsRequired: true},
 		}}
-	blue := services.CatalogAIOffer{ID: oBlue, CatalogItemID: itemID, VariantID: stringPtr(vBlue), Name: "العرض الأزرق", PricingMode: "fixed", Amount: stringPtr("12000.0000"), Currency: stringPtr("YER"), Status: "active"}
-	black := services.CatalogAIOffer{ID: oBlack, CatalogItemID: itemID, VariantID: stringPtr(vBlack), Name: "العرض الأسود", PricingMode: "fixed", Amount: stringPtr("15000.0000"), Currency: stringPtr("YER"), Status: "active"}
-	standalone := services.CatalogAIOffer{ID: oBase, CatalogItemID: itemID, Name: "العرض الأساسي", PricingMode: "fixed", Amount: stringPtr("10000.0000"), Currency: stringPtr("YER"), Status: "active"}
+	blue := services.CatalogAIOffer{ID: oBlue, CatalogItemID: itemID, VariantID: stringPtr(vBlue), Name: "العرض الأزرق", PricingMode: "fixed", Amount: stringPtr("12000.0000"), Currency: stringPtr("YER"), AvailabilityMode: stringPtr("supplier_check"), AvailabilityStatus: stringPtr("requires_check"), Status: "active"}
+	black := services.CatalogAIOffer{ID: oBlack, CatalogItemID: itemID, VariantID: stringPtr(vBlack), Name: "العرض الأسود", PricingMode: "fixed", Amount: stringPtr("15000.0000"), Currency: stringPtr("YER"), AvailabilityMode: stringPtr("supplier_check"), AvailabilityStatus: stringPtr("requires_check"), Status: "active"}
+	standalone := services.CatalogAIOffer{ID: oBase, CatalogItemID: itemID, Name: "العرض الأساسي", PricingMode: "fixed", Amount: stringPtr("10000.0000"), Currency: stringPtr("YER"), AvailabilityMode: stringPtr("supplier_check"), AvailabilityStatus: stringPtr("requires_check"), Status: "active"}
 	item := services.CatalogAIItem{ID: itemID, CatalogID: catalogID, Catalog: &catalog, Schema: &schema,
 		AttributeSchemaID: stringPtr(schemaID), AttributeSchemaVersion: intPtr(2),
 		ItemType: "physical_good", Name: "هاتف تجريبي", Status: "active",
-		PricingMode: "fixed", AvailabilityMode: "always_available", FulfillmentMode: "delivery",
+		PricingMode: "fixed", AvailabilityMode: "supplier_check", FulfillmentMode: "delivery", RequiresConfirmation: true,
 		Attributes:         map[string]any{"attr_storage": "256GB"},
 		ResolvedAttributes: []services.CatalogAIResolvedAttribute{{Key: "attr_storage", Label: "سعة التخزين", DataType: "text", Origin: "item", Value: "256GB"}},
 		Variants: []services.CatalogAIVariant{
@@ -150,7 +151,7 @@ func main() {
 	}
 	input := services.BatchEvaluationInput{
 		AIRunID: "synthetic-live-acceptance", BatchNumber: 1,
-		CustomerMessage: "أريد مقارنة هذا الهاتف بجميع ألوانه وعروضه الثلاثة مع السعر، لا تسقط خيارًا أو عرضًا.",
+		CustomerMessage: "تأكد لي الآن من المورد هل الهاتف الأسود بسعة 256GB موجود قبل ما أطلبه.",
 		EntityContract:  services.BuildCatalogEntityContractPayload(),
 		Batch:           batch,
 	}
@@ -231,23 +232,16 @@ func main() {
 	}
 	fmt.Printf("PASS: final Go HTTP request retained all 3 offers, both variants, schemas and source prices (model=%s, tokens_in=%d, tokens_out=%d)\n",
 		finalUsage.Model, finalUsage.InputTokens, finalUsage.OutputTokens)
-	// A real completion can choose any allowed terminal capability, but for
-	// this unambiguous price-comparison request it should answer with evidence.
-	answer := strings.ReplaceAll(decision.ResponseText, ",", "")
-	prices := []string{"10000", "12000", "15000"}
-	included := 0
-	for _, price := range prices {
-		if strings.Contains(answer, price) {
-			included++
-		}
-	}
-	fmt.Printf("OBSERVED: final capability=%s, reply_chars=%d, source_prices_mentioned=%d/3\n",
-		decision.Capability, len([]rune(decision.ResponseText)), included)
-	if included != 3 {
-		fmt.Fprintln(os.Stderr, "FAIL: model did not explicitly mention all three verified offer prices in its final answer")
+	if decision.Capability != ports.CustomerSalesCapabilityHandoff {
+		fmt.Fprintf(os.Stderr, "FAIL: supplier verification request must hand off after catalog evidence; got %s\n", decision.Capability)
 		os.Exit(1)
 	}
-	fmt.Println("PASS: full real catalog evaluation returned all three prices without truncating commercial evidence")
+	if strings.TrimSpace(decision.ResponseText) == "" {
+		fmt.Fprintln(os.Stderr, "FAIL: handoff capability returned empty customer text")
+		os.Exit(1)
+	}
+	fmt.Printf("PASS: final capability=%s after complete catalog evidence; unsupported supplier verification did not become another informational catalog reply (reply_chars=%d)\n",
+		decision.Capability, len([]rune(decision.ResponseText)))
 }
 
 func contains(xs []string, v string) bool {
