@@ -363,17 +363,13 @@ func TestCatalogCapabilityRequiresCompleteLocalWiring(t *testing.T) {
 	if controller.Ready() {
 		t.Fatal("missing token counter considered ready")
 	}
-	controller.TokenCounter = constantTokenCounter{}
+	controller.Evaluator = &capabilityBatchModel{}
 	if !controller.Ready() {
-		t.Fatal("compatibility token counter not accepted")
+		t.Fatal("complete provider request token estimator was not accepted")
 	}
 }
 
 type plainTokenBatchModel struct{ CatalogEvaluationClient }
-type constantTokenCounter struct{}
-
-func (constantTokenCounter) CountTokens(context.Context, any) (int, error) { return 100, nil }
-
 func TestFullCatalogCapabilityPolicyGatePreventsExecution(t *testing.T) {
 	for _, outcome := range []string{"denied", "requires_approval"} {
 		t.Run(outcome, func(t *testing.T) {
