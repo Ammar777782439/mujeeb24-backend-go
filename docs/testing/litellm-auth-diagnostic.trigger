@@ -1,0 +1,1 @@
+Single real authorization diagnostic run requested as part of reviewing mujeeb-backend key permissions. Uses GitHub encrypted LITELLM_API_KEY, GET /v1/models only, no model inference, no secret logging.
