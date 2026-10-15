@@ -1,6 +1,6 @@
 //go:build ignore
 
-// Read-only diagnostic: reproduce the production Go net/http request fingerprint.
+// Read-only diagnostic: reproduce the production Go net/http request fingerprint at the public edge.
 // Run with "go run scripts/litellm-go-edge-probe/main.go". No model inference or logging secrets.
 package main
 
