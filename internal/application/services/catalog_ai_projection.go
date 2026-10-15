@@ -67,7 +67,22 @@ type CatalogAIAttributeDefinition struct {
 }
 
 // CatalogAIItem is contract ① §1 — one catalog item with its variants and offers.
+// CatalogAIResolvedAttribute gives the model a typed human-readable label
+// alongside the original machine attribute key and its untouched value.
+type CatalogAIResolvedAttribute struct {
+	Key string `json:"key"`
+	Label string `json:"label"`
+	DataType string `json:"data_type,omitempty"`
+	Origin string `json:"origin"`
+	Value any `json:"value"`
+}
+
 type CatalogAIItem struct {
+	// Commercial context is embedded on each indivisible item; it is not
+	// inferred by the model by joining distant arrays.
+	Catalog *CatalogAICatalog `json:"catalog,omitempty"`
+	Schema *CatalogAIAttributeSchema `json:"schema,omitempty"`
+	ResolvedAttributes []CatalogAIResolvedAttribute `json:"resolved_attributes,omitempty"`
 	ID                     string             `json:"id"`
 	CatalogID              string             `json:"catalog_id"`
 	AttributeSchemaID      *string            `json:"attribute_schema_id,omitempty"`
@@ -88,6 +103,10 @@ type CatalogAIItem struct {
 
 // CatalogAIVariant is contract ① §1 — one variant under a CatalogAIItem.
 type CatalogAIVariant struct {
+	// Effective attributes are inherited from the item and overridden only
+	// where this variant carries an explicit different value.
+	EffectiveAttributes map[string]any `json:"effective_attributes,omitempty"`
+	ResolvedAttributes []CatalogAIResolvedAttribute `json:"resolved_attributes,omitempty"`
 	ID            string         `json:"id"`
 	CatalogItemID string         `json:"catalog_item_id"`
 	Name          string         `json:"name"`
