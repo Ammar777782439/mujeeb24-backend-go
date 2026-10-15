@@ -162,6 +162,12 @@ func (b AutoReplyContextBuilder) retrieveComparison(ctx context.Context, busines
 		}
 		_, item, _, err := b.findOfferByIDWithinBusiness(ctx, businessID, id, nil)
 		if err != nil {
+			// An exact reference can identify an item or an offer. Only a
+			// verified not-found may try the other type; database errors
+			// and cross-tenant mismatches must never be masked.
+			if !isScopedNotFound(err) {
+				return nil, nil, nil, err
+			}
 			item, err = b.findItemByIDWithinBusiness(ctx, businessID, id, nil)
 			if err != nil {
 				return nil, nil, nil, err
