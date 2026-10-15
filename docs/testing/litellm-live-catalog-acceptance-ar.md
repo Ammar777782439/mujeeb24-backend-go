@@ -1,5 +1,15 @@
 # اختبار LiteLLM الحي — بوابة مجيب / نموذج الكتالوج
 
+## مسارات الوصول المعتمدة
+
+- **لوحة LiteLLM Dashboard/UI:** https://webhook.mujeeb24.com/ui/ — هنا تسجيل الدخول إلى لوحة الإدارة باستخدام حساب UI، ولا يُستخدم هذا المسار لاستدعاء النماذج.
+- **أساس REST API:** https://webhook.mujeeb24.com (قيمة `LITELLM_BASE_URL` دون `/ui` ودون `/v1`).
+- **واجهة النماذج:** `GET https://webhook.mujeeb24.com/v1/models` مع Bearer Virtual Key.
+- **استدلال النماذج:** `POST https://webhook.mujeeb24.com/v1/chat/completions` مع Bearer Virtual Key.
+- **الجاهزية:** `GET https://webhook.mujeeb24.com/health/readiness`.
+
+**التمييز الأمني:** حساب UI وكلمة مرور اللوحة مختلفان عن LiteLLM Virtual Key. نجاح الوصول إلى `/ui/` أو `/health/readiness` لا يثبت صلاحيات الـAPI. اختبار خارجي بتاريخ 15 أكتوبر 2026 أكد `/health/readiness → 200`، ولكن الاختبار المصادق عليه أعاد `403` لكلٍ من `/v1/models` و`/v1/chat/completions`. صَنَّف التشخيص جسم الخطأ كـJSON API دون ظهور نوع/رمز خطأ موثوق؛ لذلك **مصدر رفض 403 لم يُحدد بعد**، ولا يعدّ اختبار النموذج ناجحًا.
+
 **الحالة:** لا يُعتبر اختبار النموذج الحي ناجحًا حتى يصدر GitHub Actions نتيجة SUCCESS من `Live LiteLLM catalog model acceptance`، وتظهر رسالتا PASS من اختبار المصادقة واستجابة النموذج.
 
 ## ما الذي ثَبُت بالفعل؟
