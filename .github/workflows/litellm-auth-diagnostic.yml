@@ -2,11 +2,6 @@ name: LiteLLM authorization diagnostic (no model calls)
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - feat/catalog-complete-commercial-entity-atomic
-    paths:
-      - docs/testing/litellm-auth-diagnostic.trigger
 
 permissions:
   contents: read
