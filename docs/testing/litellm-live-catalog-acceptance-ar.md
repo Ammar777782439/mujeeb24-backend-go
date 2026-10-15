@@ -12,6 +12,28 @@
 
 **الحالة:** لا يُعتبر اختبار النموذج الحي ناجحًا حتى يصدر GitHub Actions نتيجة SUCCESS من `Live LiteLLM catalog model acceptance`، وتظهر رسالتا PASS من اختبار المصادقة واستجابة النموذج.
 
+## تشخيص نهائي موثق — Cloudflare Error 1010 (2026-10-15)
+
+تم إثبات أن رفض الاستدلال الخارجي يحدث في Cloudflare **قبل LiteLLM**. تم تنفيذ اختبارات GET إلى `https://webhook.mujeeb24.com/v1/models` من GitHub Actions دون مفتاح، ثم بنفس المسار بمفتاح `LITELLM_API_KEY` المخزن في GitHub Secrets. النتيجة في الحالتين:
+
+- `HTTP 403`; `server: cloudflare`؛ `content_type: application/json`؛ `cloudflare_error: true`.
+- `error_code: 1010`؛ `error_category: access_denied`؛ `error_name: browser_signature_banned`؛ `owner_action_required: true`.
+- Ray ID بدون مفتاح: `a4b037edadcaff0f`؛ مع المفتاح: `a4b037ee3c00b642`.
+- [اختبار GitHub الحقيقي](https://github.com/Ammar777782439/mujeeb24-backend-go/actions/runs/38769805652). **لا يوجد اختبار نموذج ناجح بعد**.
+
+السبب حسب وثائق Cloudflare: **Browser Integrity Check (BIC)** أو سياسة حظر توقيع العميل في Cloudflare. الصور الخاصة بـ Virtual Key لا تشير إلى حظر الميزانية أو انتهاء الصلاحية، لكنها لا تثبت صلاحية النموذج؛ لا يمكن تقييم ذلك حتى يصل الطلب إلى LiteLLM.
+
+### العلاج المحدد والمفضل
+
+1. في Cloudflare افتح نطاق `mujeeb24.com` ثم **Security → Analytics → Events**، وحدد الطلب بواسطة أحد Ray IDs أعلاه أو الوقت (UTC) لمعرفة سياسة الحظر.
+2. في **Security → Security rules → Create rule → Custom rules** أنشئ قاعدة **Skip** مقيّدة بـ `http.host eq "webhook.mujeeb24.com"` و`starts_with(http.request.uri.path, "/v1/")`، واختر تجاوز **Browser Integrity Check فقط**. أبقِ WAF والأجهزة الأخرى وسياسات المعدل والمصادقة قائمة. يمكن إضافة مسار `/health/readiness` عند الحاجة، ولا تضف `/ui/`.
+3. بديل مكافئ: Configuration Rule لتعطيل BIC لمسارات API المسموح بها فقط؛ لا تعطّل فحص الموقع كاملًا لمجرد تشغيل اختبار CI.
+4. أعد اختبار `/v1/models` دون مفتاح (متوقع أن يصل إلى رفض LiteLLM `401`) ثم بالمفتاح؛ لا تستخدم نتائج BIC القديمة بعد تغيير السياسة. عند نجاح المصادقة انتقل إلى اختبار الكتالوج الحقيقي على `/v1/chat/completions`.
+
+المراجع: https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-1xxx-errors/error-1010/ و https://developers.cloudflare.com/waf/tools/browser-integrity-check/ .
+
+---
+
 ## ما الذي ثَبُت بالفعل؟
 
 - نفق `https://webhook.mujeeb24.com` أجاب من GitHub Actions: `GET /health/readiness → HTTP 200`، و`GET /v1/models` بدون مفتاح → `HTTP 401`. هذا يؤكد توجيه HTTPS إلى خدمة محمية؛ **لا يثبت وجود Alias أو استدعاء نموذج**.
