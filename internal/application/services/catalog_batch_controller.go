@@ -150,10 +150,9 @@ type CatalogAIBatchPayload struct {
 	Items            []CatalogAIItem            `json:"items,omitempty"`
 }
 
-// TokenCounter is an optional compatibility counter for catalog payloads.
-// A gateway estimator is preferred because it counts the assembled model
-// request. LiteLLM may estimate tokens for some upstream deployments, so all
-// results are bounded conservatively and must never be described as exact.
+// TokenCounter counts an assembled catalog payload when an exact provider
+// request estimator is unavailable. It cannot authorize item fragmentation.
+// Estimates must include the full request overhead for production routes.
 type TokenCounter interface {
 	CountTokens(ctx context.Context, payload any) (int, error)
 }
@@ -408,47 +407,9 @@ func appendCandidateProjection(target *CatalogAIProjection, batch CatalogAIBatch
 		if !ok {
 			continue
 		}
-		// If AI model narrowed a candidate to specific variants/offers, expose
-		// only those nested records to the next stage. Empty child lists mean
-		// the whole item remains the candidate and its nested facts stay visible.
+		// Candidate child IDs signal relevance only. Never prune the complete
+		// commercial entity before a second model evaluation.
 		filtered := item
-		if len(candidate.VariantIDs) > 0 || len(candidate.OfferIDs) > 0 {
-			variantIDs := make(map[string]struct{}, len(candidate.VariantIDs))
-			for _, id := range candidate.VariantIDs {
-				variantIDs[id] = struct{}{}
-			}
-			offerIDs := make(map[string]struct{}, len(candidate.OfferIDs))
-			for _, id := range candidate.OfferIDs {
-				offerIDs[id] = struct{}{}
-			}
-
-			filtered.Offers = nil
-			for _, offer := range item.Offers {
-				include := false
-				if len(offerIDs) > 0 {
-					_, include = offerIDs[offer.ID]
-				} else if len(variantIDs) > 0 {
-					include = offer.VariantID == nil
-					if offer.VariantID != nil {
-						_, include = variantIDs[*offer.VariantID]
-					}
-				}
-				if !include {
-					continue
-				}
-				filtered.Offers = append(filtered.Offers, offer)
-				if offer.VariantID != nil && *offer.VariantID != "" {
-					variantIDs[*offer.VariantID] = struct{}{}
-				}
-			}
-
-			filtered.Variants = nil
-			for _, variant := range item.Variants {
-				if _, include := variantIDs[variant.ID]; include {
-					filtered.Variants = append(filtered.Variants, variant)
-				}
-			}
-		}
 
 		merged := false
 		for i := range target.Items {
@@ -621,7 +582,9 @@ func parseJSONAttributes(raw []byte) map[string]any {
 		return nil
 	}
 	var out map[string]any
-	if err := json.Unmarshal(raw, &out); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber() // Preserve decimal/integer attribute values without float64 coercion.
+	if err := decoder.Decode(&out); err != nil {
 		return nil
 	}
 	if len(out) == 0 {
@@ -718,93 +681,6 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 		return c.TokenCounter.CountTokens(ctx, batch)
 	}
 
-	type itemFragmentUnit struct {
-		variant *CatalogAIVariant
-		offer   *CatalogAIOffer
-	}
-
-	buildFragmentItem := func(item CatalogAIItem, units []itemFragmentUnit) CatalogAIItem {
-		fragment := item
-		fragment.Variants = nil
-		fragment.Offers = nil
-		variantSeen := make(map[string]struct{})
-		offerSeen := make(map[string]struct{})
-		for _, unit := range units {
-			if unit.variant != nil {
-				if _, ok := variantSeen[unit.variant.ID]; !ok {
-					fragment.Variants = append(fragment.Variants, *unit.variant)
-					variantSeen[unit.variant.ID] = struct{}{}
-				}
-			}
-			if unit.offer != nil {
-				if _, ok := offerSeen[unit.offer.ID]; !ok {
-					fragment.Offers = append(fragment.Offers, *unit.offer)
-					offerSeen[unit.offer.ID] = struct{}{}
-				}
-			}
-		}
-		return fragment
-	}
-
-	var splitOversizedItem func(CatalogAIItem) error
-	splitOversizedItem = func(item CatalogAIItem) error {
-		variantByID := make(map[string]CatalogAIVariant, len(item.Variants))
-		for _, variant := range item.Variants {
-			variantByID[variant.ID] = variant
-		}
-		variantUsedByOffer := make(map[string]struct{})
-		units := make([]itemFragmentUnit, 0, len(item.Offers)+len(item.Variants))
-		for i := range item.Offers {
-			offer := item.Offers[i]
-			unit := itemFragmentUnit{offer: &offer}
-			if offer.VariantID != nil && *offer.VariantID != "" {
-				if variant, ok := variantByID[*offer.VariantID]; ok {
-					variantCopy := variant
-					unit.variant = &variantCopy
-					variantUsedByOffer[variant.ID] = struct{}{}
-				}
-			}
-			offerCopy := offer
-			unit.offer = &offerCopy
-			units = append(units, unit)
-		}
-		for i := range item.Variants {
-			variant := item.Variants[i]
-			if _, used := variantUsedByOffer[variant.ID]; used {
-				continue
-			}
-			variantCopy := variant
-			units = append(units, itemFragmentUnit{variant: &variantCopy})
-		}
-		if len(units) == 0 {
-			return fmt.Errorf("catalog item %s exceeds token budget %d and has no splittable variants/offers", item.ID, budget)
-		}
-
-		var splitUnits func([]itemFragmentUnit) error
-		splitUnits = func(part []itemFragmentUnit) error {
-			fragment := buildFragmentItem(item, part)
-			batch := buildBatch([]CatalogAIItem{fragment}, nextBatchNumber)
-			tokens, err := countBatch(batch)
-			if err != nil {
-				return fmt.Errorf("count tokens for item %s fragment batch %d: %w", item.ID, nextBatchNumber, err)
-			}
-			if tokens <= budget {
-				batches = append(batches, batch)
-				nextBatchNumber++
-				return nil
-			}
-			if len(part) == 1 {
-				return fmt.Errorf("catalog item %s contains an indivisible commercial fragment exceeding token budget %d with conservative request estimate %d; use a validated larger-context route, not truncation", item.ID, budget, tokens)
-			}
-			mid := len(part) / 2
-			if err := splitUnits(part[:mid]); err != nil {
-				return err
-			}
-			return splitUnits(part[mid:])
-		}
-		return splitUnits(units)
-	}
-
 	var split func([]CatalogAIItem) error
 	split = func(items []CatalogAIItem) error {
 		if len(items) == 0 {
@@ -821,7 +697,7 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 			return nil
 		}
 		if len(items) == 1 {
-			return splitOversizedItem(items[0])
+			return fmt.Errorf("catalog item %s exceeds token budget %d with complete request estimate %d: indivisible commercial entity; configure a verified larger-context route", items[0].ID, budget, tokens)
 		}
 		mid := len(items) / 2
 		if err := split(items[:mid]); err != nil {
@@ -833,8 +709,8 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 	if err := split(projection.Items); err != nil {
 		return nil, err
 	}
-	// Check every original commercial field, schema, variant and offer
-	// before handing a single batch to the AI provider.
+	// Verify each source item appears once, unchanged, with all its child
+	// relationships and schema before any batch is sent to the provider.
 	if err := validateCatalogBatchCoverage(projection, batches); err != nil {
 		return nil, fmt.Errorf("catalog batch coverage: %w", err)
 	}
