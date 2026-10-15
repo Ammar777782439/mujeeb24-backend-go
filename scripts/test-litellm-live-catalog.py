@@ -45,11 +45,20 @@ def request_json(path, payload=None):
         raise RuntimeError(f"{path}: HTTPS connection failed ({type(err.reason).__name__})") from None
 
 def main():
-    models = request_json("/v1/models")
-    aliases = [str(m.get("id", "")) for m in models.get("data", []) if isinstance(m, dict)]
-    if MODEL not in aliases:
-        raise AssertionError(f"catalog alias {MODEL!r} absent from authorized model list")
-    print("PASS: authenticated /v1/models includes configured catalog alias")
+    try:
+        models = request_json("/v1/models")
+    except RuntimeError as exc:
+        if str(exc) != "/v1/models: HTTP 403":
+            raise
+        # Some LiteLLM virtual keys can invoke an allowed model without
+        # permission to enumerate the model registry. This is NOT evidence
+        # of a successful model call: still require a real completion.
+        print("WARN: model listing returned 403; testing direct model invocation")
+    else:
+        aliases = [str(m.get("id", "")) for m in models.get("data", []) if isinstance(m, dict)]
+        if MODEL not in aliases:
+            raise AssertionError(f"catalog alias {MODEL!r} absent from authorized model list")
+        print("PASS: authenticated /v1/models includes configured catalog alias")
 
     variant_a, variant_b = "variant-probe-blue", "variant-probe-black"
     offer_a, offer_b, offer_base = "offer-probe-blue", "offer-probe-black", "offer-probe-base"
