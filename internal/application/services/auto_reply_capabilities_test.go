@@ -370,6 +370,7 @@ func TestCatalogCapabilityRequiresCompleteLocalWiring(t *testing.T) {
 }
 
 type plainTokenBatchModel struct{ CatalogEvaluationClient }
+
 func TestFullCatalogCapabilityPolicyGatePreventsExecution(t *testing.T) {
 	for _, outcome := range []string{"denied", "requires_approval"} {
 		t.Run(outcome, func(t *testing.T) {

@@ -216,7 +216,6 @@ func TestAutoReplyContextBuilderGroundsCatalogAgainstPostgres(t *testing.T) {
 		t.Fatal("mismatched item ID was permitted to own a focused offer")
 	}
 
-
 	// A same-count, unchanged-timestamp commercial edit must still change the
 	// content revision. PostgreSQL is real, not a stubbed repository.
 	catalogReader := NewCatalogAIReadRepository(adapter)
