@@ -50,7 +50,7 @@ jobs:
 
   lite-llm-edge:
     name: Public LiteLLM HTTPS endpoint (unauthenticated, feature branch only)
-    if: github.ref_name == 'feat/catalog-complete-commercial-entity-atomic'
+    if: github.head_ref == 'feat/catalog-complete-commercial-entity-atomic' || github.ref_name == 'feat/catalog-complete-commercial-entity-atomic'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
