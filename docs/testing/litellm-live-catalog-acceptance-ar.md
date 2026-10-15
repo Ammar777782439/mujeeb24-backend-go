@@ -1,66 +1,72 @@
-# اختبار LiteLLM الحي — بوابة مجيب / نموذج الكتالوج
+# Mujeeb 24 — اختبار LiteLLM الحقيقي للكتالوج (15 أكتوبر 2026)
 
-## مسارات الوصول المعتمدة
+**الحالة:** نجح اختبار Go الحقيقي لتقييم دفعة كتالوج والتقييم النهائي في 15 أكتوبر 2026، على الفرع `feat/catalog-complete-commercial-entity-atomic`. اختبارات Go/PostgreSQL المستقلة لا تعني أن جميع شروط التشغيل الإنتاجي أو المزودين الاحتياطيين قد اختُبرت.
 
-- **لوحة LiteLLM Dashboard/UI:** https://webhook.mujeeb24.com/ui/ — هنا تسجيل الدخول إلى لوحة الإدارة باستخدام حساب UI، ولا يُستخدم هذا المسار لاستدعاء النماذج.
-- **أساس REST API:** https://webhook.mujeeb24.com (قيمة `LITELLM_BASE_URL` دون `/ui` ودون `/v1`).
-- **واجهة النماذج:** `GET https://webhook.mujeeb24.com/v1/models` مع Bearer Virtual Key.
-- **استدلال النماذج:** `POST https://webhook.mujeeb24.com/v1/chat/completions` مع Bearer Virtual Key.
-- **الجاهزية:** `GET https://webhook.mujeeb24.com/health/readiness`.
+## المسارات الصحيحة
 
-**التمييز الأمني:** حساب UI وكلمة مرور اللوحة مختلفان عن LiteLLM Virtual Key. نجاح الوصول إلى `/ui/` أو `/health/readiness` لا يثبت صلاحيات الـAPI. اختبار خارجي بتاريخ 15 أكتوبر 2026 أكد `/health/readiness → 200`، ولكن الاختبار المصادق عليه أعاد `403` لكلٍ من `/v1/models` و`/v1/chat/completions`. صَنَّف التشخيص جسم الخطأ كـJSON API دون ظهور نوع/رمز خطأ موثوق؛ لذلك **مصدر رفض 403 لم يُحدد بعد**، ولا يعدّ اختبار النموذج ناجحًا.
+- لوحة إدارة LiteLLM: https://webhook.mujeeb24.com/ui/
+- `LITELLM_BASE_URL=https://webhook.mujeeb24.com` **دون** `/ui` أو `/v1`.
+- التحقق من جاهزية الخدمة: `GET /health/readiness`.
+- استكشاف النماذج بالمفتاح: `GET /v1/models`.
+- **مسار Customer/Catalog AI الإنتاجي عبر Go:** `POST /v1beta/interactions`.
+- مسار OpenAI-compatible الذي تستخدمه أجزاء أخرى من Go: `POST /v1/chat/completions`.
+- حساب UI وكلمة مروره لا يمثلان `LITELLM_API_KEY`؛ الأخير GitHub Secret بقيمة Virtual Key.
 
-**الحالة:** لا يُعتبر اختبار النموذج الحي ناجحًا حتى يصدر GitHub Actions نتيجة SUCCESS من `Live LiteLLM catalog model acceptance`، وتظهر رسالتا PASS من اختبار المصادقة واستجابة النموذج.
+## لماذا أعاد الاختبار الأول HTTP 403 بينما يعمل البرودكشن؟
 
-## تشخيص نهائي موثق — Cloudflare Error 1010 (2026-10-15)
+ثبت عمليًا أن **بصمة عميل Python** كانت المحظورة، وليس النطاق العام أو Virtual Key بصورة عامة.
 
-تم إثبات أن رفض الاستدلال الخارجي يحدث في Cloudflare **قبل LiteLLM**. تم تنفيذ اختبارات GET إلى `https://webhook.mujeeb24.com/v1/models` من GitHub Actions دون مفتاح، ثم بنفس المسار بمفتاح `LITELLM_API_KEY` المخزن في GitHub Secrets. النتيجة في الحالتين:
+في [التشغيل المقارن رقم 38770783777](https://github.com/Ammar777782439/mujeeb24-backend-go/actions/runs/38770783777)، من **نفس GitHub Runner** ونفس النطاق ونفس GitHub Secret:
 
-- `HTTP 403`; `server: cloudflare`؛ `content_type: application/json`؛ `cloudflare_error: true`.
-- `error_code: 1010`؛ `error_category: access_denied`؛ `error_name: browser_signature_banned`؛ `owner_action_required: true`.
-- Ray ID بدون مفتاح: `a4b037edadcaff0f`؛ مع المفتاح: `a4b037ee3c00b642`.
-- [اختبار GitHub الحقيقي](https://github.com/Ammar777782439/mujeeb24-backend-go/actions/runs/38769805652). **لا يوجد اختبار نموذج ناجح بعد**.
+| المسار | Go net/http مثل باك مجيب | Python urllib |
+|---|---|---|
+| `GET /health/readiness` | `200` | لم يُختبر في تلك المقارنة |
+| `GET /v1/models` بلا مفتاح | `401` | `403` |
+| `GET /v1/models` بالمفتاح | `200` | `403` |
 
-السبب حسب وثائق Cloudflare: **Browser Integrity Check (BIC)** أو سياسة حظر توقيع العميل في Cloudflare. الصور الخاصة بـ Virtual Key لا تشير إلى حظر الميزانية أو انتهاء الصلاحية، لكنها لا تثبت صلاحية النموذج؛ لا يمكن تقييم ذلك حتى يصل الطلب إلى LiteLLM.
+خطأ Python كان JSON صادرًا من Cloudflare يحمل `error_code=1010` و`error_name=browser_signature_banned`. بعد تجربة Go لم يعد هناك مبرر لتغيير صلاحيات مفتاح `mujeeb-backend` أو تعطيل Browser Integrity Check لمجرد إصلاح أداة الاختبار. حافظ على سياسات Cloudflare، واستخدم عميل Go للمطابقة مع البرودكشن.
 
-### العلاج المحدد والمفضل
+## نتائج الاختبار الحي للكيان التجاري الكامل
 
-1. في Cloudflare افتح نطاق `mujeeb24.com` ثم **Security → Analytics → Events**، وحدد الطلب بواسطة أحد Ray IDs أعلاه أو الوقت (UTC) لمعرفة سياسة الحظر.
-2. في **Security → Security rules → Create rule → Custom rules** أنشئ قاعدة **Skip** مقيّدة بـ `http.host eq "webhook.mujeeb24.com"` و`starts_with(http.request.uri.path, "/v1/")`، واختر تجاوز **Browser Integrity Check فقط**. أبقِ WAF والأجهزة الأخرى وسياسات المعدل والمصادقة قائمة. يمكن إضافة مسار `/health/readiness` عند الحاجة، ولا تضف `/ui/`.
-3. بديل مكافئ: Configuration Rule لتعطيل BIC لمسارات API المسموح بها فقط؛ لا تعطّل فحص الموقع كاملًا لمجرد تشغيل اختبار CI.
-4. أعد اختبار `/v1/models` دون مفتاح (متوقع أن يصل إلى رفض LiteLLM `401`) ثم بالمفتاح؛ لا تستخدم نتائج BIC القديمة بعد تغيير السياسة. عند نجاح المصادقة انتقل إلى اختبار الكتالوج الحقيقي على `/v1/chat/completions`.
+نفذ [التشغيل الناجح رقم 38772383313](https://github.com/Ammar777782439/mujeeb24-backend-go/actions/runs/38772383313) عبر `gateway.NewLiteLLMCatalogAdapter` و`litellm.Client` الحقيقيين من المستودع. **لا يوجد Model Mock أو httptest** في هذا التشغيل.
 
-المراجع: https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-1xxx-errors/error-1010/ و https://developers.cloudflare.com/waf/tools/browser-integrity-check/ .
+أُرسل **منتج اصطناعي واحد** مع:
+- Catalog واحد، Schema بإصدار 2 وتعريفَي خاصية، وحقل `resolved_attributes` يحافظ على معنى كل مفتاح وقيمته.
+- Variant أزرق وVariant أسود، `effective_attributes` وقيم موروثة، وعرض مرتبط بكل Variant.
+- عرض مباشر ثالث على مستوى المنتج؛ المبالغ الأصلية `12000.0000` و`15000.0000` و`10000.0000`، دون تحويلات float64 أو إسقاط عروض.
 
----
+تم فحص **طلب HTTP الصادر فعليًا** قبل الإرسال إلى `/v1beta/interactions` للتأكد من وجود الهوية الأصلية وجميع المعرفات والتعريفات والمبالغ وروابط العروض. ذلك الفحص لا يعدّل الـHTTP Request ولا يطبع الأسرار أو الاستجابة الخام.
 
-## ما الذي ثَبُت بالفعل؟
+| المرحلة | نتيجة التنفيذ |
+|---|---|
+| مقدّر توكنات الدفعة الحقيقي | `12,213` توكن تقديري (PASS) |
+| طلب تقيـيم الدفعة | PASS — كل الأدلة التجارية في الطلب |
+| استجابة المرشحين | مرشحان؛ معرفات العروض **ثلاثة** في أحدهما، ولا يُلزم العقد كل مرشح منفرد أن يعيد كل العروض |
+| مقدّر توكنات المرحلة النهائية | `21,777` توكن تقديري (PASS) |
+| طلب التقييم النهائي | PASS — كل العروض والخيارات والمواصفات والأسعار باقية في طلب Go الثاني |
+| Final Capability | `respond_without_action` |
+| أسعار العروض في الرد النهائي | **3 من 3** (PASS) |
 
-- نفق `https://webhook.mujeeb24.com` أجاب من GitHub Actions: `GET /health/readiness → HTTP 200`، و`GET /v1/models` بدون مفتاح → `HTTP 401`. هذا يؤكد توجيه HTTPS إلى خدمة محمية؛ **لا يثبت وجود Alias أو استدعاء نموذج**.
-- الاختبارات البرمجية وقاعدة PostgreSQL في Quality Gate منفصلة عن اختبار النموذج الحقيقي.
-- موقع `127.0.0.1:4000` صالح للوصول إلى LiteLLM من جهاز المضيف الذي يشغله؛ لا يمكن لبيئة CI الوصول إلى loopback في جهاز المستخدم.
+**تنبيه حول الدقة:** اختيار مرشح أول بلا `offer_ids` لا يعني فقدان Offer من `candidateProjection`؛ العقد يجعل تلك المعرفات *إشارة صلة*، و`appendCandidateProjection` يعيد المنتج كاملًا للقرار النهائي. كان الفحص القديم يشترط خطأً أن يعيد **كل مرشح منفرد** جميع عروض المنتج، ولذلك أعطى نتيجة رفض مبكر غير مبررة. الاختبار الحي النهائي تحقق من طلب المرحلة النهائية ومن الأسعار في الرد.
 
-## التشغيل الآمن للاختبار الحقيقي
+## حدود هذه النتائج
 
-1. في لوحة LiteLLM أنشئ **Virtual Key جديدًا للاختبار فقط** بصلاحية نموذج `mujeeb-catalog`، وميزانية/مدة قصيرة. لا تستخدم مفتاح المدير، ولا الأسرار القديمة المنشورة.
-2. في المستودع الصحيح `Ammar777782439/mujeeb24-backend-go` افتح **Settings → Secrets and variables → Actions → New repository secret**.
-3. اختر الاسم بالضبط: `LITELLM_API_KEY`، والصق مفتاح اختبار LiteLLM الجديد في **قيمة السر** هناك فقط. لا تضعه في Issues أو Comments أو Pull Requests أو ملفات أو Logs.
-4. افتح **Actions → Live LiteLLM catalog model acceptance → Run workflow**، واختر فرع `feat/catalog-complete-commercial-entity-atomic`، ثم Run.
-5. راجع رسائل PASS/FAIL في سجل الوظيفة. لا تنسخ رموز أو Headers مصادقة. بعد الاختبار ألغِ مفتاح الاختبار من LiteLLM وامسح سر GitHub إذا لن يُستخدم مجددًا.
+هذا **اختبار حي حقيقي** لمسار Go ضد LiteLLM ونموذجه وضد عقد كامل لمنتج تجريبي، لكنه **ليس**:
+- اختبار تشغيل شامل عبر قاعدة بيانات تاجر فعلية ورسائله وقناة SocialAPI.
+- إثباتًا بأن النموذج سيفهم كل عنصر في كل كتالوج وعميل بنسبة 100%؛ الضمان البنيوي يختلف عن صحة استدلال النموذج.
+- تحققًا حيًا من جميع مزودي fallback/القدرات/نوافذ السياق، أو من كتالوج ضخم ذي صفحات متعددة عبر المزود.
+- بديلًا عن الاختبارات المحلية الحقيقية لـPostgreSQL وتغيّر المراجعة والتزامن؛ هذه تنفذ بشكل مستقل في Quality Gate.
 
-## ما الذي يختبره المسار الحي؟
+## التشغيل عند الحاجة فقط
 
-- المصادقة الحقيقية من الإنترنت في `GET /v1/models`.
-- وجود `mujeeb-catalog` ضمن النماذج المصرح بها.
-- استدعاء `POST /v1/chat/completions` عبر بوابة LiteLLM مع JSON Schema.
-- مثال اصطناعي كامل: Catalog + schema + definitions + item + اثنان من Variants + عروض Variant مرتبطة + عرض على مستوى Item.
-- التحقق من رجوع جميع المعرفات المحددة **بالضبط** دون سقوط أو إضافة، ومن إصدار Schema.
+- Workflow: `.github/workflows/litellm-live-catalog.yml`، **Manual / workflow_dispatch فقط**.
+- GitHub → Actions → **Live LiteLLM catalog model acceptance** → **Run workflow** → اختر فرع `feat/catalog-complete-commercial-entity-atomic`.
+- يجب أن يكون `LITELLM_API_KEY` مضبوطًا في Repository Secrets. لا تنسخ المفتاح في المستودع أو السجلات.
+- هذا الاختبار قد يستهلك رصيد المزود؛ شغّله عند الحاجة فقط، ودوّر المفاتيح المنشورة سابقًا بخطة آمنة (خصوصًا JWT وتشفير البيانات).
+- لا تغيّر `main` ولا تعِد إدخال تجزئة المنتج القديم أو ترخيص إرسال أدلة ناقصة.
 
-**حدود الإثبات:** الاستدعاء يعمل على بيانات اصطناعية واحدة؛ لا يضمن قدرة النموذج على التفكير الصحيح مع كل الكتالوجات، ولا يتحقق من اختيار/سياسات/تكلفة كل fallback. ويلزم اختبار فعلي لمسار مجيب مع PostgreSQL والتحديث المتزامن ومزودي fallback عند توفر بيئة اختبار متصلة، دون إرسال رسائل حقيقية للعملاء.
+## روابط الأدلة
 
-## ملاحظات أمنية وتشغيلية
-
-- مفاتيح UI الخاصة بالداشبورد ليست مفاتيح REST API للنماذج. لا تستخدم كلمة مرور واجهة الإدارة للـ Bearer Authorization.
-- المفتاح وكلمات المرور ومفاتيح التوقيع والتشفير التي تم كشفها في المحادثات تحتاج خطة تدوير. **لا تستبدل مفاتيح تشفير البيانات أو JWT في الإنتاج فجأة**؛ رتب تغييرًا متوافقًا مع تخزين المفاتيح المشفرة وانتهاء صلاحية التوكنات.
-- هذه الوظيفة **يدوية عمدًا** لأنها قد تتسبب بتكلفة عند كل تشغيل؛ Quality Gate يختبر Go وPostgreSQL دون تكلفة مزود.
-- لا تستخدم Environment Secrets داخل `.env` الحقيقي في GitHub؛ حافظ على مفاتيح التاجر وقنوات SocialAPI خارج اختبار LiteLLM.
+- [Go/Python Cloudflare comparison #38770783777](https://github.com/Ammar777782439/mujeeb24-backend-go/actions/runs/38770783777)
+- [First real Go batch attempt #38771316662](https://github.com/Ammar777782439/mujeeb24-backend-go/actions/runs/38771316662) — رفض ناتج عن فرض غير صحيح حول معرّفات كل مرشح منفرد.
+- [Real Go batch+final accepted #38772383313](https://github.com/Ammar777782439/mujeeb24-backend-go/actions/runs/38772383313)
