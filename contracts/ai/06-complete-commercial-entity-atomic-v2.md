@@ -38,7 +38,7 @@ Each catalog-wide `overview` produces a general summary, not detail-level eviden
 
 ## Scoped conversation context
 
-When focusing an item, offer, variant or comparison, retrieve every active variant and offer of **each referenced item**, using cursor pagination until completion. A catalog-level focus must not expose an arbitrary first-N prefix as a complete catalog; only the manifest may be shown until `evaluate_full_catalog` is requested. Missing references, non-progressing cursors and cross-tenant relationships fail closed.
+When focusing an item, offer, variant or comparison, retrieve every active variant and offer of **each referenced item**, using cursor pagination until completion. A catalog-level focus must not expose an arbitrary first-N prefix as a complete catalog; only the manifest may be shown until `evaluate_full_catalog` is requested. Missing references, non-progressing cursors and cross-tenant relationships fail closed. When interpreting comparison references, the alternate item/offer lookup is permitted **only** after a typed `not_found`; authorization failures, storage errors and tenant mismatches must propagate and must never be reinterpreted as an unknown reference. The normal catalog manifest remains discovery-only and is not proof of completeness.
 
 ## Currency, evidence and version integrity
 
