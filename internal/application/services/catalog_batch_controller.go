@@ -803,24 +803,36 @@ func buildFinalEvaluationPayload(
 ) (FinalEvaluationInput, string) {
 	contextPayload := struct {
 		Sales                  *ports.SalesWorkflowContext                 `json:"sales,omitempty"`
+		SchemaVersion          int                                         `json:"schema_version"`
+		Freshness              string                                      `json:"freshness"`
 		Business               ports.CustomerSalesContextBusiness          `json:"business"`
 		Conversation           ports.CustomerSalesContextConversation      `json:"conversation"`
-		Customer               ports.CustomerSalesContextCustomer          `json:"customer"`
+		Customer               finalEvaluationCustomer                     `json:"customer"`
 		KnowledgeEvidence      []ports.CustomerSalesKnowledgeEvidence      `json:"knowledge_evidence,omitempty"`
 		BusinessPolicyEvidence []ports.CustomerSalesBusinessPolicyEvidence `json:"business_policy_evidence,omitempty"`
 		RecentMessages         []ports.CustomerSalesRecentMessageEvidence  `json:"recent_messages,omitempty"`
+		PolicyEvidence         ports.CustomerSalesPolicyEvidence           `json:"policy_evidence"`
+		KnowledgeState         string                                      `json:"knowledge_state"`
 		ConversationState      *ports.ConversationStateRecord              `json:"conversation_state,omitempty"`
 		ConversationSummary    string                                      `json:"conversation_summary,omitempty"`
 		GeneratedAt            time.Time                                   `json:"generated_at"`
 		ExpiresAt              time.Time                                   `json:"expires_at"`
 	}{
-		Sales:                  input.ConversationContext.Sales,
-		Business:               input.ConversationContext.Business,
-		Conversation:           input.ConversationContext.Conversation,
-		Customer:               input.ConversationContext.Customer,
+		Sales:         input.ConversationContext.Sales,
+		SchemaVersion: input.ConversationContext.SchemaVersion,
+		Freshness:     input.ConversationContext.Freshness,
+		Business:      input.ConversationContext.Business,
+		Conversation:  input.ConversationContext.Conversation,
+		Customer: finalEvaluationCustomer{
+			Reference:        input.ConversationContext.Customer.Reference,
+			LocalePreference: input.ConversationContext.Customer.LocalePreference,
+			Status:           input.ConversationContext.Customer.Status,
+		},
 		KnowledgeEvidence:      input.ConversationContext.KnowledgeEvidence,
 		BusinessPolicyEvidence: input.ConversationContext.BusinessPolicyEvidence,
 		RecentMessages:         input.ConversationContext.RecentMessages,
+		PolicyEvidence:         input.ConversationContext.PolicyEvidence,
+		KnowledgeState:         input.ConversationContext.KnowledgeState,
 		ConversationState:      input.ConversationContext.ConversationState,
 		ConversationSummary:    input.ConversationContext.ConversationSummary,
 		GeneratedAt:            input.ConversationContext.GeneratedAt,
@@ -845,6 +857,16 @@ func buildFinalEvaluationPayload(
 		EntityContract:      input.EntityContract,
 		CandidateResults:    candidates,
 	}, userPrompt
+}
+
+// finalEvaluationCustomer deliberately excludes profile and contact payloads.
+// Those fields are not catalog evidence and can be both large and sensitive;
+// the final model only needs the same bounded customer identity fields used by
+// the normal customer-sales prompt.
+type finalEvaluationCustomer struct {
+	Reference        string `json:"reference"`
+	LocalePreference string `json:"locale_preference"`
+	Status           string `json:"status"`
 }
 
 func (c *CatalogBatchController) reduceCandidateRound(

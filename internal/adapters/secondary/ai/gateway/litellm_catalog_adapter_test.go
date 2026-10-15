@@ -11,6 +11,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/litellm"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/prompts"
 )
 
 func TestLiteLLMCatalogBatchPreservesSchemaAndAllCommercialRelations(t *testing.T) {
@@ -140,5 +141,48 @@ func TestLiteLLMFinalCatalogRequiresTerminalCapability(t *testing.T) {
 	}
 	if out.Capability != ports.CustomerSalesCapabilityRespondWithoutAction || out.ResponseText != "متوفر لدينا الهاتف" || usage.Provider != "litellm" {
 		t.Fatalf("final capability contract drift: %+v %+v", out, usage)
+	}
+}
+
+func TestFinalCatalogRequestUsesStandaloneTerminalContract(t *testing.T) {
+	builder := &catalogRequestBuilder{systemPrompt: prompts.BatchEvaluationSystemPrompt}
+	request := builder.buildFinalEvaluateRequest(services.FinalEvaluationInput{
+		EntityContract:      services.BuildCatalogEntityContractPayload(),
+		ConversationContext: ports.CustomerSalesContext{Sales: &ports.SalesWorkflowContext{Enabled: true, AllowInteractions: true}},
+	}, "verified final context", &catalogRequestConfig{model: "mujeeb-catalog", maxOutputTokens: 4096})
+	if request.SystemInstruction == nil || len(request.SystemInstruction.Parts) != 2 {
+		t.Fatalf("final system instruction is incomplete: %+v", request.SystemInstruction)
+	}
+	if got := request.SystemInstruction.Parts[0].Text; got != prompts.FinalEvaluationSystemPrompt {
+		t.Fatalf("final request repeated a non-terminal prompt: %q", got)
+	}
+	if strings.Contains(request.SystemInstruction.Parts[0].Text, "catalog_manifest") ||
+		strings.Contains(request.SystemInstruction.Parts[0].Text, "إذا احتاج هدف العميل معرفة عناصر التاجر") {
+		t.Fatal("final request must not repeat the initial retrieval-selection instructions")
+	}
+	if !strings.Contains(request.SystemInstruction.Parts[1].Text, "Catalog Entity Contract") {
+		t.Fatal("final request lost the canonical catalog entity contract")
+	}
+	tools := make(map[string]bool, len(request.capabilityTools))
+	for _, tool := range request.capabilityTools {
+		tools[tool.Name] = true
+	}
+	for _, required := range []ports.CustomerSalesCapability{
+		ports.CustomerSalesCapabilityRespondWithoutAction,
+		ports.CustomerSalesCapabilityAsk,
+		ports.CustomerSalesCapabilityHandoff,
+		ports.CustomerSalesCapabilityRecordLead,
+		ports.CustomerSalesCapabilityCreateDraft,
+		ports.CustomerSalesCapabilityUpdateDraft,
+	} {
+		if !tools[string(required)] {
+			t.Fatalf("final request lost terminal capability %s", required)
+		}
+	}
+	if tools[string(ports.CustomerSalesCapabilityFullCatalog)] {
+		t.Fatal("final request re-offered full catalog retrieval after complete coverage")
+	}
+	if request.Contents[0].Parts[0].Text != "verified final context" {
+		t.Fatal("final request lost the assembled verified evidence")
 	}
 }

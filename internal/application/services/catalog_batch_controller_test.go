@@ -281,6 +281,65 @@ func TestAppendCandidateProjectionDeduplicatesCompleteItems(t *testing.T) {
 	}
 }
 
+func TestFinalEvaluationPayloadKeepsUniversalContextWithoutSupersededCatalogOrPrivateCustomerData(t *testing.T) {
+	input := CatalogEvaluationInput{
+		AIRunID:         "run-1",
+		BusinessID:      "business-1",
+		ConversationID:  "conversation-1",
+		CustomerMessage: "هل يوجد خيار مناسب وما هي سياسة الاستبدال؟",
+		ConversationContext: ports.CustomerSalesContext{
+			Sales:         &ports.SalesWorkflowContext{Enabled: true, AllowInteractions: true},
+			SchemaVersion: 12,
+			Freshness:     "fresh",
+			Business:      ports.CustomerSalesContextBusiness{Reference: "business-1", Name: "Store", Locale: "ar-YE", DefaultCurrency: "YER"},
+			Conversation:  ports.CustomerSalesContextConversation{Reference: "conversation-1", State: "open", Ownership: "ai"},
+			Customer: ports.CustomerSalesContextCustomer{
+				Reference: "customer-1", LocalePreference: "ar-YE", Status: "active",
+				Profile: []byte(`{"private_profile_sentinel":true}`), ContactPoints: []byte(`{"private_contact_sentinel":true}`),
+			},
+			CatalogEvidence:   []ports.CustomerSalesCatalogEvidence{{Reference: "superseded_catalog_sentinel", Name: "Old partial evidence"}},
+			VariantEvidence:   []ports.CustomerSalesVariantEvidence{{Reference: "superseded_variant_sentinel"}},
+			OfferEvidence:     []ports.CustomerSalesOfferEvidence{{Reference: "superseded_offer_sentinel"}},
+			KnowledgeEvidence: []ports.CustomerSalesKnowledgeEvidence{{Reference: "knowledge-1", Title: "ساعات العمل", Content: "نفتح صباحاً"}},
+			BusinessPolicyEvidence: []ports.CustomerSalesBusinessPolicyEvidence{{
+				Reference: "policy-1", Category: "returns", Title: "الاستبدال", Summary: "الاستبدال خلال المدة المحددة",
+			}},
+			RecentMessages:      []ports.CustomerSalesRecentMessageEvidence{{Reference: "message-1", Direction: "inbound", Text: "أريد مقارنة"}},
+			PolicyEvidence:      ports.CustomerSalesPolicyEvidence{Reference: "application-policy-1", State: "published"},
+			KnowledgeState:      "grounded",
+			ConversationSummary: "العميل يبحث عن خيار مناسب",
+		},
+	}
+	projection := CatalogAIProjection{Items: []CatalogAIItem{{
+		ID: "item-1", CatalogID: "catalog-1", Name: "Candidate product",
+		Variants: []CatalogAIVariant{{ID: "variant-1", CatalogItemID: "item-1", Name: "Black"}},
+		Offers:   []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1", Name: "Main offer"}},
+	}}}
+	candidates := []ports.CatalogBatchCandidate{{ItemID: "item-1", VariantIDs: []string{"variant-1"}, OfferIDs: []string{"offer-1"}, Reason: "matches request"}}
+
+	finalInput, prompt := buildFinalEvaluationPayload(input, candidates, projection)
+	for _, required := range []string{
+		input.CustomerMessage, "Candidate product", "variant-1", "offer-1",
+		"ساعات العمل", "الاستبدال", "أريد مقارنة", "العميل يبحث عن خيار مناسب",
+		"application-policy-1", `"sales"`, `"schema_version":12`, `"freshness":"fresh"`,
+	} {
+		if !strings.Contains(prompt, required) {
+			t.Fatalf("final prompt lost required universal context %q: %s", required, prompt)
+		}
+	}
+	for _, forbidden := range []string{
+		"private_profile_sentinel", "private_contact_sentinel",
+		"superseded_catalog_sentinel", "superseded_variant_sentinel", "superseded_offer_sentinel",
+	} {
+		if strings.Contains(prompt, forbidden) {
+			t.Fatalf("final prompt repeated private or superseded context %q: %s", forbidden, prompt)
+		}
+	}
+	if finalInput.ConversationContext.Sales == nil || !finalInput.ConversationContext.Sales.AllowInteractions {
+		t.Fatal("final input lost sales availability needed to expose executable capabilities")
+	}
+}
+
 func TestFinalEvaluationRejectsRetrievalAfterCoverage(t *testing.T) {
 	model := &catalogTokenEstimatorStub{
 		finalProposal: ports.CapabilityDecision{
