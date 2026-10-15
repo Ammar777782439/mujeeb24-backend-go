@@ -45,6 +45,8 @@ jobs:
         with:
           go-version: "1.22.2"
           cache: true
+      - name: Verify provider smoke script Python syntax
+        run: python3 -m py_compile scripts/test-litellm-live-catalog.py
       - name: Verify repository contract
         run: bash scripts/verify-repository.sh
 
