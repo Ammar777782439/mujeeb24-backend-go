@@ -70,3 +70,20 @@
 - [Go/Python Cloudflare comparison #38770783777](https://github.com/Ammar777782439/mujeeb24-backend-go/actions/runs/38770783777)
 - [First real Go batch attempt #38771316662](https://github.com/Ammar777782439/mujeeb24-backend-go/actions/runs/38771316662) — رفض ناتج عن فرض غير صحيح حول معرّفات كل مرشح منفرد.
 - [Real Go batch+final accepted #38772383313](https://github.com/Ammar777782439/mujeeb24-backend-go/actions/runs/38772383313)
+
+## قبول معماري بعد حذف Presentation Modes — 15 أكتوبر 2026
+
+تم تنفيذ اختبار حي واحد عبر GitHub Actions على Commit `1f024857a467c3f30acd96f7b6b4d30a2056d8fe` بعد حذف `overview/hierarchy/detail/compare` من Customer Sales، مع إبقاء `evaluate_full_catalog` retrieval داخليًا فقط.
+
+- Run: https://github.com/Ammar777782439/mujeeb24-backend-go/actions/runs/38798826426
+- Token counter للدفعة التجارية الكاملة: **12,680**.
+- الطلب الفعلي إلى LiteLLM احتوى المنتج الكامل، Variantين، 3 Offers، Schema Definitions والأسعار الأصلية.
+- استهلاك الدفعة الحقيقي: **3,446 input / 114 output tokens**.
+- Token counter للـFinal Evaluation: **21,816**.
+- استهلاك Final الحقيقي: **5,423 input / 75 output tokens**.
+- حالة الاختبار: `supplier_check + requires_check` مع طلب العميل تنفيذ التحقق من المورد.
+- النتيجة النهائية: **`handoff_to_human`** مباشرة بعد اكتمال أدلة الكتالوج، بدل إنشاء رد معلوماتي جديد أو سؤال تأكيد إضافي.
+- طول نص handoff في هذا التشغيل: **150 حرفًا Unicode**.
+
+هذا الاختبار يثبت المسار الذي عولج: retrieval الكامل لا يحدد شكل الرد ولا يصبح terminal decision بنفسه. لا يُفسَّر على أنه ضمان عام لدقة أي نموذج في جميع الرسائل المستقبلية؛ الضمان البنيوي هو أن قرار Final يحدث بعد اكتمال الأدلة وبالقدرات المتاحة فقط.
+

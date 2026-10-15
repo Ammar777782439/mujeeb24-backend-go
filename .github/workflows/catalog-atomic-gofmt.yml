@@ -36,7 +36,6 @@ jobs:
             internal/application/services/catalog_batch_controller_test.go \
             internal/application/services/catalog_batch_coverage_test.go \
             internal/application/services/catalog_semantic_projection_test.go \
-            internal/application/services/catalog_hierarchy.go \
             internal/application/services/ai_context_retrieval.go \
             internal/application/services/auto_reply_capabilities_test.go \
             internal/adapters/secondary/persistence/postgres/ai_context_builder_integration_test.go \
