@@ -34,6 +34,16 @@ def classify_error(raw, content_type):
     # We output only known category booleans, never arbitrary raw error messages.
     raw_text = str(obj).lower()
     markers = [word.replace(" ", "_") for word in MARKERS if word in raw_text]
+    def trusted_cloudflare_field(key):
+        value = obj.get(key)
+        if key in ("cloudflare_error", "owner_action_required", "retryable"):
+            return value if isinstance(value, bool) else None
+        if key == "status":
+            return value if isinstance(value, int) else None
+        value = str(value or "")
+        if key == "ray_id":
+            return value if re.fullmatch(r"[0-9a-fA-F]{8,32}(?:-[A-Za-z]{3})?", value) else "not-specified"
+        return value if re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", value) else "not-specified"
     return {
         "format": "json",
         "root_keys": fields,
@@ -41,6 +51,12 @@ def classify_error(raw, content_type):
         "error_type": safe_label("type"),
         "error_code": safe_label("code"),
         "error_categories": markers,
+        "cloudflare_details": {
+            field: trusted_cloudflare_field(field) for field in (
+                "cloudflare_error", "error_category", "error_name", "error_code",
+                "owner_action_required", "retryable", "status", "ray_id"
+            )
+        },
     }
 
 
