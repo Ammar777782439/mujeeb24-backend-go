@@ -2,6 +2,11 @@ name: Live LiteLLM catalog model acceptance
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feat/catalog-complete-commercial-entity-atomic
+    paths:
+      - docs/testing/litellm-live-one-time.trigger
 
 permissions:
   contents: read
