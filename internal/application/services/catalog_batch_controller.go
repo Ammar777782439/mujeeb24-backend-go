@@ -133,9 +133,6 @@ type FinalEvaluationInput struct {
 type CatalogEvaluationResult struct {
 	Decision ports.CapabilityDecision
 	Evidence ports.CatalogAIEvidenceSet
-	// Messages contains the complete ordered hierarchy parts if requested.
-	// It is empty for the existing AI comparison/recommendation path.
-	Messages []string
 }
 
 // CatalogAIBatchPayload is one batch's content.
@@ -161,14 +158,7 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 		return CatalogEvaluationResult{}, errors.New("business_id and ai_run_id are required for Catalog Evaluation per contract ② §1")
 	}
 
-	switch input.Presentation {
-	case "overview":
-		return c.runCatalogOverview(ctx, input)
-	case "hierarchy":
-		return c.runHierarchicalCatalog(ctx, input)
-	default:
-		return c.runPagedCatalogEvaluation(ctx, input)
-	}
+	return c.runPagedCatalogEvaluation(ctx, input)
 }
 
 func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, input CatalogEvaluationInput) (CatalogEvaluationResult, error) {
@@ -182,11 +172,6 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 	candidateSet := make([]ports.CatalogBatchCandidate, 0)
 	candidateProjection := CatalogAIProjection{}
 	candidateItemsSeen := make(map[string]struct{})
-	// Full linked commercial facts for AI model-selected informational answers.
-	// Candidate IDs decide relevance, never which variants/offers are removed.
-	selectedProjection := CatalogAIProjection{}
-	selectedItemsSeen := make(map[string]struct{})
-
 	for {
 		page, err := c.CatalogAI.ListProjectionPage(ctx, ports.CatalogAIProjectionRequest{
 			BusinessID: input.BusinessID,
@@ -248,22 +233,6 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 				pageCandidates = append(pageCandidates, result.Candidates...)
 				log.Printf("[CatalogBatch] BATCH_DONE batch=%d items=%d candidates=%d", batch.BatchNumber, len(batch.Items), len(result.Candidates))
 			}
-			if len(pageCandidates) > 0 && (input.Presentation == "detail" || input.Presentation == "compare") {
-				// AI model chooses relevant item IDs after examining the full
-				// tenant-scoped catalog batches. Rehydrate each selected item
-				// from the original page, not its potentially narrowed
-				// candidate variant/offer evidence.
-				wholeItemCandidates := make([]ports.CatalogBatchCandidate, 0, len(pageCandidates))
-				for _, candidate := range normalizeBatchCandidates(pageCandidates) {
-					wholeItemCandidates = append(wholeItemCandidates, ports.CatalogBatchCandidate{ItemID: candidate.ItemID})
-				}
-				appendCandidateProjection(
-					&selectedProjection,
-					CatalogAIBatchPayload{Catalogs: pageProjection.Catalogs, AttributeSchemas: pageProjection.AttributeSchemas, Items: pageProjection.Items},
-					wholeItemCandidates,
-					selectedItemsSeen,
-				)
-			}
 			if len(pageCandidates) > 0 {
 				appendCandidateProjection(
 					&candidateProjection,
@@ -299,24 +268,6 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 	}
 	if revisionEnd != revisionStart {
 		return CatalogEvaluationResult{}, errors.New("catalog changed during full evaluation; refusing mixed-snapshot AI result")
-	}
-
-	if input.Presentation == "detail" || input.Presentation == "compare" {
-		// An information request needs AI model-authored explanation, not a
-		// final commercial capability decision or repeated candidate reduction.
-		// All catalog pages were evaluated first and selection came from AI model.
-		result, err := c.composeCatalogProjection(ctx, input, selectedProjection)
-		if err != nil {
-			return CatalogEvaluationResult{}, err
-		}
-		revisionAfterReply, err := c.CatalogAI.GetRevision(ctx, input.BusinessID)
-		if err != nil {
-			return CatalogEvaluationResult{}, fmt.Errorf("read catalog revision after AI model detail reply: %w", err)
-		}
-		if revisionAfterReply != revisionStart {
-			return CatalogEvaluationResult{}, errors.New("catalog changed during AI model detail reply; refusing stale commercial facts")
-		}
-		return result, nil
 	}
 
 	proposal, finalProjection, err := c.runFinalEvaluation(ctx, input, candidateSet, candidateProjection, nextBatchNumber)
@@ -977,7 +928,6 @@ type CatalogEvaluationInput struct {
 	ConversationID      string
 	CatalogScope        string // the catalog scope to evaluate (e.g., a specific catalog_id)
 	CustomerMessage     string
-	Presentation        string
 	ConversationContext ports.CustomerSalesContext
 	EntityContract      CatalogEntityContractPayload
 }
