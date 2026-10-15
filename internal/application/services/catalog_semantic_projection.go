@@ -20,6 +20,25 @@ func attachItemSchemaMeaning(item *CatalogAIItem, schema *CatalogAIAttributeSche
 		variant.EffectiveAttributes = mergeCatalogAttributes(item.Attributes, variant.Attributes)
 		variant.ResolvedAttributes = resolveCatalogAttributes(item.Attributes, variant.Attributes, definitions)
 	}
+	// Expose each offer at its exact commercial parent. The canonical item
+	// Offers slice remains untouched for evidence validation and source IDs.
+	item.ItemLevelOffers = nil
+	byVariant := make(map[string]int, len(item.Variants))
+	for i := range item.Variants {
+		item.Variants[i].Offers = nil
+		byVariant[item.Variants[i].ID] = i
+	}
+	for _, offer := range item.Offers {
+		if offer.VariantID == nil || *offer.VariantID == "" {
+			item.ItemLevelOffers = append(item.ItemLevelOffers, offer)
+			continue
+		}
+		if index, exists := byVariant[*offer.VariantID]; exists {
+			item.Variants[index].Offers = append(item.Variants[index].Offers, offer)
+		}
+		// A missing variant is rejected by validateCatalogBatchCoverage before
+		// provider evaluation, never silently reassigned as an item offer.
+	}
 }
 
 // An explicit variant attribute overrides a parent attribute. Missing variant
