@@ -269,7 +269,7 @@ func TestAppendCandidateProjectionDeduplicatesCompleteItems(t *testing.T) {
 	batch := CatalogAIBatchPayload{Items: []CatalogAIItem{{
 		ID: "item-1", CatalogID: "catalog-1",
 		Variants: []CatalogAIVariant{{ID: variant, CatalogItemID: "item-1"}},
-		Offers: []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1", VariantID: &variant}},
+		Offers:   []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1", VariantID: &variant}},
 	}}}
 	target := CatalogAIProjection{}
 	seen := map[string]struct{}{}

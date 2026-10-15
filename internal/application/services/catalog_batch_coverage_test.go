@@ -105,7 +105,7 @@ func TestCatalogBatchCoverageRetainsCommercialFacts(t *testing.T) {
 		}
 	})
 
-		t.Run("missing offer", func(t *testing.T) {
+	t.Run("missing offer", func(t *testing.T) {
 		changed := append([]CatalogAIBatchPayload(nil), batches...)
 		changed[0].Items = append([]CatalogAIItem(nil), batches[0].Items...)
 		changed[0].Items[0].Offers = nil
