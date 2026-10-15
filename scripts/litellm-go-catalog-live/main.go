@@ -2,7 +2,7 @@
 
 // One real catalog batch through the production LiteLLM Go adapter used by Mujeeb.
 // All records are synthetic. No database writes, outbound messages or mocks.
-// The encrypted virtual key is provided by GitHub Actions; it is never printed.
+// The encrypted virtual key is provided by GitHub Actions; no key or raw provider content is printed.
 package main
 
 import (
