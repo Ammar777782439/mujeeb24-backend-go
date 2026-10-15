@@ -1,0 +1,45 @@
+name: LiteLLM public edge probe (no secrets)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/catalog-complete-commercial-entity-atomic
+    paths:
+      - .github/workflows/litellm-public-edge-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  public-edge:
+    name: Verify external HTTPS routing
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Test named public gateway, no credentials or customer data
+        env:
+          BASE_URL: https://webhook.mujeeb24.com
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'Probe target: https://webhook.mujeeb24.com (GET requests only, no secret)'
+          found_gateway=0
+          for path in /health/readiness /v1/models /openapi.json /; do
+            result="$(curl --silent --show-error --location-trusted --max-redirs 0 \
+              --connect-timeout 10 --max-time 20 \
+              --output /dev/null --write-out '%{http_code}' \
+              "${BASE_URL}${path}")" || result="000"
+            echo "GET ${path}: HTTP ${result}"
+            if [[ "${path}" == '/health/readiness' && "${result}" == 200 ]]; then
+              found_gateway=1
+            fi
+            if [[ "${path}" == '/v1/models' && ( "${result}" == 200 || "${result}" == 401 ) ]]; then
+              found_gateway=1
+            fi
+          done
+          if [[ "${found_gateway}" != 1 ]]; then
+            echo 'No LiteLLM endpoint confirmed. A Caddy 404, Cloudflare block or inaccessible tunnel may be responsible.'
+            exit 1
+          fi
+          echo 'LiteLLM edge looks reachable, but provider/model calls are NOT tested without a securely configured virtual key.'
