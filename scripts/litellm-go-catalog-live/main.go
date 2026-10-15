@@ -12,12 +12,54 @@ import (
     "net/http"
     "os"
     "sort"
+    "strings"
+    "encoding/json"
     "time"
 
     "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gateway"
     "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/litellm"
     "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 )
+
+// captureActualRequest inspects the exact provider-bound payload without changing
+// its bytes or the production Go HTTP User-Agent. It never prints raw data.
+type captureActualRequest struct {
+    base http.RoundTripper
+    complete bool
+    seen bool
+}
+func (c *captureActualRequest) RoundTrip(req *http.Request) (*http.Response,error) {
+    if req.URL.Path == "/v1beta/interactions" {
+        c.seen = true
+        if req.GetBody != nil {
+            reader,err:=req.GetBody()
+            if err==nil {
+                var payload struct { Input string `json:"input"`; Model string `json:"model"` }
+                parseErr:=json.NewDecoder(reader).Decode(&payload)
+                reader.Close()
+                required:=[]string{
+                    "11111111-1111-4111-8111-111111111111",
+                    "44444444-4444-4444-8444-444444444444",
+                    "55555555-5555-4555-8555-555555555555",
+                    "66666666-6666-4666-8666-666666666666",
+                    "77777777-7777-4777-8777-777777777777",
+                    "88888888-8888-4888-8888-888888888888",
+                    "12000.0000","15000.0000","10000.0000",
+                    "attribute_schemas", "definitions", "resolved_attributes",
+                    "effective_attributes", "item_level_offers",
+                }
+                c.complete=parseErr==nil && payload.Model!="" 
+                for _,item:=range required{
+                    if !strings.Contains(payload.Input,item){c.complete=false}
+                }
+            }
+        }
+        if !c.complete {
+            return nil,fmt.Errorf("refusing to send incomplete commercial entity to provider")
+        }
+    }
+    return c.base.RoundTrip(req)
+}
 
 func stringPtr(s string) *string { return &s }
 func intPtr(v int) *int { return &v }
@@ -43,9 +85,10 @@ func main() {
         fmt.Fprintln(os.Stderr,"unexpected LiteLLM endpoint"); os.Exit(1)
     }
 
+    capture:=&captureActualRequest{base:http.DefaultTransport}
     client, err := litellm.NewClient(litellm.Config{
         BaseURL:base, APIKey:key, Timeout:55*time.Second,
-        HTTPClient:&http.Client{Timeout:55*time.Second,
+        HTTPClient:&http.Client{Timeout:55*time.Second,Transport:capture,
             CheckRedirect:func(*http.Request,[]*http.Request)error{return http.ErrUseLastResponse}},
     })
     must("create-client",err)
@@ -106,6 +149,11 @@ func main() {
     fmt.Printf("PASS: real gateway token-counter returned %d tokens for complete commercial batch\n",tokens)
     result,err:=adapter.EvaluateBatch(ctx,input)
     must("real-batch-interaction",err)
+    if !capture.seen || !capture.complete {
+        fmt.Fprintln(os.Stderr,"FAIL: complete commercial entity was not sent")
+        os.Exit(1)
+    }
+    fmt.Println("PASS: actual Go HTTP request included original item, both variants, all 3 linked offers, attribute definitions and precise prices")
     if result.BatchNumber!=1 || len(result.Candidates)==0 {
         fmt.Fprintln(os.Stderr,"FAIL: provider returned no valid catalog candidate");os.Exit(1)
     }
@@ -116,6 +164,8 @@ func main() {
         if !includesAll(c.VariantIDs,[]string{vBlue,vBlack}) {
             fmt.Fprintln(os.Stderr,"FAIL: provider candidate did not cover both variants");os.Exit(1)
         }
+        fmt.Printf("OBSERVED: provider selected %d variant IDs and %d offer IDs; item-level offer included=%t\n",
+            len(c.VariantIDs),len(c.OfferIDs),contains(c.OfferIDs,oBase))
         if !includesAll(c.OfferIDs,[]string{oBlue,oBlack,oBase}) {
             fmt.Fprintln(os.Stderr,"FAIL: provider candidate did not cover all three offers");os.Exit(1)
         }
@@ -123,6 +173,11 @@ func main() {
     if !selected {fmt.Fprintln(os.Stderr,"FAIL: original item not selected");os.Exit(1)}
     fmt.Printf("PASS: real LiteLLM batch evaluated complete item, 2 variants, 3 offers (provider=%s, model=%s, requests=%d, tokens_in=%d, tokens_out=%d)\n",
         result.Usage.Provider,result.Usage.Model,result.Usage.ModelRequests,result.Usage.InputTokens,result.Usage.OutputTokens)
+}
+
+func contains(xs []string,v string) bool {
+    for _,x:=range xs {if x==v{return true}}
+    return false
 }
 
 func includesAll(got,expected []string) bool {
