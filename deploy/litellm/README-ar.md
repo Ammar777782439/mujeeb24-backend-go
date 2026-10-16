@@ -65,6 +65,8 @@ curl.exe http://127.0.0.1:4000/health/readiness
 - `mujeeb-catalog` — نموذج يدعم JSON Schema والكتالوج الكامل والدفعات والسياق المطلوب.
 - `mujeeb-merchant` — نموذج يدعم Chat Completions + tools + JSON Schema الصارم في نفس الطلب.
 
+كل طلبات توليد النص/الأدوات من مجيب (مبيعات العملاء والكتالوج ومساعد التاجر) تستخدم `POST /v1/chat/completions`. لذلك اختبر دعم كل Deployment وFallback لـ `tools` و`tool_choice=required` و`response_format=json_schema` وحدود السياق. تغيير هذا المسار لا يغيّر تنفيذ الصفقات أو صلاحيات التاجر.
+
 ابدأ **بنموذج واحد مؤهل لكل اسم**، ثم أضف مزودين احتياطيين من الواجهة بعد نجاح اختبارات الأدوار الثلاثة. إعداد نماذج متعددة لا يضمن أن جميعها تدعم نفس الأدوات؛ لا تُفعّل احتياطيًا قبل اختبار عقده.
 
 أنشئ **Virtual Key** لمجيب من `Virtual Keys`، بصلاحية الوصول إلى aliases الثلاثة. ضعه في `LITELLM_API_KEY` داخل بيئة الباك، وليس مفتاح مدير LiteLLM ولا مفتاح Gemini/Groq نفسه.
