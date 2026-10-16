@@ -108,7 +108,7 @@ func (c *LiteLLMCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cu
 	}
 	decision, err := parseCustomerSalesCapability(interactionResponse{Steps: steps}, tools)
 	if err != nil {
-		return ports.CustomerSalesDecisionOutput{}, err
+		return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("%w; LiteLLM response shape: %s", err, summarizeDecisionResponseShape(resp))
 	}
 
 	latencyMs := time.Since(started).Milliseconds()
@@ -123,6 +123,22 @@ func (c *LiteLLMCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cu
 		},
 		LatencyMs: latencyMs,
 	}, nil
+}
+
+// summarizeDecisionResponseShape exposes only the structural fields needed to
+// diagnose gateway tool-call normalization. It deliberately excludes text and
+// argument contents because both may contain customer or merchant data.
+func summarizeDecisionResponseShape(resp liteLLMDecisionResponse) string {
+	parts := []string{fmt.Sprintf("status=%q steps=%d outputs=%d", resp.Status, len(resp.Steps), len(resp.Outputs))}
+	for i, step := range resp.Steps {
+		parts = append(parts, fmt.Sprintf("step[%d]={type=%q id_present=%t name=%q arguments_bytes=%d}",
+			i, step.Type, strings.TrimSpace(step.ID) != "", step.Name, len(step.Arguments)))
+	}
+	for i, output := range resp.Outputs {
+		parts = append(parts, fmt.Sprintf("output[%d]={type=%q id_present=%t call_id_present=%t name=%q arguments_bytes=%d}",
+			i, output.Type, strings.TrimSpace(output.ID) != "", strings.TrimSpace(output.CallID) != "", output.Name, len(output.Arguments)))
+	}
+	return strings.Join(parts, " ")
 }
 
 type liteLLMDecisionResponse struct {
