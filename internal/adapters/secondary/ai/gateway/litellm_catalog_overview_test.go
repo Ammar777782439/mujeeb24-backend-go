@@ -22,12 +22,8 @@ func TestLiteLLMOverviewReadsWholeBatchAndProducesOneFinalCustomerReply(t *testi
 		case "/utils/token_counter":
 			counted++
 			_, _ = w.Write([]byte(`{"total_tokens":320}`))
-		case "/v1beta/interactions":
-			var body struct {
-				Model          string                     `json:"model"`
-				Input          string                     `json:"input"`
-				ResponseFormat *interactionResponseFormat `json:"response_format"`
-			}
+		case "/v1/chat/completions":
+			var body chatGatewayTestRequest
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				t.Error(err)
 				return
@@ -41,7 +37,7 @@ func TestLiteLLMOverviewReadsWholeBatchAndProducesOneFinalCustomerReply(t *testi
 				Batch     any    `json:"catalog_batch"`
 				Summaries any    `json:"reviewed_summaries"`
 			}
-			if err := json.Unmarshal([]byte(body.Input), &input); err != nil {
+			if err := json.Unmarshal([]byte(body.UserContent()), &input); err != nil {
 				t.Error(err)
 				return
 			}
@@ -49,24 +45,24 @@ func TestLiteLLMOverviewReadsWholeBatchAndProducesOneFinalCustomerReply(t *testi
 			switch input.Stage {
 			case "batch":
 				batchCalls++
-				if !strings.Contains(body.Input, "250.0000") || !strings.Contains(body.Input, "SAR") || !strings.Contains(body.Input, "variant-1") {
-					t.Errorf("overview batch missing original commercial evidence: %s", body.Input)
+				if !strings.Contains(body.UserContent(), "250.0000") || !strings.Contains(body.UserContent(), "SAR") || !strings.Contains(body.UserContent(), "variant-1") {
+					t.Errorf("overview batch missing original commercial evidence: %s", body.UserContent())
 				}
-				properties := body.ResponseFormat.Schema["properties"].(map[string]any)
+				properties := body.ResponseFormat.JSONSchema.Schema["properties"].(map[string]any)
 				if len(properties) != 1 || properties["text"] == nil || properties["covered_item_ids"] != nil {
 					t.Errorf("overview schema must only request a semantic digest: %v", properties)
 				}
 				reply = `{"text":"المتجر يعرض هاتفًا وخيارات تقنية بسعر 250 ريال سعودي."}`
 			case "final":
 				finalCalls++
-				if input.Batch != nil || !strings.Contains(body.Input, "reviewed_summaries") {
+				if input.Batch != nil || !strings.Contains(body.UserContent(), "reviewed_summaries") {
 					t.Error("Gemini final synthesis received raw catalog or no reviewed summary")
 				}
 				reply = `{"text":"أهلًا بك! لدينا أجهزة وخدمات متنوعة. أي قسم ترغب في استكشافه؟"}`
 			default:
 				t.Errorf("unexpected stage %q", input.Stage)
 			}
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			writeChatTestResponse(w, map[string]any{
 				"status": "completed",
 				"outputs": []any{map[string]any{"type": "message", "content": []any{
 					map[string]any{"type": "output_text", "text": reply},
