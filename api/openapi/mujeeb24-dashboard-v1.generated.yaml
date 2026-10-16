@@ -982,6 +982,54 @@ components:
         - conversations
         - messages
       type: object
+    ChannelPassCapacityApprovalRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ChannelPassCapacityApprovalRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        max_channel_passes:
+          format: int64
+          minimum: 1
+          type: integer
+        reason:
+          maxLength: 500
+          minLength: 1
+          type: string
+      required:
+        - max_channel_passes
+        - reason
+      type: object
+    ChannelPassCapacityApprovalView:
+      additionalProperties: false
+      properties:
+        approved_at:
+          type: string
+        approved_by:
+          type: string
+        business_id:
+          type: string
+        max_channel_passes:
+          format: int64
+          type: integer
+        reason:
+          type: string
+        subscription_id:
+          type: string
+        updated_at:
+          type: string
+      required:
+        - subscription_id
+        - business_id
+        - max_channel_passes
+        - reason
+        - approved_by
+        - approved_at
+        - updated_at
+      type: object
     ChannelProvisioning:
       additionalProperties: false
       properties:
@@ -2855,6 +2903,29 @@ components:
         - pagination
         - request_id
       type: object
+    ListSubscriptionAddonViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListSubscriptionAddonViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/SubscriptionAddonView"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
     ListSubscriptionViewBody:
       additionalProperties: false
       properties:
@@ -4258,6 +4329,23 @@ components:
         - data
         - request_id
       type: object
+    SingleChannelPassCapacityApprovalViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleChannelPassCapacityApprovalViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/ChannelPassCapacityApprovalView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
     SingleChannelProvisioningBody:
       additionalProperties: false
       properties:
@@ -4984,6 +5072,10 @@ components:
           format: int64
           type: integer
         business_id:
+          type: string
+        cancelled_at:
+          type: string
+        cancelled_reason:
           type: string
         catalog_delta:
           format: int64
@@ -16927,6 +17019,86 @@ paths:
       summary: Run provider health check.
       tags:
         - Platform.Providers
+  /platform/subscription-addons/{addon_id}/cancel:
+    post:
+      operationId: platformCancelSubscriptionAddon
+      parameters:
+        - in: path
+          name: addon_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelSubscriptionRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSubscriptionAddonViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Cancel a subscription add-on without silently exceeding entitlements.
+      tags:
+        - Platform.Addons
   /platform/subscription-addons/{addon_id}/payments:
     post:
       operationId: platformRecordSubscriptionAddonPayment
@@ -17141,6 +17313,85 @@ paths:
       tags:
         - Platform.Subscriptions
   /platform/subscriptions/{subscription_id}/addons:
+    get:
+      operationId: platformListSubscriptionAddons
+      parameters:
+        - in: path
+          name: subscription_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - explode: false
+          in: query
+          name: status
+          schema:
+            enum:
+              - PENDING
+              - ACTIVE
+              - CANCELLED
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            format: int64
+            maximum: 1000
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSubscriptionAddonViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List subscription add-ons.
+      tags:
+        - Platform.Addons
     post:
       operationId: platformCreateSubscriptionAddon
       parameters:
@@ -17438,6 +17689,86 @@ paths:
       summary: Cancel a subscription.
       tags:
         - Platform.Subscriptions
+  /platform/subscriptions/{subscription_id}/channel-pass-capacity:
+    put:
+      operationId: platformApproveChannelPassCapacity
+      parameters:
+        - in: path
+          name: subscription_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChannelPassCapacityApprovalRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleChannelPassCapacityApprovalViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Record verified provider capacity before selling a Channel Pass.
+      tags:
+        - Platform.Addons
   /platform/subscriptions/{subscription_id}/payments:
     get:
       operationId: platformListPayments
