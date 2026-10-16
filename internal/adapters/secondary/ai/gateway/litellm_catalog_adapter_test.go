@@ -24,19 +24,14 @@ func TestLiteLLMCatalogBatchPreservesSchemaAndAllCommercialRelations(t *testing.
 		case "/utils/token_counter":
 			sawCount = true
 			_, _ = w.Write([]byte(`{"total_tokens":210}`))
-		case "/v1beta/interactions":
+		case "/v1/chat/completions":
 			sawEvaluation = true
-			var req struct {
-				Model             string                     `json:"model"`
-				Input             string                     `json:"input"`
-				SystemInstruction string                     `json:"system_instruction"`
-				ResponseFormat    *interactionResponseFormat `json:"response_format"`
-			}
+			var req chatGatewayTestRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Error(err)
 			}
-			if req.ResponseFormat != nil && req.ResponseFormat.Schema != nil {
-				props := req.ResponseFormat.Schema["properties"].(map[string]any)["candidates"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+			if req.ResponseFormat != nil && req.ResponseFormat.JSONSchema.Schema != nil {
+				props := req.ResponseFormat.JSONSchema.Schema["properties"].(map[string]any)["candidates"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
 				for key, want := range map[string]string{"item_id": itemID, "variant_ids": "v1", "offer_ids": "o1"} {
 					prop := props[key].(map[string]any)
 					if key != "item_id" {
@@ -49,19 +44,19 @@ func TestLiteLLMCatalogBatchPreservesSchemaAndAllCommercialRelations(t *testing.
 				}
 			}
 			if req.Model != "mujeeb-catalog" ||
-				!strings.Contains(req.Input, "attribute_schemas") ||
-				!strings.Contains(req.Input, "attr_1") ||
-				!strings.Contains(req.Input, "256GB") ||
-				!strings.Contains(req.Input, "variants") ||
-				!strings.Contains(req.Input, "offers") ||
-				!strings.Contains(req.SystemInstruction, "Catalog Entity Contract") ||
-				req.ResponseFormat == nil || req.ResponseFormat.Schema == nil {
+				!strings.Contains(req.UserContent(), "attribute_schemas") ||
+				!strings.Contains(req.UserContent(), "attr_1") ||
+				!strings.Contains(req.UserContent(), "256GB") ||
+				!strings.Contains(req.UserContent(), "variants") ||
+				!strings.Contains(req.UserContent(), "offers") ||
+				!strings.Contains(req.SystemContent(), "Catalog Entity Contract") ||
+				req.ResponseFormat == nil || req.ResponseFormat.JSONSchema.Schema == nil {
 				t.Errorf("catalog request lost schema/relations/structured response: %+v", req)
 			}
 			result := map[string]any{"status": "completed", "outputs": []any{map[string]any{
 				"type": "message", "content": []any{map[string]any{"type": "output_text", "text": `{"candidates":[{"item_id":"11111111-1111-4111-8111-111111111111","variant_ids":["v1"],"offer_ids":["o1"]}]}`}},
 			}}, "usage": map[string]any{"total_input_tokens": 300, "total_output_tokens": 22}}
-			_ = json.NewEncoder(w).Encode(result)
+			writeChatTestResponse(w, result)
 		default:
 			t.Errorf("unexpected endpoint %s", r.URL.Path)
 		}
@@ -109,16 +104,14 @@ func TestLiteLLMFinalCatalogRequiresTerminalCapability(t *testing.T) {
 			_, _ = w.Write([]byte(`{"total_tokens":70}`))
 			return
 		}
-		var req struct {
-			Tools []customerSalesTool `json:"tools"`
-		}
+		var req chatGatewayTestRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Error(err)
 		}
-		if len(req.Tools) == 0 {
+		if len(req.Tools) == 0 || req.ToolChoice != "required" {
 			t.Error("final catalog capabilities were not offered")
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		writeChatTestResponse(w, map[string]any{
 			"status": "requires_action",
 			"outputs": []any{map[string]any{"type": "function_call", "id": "call-1",
 				"name": "respond_without_action", "arguments": map[string]any{"response_text": "متوفر لدينا الهاتف"}}},
