@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
@@ -178,14 +179,24 @@ func (r *TeamRepository) AcceptInvitation(ctx context.Context, acceptance ports.
 	if r == nil || r.adapter == nil {
 		return ports.TeamInvitationRecord{}, ErrPoolClosed
 	}
-	executor, err := r.adapter.Executor(ctx)
-	if err != nil {
-		return ports.TeamInvitationRecord{}, err
-	}
-	if _, err := executor.Exec(ctx, `UPDATE team_invitations SET status = 'expired', updated_at = $2 WHERE token_hash = $1 AND status = 'pending' AND expires_at <= $2`, acceptance.TokenHash, acceptance.AcceptedAt); err != nil {
-		return ports.TeamInvitationRecord{}, classifyRepositoryWriteError("team.accept_expire", err)
-	}
-	record, err := scanTeamInvitation(executor.QueryRow(ctx, `WITH accepted_invitation AS (
+	var record ports.TeamInvitationRecord
+	err := r.adapter.Within(ctx, func(txCtx context.Context) error {
+		executor, executorErr := r.adapter.Executor(txCtx)
+		if executorErr != nil {
+			return executorErr
+		}
+		if _, updateErr := executor.Exec(txCtx, `UPDATE team_invitations SET status = 'expired', updated_at = $2 WHERE token_hash = $1 AND status = 'pending' AND expires_at <= $2`, acceptance.TokenHash, acceptance.AcceptedAt); updateErr != nil {
+			return classifyRepositoryWriteError("team.accept_expire", updateErr)
+		}
+		var businessID string
+		if queryErr := executor.QueryRow(txCtx, `SELECT business_id::text FROM team_invitations WHERE token_hash=$1 AND status='pending' AND expires_at>$2 FOR UPDATE`, acceptance.TokenHash, acceptance.AcceptedAt).Scan(&businessID); queryErr != nil {
+			return &RepositoryError{Operation: "team.accept_invitation", Kind: RepositoryConflict, Err: errors.New("invitation is not pending")}
+		}
+		if guardErr := r.ensureSeatAvailable(txCtx, executor, businessID, acceptance.PrincipalID, acceptance.AcceptedAt); guardErr != nil {
+			return guardErr
+		}
+		var scanErr error
+		record, scanErr = scanTeamInvitation(executor.QueryRow(txCtx, `WITH accepted_invitation AS (
 		UPDATE team_invitations invitation
 		SET status = 'accepted', accepted_by = $2::uuid, accepted_at = $3, updated_at = $3
 		FROM principals principal, businesses business
@@ -202,6 +213,8 @@ func (r *TeamRepository) AcceptInvitation(ctx context.Context, acceptance ports.
 	)
 	SELECT `+teamInvitationReturning+` FROM accepted_invitation
 	WHERE EXISTS (SELECT 1 FROM activated_membership)`, acceptance.TokenHash, acceptance.PrincipalID, acceptance.AcceptedAt))
+		return scanErr
+	})
 	if err != nil {
 		return ports.TeamInvitationRecord{}, err
 	}
@@ -236,6 +249,9 @@ func (r *TeamRepository) AcceptInvitationNewAccount(ctx context.Context, accepta
 		if err := executor.QueryRow(txCtx, `SELECT status FROM businesses WHERE id = $1::uuid FOR SHARE`, invitation.BusinessID).Scan(&businessStatus); err != nil || businessStatus != "active" {
 			return &RepositoryError{Operation: "team.accept_new", Kind: RepositoryConflict, Err: errors.New("business is not active")}
 		}
+		if guardErr := r.ensureSeatAvailable(txCtx, executor, invitation.BusinessID, acceptance.PrincipalID, acceptance.AcceptedAt); guardErr != nil {
+			return guardErr
+		}
 		var existingID string
 		err := executor.QueryRow(txCtx, `SELECT id::text FROM principals WHERE lower(email) = lower($1)`, invitation.Email).Scan(&existingID)
 		if err == nil {
@@ -261,6 +277,32 @@ func (r *TeamRepository) AcceptInvitationNewAccount(ctx context.Context, accepta
 		return ports.TeamInvitationRecord{}, err
 	}
 	return accepted, nil
+}
+
+func (r *TeamRepository) ensureSeatAvailable(ctx context.Context, executor SQLExecutor, businessID, principalID string, now time.Time) error {
+	if _, err := executor.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, businessID); err != nil {
+		return &RepositoryError{Operation: "team.seat_entitlement.lock", Kind: RepositoryInvalid, Err: err}
+	}
+	var seatLimit int
+	if err := executor.QueryRow(ctx,
+		`SELECT seat_limit + COALESCE((SELECT sum(seat_delta) FROM subscription_addons WHERE subscription_id=subscriptions.id AND status='ACTIVE'),0) FROM subscriptions
+		 WHERE business_id=$1::uuid AND status='ACTIVE' AND period_start <= $2 AND period_end > $2`,
+		businessID, now).Scan(&seatLimit); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return &RepositoryError{Operation: "team.seat_entitlement", Kind: RepositoryConflict, Err: errors.New("an active subscription is required to add a team seat")}
+		}
+		return &RepositoryError{Operation: "team.seat_entitlement", Kind: RepositoryInvalid, Err: err}
+	}
+	var activeSeats int
+	if err := executor.QueryRow(ctx,
+		`SELECT COUNT(*)::int FROM business_memberships WHERE business_id=$1::uuid AND status='active' AND principal_id<>$2::uuid`,
+		businessID, principalID).Scan(&activeSeats); err != nil {
+		return &RepositoryError{Operation: "team.seat_entitlement", Kind: RepositoryInvalid, Err: err}
+	}
+	if activeSeats >= seatLimit {
+		return &RepositoryError{Operation: "team.seat_entitlement", Kind: RepositoryConflict, Err: fmt.Errorf("active seat limit %d has been reached", seatLimit)}
+	}
+	return nil
 }
 
 func (r *TeamRepository) RevokeInvitation(ctx context.Context, revocation ports.TeamInvitationRevocation) (ports.TeamInvitationRecord, error) {

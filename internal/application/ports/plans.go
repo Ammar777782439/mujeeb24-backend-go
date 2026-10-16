@@ -26,7 +26,9 @@ type PlanRecord struct {
 	BillingInterval         string
 	AIReplyLimit            int
 	AICatalogLimit          int
-	ChannelLimit            int
+	ChannelLimit            int // paid base allowance; currently one channel per public plan
+	ChannelCeiling          int // maximum after paid channel passes
+	SeatLimit               int
 	InternalAICostBudgetYER int
 	Status                  string
 	CreatedAt               time.Time
@@ -44,6 +46,8 @@ type PlanCreate struct {
 	AIReplyLimit            int
 	AICatalogLimit          int
 	ChannelLimit            int
+	ChannelCeiling          int
+	SeatLimit               int
 	InternalAICostBudgetYER int
 	Now                     time.Time
 }
@@ -66,6 +70,8 @@ type PlanVersionCreate struct {
 	AIReplyLimit            int
 	AICatalogLimit          int
 	ChannelLimit            int
+	ChannelCeiling          int
+	SeatLimit               int
 	InternalAICostBudgetYER int
 	ChangedBy               string
 	Reason                  string

@@ -24,7 +24,7 @@ type ChannelProvisioningService struct {
 	SocialBrands   ports.ProviderBrandProvisioner
 	ProviderBrands ports.ProviderBrandStore
 	Businesses     ports.BusinessRepository
-	Connections    ports.ChannelConnectionWriter
+	Connections    ports.ChannelProvisioningConnectionStore
 	RedirectURI    string
 	SecretRef      func(sessionID string) string
 }
@@ -233,14 +233,48 @@ func (s ChannelProvisioningService) Complete(ctx context.Context, businessID, se
 	if s.SecretRef != nil {
 		secretReference = s.SecretRef(session.ID)
 	}
+	// OAuth providers can return the same connection reference when a user
+	// repeats an authorization flow or returns to an older callback URL. The
+	// database deliberately makes that reference globally unique. Resolve it
+	// first so a repeat callback becomes an idempotent completion rather than a
+	// PostgreSQL unique-constraint error exposed to the user.
+	if existing, lookupErr := s.Connections.GetByProviderReferences(ctx, session.ProviderRef, "", authorization.ProviderConnectionRef); lookupErr == nil {
+		return s.completeWithExistingConnection(ctx, session, authorization, existing)
+	}
+
 	connection, err := s.Connections.CreatePending(ctx, businessID, session.ProviderRef, session.Channel, authorization.ProviderConnectionRef, secretReference)
 	if err != nil {
+		// A concurrent callback can create the record between the lookup above
+		// and this INSERT. Resolve once; this is reconciliation of a known
+		// unique key outcome, not a blind retry.
+		if existing, lookupErr := s.Connections.GetByProviderReferences(ctx, session.ProviderRef, "", authorization.ProviderConnectionRef); lookupErr == nil {
+			return s.completeWithExistingConnection(ctx, session, authorization, existing)
+		}
 		return s.fail(ctx, session, "channel_connection_create_failed", err)
 	}
 	if _, err := s.Connections.Activate(ctx, businessID, connection.ID, authorization.ProviderAccountRef, authorization.ProviderConnectionRef); err != nil {
-		return s.failWithConnection(ctx, session, connection.ID, "channel_connection_activation_failed", err)
+		return s.failWithConnection(ctx, session, connection, "channel_connection_activation_failed", err)
 	}
-	return s.Sessions.MarkProvisioning(ctx, businessID, session.ID, ports.ChannelProvisioningPatch{Status: ports.ProvisioningConnected, ProviderAccountRef: stringPtr(authorization.ProviderAccountRef), ProviderConnectionRef: stringPtr(authorization.ProviderConnectionRef), ChannelConnectionID: stringPtr(connection.ID)})
+	return s.markConnected(ctx, session, authorization, connection.ID)
+}
+
+func (s ChannelProvisioningService) completeWithExistingConnection(ctx context.Context, session ports.ChannelProvisioningSession, authorization ports.SocialAuthorization, connection ports.ChannelConnectionRecord) (ports.ChannelProvisioningSession, error) {
+	if connection.BusinessID != session.BusinessID {
+		return s.fail(ctx, session, "channel_connection_already_linked", errors.New("provider channel is already linked to another business"))
+	}
+	if connection.ProviderReference != session.ProviderRef || connection.Channel != session.Channel {
+		return s.fail(ctx, session, "channel_connection_conflict", errors.New("provider connection does not match the requested channel"))
+	}
+	if connection.Status != "active" {
+		if _, err := s.Connections.Activate(ctx, session.BusinessID, connection.ID, authorization.ProviderAccountRef, authorization.ProviderConnectionRef); err != nil {
+			return s.failWithConnection(ctx, session, connection, "channel_connection_activation_failed", err)
+		}
+	}
+	return s.markConnected(ctx, session, authorization, connection.ID)
+}
+
+func (s ChannelProvisioningService) markConnected(ctx context.Context, session ports.ChannelProvisioningSession, authorization ports.SocialAuthorization, connectionID string) (ports.ChannelProvisioningSession, error) {
+	return s.Sessions.MarkProvisioning(ctx, session.BusinessID, session.ID, ports.ChannelProvisioningPatch{Status: ports.ProvisioningConnected, ProviderAccountRef: stringPtr(authorization.ProviderAccountRef), ProviderConnectionRef: stringPtr(authorization.ProviderConnectionRef), ChannelConnectionID: stringPtr(connectionID)})
 }
 
 func (s ChannelProvisioningService) fail(ctx context.Context, session ports.ChannelProvisioningSession, code string, cause error) (ports.ChannelProvisioningSession, error) {
@@ -251,8 +285,18 @@ func (s ChannelProvisioningService) fail(ctx context.Context, session ports.Chan
 	return session, fmt.Errorf("%s: %w", code, cause)
 }
 
-func (s ChannelProvisioningService) failWithConnection(ctx context.Context, session ports.ChannelProvisioningSession, connectionID, code string, cause error) (ports.ChannelProvisioningSession, error) {
-	updated, updateErr := s.Sessions.MarkProvisioning(ctx, session.BusinessID, session.ID, ports.ChannelProvisioningPatch{Status: ports.ProvisioningFailed, ChannelConnectionID: stringPtr(connectionID), FailureCode: stringPtr(code)})
+func (s ChannelProvisioningService) failWithConnection(ctx context.Context, session ports.ChannelProvisioningSession, connection ports.ChannelConnectionRecord, code string, cause error) (ports.ChannelProvisioningSession, error) {
+	// OAuth has completed at this point. Leaving the newly created local
+	// connection as pending would make the merchant UI say "verifying" forever
+	// even though the real failure is local activation (most often channel
+	// entitlement). Record an actionable lifecycle state in a separate DB call;
+	// activation itself has already rolled back, and no network call happens
+	// here. A conditional update prevents a racing successful activation from
+	// ever being downgraded.
+	if _, markErr := s.Connections.MarkActivationFailed(ctx, session.BusinessID, connection.ID, connection.ResourceVersion, code); markErr != nil {
+		log.Printf("[ChannelProvisioning] activation failure state mark failed business=%s connection=%s err=%v", session.BusinessID, connection.ID, markErr)
+	}
+	updated, updateErr := s.Sessions.MarkProvisioning(ctx, session.BusinessID, session.ID, ports.ChannelProvisioningPatch{Status: ports.ProvisioningFailed, ChannelConnectionID: stringPtr(connection.ID), FailureCode: stringPtr(code)})
 	if updateErr == nil {
 		session = updated
 	}

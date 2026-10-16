@@ -15,7 +15,6 @@ import (
 
 const (
 	defaultAdminEmail  = "admin@mujeeb.ai"
-	defaultAdminPass   = "Password123456!"
 	defaultBusinessID  = "00000000-0000-0000-0000-000000000001"
 	defaultPrincipalID = "2818b77d-d94d-455f-8ca3-2ca18075160f"
 )
@@ -23,7 +22,11 @@ const (
 func main() {
 	dbURL := os.Getenv("DATABASE_URL")
 	if strings.TrimSpace(dbURL) == "" {
-		dbURL = "postgres://mujeeb:551f7de64c01ce392e5a8ce35d8c8a66447e6d90fe8bd9de@127.0.0.1:5433/mujeeb24?sslmode=disable"
+		log.Fatal("DATABASE_URL is required")
+	}
+	seedAdminPassword := strings.TrimSpace(os.Getenv("SEED_ADMIN_PASSWORD"))
+	if seedAdminPassword == "" {
+		log.Fatal("SEED_ADMIN_PASSWORD is required")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -47,7 +50,7 @@ func main() {
 	principalID := defaultPrincipalID
 
 	log.Println("1. Ensuring Principal and Super Admin credentials...")
-	passHash, err := bcrypt.GenerateFromPassword([]byte(defaultAdminPass), bcrypt.DefaultCost)
+	passHash, err := bcrypt.GenerateFromPassword([]byte(seedAdminPassword), bcrypt.DefaultCost)
 	if err != nil {
 		log.Fatalf("Failed to hash password: %v", err)
 	}
@@ -1103,8 +1106,8 @@ func main() {
 
 	log.Println("==========================================================")
 	log.Println("🎉 Database Demo Seeder Complete Successfully!")
-	log.Printf("👤 Admin User:    %s (Password: %s) -> Business: %s (With 3 Channels & Full Demo Data)", defaultAdminEmail, defaultAdminPass, defaultBusinessID)
-	log.Printf("👤 Clean User:    %s (Password: %s) -> Business: %s (Zero Channels & Fresh State)", cleanMerchantEmail, defaultAdminPass, cleanBusinessID)
+	log.Printf("👤 Admin User:    %s -> Business: %s (With 3 Channels & Full Demo Data)", defaultAdminEmail, defaultBusinessID)
+	log.Printf("👤 Clean User:    %s -> Business: %s (Zero Channels & Fresh State)", cleanMerchantEmail, cleanBusinessID)
 	log.Printf("🏢 Main Business: %s (%s)", "متجر مجيب 24 الذكي للإلكترونيات", defaultBusinessID)
 	log.Println("📦 Products:      15+ Core Smart Gadgets, Laptops, Audio, Gaming & Accessories")
 	log.Printf("💬 Chats:         %d Realistic Multiturn Conversations across WhatsApp, IG & Facebook", len(convs))

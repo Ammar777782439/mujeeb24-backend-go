@@ -30,6 +30,7 @@ type Dependencies struct {
 	GetBusiness                  queries.GetBusinessHandler
 	GetBusinessPolicy            queries.GetBusinessPolicyHandler
 	GetDashboardOverview         queries.GetDashboardOverviewHandler
+	GetBusinessSubscription      queries.GetBusinessSubscriptionHandler
 	ListConversations            queries.ListConversationsHandler
 	GetConversation              queries.GetConversationHandler
 	ListConversationMessages     queries.ListConversationMessagesHandler

@@ -26,7 +26,7 @@ func NewPaymentRepository(adapter *Adapter) *PaymentRepository {
 	return &PaymentRepository{adapter: adapter}
 }
 
-const paymentSelectColumns = `id::text, subscription_id::text, business_id::text, amount_yer, method, reference, paid_at, recorded_by::text, created_at`
+const paymentSelectColumns = `id::text, subscription_id::text, business_id::text, amount_yer, method, reference, paid_at, recorded_by::text, COALESCE(idempotency_key, ''), created_at`
 
 func scanPayment(scanner interface {
 	Scan(dest ...any) error
@@ -34,7 +34,7 @@ func scanPayment(scanner interface {
 	return scanner.Scan(
 		&record.ID, &record.SubscriptionID, &record.BusinessID,
 		&record.AmountYER, &record.Method, &record.Reference,
-		&record.PaidAt, &record.RecordedBy, &record.CreatedAt,
+		&record.PaidAt, &record.RecordedBy, &record.IdempotencyKey, &record.CreatedAt,
 	)
 }
 
@@ -73,18 +73,28 @@ func (r *PaymentRepository) Append(ctx context.Context, create ports.PaymentCrea
 	}
 	paymentID := uuid.NewString()
 	var record ports.PaymentRecord
-	err = executor.QueryRow(ctx,
-		`INSERT INTO subscription_payments (id, subscription_id, business_id, amount_yer, method, reference, paid_at, recorded_by, created_at)
-		 VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::uuid, $9)
+	err = scanPayment(executor.QueryRow(ctx,
+		`INSERT INTO subscription_payments (id, subscription_id, business_id, amount_yer, method, reference, paid_at, recorded_by, idempotency_key, created_at)
+		 VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::uuid, NULLIF($9, ''), $10)
+		 ON CONFLICT DO NOTHING
 		 RETURNING `+paymentSelectColumns,
 		paymentID, create.SubscriptionID, create.BusinessID,
 		create.AmountYER, method, create.Reference,
-		create.PaidAt, create.RecordedBy, create.Now,
-	).Scan(
-		&record.ID, &record.SubscriptionID, &record.BusinessID,
-		&record.AmountYER, &record.Method, &record.Reference,
-		&record.PaidAt, &record.RecordedBy, &record.CreatedAt,
-	)
+		create.PaidAt, create.RecordedBy, strings.TrimSpace(create.IdempotencyKey), create.Now,
+	), &record)
+	if errors.Is(err, pgx.ErrNoRows) && strings.TrimSpace(create.IdempotencyKey) != "" {
+		err = scanPayment(executor.QueryRow(ctx,
+			`SELECT `+paymentSelectColumns+` FROM subscription_payments WHERE recorded_by=$1::uuid AND idempotency_key=$2`,
+			create.RecordedBy, strings.TrimSpace(create.IdempotencyKey)), &record)
+		if err == nil && (record.SubscriptionID != create.SubscriptionID || record.BusinessID != create.BusinessID ||
+			record.AmountYER != create.AmountYER || record.Method != method || record.Reference != create.Reference ||
+			!record.PaidAt.Equal(create.PaidAt)) {
+			return ports.PaymentRecord{}, &RepositoryError{Operation: "payment.append", Kind: RepositoryConflict, Err: errors.New("idempotency key was already used with a different payment request")}
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ports.PaymentRecord{}, &RepositoryError{Operation: "payment.append", Kind: RepositoryConflict, Err: errors.New("subscription already has a different payment or the idempotency key conflicts")}
+		}
+	}
 	if err != nil {
 		return ports.PaymentRecord{}, classifyRepositoryWriteError("payment.append", err)
 	}
@@ -165,7 +175,7 @@ func (r *PaymentRepository) GetByID(ctx context.Context, paymentID string) (port
 	).Scan(
 		&record.ID, &record.SubscriptionID, &record.BusinessID,
 		&record.AmountYER, &record.Method, &record.Reference,
-		&record.PaidAt, &record.RecordedBy, &record.CreatedAt,
+		&record.PaidAt, &record.RecordedBy, &record.IdempotencyKey, &record.CreatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

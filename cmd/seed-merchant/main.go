@@ -17,31 +17,30 @@ import (
 // Fixed demo merchant requested for end-to-end testing.
 //
 // Business: نظام مجيب مقدم خدمات
-// Email:    merchant@mujeeb24.com
-// Password: Mujeeb24@2026
-//
-// The password is never stored in plaintext; the database receives only
-// a bcrypt hash. Subscription activation follows the real contract:
+// Credentials are supplied through environment variables; the database
+// receives only a bcrypt hash. Subscription activation follows the real contract:
 // PENDING -> recorded payment -> ACTIVE.
 
 const (
-	merchantEmail    = "merchant@mujeeb24.com"
-	merchantPassword = "Mujeeb24@2026"
-	merchantName     = "نظام مجيب مقدم خدمات"
-	merchantSlug     = "mujeeb-service-provider"
+	merchantEmail = "merchant@mujeeb24.com"
+	merchantName  = "نظام مجيب مقدم خدمات"
+	merchantSlug  = "mujeeb-service-provider"
 
 	merchantPrincipalID    = "00000000-0000-0000-0000-000000000004"
 	merchantBusinessID     = "00000000-0000-0000-0000-000000000004"
 	merchantSubscriptionID = "00000000-0000-0000-0000-000000000005"
 
-	basicPlanID       = "00000000-0000-0000-0000-00000000a001"
-	basicPlanPriceYER = 5000
+	basicPlanPriceYER = 6500
 )
 
 func main() {
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if dbURL == "" {
 		log.Fatal("DATABASE_URL is required")
+	}
+	merchantPassword := strings.TrimSpace(os.Getenv("SEED_MERCHANT_PASSWORD"))
+	if merchantPassword == "" {
+		log.Fatal("SEED_MERCHANT_PASSWORD is required")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -153,36 +152,20 @@ func main() {
 		log.Fatalf("upsert merchant membership: %v", err)
 	}
 
-	log.Println("5. Ensuring Basic plan (5000 YER/month)...")
-	_, err = tx.Exec(ctx, `
-		INSERT INTO plans (
-			id, code, version, display_name, price_yer, billing_interval,
-			ai_reply_limit, ai_catalog_limit, channel_limit,
-			internal_ai_cost_budget_yer, status, created_at, updated_at
-		)
-		VALUES (
-			$1::uuid, 'basic', 1, 'Basic', 5000, 'MONTH',
-			500, 200, 1, 1000, 'ACTIVE', $2, $2
-		)
-		ON CONFLICT (code, version) DO NOTHING
-	`, basicPlanID, now)
-	if err != nil {
-		log.Fatalf("ensure basic plan: %v", err)
-	}
-
+	log.Println("5. Loading active Basic Pricing V2 plan (6500 YER/month)...")
 	var planID string
 	var planPrice int
 	var planStatus string
-	var aiReplyLimit, aiCatalogLimit, channelLimit, costBudget int
+	var aiReplyLimit, aiCatalogLimit, channelLimit, channelCeiling, seatLimit, costBudget int
 	err = tx.QueryRow(ctx, `
 		SELECT id::text, price_yer, status,
 		       ai_reply_limit, ai_catalog_limit,
-		       channel_limit, internal_ai_cost_budget_yer
+		       included_channel_limit, channel_ceiling, seat_limit, internal_ai_cost_budget_yer
 		FROM plans
-		WHERE code = 'basic' AND version = 1
+		WHERE code = 'basic' AND status = 'ACTIVE'
 	`).Scan(
 		&planID, &planPrice, &planStatus,
-		&aiReplyLimit, &aiCatalogLimit, &channelLimit, &costBudget,
+		&aiReplyLimit, &aiCatalogLimit, &channelLimit, &channelCeiling, &seatLimit, &costBudget,
 	)
 	if err != nil {
 		log.Fatalf("load basic plan: %v", err)
@@ -206,16 +189,17 @@ func main() {
 
 		_, err = tx.Exec(ctx, `
 			INSERT INTO subscriptions (
-				id, business_id, plan_id, period_start, period_end, status,
-				ai_reply_limit, ai_catalog_limit, channel_limit,
-				internal_ai_cost_budget_yer, created_at, updated_at
+				id, business_id, plan_id, price_yer_snapshot, amount_due_yer,
+				period_start, period_end, status,
+				ai_reply_limit, ai_catalog_limit, channel_limit, included_channel_limit,
+				channel_ceiling, seat_limit, internal_ai_cost_budget_yer, created_at, updated_at
 			)
 			VALUES (
-				$1::uuid, $2::uuid, $3::uuid, $4, $5, 'PENDING',
-				$6, $7, $8, $9, $4, $4
+				$1::uuid, $2::uuid, $3::uuid, $4, $4, $5, $6, 'PENDING',
+				$7, $8, $9, $9, $10, $11, $12, $5, $5
 			)
-		`, merchantSubscriptionID, merchantBusinessID, planID, periodStart, periodEnd,
-			aiReplyLimit, aiCatalogLimit, channelLimit, costBudget)
+		`, merchantSubscriptionID, merchantBusinessID, planID, planPrice, periodStart, periodEnd,
+			aiReplyLimit, aiCatalogLimit, channelLimit, channelCeiling, seatLimit, costBudget)
 		if err != nil {
 			log.Fatalf("create subscription: %v", err)
 		}
@@ -235,7 +219,7 @@ func main() {
 			SELECT 1
 			FROM subscription_payments
 			WHERE subscription_id = $1::uuid
-			  AND reference = 'SEED-MUJEEB-BASIC-5000'
+			  AND reference = 'SEED-MUJEEB-BASIC-V2-6500'
 		)
 	`, merchantSubscriptionID).Scan(&paymentExists)
 	if err != nil {
@@ -257,14 +241,14 @@ func main() {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO subscription_payments (
 				id, subscription_id, business_id, amount_yer,
-				method, reference, paid_at, recorded_by, created_at
+				method, reference, paid_at, recorded_by, idempotency_key, created_at
 			)
 			VALUES (
 				$1::uuid, $2::uuid, $3::uuid, $4,
-				'CASH', $5, $6, $7::uuid, $6
+				'CASH', $5, $6, $7::uuid, $8, $6
 			)
 		`, uuid.NewString(), merchantSubscriptionID, merchantBusinessID,
-			basicPlanPriceYER, "SEED-MUJEEB-BASIC-5000", now, recordedBy)
+			basicPlanPriceYER, "SEED-MUJEEB-BASIC-V2-6500", now, recordedBy, "seed-merchant-basic-v2-payment")
 		if err != nil {
 			log.Fatalf("record seed payment: %v", err)
 		}
@@ -273,7 +257,7 @@ func main() {
 	if subscriptionStatus == "PENDING" {
 		_, err = tx.Exec(ctx, `
 			UPDATE subscriptions
-			SET status = 'ACTIVE', updated_at = $2
+			SET status = 'ACTIVE', activated_at = $2, updated_at = $2
 			WHERE id = $1::uuid AND status = 'PENDING'
 		`, merchantSubscriptionID, now)
 		if err != nil {

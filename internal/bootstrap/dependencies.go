@@ -20,6 +20,7 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 	customerRuntime := services.CustomerRuntimeService{Repository: customerRepository, Transactions: adapter}
 	catalogRepository := postgres.NewCatalogRepository(adapter)
 	catalogCommands := services.NewCatalogCommandServices(catalogRepository, adapter)
+	catalogCommands.Entitlements = postgres.NewSubscriptionRepository(adapter)
 
 	leadRepository := postgres.NewLeadRepository(adapter)
 	transactionRepository := postgres.NewTransactionRepository(adapter)
@@ -47,6 +48,7 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 		UpdateBusinessProfile:     services.UpdateBusinessProfileService{BusinessManagementService: businessManagement},
 		UpdateBusinessPolicy:      services.UpdateBusinessPolicyService{BusinessManagementService: businessManagement},
 		GetDashboardOverview:      services.DashboardOverviewQueryService{Repository: dashboardRepository},
+		GetBusinessSubscription:   services.BusinessSubscriptionQueryService{Repository: dashboardRepository},
 		GetCustomer:               services.GetCustomerQueryService{Repository: customerRepository},
 		ListCustomers:             services.ListCustomersQueryService{CustomerRuntimeService: customerRuntime},
 		CreateCustomer:            services.CreateCustomerCommandService{CustomerRuntimeService: customerRuntime},

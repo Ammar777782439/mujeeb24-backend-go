@@ -6,6 +6,8 @@ AI Usage, Token Telemetry & Subscription Consumption Contract
 
 الحالة: CLOSED
 
+> **المرجع التجاري 2026-10-16:** آلية القياس والحماية في هذه الوثيقة باقية، والأسعار والميزانيات المعتمدة تأتي حصراً من [Mujeeb 24 — Pricing & Subscription Contract v2.0](../../Mujeeb_24_Pricing_Contract_v2.0.md). لا تتحول الخطة إلى Runtime بمجرد تحديث الوثائق.
+
 هذا العقد جزء إلزامي من:
 
 Platform Administration Contract V1
@@ -46,19 +48,18 @@ Tool Calls
 
 AI Replies
 
-والباقات الحالية:
+والباقات التجارية المرجعية للمبيعات الجديدة في v2:
 
-Basic
-5,000 YER
-500 AI Replies
+| Plan | Monthly YER Price | AI Replies |
+|---|---:|---:|
+| بداية (`starter`) | 4,000 YER | 50 |
+| متجر (`basic`) | 6,500 YER | 200 |
+| نمو (`growth`) | 10,000 YER | 500 |
+| احتراف (`pro`) | 16,000 YER | 1,200 |
+| أعمال (`business`) | 25,000 YER | 3,000 |
+| مؤسسات/وكالات (`enterprise`) | عرض مخصص | قياس فعلي |
 
-Growth
-10,000 YER
-1,500 AI Replies
-
-Business
-20,000 YER
-4,000 AI Replies
+سعر التاجر يثبت بالريال داخل Plan Version ولا يُشتق يوميًا من الدولار. سعر الصرف يُستخدم داخليًا لتحويل تكلفة الموردين وقياس الهامش.
 
 وهذه هي الـMerchant Entitlement.
 
@@ -306,16 +307,18 @@ projected_remaining_cost
 
 internal_ai_cost_budget_yer
 
-القيم المعتمدة في baseline الحالي:
+القيم المرجعية في v2 المحلية:
 
-Basic
-1,000 YER / month
+| Plan | Internal AI Cost Budget |
+|---|---:|
+| بداية (`starter`) | 500 YER / month |
+| متجر (`basic`) | 1,000 YER / month |
+| نمو (`growth`) | 2,000 YER / month |
+| احتراف (`pro`) | 4,000 YER / month |
+| أعمال (`business`) | 7,500 YER / month |
+| مؤسسات/وكالات (`enterprise`) | حد نقدي متفق عليه |
 
-Growth
-3,500 YER / month
-
-Business
-9,000 YER / month
+تثبت الميزانية في Plan Version والاشتراك، ولا يعاد حسابها آليًا كنسبة متحركة. هذه hard economic allowance، بينما authoritative consumption يأتي من LiteLLM native spend وFX snapshot.
 
 وهذه ليست رسومًا إضافية على التاجر وليست Token Quota.
 
@@ -342,16 +345,16 @@ MAX(cost_budget_yer - provider_cost_yer, 0)
 
 مثال:
 
-Growth
+Growth v2 reference example
 
 Budget:
-3,500 YER
+2,000 YER
 
 Consumed:
 1,420 YER
 
 Remaining:
-2,080 YER
+580 YER
 
 ---
 
@@ -556,23 +559,23 @@ New Plan Version
 
 مثلاً:
 
-Basic v1
-AI Cost Budget = 1,000 YER
+Growth — current used Plan Version
+AI Cost Budget = 2,000 YER
 
 ثم يكتشف المدير من البيانات الفعلية أن التكلفة تغيرت.
 
 ينشئ:
 
-Basic v2
-AI Cost Budget = 1,300 YER
+Growth — new Plan Version
+AI Cost Budget = القيمة الجديدة المثبتة من القياس
 
-الاشتراكات القديمة تبقى مرتبطة بـ:
+الاشتراكات النشطة تبقى مرتبطة بـ:
 
-Basic v1
+نسخة الخطة التي بدأت بها الفترة
 
 والاشتراكات الجديدة تستخدم:
 
-Basic v2
+نسخة الخطة الجديدة
 
 ولا نغير الماضي.
 
@@ -760,12 +763,12 @@ AI Replies × fixed cost
 لكل اشتراك تظهر للـPlatform Admin بطاقة:
 
 PLAN
-Growth v1
+Growth v2 reference
 
 AI REPLIES
-1,500 Limit
-620 Used
-880 Remaining
+500 Limit
+220 Used
+280 Remaining
 
 TOKENS
 Input:
@@ -789,10 +792,10 @@ Actual:
 1,420 YER
 
 Budget:
-3,500 YER
+2,000 YER
 
 Remaining Budget:
-2,080 YER
+580 YER
 
 Average / Reply:
 ...

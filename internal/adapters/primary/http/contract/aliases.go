@@ -21,6 +21,7 @@ type TeamInvitation = dto.TeamInvitation
 type TeamInvitationCreated = dto.TeamInvitationCreated
 type BusinessPolicy = dto.BusinessPolicy
 type DashboardOverview = dto.DashboardOverview
+type MerchantSubscriptionView = dto.MerchantSubscriptionView
 type ChannelHistorySummary = dto.ChannelHistorySummary
 type PurgeChannelHistoryInput = dto.PurgeChannelHistoryInput
 type PurgeChannelHistoryRequest = dto.PurgeChannelHistoryRequest
