@@ -23,26 +23,21 @@ func TestLiteLLMComposesCatalogReplyWithWholeCommercialEvidence(t *testing.T) {
 		case "/utils/token_counter":
 			counted++
 			_, _ = w.Write([]byte(`{"total_tokens":230}`))
-		case "/v1beta/interactions":
+		case "/v1/chat/completions":
 			composed++
-			var req struct {
-				Model             string                     `json:"model"`
-				Input             string                     `json:"input"`
-				SystemInstruction string                     `json:"system_instruction"`
-				ResponseFormat    *interactionResponseFormat `json:"response_format"`
-			}
+			var req chatGatewayTestRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Error(err)
 				return
 			}
-			if req.Model != "mujeeb-catalog" || !strings.Contains(req.SystemInstruction, "اكتب جوابًا طبيعيًا") ||
-				!strings.Contains(req.Input, "special-feature") || !strings.Contains(req.Input, "offer-price") ||
-				!strings.Contains(req.Input, "variants") || !strings.Contains(req.Input, `"amount":"250.0000"`) || !strings.Contains(req.Input, `"currency":"SAR"`) ||
-				req.ResponseFormat == nil || req.ResponseFormat.Schema == nil {
+			if req.Model != "mujeeb-catalog" || !strings.Contains(req.SystemContent(), "اكتب جوابًا طبيعيًا") ||
+				!strings.Contains(req.UserContent(), "special-feature") || !strings.Contains(req.UserContent(), "offer-price") ||
+				!strings.Contains(req.UserContent(), "variants") || !strings.Contains(req.UserContent(), `"amount":"250.0000"`) || !strings.Contains(req.UserContent(), `"currency":"SAR"`) ||
+				req.ResponseFormat == nil || req.ResponseFormat.JSONSchema.Schema == nil {
 				t.Errorf("Gemini narration lost commercial facts or its grounded-output contract: %+v", req)
 			}
 			if req.ResponseFormat != nil {
-				properties := req.ResponseFormat.Schema["properties"].(map[string]any)
+				properties := req.ResponseFormat.JSONSchema.Schema["properties"].(map[string]any)
 				sections := properties["sections"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
 				itemProps := sections["items"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
 				allowed := itemProps["item_id"].(map[string]any)["enum"].([]any)
@@ -54,7 +49,7 @@ func TestLiteLLMComposesCatalogReplyWithWholeCommercialEvidence(t *testing.T) {
 					t.Errorf("Gemini catalog IDs not constrained: %+v", catalogs)
 				}
 			}
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			writeChatTestResponse(w, map[string]any{
 				"status": "completed",
 				"outputs": []any{map[string]any{
 					"type": "message", "content": []any{map[string]any{
