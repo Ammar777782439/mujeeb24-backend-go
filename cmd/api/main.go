@@ -35,7 +35,7 @@ func run() error {
 		log.Printf("[SECURITY] AUTH_ENABLED=false — authentication DISABLED. This must NEVER happen in production.")
 	}
 	log.Printf("[API] starting mujeeb24 API on %s", cfg.HTTPAddr)
-	log.Printf("[API] auto_reply=%v llm_enabled=%v gemini_key=%v", cfg.AutoReplyEnabled, cfg.LLMEnabled, cfg.GeminiAPIKey != "")
+	log.Printf("[API] auto_reply=%v gateway_only=%v gateway_configured=%v", cfg.AutoReplyEnabled, cfg.LiteLLMGatewayOnly, cfg.LiteLLMBaseURL != "" && cfg.LiteLLMAPIKey != "")
 	log.Printf("[API] socialapi_key=%v webhook_secret=%v", cfg.SocialAPIAPIKey != "", cfg.SocialAPIWebhookSecret != "")
 	startupContext, cancelStartup := context.WithTimeout(context.Background(), cfg.DBConnectTimeout)
 	defer cancelStartup()

@@ -1,7 +1,7 @@
 // Package services — Test fake for the customer-sales decision port.
 //
 // This fake implements ports.CustomerSalesDecisionPort so application/postgres tests can
-// exercise the contract-aligned AutoReplyService flow without an HTTP Gemini
+// exercise the contract-aligned AutoReplyService flow without an HTTP AI provider
 // call. It returns a fixed CapabilityDecision per contract ④ §4.
 //
 // Tests can override the returned proposal by setting FakeCustomerSalesDecisionPort.Decision.
@@ -21,10 +21,9 @@ import (
 // It returns the configured Proposal on every call, recording the input
 // arguments for assertions. Tests may set Error to simulate a provider failure.
 type FakeCustomerSalesDecisionPort struct {
-	Decision            ports.CapabilityDecision
-	GeminiInteractionID string // returned as ResultingInteractionID
-	Error               error
-	LastInput           ports.CustomerSalesDecisionInput
+	Decision  ports.CapabilityDecision
+	Error     error
+	LastInput ports.CustomerSalesDecisionInput
 }
 
 // NewFakeCustomerSalesDecisionPort returns a fake that produces a contract-aligned
@@ -35,7 +34,6 @@ func NewFakeCustomerSalesDecisionPort(responseText string) *FakeCustomerSalesDec
 			Capability:   ports.CustomerSalesCapabilityRespondWithoutAction,
 			ResponseText: responseText,
 		},
-		GeminiInteractionID: "fake-interaction-id",
 	}
 }
 
@@ -50,11 +48,6 @@ func (f *FakeCustomerSalesDecisionPort) Decide(ctx context.Context, input ports.
 	}
 	return ports.CustomerSalesDecisionOutput{
 		Decision: f.Decision,
-		GeminiInteraction: ports.GeminiInteractionContext{
-			PreviousInteractionID:  input.GeminiInteraction.PreviousInteractionID,
-			ResultingInteractionID: f.GeminiInteractionID,
-			Store:                  input.GeminiInteraction.Store,
-		},
 		Usage: ports.CustomerSalesUsageTelemetry{
 			InputTokens:  10,
 			OutputTokens: 5,

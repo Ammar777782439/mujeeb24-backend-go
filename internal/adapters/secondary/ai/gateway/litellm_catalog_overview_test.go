@@ -1,0 +1,110 @@
+package gateway
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/litellm"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
+)
+
+func TestLiteLLMOverviewReadsWholeBatchAndProducesOneFinalCustomerReply(t *testing.T) {
+	var counted, batchCalls, finalCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer test-key" {
+			t.Error("gateway virtual key missing")
+		}
+		switch r.URL.Path {
+		case "/utils/token_counter":
+			counted++
+			_, _ = w.Write([]byte(`{"total_tokens":320}`))
+		case "/v1/chat/completions":
+			var body chatGatewayTestRequest
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Error(err)
+				return
+			}
+			if body.Model != "mujeeb-catalog" || body.ResponseFormat == nil {
+				t.Error("expected catalog model and JSON Schema")
+				return
+			}
+			var input struct {
+				Stage     string `json:"stage"`
+				Batch     any    `json:"catalog_batch"`
+				Summaries any    `json:"reviewed_summaries"`
+			}
+			if err := json.Unmarshal([]byte(body.UserContent()), &input); err != nil {
+				t.Error(err)
+				return
+			}
+			reply := ""
+			switch input.Stage {
+			case "batch":
+				batchCalls++
+				if !strings.Contains(body.UserContent(), "250.0000") || !strings.Contains(body.UserContent(), "SAR") || !strings.Contains(body.UserContent(), "variant-1") {
+					t.Errorf("overview batch missing original commercial evidence: %s", body.UserContent())
+				}
+				properties := body.ResponseFormat.JSONSchema.Schema["properties"].(map[string]any)
+				if len(properties) != 1 || properties["text"] == nil || properties["covered_item_ids"] != nil {
+					t.Errorf("overview schema must only request a semantic digest: %v", properties)
+				}
+				reply = `{"text":"المتجر يعرض هاتفًا وخيارات تقنية بسعر 250 ريال سعودي."}`
+			case "final":
+				finalCalls++
+				if input.Batch != nil || !strings.Contains(body.UserContent(), "reviewed_summaries") {
+					t.Error("Gemini final synthesis received raw catalog or no reviewed summary")
+				}
+				reply = `{"text":"أهلًا بك! لدينا أجهزة وخدمات متنوعة. أي قسم ترغب في استكشافه؟"}`
+			default:
+				t.Errorf("unexpected stage %q", input.Stage)
+			}
+			writeChatTestResponse(w, map[string]any{
+				"status": "completed",
+				"outputs": []any{map[string]any{"type": "message", "content": []any{
+					map[string]any{"type": "output_text", "text": reply},
+				}}},
+				"usage": map[string]any{"total_input_tokens": 320, "total_output_tokens": 70},
+			})
+		default:
+			t.Errorf("unexpected endpoint %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	client, err := litellm.NewClient(litellm.Config{BaseURL: server.URL, APIKey: "test-key"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter, err := NewLiteLLMCatalogAdapter(client, "mujeeb-catalog", 4096, 32768)
+	if err != nil {
+		t.Fatal(err)
+	}
+	variant, price, currency := "variant-1", "250.0000", "SAR"
+	batch := services.CatalogAIBatchPayload{
+		Catalogs: []services.CatalogAICatalog{{ID: "catalog", Name: "الإلكترونيات", Status: "active"}},
+		Items: []services.CatalogAIItem{{
+			ID: "item-1", CatalogID: "catalog", Name: "هاتف",
+			Variants: []services.CatalogAIVariant{{ID: variant, CatalogItemID: "item-1"}},
+			Offers:   []services.CatalogAIOffer{{ID: "offer", CatalogItemID: "item-1", VariantID: &variant, Amount: &price, Currency: &currency}},
+		}},
+	}
+	request := services.CatalogOverviewRequest{Stage: "batch", CustomerMessage: "ما المتوفر عندكم؟", Batch: &batch, RequestedPresentation: "overview"}
+	count, err := adapter.CountOverviewTokens(context.Background(), request)
+	if err != nil || count < 320 {
+		t.Fatalf("exact overview token counter: %d %v", count, err)
+	}
+	result, err := adapter.ComposeOverview(context.Background(), request)
+	if err != nil || result.Text == "" || result.Usage.OutputTokens != 70 {
+		t.Fatalf("Gemini batch response invalid: %+v %v", result, err)
+	}
+	final, err := adapter.ComposeOverview(context.Background(), services.CatalogOverviewRequest{
+		Stage: "final", CustomerMessage: "ما المتوفر عندكم؟",
+		RequestedPresentation: "overview", Summaries: []string{result.Text},
+	})
+	if err != nil || !strings.Contains(final.Text, "أي قسم") || counted < 3 || batchCalls != 1 || finalCalls != 1 {
+		t.Fatalf("final AI customer summary missing: %+v err=%v counted=%d batch=%d final=%d", final, err, counted, batchCalls, finalCalls)
+	}
+}

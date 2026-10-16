@@ -46,13 +46,16 @@ const (
 
 // AIRunFailureStage per contract ⑨ §30 — pinpoints where the run failed.
 const (
-	AIRunFailureStageContextBuild  = "context_build"
-	AIRunFailureStageGeminiRequest = "gemini_request"
-	AIRunFailureStageToolCall      = "tool_call"
-	AIRunFailureStageValidation    = "validation"
-	AIRunFailureStagePolicy        = "policy"
-	AIRunFailureStageAuthorization = "authorization"
-	AIRunFailureStageExecution     = "execution"
+	AIRunFailureStageContextBuild = "context_build"
+	// Keep the historical DB value to preserve existing trace and check constraints.
+	// New gateway code should use the provider-neutral alias.
+	AIRunFailureStageGeminiRequest   = "gemini_request"
+	AIRunFailureStageProviderRequest = AIRunFailureStageGeminiRequest
+	AIRunFailureStageToolCall        = "tool_call"
+	AIRunFailureStageValidation      = "validation"
+	AIRunFailureStagePolicy          = "policy"
+	AIRunFailureStageAuthorization   = "authorization"
+	AIRunFailureStageExecution       = "execution"
 )
 
 // AIRunFailureCategory per contract ⑨ §6-7 and ⑧ §10 — Retryable vs Non-Retryable.

@@ -44,18 +44,6 @@ func TestLoadFromEnvRejectsInvalidDuration(t *testing.T) {
 	}
 }
 
-func TestLoadFromEnvDisablesLLMByDefault(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
-	t.Setenv("LLM_ENABLED", "false")
-	cfg, err := LoadFromEnv()
-	if err != nil {
-		t.Fatalf("LoadFromEnv: %v", err)
-	}
-	if cfg.LLMEnabled || cfg.LLMModel != "" {
-		t.Fatalf("unexpected default LLM config: %#v", cfg)
-	}
-}
-
 func TestLoadFromEnvDisablesAutoReplyByDefaultAndReadsOverride(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
 	cfg, err := LoadFromEnv()
@@ -68,10 +56,13 @@ func TestLoadFromEnvDisablesAutoReplyByDefaultAndReadsOverride(t *testing.T) {
 	t.Setenv("AUTOREPLY_ENABLED", "true")
 	t.Setenv("SOCIALAPI_WEBHOOK_SECRET", "test-webhook-secret")
 	t.Setenv("SOCIALAPI_API_KEY", "test-socialapi-key")
-	t.Setenv("LLM_ENABLED", "true")
-	t.Setenv("LLM_BASE_URL", "https://llm.example/v1")
-	t.Setenv("LLM_API_KEY", "test-only-key")
-	t.Setenv("LLM_MODEL", "test-model")
+	t.Setenv("LITELLM_GATEWAY_ONLY", "true")
+	t.Setenv("LITELLM_BASE_URL", "http://127.0.0.1:4000")
+	t.Setenv("LITELLM_API_KEY", "test-gateway-virtual-key")
+	t.Setenv("LITELLM_USD_TO_YER_RATE", "500")
+	t.Setenv("LITELLM_CUSTOMER_MODEL", "mujeeb-customer")
+	t.Setenv("LITELLM_CATALOG_MODEL", "mujeeb-catalog")
+	t.Setenv("LITELLM_MERCHANT_MODEL", "mujeeb-merchant")
 	cfg, err = LoadFromEnv()
 	if err != nil || !cfg.AutoReplyEnabled {
 		t.Fatalf("AutoReply override: cfg=%#v err=%v", cfg, err)
@@ -86,33 +77,16 @@ func TestLoadFromEnvRejectsIncompleteExternalFeatureEnablement(t *testing.T) {
 	}
 }
 
-func TestLoadFromEnvRequiresCompleteLLMConfigurationWhenEnabled(t *testing.T) {
+func TestLoadFromEnvRejectsDirectGeminiAsCustomerRuntime(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
+	t.Setenv("AUTOREPLY_ENABLED", "true")
+	t.Setenv("SOCIALAPI_WEBHOOK_SECRET", "test-webhook-secret")
+	t.Setenv("SOCIALAPI_API_KEY", "test-socialapi-key")
+	t.Setenv("LITELLM_GATEWAY_ONLY", "false")
+	t.Setenv("GEMINI_API_KEY", "obsolete-direct-key")
 	t.Setenv("LLM_ENABLED", "true")
-	t.Setenv("LLM_BASE_URL", "")
-	t.Setenv("LLM_API_KEY", "test-only-key")
-	t.Setenv("LLM_MODEL", "test-model")
 	if _, err := LoadFromEnv(); err == nil {
-		t.Fatal("LoadFromEnv accepted enabled LLM without base URL")
-	}
-}
-
-func TestLoadFromEnvReadsLLMRuntimeConfiguration(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
-	t.Setenv("LLM_ENABLED", "true")
-	t.Setenv("LLM_BASE_URL", "https://llm.example/v1/")
-	t.Setenv("LLM_API_KEY", "test-only-key")
-	t.Setenv("LLM_MODEL", "test-model")
-	t.Setenv("LLM_HTTP_TIMEOUT", "7s")
-	t.Setenv("LLM_MAX_OUTPUT_TOKENS", "321")
-	t.Setenv("LLM_MAX_INPUT_CHARACTERS", "9000")
-	t.Setenv("LLM_OUTPUT_TOKENS_FIELD", "max_tokens")
-	cfg, err := LoadFromEnv()
-	if err != nil {
-		t.Fatalf("LoadFromEnv: %v", err)
-	}
-	if !cfg.LLMEnabled || cfg.LLMBaseURL != "https://llm.example/v1" || cfg.LLMModel != "test-model" || cfg.LLMHTTPTimeout.String() != "7s" || cfg.LLMMaxOutputTokens != 321 || cfg.LLMMaxInputCharacters != 9000 || cfg.LLMOutputTokensField != "max_tokens" {
-		t.Fatalf("unexpected LLM config: %#v", cfg)
+		t.Fatal("direct Gemini or legacy LLM configuration unexpectedly satisfied the gateway-only requirement")
 	}
 }
 

@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"net/url"
 	"os"
 	"strconv"
@@ -38,19 +39,21 @@ type ProcessConfig struct {
 	ChannelProvisioningRedirectURI string
 	CustomerSalesEnabled           bool
 	AutoReplyEnabled               bool
-	LLMEnabled                     bool
-	LLMBaseURL                     string
-	LLMAPIKey                      string
-	LLMModel                       string
-	LLMHTTPTimeout                 time.Duration
-	LLMMaxOutputTokens             int
-	LLMMaxInputCharacters          int
-	LLMOutputTokensField           string
-	GeminiAPIKey                   string
-	GeminiBaseURL                  string
-	GeminiModel                    string
-	GeminiHTTPTimeout              time.Duration
+	LiteLLMGatewayOnly             bool
+	LiteLLMMerchantModel           string
+	LiteLLMMerchantMaxRequestBytes int
+	LiteLLMCatalogModel            string
+	LiteLLMMaxContextTokens        int
+	LiteLLMBaseURL                 string
+	LiteLLMAPIKey                  string
+	LiteLLMCustomerModel           string
+	LiteLLMHTTPTimeout             time.Duration
+	LiteLLMMaxOutputTokens         int
+	LiteLLMMaxInputCharacters      int
 	FrontendURL                    string
+
+	// Exchange rate selected by deployment for native LiteLLM USD spend.
+	LiteLLMUSDToYERRate string
 }
 
 func LoadFromEnv() (ProcessConfig, error) {
@@ -87,19 +90,20 @@ func LoadFromEnv() (ProcessConfig, error) {
 		ChannelProvisioningEnabled:     false,
 		ChannelProvisioningRedirectURI: strings.TrimSpace(os.Getenv("CHANNEL_PROVISIONING_REDIRECT_URI")),
 		AutoReplyEnabled:               false,
-		LLMEnabled:                     false,
-		LLMBaseURL:                     strings.TrimRight(strings.TrimSpace(os.Getenv("LLM_BASE_URL")), "/"),
-		LLMAPIKey:                      strings.TrimSpace(os.Getenv("LLM_API_KEY")),
-		LLMModel:                       strings.TrimSpace(os.Getenv("LLM_MODEL")),
-		LLMHTTPTimeout:                 30 * time.Second,
-		LLMMaxOutputTokens:             4096,
-		LLMMaxInputCharacters:          12000,
-		LLMOutputTokensField:           envOr("LLM_OUTPUT_TOKENS_FIELD", "max_completion_tokens"),
-		GeminiAPIKey:                   strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
-		GeminiBaseURL:                  strings.TrimRight(strings.TrimSpace(os.Getenv("GEMINI_BASE_URL")), "/"),
-		GeminiModel:                    strings.TrimSpace(os.Getenv("GEMINI_MODEL")),
-		GeminiHTTPTimeout:              30 * time.Second,
+		LiteLLMGatewayOnly:             false,
+		LiteLLMMerchantModel:           envOr("LITELLM_MERCHANT_MODEL", "mujeeb-merchant"),
+		LiteLLMMerchantMaxRequestBytes: 524288,
+		LiteLLMCatalogModel:            envOr("LITELLM_CATALOG_MODEL", "mujeeb-catalog"),
+		LiteLLMMaxContextTokens:        32768,
+		LiteLLMBaseURL:                 strings.TrimRight(strings.TrimSpace(os.Getenv("LITELLM_BASE_URL")), "/"),
+		LiteLLMAPIKey:                  strings.TrimSpace(os.Getenv("LITELLM_API_KEY")),
+		LiteLLMCustomerModel:           envOr("LITELLM_CUSTOMER_MODEL", "mujeeb-customer"),
+		LiteLLMHTTPTimeout:             20 * time.Second,
+		LiteLLMMaxOutputTokens:         4096,
+		LiteLLMMaxInputCharacters:      48000,
 		FrontendURL:                    strings.TrimRight(strings.TrimSpace(os.Getenv("FRONTEND_URL")), "/"),
+
+		LiteLLMUSDToYERRate: strings.TrimSpace(os.Getenv("LITELLM_USD_TO_YER_RATE")),
 	}
 	if cfg.DatabaseURL == "" {
 		return ProcessConfig{}, errors.New("DATABASE_URL is required")
@@ -153,27 +157,33 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.AutoReplyEnabled, err = boolEnv("AUTOREPLY_ENABLED", cfg.AutoReplyEnabled); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.LLMEnabled, err = boolEnv("LLM_ENABLED", cfg.LLMEnabled); err != nil {
+	if cfg.LiteLLMMerchantMaxRequestBytes, err = intEnv("LITELLM_MERCHANT_MAX_REQUEST_BYTES", cfg.LiteLLMMerchantMaxRequestBytes); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.LLMHTTPTimeout, err = durationEnv("LLM_HTTP_TIMEOUT", cfg.LLMHTTPTimeout); err != nil {
+	if cfg.LiteLLMMaxContextTokens, err = intEnv("LITELLM_MAX_CONTEXT_TOKENS", cfg.LiteLLMMaxContextTokens); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.LLMMaxOutputTokens, err = intEnv("LLM_MAX_OUTPUT_TOKENS", cfg.LLMMaxOutputTokens); err != nil {
+	if cfg.LiteLLMGatewayOnly, err = boolEnv("LITELLM_GATEWAY_ONLY", false); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.LLMMaxInputCharacters, err = intEnv("LLM_MAX_INPUT_CHARACTERS", cfg.LLMMaxInputCharacters); err != nil {
+	if cfg.LiteLLMHTTPTimeout, err = durationEnv("LITELLM_HTTP_TIMEOUT", cfg.LiteLLMHTTPTimeout); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.GeminiHTTPTimeout, err = durationEnv("GEMINI_HTTP_TIMEOUT", cfg.GeminiHTTPTimeout); err != nil {
+	if cfg.LiteLLMMaxOutputTokens, err = intEnv("LITELLM_MAX_OUTPUT_TOKENS", cfg.LiteLLMMaxOutputTokens); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.LLMEnabled {
-		if cfg.LLMBaseURL == "" || cfg.LLMAPIKey == "" || cfg.LLMModel == "" {
-			return ProcessConfig{}, errors.New("LLM_ENABLED requires LLM_BASE_URL, LLM_API_KEY, and LLM_MODEL")
+	if cfg.LiteLLMMaxInputCharacters, err = intEnv("LITELLM_MAX_INPUT_CHARACTERS", cfg.LiteLLMMaxInputCharacters); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.LiteLLMGatewayOnly {
+		rate, ok := new(big.Rat).SetString(cfg.LiteLLMUSDToYERRate)
+		if !ok || rate.Sign() <= 0 {
+			return ProcessConfig{}, errors.New("LITELLM_USD_TO_YER_RATE must be an explicit positive decimal rate")
 		}
-		if cfg.LLMMaxOutputTokens <= 0 || cfg.LLMMaxInputCharacters <= 0 {
-			return ProcessConfig{}, errors.New("LLM token and input limits must be positive")
+		if cfg.LiteLLMBaseURL == "" || cfg.LiteLLMAPIKey == "" || cfg.LiteLLMCustomerModel == "" || cfg.LiteLLMCatalogModel == "" || cfg.LiteLLMMerchantModel == "" ||
+			cfg.LiteLLMMaxOutputTokens <= 0 || cfg.LiteLLMMaxInputCharacters <= 0 || cfg.LiteLLMMerchantMaxRequestBytes <= 0 ||
+			cfg.LiteLLMMaxContextTokens <= cfg.LiteLLMMaxOutputTokens {
+			return ProcessConfig{}, errors.New("LITELLM_GATEWAY_ONLY requires LITELLM_BASE_URL, LITELLM_API_KEY, customer/catalog/merchant models and positive limits")
 		}
 	}
 	if cfg.AuthEnabled && (cfg.JWTEd25519PrivateKey == "" || cfg.JWTEd25519PublicKey == "" || strings.TrimSpace(cfg.JWTIssuer) == "" || cfg.JWTAccessTTL <= 0 || cfg.RefreshSessionTTL <= 0) {
@@ -185,9 +195,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if strings.TrimSpace(cfg.HTTPAddr) == "" {
 		return ProcessConfig{}, errors.New("HTTP_ADDR cannot be empty")
 	}
-	hasAI := cfg.LLMEnabled || strings.TrimSpace(cfg.GeminiAPIKey) != ""
+	hasAI := cfg.LiteLLMGatewayOnly
 	if (cfg.AutoReplyEnabled || cfg.CustomerSalesEnabled) && (cfg.SocialAPIWebhookSecret == "" || cfg.SocialAPIAPIKey == "" || !hasAI) {
-		return ProcessConfig{}, errors.New("AUTOREPLY_ENABLED requires SOCIALAPI_WEBHOOK_SECRET, SOCIALAPI_API_KEY, and LLM_ENABLED or GEMINI_API_KEY")
+		return ProcessConfig{}, errors.New("AUTOREPLY_ENABLED and CUSTOMER_SALES_ENABLED require SOCIALAPI_WEBHOOK_SECRET, SOCIALAPI_API_KEY and LITELLM_GATEWAY_ONLY=true")
 	}
 	return cfg, nil
 }

@@ -22,10 +22,7 @@ import (
 //   - The AI Runtime is the master gate — even when providers are
 //     ENABLED + HEALTHY, no AI execution can start with Runtime = DISABLED.
 //
-// Per Contract §76: the production AI provider is Gemini with model
-// gemini-3.1-flash-lite. Per Contract §88: OpenAI-compatible adapter
-// exists but is NOT marked as an active production provider — it doesn't
-// appear in ListProviders() as active.
+// The AI provider is the LiteLLM gateway; upstream model routing belongs to LiteLLM.
 type InMemoryPlatformOperationsRepository struct {
 	mu        sync.RWMutex
 	runtime   ports.AIRuntimeState
@@ -34,8 +31,8 @@ type InMemoryPlatformOperationsRepository struct {
 }
 
 // NewInMemoryPlatformOperationsRepository seeds the registry with the
-// baseline providers per Contract §76 + §90:
-//   - AI: Google Gemini (model: gemini-3.1-flash-lite)
+// active deployment providers:
+//   - AI: LiteLLM Gateway (configured customer model alias)
 //   - Channel Transport: SocialAPI (Facebook + Instagram + WhatsApp)
 //
 // `aiConfigured` and `channelConfigured` are determined by the bootstrap
@@ -50,14 +47,13 @@ func NewInMemoryPlatformOperationsRepository(aiConfigured, channelConfigured boo
 		probes:    map[string]ports.HealthCheckProbe{},
 	}
 	// Seed the AI provider (Contract §76)
-	registry.providers["google_gemini"] = ports.ProviderRecord{
-		ProviderID:   "google_gemini",
+	registry.providers["litellm"] = ports.ProviderRecord{
+		ProviderID:   "litellm",
 		ProviderType: ports.ProviderTypeAI,
-		DisplayName:  "Google Gemini",
+		DisplayName:  "LiteLLM Gateway",
 		AdminState:   ports.ProviderAdminEnabled,
 		HealthState:  ports.ProviderHealthUnknown,
 		Configured:   aiConfigured,
-		Model:        "gemini-3.1-flash-lite",
 	}
 	// Seed the channel transport provider (Contract §90)
 	registry.providers["socialapi"] = ports.ProviderRecord{
@@ -72,8 +68,18 @@ func NewInMemoryPlatformOperationsRepository(aiConfigured, channelConfigured boo
 }
 
 // RegisterProbe attaches a HealthCheckProbe to a provider. Probes are
-// implementation-specific (Gemini probe, SocialAPI probe) and are wired
+// implementation-specific (LiteLLM probe, SocialAPI probe) and are wired
 // by the bootstrap layer.
+// SetAIModel reports the deployment-defined customer route alias without
+// implying that any single upstream provider is permanently selected.
+func (r *InMemoryPlatformOperationsRepository) SetAIModel(model string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p := r.providers["litellm"]
+	p.Model = strings.TrimSpace(model)
+	r.providers["litellm"] = p
+}
+
 func (r *InMemoryPlatformOperationsRepository) RegisterProbe(providerID string, probe ports.HealthCheckProbe) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -142,23 +148,38 @@ func (r *InMemoryPlatformOperationsRepository) GetProvider(_ context.Context, pr
 // merchant data. If no probe is registered, the health state is set to
 // UNKNOWN with a failure_code of "NO_PROBE_REGISTERED".
 func (r *InMemoryPlatformOperationsRepository) RunHealthCheck(ctx context.Context, providerID string, now time.Time) (ports.ProviderRecord, error) {
+	providerID = strings.TrimSpace(providerID)
+	r.mu.RLock()
+	_, exists := r.providers[providerID]
+	probe := r.probes[providerID]
+	r.mu.RUnlock()
+	if !exists {
+		return ports.ProviderRecord{}, fmt.Errorf("provider %q not found", providerID)
+	}
+
+	// Network I/O must NEVER hold the runtime registry lock: an emergency AI
+	// disable must work even when the LiteLLM provider is timing out.
+	healthState := ports.ProviderHealthUnknown
+	var failureCode *string
+	if probe == nil {
+		code := "NO_PROBE_REGISTERED"
+		failureCode = &code
+	} else {
+		var latencyMs int64
+		healthState, latencyMs, failureCode = probe.Probe(ctx)
+		_ = latencyMs // Reserved for dashboard latency telemetry.
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	providerID = strings.TrimSpace(providerID)
 	provider, ok := r.providers[providerID]
 	if !ok {
 		return ports.ProviderRecord{}, fmt.Errorf("provider %q not found", providerID)
 	}
-	probe, hasProbe := r.probes[providerID]
-	if !hasProbe || probe == nil {
-		provider.HealthState = ports.ProviderHealthUnknown
-		noProbeCode := "NO_PROBE_REGISTERED"
-		provider.LastHealthCheck = &now
-		provider.LastFailureCode = &noProbeCode
-		r.providers[providerID] = provider
+	// Do not overwrite a more recent concurrent health check.
+	if provider.LastHealthCheck != nil && provider.LastHealthCheck.After(now) {
 		return provider, nil
 	}
-	healthState, latencyNanos, failureCode := probe.Probe(ctx)
 	provider.LastHealthCheck = &now
 	provider.HealthState = healthState
 	switch healthState {
@@ -168,8 +189,9 @@ func (r *InMemoryPlatformOperationsRepository) RunHealthCheck(ctx context.Contex
 	case ports.ProviderHealthDegraded, ports.ProviderHealthDown:
 		provider.LastFailure = &now
 		provider.LastFailureCode = failureCode
+	default:
+		provider.LastFailureCode = failureCode
 	}
-	_ = latencyNanos // reserved for future latency metrics surface
 	r.providers[providerID] = provider
 	return provider, nil
 }

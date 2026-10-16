@@ -76,7 +76,6 @@ func TestWorkerPoolSubmitNonBlockingWhenFull(t *testing.T) {
 				return commands.AutoReplyResult{}, nil
 			},
 		},
-		executionTimeout: 5 * time.Second,
 	}
 	if !pool.Submit(blockingTask) {
 		t.Fatalf("first submit should succeed (queue empty)")
@@ -122,7 +121,6 @@ func TestWorkerPoolConcurrentBound(t *testing.T) {
 				return commands.AutoReplyResult{}, nil
 			},
 		},
-		executionTimeout: 5 * time.Second,
 	}
 	// Submit 10 tasks — only 3 should run concurrently.
 	for i := 0; i < 10; i++ {
@@ -149,7 +147,6 @@ func TestWorkerPoolGracefulStopDrainsQueuedTasks(t *testing.T) {
 				return commands.AutoReplyResult{}, nil
 			},
 		},
-		executionTimeout: 5 * time.Second,
 	}
 	// Pool with 1 worker + 10-deep queue.
 	pool := NewAutoReplyWorkerPool(1, 10)
@@ -163,7 +160,6 @@ func TestWorkerPoolGracefulStopDrainsQueuedTasks(t *testing.T) {
 				return commands.AutoReplyResult{}, nil
 			},
 		},
-		executionTimeout: 5 * time.Second,
 	}
 	pool.Submit(blockingTask)
 	time.Sleep(50 * time.Millisecond) // let worker pick up blocking task

@@ -1,0 +1,35 @@
+# Local ONLY: the gateway and its own Postgres (NOT Mujeeb's business DB).
+# Keep port 4000 bound to loopback. Pin LITELLM_IMAGE to a reviewed release
+# or digest before using outside local testing.
+services:
+  litellm:
+    image: ${LITELLM_IMAGE:-docker.litellm.ai/berriai/litellm:main-stable}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4000:4000"
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set a random master key}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?set a random stable salt key}
+      DATABASE_URL: postgresql://litellm:${LITELLM_POSTGRES_PASSWORD:?set a database password}@db:5432/litellm
+      STORE_MODEL_IN_DB: "True"
+      UI_USERNAME: ${UI_USERNAME:-admin}
+      UI_PASSWORD: ${UI_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${LITELLM_POSTGRES_PASSWORD:?set a database password}
+      POSTGRES_DB: litellm
+    volumes:
+      - litellm_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+volumes:
+  litellm_data:

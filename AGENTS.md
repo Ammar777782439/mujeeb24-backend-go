@@ -1,3 +1,5 @@
+> **قواعد ملزمة لهذا الفرع فقط — LiteLLM Migration (2026-10-13):** `feat/ai-litellm-multi-provider-gateway` مشتق من `feat/customer-sales-workflow-interactive`. لا تدمجه مع `main` ولا الفرع المصدر ولا أي فرع آخر، **حتى عند اكتمال جميع المراحل**، إلا بأمر جديد صريح من مالك المشروع. أي توجيه قديم أدناه باستخدام فرع مختلف لا ينطبق على هذا العمل. بعد إثبات اكتمال B2C والكتالوج الكامل وB2B والتكاليف والتشغيل، يجب حذف كل كود Fallback القديم والتكاملات المباشرة المكررة والإعدادات غير المستخدمة، والاعتماد على LiteLLM فقط كبوابة، مع **الإبقاء على تعدد المزودين والـFallback داخل LiteLLM**. حافظ على العقود والـCapabilities والمبيعات دون تغيير المنطق التجاري. مرجع التفاصيل: [وثيقة ترحيل LiteLLM](docs/architecture/litellm-multi-provider-migration-ar.md).
+
 > تعديل Customer Sales المعتمد في 2026-10-11: راجع [عقد القدرات v12](docs/architecture/customer-sales-capabilities-v12-ar.md). Gemini يختار القدرة عبر Function Calling؛ CapabilityDecision يبقى مصدر الحقيقة حتى التنفيذ والتدقيق؛ Action القديم محصور بحد التوافق للحفظ وAPI. لا استبدال لنص handoff ولا تصنيف نوايا داخل مجيب.
 
 # تعليمات وكيل البرمجة (Agent Guidelines) — Mujeeb 24 Backend

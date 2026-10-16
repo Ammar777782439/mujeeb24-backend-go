@@ -97,6 +97,10 @@ type ConversationSummaryService struct {
 	// computing provider_cost_yer on the summary call. If nil, the
 	// record is marked status="pricing_failed" per P1-6.
 	AIPricing ports.AIProviderPricingRepository
+
+	// Currency conversion for gateway native spend; not a token cost estimator.
+	GatewayFXRateYER string
+
 	// Subscriptions looks up the business's active subscription ID so
 	// the summary usage record is associated with the correct
 	// subscription (same as AutoReply.recordAIUsage).
@@ -369,29 +373,12 @@ func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, bus
 	// Compute provider_cost from the pricing table (per P1-6: never
 	// silently store cost=0 as "success").
 	providerCostYER := 0
-	pricingVersion := "unknown"
-	pricingFailed := false
+	pricingVersion, gatewayCostUSD, gatewayFXRate, pricingFailed := gatewayNativeSpend(usage, s.GatewayFXRateYER)
 	totalInput := usage.InputTokens
 	cachedInput := usage.CachedTokens
 	nonCachedInput := totalInput - cachedInput
 	if nonCachedInput < 0 {
 		nonCachedInput = 0
-	}
-	if s.AIPricing != nil {
-		pricing, err := s.AIPricing.GetCurrentForProvider(ctx, "google_gemini", usage.Model)
-		if err == nil {
-			pricingVersion = pricing.PricingVersion
-			inputCost := int64(nonCachedInput) * int64(pricing.InputPerMillionYER) / 1_000_000
-			cachedCost := int64(cachedInput) * int64(pricing.CachedInputPerMillionYER) / 1_000_000
-			outputCost := int64(usage.OutputTokens) * int64(pricing.OutputPerMillionYER) / 1_000_000
-			providerCostYER = int(inputCost + cachedCost + outputCost)
-		} else {
-			log.Printf("[SummaryService] AI_USAGE_PRICING_LOOKUP_FAILED business=%s model=%s err=%v", businessID, usage.Model, err)
-			pricingFailed = true
-		}
-	} else {
-		log.Printf("[SummaryService] AI_USAGE_PRICING_REPO_NOT_WIRED business=%s model=%s", businessID, usage.Model)
-		pricingFailed = true
 	}
 	// Per §3: summary calls do NOT count as final AI Replies —
 	// they're internal background work, not customer-facing responses.
@@ -406,11 +393,11 @@ func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, bus
 		recordStatus = "pricing_failed"
 	}
 	recordID := s.newID()
-	_, err := s.AIUsage.AppendRecord(ctx, ports.AIUsageAppend{
+	usageRecord := ports.AIUsageAppend{
 		ID:                recordID,
 		BusinessID:        businessID,
 		SubscriptionID:    subscriptionID,
-		Provider:          "google_gemini",
+		Provider:          usageProvider(usage.Provider),
 		Model:             usage.Model,
 		InputTokens:       int64(nonCachedInput),
 		CachedInputTokens: int64(cachedInput),
@@ -419,13 +406,17 @@ func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, bus
 		ToolCalls:         0,
 		FinalAIReplies:    finalAIReplies,
 		ProviderCostYER:   providerCostYER,
-		PricingVersion:    pricingVersion,
-		Status:            recordStatus,
-		CorrelationID:     summaryStrPtr("summary-" + businessID),
-		StartedAt:         startedAt,
-		CompletedAt:       now,
-		Now:               now,
-	})
+
+		PricingVersion: pricingVersion,
+		Status:         recordStatus,
+		CorrelationID:  summaryStrPtr("summary-" + businessID),
+		StartedAt:      startedAt,
+		CompletedAt:    now,
+		Now:            now,
+	}
+	usageRecord.GatewayCostUSD, usageRecord.GatewayFXRateYER = gatewayCostUSD, gatewayFXRate
+	usageRecord.GatewayCallID, usageRecord.GatewayDeploymentID = usage.GatewayCallID, usage.GatewayDeploymentID
+	_, err := s.AIUsage.AppendRecord(ctx, usageRecord)
 	if err != nil {
 		log.Printf("[SummaryService] AI_USAGE_RECORD_FAILED business=%s subscription=%s err=%v", businessID, subscriptionID, err)
 		return

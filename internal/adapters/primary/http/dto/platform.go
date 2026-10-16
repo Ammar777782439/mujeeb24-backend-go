@@ -683,6 +683,10 @@ type DiscoverModelsInput struct {
 type AIConfigurationView struct {
 	Provider              string  `json:"provider"`
 	Model                 string  `json:"model"`
+	CustomerModel         string  `json:"customer_model,omitempty"`
+	CatalogModel          string  `json:"catalog_model,omitempty"`
+	MerchantModel         string  `json:"merchant_model,omitempty"`
+	ConfigurationSource   string  `json:"configuration_source,omitempty"`
 	CredentialID          string  `json:"credential_id"`
 	CredentialStatus      string  `json:"credential_status"`
 	MujeebMaxInputChars   int     `json:"mujeeb_max_input_chars"`

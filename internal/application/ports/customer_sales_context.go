@@ -102,17 +102,6 @@ type CustomerSalesContextConversation struct {
 	Priority            string
 	AIModeOverride      string
 	AssignmentReference string
-	// LastGeminiInteractionID per contract ③ §4 + migration 000057.
-	//
-	// Per Item 8: this carries the conversation's last successful Gemini
-	// interaction ID from the context builder (which loaded the
-	// ConversationRecord) to the AutoReply handler. The handler passes
-	// it as PreviousInteractionID to the next CustomerSalesDecisionPort.Decide call —
-	// enabling Gemini Interactions API chaining (store=true per §9).
-	//
-	// Per contract ③ §5: Mujeeb retention is canonical; this is just
-	// continuity convenience. Empty/nil for the first turn.
-	LastGeminiInteractionID *string
 }
 
 type CustomerSalesContextCustomer struct {

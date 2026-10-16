@@ -134,6 +134,12 @@ type AIUsageAppend struct {
 	StartedAt         time.Time
 	CompletedAt       time.Time
 	Now               time.Time
+	// LiteLLM's native spend in USD. These values are passed through unchanged
+	// and converted only when PostgreSQL calculates YER budget aggregates.
+	GatewayCostUSD      string
+	GatewayFXRateYER    string
+	GatewayCallID       string
+	GatewayDeploymentID string
 }
 
 // SubscriptionAIUsageAggregate is the per-subscription snapshot (Contract §8).

@@ -1,0 +1,9 @@
+# Render-only wrapper around the pinned official LiteLLM release.
+# Render generates persistent 256-bit random seeds; this image adds the
+# sk- prefix expected by LiteLLM without committing credentials to Git.
+FROM ghcr.io/berriai/litellm:v1.103.0
+
+COPY deploy/litellm/render-entrypoint.sh /app/docker/mujeeb-render-entrypoint.sh
+
+ENTRYPOINT ["/bin/sh", "/app/docker/mujeeb-render-entrypoint.sh"]
+CMD ["--host", "0.0.0.0", "--port", "4000"]

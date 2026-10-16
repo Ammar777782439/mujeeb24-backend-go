@@ -71,8 +71,8 @@ func (r *AIUsageRepository) AppendRecord(ctx context.Context, input ports.AIUsag
 			return err
 		}
 		err = executor.QueryRow(ctx,
-			`INSERT INTO ai_usage_records (id, business_id, subscription_id, provider, model, input_tokens, cached_input_tokens, output_tokens, model_requests, tool_calls, final_ai_replies, provider_cost_yer, pricing_version, status, failure_code, correlation_id, started_at, completed_at)
-                         VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULLIF($15, ''), NULLIF($16, ''), $17, $18)
+			`INSERT INTO ai_usage_records (id, business_id, subscription_id, provider, model, input_tokens, cached_input_tokens, output_tokens, model_requests, tool_calls, final_ai_replies, provider_cost_yer, pricing_version, status, failure_code, correlation_id, started_at, completed_at, gateway_cost_usd, gateway_fx_yer_per_usd, gateway_call_id, gateway_deployment_id)
+                         VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULLIF($15, ''), NULLIF($16, ''), $17, $18, NULLIF($19, '')::numeric, NULLIF($20, '')::numeric, NULLIF($21, ''), NULLIF($22, ''))
                          RETURNING `+aiUsageRecordSelectColumns,
 			input.ID, input.BusinessID, input.SubscriptionID, input.Provider, input.Model,
 			input.InputTokens, input.CachedInputTokens, input.OutputTokens,
@@ -80,6 +80,7 @@ func (r *AIUsageRepository) AppendRecord(ctx context.Context, input ports.AIUsag
 			input.ProviderCostYER, input.PricingVersion, input.Status,
 			optionalStr(input.FailureCode), optionalStr(input.CorrelationID),
 			input.StartedAt, input.CompletedAt,
+			input.GatewayCostUSD, input.GatewayFXRateYER, input.GatewayCallID, input.GatewayDeploymentID,
 		).Scan(
 			&record.ID, &record.BusinessID, &record.SubscriptionID,
 			&record.Provider, &record.Model,
@@ -217,7 +218,7 @@ func (r *AIUsageRepository) refreshAggregateInPlace(ctx context.Context, executo
                    COALESCE(SUM(r.output_tokens), 0),
                    COALESCE(SUM(r.model_requests), 0),
                    COALESCE(SUM(r.tool_calls), 0),
-                   COALESCE(SUM(r.provider_cost_yer), 0),
+                   COALESCE(CEIL(SUM(COALESCE(r.gateway_cost_usd * r.gateway_fx_yer_per_usd, r.provider_cost_yer))), 0)::integer,
                    (SELECT MAX(completed_at) FROM ai_usage_records WHERE subscription_id = $1::uuid),
                    $3
                  FROM subscriptions s
@@ -501,7 +502,7 @@ func (r *AIUsageRepository) GetPlatformAIUsageOverview(ctx context.Context) (por
                    COALESCE(SUM(r.output_tokens), 0),
                    COALESCE(SUM(r.model_requests), 0),
                    COALESCE(SUM(r.tool_calls), 0),
-                   COALESCE(SUM(r.provider_cost_yer), 0),
+                   COALESCE(CEIL(SUM(COALESCE(r.gateway_cost_usd * r.gateway_fx_yer_per_usd, r.provider_cost_yer))), 0)::integer,
                    COALESCE((SELECT SUM(COALESCE(s.cost_budget_override_yer, s.internal_ai_cost_budget_yer))
                              FROM subscriptions s WHERE s.status = 'ACTIVE'), 0)
                  FROM ai_usage_records r`,
@@ -546,10 +547,10 @@ func (r *AIUsageRepository) GetAIUsageByBusiness(ctx context.Context, limit int)
                    COALESCE(SUM(output_tokens), 0),
                    COALESCE(SUM(model_requests), 0),
                    COALESCE(SUM(tool_calls), 0),
-                   COALESCE(SUM(provider_cost_yer), 0)
+                   COALESCE(CEIL(SUM(COALESCE(gateway_cost_usd * gateway_fx_yer_per_usd, provider_cost_yer))), 0)::integer
                  FROM ai_usage_records
                  GROUP BY business_id
-                 ORDER BY SUM(provider_cost_yer) DESC
+                 ORDER BY SUM(COALESCE(gateway_cost_usd * gateway_fx_yer_per_usd, provider_cost_yer)) DESC
                  LIMIT $1`,
 		limit,
 	)
