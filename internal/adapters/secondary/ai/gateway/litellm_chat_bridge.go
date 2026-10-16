@@ -67,7 +67,7 @@ func chatCompletionPayload(req interactionRequest) (map[string]any, error) {
 		out["response_format"] = map[string]any{
 			"type": "json_schema",
 			"json_schema": map[string]any{
-				"name": "mujeeb_catalog_result",
+				"name":   "mujeeb_catalog_result",
 				"strict": false,
 				"schema": req.ResponseFormat.Schema,
 			},
@@ -83,24 +83,24 @@ func parseChatCompletionResponse(raw []byte) (json.RawMessage, error) {
 	var response struct {
 		Choices []struct {
 			FinishReason string `json:"finish_reason"`
-			Message struct {
-				Role string `json:"role"`
-				Content json.RawMessage `json:"content"`
-				Refusal *string `json:"refusal"`
+			Message      struct {
+				Role      string          `json:"role"`
+				Content   json.RawMessage `json:"content"`
+				Refusal   *string         `json:"refusal"`
 				ToolCalls []struct {
-					ID string `json:"id"`
-					Type string `json:"type"`
+					ID       string `json:"id"`
+					Type     string `json:"type"`
 					Function struct {
-						Name string `json:"name"`
+						Name      string `json:"name"`
 						Arguments string `json:"arguments"`
 					} `json:"function"`
 				} `json:"tool_calls"`
 			} `json:"message"`
 		} `json:"choices"`
 		Usage struct {
-			PromptTokens int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
-			TotalTokens int `json:"total_tokens"`
+			PromptTokens        int `json:"prompt_tokens"`
+			CompletionTokens    int `json:"completion_tokens"`
+			TotalTokens         int `json:"total_tokens"`
 			PromptTokensDetails struct {
 				CachedTokens int `json:"cached_tokens"`
 			} `json:"prompt_tokens_details"`
@@ -149,10 +149,10 @@ func parseChatCompletionResponse(raw []byte) (json.RawMessage, error) {
 	normalized := interactionResponse{
 		Status: "completed", Steps: steps,
 		Usage: interactionUsage{
-			TotalInputTokens: response.Usage.PromptTokens,
+			TotalInputTokens:  response.Usage.PromptTokens,
 			TotalCachedTokens: cached,
 			TotalOutputTokens: response.Usage.CompletionTokens,
-			TotalTokens: response.Usage.TotalTokens,
+			TotalTokens:       response.Usage.TotalTokens,
 		},
 	}
 	data, err := json.Marshal(normalized)
