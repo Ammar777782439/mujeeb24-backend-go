@@ -126,7 +126,7 @@ func (c *LiteLLMCatalogAdapter) ComposeCatalogReply(ctx context.Context, input s
 	}
 	started := time.Now()
 	ctx = litellm.WithSpendAttribution(ctx, input.ConversationContext.Business.Reference, "", "catalog_reply")
-	raw, meta, err := c.client.SendInteractionWithMetadata(ctx, req)
+	raw, meta, err := sendGatewayChatWithMetadata(ctx, c.client, req)
 	if err != nil {
 		return services.CatalogReplyOutput{}, fmt.Errorf("compose customer catalog message via Gemini: %w", err)
 	}
