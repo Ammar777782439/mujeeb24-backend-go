@@ -59,12 +59,11 @@ import (
 //   - Explains why each candidate is in the candidate set
 type CatalogBatchController struct {
 	// CatalogAI supplies complete tenant-scoped projection pages.
-	CatalogAI    ports.CatalogAIReadRepository
-	TokenCounter TokenCounter
-	Evaluator    CatalogEvaluationClient
-	RunRepo      ports.AIRunRepository
-	Now          func() time.Time
-	NewID        func() string
+	CatalogAI ports.CatalogAIReadRepository
+	Evaluator CatalogEvaluationClient
+	RunRepo   ports.AIRunRepository
+	Now       func() time.Time
+	NewID     func() string
 
 	// TokenBudget is the per-batch token cap. Per contract ② §2, this is
 	// token-based not item-count-based. Set via runtime config.
@@ -134,9 +133,6 @@ type FinalEvaluationInput struct {
 type CatalogEvaluationResult struct {
 	Decision ports.CapabilityDecision
 	Evidence ports.CatalogAIEvidenceSet
-	// Messages contains the complete ordered hierarchy parts if requested.
-	// It is empty for the existing AI comparison/recommendation path.
-	Messages []string
 }
 
 // CatalogAIBatchPayload is one batch's content.
@@ -148,14 +144,6 @@ type CatalogAIBatchPayload struct {
 	Catalogs         []CatalogAICatalog         `json:"catalogs,omitempty"`
 	AttributeSchemas []CatalogAIAttributeSchema `json:"attribute_schemas,omitempty"`
 	Items            []CatalogAIItem            `json:"items,omitempty"`
-}
-
-// TokenCounter is an optional compatibility counter for catalog payloads.
-// A gateway estimator is preferred because it counts the assembled model
-// request. LiteLLM may estimate tokens for some upstream deployments, so all
-// results are bounded conservatively and must never be described as exact.
-type TokenCounter interface {
-	CountTokens(ctx context.Context, payload any) (int, error)
 }
 
 // RunCatalogEvaluation drives the full contract ② §9 evaluation pipeline.
@@ -170,14 +158,7 @@ func (c *CatalogBatchController) RunCatalogEvaluation(ctx context.Context, input
 		return CatalogEvaluationResult{}, errors.New("business_id and ai_run_id are required for Catalog Evaluation per contract ② §1")
 	}
 
-	switch input.Presentation {
-	case "overview":
-		return c.runCatalogOverview(ctx, input)
-	case "hierarchy":
-		return c.runHierarchicalCatalog(ctx, input)
-	default:
-		return c.runPagedCatalogEvaluation(ctx, input)
-	}
+	return c.runPagedCatalogEvaluation(ctx, input)
 }
 
 func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, input CatalogEvaluationInput) (CatalogEvaluationResult, error) {
@@ -191,11 +172,6 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 	candidateSet := make([]ports.CatalogBatchCandidate, 0)
 	candidateProjection := CatalogAIProjection{}
 	candidateItemsSeen := make(map[string]struct{})
-	// Full linked commercial facts for AI model-selected informational answers.
-	// Candidate IDs decide relevance, never which variants/offers are removed.
-	selectedProjection := CatalogAIProjection{}
-	selectedItemsSeen := make(map[string]struct{})
-
 	for {
 		page, err := c.CatalogAI.ListProjectionPage(ctx, ports.CatalogAIProjectionRequest{
 			BusinessID: input.BusinessID,
@@ -257,22 +233,6 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 				pageCandidates = append(pageCandidates, result.Candidates...)
 				log.Printf("[CatalogBatch] BATCH_DONE batch=%d items=%d candidates=%d", batch.BatchNumber, len(batch.Items), len(result.Candidates))
 			}
-			if len(pageCandidates) > 0 && (input.Presentation == "detail" || input.Presentation == "compare") {
-				// AI model chooses relevant item IDs after examining the full
-				// tenant-scoped catalog batches. Rehydrate each selected item
-				// from the original page, not its potentially narrowed
-				// candidate variant/offer evidence.
-				wholeItemCandidates := make([]ports.CatalogBatchCandidate, 0, len(pageCandidates))
-				for _, candidate := range normalizeBatchCandidates(pageCandidates) {
-					wholeItemCandidates = append(wholeItemCandidates, ports.CatalogBatchCandidate{ItemID: candidate.ItemID})
-				}
-				appendCandidateProjection(
-					&selectedProjection,
-					CatalogAIBatchPayload{Catalogs: pageProjection.Catalogs, AttributeSchemas: pageProjection.AttributeSchemas, Items: pageProjection.Items},
-					wholeItemCandidates,
-					selectedItemsSeen,
-				)
-			}
 			if len(pageCandidates) > 0 {
 				appendCandidateProjection(
 					&candidateProjection,
@@ -308,24 +268,6 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 	}
 	if revisionEnd != revisionStart {
 		return CatalogEvaluationResult{}, errors.New("catalog changed during full evaluation; refusing mixed-snapshot AI result")
-	}
-
-	if input.Presentation == "detail" || input.Presentation == "compare" {
-		// An information request needs AI model-authored explanation, not a
-		// final commercial capability decision or repeated candidate reduction.
-		// All catalog pages were evaluated first and selection came from AI model.
-		result, err := c.composeCatalogProjection(ctx, input, selectedProjection)
-		if err != nil {
-			return CatalogEvaluationResult{}, err
-		}
-		revisionAfterReply, err := c.CatalogAI.GetRevision(ctx, input.BusinessID)
-		if err != nil {
-			return CatalogEvaluationResult{}, fmt.Errorf("read catalog revision after AI model detail reply: %w", err)
-		}
-		if revisionAfterReply != revisionStart {
-			return CatalogEvaluationResult{}, errors.New("catalog changed during AI model detail reply; refusing stale commercial facts")
-		}
-		return result, nil
 	}
 
 	proposal, finalProjection, err := c.runFinalEvaluation(ctx, input, candidateSet, candidateProjection, nextBatchNumber)
@@ -404,64 +346,13 @@ func appendCandidateProjection(target *CatalogAIProjection, batch CatalogAIBatch
 	}
 
 	for _, item := range batch.Items {
-		candidate, ok := candidateByItem[item.ID]
-		if !ok {
+		if _, selected := candidateByItem[item.ID]; !selected {
 			continue
 		}
-		// If AI model narrowed a candidate to specific variants/offers, expose
-		// only those nested records to the next stage. Empty child lists mean
-		// the whole item remains the candidate and its nested facts stay visible.
-		filtered := item
-		if len(candidate.VariantIDs) > 0 || len(candidate.OfferIDs) > 0 {
-			variantIDs := make(map[string]struct{}, len(candidate.VariantIDs))
-			for _, id := range candidate.VariantIDs {
-				variantIDs[id] = struct{}{}
-			}
-			offerIDs := make(map[string]struct{}, len(candidate.OfferIDs))
-			for _, id := range candidate.OfferIDs {
-				offerIDs[id] = struct{}{}
-			}
-
-			filtered.Offers = nil
-			for _, offer := range item.Offers {
-				include := false
-				if len(offerIDs) > 0 {
-					_, include = offerIDs[offer.ID]
-				} else if len(variantIDs) > 0 {
-					include = offer.VariantID == nil
-					if offer.VariantID != nil {
-						_, include = variantIDs[*offer.VariantID]
-					}
-				}
-				if !include {
-					continue
-				}
-				filtered.Offers = append(filtered.Offers, offer)
-				if offer.VariantID != nil && *offer.VariantID != "" {
-					variantIDs[*offer.VariantID] = struct{}{}
-				}
-			}
-
-			filtered.Variants = nil
-			for _, variant := range item.Variants {
-				if _, include := variantIDs[variant.ID]; include {
-					filtered.Variants = append(filtered.Variants, variant)
-				}
-			}
+		if _, exists := seen[item.ID]; exists {
+			continue // already included as an indivisible complete item
 		}
-
-		merged := false
-		for i := range target.Items {
-			if target.Items[i].ID != filtered.ID {
-				continue
-			}
-			mergeCatalogAIItemChildren(&target.Items[i], filtered)
-			merged = true
-			break
-		}
-		if !merged {
-			target.Items = append(target.Items, filtered)
-		}
+		target.Items = append(target.Items, item)
 		seen[item.ID] = struct{}{}
 	}
 
@@ -497,35 +388,6 @@ func appendCandidateProjection(target *CatalogAIProjection, batch CatalogAIBatch
 				break
 			}
 		}
-	}
-}
-
-func mergeCatalogAIItemChildren(target *CatalogAIItem, incoming CatalogAIItem) {
-	if target == nil {
-		return
-	}
-	variantSeen := make(map[string]struct{}, len(target.Variants))
-	for _, variant := range target.Variants {
-		variantSeen[variant.ID] = struct{}{}
-	}
-	for _, variant := range incoming.Variants {
-		if _, ok := variantSeen[variant.ID]; ok {
-			continue
-		}
-		target.Variants = append(target.Variants, variant)
-		variantSeen[variant.ID] = struct{}{}
-	}
-
-	offerSeen := make(map[string]struct{}, len(target.Offers))
-	for _, offer := range target.Offers {
-		offerSeen[offer.ID] = struct{}{}
-	}
-	for _, offer := range incoming.Offers {
-		if _, ok := offerSeen[offer.ID]; ok {
-			continue
-		}
-		target.Offers = append(target.Offers, offer)
-		offerSeen[offer.ID] = struct{}{}
 	}
 }
 
@@ -621,7 +483,9 @@ func parseJSONAttributes(raw []byte) map[string]any {
 		return nil
 	}
 	var out map[string]any
-	if err := json.Unmarshal(raw, &out); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber() // Preserve decimal/integer attribute values without float64 coercion.
+	if err := decoder.Decode(&out); err != nil {
 		return nil
 	}
 	if len(out) == 0 {
@@ -668,8 +532,8 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 	}
 
 	estimator, hasEstimator := c.Evaluator.(BatchRequestTokenEstimator)
-	if !hasEstimator && c.TokenCounter == nil {
-		return nil, errors.New("batch token counter is not configured")
+	if !hasEstimator {
+		return nil, errors.New("full provider request token estimator is required; no legacy payload-only counter")
 	}
 
 	buildBatch := func(items []CatalogAIItem, batchNumber int) CatalogAIBatchPayload {
@@ -699,110 +563,18 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 	}
 	batches := make([]CatalogAIBatchPayload, 0)
 	countBatch := func(batch CatalogAIBatchPayload) (int, error) {
-		if hasEstimator {
-			return estimator.CountBatchTokens(ctx, BatchEvaluationInput{
-				AIRunID:             input.AIRunID,
-				AttemptID:           input.AttemptID,
-				BatchNumber:         batch.BatchNumber,
-				BusinessID:          input.BusinessID,
-				ConversationID:      input.ConversationID,
-				CustomerMessage:     input.CustomerMessage,
-				ConversationContext: input.ConversationContext,
-				EntityContract:      input.EntityContract,
-				Batch:               batch,
-				Reduction:           reduction,
-			})
-		}
-		// Compatibility fallback for unit tests. Production LiteLLM adapter
-		// implements BatchRequestTokenEstimator.
-		return c.TokenCounter.CountTokens(ctx, batch)
-	}
-
-	type itemFragmentUnit struct {
-		variant *CatalogAIVariant
-		offer   *CatalogAIOffer
-	}
-
-	buildFragmentItem := func(item CatalogAIItem, units []itemFragmentUnit) CatalogAIItem {
-		fragment := item
-		fragment.Variants = nil
-		fragment.Offers = nil
-		variantSeen := make(map[string]struct{})
-		offerSeen := make(map[string]struct{})
-		for _, unit := range units {
-			if unit.variant != nil {
-				if _, ok := variantSeen[unit.variant.ID]; !ok {
-					fragment.Variants = append(fragment.Variants, *unit.variant)
-					variantSeen[unit.variant.ID] = struct{}{}
-				}
-			}
-			if unit.offer != nil {
-				if _, ok := offerSeen[unit.offer.ID]; !ok {
-					fragment.Offers = append(fragment.Offers, *unit.offer)
-					offerSeen[unit.offer.ID] = struct{}{}
-				}
-			}
-		}
-		return fragment
-	}
-
-	var splitOversizedItem func(CatalogAIItem) error
-	splitOversizedItem = func(item CatalogAIItem) error {
-		variantByID := make(map[string]CatalogAIVariant, len(item.Variants))
-		for _, variant := range item.Variants {
-			variantByID[variant.ID] = variant
-		}
-		variantUsedByOffer := make(map[string]struct{})
-		units := make([]itemFragmentUnit, 0, len(item.Offers)+len(item.Variants))
-		for i := range item.Offers {
-			offer := item.Offers[i]
-			unit := itemFragmentUnit{offer: &offer}
-			if offer.VariantID != nil && *offer.VariantID != "" {
-				if variant, ok := variantByID[*offer.VariantID]; ok {
-					variantCopy := variant
-					unit.variant = &variantCopy
-					variantUsedByOffer[variant.ID] = struct{}{}
-				}
-			}
-			offerCopy := offer
-			unit.offer = &offerCopy
-			units = append(units, unit)
-		}
-		for i := range item.Variants {
-			variant := item.Variants[i]
-			if _, used := variantUsedByOffer[variant.ID]; used {
-				continue
-			}
-			variantCopy := variant
-			units = append(units, itemFragmentUnit{variant: &variantCopy})
-		}
-		if len(units) == 0 {
-			return fmt.Errorf("catalog item %s exceeds token budget %d and has no splittable variants/offers", item.ID, budget)
-		}
-
-		var splitUnits func([]itemFragmentUnit) error
-		splitUnits = func(part []itemFragmentUnit) error {
-			fragment := buildFragmentItem(item, part)
-			batch := buildBatch([]CatalogAIItem{fragment}, nextBatchNumber)
-			tokens, err := countBatch(batch)
-			if err != nil {
-				return fmt.Errorf("count tokens for item %s fragment batch %d: %w", item.ID, nextBatchNumber, err)
-			}
-			if tokens <= budget {
-				batches = append(batches, batch)
-				nextBatchNumber++
-				return nil
-			}
-			if len(part) == 1 {
-				return fmt.Errorf("catalog item %s contains an indivisible commercial fragment exceeding token budget %d with conservative request estimate %d; use a validated larger-context route, not truncation", item.ID, budget, tokens)
-			}
-			mid := len(part) / 2
-			if err := splitUnits(part[:mid]); err != nil {
-				return err
-			}
-			return splitUnits(part[mid:])
-		}
-		return splitUnits(units)
+		return estimator.CountBatchTokens(ctx, BatchEvaluationInput{
+			AIRunID:             input.AIRunID,
+			AttemptID:           input.AttemptID,
+			BatchNumber:         batch.BatchNumber,
+			BusinessID:          input.BusinessID,
+			ConversationID:      input.ConversationID,
+			CustomerMessage:     input.CustomerMessage,
+			ConversationContext: input.ConversationContext,
+			EntityContract:      input.EntityContract,
+			Batch:               batch,
+			Reduction:           reduction,
+		})
 	}
 
 	var split func([]CatalogAIItem) error
@@ -821,7 +593,7 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 			return nil
 		}
 		if len(items) == 1 {
-			return splitOversizedItem(items[0])
+			return fmt.Errorf("catalog item %s exceeds token budget %d with complete request estimate %d: indivisible commercial entity; configure a verified larger-context route", items[0].ID, budget, tokens)
 		}
 		mid := len(items) / 2
 		if err := split(items[:mid]); err != nil {
@@ -833,8 +605,8 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 	if err := split(projection.Items); err != nil {
 		return nil, err
 	}
-	// Check every original commercial field, schema, variant and offer
-	// before handing a single batch to the AI provider.
+	// Verify each source item appears once, unchanged, with all its child
+	// relationships and schema before any batch is sent to the provider.
 	if err := validateCatalogBatchCoverage(projection, batches); err != nil {
 		return nil, fmt.Errorf("catalog batch coverage: %w", err)
 	}
@@ -1031,24 +803,36 @@ func buildFinalEvaluationPayload(
 ) (FinalEvaluationInput, string) {
 	contextPayload := struct {
 		Sales                  *ports.SalesWorkflowContext                 `json:"sales,omitempty"`
+		SchemaVersion          int                                         `json:"schema_version"`
+		Freshness              string                                      `json:"freshness"`
 		Business               ports.CustomerSalesContextBusiness          `json:"business"`
 		Conversation           ports.CustomerSalesContextConversation      `json:"conversation"`
-		Customer               ports.CustomerSalesContextCustomer          `json:"customer"`
+		Customer               finalEvaluationCustomer                     `json:"customer"`
 		KnowledgeEvidence      []ports.CustomerSalesKnowledgeEvidence      `json:"knowledge_evidence,omitempty"`
 		BusinessPolicyEvidence []ports.CustomerSalesBusinessPolicyEvidence `json:"business_policy_evidence,omitempty"`
 		RecentMessages         []ports.CustomerSalesRecentMessageEvidence  `json:"recent_messages,omitempty"`
+		PolicyEvidence         ports.CustomerSalesPolicyEvidence           `json:"policy_evidence"`
+		KnowledgeState         string                                      `json:"knowledge_state"`
 		ConversationState      *ports.ConversationStateRecord              `json:"conversation_state,omitempty"`
 		ConversationSummary    string                                      `json:"conversation_summary,omitempty"`
 		GeneratedAt            time.Time                                   `json:"generated_at"`
 		ExpiresAt              time.Time                                   `json:"expires_at"`
 	}{
-		Sales:                  input.ConversationContext.Sales,
-		Business:               input.ConversationContext.Business,
-		Conversation:           input.ConversationContext.Conversation,
-		Customer:               input.ConversationContext.Customer,
+		Sales:         input.ConversationContext.Sales,
+		SchemaVersion: input.ConversationContext.SchemaVersion,
+		Freshness:     input.ConversationContext.Freshness,
+		Business:      input.ConversationContext.Business,
+		Conversation:  input.ConversationContext.Conversation,
+		Customer: finalEvaluationCustomer{
+			Reference:        input.ConversationContext.Customer.Reference,
+			LocalePreference: input.ConversationContext.Customer.LocalePreference,
+			Status:           input.ConversationContext.Customer.Status,
+		},
 		KnowledgeEvidence:      input.ConversationContext.KnowledgeEvidence,
 		BusinessPolicyEvidence: input.ConversationContext.BusinessPolicyEvidence,
 		RecentMessages:         input.ConversationContext.RecentMessages,
+		PolicyEvidence:         input.ConversationContext.PolicyEvidence,
+		KnowledgeState:         input.ConversationContext.KnowledgeState,
 		ConversationState:      input.ConversationContext.ConversationState,
 		ConversationSummary:    input.ConversationContext.ConversationSummary,
 		GeneratedAt:            input.ConversationContext.GeneratedAt,
@@ -1073,6 +857,16 @@ func buildFinalEvaluationPayload(
 		EntityContract:      input.EntityContract,
 		CandidateResults:    candidates,
 	}, userPrompt
+}
+
+// finalEvaluationCustomer deliberately excludes profile and contact payloads.
+// Those fields are not catalog evidence and can be both large and sensitive;
+// the final model only needs the same bounded customer identity fields used by
+// the normal customer-sales prompt.
+type finalEvaluationCustomer struct {
+	Reference        string `json:"reference"`
+	LocalePreference string `json:"locale_preference"`
+	Status           string `json:"status"`
 }
 
 func (c *CatalogBatchController) reduceCandidateRound(
@@ -1156,7 +950,6 @@ type CatalogEvaluationInput struct {
 	ConversationID      string
 	CatalogScope        string // the catalog scope to evaluate (e.g., a specific catalog_id)
 	CustomerMessage     string
-	Presentation        string
 	ConversationContext ports.CustomerSalesContext
 	EntityContract      CatalogEntityContractPayload
 }
@@ -1269,5 +1062,5 @@ func (c *CatalogBatchController) Ready() bool {
 		return false
 	}
 	_, estimated := c.Evaluator.(BatchRequestTokenEstimator)
-	return estimated || c.TokenCounter != nil
+	return estimated
 }

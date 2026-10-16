@@ -20,7 +20,16 @@ func (s *stubSubscriptionsRepo) List(_ context.Context, _ ports.SubscriptionList
 	if s.err != nil {
 		return ports.SubscriptionPage{}, s.err
 	}
-	return ports.SubscriptionPage{Items: s.items}, nil
+	items := append([]ports.SubscriptionRecord(nil), s.items...)
+	for i := range items {
+		if items[i].PeriodStart.IsZero() {
+			items[i].PeriodStart = time.Now().UTC().Add(-time.Hour)
+		}
+		if items[i].PeriodEnd.IsZero() {
+			items[i].PeriodEnd = time.Now().UTC().Add(time.Hour)
+		}
+	}
+	return ports.SubscriptionPage{Items: items}, nil
 }
 func (s *stubSubscriptionsRepo) GetByID(_ context.Context, _ string) (ports.SubscriptionRecord, error) {
 	return ports.SubscriptionRecord{}, nil
@@ -40,7 +49,7 @@ func (s *stubSubscriptionsRepo) MarkExpired(_ context.Context, _ string, _ time.
 func (s *stubSubscriptionsRepo) ApplyCostBudgetOverride(_ context.Context, _ string, _ int, _ string, _ string, _ time.Time) (ports.SubscriptionRecord, error) {
 	return ports.SubscriptionRecord{}, nil
 }
-func (s *stubSubscriptionsRepo) CheckEntitlements(_ context.Context, _ string, _ int, _ int) error {
+func (s *stubSubscriptionsRepo) CheckEntitlements(_ context.Context, _ string, _ int, _ int, _ int) error {
 	return nil
 }
 

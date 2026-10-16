@@ -409,8 +409,10 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		PlatformAudit:       postgres.NewPlatformAuditRepository(database),
 		Subscriptions:       postgres.NewSubscriptionRepository(database),
 		Payments:            postgres.NewPaymentRepository(database),
+		Addons:              postgres.NewSubscriptionAddonRepository(database),
 		Support:             postgres.NewSupportRepository(database),
 		AIUsage:             postgres.NewAIUsageRepository(database),
+		Transactions:        database,
 		Operations:          platformOperations,
 		ChannelReader:       postgres.NewPlatformChannelReadRepository(database),
 		ModelDiscovery:      modelDiscovery,
@@ -488,8 +490,12 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			}
 			writer.Header().Set("Content-Type", "application/json")
 			if err != nil {
+				// The callback is a public browser endpoint. Never expose a raw
+				// database/provider error here: it can include implementation
+				// details such as SQL constraints and is not actionable for a
+				// merchant. The full cause remains in the server log.
 				writer.WriteHeader(http.StatusBadRequest)
-				_, _ = fmt.Fprintf(writer, `{"status":"failed","error":%q}`, err.Error())
+				_, _ = writer.Write([]byte(`{"status":"failed","error":{"code":"channel_connection_failed","message":"Unable to complete the channel connection. Return to the dashboard and try again."}}`))
 				return
 			}
 			_, _ = fmt.Fprintf(writer, `{"status":%q,"provisioning_id":%q,"provider":%q,"channel":%q}`, session.Status, session.ID, session.ProviderRef, session.Channel)

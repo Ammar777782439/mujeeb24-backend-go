@@ -58,6 +58,36 @@ type ListChannelConnectionsHandler = commands.QueryHandler[ListChannelConnection
 type GetChannelConnectionHandler = commands.QueryHandler[GetChannelConnectionQuery, commands.ChannelConnectionView]
 type GetConnectionCapabilitiesHandler = commands.QueryHandler[GetConnectionCapabilitiesQuery, commands.ListResult[ConnectionCapabilityView]]
 
+type MerchantSubscriptionView struct {
+	HasSubscription    bool    `json:"has_subscription"`
+	ID                 *string `json:"id,omitempty"`
+	BusinessID         string  `json:"business_id"`
+	PlanID             *string `json:"plan_id,omitempty"`
+	PlanCode           *string `json:"plan_code,omitempty"`
+	PlanName           *string `json:"plan_name,omitempty"`
+	PlanVersion        *int    `json:"plan_version,omitempty"`
+	Status             *string `json:"status,omitempty"`
+	PeriodStart        *string `json:"period_start,omitempty"`
+	PeriodEnd          *string `json:"period_end,omitempty"`
+	PriceYERSnapshot   *int    `json:"price_yer_snapshot,omitempty"`
+	AmountDueYER       *int    `json:"amount_due_yer,omitempty"`
+	AIReplyLimit       *int    `json:"ai_reply_limit,omitempty"`
+	AIRepliesUsed      *int    `json:"ai_replies_used,omitempty"`
+	AIRepliesRemaining *int    `json:"ai_replies_remaining,omitempty"`
+	AICatalogLimit     *int    `json:"ai_catalog_limit,omitempty"`
+	ChannelLimit       *int    `json:"channel_limit,omitempty"`
+	ChannelCeiling     *int    `json:"channel_ceiling,omitempty"`
+	SeatLimit          *int    `json:"seat_limit,omitempty"`
+	ActiveChannels     int     `json:"active_channels"`
+	ActiveSeats        int     `json:"active_seats"`
+	DaysRemaining      *int    `json:"days_remaining,omitempty"`
+	ActivatedAt        *string `json:"activated_at,omitempty"`
+	CreatedAt          *string `json:"created_at,omitempty"`
+}
+
+type GetBusinessSubscriptionQuery struct{ Meta QueryMeta }
+type GetBusinessSubscriptionHandler = commands.QueryHandler[GetBusinessSubscriptionQuery, MerchantSubscriptionView]
+
 type GetDashboardOverviewQuery struct{ Meta QueryMeta }
 type DashboardOverviewView struct {
 	OpenConversations         int
@@ -65,6 +95,7 @@ type DashboardOverviewView struct {
 	NewCustomers              int
 	NewLeads                  int
 	TransactionsNeedingReview int
+	Subscription              *MerchantSubscriptionView
 }
 type GetDashboardOverviewHandler = commands.QueryHandler[GetDashboardOverviewQuery, DashboardOverviewView]
 

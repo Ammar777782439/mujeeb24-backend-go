@@ -52,7 +52,7 @@ func buildOperationPermissions() map[string]string {
 			permissions[operation] = permission
 		}
 	}
-	register(PermissionBusinessRead, "getBusiness", "getBusinessPolicy")
+	register(PermissionBusinessRead, "getBusiness", "getBusinessPolicy", "getBusinessSubscription")
 	register(PermissionBusinessSettings, "createSalesRequirement", "updateBusinessProfile", "updateBusinessPolicy")
 	register(PermissionDashboardRead, "getDashboardOverview")
 	register(PermissionTeamRead, "listTeamMembers", "listTeamInvitations")

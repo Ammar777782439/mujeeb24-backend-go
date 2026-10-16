@@ -84,11 +84,12 @@ func (r *capabilityCatalogRepo) ListProjectionPage(_ context.Context, request po
 	if request.Cursor == "page2" {
 		start = 3
 	}
+	schemaVersion := 1
 	page := ports.CatalogAIProjectionPage{Catalogs: []ports.CatalogRecord{{ID: "catalog", BusinessID: "business-1", Name: "Main", Status: "active"}}, HasMore: start == 1, NextCursor: "page2"}
 	for i := start; i < start+2; i++ {
 		id := fmt.Sprintf("item-%d", i)
 		page.Items = append(page.Items, ports.CatalogAIProjectionBundle{
-			Item:            ports.CatalogItemRecord{ID: id, BusinessID: "business-1", CatalogID: "catalog", Name: id, Status: "active", ItemType: "service", AttributeSchemaID: stringPtr("schema")},
+			Item:            ports.CatalogItemRecord{ID: id, BusinessID: "business-1", CatalogID: "catalog", Name: id, Status: "active", ItemType: "service", AttributeSchemaID: stringPtr("schema"), AttributeSchemaVersion: &schemaVersion},
 			AttributeSchema: &ports.AttributeSchemaRecord{ID: "schema", BusinessID: "business-1", Name: "Schema", Version: 1},
 			Variants:        []ports.VariantRecord{{ID: "variant-" + id, BusinessID: "business-1", CatalogItemID: id, Status: "active"}},
 			Offers:          []ports.OfferRecord{{ID: "offer-" + id, BusinessID: "business-1", CatalogItemID: id, VariantID: stringPtr("variant-" + id), Status: "active", PricingMode: "fixed"}},
@@ -362,16 +363,13 @@ func TestCatalogCapabilityRequiresCompleteLocalWiring(t *testing.T) {
 	if controller.Ready() {
 		t.Fatal("missing token counter considered ready")
 	}
-	controller.TokenCounter = constantTokenCounter{}
+	controller.Evaluator = &capabilityBatchModel{}
 	if !controller.Ready() {
-		t.Fatal("compatibility token counter not accepted")
+		t.Fatal("complete provider request token estimator was not accepted")
 	}
 }
 
 type plainTokenBatchModel struct{ CatalogEvaluationClient }
-type constantTokenCounter struct{}
-
-func (constantTokenCounter) CountTokens(context.Context, any) (int, error) { return 100, nil }
 
 func TestFullCatalogCapabilityPolicyGatePreventsExecution(t *testing.T) {
 	for _, outcome := range []string{"denied", "requires_approval"} {

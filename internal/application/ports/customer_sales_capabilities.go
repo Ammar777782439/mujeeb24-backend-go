@@ -31,13 +31,8 @@ func CustomerSalesCapabilities(fullCatalogAvailable bool, salesAvailable ...bool
 type CapabilityDecision struct {
 	Capability   CustomerSalesCapability `json:"capability"`
 	ResponseText string                  `json:"response_text,omitempty"`
-	// Presentation is chosen by Gemini only for evaluate_full_catalog.
-	// "overview" summarizes every reviewed item without listing each; "hierarchy"
-	// is an explicit exhaustive navigation mode; "detail" and "compare" let Gemini
-	// select relevant items from complete tenant-scoped catalog evaluation.
-	Presentation string                 `json:"presentation,omitempty"`
-	Selected     []SelectedReference    `json:"selected,omitempty"`
-	Sales        *SalesWorkflowProposal `json:"sales,omitempty"`
+	Selected     []SelectedReference     `json:"selected,omitempty"`
+	Sales        *SalesWorkflowProposal  `json:"sales,omitempty"`
 }
 
 // CustomerSalesCapabilityDefinition describes an executable operation, not intent.

@@ -456,7 +456,7 @@ func (activeSubscriptionStub) ApplyCostBudgetOverride(context.Context, string, i
 	return ports.SubscriptionRecord{}, errors.New("not used")
 }
 
-func (activeSubscriptionStub) CheckEntitlements(context.Context, string, int, int) error {
+func (activeSubscriptionStub) CheckEntitlements(context.Context, string, int, int, int) error {
 	return nil
 }
 

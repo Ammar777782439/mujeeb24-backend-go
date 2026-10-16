@@ -124,4 +124,20 @@ type SocialChannelProvisioner interface {
 type ChannelConnectionWriter interface {
 	CreatePending(ctx context.Context, businessID, providerRef, channel, providerConnectionRef, secretReference string) (ChannelConnectionRecord, error)
 	Activate(ctx context.Context, businessID, id, providerAccountRef, providerConnectionRef string) (ChannelConnectionRecord, error)
+	// MarkActivationFailed keeps a locally created connection from being shown
+	// as pending forever when OAuth succeeded but local activation was rejected
+	// (for example because the subscription has no available channel capacity).
+	// It is intentionally conditional on the expected version and on a
+	// pre-active lifecycle state: a concurrent successful activation must never
+	// be overwritten by a later failure marker.
+	MarkActivationFailed(ctx context.Context, businessID, id string, expectedVersion int64, reason string) (ChannelConnectionRecord, error)
+}
+
+// ChannelProvisioningConnectionStore resolves the provider connection returned
+// by OAuth before creating a local record. Provider connection references are
+// globally unique, so completing a second OAuth session must converge on the
+// existing local connection instead of attempting a duplicate INSERT.
+type ChannelProvisioningConnectionStore interface {
+	ChannelConnectionRepository
+	ChannelConnectionWriter
 }

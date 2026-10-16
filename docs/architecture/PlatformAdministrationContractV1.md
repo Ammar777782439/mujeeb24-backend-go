@@ -385,51 +385,24 @@ Channel Limit
 
 16. Plans المعتمدة
 
-هذه هي باقات Mujeeb 24 المعتمدة:
+المرجع التجاري الحالي للمبيعات الجديدة هو:
 
-Basic
+[Mujeeb 24 — Pricing & Subscription Contract v2.0](../../Mujeeb_24_Pricing_Contract_v2.0.md)
 
-Price:
-5,000 YER / month
+والباقات المرجعية فيه:
 
-AI Replies:
-500
+| Plan | YER Price | AI Replies | Active AI Catalog Products | Included Base Channel | Plan Channel Ceiling* | Internal AI Budget |
+|---|---:|---:|---:|---:|---:|---:|
+| بداية (`starter`) | 4,000 YER | 50 | 20 | 1 | 1 | 500 YER |
+| متجر (`basic`) | 6,500 YER | 200 | 60 | 1 | 1 | 1,000 YER |
+| نمو (`growth`) | 10,000 YER | 500 | 200 | 1 | 2 | 2,000 YER |
+| احتراف (`pro`) | 16,000 YER | 1,200 | 600 | 1 | 3 | 4,000 YER |
+| أعمال (`business`) | 25,000 YER | 3,000 | 1,500 | 1 | 5 | 7,500 YER |
+| مؤسسات/وكالات (`enterprise`) | عرض مخصص | قياس فعلي | حسب العقد | حسب العقد | حسب السعة | حد نقدي متفق عليه |
 
-AI Catalog Records:
-200
+\* الباقة تحدد السقف: بداية/متجر قناة، نمو قناتان، احتراف ثلاث، وأعمال خمس. السعر الأساسي يشمل قناة واحدة؛ كل قناة إضافية تحتاج `Channel Pass` مقترحًا بسعر 5,000 YER شهريًا، وتشترك في AI/catalog/seat entitlements نفسها. الإضافة غير مفعلة بعد، ولا تُباع دون سعة فعلية لدى المزود واكتمال `Channel Expansion Cohort`. الأسعار العامة ثابتة بالريال داخل Plan Version؛ سعر الصرف محاسبي داخلي لقياس تكلفة الموردين ولا يغيّر فترة نشطة.
 
-Channels:
-1
-
-Growth
-
-Price:
-10,000 YER / month
-
-AI Replies:
-1,500
-
-AI Catalog Records:
-750
-
-Channels:
-2
-
-Business
-
-Price:
-20,000 YER / month
-
-AI Replies:
-4,000
-
-AI Catalog Records:
-2,500
-
-Channels:
-5
-
-هذه هي الـcommercial baseline المعتمدة في المشروع.
+هذه هي باقات التسعير الوحيدة المعتمدة في التوثيق. لا تصبح `ACTIVE` في Runtime إلا بعد بوابات قياس التكلفة وسعر الصرف وإنشاء Plan Versions جديدة؛ وجود الوثيقة وحده لا يعني أن القيم مطبقة في قاعدة البيانات.
 
 ---
 

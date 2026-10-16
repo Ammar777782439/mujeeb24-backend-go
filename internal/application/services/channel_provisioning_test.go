@@ -188,20 +188,75 @@ type provisioningConnections struct {
 	pending            int
 	activationAttempts int
 	active             int
+	activationFailed   int
 	activateErr        error
+	createErr          error
+	records            map[string]ports.ChannelConnectionRecord
 }
 
-func (c *provisioningConnections) CreatePending(context.Context, string, string, string, string, string) (ports.ChannelConnectionRecord, error) {
-	c.pending++
-	return ports.ChannelConnectionRecord{ID: "connection-1", Status: "pending"}, nil
+func (c *provisioningConnections) GetByID(_ context.Context, businessID, connectionID string) (ports.ChannelConnectionRecord, error) {
+	for _, record := range c.records {
+		if record.BusinessID == businessID && record.ID == connectionID {
+			return record, nil
+		}
+	}
+	return ports.ChannelConnectionRecord{}, errors.New("connection not found")
 }
-func (c *provisioningConnections) Activate(context.Context, string, string, string, string) (ports.ChannelConnectionRecord, error) {
+
+func (c *provisioningConnections) GetByProviderReferences(_ context.Context, providerRef, _, providerConnectionRef string) (ports.ChannelConnectionRecord, error) {
+	for _, record := range c.records {
+		if record.ProviderReference == providerRef && record.ProviderConnectionRef == providerConnectionRef {
+			return record, nil
+		}
+	}
+	return ports.ChannelConnectionRecord{}, errors.New("connection not found")
+}
+
+func (c *provisioningConnections) CreatePending(_ context.Context, businessID, providerRef, channel, providerConnectionRef, _ string) (ports.ChannelConnectionRecord, error) {
+	c.pending++
+	if c.createErr != nil {
+		return ports.ChannelConnectionRecord{}, c.createErr
+	}
+	record := ports.ChannelConnectionRecord{ID: "connection-1", BusinessID: businessID, ProviderReference: providerRef, Channel: channel, ProviderConnectionRef: providerConnectionRef, Status: "pending"}
+	if c.records == nil {
+		c.records = map[string]ports.ChannelConnectionRecord{}
+	}
+	c.records[providerRef+"/"+providerConnectionRef] = record
+	return record, nil
+}
+func (c *provisioningConnections) Activate(_ context.Context, businessID, connectionID, providerAccountRef, providerConnectionRef string) (ports.ChannelConnectionRecord, error) {
 	c.activationAttempts++
 	if c.activateErr != nil {
 		return ports.ChannelConnectionRecord{}, c.activateErr
 	}
 	c.active++
-	return ports.ChannelConnectionRecord{ID: "connection-1", Status: "active"}, nil
+	record, err := c.GetByProviderReferences(context.Background(), "socialapi", "", providerConnectionRef)
+	if err != nil {
+		record = ports.ChannelConnectionRecord{ID: connectionID, BusinessID: businessID, ProviderReference: "socialapi", ProviderConnectionRef: providerConnectionRef}
+	}
+	record.ID = connectionID
+	record.BusinessID = businessID
+	record.ProviderAccountReference = &providerAccountRef
+	record.Status = "active"
+	if c.records == nil {
+		c.records = map[string]ports.ChannelConnectionRecord{}
+	}
+	c.records[record.ProviderReference+"/"+providerConnectionRef] = record
+	return record, nil
+}
+
+func (c *provisioningConnections) MarkActivationFailed(_ context.Context, businessID, connectionID string, expectedVersion int64, _ string) (ports.ChannelConnectionRecord, error) {
+	c.activationFailed++
+	for key, record := range c.records {
+		if record.BusinessID != businessID || record.ID != connectionID || record.ResourceVersion != expectedVersion {
+			continue
+		}
+		record.Status = "reconnect_required"
+		record.ResourceVersion++
+		c.records[key] = record
+		return record, nil
+	}
+	return ports.ChannelConnectionRecord{}, errors.New("connection not found")
 }
 
 func TestChannelProvisioningStartIsIdempotentAndCompleteConnects(t *testing.T) {
@@ -257,8 +312,72 @@ func TestChannelProvisioningRecordsActivationFailureWithoutConnection(t *testing
 		t.Fatalf("start: %v", err)
 	}
 	failed, err := service.Complete(context.Background(), "business-1", started.ID, ports.SocialAuthorizationCallback{State: started.OAuthState, Status: "success", Platform: "whatsapp", AccountID: "account-1"})
-	if err == nil || failed.Status != ports.ProvisioningFailed || failed.FailureCode != "channel_connection_activation_failed" || connections.pending != 1 || connections.active != 0 || connections.activationAttempts != 1 {
+	if err == nil || failed.Status != ports.ProvisioningFailed || failed.FailureCode != "channel_connection_activation_failed" || connections.pending != 1 || connections.active != 0 || connections.activationAttempts != 1 || connections.activationFailed != 1 {
 		t.Fatalf("activation failure mismatch: session=%#v err=%v connections=%#v", failed, err, connections)
+	}
+	record, lookupErr := connections.GetByProviderReferences(context.Background(), "socialapi", "", "connection-1")
+	if lookupErr != nil || record.Status != "reconnect_required" {
+		t.Fatalf("activation failure left a non-actionable connection: record=%#v err=%v", record, lookupErr)
+	}
+}
+
+func TestChannelProvisioningReusesExistingActiveConnectionForRepeatedOAuth(t *testing.T) {
+	store := &provisioningSessionStore{}
+	connections := &provisioningConnections{records: map[string]ports.ChannelConnectionRecord{
+		"socialapi/connection-1": {ID: "existing-connection", BusinessID: "business-1", ProviderReference: "socialapi", Channel: "instagram", ProviderConnectionRef: "connection-1", Status: "active"},
+	}}
+	brands := &provisioningBrands{}
+	service := ChannelProvisioningService{Sessions: store, Social: &provisioningSocial{}, SocialBrands: brands, ProviderBrands: brands, Businesses: &provisioningBusinesses{}, Connections: connections, RedirectURI: "https://app.example/oauth/callback"}
+
+	started, err := service.Start(context.Background(), "business-1", "socialapi", "instagram", "Acme Instagram", "idem-repeat")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	completed, err := service.Complete(context.Background(), "business-1", started.ID, ports.SocialAuthorizationCallback{State: started.OAuthState, Status: "success", Platform: "instagram", AccountID: "account-1"})
+	if err != nil {
+		t.Fatalf("complete repeated oauth: %v", err)
+	}
+	if completed.Status != ports.ProvisioningConnected || completed.ChannelConnectionID != "existing-connection" || connections.pending != 0 || connections.activationAttempts != 0 {
+		t.Fatalf("expected existing active connection to be reused: session=%#v connections=%#v", completed, connections)
+	}
+}
+
+func TestChannelProvisioningActivatesExistingPendingConnectionForRepeatedOAuth(t *testing.T) {
+	store := &provisioningSessionStore{}
+	connections := &provisioningConnections{records: map[string]ports.ChannelConnectionRecord{
+		"socialapi/connection-1": {ID: "existing-pending", BusinessID: "business-1", ProviderReference: "socialapi", Channel: "instagram", ProviderConnectionRef: "connection-1", Status: "pending"},
+	}}
+	brands := &provisioningBrands{}
+	service := ChannelProvisioningService{Sessions: store, Social: &provisioningSocial{}, SocialBrands: brands, ProviderBrands: brands, Businesses: &provisioningBusinesses{}, Connections: connections, RedirectURI: "https://app.example/oauth/callback"}
+
+	started, err := service.Start(context.Background(), "business-1", "socialapi", "instagram", "Acme Instagram", "idem-pending")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	completed, err := service.Complete(context.Background(), "business-1", started.ID, ports.SocialAuthorizationCallback{State: started.OAuthState, Status: "success", Platform: "instagram", AccountID: "account-1"})
+	if err != nil {
+		t.Fatalf("complete pending oauth: %v", err)
+	}
+	if completed.Status != ports.ProvisioningConnected || completed.ChannelConnectionID != "existing-pending" || connections.pending != 0 || connections.activationAttempts != 1 {
+		t.Fatalf("expected pending connection to be activated: session=%#v connections=%#v", completed, connections)
+	}
+}
+
+func TestChannelProvisioningRejectsProviderConnectionOwnedByAnotherBusiness(t *testing.T) {
+	store := &provisioningSessionStore{}
+	connections := &provisioningConnections{records: map[string]ports.ChannelConnectionRecord{
+		"socialapi/connection-1": {ID: "other-business-connection", BusinessID: "business-2", ProviderReference: "socialapi", Channel: "instagram", ProviderConnectionRef: "connection-1", Status: "active"},
+	}}
+	brands := &provisioningBrands{}
+	service := ChannelProvisioningService{Sessions: store, Social: &provisioningSocial{}, SocialBrands: brands, ProviderBrands: brands, Businesses: &provisioningBusinesses{}, Connections: connections, RedirectURI: "https://app.example/oauth/callback"}
+
+	started, err := service.Start(context.Background(), "business-1", "socialapi", "instagram", "Acme Instagram", "idem-other-business")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	failed, err := service.Complete(context.Background(), "business-1", started.ID, ports.SocialAuthorizationCallback{State: started.OAuthState, Status: "success", Platform: "instagram", AccountID: "account-1"})
+	if err == nil || failed.Status != ports.ProvisioningFailed || failed.FailureCode != "channel_connection_already_linked" || connections.pending != 0 || connections.activationAttempts != 0 {
+		t.Fatalf("expected cross-business channel rejection: session=%#v err=%v connections=%#v", failed, err, connections)
 	}
 }
 

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
@@ -91,6 +92,10 @@ func (s *AICostProtectionService) IsAIExecutionAllowed(ctx context.Context, busi
 		return false, "active_subscription_required"
 	}
 	sub := page.Items[0]
+	now := time.Now().UTC()
+	if now.Before(sub.PeriodStart) || !now.Before(sub.PeriodEnd) {
+		return false, "active_subscription_period_invalid"
+	}
 	agg, err := s.AIUsage.GetSubscriptionAIUsage(ctx, sub.ID)
 	if err != nil {
 		return false, "ai_usage_check_unavailable"

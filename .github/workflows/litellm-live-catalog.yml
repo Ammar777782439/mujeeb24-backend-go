@@ -1,0 +1,33 @@
+name: Live LiteLLM catalog model acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-model:
+    name: Real Mujeeb Go catalog adapter / LiteLLM provider
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      LITELLM_BASE_URL: https://webhook.mujeeb24.com
+      LITELLM_CATALOG_MODEL: mujeeb-catalog
+      LITELLM_API_KEY: ${{ secrets.LITELLM_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+          cache: true
+      - name: Require encrypted LiteLLM Virtual Key
+        shell: bash
+        run: |
+          if [[ -z "${LITELLM_API_KEY}" ]]; then
+            echo "::error::Missing encrypted repository secret LITELLM_API_KEY."
+            exit 1
+          fi
+      - name: Real Go adapter / token counter / full catalog batch
+        shell: bash
+        run: go run scripts/litellm-go-catalog-live/main.go

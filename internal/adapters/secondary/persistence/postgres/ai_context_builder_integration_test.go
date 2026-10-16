@@ -4,6 +4,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -121,6 +122,121 @@ func TestAutoReplyContextBuilderGroundsCatalogAgainstPostgres(t *testing.T) {
 	if len(contextValue.CatalogEvidence) != 1 || contextValue.CatalogEvidence[0].Reference != itemID || len(contextValue.OfferEvidence) != 1 || contextValue.OfferEvidence[0].Reference != offerID || contextValue.OfferEvidence[0].AvailabilityStatus != "available" || contextValue.OfferEvidence[0].Amount != "250000.0000" || len(contextValue.VariantEvidence) != 1 || contextValue.VariantEvidence[0].Reference != variantID {
 		t.Fatalf("grounding mismatch: %#v", contextValue)
 	}
+	// Real PostgreSQL pagination test: exceed the 200-record cursor limit.
+	// All 206 options and 206 offers must reach the scoped AI context.
+	extraOfferIDs := make([]string, 0, 205)
+	for n := 0; n < 205; n++ {
+		extraVariantID := uuid.NewString()
+		extraOfferID := uuid.NewString()
+		if _, err := adapter.Pool().Exec(ctx, `INSERT INTO variants
+			(id, business_id, catalog_item_id, name, attributes, status, created_at, updated_at)
+			VALUES ($1::uuid, $2::uuid, $3::uuid, $4, '{}'::jsonb, 'active', $5, $5)`,
+			extraVariantID, businessID, itemID, fmt.Sprintf("Variant %d", n), base); err != nil {
+			t.Fatalf("insert additional variant %d: %v", n, err)
+		}
+		extraOfferIDs = append(extraOfferIDs, extraOfferID)
+		if _, err := adapter.Pool().Exec(ctx, `INSERT INTO offers
+			(id, business_id, catalog_item_id, variant_id, name, pricing_mode, amount, currency,
+			 availability_mode, availability_status, fulfillment_mode, price_verification_status,
+			 status, created_at, updated_at)
+			VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, 'fixed', 100, 'YER',
+			 'stock', 'available', 'delivery', 'verified', 'active', $6, $6)`,
+			extraOfferID, businessID, itemID, extraVariantID, fmt.Sprintf("Offer %d", n), base); err != nil {
+			t.Fatalf("insert additional offer %d: %v", n, err)
+		}
+	}
+	complete, err := builder.Build(ctx, ports.CustomerSalesContextInput{
+		BusinessID: businessID, ConversationID: conversationID, SourceMessageReference: "incoming-current",
+		Text: "قارن جميع خيارات الهاتف", Channel: "whatsapp",
+		ConversationState: &ports.ConversationStateRecord{BusinessID: businessID, ConversationID: conversationID,
+			Focus: &ports.ConversationFocus{Type: "item", ID: itemID, CatalogID: &catalogID}},
+	})
+	if err != nil {
+		t.Fatalf("real PostgreSQL complete catalog entity retrieval: %v", err)
+	}
+	if len(complete.CatalogEvidence) != 1 || len(complete.VariantEvidence) != 206 || len(complete.OfferEvidence) != 206 {
+		t.Fatalf("truncated complete entity: items=%d variants=%d offers=%d",
+			len(complete.CatalogEvidence), len(complete.VariantEvidence), len(complete.OfferEvidence))
+	}
+
+	// Locate a target offer that is definitively OUTSIDE the original
+	// first five database rows, then verify focused retrieval uses the exact
+	// record while still hydrating its full 206-offer commercial parent.
+	firstPage, err := NewCatalogRepository(adapter).ListOffers(ctx, businessID, itemID, "active", 5, "")
+	if err != nil {
+		t.Fatalf("load first real offer page: %v", err)
+	}
+	firstFive := map[string]bool{}
+	for _, record := range firstPage.Items {
+		firstFive[record.ID] = true
+	}
+	targetOfferID := ""
+	for _, id := range extraOfferIDs {
+		if !firstFive[id] {
+			targetOfferID = id
+			break
+		}
+	}
+	if targetOfferID == "" {
+		t.Fatal("test did not find an offer beyond first five rows")
+	}
+	focused, err := builder.Build(ctx, ports.CustomerSalesContextInput{
+		BusinessID: businessID, ConversationID: conversationID, Text: "تفاصيل هذا العرض",
+		ConversationState: &ports.ConversationStateRecord{
+			BusinessID: businessID, ConversationID: conversationID,
+			Focus: &ports.ConversationFocus{Type: "offer", ID: targetOfferID, ItemID: &itemID, CatalogID: &catalogID},
+		},
+	})
+	if err != nil {
+		t.Fatalf("focused offer beyond first page was not resolved: %v", err)
+	}
+	if len(focused.CatalogEvidence) != 1 || len(focused.OfferEvidence) != 206 || len(focused.VariantEvidence) != 206 {
+		t.Fatalf("focused offer lost siblings: items=%d offers=%d variants=%d",
+			len(focused.CatalogEvidence), len(focused.OfferEvidence), len(focused.VariantEvidence))
+	}
+	found := false
+	for _, evidence := range focused.OfferEvidence {
+		if evidence.Reference == targetOfferID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("focused commercial offer was missing despite complete context")
+	}
+	wrongItemID := uuid.NewString()
+	_, mismatchErr := builder.Build(ctx, ports.CustomerSalesContextInput{
+		BusinessID: businessID, ConversationID: conversationID, Text: "تفاصيل العرض",
+		ConversationState: &ports.ConversationStateRecord{
+			BusinessID: businessID, ConversationID: conversationID,
+			Focus: &ports.ConversationFocus{Type: "offer", ID: targetOfferID, ItemID: &wrongItemID},
+		},
+	})
+	if mismatchErr == nil {
+		t.Fatal("mismatched item ID was permitted to own a focused offer")
+	}
+
+	// A same-count, unchanged-timestamp commercial edit must still change the
+	// content revision. PostgreSQL is real, not a stubbed repository.
+	catalogReader := NewCatalogAIReadRepository(adapter)
+	originalRevision, err := catalogReader.GetRevision(ctx, businessID)
+	if err != nil {
+		t.Fatalf("revision before offer change: %v", err)
+	}
+	if _, err := adapter.Pool().Exec(ctx, `UPDATE offers SET amount=250001 WHERE id=$1::uuid`, offerID); err != nil {
+		t.Fatalf("edit price without timestamp update: %v", err)
+	}
+	changedRevision, err := catalogReader.GetRevision(ctx, businessID)
+	if err != nil {
+		t.Fatalf("revision after offer change: %v", err)
+	}
+	if changedRevision == originalRevision {
+		t.Fatal("commercial price changed but catalog revision did not")
+	}
+	if _, err := adapter.Pool().Exec(ctx, `UPDATE offers SET amount=250000 WHERE id=$1::uuid`, offerID); err != nil {
+		t.Fatalf("restore test offer price: %v", err)
+	}
+
 	if len(contextValue.RecentMessages) != 1 || contextValue.RecentMessages[0].Text != "أريد هاتفًا" {
 		t.Fatalf("history mismatch: %#v", contextValue.RecentMessages)
 	}

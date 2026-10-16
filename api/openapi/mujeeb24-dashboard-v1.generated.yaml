@@ -982,6 +982,54 @@ components:
         - conversations
         - messages
       type: object
+    ChannelPassCapacityApprovalRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ChannelPassCapacityApprovalRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        max_channel_passes:
+          format: int64
+          minimum: 1
+          type: integer
+        reason:
+          maxLength: 500
+          minLength: 1
+          type: string
+      required:
+        - max_channel_passes
+        - reason
+      type: object
+    ChannelPassCapacityApprovalView:
+      additionalProperties: false
+      properties:
+        approved_at:
+          type: string
+        approved_by:
+          type: string
+        business_id:
+          type: string
+        max_channel_passes:
+          format: int64
+          type: integer
+        reason:
+          type: string
+        subscription_id:
+          type: string
+        updated_at:
+          type: string
+      required:
+        - subscription_id
+        - business_id
+        - max_channel_passes
+        - reason
+        - approved_by
+        - approved_at
+        - updated_at
+      type: object
     ChannelProvisioning:
       additionalProperties: false
       properties:
@@ -1187,8 +1235,12 @@ components:
           type: integer
         Name:
           type: string
+        Partitioned:
+          type: boolean
         Path:
           type: string
+        Quoted:
+          type: boolean
         Raw:
           type: string
         RawExpires:
@@ -1208,6 +1260,7 @@ components:
       required:
         - Name
         - Value
+        - Quoted
         - Path
         - Domain
         - Expires
@@ -1216,6 +1269,7 @@ components:
         - Secure
         - HttpOnly
         - SameSite
+        - Partitioned
         - Raw
         - Unparsed
       type: object
@@ -1503,6 +1557,10 @@ components:
         billing_interval:
           default: MONTH
           type: string
+        channel_ceiling:
+          format: int64
+          minimum: 1
+          type: integer
         channel_limit:
           format: int64
           minimum: 1
@@ -1523,6 +1581,10 @@ components:
           format: int64
           minimum: 1
           type: integer
+        seat_limit:
+          format: int64
+          minimum: 1
+          type: integer
       required:
         - code
         - display_name
@@ -1531,6 +1593,8 @@ components:
         - ai_reply_limit
         - ai_catalog_limit
         - channel_limit
+        - channel_ceiling
+        - seat_limit
         - internal_ai_cost_budget_yer
       type: object
     CreatePlanVersionRequest:
@@ -1553,6 +1617,10 @@ components:
         billing_interval:
           default: MONTH
           type: string
+        channel_ceiling:
+          format: int64
+          minimum: 1
+          type: integer
         channel_limit:
           format: int64
           minimum: 1
@@ -1573,6 +1641,10 @@ components:
           maxLength: 500
           minLength: 1
           type: string
+        seat_limit:
+          format: int64
+          minimum: 1
+          type: integer
       required:
         - display_name
         - price_yer
@@ -1580,8 +1652,30 @@ components:
         - ai_reply_limit
         - ai_catalog_limit
         - channel_limit
+        - channel_ceiling
+        - seat_limit
         - internal_ai_cost_budget_yer
         - reason
+      type: object
+    CreateSubscriptionAddonRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/CreateSubscriptionAddonRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        kind:
+          enum:
+            - AI_REPLIES_100
+            - AI_REPLIES_500
+            - CATALOG_PRODUCTS_100
+            - EXTRA_SEAT
+            - CHANNEL_PASS
+          type: string
+      required:
+        - kind
       type: object
     CreateSubscriptionRequest:
       additionalProperties: false
@@ -1819,6 +1913,8 @@ components:
         open_conversations:
           format: int64
           type: integer
+        subscription:
+          $ref: "#/components/schemas/MerchantSubscriptionView"
         transactions_needing_review:
           format: int64
           type: integer
@@ -2807,6 +2903,29 @@ components:
         - pagination
         - request_id
       type: object
+    ListSubscriptionAddonViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListSubscriptionAddonViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/SubscriptionAddonView"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
     ListSubscriptionViewBody:
       additionalProperties: false
       properties:
@@ -3021,6 +3140,76 @@ components:
           type: string
       required:
         - message
+      type: object
+    MerchantSubscriptionView:
+      additionalProperties: false
+      properties:
+        activated_at:
+          type: string
+        active_channels:
+          format: int64
+          type: integer
+        active_seats:
+          format: int64
+          type: integer
+        ai_catalog_limit:
+          format: int64
+          type: integer
+        ai_replies_remaining:
+          format: int64
+          type: integer
+        ai_replies_used:
+          format: int64
+          type: integer
+        ai_reply_limit:
+          format: int64
+          type: integer
+        amount_due_yer:
+          format: int64
+          type: integer
+        business_id:
+          type: string
+        channel_ceiling:
+          format: int64
+          type: integer
+        channel_limit:
+          format: int64
+          type: integer
+        created_at:
+          type: string
+        days_remaining:
+          format: int64
+          type: integer
+        has_subscription:
+          type: boolean
+        id:
+          type: string
+        period_end:
+          type: string
+        period_start:
+          type: string
+        plan_code:
+          type: string
+        plan_id:
+          type: string
+        plan_name:
+          type: string
+        plan_version:
+          format: int64
+          type: integer
+        price_yer_snapshot:
+          format: int64
+          type: integer
+        seat_limit:
+          format: int64
+          type: integer
+        status:
+          type: string
+      required:
+        - has_subscription
+        - business_id
+        - active_channels
+        - active_seats
       type: object
     MergeCustomerRequest:
       additionalProperties: false
@@ -3327,6 +3516,9 @@ components:
           type: integer
         billing_interval:
           type: string
+        channel_ceiling:
+          format: int64
+          type: integer
         channel_limit:
           format: int64
           type: integer
@@ -3346,6 +3538,9 @@ components:
           type: integer
         retired_at:
           type: string
+        seat_limit:
+          format: int64
+          type: integer
         status:
           type: string
         updated_at:
@@ -3363,6 +3558,8 @@ components:
         - ai_reply_limit
         - ai_catalog_limit
         - channel_limit
+        - channel_ceiling
+        - seat_limit
         - internal_ai_cost_budget_yer
         - status
         - created_at
@@ -4132,6 +4329,23 @@ components:
         - data
         - request_id
       type: object
+    SingleChannelPassCapacityApprovalViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleChannelPassCapacityApprovalViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/ChannelPassCapacityApprovalView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
     SingleChannelProvisioningBody:
       additionalProperties: false
       properties:
@@ -4296,6 +4510,23 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/MerchantCatalogAIResponse"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleMerchantSubscriptionViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleMerchantSubscriptionViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/MerchantSubscriptionView"
         request_id:
           type: string
       required:
@@ -4551,6 +4782,23 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/SubscriptionAIUsageView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleSubscriptionAddonViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleSubscriptionAddonViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/SubscriptionAddonView"
         request_id:
           type: string
       required:
@@ -4815,6 +5063,55 @@ components:
         - projected_total_cost_yer
         - budget_status
       type: object
+    SubscriptionAddonView:
+      additionalProperties: false
+      properties:
+        activated_at:
+          type: string
+        ai_reply_delta:
+          format: int64
+          type: integer
+        business_id:
+          type: string
+        cancelled_at:
+          type: string
+        cancelled_reason:
+          type: string
+        catalog_delta:
+          format: int64
+          type: integer
+        channel_delta:
+          format: int64
+          type: integer
+        created_at:
+          type: string
+        id:
+          type: string
+        kind:
+          type: string
+        price_yer_snapshot:
+          format: int64
+          type: integer
+        seat_delta:
+          format: int64
+          type: integer
+        status:
+          type: string
+        subscription_id:
+          type: string
+      required:
+        - id
+        - subscription_id
+        - business_id
+        - kind
+        - status
+        - price_yer_snapshot
+        - ai_reply_delta
+        - catalog_delta
+        - seat_delta
+        - channel_delta
+        - created_at
+      type: object
     SubscriptionView:
       additionalProperties: false
       properties:
@@ -4824,12 +5121,18 @@ components:
         ai_reply_limit:
           format: int64
           type: integer
+        amount_due_yer:
+          format: int64
+          type: integer
         business_id:
           type: string
         cancelled_at:
           type: string
         cancelled_reason:
           type: string
+        channel_ceiling:
+          format: int64
+          type: integer
         channel_limit:
           format: int64
           type: integer
@@ -4856,6 +5159,12 @@ components:
         plan_version:
           format: int64
           type: integer
+        price_yer_snapshot:
+          format: int64
+          type: integer
+        seat_limit:
+          format: int64
+          type: integer
         status:
           type: string
         updated_at:
@@ -4866,12 +5175,16 @@ components:
         - plan_id
         - plan_code
         - plan_version
+        - price_yer_snapshot
+        - amount_due_yer
         - period_start
         - period_end
         - status
         - ai_reply_limit
         - ai_catalog_limit
         - channel_limit
+        - channel_ceiling
+        - seat_limit
         - internal_ai_cost_budget_yer
         - created_at
         - updated_at
@@ -12052,6 +12365,70 @@ paths:
       summary: reviewSalesWorkflow
       tags:
         - Sales
+  /businesses/{business_id}/subscription:
+    get:
+      operationId: getBusinessSubscription
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleMerchantSubscriptionViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Get the active business subscription and quota projection
+      tags:
+        - Business
   /businesses/{business_id}/team/invitations:
     get:
       operationId: listTeamInvitations
@@ -13996,19 +14373,19 @@ paths:
       operationId: platformAIDisable
       parameters:
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       responses:
@@ -14064,19 +14441,19 @@ paths:
       operationId: platformAIEnable
       parameters:
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       responses:
@@ -14132,19 +14509,19 @@ paths:
       operationId: platformAIHealthCheck
       parameters:
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       responses:
@@ -14756,19 +15133,19 @@ paths:
       operationId: platformCreateBusiness
       parameters:
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       requestBody:
@@ -14894,19 +15271,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       responses:
@@ -14968,19 +15345,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       requestBody:
@@ -15048,19 +15425,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       responses:
@@ -15122,19 +15499,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       requestBody:
@@ -15202,19 +15579,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       requestBody:
@@ -15282,19 +15659,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       responses:
@@ -15356,19 +15733,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       requestBody:
@@ -15569,19 +15946,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       responses:
@@ -15687,19 +16064,19 @@ paths:
       operationId: platformUpdateAIConfiguration
       parameters:
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       requestBody:
@@ -15812,19 +16189,19 @@ paths:
       operationId: platformAddAICredential
       parameters:
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       requestBody:
@@ -15886,19 +16263,19 @@ paths:
       operationId: platformDiscoverAIModels
       parameters:
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
         - in: path
@@ -15959,19 +16336,19 @@ paths:
       operationId: platformTestAIConnection
       parameters:
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
         - in: path
@@ -16106,19 +16483,19 @@ paths:
       operationId: platformCreatePlan
       parameters:
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       requestBody:
@@ -16244,19 +16621,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       responses:
@@ -16318,19 +16695,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       responses:
@@ -16392,19 +16769,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       requestBody:
@@ -16579,19 +16956,19 @@ paths:
           schema:
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       responses:
@@ -16642,6 +17019,166 @@ paths:
       summary: Run provider health check.
       tags:
         - Platform.Providers
+  /platform/subscription-addons/{addon_id}/cancel:
+    post:
+      operationId: platformCancelSubscriptionAddon
+      parameters:
+        - in: path
+          name: addon_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelSubscriptionRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSubscriptionAddonViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Cancel a subscription add-on without silently exceeding entitlements.
+      tags:
+        - Platform.Addons
+  /platform/subscription-addons/{addon_id}/payments:
+    post:
+      operationId: platformRecordSubscriptionAddonPayment
+      parameters:
+        - in: path
+          name: addon_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordPaymentRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSubscriptionAddonViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Record payment and activate a subscription add-on.
+      tags:
+        - Platform.Addons
   /platform/subscriptions:
     get:
       operationId: platformListSubscriptions
@@ -16775,6 +17312,165 @@ paths:
       summary: Get a subscription.
       tags:
         - Platform.Subscriptions
+  /platform/subscriptions/{subscription_id}/addons:
+    get:
+      operationId: platformListSubscriptionAddons
+      parameters:
+        - in: path
+          name: subscription_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - explode: false
+          in: query
+          name: status
+          schema:
+            enum:
+              - PENDING
+              - ACTIVE
+              - CANCELLED
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            format: int64
+            maximum: 1000
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSubscriptionAddonViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List subscription add-ons.
+      tags:
+        - Platform.Addons
+    post:
+      operationId: platformCreateSubscriptionAddon
+      parameters:
+        - in: path
+          name: subscription_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubscriptionAddonRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleSubscriptionAddonViewBody"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Create a pending paid subscription add-on.
+      tags:
+        - Platform.Addons
   /platform/subscriptions/{subscription_id}/ai-cost-budget:
     post:
       operationId: platformOverrideSubscriptionAICostBudget
@@ -16786,19 +17482,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       requestBody:
@@ -16924,19 +17620,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       requestBody:
@@ -16993,6 +17689,86 @@ paths:
       summary: Cancel a subscription.
       tags:
         - Platform.Subscriptions
+  /platform/subscriptions/{subscription_id}/channel-pass-capacity:
+    put:
+      operationId: platformApproveChannelPassCapacity
+      parameters:
+        - in: path
+          name: subscription_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChannelPassCapacityApprovalRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleChannelPassCapacityApprovalViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Record verified provider capacity before selling a Channel Pass.
+      tags:
+        - Platform.Addons
   /platform/subscriptions/{subscription_id}/payments:
     get:
       operationId: platformListPayments
@@ -17083,19 +17859,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       requestBody:
@@ -17318,19 +18094,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       responses:
@@ -17392,19 +18168,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       requestBody:
@@ -17472,19 +18248,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       responses:
@@ -17546,19 +18322,19 @@ paths:
             format: uuid
             type: string
         - in: header
-          name: Idempotency-Key,omitempty
+          name: Idempotency-Key
           schema:
             type: string
         - in: header
-          name: If-Match,omitempty
+          name: If-Match
           schema:
             type: string
         - in: header
-          name: X-Request-ID,omitempty
+          name: X-Request-ID
           schema:
             type: string
         - in: header
-          name: X-Correlation-ID,omitempty
+          name: X-Correlation-ID
           schema:
             type: string
       responses:

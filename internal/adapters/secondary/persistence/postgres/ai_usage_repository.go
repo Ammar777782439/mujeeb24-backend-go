@@ -134,7 +134,7 @@ func (r *AIUsageRepository) GetSubscriptionAIUsage(ctx context.Context, subscrip
 		lastRecordedAt         *time.Time
 	)
 	err = executor.QueryRow(ctx,
-		`SELECT s.id::text, s.business_id::text, s.ai_reply_limit, COALESCE(u.ai_replies_used, 0), COALESCE(u.input_tokens, 0), COALESCE(u.cached_input_tokens, 0), COALESCE(u.output_tokens, 0), COALESCE(u.model_requests, 0), COALESCE(u.tool_calls, 0), COALESCE(u.provider_cost_yer, 0), s.internal_ai_cost_budget_yer, s.cost_budget_override_yer, u.last_recorded_at
+		`SELECT s.id::text, s.business_id::text, s.ai_reply_limit + COALESCE((SELECT sum(ai_reply_delta) FROM subscription_addons WHERE subscription_id=s.id AND status='ACTIVE'),0), COALESCE(u.ai_replies_used, 0), COALESCE(u.input_tokens, 0), COALESCE(u.cached_input_tokens, 0), COALESCE(u.output_tokens, 0), COALESCE(u.model_requests, 0), COALESCE(u.tool_calls, 0), COALESCE(u.provider_cost_yer, 0), s.internal_ai_cost_budget_yer, s.cost_budget_override_yer, u.last_recorded_at
                  FROM subscriptions s
                  LEFT JOIN subscription_ai_usage u ON u.subscription_id = s.id
                  WHERE s.id = $1::uuid`,

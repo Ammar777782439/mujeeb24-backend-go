@@ -35,7 +35,7 @@ func (s *stubSubsRepoFailList) MarkExpired(_ context.Context, _ string, _ time.T
 func (s *stubSubsRepoFailList) ApplyCostBudgetOverride(_ context.Context, _ string, _ int, _ string, _ string, _ time.Time) (ports.SubscriptionRecord, error) {
 	return ports.SubscriptionRecord{}, nil
 }
-func (s *stubSubsRepoFailList) CheckEntitlements(_ context.Context, _ string, _ int, _ int) error {
+func (s *stubSubsRepoFailList) CheckEntitlements(_ context.Context, _ string, _ int, _ int, _ int) error {
 	return nil
 }
 
@@ -65,7 +65,7 @@ func (s *stubSubsRepoEmpty) MarkExpired(_ context.Context, _ string, _ time.Time
 func (s *stubSubsRepoEmpty) ApplyCostBudgetOverride(_ context.Context, _ string, _ int, _ string, _ string, _ time.Time) (ports.SubscriptionRecord, error) {
 	return ports.SubscriptionRecord{}, nil
 }
-func (s *stubSubsRepoEmpty) CheckEntitlements(_ context.Context, _ string, _ int, _ int) error {
+func (s *stubSubsRepoEmpty) CheckEntitlements(_ context.Context, _ string, _ int, _ int, _ int) error {
 	return nil
 }
 

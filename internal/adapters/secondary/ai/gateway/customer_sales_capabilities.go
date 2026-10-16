@@ -36,7 +36,12 @@ func customerSalesTools(capabilities []ports.CustomerSalesCapability) []customer
 			tools = append(tools, salesWorkflowTool(capability))
 			continue
 		case ports.CustomerSalesCapabilityFullCatalog:
-			tools = append(tools, customerSalesTool{Type: "function", Name: string(capability), Description: "Request complete merchant catalog understanding. presentation=overview when the customer asks generally what ALL products, services or catalogs the merchant offers, including initial broad price/features questions: examine every catalog internally but provide ONE concise overview instead of enumerating every item. presentation=hierarchy ONLY for explicitly requested exhaustive item-by-item listing when feasible, never for general discovery. presentation=detail for one named item including follow-up; presentation=compare for a small set of matching options. Gemini determines presentation using current and past conversation; never invent IDs, search filters or tenant identifiers.", Parameters: map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{"presentation": map[string]any{"type": "string", "enum": []string{"overview", "hierarchy", "detail", "compare"}}}, "required": []string{"presentation"}}})
+			tools = append(tools, customerSalesTool{
+				Type:        "function",
+				Name:        string(capability),
+				Description: "Request complete merchant catalog evidence when the current trusted context is not sufficient. This is an internal retrieval step only: it does not choose customer-facing presentation and it is never a final customer response. After complete coverage, Gemini must choose one terminal capability from the evidence.",
+				Parameters:  map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{}},
+			})
 			continue
 		default:
 			continue
@@ -77,16 +82,11 @@ func parseCustomerSalesCapability(resp interactionResponse, tools []customerSale
 	}
 	capability := ports.CustomerSalesCapability(call.Name)
 	if capability == ports.CustomerSalesCapabilityFullCatalog {
-		var args struct {
-			Presentation string `json:"presentation,omitempty"`
-		}
+		var args struct{}
 		if err := decodeStrictStructuredJSON(call.Arguments, &args); err != nil {
 			return ports.CapabilityDecision{}, fmt.Errorf("decode catalog capability: %w", err)
 		}
-		if args.Presentation != "overview" && args.Presentation != "hierarchy" && args.Presentation != "detail" && args.Presentation != "compare" {
-			return ports.CapabilityDecision{}, errors.New("unsupported catalog presentation")
-		}
-		return ports.CapabilityDecision{Capability: capability, Presentation: args.Presentation}, nil
+		return ports.CapabilityDecision{Capability: capability}, nil
 	}
 	var args customerSalesToolArguments
 	if err := decodeStrictStructuredJSON(call.Arguments, &args); err != nil {

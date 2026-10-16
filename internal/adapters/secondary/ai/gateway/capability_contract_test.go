@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"encoding/json"
-	"slices"
 	"strings"
 	"testing"
 
@@ -19,9 +18,8 @@ func TestCustomerCapabilityBoundary(t *testing.T) {
 		{"greeting", `{"steps":[{"type":"function_call","id":"c","name":"respond_without_action","arguments":{"response_text":"وعليكم السلام"}}]}`, ports.CustomerSalesCapabilityRespondWithoutAction, false},
 		{"clarify", `{"steps":[{"type":"function_call","id":"c","name":"ask_customer","arguments":{"response_text":"ما العدد؟"}}]}`, ports.CustomerSalesCapabilityAsk, false},
 		{"handoff", `{"steps":[{"type":"function_call","id":"c","name":"handoff_to_human","arguments":{"response_text":"سأحوّل طلبك إلى الفريق"}}]}`, ports.CustomerSalesCapabilityHandoff, false},
-		{"catalog", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{"presentation":"hierarchy"}}]}`, ports.CustomerSalesCapabilityFullCatalog, false},
-		{"missing presentation", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{}}]}`, "", true},
-		{"targeted product details", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{"presentation":"detail"}}]}`, ports.CustomerSalesCapabilityFullCatalog, false},
+		{"catalog", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{}}]}`, ports.CustomerSalesCapabilityFullCatalog, false},
+		{"obsolete presentation", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{"presentation":"detail"}}]}`, "", true},
 		{"no call", `{"steps":[{"type":"model_output","content":[{"type":"text","text":"hello"}]}]}`, "", true},
 		{"unknown", `{"steps":[{"type":"function_call","id":"c","name":"create_order_draft","arguments":{}}]}`, "", true},
 		{"tenant argument", `{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{"business_id":"other"}}]}`, "", true},
@@ -59,23 +57,30 @@ func TestCustomerCapabilityBoundary(t *testing.T) {
 	}
 }
 
-func TestCatalogDetailCapabilityContract(t *testing.T) {
+func TestCatalogCapabilityHasNoPresentationArguments(t *testing.T) {
 	tools := customerSalesTools([]ports.CustomerSalesCapability{ports.CustomerSalesCapabilityFullCatalog})
 	if len(tools) != 1 {
 		t.Fatal("catalog capability is unavailable")
 	}
 	props := tools[0].Parameters["properties"].(map[string]any)
-	presentation := props["presentation"].(map[string]any)["enum"].([]string)
-	if !slices.Contains(presentation, "detail") || !slices.Contains(presentation, "hierarchy") || !slices.Contains(presentation, "compare") {
-		t.Fatalf("catalog intent modes missing: %v", presentation)
+	if len(props) != 0 {
+		t.Fatalf("evaluate_full_catalog must not expose presentation or retrieval filters: %+v", props)
 	}
+
 	var response interactionResponse
-	if err := json.Unmarshal([]byte(`{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{"presentation":"detail"}}]}`), &response); err != nil {
+	if err := json.Unmarshal([]byte(`{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{}}]}`), &response); err != nil {
 		t.Fatal(err)
 	}
 	decision, err := parseCustomerSalesCapability(response, tools)
-	if err != nil || decision.Presentation != "detail" || decision.Capability != ports.CustomerSalesCapabilityFullCatalog {
-		t.Fatalf("Gemini's requested detail mode was lost: %+v %v", decision, err)
+	if err != nil || decision.Capability != ports.CustomerSalesCapabilityFullCatalog {
+		t.Fatalf("catalog retrieval capability was not accepted: %+v %v", decision, err)
+	}
+
+	if err := json.Unmarshal([]byte(`{"steps":[{"type":"function_call","id":"c","name":"evaluate_full_catalog","arguments":{"presentation":"hierarchy"}}]}`), &response); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parseCustomerSalesCapability(response, tools); err == nil {
+		t.Fatal("obsolete presentation argument was accepted")
 	}
 }
 

@@ -62,8 +62,19 @@ func TestChannelConnectionRuntimeAgainstPostgres(t *testing.T) {
 	if err != nil || disconnected.Status != "disconnected" || disconnected.ResourceVersion != 3 {
 		t.Fatalf("disconnect: %#v err=%v", disconnected, err)
 	}
+	activationFailed, err := repo.MarkActivationFailed(ctx, businessA, connectionID, 3, "channel_connection_activation_failed")
+	if err != nil || activationFailed.Status != "reconnect_required" || activationFailed.ResourceVersion != 4 {
+		t.Fatalf("mark activation failed: %#v err=%v", activationFailed, err)
+	}
+	if _, err := repo.MarkActivationFailed(ctx, businessA, connectionID, 3, "stale activation failure"); !IsRepositoryKind(err, RepositoryStale) {
+		t.Fatalf("expected stale activation failure marker: %v", err)
+	}
 	var events int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM channel_connection_state_events WHERE business_id=$1::uuid AND connection_id=$2::uuid`, businessA, connectionID).Scan(&events); err != nil || events != 2 {
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM channel_connection_state_events WHERE business_id=$1::uuid AND connection_id=$2::uuid`, businessA, connectionID).Scan(&events); err != nil || events != 3 {
 		t.Fatalf("events=%d err=%v", events, err)
+	}
+	var activationFailureEvents int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM channel_connection_state_events WHERE business_id=$1::uuid AND connection_id=$2::uuid AND action='provisioning_activation_failed'`, businessA, connectionID).Scan(&activationFailureEvents); err != nil || activationFailureEvents != 1 {
+		t.Fatalf("activation failure events=%d err=%v", activationFailureEvents, err)
 	}
 }

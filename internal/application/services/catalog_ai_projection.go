@@ -67,32 +67,53 @@ type CatalogAIAttributeDefinition struct {
 }
 
 // CatalogAIItem is contract ① §1 — one catalog item with its variants and offers.
+// CatalogAIResolvedAttribute gives the model a typed human-readable label
+// alongside the original machine attribute key and its untouched value.
+type CatalogAIResolvedAttribute struct {
+	Key      string `json:"key"`
+	Label    string `json:"label"`
+	DataType string `json:"data_type,omitempty"`
+	Origin   string `json:"origin"`
+	Value    any    `json:"value"`
+}
+
 type CatalogAIItem struct {
-	ID                     string             `json:"id"`
-	CatalogID              string             `json:"catalog_id"`
-	AttributeSchemaID      *string            `json:"attribute_schema_id,omitempty"`
-	AttributeSchemaVersion *int               `json:"attribute_schema_version,omitempty"`
-	ItemType               string             `json:"item_type"`
-	Name                   string             `json:"name"`
-	ShortDescription       *string            `json:"short_description,omitempty"`
-	LongDescription        *string            `json:"long_description,omitempty"`
-	Status                 string             `json:"status"`
-	PricingMode            string             `json:"pricing_mode"`
-	AvailabilityMode       string             `json:"availability_mode"`
-	FulfillmentMode        string             `json:"fulfillment_mode"`
-	RequiresConfirmation   bool               `json:"requires_confirmation"`
-	Attributes             map[string]any     `json:"attributes,omitempty"`
-	Variants               []CatalogAIVariant `json:"variants,omitempty"`
-	Offers                 []CatalogAIOffer   `json:"offers,omitempty"`
+	// Commercial context is embedded on each indivisible item; it is not
+	// inferred by the model by joining distant arrays.
+	Catalog                *CatalogAICatalog            `json:"catalog,omitempty"`
+	Schema                 *CatalogAIAttributeSchema    `json:"schema,omitempty"`
+	ResolvedAttributes     []CatalogAIResolvedAttribute `json:"resolved_attributes,omitempty"`
+	ID                     string                       `json:"id"`
+	CatalogID              string                       `json:"catalog_id"`
+	AttributeSchemaID      *string                      `json:"attribute_schema_id,omitempty"`
+	AttributeSchemaVersion *int                         `json:"attribute_schema_version,omitempty"`
+	ItemType               string                       `json:"item_type"`
+	Name                   string                       `json:"name"`
+	ShortDescription       *string                      `json:"short_description,omitempty"`
+	LongDescription        *string                      `json:"long_description,omitempty"`
+	Status                 string                       `json:"status"`
+	PricingMode            string                       `json:"pricing_mode"`
+	AvailabilityMode       string                       `json:"availability_mode"`
+	FulfillmentMode        string                       `json:"fulfillment_mode"`
+	RequiresConfirmation   bool                         `json:"requires_confirmation"`
+	Attributes             map[string]any               `json:"attributes,omitempty"`
+	Variants               []CatalogAIVariant           `json:"variants,omitempty"`
+	Offers                 []CatalogAIOffer             `json:"offers,omitempty"`
+	ItemLevelOffers        []CatalogAIOffer             `json:"item_level_offers,omitempty"`
 }
 
 // CatalogAIVariant is contract ① §1 — one variant under a CatalogAIItem.
 type CatalogAIVariant struct {
-	ID            string         `json:"id"`
-	CatalogItemID string         `json:"catalog_item_id"`
-	Name          string         `json:"name"`
-	Attributes    map[string]any `json:"attributes,omitempty"`
-	Status        string         `json:"status"`
+	// Effective attributes are inherited from the item and overridden only
+	// where this variant carries an explicit different value.
+	EffectiveAttributes map[string]any               `json:"effective_attributes,omitempty"`
+	ResolvedAttributes  []CatalogAIResolvedAttribute `json:"resolved_attributes,omitempty"`
+	Offers              []CatalogAIOffer             `json:"offers,omitempty"`
+	ID                  string                       `json:"id"`
+	CatalogItemID       string                       `json:"catalog_item_id"`
+	Name                string                       `json:"name"`
+	Attributes          map[string]any               `json:"attributes,omitempty"`
+	Status              string                       `json:"status"`
 }
 
 // CatalogAIOffer is contract ① §1 — one offer under a CatalogAIItem.

@@ -252,5 +252,5 @@ func batchInteractionRequest(request catalogPromptRequest, model string) interac
 
 func finalCustomerSalesInstruction(contract services.CatalogEntityContractPayload) *batchContent {
 	encoded, _ := json.Marshal(contract)
-	return &batchContent{Role: "system", Parts: []batchPart{{Text: prompts.CustomerSalesSystemPrompt + prompts.FinalEvaluationSystemPromptSuffix}, {Text: "Catalog Entity Contract\n" + string(encoded)}}}
+	return &batchContent{Role: "system", Parts: []batchPart{{Text: prompts.FinalEvaluationSystemPrompt}, {Text: "Catalog Entity Contract\n" + string(encoded)}}}
 }

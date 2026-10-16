@@ -46,7 +46,30 @@ func (s *Server) dispatchAdditionalQuery(ctx context.Context, operationID string
 			return mapApplicationError(err), true
 		}
 		out := &contract.Single[contract.DashboardOverview]{}
-		out.Body.Data = contract.DashboardOverview{OpenConversations: view.OpenConversations, WaitingHuman: view.WaitingHuman, NewCustomers: view.NewCustomers, NewLeads: view.NewLeads, TransactionsNeedingReview: view.TransactionsNeedingReview}
+		out.Body.Data = contract.DashboardOverview{
+			OpenConversations:         view.OpenConversations,
+			WaitingHuman:              view.WaitingHuman,
+			NewCustomers:              view.NewCustomers,
+			NewLeads:                  view.NewLeads,
+			TransactionsNeedingReview: view.TransactionsNeedingReview,
+			Subscription:              merchantSubscriptionProjection(view.Subscription),
+		}
+		return out, true
+	case "getBusinessSubscription":
+		in := input.(*contract.BusinessPath)
+		if s.deps.GetBusinessSubscription == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.GetBusinessSubscription.Handle(ctx, queries.GetBusinessSubscriptionQuery{Meta: queryMeta(actor, "", "")})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		out := &contract.Single[contract.MerchantSubscriptionView]{}
+		out.Body.Data = merchantSubscriptionDirectProjection(view)
 		return out, true
 	case "listChannelConnections":
 		in := input.(*contract.ConnectionListInput)
@@ -503,7 +526,6 @@ func (s *Server) dispatchAdditionalQuery(ctx context.Context, operationID string
 		return nil, false
 	}
 }
-
 func businessPolicyProjection(v commands.BusinessPolicyView) contract.BusinessPolicy {
 	return contract.BusinessPolicy{BusinessID: contract.UUID(v.BusinessID), AIMode: v.AIMode, DefaultHumanReview: v.DefaultHumanReview, AllowAutoReply: v.AllowAutoReply, AllowAutoLeadCreation: v.AllowAutoLeadCreation, AllowAutoTransactionDraft: v.AllowAutoTransactionDraft, AllowAutoConfirmation: v.AllowAutoConfirmation, SalesWorkflowEnabled: v.SalesWorkflowEnabled, AllowSalesInteractions: v.AllowSalesInteractions, ResourceVersion: string(v.ResourceVersion)}
 }
@@ -787,4 +809,41 @@ func jsonStrings(value []byte) []string {
 		return nil
 	}
 	return values
+}
+
+func merchantSubscriptionProjection(sub *queries.MerchantSubscriptionView) *contract.MerchantSubscriptionView {
+	if sub == nil {
+		return nil
+	}
+	dtoSub := merchantSubscriptionDirectProjection(*sub)
+	return &dtoSub
+}
+
+func merchantSubscriptionDirectProjection(sub queries.MerchantSubscriptionView) contract.MerchantSubscriptionView {
+	return contract.MerchantSubscriptionView{
+		HasSubscription:    sub.HasSubscription,
+		ID:                 sub.ID,
+		BusinessID:         sub.BusinessID,
+		PlanID:             sub.PlanID,
+		PlanCode:           sub.PlanCode,
+		PlanName:           sub.PlanName,
+		PlanVersion:        sub.PlanVersion,
+		Status:             sub.Status,
+		PeriodStart:        sub.PeriodStart,
+		PeriodEnd:          sub.PeriodEnd,
+		PriceYERSnapshot:   sub.PriceYERSnapshot,
+		AmountDueYER:       sub.AmountDueYER,
+		AIReplyLimit:       sub.AIReplyLimit,
+		AIRepliesUsed:      sub.AIRepliesUsed,
+		AIRepliesRemaining: sub.AIRepliesRemaining,
+		AICatalogLimit:     sub.AICatalogLimit,
+		ChannelLimit:       sub.ChannelLimit,
+		ChannelCeiling:     sub.ChannelCeiling,
+		SeatLimit:          sub.SeatLimit,
+		ActiveChannels:     sub.ActiveChannels,
+		ActiveSeats:        sub.ActiveSeats,
+		DaysRemaining:      sub.DaysRemaining,
+		ActivatedAt:        sub.ActivatedAt,
+		CreatedAt:          sub.CreatedAt,
+	}
 }

@@ -94,3 +94,19 @@ func TestLiteLLMCustomerSalesRejectsUnknownAndParallelTools(t *testing.T) {
 		})
 	}
 }
+
+func TestSummarizeDecisionResponseShapeDoesNotExposeArguments(t *testing.T) {
+	secretText := "customer-private-text"
+	resp := liteLLMDecisionResponse{
+		Status: "completed",
+		Steps:  []interactionStep{{Type: "function_call", Name: "respond_without_action", Arguments: json.RawMessage(`{"response_text":"` + secretText + `"}`)}},
+	}
+
+	got := summarizeDecisionResponseShape(resp)
+	if strings.Contains(got, secretText) || strings.Contains(got, "response_text") {
+		t.Fatalf("diagnostic leaked arguments: %s", got)
+	}
+	if !strings.Contains(got, "id_present=false") || !strings.Contains(got, `name="respond_without_action"`) {
+		t.Fatalf("diagnostic omitted required response shape: %s", got)
+	}
+}

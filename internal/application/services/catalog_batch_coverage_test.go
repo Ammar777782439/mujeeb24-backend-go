@@ -8,6 +8,7 @@ import (
 
 func TestCatalogBatchCoverageRetainsCommercialFacts(t *testing.T) {
 	v1, v2, schemaID := "variant-1", "variant-2", "schema-1"
+	schemaVersion := 2
 	price := "12000"
 	description := "وصف تفصيلي أصلي يجب ألا يُختصر أو يُعدل"
 	source := CatalogAIProjection{
@@ -18,7 +19,7 @@ func TestCatalogBatchCoverageRetainsCommercialFacts(t *testing.T) {
 		}},
 		Items: []CatalogAIItem{{
 			ID: "item-1", CatalogID: "catalog-1", Name: "Laptop",
-			LongDescription: &description, AttributeSchemaID: &schemaID,
+			LongDescription: &description, AttributeSchemaID: &schemaID, AttributeSchemaVersion: &schemaVersion,
 			Attributes: map[string]any{"ram": "16GB"},
 			Variants: []CatalogAIVariant{
 				{ID: v1, CatalogItemID: "item-1", Attributes: map[string]any{"color": "blue"}},
@@ -37,16 +38,16 @@ func TestCatalogBatchCoverageRetainsCommercialFacts(t *testing.T) {
 		}
 		return count, nil
 	}}
-	controller := &CatalogBatchController{Evaluator: stub, TokenBudget: 450}
+	controller := &CatalogBatchController{Evaluator: stub, TokenBudget: 900}
 	batches, err := controller.splitIntoBatches(context.Background(), source, CatalogEvaluationInput{AIRunID: "run", BusinessID: "business"}, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(batches) != 2 {
-		t.Fatalf("expected two full commercial fragments, got %d", len(batches))
+	if len(batches) != 1 {
+		t.Fatalf("expected one indivisible complete commercial entity, got %d", len(batches))
 	}
 	if err := validateCatalogBatchCoverage(source, batches); err != nil {
-		t.Fatalf("lossless commercial fragments rejected: %v", err)
+		t.Fatalf("complete commercial entity rejected: %v", err)
 	}
 
 	t.Run("changed offer price", func(t *testing.T) {
@@ -64,7 +65,7 @@ func TestCatalogBatchCoverageRetainsCommercialFacts(t *testing.T) {
 		changed := append([]CatalogAIBatchPayload(nil), batches...)
 		changed[0].Items = append([]CatalogAIItem(nil), batches[0].Items...)
 		changed[0].Items[0].Variants = nil
-		if err := validateCatalogBatchCoverage(source, changed); err == nil || !strings.Contains(err.Error(), "separated offer") {
+		if err := validateCatalogBatchCoverage(source, changed); err == nil || !strings.Contains(err.Error(), "lost or changed") {
 			t.Fatalf("detached offer passed coverage: %v", err)
 		}
 	})
@@ -87,11 +88,28 @@ func TestCatalogBatchCoverageRetainsCommercialFacts(t *testing.T) {
 		}
 	})
 
+	t.Run("duplicate entity", func(t *testing.T) {
+		duplicate := append([]CatalogAIBatchPayload(nil), batches...)
+		duplicate = append(duplicate, batches[0])
+		if err := validateCatalogBatchCoverage(source, duplicate); err == nil || !strings.Contains(err.Error(), "duplicated or fragmented") {
+			t.Fatalf("duplicate entity was accepted: %v", err)
+		}
+	})
+
+	t.Run("missing linked variant", func(t *testing.T) {
+		changed := append([]CatalogAIBatchPayload(nil), batches...)
+		changed[0].Items = append([]CatalogAIItem(nil), batches[0].Items...)
+		changed[0].Items[0].Variants = changed[0].Items[0].Variants[:1]
+		if err := validateCatalogBatchCoverage(source, changed); err == nil {
+			t.Fatal("incomplete entity was accepted")
+		}
+	})
+
 	t.Run("missing offer", func(t *testing.T) {
 		changed := append([]CatalogAIBatchPayload(nil), batches...)
 		changed[0].Items = append([]CatalogAIItem(nil), batches[0].Items...)
 		changed[0].Items[0].Offers = nil
-		if err := validateCatalogBatchCoverage(source, changed); err == nil || !strings.Contains(err.Error(), "lost offer") {
+		if err := validateCatalogBatchCoverage(source, changed); err == nil || !strings.Contains(err.Error(), "lost or changed") {
 			t.Fatalf("missing offer passed coverage: %v", err)
 		}
 	})

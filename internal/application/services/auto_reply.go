@@ -274,14 +274,12 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		return commands.AutoReplyResult{}, err
 	}
 	proposal := out.Decision
-	log.Printf("[AutoReply] AI_GATEWAY_OK business=%s capability=%s presentation=%s tokens_in=%d tokens_out=%d latency=%dms",
-		businessID, proposal.Capability, proposal.Presentation, out.Usage.InputTokens, out.Usage.OutputTokens, out.LatencyMs)
+	log.Printf("[AutoReply] AI_GATEWAY_OK business=%s capability=%s tokens_in=%d tokens_out=%d latency=%dms",
+		businessID, proposal.Capability, out.Usage.InputTokens, out.Usage.OutputTokens, out.LatencyMs)
 
 	// Exact relational evidence exposed in the normal customer-sales context.
 	// Batch evaluation evidence is merged only after complete batch coverage.
 	catalogEvidence := EvidenceFromCustomerSalesContext(builtContext)
-	var catalogMessages []string
-
 	// Only AI model's explicit capability request starts full catalog evaluation.
 	// Invalid references are rejected by validation; they never expand evidence.
 	fullCatalogRequired := out.Decision.Capability == ports.CustomerSalesCapabilityFullCatalog
@@ -310,7 +308,6 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			ConversationID:      conversationID,
 			CatalogScope:        "", // evaluate all active catalogs for the business
 			CustomerMessage:     command.Text,
-			Presentation:        out.Decision.Presentation,
 			ConversationContext: derefCustomerSalesContext(builtContext),
 			EntityContract:      entityContract,
 		})
@@ -321,7 +318,6 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		} else {
 			log.Printf("[AutoReply] CATALOG_EVAL_OK run=%s capability=%s", run.ID, catalogResult.Decision.Capability)
 			proposal = catalogResult.Decision
-			catalogMessages = catalogResult.Messages
 			catalogEvidence.Merge(catalogResult.Evidence)
 		}
 	}
@@ -553,85 +549,63 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			return appErrors.New(appErrors.CodeInvalidState, "conversation provider reference is incomplete")
 		}
 
-		// A complete hierarchy can span several transport-safe texts. Enqueue
-		// every part in the SAME transaction with unique idempotency keys.
-		// Never send a partial hierarchy if any part fails to persist.
-		texts := catalogMessages
-		if len(texts) == 0 {
-			texts = []string{proposal.ResponseText}
+		replyText := proposal.ResponseText
+		dedupeKey := "auto-reply:" + sourceMessageRef
+		outboundID := s.id()
+		contentReference := EncodeInlineTextContentReference(replyText)
+		outbound, outboundErr := s.OutboundRepository.CreatePending(txCtx, ports.OutboundMessageDraft{
+			ID:                      outboundID,
+			BusinessID:              businessID,
+			ConversationID:          conversationID,
+			ConversationReferenceID: reference.ID,
+			ConnectionID:            *reference.ConnectionID,
+			ProviderRef:             command.ProviderRef,
+			Channel:                 command.Channel,
+			Origin:                  "ai",
+			Transport:               "provider",
+			ContentReference:        contentReference,
+			ProviderIdempotencyKey:  dedupeKey,
+			CorrelationID:           uuidStringPointer(command.Meta.CorrelationID),
+			CausationID:             uuidStringPointer(decision.ID),
+		})
+		if outboundErr != nil {
+			return mapAIRepositoryError(outboundErr)
 		}
-		if texts[0] != proposal.ResponseText {
-			return errors.New("hierarchical catalog first part does not match validated response")
-		}
-		for partIndex, replyText := range texts {
-			if strings.TrimSpace(replyText) == "" {
-				return errors.New("empty hierarchical catalog part")
-			}
-			dedupeKey := "auto-reply:" + sourceMessageRef
-			if partIndex > 0 {
-				dedupeKey += fmt.Sprintf(":part:%d", partIndex+1)
-			}
-			outboundID := s.id()
-			contentReference := EncodeInlineTextContentReference(replyText)
-			outbound, outboundErr := s.OutboundRepository.CreatePending(txCtx, ports.OutboundMessageDraft{
-				ID:                      outboundID,
+		if s.MessageRepository != nil {
+			msgDraft := ports.CommunicationMessageDraft{
+				ID:                      s.id(),
 				BusinessID:              businessID,
-				ConversationID:          conversationID,
 				ConversationReferenceID: reference.ID,
-				ConnectionID:            *reference.ConnectionID,
-				ProviderRef:             command.ProviderRef,
-				Channel:                 command.Channel,
+				OutboundMessageID:       &outbound.ID,
+				Direction:               "outbound",
 				Origin:                  "ai",
 				Transport:               "provider",
+				ContentType:             "text",
+				TextContent:             &replyText,
 				ContentReference:        contentReference,
-				ProviderIdempotencyKey:  dedupeKey,
-				CorrelationID:           uuidStringPointer(command.Meta.CorrelationID),
-				CausationID:             uuidStringPointer(decision.ID),
-			})
-			if outboundErr != nil {
-				return mapAIRepositoryError(outboundErr)
+				Visibility:              "public",
+				OccurredAt:              s.now(),
+				CreatedAt:               s.now(),
 			}
-			if s.MessageRepository != nil {
-				msgDraft := ports.CommunicationMessageDraft{
-					ID:                      s.id(),
-					BusinessID:              businessID,
-					ConversationReferenceID: reference.ID,
-					OutboundMessageID:       &outbound.ID,
-					Direction:               "outbound",
-					Origin:                  "ai",
-					Transport:               "provider",
-					ContentType:             "text",
-					TextContent:             &replyText,
-					ContentReference:        contentReference,
-					Visibility:              "public",
-					OccurredAt:              s.now(),
-					CreatedAt:               s.now(),
-				}
-				if _, msgErr := s.MessageRepository.Record(txCtx, msgDraft); msgErr != nil {
-					return mapAIRepositoryError(msgErr)
-				}
-			}
-			// A modest offset keeps multipart messages in conversational
-			// order without relying on UUID ordering in the outbox.
-			availableAt := now.Add(time.Duration(partIndex) * 3 * time.Second)
-			outboxEntry, outboxErr := s.Outbox.Enqueue(txCtx, ports.OutboxEntryDraft{
-				ID:                s.id(),
-				BusinessID:        businessID,
-				OutboundMessageID: outbound.ID,
-				CommandType:       OutboundSendCommandType,
-				DedupeKey:         dedupeKey,
-				AvailableAt:       availableAt,
-				CreatedAt:         now,
-				UpdatedAt:         now,
-			})
-			if outboxErr != nil {
-				return mapAIRepositoryError(outboxErr)
-			}
-			if partIndex == 0 {
-				result.OutboundMessageID = commands.MessageID(outbound.ID)
-				result.OutboxEntryID = commands.ID(outboxEntry.ID)
+			if _, msgErr := s.MessageRepository.Record(txCtx, msgDraft); msgErr != nil {
+				return mapAIRepositoryError(msgErr)
 			}
 		}
+		outboxEntry, outboxErr := s.Outbox.Enqueue(txCtx, ports.OutboxEntryDraft{
+			ID:                s.id(),
+			BusinessID:        businessID,
+			OutboundMessageID: outbound.ID,
+			CommandType:       OutboundSendCommandType,
+			DedupeKey:         dedupeKey,
+			AvailableAt:       now,
+			CreatedAt:         now,
+			UpdatedAt:         now,
+		})
+		if outboxErr != nil {
+			return mapAIRepositoryError(outboxErr)
+		}
+		result.OutboundMessageID = commands.MessageID(outbound.ID)
+		result.OutboxEntryID = commands.ID(outboxEntry.ID)
 		result.Enqueued = true
 		return nil
 	})

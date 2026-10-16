@@ -61,12 +61,16 @@ type SubscriptionRecord struct {
 	PlanID                   string
 	PlanCode                 string
 	PlanVersion              int
+	PriceYERSnapshot         int
+	AmountDueYER             int
 	PeriodStart              time.Time
 	PeriodEnd                time.Time
 	Status                   string
 	AIReplyLimit             int
 	AICatalogLimit           int
 	ChannelLimit             int
+	ChannelCeiling           int
+	SeatLimit                int
 	InternalAICostBudgetYER  int
 	CostBudgetOverrideYER    *int
 	CostBudgetOverrideReason *string
@@ -75,6 +79,7 @@ type SubscriptionRecord struct {
 	CancelledAt              *time.Time
 	CancelledReason          *string
 	CancelledBy              *string
+	ActivatedAt              *time.Time
 	CreatedAt                time.Time
 	UpdatedAt                time.Time
 }
@@ -86,11 +91,15 @@ type SubscriptionCreate struct {
 	ID                      string
 	BusinessID              string
 	PlanID                  string
+	PriceYERSnapshot        int
+	AmountDueYER            int
 	PeriodStart             time.Time
 	PeriodEnd               time.Time
 	AIReplyLimit            int
 	AICatalogLimit          int
 	ChannelLimit            int
+	ChannelCeiling          int
+	SeatLimit               int
 	InternalAICostBudgetYER int
 	Now                     time.Time
 }
@@ -133,13 +142,19 @@ type SubscriptionRepository interface {
 	Cancel(ctx context.Context, subscriptionID, reason, cancelledBy string, now time.Time) (SubscriptionRecord, error)
 	MarkExpired(ctx context.Context, subscriptionID string, now time.Time) (SubscriptionRecord, error)
 	ApplyCostBudgetOverride(ctx context.Context, subscriptionID string, newBudgetYER int, reason, overrideBy string, now time.Time) (SubscriptionRecord, error)
-	// CheckEntitlements verifies that the business's current catalog item count
-	// and active channel count do not exceed the subscription's plan limits.
+	// CheckEntitlements verifies that the business's active catalog item count,
+	// active channel count, and active seat count do not exceed plan limits.
 	// Per Contract §34-35: if the current state is higher than the new plan's
 	// limits, the subscription does NOT become ACTIVE until the merchant resolves
 	// the overrun. No silent data deletion.
 	//
 	// Returns nil if within limits. Returns Conflict error if catalog or channel
 	// count exceeds the subscription's snapshotted limits.
-	CheckEntitlements(ctx context.Context, businessID string, catalogLimit, channelLimit int) error
+	CheckEntitlements(ctx context.Context, businessID string, catalogLimit, channelLimit, seatLimit int) error
+}
+
+// SubscriptionExpiryRepository is the worker-facing, bounded lifecycle port.
+// It expires only ACTIVE rows whose period_end has passed and preserves data.
+type SubscriptionExpiryRepository interface {
+	ExpireDue(ctx context.Context, now time.Time, limit int) (int, error)
 }

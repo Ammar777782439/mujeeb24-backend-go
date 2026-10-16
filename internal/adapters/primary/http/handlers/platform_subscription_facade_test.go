@@ -62,7 +62,7 @@ func (s *stubSubscriptionRepository) MarkExpired(_ context.Context, _ string, _ 
 func (s *stubSubscriptionRepository) ApplyCostBudgetOverride(_ context.Context, _ string, _ int, _, _ string, _ time.Time) (ports.SubscriptionRecord, error) {
 	return s.overrideResult, s.overrideErr
 }
-func (s *stubSubscriptionRepository) CheckEntitlements(_ context.Context, _ string, _, _ int) error {
+func (s *stubSubscriptionRepository) CheckEntitlements(_ context.Context, _ string, _, _, _ int) error {
 	return s.entitlementErr
 }
 
@@ -73,6 +73,45 @@ type stubPaymentRepository struct {
 	listErr   error
 	getByID   ports.PaymentRecord
 	getErr    error
+}
+
+type stubSubscriptionAddonRepository struct {
+	created       ports.SubscriptionAddonRecord
+	createErr     error
+	createdInput  ports.SubscriptionAddonCreate
+	page          ports.SubscriptionAddonPage
+	listErr       error
+	activated     ports.SubscriptionAddonRecord
+	paymentErr    error
+	cancelled     ports.SubscriptionAddonRecord
+	cancelErr     error
+	approval      ports.ChannelPassCapacityApprovalRecord
+	approvalErr   error
+	approvalInput ports.ChannelPassCapacityApproval
+}
+
+func (s *stubSubscriptionAddonRepository) CreatePending(_ context.Context, in ports.SubscriptionAddonCreate) (ports.SubscriptionAddonRecord, error) {
+	s.createdInput = in
+	return s.created, s.createErr
+}
+func (s *stubSubscriptionAddonRepository) List(_ context.Context, _ ports.SubscriptionAddonListFilter) (ports.SubscriptionAddonPage, error) {
+	return s.page, s.listErr
+}
+func (s *stubSubscriptionAddonRepository) RecordPaymentAndActivate(_ context.Context, _ ports.SubscriptionAddonPayment) (ports.SubscriptionAddonRecord, error) {
+	return s.activated, s.paymentErr
+}
+func (s *stubSubscriptionAddonRepository) Cancel(_ context.Context, _ ports.SubscriptionAddonCancel) (ports.SubscriptionAddonRecord, error) {
+	return s.cancelled, s.cancelErr
+}
+func (s *stubSubscriptionAddonRepository) ApproveChannelPassCapacity(_ context.Context, in ports.ChannelPassCapacityApproval) (ports.ChannelPassCapacityApprovalRecord, error) {
+	s.approvalInput = in
+	return s.approval, s.approvalErr
+}
+
+type stubBillingTransactions struct{}
+
+func (stubBillingTransactions) Within(ctx context.Context, fn func(context.Context) error) error {
+	return fn(ctx)
 }
 
 func (s *stubPaymentRepository) Append(_ context.Context, _ ports.PaymentCreate) (ports.PaymentRecord, error) {
@@ -116,6 +155,62 @@ func TestPlatformListSubscriptionsReturnsPaginatedItems(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatalf("expected non-nil result")
+	}
+}
+
+func TestPlatformCreateSubscriptionAddonPassesDurableIdempotencyKey(t *testing.T) {
+	now := time.Now().UTC()
+	addons := &stubSubscriptionAddonRepository{created: ports.SubscriptionAddonRecord{ID: "addon-1", SubscriptionID: subIDForTests, BusinessID: "biz-1", Kind: "AI_REPLIES_100", Status: "PENDING", CreatedAt: now}}
+	server := newPlatformServer(PlatformDeps{
+		Subscriptions: &stubSubscriptionRepository{getByID: ports.SubscriptionRecord{ID: subIDForTests, BusinessID: "biz-1"}},
+		Addons:        addons,
+		PlatformAudit: &stubPlatformAuditRepository{},
+	})
+	ctx, cancel := ctxWithPlatformAdmin()
+	defer cancel()
+	_, handled := server.dispatchPlatformCommand(ctx, "platformCreateSubscriptionAddon", &dto.CreateSubscriptionAddonInput{
+		PlatformSubscriptionPath: platformSubscriptionPath(),
+		PlatformCommandHeaders:   dto.PlatformCommandHeaders{IdempotencyKey: "create-addon-1"},
+		Body:                     dto.CreateSubscriptionAddonRequest{Kind: "AI_REPLIES_100"},
+	})
+	if !handled {
+		t.Fatal("expected add-on command to be handled")
+	}
+	if addons.createdInput.IdempotencyKey != "create-addon-1" {
+		t.Fatalf("creation idempotency key = %q", addons.createdInput.IdempotencyKey)
+	}
+}
+
+func TestPlatformListAndCancelSubscriptionAddons(t *testing.T) {
+	now := time.Now().UTC()
+	addons := &stubSubscriptionAddonRepository{
+		page:      ports.SubscriptionAddonPage{Items: []ports.SubscriptionAddonRecord{{ID: "addon-1", SubscriptionID: subIDForTests, BusinessID: "biz-1", Status: "ACTIVE", CreatedAt: now}}},
+		cancelled: ports.SubscriptionAddonRecord{ID: "addon-1", SubscriptionID: subIDForTests, BusinessID: "biz-1", Status: "CANCELLED", CreatedAt: now},
+	}
+	server := newPlatformServer(PlatformDeps{Addons: addons, PlatformAudit: &stubPlatformAuditRepository{}})
+	ctx, cancel := ctxWithPlatformAdmin()
+	defer cancel()
+	if _, handled := server.dispatchPlatformCommand(ctx, "platformListSubscriptionAddons", &dto.SubscriptionAddonListInput{PlatformSubscriptionPath: platformSubscriptionPath()}); !handled {
+		t.Fatal("expected list add-ons command to be handled")
+	}
+	if _, handled := server.dispatchPlatformCommand(ctx, "platformCancelSubscriptionAddon", &dto.CancelSubscriptionAddonInput{
+		PlatformSubscriptionAddonPath: dto.PlatformSubscriptionAddonPath{AddonID: dto.UUID("00000000-0000-0000-0000-00000000add1")},
+		Body:                          dto.CancelSubscriptionRequest{Reason: "manual correction"},
+	}); !handled {
+		t.Fatal("expected cancel add-on command to be handled")
+	}
+}
+
+func TestPlatformApproveChannelPassCapacityRequiresReason(t *testing.T) {
+	server := newPlatformServer(PlatformDeps{Addons: &stubSubscriptionAddonRepository{}, Subscriptions: &stubSubscriptionRepository{}})
+	ctx, cancel := ctxWithPlatformAdmin()
+	defer cancel()
+	_, handled := server.dispatchPlatformCommand(ctx, "platformApproveChannelPassCapacity", &dto.ApproveChannelPassCapacityInput{
+		PlatformSubscriptionPath: platformSubscriptionPath(),
+		Body:                     dto.ChannelPassCapacityApprovalRequest{MaxChannelPasses: 1},
+	})
+	if !handled {
+		t.Fatal("expected approval command to be handled")
 	}
 }
 
@@ -248,10 +343,10 @@ func TestPlatformRecordPaymentRejectsInvalidMethod(t *testing.T) {
 func TestPlatformRecordPaymentFailsIfSubscriptionMissing(t *testing.T) {
 	subRepo := &stubSubscriptionRepository{getErr: errors.New("not found")}
 	auditRepo := &stubPlatformAuditRepository{}
-	server := newPlatformServer(PlatformDeps{Subscriptions: subRepo, Payments: &stubPaymentRepository{}, PlatformAudit: auditRepo})
+	server := newPlatformServer(PlatformDeps{Subscriptions: subRepo, Payments: &stubPaymentRepository{}, Transactions: stubBillingTransactions{}, PlatformAudit: auditRepo})
 	ctx, cancel := ctxWithPlatformAdmin()
 	defer cancel()
-	_, handled := server.dispatchPlatformCommand(ctx, "platformRecordPayment", &dto.RecordPaymentInput{PlatformSubscriptionPath: platformSubscriptionPath(),
+	_, handled := server.dispatchPlatformCommand(ctx, "platformRecordPayment", &dto.RecordPaymentInput{PlatformSubscriptionPath: platformSubscriptionPath(), PlatformCommandHeaders: dto.PlatformCommandHeaders{IdempotencyKey: "payment-missing-sub"},
 		Body: dto.RecordPaymentRequest{AmountYER: 5000, Method: "CASH", Reference: "ref-1", PaidAt: time.Now().UTC().Format(time.RFC3339)},
 	})
 	if !handled {
@@ -270,17 +365,18 @@ func TestPlatformRecordPaymentRecordsPaymentAndActivatesPendingSubscription(t *t
 	// 1. Append the payment (returns payment ID).
 	// 2. Call Activate() to transition PENDING → ACTIVE.
 	// 3. Audit BOTH payment.recorded (SUCCESS) and subscription.activated (SUCCESS).
+	now := time.Now().UTC()
 	subRepo := &stubSubscriptionRepository{
-		getByID:   ports.SubscriptionRecord{ID: "sub-1", BusinessID: "biz-1", Status: "PENDING"},
+		getByID:   ports.SubscriptionRecord{ID: "sub-1", BusinessID: "biz-1", Status: "PENDING", AmountDueYER: 5000, SeatLimit: 1, PeriodStart: now.Add(-time.Hour), PeriodEnd: now.Add(time.Hour)},
 		activated: ports.SubscriptionRecord{ID: "sub-1", BusinessID: "biz-1", Status: "ACTIVE"},
 	}
 	paymentRepo := &stubPaymentRepository{appended: ports.PaymentRecord{ID: "pay-1", SubscriptionID: "sub-1", BusinessID: "biz-1", AmountYER: 5000}}
 	auditRepo := &stubPlatformAuditRepository{}
-	server := newPlatformServer(PlatformDeps{Subscriptions: subRepo, Payments: paymentRepo, PlatformAudit: auditRepo})
+	server := newPlatformServer(PlatformDeps{Subscriptions: subRepo, Payments: paymentRepo, Transactions: stubBillingTransactions{}, PlatformAudit: auditRepo})
 
 	ctx, cancel := ctxWithPlatformAdmin()
 	defer cancel()
-	_, handled := server.dispatchPlatformCommand(ctx, "platformRecordPayment", &dto.RecordPaymentInput{PlatformSubscriptionPath: platformSubscriptionPath(),
+	_, handled := server.dispatchPlatformCommand(ctx, "platformRecordPayment", &dto.RecordPaymentInput{PlatformSubscriptionPath: platformSubscriptionPath(), PlatformCommandHeaders: dto.PlatformCommandHeaders{IdempotencyKey: "payment-pending"},
 		Body: dto.RecordPaymentRequest{AmountYER: 5000, Method: "CASH", Reference: "ref-1", PaidAt: time.Now().UTC().Format(time.RFC3339)},
 	})
 	if !handled {
@@ -303,16 +399,16 @@ func TestPlatformRecordPaymentRecordsPaymentButDoesNotActivateActiveSubscription
 	// If the subscription is already ACTIVE (e.g., a renewal mid-period),
 	// the activation step must NOT be called (no transition needed).
 	subRepo := &stubSubscriptionRepository{
-		getByID:     ports.SubscriptionRecord{ID: "sub-1", BusinessID: "biz-1", Status: "ACTIVE"},
+		getByID:     ports.SubscriptionRecord{ID: "sub-1", BusinessID: "biz-1", Status: "ACTIVE", AmountDueYER: 5000},
 		activateErr: errors.New("should not be called"),
 	}
 	paymentRepo := &stubPaymentRepository{appended: ports.PaymentRecord{ID: "pay-1"}}
 	auditRepo := &stubPlatformAuditRepository{}
-	server := newPlatformServer(PlatformDeps{Subscriptions: subRepo, Payments: paymentRepo, PlatformAudit: auditRepo})
+	server := newPlatformServer(PlatformDeps{Subscriptions: subRepo, Payments: paymentRepo, Transactions: stubBillingTransactions{}, PlatformAudit: auditRepo})
 
 	ctx, cancel := ctxWithPlatformAdmin()
 	defer cancel()
-	_, handled := server.dispatchPlatformCommand(ctx, "platformRecordPayment", &dto.RecordPaymentInput{PlatformSubscriptionPath: platformSubscriptionPath(),
+	_, handled := server.dispatchPlatformCommand(ctx, "platformRecordPayment", &dto.RecordPaymentInput{PlatformSubscriptionPath: platformSubscriptionPath(), PlatformCommandHeaders: dto.PlatformCommandHeaders{IdempotencyKey: "payment-active"},
 		Body: dto.RecordPaymentRequest{AmountYER: 5000, Method: "CASH", Reference: "ref-1", PaidAt: time.Now().UTC().Format(time.RFC3339)},
 	})
 	if !handled {

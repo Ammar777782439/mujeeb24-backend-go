@@ -45,8 +45,13 @@ type contextCatalogRepository struct {
 func (r contextCatalogRepository) ListCatalogs(context.Context, string, string, int, string) (ports.CatalogPage, error) {
 	return r.catalogs, nil
 }
-func (r contextCatalogRepository) GetCatalog(context.Context, string, string) (ports.CatalogRecord, error) {
-	return ports.CatalogRecord{}, nil
+func (r contextCatalogRepository) GetCatalog(_ context.Context, businessID, catalogID string) (ports.CatalogRecord, error) {
+	for _, catalog := range r.catalogs.Items {
+		if catalog.ID == catalogID && catalog.BusinessID == businessID {
+			return catalog, nil
+		}
+	}
+	return ports.CatalogRecord{}, errNotFoundStub{}
 }
 func (r contextCatalogRepository) CreateCatalog(context.Context, ports.CatalogDraft) (ports.CatalogRecord, error) {
 	return ports.CatalogRecord{}, nil
@@ -57,8 +62,13 @@ func (r contextCatalogRepository) UpdateCatalog(context.Context, ports.CatalogPa
 func (r contextCatalogRepository) ListCatalogItems(_ context.Context, _ string, catalogID, _ string, _ string, _ int, _ string) (ports.CatalogItemPage, error) {
 	return r.items[catalogID], nil
 }
-func (r contextCatalogRepository) GetCatalogItem(context.Context, string, string, string) (ports.CatalogItemRecord, error) {
-	return ports.CatalogItemRecord{}, nil
+func (r contextCatalogRepository) GetCatalogItem(_ context.Context, businessID, catalogID, itemID string) (ports.CatalogItemRecord, error) {
+	for _, item := range r.items[catalogID].Items {
+		if item.ID == itemID && item.CatalogID == catalogID && item.BusinessID == businessID {
+			return item, nil
+		}
+	}
+	return ports.CatalogItemRecord{}, errNotFoundStub{}
 }
 func (r contextCatalogRepository) GetCatalogItemByID(_ context.Context, businessID, itemID string) (ports.CatalogItemRecord, error) {
 	for _, page := range r.items {

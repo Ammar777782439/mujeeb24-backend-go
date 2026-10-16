@@ -31,8 +31,10 @@ type PlatformDeps struct {
 	PlatformAudit    ports.PlatformAuditRepository
 	Subscriptions    ports.SubscriptionRepository
 	Payments         ports.PaymentRepository
+	Addons           ports.SubscriptionAddonRepository
 	Support          ports.SupportRepository
 	AIUsage          ports.AIUsageRepository
+	Transactions     ports.TransactionManager
 	// Platform Operations (AI kill switch + provider/channel health) — in-memory
 	Operations ports.PlatformOperationsPort
 	// Channel Reader — platform-scoped read of channel_connections (no secrets)
@@ -128,6 +130,14 @@ func extractIdempotencyKey(operationID string, input any) string {
 		}
 	case "platformRecordPayment":
 		if in, ok := input.(*dto.RecordPaymentInput); ok {
+			return in.IdempotencyKey
+		}
+	case "platformCreateSubscriptionAddon":
+		if in, ok := input.(*dto.CreateSubscriptionAddonInput); ok {
+			return in.IdempotencyKey
+		}
+	case "platformRecordSubscriptionAddonPayment":
+		if in, ok := input.(*dto.RecordSubscriptionAddonPaymentInput); ok {
 			return in.IdempotencyKey
 		}
 	case "platformCreateSupportMessage":
@@ -247,6 +257,16 @@ func (s *Server) dispatchPlatformCommandInner(ctx context.Context, operationID s
 	// ---- Manual Payment Recording (Contract §25-28) ----
 	case "platformRecordPayment":
 		return s.platformRecordPayment(ctx, input.(*dto.RecordPaymentInput))
+	case "platformCreateSubscriptionAddon":
+		return s.platformCreateSubscriptionAddon(ctx, input.(*dto.CreateSubscriptionAddonInput))
+	case "platformListSubscriptionAddons":
+		return s.platformListSubscriptionAddons(ctx, input.(*dto.SubscriptionAddonListInput))
+	case "platformRecordSubscriptionAddonPayment":
+		return s.platformRecordSubscriptionAddonPayment(ctx, input.(*dto.RecordSubscriptionAddonPaymentInput))
+	case "platformCancelSubscriptionAddon":
+		return s.platformCancelSubscriptionAddon(ctx, input.(*dto.CancelSubscriptionAddonInput))
+	case "platformApproveChannelPassCapacity":
+		return s.platformApproveChannelPassCapacity(ctx, input.(*dto.ApproveChannelPassCapacityInput))
 	case "platformListPayments":
 		return s.platformListPayments(ctx, input.(*dto.PaymentListInput))
 
@@ -317,6 +337,8 @@ func planProjection(p ports.PlanRecord) dto.PlanView {
 		AIReplyLimit:            p.AIReplyLimit,
 		AICatalogLimit:          p.AICatalogLimit,
 		ChannelLimit:            p.ChannelLimit,
+		ChannelCeiling:          p.ChannelCeiling,
+		SeatLimit:               p.SeatLimit,
 		InternalAICostBudgetYER: p.InternalAICostBudgetYER,
 		Status:                  p.Status,
 		CreatedAt:               p.CreatedAt.UTC().Format(time.RFC3339),
@@ -380,6 +402,8 @@ func (s *Server) platformCreatePlan(ctx context.Context, in *dto.CreatePlanInput
 		AIReplyLimit:            in.Body.AIReplyLimit,
 		AICatalogLimit:          in.Body.AICatalogLimit,
 		ChannelLimit:            in.Body.ChannelLimit,
+		ChannelCeiling:          in.Body.ChannelCeiling,
+		SeatLimit:               in.Body.SeatLimit,
 		InternalAICostBudgetYER: in.Body.InternalAICostBudgetYER,
 		Now:                     time.Now().UTC(),
 	})
@@ -519,6 +543,8 @@ func (s *Server) platformCreatePlanVersion(ctx context.Context, in *dto.CreatePl
 		AIReplyLimit:            in.Body.AIReplyLimit,
 		AICatalogLimit:          in.Body.AICatalogLimit,
 		ChannelLimit:            in.Body.ChannelLimit,
+		ChannelCeiling:          in.Body.ChannelCeiling,
+		SeatLimit:               in.Body.SeatLimit,
 		InternalAICostBudgetYER: in.Body.InternalAICostBudgetYER,
 		ChangedBy:               string(adminID),
 		Reason:                  in.Body.Reason,
@@ -833,12 +859,16 @@ func subscriptionProjection(s ports.SubscriptionRecord) dto.SubscriptionView {
 		PlanID:                   s.PlanID,
 		PlanCode:                 s.PlanCode,
 		PlanVersion:              s.PlanVersion,
+		PriceYERSnapshot:         s.PriceYERSnapshot,
+		AmountDueYER:             s.AmountDueYER,
 		PeriodStart:              s.PeriodStart.UTC().Format(time.RFC3339),
 		PeriodEnd:                s.PeriodEnd.UTC().Format(time.RFC3339),
 		Status:                   s.Status,
 		AIReplyLimit:             s.AIReplyLimit,
 		AICatalogLimit:           s.AICatalogLimit,
 		ChannelLimit:             s.ChannelLimit,
+		ChannelCeiling:           s.ChannelCeiling,
+		SeatLimit:                s.SeatLimit,
 		InternalAICostBudgetYER:  s.InternalAICostBudgetYER,
 		CostBudgetOverrideYER:    s.CostBudgetOverrideYER,
 		CostBudgetOverrideReason: s.CostBudgetOverrideReason,
@@ -865,6 +895,139 @@ func paymentProjection(p ports.PaymentRecord) dto.PaymentView {
 		RecordedBy:     p.RecordedBy,
 		CreatedAt:      p.CreatedAt.UTC().Format(time.RFC3339),
 	}
+}
+
+func subscriptionAddonProjection(a ports.SubscriptionAddonRecord) dto.SubscriptionAddonView {
+	v := dto.SubscriptionAddonView{ID: a.ID, SubscriptionID: a.SubscriptionID, BusinessID: a.BusinessID, Kind: a.Kind, Status: a.Status, PriceYERSnapshot: a.PriceYERSnapshot, AIReplyDelta: a.AIReplyDelta, CatalogDelta: a.CatalogDelta, SeatDelta: a.SeatDelta, ChannelDelta: a.ChannelDelta, CreatedAt: a.CreatedAt.UTC().Format(time.RFC3339)}
+	if a.ActivatedAt != nil {
+		x := a.ActivatedAt.UTC().Format(time.RFC3339)
+		v.ActivatedAt = &x
+	}
+	if a.CancelledAt != nil {
+		x := a.CancelledAt.UTC().Format(time.RFC3339)
+		v.CancelledAt = &x
+	}
+	v.CancelledReason = a.CancelledReason
+	return v
+}
+
+func channelPassCapacityApprovalProjection(a ports.ChannelPassCapacityApprovalRecord) dto.ChannelPassCapacityApprovalView {
+	return dto.ChannelPassCapacityApprovalView{
+		SubscriptionID:   a.SubscriptionID,
+		BusinessID:       a.BusinessID,
+		MaxChannelPasses: a.MaxChannelPasses,
+		Reason:           a.Reason,
+		ApprovedBy:       a.ApprovedBy,
+		ApprovedAt:       a.ApprovedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:        a.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func (s *Server) platformCreateSubscriptionAddon(ctx context.Context, in *dto.CreateSubscriptionAddonInput) (any, bool) {
+	if s.platformDeps.Addons == nil || s.platformDeps.Subscriptions == nil {
+		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "subscription add-ons are not wired")), true
+	}
+	if strings.TrimSpace(in.IdempotencyKey) == "" || strings.TrimSpace(in.Body.Kind) == "" {
+		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "Idempotency-Key and addon kind are required")), true
+	}
+	sub, err := s.platformDeps.Subscriptions.GetByID(ctx, string(in.SubscriptionID))
+	if err != nil {
+		return mapApplicationError(err), true
+	}
+	admin, _ := middleware.PlatformAdminID(ctx)
+	record, err := s.platformDeps.Addons.CreatePending(ctx, ports.SubscriptionAddonCreate{SubscriptionID: sub.ID, BusinessID: sub.BusinessID, Kind: in.Body.Kind, CreatedBy: string(admin), IdempotencyKey: in.IdempotencyKey, Now: time.Now().UTC()})
+	if err != nil {
+		s.appendPlatformAudit(ctx, "subscription_addon.created", "subscription_addon", nil, &sub.BusinessID, "FAILURE", classifyPlatformRepoErrorKind(err), map[string]any{"subscription_id": sub.ID, "kind": in.Body.Kind})
+		return mapApplicationError(err), true
+	}
+	s.appendPlatformAudit(ctx, "subscription_addon.created", "subscription_addon", &record.ID, &record.BusinessID, "SUCCESS", "", map[string]any{"subscription_id": record.SubscriptionID, "kind": record.Kind, "price_yer": record.PriceYERSnapshot})
+	out := &contract.Single[dto.SubscriptionAddonView]{}
+	out.Body.Data = subscriptionAddonProjection(record)
+	return out, true
+}
+
+func (s *Server) platformRecordSubscriptionAddonPayment(ctx context.Context, in *dto.RecordSubscriptionAddonPaymentInput) (any, bool) {
+	if s.platformDeps.Addons == nil {
+		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "subscription add-ons are not wired")), true
+	}
+	if strings.TrimSpace(in.IdempotencyKey) == "" || in.Body.AmountYER <= 0 || strings.TrimSpace(in.Body.Reference) == "" {
+		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "Idempotency-Key, positive amount_yer, and reference are required")), true
+	}
+	paidAt, err := parseOptionalRFC3339(in.Body.PaidAt)
+	if err != nil || paidAt == nil {
+		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "paid_at must be a valid RFC 3339 timestamp")), true
+	}
+	admin, _ := middleware.PlatformAdminID(ctx)
+	record, err := s.platformDeps.Addons.RecordPaymentAndActivate(ctx, ports.SubscriptionAddonPayment{AddonID: string(in.AddonID), RecordedBy: string(admin), IdempotencyKey: in.IdempotencyKey, AmountYER: in.Body.AmountYER, Method: in.Body.Method, Reference: in.Body.Reference, PaidAt: *paidAt, Now: time.Now().UTC()})
+	if err != nil {
+		addonID := string(in.AddonID)
+		s.appendPlatformAudit(ctx, "subscription_addon.activated", "subscription_addon", &addonID, nil, "FAILURE", classifyPlatformRepoErrorKind(err), nil)
+		return mapApplicationError(err), true
+	}
+	s.appendPlatformAudit(ctx, "subscription_addon.activated", "subscription_addon", &record.ID, &record.BusinessID, "SUCCESS", "", map[string]any{"kind": record.Kind, "price_yer": record.PriceYERSnapshot})
+	out := &contract.Single[dto.SubscriptionAddonView]{}
+	out.Body.Data = subscriptionAddonProjection(record)
+	return out, true
+}
+
+func (s *Server) platformListSubscriptionAddons(ctx context.Context, in *dto.SubscriptionAddonListInput) (any, bool) {
+	if s.platformDeps.Addons == nil {
+		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "subscription add-ons are not wired")), true
+	}
+	page, err := s.platformDeps.Addons.List(ctx, ports.SubscriptionAddonListFilter{SubscriptionID: string(in.SubscriptionID), Status: in.Status, Limit: in.Limit, Cursor: in.Cursor})
+	if err != nil {
+		return mapApplicationError(err), true
+	}
+	out := &contract.List[dto.SubscriptionAddonView]{}
+	out.Body.Data = make([]dto.SubscriptionAddonView, 0, len(page.Items))
+	for _, record := range page.Items {
+		out.Body.Data = append(out.Body.Data, subscriptionAddonProjection(record))
+	}
+	out.Body.Pagination = contract.Page{HasMore: page.HasMore, NextCursor: platformCursorPtr(page.NextCursor)}
+	return out, true
+}
+
+func (s *Server) platformCancelSubscriptionAddon(ctx context.Context, in *dto.CancelSubscriptionAddonInput) (any, bool) {
+	if s.platformDeps.Addons == nil {
+		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "subscription add-ons are not wired")), true
+	}
+	if strings.TrimSpace(in.Body.Reason) == "" {
+		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "cancellation reason is required")), true
+	}
+	admin, _ := middleware.PlatformAdminID(ctx)
+	record, err := s.platformDeps.Addons.Cancel(ctx, ports.SubscriptionAddonCancel{AddonID: string(in.AddonID), CancelledBy: string(admin), Reason: in.Body.Reason, Now: time.Now().UTC()})
+	if err != nil {
+		addonID := string(in.AddonID)
+		s.appendPlatformAudit(ctx, "subscription_addon.cancelled", "subscription_addon", &addonID, nil, "FAILURE", classifyPlatformRepoErrorKind(err), map[string]any{"reason": in.Body.Reason})
+		return mapApplicationError(err), true
+	}
+	s.appendPlatformAudit(ctx, "subscription_addon.cancelled", "subscription_addon", &record.ID, &record.BusinessID, "SUCCESS", "", map[string]any{"reason": in.Body.Reason})
+	out := &contract.Single[dto.SubscriptionAddonView]{}
+	out.Body.Data = subscriptionAddonProjection(record)
+	return out, true
+}
+
+func (s *Server) platformApproveChannelPassCapacity(ctx context.Context, in *dto.ApproveChannelPassCapacityInput) (any, bool) {
+	if s.platformDeps.Addons == nil || s.platformDeps.Subscriptions == nil {
+		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "subscription add-ons are not wired")), true
+	}
+	if in.Body.MaxChannelPasses <= 0 || strings.TrimSpace(in.Body.Reason) == "" {
+		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "positive max_channel_passes and approval reason are required")), true
+	}
+	sub, err := s.platformDeps.Subscriptions.GetByID(ctx, string(in.SubscriptionID))
+	if err != nil {
+		return mapApplicationError(err), true
+	}
+	admin, _ := middleware.PlatformAdminID(ctx)
+	record, err := s.platformDeps.Addons.ApproveChannelPassCapacity(ctx, ports.ChannelPassCapacityApproval{SubscriptionID: sub.ID, BusinessID: sub.BusinessID, MaxChannelPasses: in.Body.MaxChannelPasses, Reason: in.Body.Reason, ApprovedBy: string(admin), Now: time.Now().UTC()})
+	if err != nil {
+		s.appendPlatformAudit(ctx, "subscription_addon.channel_capacity_approved", "subscription", &sub.ID, &sub.BusinessID, "FAILURE", classifyPlatformRepoErrorKind(err), nil)
+		return mapApplicationError(err), true
+	}
+	s.appendPlatformAudit(ctx, "subscription_addon.channel_capacity_approved", "subscription", &sub.ID, &sub.BusinessID, "SUCCESS", "", map[string]any{"max_channel_passes": record.MaxChannelPasses, "reason": record.Reason})
+	out := &contract.Single[dto.ChannelPassCapacityApprovalView]{}
+	out.Body.Data = channelPassCapacityApprovalProjection(record)
+	return out, true
 }
 
 // ----------------------------------------------------------------------------
@@ -914,11 +1077,9 @@ func (s *Server) platformGetSubscription(ctx context.Context, in *dto.PlatformSu
 //   - Plan limits snapshot at creation (§17) — never mutated by plan edits.
 //   - New subscription is in PENDING status. Activation requires payment (§28).
 //
-// Per Contract §34 + §35: catalog/channel overrun detection is TODO for V1+
-// — the contract requires "no silent data deletion" but the current merchant
-// side has no AI-active catalog count query; the check is deferred until the
-// subscription activation flow is wired to merchant entitlements. For now
-// we just snapshot the plan's limits.
+// Per Contract §34 + §35, activation checks active catalog items, channels,
+// and seats against this immutable snapshot. It blocks the new period on an
+// overrun and never deletes merchant data to make a downgrade fit.
 func (s *Server) platformCreateSubscription(ctx context.Context, in *dto.CreateSubscriptionInput) (any, bool) {
 	if s.platformDeps.Subscriptions == nil {
 		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "subscription repository is not wired")), true
@@ -947,11 +1108,15 @@ func (s *Server) platformCreateSubscription(ctx context.Context, in *dto.CreateS
 		ID:                      uuid.NewString(),
 		BusinessID:              string(in.BusinessID),
 		PlanID:                  plan.ID,
+		PriceYERSnapshot:        plan.PriceYER,
+		AmountDueYER:            plan.PriceYER,
 		PeriodStart:             periodStart,
 		PeriodEnd:               periodEnd,
 		AIReplyLimit:            plan.AIReplyLimit,
 		AICatalogLimit:          plan.AICatalogLimit,
 		ChannelLimit:            plan.ChannelLimit,
+		ChannelCeiling:          plan.ChannelCeiling,
+		SeatLimit:               plan.SeatLimit,
 		InternalAICostBudgetYER: plan.InternalAICostBudgetYER,
 		Now:                     now,
 	})
@@ -1000,16 +1165,12 @@ func (s *Server) platformCancelSubscription(ctx context.Context, in *dto.CancelS
 //  3. If the subscription is PENDING → Activate it atomically.
 //  4. Audit both payment.recorded + subscription.activated.
 //
-// Steps 1-3 must be atomic — a payment without an activation is a half-state.
-// The current implementation runs them as separate SQL statements on the
-// same adapter; a future refactor should wrap them in a single Within()
-// transaction. For now, the Append + Activate pair is the closest thing
-// to atomic since both go through the same pool — a partial failure
-// (payment appended but Activate fails) leaves a payment record + a PENDING
-// subscription, which is recoverable via admin retry of Activate.
+// Steps 1-3 run inside one local PostgreSQL transaction. A failed entitlement
+// or activation check rolls the append back, so no paid-PENDING half-state is
+// left behind.
 func (s *Server) platformRecordPayment(ctx context.Context, in *dto.RecordPaymentInput) (any, bool) {
-	if s.platformDeps.Subscriptions == nil || s.platformDeps.Payments == nil {
-		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "subscription/payment repositories are not wired")), true
+	if s.platformDeps.Subscriptions == nil || s.platformDeps.Payments == nil || s.platformDeps.Transactions == nil {
+		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "atomic subscription billing is not wired")), true
 	}
 	subID := strings.TrimSpace(string(in.SubscriptionID))
 	if subID == "" {
@@ -1024,32 +1185,69 @@ func (s *Server) platformRecordPayment(ctx context.Context, in *dto.RecordPaymen
 	if strings.TrimSpace(in.Body.Reference) == "" {
 		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "reference is required")), true
 	}
+	idempotencyKey := strings.TrimSpace(in.IdempotencyKey)
+	if idempotencyKey == "" {
+		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "Idempotency-Key header is required")), true
+	}
 	paidAt, err := parseOptionalRFC3339(in.Body.PaidAt)
 	if err != nil || paidAt == nil {
 		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "paid_at must be a valid RFC 3339 timestamp")), true
 	}
 	// 1. Fetch subscription — needed for business_id cross-check (tenant isolation).
-	sub, err := s.platformDeps.Subscriptions.GetByID(ctx, subID)
-	if err != nil {
-		failureCode := classifyPlatformRepoErrorKind(err)
-		s.appendPlatformAudit(ctx, "payment.recorded", "subscription", &subID, nil, "FAILURE", failureCode, map[string]any{"reason": "subscription lookup failed"})
-		return mapApplicationError(err), true
-	}
 	adminID, _ := middleware.PlatformAdminID(ctx)
 	// 2. Append payment (Contract §27: append-only).
-	payment, err := s.platformDeps.Payments.Append(ctx, ports.PaymentCreate{
-		SubscriptionID: sub.ID,
-		BusinessID:     sub.BusinessID,
-		AmountYER:      in.Body.AmountYER,
-		Method:         in.Body.Method,
-		Reference:      in.Body.Reference,
-		PaidAt:         *paidAt,
-		RecordedBy:     string(adminID),
-		Now:            time.Now().UTC(),
+	var payment ports.PaymentRecord
+	var sub ports.SubscriptionRecord
+	didActivate := false
+	now := time.Now().UTC()
+	err = s.platformDeps.Transactions.Within(ctx, func(txCtx context.Context) error {
+		var operationErr error
+		sub, operationErr = s.platformDeps.Subscriptions.GetByID(txCtx, subID)
+		if operationErr != nil {
+			return operationErr
+		}
+		if in.Body.AmountYER != sub.AmountDueYER {
+			return appErrors.New(appErrors.CodeConflict, fmt.Sprintf("amount_yer must equal the immutable amount due: %d YER", sub.AmountDueYER))
+		}
+		if sub.Status == "PENDING" {
+			if now.Before(sub.PeriodStart) || !now.Before(sub.PeriodEnd) {
+				return appErrors.New(appErrors.CodeConflict, "subscription period is not currently eligible for activation")
+			}
+			if operationErr = s.platformDeps.Subscriptions.CheckEntitlements(txCtx, sub.BusinessID, sub.AICatalogLimit, sub.ChannelLimit, sub.SeatLimit); operationErr != nil {
+				return operationErr
+			}
+		}
+		payment, operationErr = s.platformDeps.Payments.Append(txCtx, ports.PaymentCreate{
+			SubscriptionID: sub.ID,
+			BusinessID:     sub.BusinessID,
+			AmountYER:      in.Body.AmountYER,
+			Method:         in.Body.Method,
+			Reference:      in.Body.Reference,
+			PaidAt:         *paidAt,
+			RecordedBy:     string(adminID),
+			IdempotencyKey: idempotencyKey,
+			Now:            now,
+		})
+		if operationErr != nil {
+			return operationErr
+		}
+		current, operationErr := s.platformDeps.Subscriptions.GetByID(txCtx, sub.ID)
+		if operationErr != nil {
+			return operationErr
+		}
+		if current.Status == "ACTIVE" {
+			return nil
+		}
+		if current.Status != "PENDING" {
+			return appErrors.New(appErrors.CodeConflict, "only a PENDING subscription can be activated by payment")
+		}
+		_, operationErr = s.platformDeps.Subscriptions.Activate(txCtx, sub.ID, now)
+		didActivate = operationErr == nil
+		return operationErr
 	})
 	if err != nil {
 		failureCode := classifyPlatformRepoErrorKind(err)
-		s.appendPlatformAudit(ctx, "payment.recorded", "subscription", &subID, &sub.BusinessID, "FAILURE", failureCode, map[string]any{
+		s.appendPlatformAudit(ctx, "payment.recorded", "subscription", &subID, nullableStringPtr(sub.BusinessID), "FAILURE", failureCode, map[string]any{
 			"amount_yer": in.Body.AmountYER, "method": in.Body.Method, "reference": in.Body.Reference,
 		})
 		return mapApplicationError(err), true
@@ -1057,39 +1255,8 @@ func (s *Server) platformRecordPayment(ctx context.Context, in *dto.RecordPaymen
 	s.appendPlatformAudit(ctx, "payment.recorded", "payment", &payment.ID, &sub.BusinessID, "SUCCESS", "", map[string]any{
 		"subscription_id": sub.ID, "amount_yer": payment.AmountYER, "method": payment.Method, "reference": payment.Reference,
 	})
-	// 3. Activate subscription if it was PENDING (Contract §28).
-	// If the subscription was already ACTIVE (renewal mid-period?) or terminal,
-	// Activate returns Conflict — we log it as a soft note but DON'T fail the
-	// payment record. The payment is append-only and stays even if activation
-	// is rejected (e.g., subscription is CANCELLED — payment is still a
-	// historical record).
-	if sub.Status == "PENDING" {
-		// Per Contract §34-35: check entitlements BEFORE activating.
-		// If catalog or channel count exceeds the plan's limits, block
-		// activation. The payment is still recorded (append-only), but
-		// the subscription stays PENDING until the merchant resolves
-		// the overrun. No silent data deletion.
-		entitlementErr := s.platformDeps.Subscriptions.CheckEntitlements(ctx, sub.BusinessID, sub.AICatalogLimit, sub.ChannelLimit)
-		if entitlementErr != nil {
-			failureCode := classifyPlatformRepoErrorKind(entitlementErr)
-			s.appendPlatformAudit(ctx, "subscription.activated", "subscription", &sub.ID, &sub.BusinessID, "FAILURE", failureCode, map[string]any{
-				"payment_id": payment.ID, "reason": "entitlement_overrun",
-			})
-			// Return the payment view — the payment IS recorded, but
-			// activation is blocked. The caller sees the payment + a
-			// 409 Conflict in the audit log explaining why activation
-			// was blocked.
-			out := &contract.Single[dto.PaymentView]{}
-			out.Body.Data = paymentProjection(payment)
-			return out, true
-		}
-		activated, activateErr := s.platformDeps.Subscriptions.Activate(ctx, sub.ID, time.Now().UTC())
-		if activateErr != nil {
-			failureCode := classifyPlatformRepoErrorKind(activateErr)
-			s.appendPlatformAudit(ctx, "subscription.activated", "subscription", &sub.ID, &sub.BusinessID, "FAILURE", failureCode, map[string]any{"payment_id": payment.ID})
-		} else {
-			s.appendPlatformAudit(ctx, "subscription.activated", "subscription", &activated.ID, &activated.BusinessID, "SUCCESS", "", map[string]any{"payment_id": payment.ID})
-		}
+	if didActivate {
+		s.appendPlatformAudit(ctx, "subscription.activated", "subscription", &sub.ID, &sub.BusinessID, "SUCCESS", "", map[string]any{"payment_id": payment.ID})
 	}
 	out := &contract.Single[dto.PaymentView]{}
 	out.Body.Data = paymentProjection(payment)

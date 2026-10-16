@@ -46,7 +46,7 @@ func wireMerchantCatalogAuthoringAI(
 	}
 
 	handler := handlers.NewMerchantCatalogAIV2Handler(merchantCatalogAuthoringAgent)
-	handler.Execution = &merchantcatalogai.ExecutionService{Catalogs: catalogRepo, Transactions: database, Store: postgres.MerchantAIExecutionStore{Adapter: database}, Sessions: merchantCatalogAuthoringAgent.Sessions}
+	handler.Execution = &merchantcatalogai.ExecutionService{Catalogs: catalogRepo, Transactions: database, Entitlements: postgres.NewSubscriptionRepository(database), Store: postgres.MerchantAIExecutionStore{Adapter: database}, Sessions: merchantCatalogAuthoringAgent.Sessions}
 	return dashboardServer.WithMerchantCatalogAIV2(
 		handlers.MerchantCatalogAIV2Deps{
 			Handler: handler,

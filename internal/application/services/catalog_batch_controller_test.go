@@ -46,15 +46,16 @@ func TestSplitIntoBatchesUsesEstimatedRequestTokensAndSequentialNumbers(t *testi
 		TokenBudget: 250,
 	}
 	schemaID := "schema-1"
+	schemaVersion := 1
 	projection := CatalogAIProjection{
 		Catalogs: []CatalogAICatalog{{ID: "catalog-1", Name: "Main", Status: "active"}},
 		AttributeSchemas: []CatalogAIAttributeSchema{{
 			ID: schemaID, Name: "Common", Version: 1,
 		}},
 		Items: []CatalogAIItem{
-			{ID: "item-1", CatalogID: "catalog-1", AttributeSchemaID: &schemaID},
-			{ID: "item-2", CatalogID: "catalog-1", AttributeSchemaID: &schemaID},
-			{ID: "item-3", CatalogID: "catalog-1", AttributeSchemaID: &schemaID},
+			{ID: "item-1", CatalogID: "catalog-1", AttributeSchemaID: &schemaID, AttributeSchemaVersion: &schemaVersion},
+			{ID: "item-2", CatalogID: "catalog-1", AttributeSchemaID: &schemaID, AttributeSchemaVersion: &schemaVersion},
+			{ID: "item-3", CatalogID: "catalog-1", AttributeSchemaID: &schemaID, AttributeSchemaVersion: &schemaVersion},
 		},
 	}
 	input := CatalogEvaluationInput{
@@ -191,7 +192,7 @@ func TestReductionSplitUsesReductionRequestShape(t *testing.T) {
 	}
 }
 
-func TestAppendCandidateProjectionPrunesUnselectedNestedEvidence(t *testing.T) {
+func TestAppendCandidateProjectionPreservesFullCommercialEntity(t *testing.T) {
 	variantA := "variant-a"
 	variantB := "variant-b"
 	offerA := "offer-a"
@@ -218,15 +219,15 @@ func TestAppendCandidateProjectionPrunesUnselectedNestedEvidence(t *testing.T) {
 		t.Fatalf("expected one candidate item, got %d", len(target.Items))
 	}
 	item := target.Items[0]
-	if len(item.Variants) != 1 || item.Variants[0].ID != variantA {
+	if len(item.Variants) != 2 || item.Variants[1].ID != variantB {
 		t.Fatalf("unexpected final variants: %+v", item.Variants)
 	}
-	if len(item.Offers) != 1 || item.Offers[0].ID != offerA {
+	if len(item.Offers) != 2 || item.Offers[1].ID != offerB {
 		t.Fatalf("unexpected final offers: %+v", item.Offers)
 	}
 }
 
-func TestSplitIntoBatchesFragmentsOversizedItemWithoutLosingNestedEvidence(t *testing.T) {
+func TestSplitIntoBatchesNeverFragmentsOversizedCommercialEntity(t *testing.T) {
 	v1, v2 := "variant-1", "variant-2"
 	model := &catalogTokenEstimatorStub{
 		countFn: func(input BatchEvaluationInput) (int, error) {
@@ -252,69 +253,90 @@ func TestSplitIntoBatchesFragmentsOversizedItemWithoutLosingNestedEvidence(t *te
 			},
 		}},
 	}
-
 	batches, err := controller.splitIntoBatches(context.Background(), projection, CatalogEvaluationInput{
 		AIRunID: "run-1", BusinessID: "business-1", CustomerMessage: "test",
 	}, 1)
-	if err != nil {
-		t.Fatalf("split oversized item: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "indivisible commercial entity") {
+		t.Fatalf("oversized complete product must fail closed: batches=%+v error=%v", batches, err)
 	}
-	if len(batches) != 2 {
-		t.Fatalf("expected 2 item fragments, got %d", len(batches))
-	}
-	variantSeen := map[string]bool{}
-	offerSeen := map[string]bool{}
-	for _, batch := range batches {
-		if len(batch.Items) != 1 || batch.Items[0].ID != "item-1" {
-			t.Fatalf("fragment lost item identity: %+v", batch.Items)
-		}
-		for _, variant := range batch.Items[0].Variants {
-			variantSeen[variant.ID] = true
-		}
-		for _, offer := range batch.Items[0].Offers {
-			offerSeen[offer.ID] = true
-		}
-	}
-	for _, id := range []string{v1, v2} {
-		if !variantSeen[id] {
-			t.Fatalf("variant %s was not covered by fragments", id)
-		}
-	}
-	for _, id := range []string{"offer-1", "offer-2"} {
-		if !offerSeen[id] {
-			t.Fatalf("offer %s was not covered by fragments", id)
-		}
+	if len(batches) != 0 {
+		t.Fatalf("failed evaluation must not send any item fragment: %+v", batches)
 	}
 }
 
-func TestAppendCandidateProjectionMergesSameItemFragments(t *testing.T) {
-	v1, v2 := "variant-1", "variant-2"
+func TestAppendCandidateProjectionDeduplicatesCompleteItems(t *testing.T) {
+	variant := "variant-1"
+	batch := CatalogAIBatchPayload{Items: []CatalogAIItem{{
+		ID: "item-1", CatalogID: "catalog-1",
+		Variants: []CatalogAIVariant{{ID: variant, CatalogItemID: "item-1"}},
+		Offers:   []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1", VariantID: &variant}},
+	}}}
 	target := CatalogAIProjection{}
 	seen := map[string]struct{}{}
-
-	batch1 := CatalogAIBatchPayload{Items: []CatalogAIItem{{
-		ID: "item-1", CatalogID: "catalog-1",
-		Variants: []CatalogAIVariant{{ID: v1, CatalogItemID: "item-1"}},
-		Offers:   []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1", VariantID: &v1}},
-	}}}
-	batch2 := CatalogAIBatchPayload{Items: []CatalogAIItem{{
-		ID: "item-1", CatalogID: "catalog-1",
-		Variants: []CatalogAIVariant{{ID: v2, CatalogItemID: "item-1"}},
-		Offers:   []CatalogAIOffer{{ID: "offer-2", CatalogItemID: "item-1", VariantID: &v2}},
-	}}}
-
-	appendCandidateProjection(&target, batch1, []ports.CatalogBatchCandidate{{
-		ItemID: "item-1", VariantIDs: []string{v1}, OfferIDs: []string{"offer-1"},
-	}}, seen)
-	appendCandidateProjection(&target, batch2, []ports.CatalogBatchCandidate{{
-		ItemID: "item-1", VariantIDs: []string{v2}, OfferIDs: []string{"offer-2"},
-	}}, seen)
-
-	if len(target.Items) != 1 {
-		t.Fatalf("expected one merged item, got %d", len(target.Items))
+	selected := []ports.CatalogBatchCandidate{{ItemID: "item-1", VariantIDs: []string{variant}}}
+	appendCandidateProjection(&target, batch, selected, seen)
+	appendCandidateProjection(&target, batch, selected, seen)
+	if len(target.Items) != 1 || len(target.Items[0].Variants) != 1 || len(target.Items[0].Offers) != 1 {
+		t.Fatalf("complete selected item must appear once: %+v", target)
 	}
-	if len(target.Items[0].Variants) != 2 || len(target.Items[0].Offers) != 2 {
-		t.Fatalf("fragment evidence was not merged: variants=%d offers=%d", len(target.Items[0].Variants), len(target.Items[0].Offers))
+}
+
+func TestFinalEvaluationPayloadKeepsUniversalContextWithoutSupersededCatalogOrPrivateCustomerData(t *testing.T) {
+	input := CatalogEvaluationInput{
+		AIRunID:         "run-1",
+		BusinessID:      "business-1",
+		ConversationID:  "conversation-1",
+		CustomerMessage: "هل يوجد خيار مناسب وما هي سياسة الاستبدال؟",
+		ConversationContext: ports.CustomerSalesContext{
+			Sales:         &ports.SalesWorkflowContext{Enabled: true, AllowInteractions: true},
+			SchemaVersion: 12,
+			Freshness:     "fresh",
+			Business:      ports.CustomerSalesContextBusiness{Reference: "business-1", Name: "Store", Locale: "ar-YE", DefaultCurrency: "YER"},
+			Conversation:  ports.CustomerSalesContextConversation{Reference: "conversation-1", State: "open", Ownership: "ai"},
+			Customer: ports.CustomerSalesContextCustomer{
+				Reference: "customer-1", LocalePreference: "ar-YE", Status: "active",
+				Profile: []byte(`{"private_profile_sentinel":true}`), ContactPoints: []byte(`{"private_contact_sentinel":true}`),
+			},
+			CatalogEvidence:   []ports.CustomerSalesCatalogEvidence{{Reference: "superseded_catalog_sentinel", Name: "Old partial evidence"}},
+			VariantEvidence:   []ports.CustomerSalesVariantEvidence{{Reference: "superseded_variant_sentinel"}},
+			OfferEvidence:     []ports.CustomerSalesOfferEvidence{{Reference: "superseded_offer_sentinel"}},
+			KnowledgeEvidence: []ports.CustomerSalesKnowledgeEvidence{{Reference: "knowledge-1", Title: "ساعات العمل", Content: "نفتح صباحاً"}},
+			BusinessPolicyEvidence: []ports.CustomerSalesBusinessPolicyEvidence{{
+				Reference: "policy-1", Category: "returns", Title: "الاستبدال", Summary: "الاستبدال خلال المدة المحددة",
+			}},
+			RecentMessages:      []ports.CustomerSalesRecentMessageEvidence{{Reference: "message-1", Direction: "inbound", Text: "أريد مقارنة"}},
+			PolicyEvidence:      ports.CustomerSalesPolicyEvidence{Reference: "application-policy-1", State: "published"},
+			KnowledgeState:      "grounded",
+			ConversationSummary: "العميل يبحث عن خيار مناسب",
+		},
+	}
+	projection := CatalogAIProjection{Items: []CatalogAIItem{{
+		ID: "item-1", CatalogID: "catalog-1", Name: "Candidate product",
+		Variants: []CatalogAIVariant{{ID: "variant-1", CatalogItemID: "item-1", Name: "Black"}},
+		Offers:   []CatalogAIOffer{{ID: "offer-1", CatalogItemID: "item-1", Name: "Main offer"}},
+	}}}
+	candidates := []ports.CatalogBatchCandidate{{ItemID: "item-1", VariantIDs: []string{"variant-1"}, OfferIDs: []string{"offer-1"}, Reason: "matches request"}}
+
+	finalInput, prompt := buildFinalEvaluationPayload(input, candidates, projection)
+	for _, required := range []string{
+		input.CustomerMessage, "Candidate product", "variant-1", "offer-1",
+		"ساعات العمل", "الاستبدال", "أريد مقارنة", "العميل يبحث عن خيار مناسب",
+		"application-policy-1", `"sales"`, `"schema_version":12`, `"freshness":"fresh"`,
+	} {
+		if !strings.Contains(prompt, required) {
+			t.Fatalf("final prompt lost required universal context %q: %s", required, prompt)
+		}
+	}
+	for _, forbidden := range []string{
+		"private_profile_sentinel", "private_contact_sentinel",
+		"superseded_catalog_sentinel", "superseded_variant_sentinel", "superseded_offer_sentinel",
+	} {
+		if strings.Contains(prompt, forbidden) {
+			t.Fatalf("final prompt repeated private or superseded context %q: %s", forbidden, prompt)
+		}
+	}
+	if finalInput.ConversationContext.Sales == nil || !finalInput.ConversationContext.Sales.AllowInteractions {
+		t.Fatal("final input lost sales availability needed to expose executable capabilities")
 	}
 }
 
