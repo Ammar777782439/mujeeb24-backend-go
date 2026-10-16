@@ -14,25 +14,19 @@ import (
 
 func TestLiteLLMCustomerSalesUsesExistingCapabilityBoundary(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var request struct {
-			Model             string                      `json:"model"`
-			Store             bool                        `json:"store"`
-			Tools             []customerSalesTool         `json:"tools"`
-			GenerationConfig  interactionGenerationConfig `json:"generation_config"`
-			SystemInstruction string                      `json:"system_instruction"`
-		}
+		var request chatGatewayTestRequest
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Error(err)
 		}
-		if request.Model != "mujeeb-customer" || request.Store || request.GenerationConfig.ToolChoice != "any" {
+		if request.Model != "mujeeb-customer" || request.ToolChoice != "required" || request.MaxTokens != 4096 || r.URL.Path != "/v1/chat/completions" {
 			t.Errorf("contract changed: %+v", request)
 		}
-		if len(request.Tools) != 1 || request.Tools[0].Name != "respond_without_action" ||
-			!strings.Contains(request.SystemInstruction, "Catalog Entity Contract") {
+		if len(request.Tools) != 1 || request.Tools[0].Function.Name != "respond_without_action" ||
+			!strings.Contains(request.SystemContent(), "Catalog Entity Contract") {
 			t.Errorf("capability or system contract changed")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"completed","outputs":[{"type":"function_call","id":"call-1","name":"respond_without_action","arguments":{"response_text":"وعليكم السلام"}}],"usage":{"total_input_tokens":23,"total_output_tokens":8}}`))
+		writeChatTestResponse(w, json.RawMessage(`{"status":"completed","outputs":[{"type":"function_call","id":"call-1","name":"respond_without_action","arguments":{"response_text":"وعليكم السلام"}}],"usage":{"total_input_tokens":23,"total_output_tokens":8}}`))
 	}))
 	defer server.Close()
 
@@ -73,7 +67,7 @@ func TestLiteLLMCustomerSalesRejectsUnknownAndParallelTools(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				_, _ = w.Write([]byte(test.body))
+				writeChatTestResponse(w, json.RawMessage(test.body))
 			}))
 			defer server.Close()
 			client, err := litellm.NewClient(litellm.Config{BaseURL: server.URL, APIKey: "test-key"})
