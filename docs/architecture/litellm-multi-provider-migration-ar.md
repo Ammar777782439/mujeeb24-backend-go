@@ -6,7 +6,7 @@
 
 ## Current implementation (authoritative)
 
-- **Transport:** `internal/adapters/secondary/ai/litellm/`. The gateway owns model selection, retries and fallback. Mujeeb does **not** retry against specific providers in Go.
+- **Transport:** `internal/adapters/secondary/ai/litellm/`. All live B2C, catalog and B2B generation requests use LiteLLM `POST /v1/chat/completions` (the old Interactions wire endpoint is retired from these paths). The shared B2C/catalog bridge converts tools to OpenAI-compatible function declarations and normalizes strict results into Mujeeb's existing capability contract. The gateway owns model selection, retries and fallback; Mujeeb does **not** retry against specific providers in Go.
 - **B2C decision and catalog evaluation:** `internal/adapters/secondary/ai/gateway/` and `internal/application/services/`. The AI returns a strictly validated Capability; Go validates and executes the authorized action.
 - **Customer conversation continuity:** **stateless at the provider**. Each call receives Mujeeb's canonical conversation context and summary. `previous_interaction_id` is not used or persisted by the live AI path.
 - **Universal Catalog:** `CatalogBatchController` retains full pagination, schemas and definitions, variants, offers, evidence coverage, revision checks, candidate reduction and final validation. The `CatalogEvaluationClient` and token estimator interfaces are provider-neutral.
