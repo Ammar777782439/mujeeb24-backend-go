@@ -62,7 +62,7 @@ func (c *LiteLLMCatalogAdapter) count(ctx context.Context, request interactionRe
 	}
 	var tools any
 	if len(request.Tools) > 0 {
-		tools = request.Tools
+		tools = chatCompletionTools(request.Tools)
 	}
 	count, err := c.client.CountInteractionTokens(ctx, request.Model, request.SystemInstruction+contractOverhead, request.Input, tools)
 	if err != nil {
@@ -121,7 +121,7 @@ func (c *LiteLLMCatalogAdapter) EvaluateBatch(ctx context.Context, input service
 	}
 	started := time.Now()
 	ctx = litellm.WithSpendAttribution(ctx, input.BusinessID, input.AIRunID, "catalog_batch")
-	raw, meta, err := c.client.SendInteractionWithMetadata(ctx, req)
+	raw, meta, err := sendGatewayChatWithMetadata(ctx, c.client, req)
 	if err != nil {
 		return ports.CatalogBatchResult{}, fmt.Errorf("send catalog batch %d: %w", input.BatchNumber, err)
 	}
@@ -163,7 +163,7 @@ func (c *LiteLLMCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, in
 	}
 	started := time.Now()
 	ctx = litellm.WithSpendAttribution(ctx, input.BusinessID, input.AIRunID, "catalog_final")
-	raw, meta, err := c.client.SendInteractionWithMetadata(ctx, req)
+	raw, meta, err := sendGatewayChatWithMetadata(ctx, c.client, req)
 	if err != nil {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, fmt.Errorf("send final catalog evaluation: %w", err)
 	}
