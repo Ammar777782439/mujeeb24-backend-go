@@ -71,7 +71,7 @@ func (c *LiteLLMCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cu
 	}
 	started := time.Now()
 	ctx = litellm.WithSpendAttribution(ctx, input.Request.BusinessID, input.AIRunID, "customer_decision")
-	raw, meta, err := c.client.SendInteractionWithMetadata(ctx, req)
+	raw, meta, err := sendGatewayChatWithMetadata(ctx, c.client, req)
 	if err != nil {
 		return ports.CustomerSalesDecisionOutput{}, err
 	}
