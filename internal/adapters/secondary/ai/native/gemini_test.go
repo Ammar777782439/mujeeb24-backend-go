@@ -136,3 +136,117 @@ func TestGeminiRejectsUnknownToolsAndMalformedParameters(t *testing.T) {
 		t.Fatalf("invalid outbound tool schema should be denied: calls=%d err=%v", calls, err)
 	}
 }
+
+func TestGemini31SalesCapabilityPreservesSignedFunctionCall(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1beta/models/gemini-3.1-flash-lite:generateContent" {
+			t.Errorf("wrong Gemini model URL: %s", r.URL.Path)
+		}
+		_, _ = fmt.Fprint(w, `{"candidates":[{"finishReason":"STOP","content":{"parts":[{"functionCall":{"name":"answer_customer","args":{"text":"متوفر"}},"thoughtSignature":"exact-opaque-signature=="}]}}],"usageMetadata":{"promptTokenCount":8,"candidatesTokenCount":6}}`)
+	}))
+	defer srv.Close()
+	api, err := NewGemini(GeminiConfig{Model:"gemini-3.1-flash-lite",APIKey:"fake",BaseURL:srv.URL+"/v1beta",Timeout:time.Second})
+	if err != nil {t.Fatal(err)}
+	req := Request{Payload:json.RawMessage(`{"model":"mujeeb-sales","messages":[{"role":"system","content":"trusted"},{"role":"user","content":"مرحبا"}],"tools":[{"type":"function","function":{"name":"answer_customer","strict":true,"parameters":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false}}}],"tool_choice":"required","parallel_tool_calls":false,"max_tokens":128}`)}
+	result, err := api.Generate(context.Background(),req)
+	if err != nil {t.Fatalf("Gemini 3.1 signed capability rejected: %v",err)}
+	var parsed struct{
+		Choices []struct{
+			FinishReason string `json:"finish_reason"`
+			Message struct{ToolCalls []struct{
+				ThoughtSignature string `json:"thought_signature"`
+				Function struct{Name string `json:"name"`} `json:"function"`
+			} `json:"tool_calls"`} `json:"message"`
+		} `json:"choices"`
+	}
+	if err:=json.Unmarshal(result.Payload,&parsed);err!=nil{t.Fatal(err)}
+	if len(parsed.Choices)!=1||parsed.Choices[0].FinishReason!="tool_calls"||
+		len(parsed.Choices[0].Message.ToolCalls)!=1||
+		parsed.Choices[0].Message.ToolCalls[0].ThoughtSignature!="exact-opaque-signature=="||
+		parsed.Choices[0].Message.ToolCalls[0].Function.Name!="answer_customer"{
+		t.Fatalf("Gemini function signature or canonical capability lost: %s",result.Payload)
+	}
+}
+
+func TestGemini31SequentialFunctionCallsReplayAllOriginalSignatures(t *testing.T) {
+	callCount:=0
+	srv:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+		var wire struct{
+			Contents []struct{
+				Role string `json:"role"`
+				Parts []struct {
+					Text string `json:"text"`
+					ThoughtSignature string `json:"thoughtSignature"`
+					FunctionCall *struct{
+						Name string `json:"name"`
+						ID string `json:"id"`
+					} `json:"functionCall"`
+					FunctionResponse *struct{Name string `json:"name"`;ID string `json:"id"`} `json:"functionResponse"`
+				} `json:"parts"`
+			} `json:"contents"`
+		}
+		if err:=json.NewDecoder(r.Body).Decode(&wire);err!=nil{t.Error(err)}
+		if len(wire.Contents)!=1+2*callCount {t.Errorf("incomplete replay count=%d messages=%d",callCount,len(wire.Contents))}
+		for step:=0;step<callCount;step++{
+			model:=wire.Contents[1+2*step]
+			tool:=wire.Contents[2+2*step]
+			wantSignature:=fmt.Sprintf("opaque-thought-%d==",step+1)
+			wantName:=fmt.Sprintf("read_%d",step+1)
+			if model.Role!="model"||len(model.Parts)!=1||model.Parts[0].ThoughtSignature!=wantSignature||
+				model.Parts[0].FunctionCall==nil||model.Parts[0].FunctionCall.Name!=wantName||
+				tool.Role!="user"||len(tool.Parts)!=1||tool.Parts[0].FunctionResponse==nil||
+				tool.Parts[0].FunctionResponse.Name!=wantName{
+				t.Errorf("original signature/function response not replayed for step %d: %+v %+v",step,model,tool)
+			}
+		}
+		callCount++
+		if callCount<=2{
+			_,_=fmt.Fprintf(w,`{"candidates":[{"finishReason":"STOP","content":{"parts":[{"functionCall":{"name":"read_%d","id":"call_%d","args":{}},"thoughtSignature":"opaque-thought-%d=="}]}}]}`,callCount,callCount,callCount)
+		} else {
+			_,_=fmt.Fprint(w,`{"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"All tools complete"}]}}]}`)
+		}
+	}))
+	defer srv.Close()
+	api,err:=NewGemini(GeminiConfig{Model:"gemini-3.1-flash-lite",APIKey:"fake",BaseURL:srv.URL+"/v1beta",Timeout:time.Second})
+	if err!=nil{t.Fatal(err)}
+	history:=[]any{
+		map[string]any{"role":"system","content":"Only read scoped catalog evidence"},
+		map[string]any{"role":"user","content":"Read information before answering"},
+	}
+	for step:=0;step<3;step++ {
+		body:=map[string]any{
+			"model":"mujeeb-merchant","messages":history,"max_tokens":128,"tool_choice":"auto","parallel_tool_calls":false,
+			"tools":[]any{
+				map[string]any{"type":"function","function":map[string]any{"name":"read_1","strict":true,
+					"parameters":map[string]any{"type":"object","properties":map[string]any{},"required":[]string{},"additionalProperties":false}}},
+				map[string]any{"type":"function","function":map[string]any{"name":"read_2","strict":true,
+					"parameters":map[string]any{"type":"object","properties":map[string]any{},"required":[]string{},"additionalProperties":false}}},
+			},
+		}
+		raw,_:=json.Marshal(body)
+		response,err:=api.Generate(context.Background(),Request{Payload:raw})
+		if err!=nil{t.Fatalf("Gemini 3.1 round %d: %v",step+1,err)}
+		var parsed struct{Choices []struct{
+			FinishReason string `json:"finish_reason"`
+			Message struct{
+				Content *string `json:"content"`
+				ToolCalls []map[string]any `json:"tool_calls"`
+			} `json:"message"`
+		} `json:"choices"`}
+		if err:=json.Unmarshal(response.Payload,&parsed);err!=nil{t.Fatal(err)}
+		if len(parsed.Choices)!=1{t.Fatalf("no Gemini choice: %s",response.Payload)}
+		if step==2 {
+			if parsed.Choices[0].FinishReason!="stop"||parsed.Choices[0].Message.Content==nil||
+				*parsed.Choices[0].Message.Content!="All tools complete" {t.Fatalf("final: %s",response.Payload)}
+			break
+		}
+		calls:=parsed.Choices[0].Message.ToolCalls
+		if len(calls)!=1 {t.Fatalf("missing tool call at step %d",step)}
+		wantSig:=fmt.Sprintf("opaque-thought-%d==",step+1)
+		if calls[0]["thought_signature"]!=wantSig {t.Fatalf("signature was mutated: %#v",calls[0])}
+		history=append(history,map[string]any{"role":"assistant","tool_calls":calls})
+		history=append(history,map[string]any{"role":"tool","tool_call_id":calls[0]["id"],
+			"content":`{"read_only_result":true}`})
+	}
+	if callCount!=3 {t.Fatalf("expected three inference calls, got %d",callCount)}
+}

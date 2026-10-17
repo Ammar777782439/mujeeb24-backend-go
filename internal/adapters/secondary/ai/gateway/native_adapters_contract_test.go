@@ -152,6 +152,7 @@ func TestNativeMerchantReadOnlyToolAndCanonicalFinalValidation(t *testing.T) {
 				Role       string          `json:"role"`
 				Content    json.RawMessage `json:"content"`
 				ToolCallID string          `json:"tool_call_id"`
+				ToolCalls []struct{ThoughtSignature string `json:"thought_signature"`} `json:"tool_calls"`
 			} `json:"messages"`
 			Tools             []map[string]any `json:"tools"`
 			ResponseFormat    map[string]any   `json:"response_format"`
@@ -177,7 +178,9 @@ func TestNativeMerchantReadOnlyToolAndCanonicalFinalValidation(t *testing.T) {
 		}
 		if round >= 2 && (len(body.Messages) != 4 || body.Messages[2].Role != "assistant" ||
 			body.Messages[3].Role != "tool" || body.Messages[3].ToolCallID != "call-1" ||
-			!strings.Contains(string(body.Messages[3].Content), "Coffee")) {
+			!strings.Contains(string(body.Messages[3].Content), "Coffee") ||
+			len(body.Messages[2].ToolCalls)!=1 ||
+			body.Messages[2].ToolCalls[0].ThoughtSignature!="replay-signature-exact==") {
 			t.Error("read-only discovery result not replayed to model")
 		}
 		var choice map[string]any
@@ -186,6 +189,7 @@ func TestNativeMerchantReadOnlyToolAndCanonicalFinalValidation(t *testing.T) {
 			choice = map[string]any{"finish_reason": "tool_calls", "message": map[string]any{
 				"role": "assistant", "content": nil,
 				"tool_calls": []any{map[string]any{"id": "call-1", "type": "function",
+					"thought_signature":"replay-signature-exact==",
 					"function": map[string]any{"name": "read_catalog", "arguments": `{"query":"coffee"}`}}},
 			}}
 		case 2:

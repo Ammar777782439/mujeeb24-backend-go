@@ -240,3 +240,22 @@ func TestDeepSeekToolRequestRoundTripsNullableSelectedReferences(t *testing.T) {
 		t.Fatalf("nullable canonical round trip failed: %+v", args)
 	}
 }
+
+func TestDeepSeekDropsOnlyGeminiTransportThoughtSignatures(t *testing.T) {
+	input:=[]json.RawMessage{
+		json.RawMessage(`{"role":"system","content":"trusted"}`),
+		json.RawMessage(`{"role":"assistant","tool_calls":[{"id":"call_1","type":"function","thought_signature":"private-opaque==","function":{"name":"read_catalog","arguments":"{}"}}]}`),
+		json.RawMessage(`{"role":"tool","tool_call_id":"call_1","content":"{\"records\":[1]}"}`),
+	}
+	out,err:=deepSeekMessagesWithoutGeminiSignatures(input)
+	if err!=nil||len(out)!=len(input){t.Fatalf("cannot sanitize provider-only metadata: %v",err)}
+	if strings.Contains(string(out[1]),"thought_signature")||strings.Contains(string(out[1]),"private-opaque")||
+		!strings.Contains(string(out[1]),"read_catalog")||
+		!strings.Contains(string(out[1]),"call_1") ||
+		string(out[2])!=string(input[2]){
+		t.Fatalf("DeepSeek transport changed commercial tool history: %s",out[1])
+	}
+	if _,err:=deepSeekMessagesWithoutGeminiSignatures([]json.RawMessage{json.RawMessage(`{"role":"assistant","tool_calls":{"bad":true}}`)});err==nil{
+		t.Fatal("malformed provider-neutral tool history accepted")
+	}
+}
