@@ -78,3 +78,37 @@ Render correctly refused to start with a migration name mismatch. Resolution:
   A successful GitHub build is not proof that Render has already deployed it.
 - If another migration fails after version 75, stop and inspect that
   migration rather than modifying production state manually.
+
+
+## Gemini 3.1 function-call thought signatures — October 18, 2026
+
+The previous Gemini REST adapter wrongly rejected any response carrying a
+`thoughtSignature` unless the deployment model name began with `gemini-2.5-`.
+`gemini-3.1-flash-lite` correctly returns opaque signatures on function-call
+parts; this local model-version check caused the observed `AI_GATEWAY_FAILED`
+even when the upstream request itself succeeded.
+
+- No version-specific reject rule remains. Gemini adapter preserves each
+  signature exactly as received in the corresponding canonical transport-only
+  `tool_calls[].thought_signature` field. It does not change or fabricate the
+  signature, nor does this metadata enter customer-facing business decisions.
+- Read-only merchant tool continuation retains signature + function arguments
+  and ID in order, then Gemini REST reconstructs the same
+  `model.parts[].functionCall` together with `thoughtSignature` before
+  sending `functionResponse`. Existing capability authorization, catalog
+  evidence and transaction execution logic remain unchanged.
+- If a 503 fails over an existing signed tool history to DeepSeek, the DeepSeek
+  adapter removes *only* Gemini-specific signature metadata from outbound
+  transport messages; it preserves all tool IDs, function names, arguments,
+  role order and read-only tool results.
+- Unit tests use mocked Gemini 3.1 REST responses, covering initial sales
+  capability selection, sequential signed merchant function calls and exact
+  replay across multiple rounds. Mock tests never prove live Google API
+  acceptance and do not substitute for a controlled Render acceptance test.
+- Render operator: keep `GEMINI_MODEL=gemini-3.1-flash-lite` if that version
+  is enabled for the account, deploy the feature branch HEAD carrying this
+  fix, and retest a harmless inbound customer message. Inspect the resulting
+  AutoReply logs for `AI_GATEWAY_FAILED`; do not infer delivery merely from
+  a green Render `Deploy succeeded` status.
+
+Google REST reference: https://ai.google.dev/gemini-api/docs/generate-content/thought-signatures
