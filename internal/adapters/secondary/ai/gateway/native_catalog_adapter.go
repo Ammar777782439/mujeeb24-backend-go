@@ -51,12 +51,18 @@ func (c *NativeCatalogAdapter) finalRequest(input services.FinalEvaluationInput,
 	return batchChatRequest(c.builder().buildFinalEvaluateRequest(input, userPrompt, rc), c.model)
 }
 
+// Native providers do not share a tokenizer. Serialized UTF-8 byte count
+// plus a fixed protocol overhead is a conservative admission estimate, not
+// a claim of exact provider token usage. Never truncate catalog evidence.
 func (c *NativeCatalogAdapter) count(ctx context.Context, req chatCompletionRequest) (int, error) {
 	if err := ctx.Err(); err != nil { return 0, err }
-	// Conservative byte upper bound plus framing reserve; no item truncation.
 	encoded, err := json.Marshal(req)
 	if err != nil { return 0, err }
-	return len(encoded)+1024, nil
+	const protocolReserve = 4096
+	if len(encoded) > int(^uint(0)>>1)-protocolReserve {
+		return 0, errors.New("native catalog request size overflow")
+	}
+	return len(encoded)+protocolReserve, nil
 }
 
 // BatchTokenBudget reserves output and a safety margin inside the smallest
@@ -129,6 +135,10 @@ func (c *NativeCatalogAdapter) EvaluateBatch(ctx context.Context, input services
 	if err != nil {
 		return ports.CatalogBatchResult{}, err
 	}
+	if int64(normalized.Usage.PromptTokens) != info.InputTokens ||
+		int64(normalized.Usage.CompletionTokens) != info.OutputTokens ||
+		int64(normalized.Usage.CachedTokens) != info.CachedTokens ||
+		len(info.Trace.Attempts)==0 { return ports.CatalogBatchResult{}, errors.New("native catalog usage mismatch") }
 	latency := time.Since(started).Milliseconds()
 	return ports.CatalogBatchResult{
 		BatchNumber: input.BatchNumber,
@@ -175,6 +185,12 @@ func (c *NativeCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, inp
 	def, ok := ports.CustomerSalesCapabilityDefinitionFor(decision.Capability)
 	if !ok || !def.Terminal {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, errors.New("non-terminal capability after full catalog evaluation")
+	}
+	if int64(normalized.Usage.PromptTokens) != info.InputTokens ||
+		int64(normalized.Usage.CompletionTokens) != info.OutputTokens ||
+		int64(normalized.Usage.CachedTokens) != info.CachedTokens ||
+		len(info.Trace.Attempts)==0 {
+		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, errors.New("native final catalog usage mismatch")
 	}
 	return decision, ports.CustomerSalesUsageTelemetry{
 		Provider: info.Provider, Model: info.Model, InputTokens: normalized.Usage.PromptTokens,
