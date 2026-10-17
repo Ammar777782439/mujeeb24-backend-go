@@ -97,12 +97,12 @@ func (c *NativeCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cus
 	return ports.CustomerSalesDecisionOutput{
 		Decision: decision,
 		Usage: ports.CustomerSalesUsageTelemetry{
-			Provider: modelInfo.Provider,
-			Model: modelInfo.Model,
-			InputTokens: normalized.Usage.PromptTokens,
-			CachedTokens: normalized.Usage.CachedTokens,
-			OutputTokens: normalized.Usage.CompletionTokens,
-			LatencyMs: latencyMs,
+			Provider:      modelInfo.Provider,
+			Model:         modelInfo.Model,
+			InputTokens:   normalized.Usage.PromptTokens,
+			CachedTokens:  normalized.Usage.CachedTokens,
+			OutputTokens:  normalized.Usage.CompletionTokens,
+			LatencyMs:     latencyMs,
 			ModelRequests: len(modelInfo.Trace.Attempts),
 		},
 		LatencyMs: latencyMs,
