@@ -129,7 +129,6 @@ func TestLiteLLMFinalCatalogRequiresTerminalCapability(t *testing.T) {
 			}},
 			"usage": map[string]any{"prompt_tokens": 90, "completion_tokens": 16},
 		})
-		})
 	}))
 	defer server.Close()
 	client, err := litellm.NewClient(litellm.Config{BaseURL: server.URL, APIKey: "test-key"})
