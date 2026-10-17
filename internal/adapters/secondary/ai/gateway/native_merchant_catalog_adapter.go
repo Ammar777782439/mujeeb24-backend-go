@@ -25,8 +25,8 @@ type NativeMerchantCatalogAuthoringAdapter struct {
 }
 
 const (
-	nativeMaxMerchantToolRounds    = 12
-	nativeMaxMerchantToolCalls     = 32
+	nativeMaxMerchantToolRounds = 12
+	nativeMaxMerchantToolCalls  = 32
 )
 
 func NewNativeMerchantCatalogAuthoringAdapter(client *native.CompletionClient, model string, maxOutputTokens, maxRequestBytes int) (*NativeMerchantCatalogAuthoringAdapter, error) {
@@ -60,14 +60,14 @@ type nativeMerchantChatMessage struct {
 	ToolCallID string                   `json:"tool_call_id,omitempty"`
 }
 type nativeMerchantChatRequest struct {
-	Model          string                      `json:"model"`
-	Messages       []nativeMerchantChatMessage `json:"messages"`
-	Tools          []map[string]any            `json:"tools,omitempty"`
-	ToolChoice     string                      `json:"tool_choice,omitempty"`
-	ParallelToolCalls *bool                    `json:"parallel_tool_calls,omitempty"`
-	ResponseFormat any                         `json:"response_format,omitempty"`
-	MaxTokens      int                         `json:"max_tokens"`
-	Stream         bool                        `json:"stream"`
+	Model             string                      `json:"model"`
+	Messages          []nativeMerchantChatMessage `json:"messages"`
+	Tools             []map[string]any            `json:"tools,omitempty"`
+	ToolChoice        string                      `json:"tool_choice,omitempty"`
+	ParallelToolCalls *bool                       `json:"parallel_tool_calls,omitempty"`
+	ResponseFormat    any                         `json:"response_format,omitempty"`
+	MaxTokens         int                         `json:"max_tokens"`
+	Stream            bool                        `json:"stream"`
 }
 type nativeMerchantChatResponse struct {
 	Usage struct {
@@ -126,10 +126,10 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 		"\nReturn the complete proposal matching this canonical contract as the string value of canonical_proposal_json. Never omit commercial fields."
 	allowParallel := false
 	req := nativeMerchantChatRequest{
-		Model:     a.model,
-		Messages:  []nativeMerchantChatMessage{{Role: "system", Content: system}, {Role: "user", Content: contextualInput}},
-		MaxTokens: a.maxOutputTokens,
-		Stream:    false,
+		Model:             a.model,
+		Messages:          []nativeMerchantChatMessage{{Role: "system", Content: system}, {Role: "user", Content: contextualInput}},
+		MaxTokens:         a.maxOutputTokens,
+		Stream:            false,
 		ParallelToolCalls: &allowParallel,
 	}
 	allowed := map[string]map[string]any{}

@@ -240,8 +240,8 @@ func TestNativeMerchantRejectsInvalidStrictProposalEnvelope(t *testing.T) {
 	provider := &nativeContractProvider{name: "gemini"}
 	provider.call = func(req native.Request) (native.Response, error) {
 		var body struct {
-			ResponseFormat map[string]any `json:"response_format"`
-			ParallelToolCalls *bool `json:"parallel_tool_calls"`
+			ResponseFormat    map[string]any `json:"response_format"`
+			ParallelToolCalls *bool          `json:"parallel_tool_calls"`
 		}
 		if err := json.Unmarshal(req.Payload, &body); err != nil || body.ResponseFormat["type"] != "json_schema" {
 			t.Fatal("merchant provider called without strict final schema")
