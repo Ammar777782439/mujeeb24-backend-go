@@ -99,7 +99,7 @@ func TestGemini25AcceptsOptionalThoughtSignatureForSingleCapability(t *testing.T
 		_, _ = fmt.Fprint(w, `{"candidates":[{"finishReason":"STOP","content":{"parts":[{"functionCall":{"name":"respond_without_action","args":{"response_text":"ok","selected":[]}},"thoughtSignature":"opaque-signature"}]}}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":4}}`)
 	})
 	defer done()
-	req := Request{Payload: []byte(`{"model":"mujeeb-sales","messages":[{"role":"system","content":"trusted"},{"role":"user","content":"hello"}],"max_tokens":128,"tool_choice":"required","parallel_tool_calls":false,"tools":[{"type":"function","function":{"name":"respond_without_action","strict":true,"parameters":{"type":"object","additionalProperties":false,"required":[],"properties":{}}}}]}`)}
+	req := Request{Payload: []byte(`{"model":"mujeeb-sales","messages":[{"role":"system","content":"trusted"},{"role":"user","content":"hello"}],"max_tokens":128,"tool_choice":"required","parallel_tool_calls":false,"tools":[{"type":"function","function":{"name":"respond_without_action","strict":true,"parameters":{"type":"object","additionalProperties":false,"required":["response_text","selected"],"properties":{"response_text":{"type":"string"},"selected":{"type":"array","items":{"type":"object","additionalProperties":false,"required":[],"properties":{}}}}}}}]}`)}
 	if _, err := api.Generate(context.Background(), req); err != nil {
 		t.Fatalf("Gemini 2.5 optional thought signature rejected: %v", err)
 	}
