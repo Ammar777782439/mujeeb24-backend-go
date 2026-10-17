@@ -194,7 +194,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// every model request's tokens + cost are recorded to ai_usage_records
 		// and flow through to the Platform Admin AI Usage view.
 		service.AIUsage = postgres.NewAIUsageRepository(database)
-		
+
 		service.Subscriptions = postgres.NewSubscriptionRepository(database)
 		// Per contract ⑤ §7, build the Catalog Entity Contract payload
 		// once and reuse for every call.
@@ -393,18 +393,18 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	}
 	dashboardServer := handlers.NewServer(dependencies)
 	dashboardServer = dashboardServer.WithPlatformDeps(handlers.PlatformDeps{
-		Plans:               postgres.NewPlanRepository(database),
-		PlatformBusiness:    postgres.NewPlatformBusinessRepository(database),
-		PlatformAudit:       postgres.NewPlatformAuditRepository(database),
-		Subscriptions:       postgres.NewSubscriptionRepository(database),
-		Payments:            postgres.NewPaymentRepository(database),
-		Addons:              postgres.NewSubscriptionAddonRepository(database),
-		Support:             postgres.NewSupportRepository(database),
-		AIUsage:             postgres.NewAIUsageRepository(database),
-		Transactions:        database,
-		Operations:          platformOperations,
-		ChannelReader:       postgres.NewPlatformChannelReadRepository(database),
-		
+		Plans:            postgres.NewPlanRepository(database),
+		PlatformBusiness: postgres.NewPlatformBusinessRepository(database),
+		PlatformAudit:    postgres.NewPlatformAuditRepository(database),
+		Subscriptions:    postgres.NewSubscriptionRepository(database),
+		Payments:         postgres.NewPaymentRepository(database),
+		Addons:           postgres.NewSubscriptionAddonRepository(database),
+		Support:          postgres.NewSupportRepository(database),
+		AIUsage:          postgres.NewAIUsageRepository(database),
+		Transactions:     database,
+		Operations:       platformOperations,
+		ChannelReader:    postgres.NewPlatformChannelReadRepository(database),
+
 		NativeAISettings:    external.NativeAISettings,
 		AssignBusinessOwner: assignBusinessOwner,
 	})

@@ -3,7 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
-		"net/url"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -11,16 +11,16 @@ import (
 )
 
 type ProcessConfig struct {
-	NativeAIEnabled               bool
-	GeminiAPIKey                  string
-	GeminiModel                   string
-	DeepSeekAPIKey                string
-	DeepSeekModel                 string
-	NativeHTTPTimeout             time.Duration
-	NativeMaxContextTokens        int
-	NativeMaxOutputTokens         int
-	NativeMaxInputCharacters      int
-	NativeMerchantMaxRequestBytes int
+	NativeAIEnabled                bool
+	GeminiAPIKey                   string
+	GeminiModel                    string
+	DeepSeekAPIKey                 string
+	DeepSeekModel                  string
+	NativeHTTPTimeout              time.Duration
+	NativeMaxContextTokens         int
+	NativeMaxOutputTokens          int
+	NativeMaxInputCharacters       int
+	NativeMerchantMaxRequestBytes  int
 	Environment                    string
 	DatabaseURL                    string
 	HTTPAddr                       string
@@ -59,16 +59,16 @@ func LoadFromEnv() (ProcessConfig, error) {
 	}
 
 	cfg := ProcessConfig{
-		NativeAIEnabled:               false,
-		GeminiAPIKey:                  strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
-		GeminiModel:                   envOr("GEMINI_MODEL", "gemini-2.5-flash"),
-		DeepSeekAPIKey:                strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")),
-		DeepSeekModel:                 envOr("DEEPSEEK_MODEL", "deepseek-flash"),
-		NativeHTTPTimeout:             20*time.Second,
-		NativeMaxContextTokens:        32768,
-		NativeMaxOutputTokens:         4096,
-		NativeMaxInputCharacters:      48000,
-		NativeMerchantMaxRequestBytes: 524288,
+		NativeAIEnabled:                false,
+		GeminiAPIKey:                   strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
+		GeminiModel:                    envOr("GEMINI_MODEL", "gemini-2.5-flash"),
+		DeepSeekAPIKey:                 strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")),
+		DeepSeekModel:                  envOr("DEEPSEEK_MODEL", "deepseek-flash"),
+		NativeHTTPTimeout:              20 * time.Second,
+		NativeMaxContextTokens:         32768,
+		NativeMaxOutputTokens:          4096,
+		NativeMaxInputCharacters:       48000,
+		NativeMerchantMaxRequestBytes:  524288,
 		Environment:                    envOr("APP_ENV", "development"),
 		DatabaseURL:                    strings.TrimSpace(os.Getenv("DATABASE_URL")),
 		HTTPAddr:                       httpAddr,
@@ -149,13 +149,25 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.AutoReplyEnabled, err = boolEnv("AUTOREPLY_ENABLED", cfg.AutoReplyEnabled); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.NativeAIEnabled, err = boolEnv("NATIVE_AI_ENABLED", false); err != nil { return ProcessConfig{}, err }
-	if cfg.NativeHTTPTimeout, err = durationEnv("NATIVE_AI_HTTP_TIMEOUT", cfg.NativeHTTPTimeout); err != nil { return ProcessConfig{}, err }
-	if cfg.NativeMaxContextTokens, err = intEnv("NATIVE_AI_MAX_CONTEXT_TOKENS", cfg.NativeMaxContextTokens); err != nil { return ProcessConfig{}, err }
-	if cfg.NativeMaxOutputTokens, err = intEnv("NATIVE_AI_MAX_OUTPUT_TOKENS", cfg.NativeMaxOutputTokens); err != nil { return ProcessConfig{}, err }
-	if cfg.NativeMaxInputCharacters, err = intEnv("NATIVE_AI_MAX_INPUT_CHARACTERS", cfg.NativeMaxInputCharacters); err != nil { return ProcessConfig{}, err }
-	if cfg.NativeMerchantMaxRequestBytes, err = intEnv("NATIVE_AI_MERCHANT_MAX_REQUEST_BYTES", cfg.NativeMerchantMaxRequestBytes); err != nil { return ProcessConfig{}, err }
-	if cfg.NativeAIEnabled && (cfg.GeminiAPIKey=="" || cfg.DeepSeekAPIKey=="" || cfg.GeminiModel=="" || cfg.DeepSeekModel=="" || cfg.NativeHTTPTimeout<=0 || cfg.NativeMaxOutputTokens<=0 || cfg.NativeMaxContextTokens<=cfg.NativeMaxOutputTokens || cfg.NativeMaxInputCharacters<=0 || cfg.NativeMerchantMaxRequestBytes<=0) {
+	if cfg.NativeAIEnabled, err = boolEnv("NATIVE_AI_ENABLED", false); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.NativeHTTPTimeout, err = durationEnv("NATIVE_AI_HTTP_TIMEOUT", cfg.NativeHTTPTimeout); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.NativeMaxContextTokens, err = intEnv("NATIVE_AI_MAX_CONTEXT_TOKENS", cfg.NativeMaxContextTokens); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.NativeMaxOutputTokens, err = intEnv("NATIVE_AI_MAX_OUTPUT_TOKENS", cfg.NativeMaxOutputTokens); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.NativeMaxInputCharacters, err = intEnv("NATIVE_AI_MAX_INPUT_CHARACTERS", cfg.NativeMaxInputCharacters); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.NativeMerchantMaxRequestBytes, err = intEnv("NATIVE_AI_MERCHANT_MAX_REQUEST_BYTES", cfg.NativeMerchantMaxRequestBytes); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.NativeAIEnabled && (cfg.GeminiAPIKey == "" || cfg.DeepSeekAPIKey == "" || cfg.GeminiModel == "" || cfg.DeepSeekModel == "" || cfg.NativeHTTPTimeout <= 0 || cfg.NativeMaxOutputTokens <= 0 || cfg.NativeMaxContextTokens <= cfg.NativeMaxOutputTokens || cfg.NativeMaxInputCharacters <= 0 || cfg.NativeMerchantMaxRequestBytes <= 0) {
 		return ProcessConfig{}, errors.New("NATIVE_AI_ENABLED requires Gemini and DeepSeek credentials, models, and positive limits")
 	}
 	if cfg.AuthEnabled && (cfg.JWTEd25519PrivateKey == "" || cfg.JWTEd25519PublicKey == "" || strings.TrimSpace(cfg.JWTIssuer) == "" || cfg.JWTAccessTTL <= 0 || cfg.RefreshSessionTTL <= 0) {

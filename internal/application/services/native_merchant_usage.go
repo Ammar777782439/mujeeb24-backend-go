@@ -36,7 +36,9 @@ func (r NativeMerchantUsageRecorder) Record(ctx context.Context, businessID, ses
 	}
 	now := time.Now().UTC()
 	attemptID := usage.GatewayCallID
-	if attemptID == "" { attemptID = uuid.NewString() }
+	if attemptID == "" {
+		attemptID = uuid.NewString()
+	}
 	correlation := "merchant:" + sessionID + ":" + attemptID
 	input := ports.AIUsageAppend{
 		ID: uuid.NewString(), BusinessID: businessID, SubscriptionID: page.Items[0].ID,
@@ -56,4 +58,9 @@ func (r NativeMerchantUsageRecorder) Record(ctx context.Context, businessID, ses
 	return err
 }
 
-func maxNativeRequests(n int) int { if n<1 { return 1 }; return n }
+func maxNativeRequests(n int) int {
+	if n < 1 {
+		return 1
+	}
+	return n
+}

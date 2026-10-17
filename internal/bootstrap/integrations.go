@@ -13,10 +13,10 @@ import (
 )
 
 type ExternalAdapters struct {
-	NativeAISettings *ports.NativeAIPlatformConfig
-	NativeCustomerDecision ports.CustomerSalesDecisionPort
-	NativeCatalogClient *gatewayai.NativeCatalogAdapter
-	NativeMerchantAuthoring merchantcatalogai.MerchantCatalogAuthoringPort
+	NativeAISettings               *ports.NativeAIPlatformConfig
+	NativeCustomerDecision         ports.CustomerSalesDecisionPort
+	NativeCatalogClient            *gatewayai.NativeCatalogAdapter
+	NativeMerchantAuthoring        merchantcatalogai.MerchantCatalogAuthoringPort
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
 	SocialAPIHealthProbe           ports.HealthCheckProbe
@@ -37,9 +37,9 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 		"auto_reply":           "disabled",
 		"channel_provisioning": "disabled",
 		"llm_runtime":          "disabled",
-		"native_customer": "disabled",
-		"native_catalog": "disabled",
-		"native_merchant": "disabled",
+		"native_customer":      "disabled",
+		"native_catalog":       "disabled",
+		"native_merchant":      "disabled",
 	}
 	if a.SocialWebhook != nil {
 		checks["socialapi_webhook"] = "configured"
@@ -58,22 +58,28 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 		}
 	}
 	if a.NativeCustomerDecision != nil && a.NativeCatalogClient != nil && a.NativeMerchantAuthoring != nil {
-		checks["llm_runtime"]="configured"
+		checks["llm_runtime"] = "configured"
 	}
-	if a.NativeCustomerDecision != nil { checks["native_customer"]="configured" }
-	if a.NativeCatalogClient != nil { checks["native_catalog"]="configured" }
-	if a.NativeMerchantAuthoring != nil { checks["native_merchant"]="configured" }
+	if a.NativeCustomerDecision != nil {
+		checks["native_customer"] = "configured"
+	}
+	if a.NativeCatalogClient != nil {
+		checks["native_catalog"] = "configured"
+	}
+	if a.NativeMerchantAuthoring != nil {
+		checks["native_merchant"] = "configured"
+	}
 	return checks
 }
 
 func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 	adapters := ExternalAdapters{}
 	adapters.NativeAISettings = &ports.NativeAIPlatformConfig{
-		GeminiModel:cfg.GeminiModel, DeepSeekModel:cfg.DeepSeekModel,
-		CustomerModel:"mujeeb-sales", CatalogModel:"mujeeb-catalog", MerchantModel:"mujeeb-merchant",
-		MaxOutputTokens:cfg.NativeMaxOutputTokens, MaxInputCharacters:cfg.NativeMaxInputCharacters,
-		GeminiConfigured:cfg.NativeAIEnabled && cfg.GeminiAPIKey!="",
-		DeepSeekConfigured:cfg.NativeAIEnabled && cfg.DeepSeekAPIKey!="",
+		GeminiModel: cfg.GeminiModel, DeepSeekModel: cfg.DeepSeekModel,
+		CustomerModel: "mujeeb-sales", CatalogModel: "mujeeb-catalog", MerchantModel: "mujeeb-merchant",
+		MaxOutputTokens: cfg.NativeMaxOutputTokens, MaxInputCharacters: cfg.NativeMaxInputCharacters,
+		GeminiConfigured:   cfg.NativeAIEnabled && cfg.GeminiAPIKey != "",
+		DeepSeekConfigured: cfg.NativeAIEnabled && cfg.DeepSeekAPIKey != "",
 	}
 	if cfg.SocialAPIAPIKey != "" || cfg.SocialAPIWebhookSecret != "" {
 		client := socialapi.NewClient(socialapi.Config{BaseURL: cfg.SocialAPIBaseURL, APIKey: cfg.SocialAPIAPIKey, WebhookSecret: cfg.SocialAPIWebhookSecret, HTTPTimeout: cfg.SocialAPIHTTPTimeout})
@@ -94,23 +100,37 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 		adapters.LLMConfigError = errors.New("customer AI requires a configured native Gemini and DeepSeek runtime")
 	}
 	if cfg.NativeAIEnabled {
-		primary,err:=native.NewGemini(native.GeminiConfig{Model:cfg.GeminiModel,APIKey:cfg.GeminiAPIKey,Timeout:cfg.NativeHTTPTimeout})
-		if err!=nil {adapters.LLMConfigError=err} else {
-			backup,err:=native.NewDeepSeek(native.DeepSeekConfig{Model:cfg.DeepSeekModel,APIKey:cfg.DeepSeekAPIKey,Timeout:cfg.NativeHTTPTimeout})
-			if err!=nil {adapters.LLMConfigError=err} else {
-				router,err:=native.NewRouter(primary,backup,native.Policy{ConsecutiveFailures:3,Cooldown:time.Minute})
-				if err!=nil {adapters.LLMConfigError=err} else {
-					client,err:=native.NewCompletionClient(router)
-					if err!=nil {adapters.LLMConfigError=err} else {
-						customer,err:=gatewayai.NewNativeCustomerSalesAdapter(client,"mujeeb-sales",cfg.NativeMaxOutputTokens,cfg.NativeMaxInputCharacters)
-						if err!=nil {adapters.LLMConfigError=err} else {
-							catalog,err:=gatewayai.NewNativeCatalogAdapter(client,"mujeeb-catalog",cfg.NativeMaxOutputTokens,cfg.NativeMaxContextTokens)
-							if err!=nil {adapters.LLMConfigError=err} else {
-								merchant,err:=gatewayai.NewNativeMerchantCatalogAuthoringAdapter(client,"mujeeb-merchant",cfg.NativeMaxOutputTokens,cfg.NativeMerchantMaxRequestBytes)
-								if err!=nil {adapters.LLMConfigError=err} else {
-									adapters.NativeCustomerDecision=customer
-									adapters.NativeCatalogClient=catalog
-									adapters.NativeMerchantAuthoring=merchant
+		primary, err := native.NewGemini(native.GeminiConfig{Model: cfg.GeminiModel, APIKey: cfg.GeminiAPIKey, Timeout: cfg.NativeHTTPTimeout})
+		if err != nil {
+			adapters.LLMConfigError = err
+		} else {
+			backup, err := native.NewDeepSeek(native.DeepSeekConfig{Model: cfg.DeepSeekModel, APIKey: cfg.DeepSeekAPIKey, Timeout: cfg.NativeHTTPTimeout})
+			if err != nil {
+				adapters.LLMConfigError = err
+			} else {
+				router, err := native.NewRouter(primary, backup, native.Policy{ConsecutiveFailures: 3, Cooldown: time.Minute})
+				if err != nil {
+					adapters.LLMConfigError = err
+				} else {
+					client, err := native.NewCompletionClient(router)
+					if err != nil {
+						adapters.LLMConfigError = err
+					} else {
+						customer, err := gatewayai.NewNativeCustomerSalesAdapter(client, "mujeeb-sales", cfg.NativeMaxOutputTokens, cfg.NativeMaxInputCharacters)
+						if err != nil {
+							adapters.LLMConfigError = err
+						} else {
+							catalog, err := gatewayai.NewNativeCatalogAdapter(client, "mujeeb-catalog", cfg.NativeMaxOutputTokens, cfg.NativeMaxContextTokens)
+							if err != nil {
+								adapters.LLMConfigError = err
+							} else {
+								merchant, err := gatewayai.NewNativeMerchantCatalogAuthoringAdapter(client, "mujeeb-merchant", cfg.NativeMaxOutputTokens, cfg.NativeMerchantMaxRequestBytes)
+								if err != nil {
+									adapters.LLMConfigError = err
+								} else {
+									adapters.NativeCustomerDecision = customer
+									adapters.NativeCatalogClient = catalog
+									adapters.NativeMerchantAuthoring = merchant
 								}
 							}
 						}

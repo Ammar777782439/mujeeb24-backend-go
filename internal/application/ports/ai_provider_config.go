@@ -8,14 +8,14 @@ import (
 // NativeAIPlatformConfig exposes only deployment model identifiers and
 // credential-presence flags. Provider secrets never enter HTTP responses.
 type NativeAIPlatformConfig struct {
-	GeminiModel string
-	DeepSeekModel string
-	CustomerModel string
-	CatalogModel string
-	MerchantModel string
-	MaxOutputTokens int
+	GeminiModel        string
+	DeepSeekModel      string
+	CustomerModel      string
+	CatalogModel       string
+	MerchantModel      string
+	MaxOutputTokens    int
 	MaxInputCharacters int
-	GeminiConfigured bool
+	GeminiConfigured   bool
 	DeepSeekConfigured bool
 }
 

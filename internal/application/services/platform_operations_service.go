@@ -47,14 +47,14 @@ func NewInMemoryPlatformOperationsRepository(aiConfigured, channelConfigured boo
 		probes:    map[string]ports.HealthCheckProbe{},
 	}
 	// Seed the AI provider (Contract §76)
-	for _, ai := range []struct{id,name string}{
-		{"gemini","Google Gemini primary"},
-		{"deepseek","DeepSeek standby"},
+	for _, ai := range []struct{ id, name string }{
+		{"gemini", "Google Gemini primary"},
+		{"deepseek", "DeepSeek standby"},
 	} {
 		registry.providers[ai.id] = ports.ProviderRecord{
-			ProviderID:ai.id, ProviderType:ports.ProviderTypeAI,
-			DisplayName:ai.name,AdminState:ports.ProviderAdminEnabled,
-			HealthState:ports.ProviderHealthUnknown,Configured:aiConfigured,
+			ProviderID: ai.id, ProviderType: ports.ProviderTypeAI,
+			DisplayName: ai.name, AdminState: ports.ProviderAdminEnabled,
+			HealthState: ports.ProviderHealthUnknown, Configured: aiConfigured,
 		}
 	}
 	// Seed the channel transport provider (Contract §90)

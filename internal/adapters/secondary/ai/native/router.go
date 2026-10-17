@@ -48,6 +48,7 @@ type StatusError struct {
 func (e *StatusError) Error() string {
 	return fmt.Sprintf("%s model request HTTP %d", e.Provider, e.Code)
 }
+
 // Retryable reports a temporary provider HTTP status to the application
 // without importing an adapter package into business services.
 func (e *StatusError) Retryable() bool {

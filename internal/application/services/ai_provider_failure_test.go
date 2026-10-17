@@ -50,9 +50,9 @@ func TestAIProviderErrorClassification(t *testing.T) {
 	}{
 		{"deadline", fmt.Errorf("gateway call: %w", context.DeadlineExceeded), string(ports.AIRunFailureCategoryTimeout)},
 		{"canceled", context.Canceled, string(ports.AIRunFailureCategoryInfrastructure)},
-		{"gateway 503", &native.StatusError{Provider:"gemini",Code: 503}, string(ports.AIRunFailureCategoryProviderTemporary)},
-		{"gateway 429", &native.StatusError{Provider:"gemini",Code: 429}, string(ports.AIRunFailureCategoryProviderTemporary)},
-		{"gateway 401", &native.StatusError{Provider:"gemini",Code: 401}, string(ports.AIRunFailureCategoryProviderPermanent)},
+		{"gateway 503", &native.StatusError{Provider: "gemini", Code: 503}, string(ports.AIRunFailureCategoryProviderTemporary)},
+		{"gateway 429", &native.StatusError{Provider: "gemini", Code: 429}, string(ports.AIRunFailureCategoryProviderTemporary)},
+		{"gateway 401", &native.StatusError{Provider: "gemini", Code: 401}, string(ports.AIRunFailureCategoryProviderPermanent)},
 		{"network timeout", &net.DNSError{IsTimeout: true}, string(ports.AIRunFailureCategoryTimeout)},
 		{"other", errors.New("invalid function arguments"), string(ports.AIRunFailureCategoryProviderPermanent)},
 	}

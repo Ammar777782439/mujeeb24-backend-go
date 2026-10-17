@@ -56,10 +56,10 @@ func TestLoadFromEnvDisablesAutoReplyByDefaultAndReadsOverride(t *testing.T) {
 	t.Setenv("AUTOREPLY_ENABLED", "true")
 	t.Setenv("SOCIALAPI_WEBHOOK_SECRET", "test-webhook-secret")
 	t.Setenv("SOCIALAPI_API_KEY", "test-socialapi-key")
-	t.Setenv("NATIVE_AI_ENABLED","true")
-	t.Setenv("GEMINI_API_KEY","test-gemini-key")
-	t.Setenv("DEEPSEEK_API_KEY","test-deepseek-key")
-		cfg, err = LoadFromEnv()
+	t.Setenv("NATIVE_AI_ENABLED", "true")
+	t.Setenv("GEMINI_API_KEY", "test-gemini-key")
+	t.Setenv("DEEPSEEK_API_KEY", "test-deepseek-key")
+	cfg, err = LoadFromEnv()
 	if err != nil || !cfg.AutoReplyEnabled {
 		t.Fatalf("AutoReply override: cfg=%#v err=%v", cfg, err)
 	}
