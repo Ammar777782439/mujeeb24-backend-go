@@ -153,98 +153,112 @@ func TestNativeMerchantReadOnlyToolAndCanonicalFinalValidation(t *testing.T) {
 				Content    json.RawMessage `json:"content"`
 				ToolCallID string          `json:"tool_call_id"`
 			} `json:"messages"`
-			Tools []map[string]any `json:"tools"`
-			ResponseFormat map[string]any `json:"response_format"`
+			Tools          []map[string]any `json:"tools"`
+			ResponseFormat map[string]any   `json:"response_format"`
 		}
-		if err := json.Unmarshal(req.Payload,&body);err!=nil{t.Fatal(err)}
-		if len(body.Messages)<2 || body.Messages[0].Role!="system" || body.Messages[1].Role!="user" {
+		if err := json.Unmarshal(req.Payload, &body); err != nil {
+			t.Fatal(err)
+		}
+		if len(body.Messages) < 2 || body.Messages[0].Role != "system" || body.Messages[1].Role != "user" {
 			t.Error("merchant trusted and untrusted messages merged")
 		}
-		if round<3 && (len(body.Tools)!=1||body.ResponseFormat!=nil) {
+		if round < 3 && (len(body.Tools) != 1 || body.ResponseFormat != nil) {
 			t.Error("discovery tools must not silently combine with structured final output")
 		}
-		if round==3 {
-			if len(body.Tools)!=0 || body.ResponseFormat["type"]!="json_schema" ||
-				!strings.Contains(string(body.Messages[0].Content),"Canonical merchant proposal JSON schema") {
+		if round == 3 {
+			if len(body.Tools) != 0 || body.ResponseFormat["type"] != "json_schema" ||
+				!strings.Contains(string(body.Messages[0].Content), "Canonical merchant proposal JSON schema") {
 				t.Error("strict final proposal transport is not isolated from discovery tools")
 			}
 		}
-		if round>=2 && (len(body.Messages)!=4 || body.Messages[2].Role!="assistant" ||
-			body.Messages[3].Role!="tool" || body.Messages[3].ToolCallID!="call-1" ||
-			!strings.Contains(string(body.Messages[3].Content),"Coffee")) {
+		if round >= 2 && (len(body.Messages) != 4 || body.Messages[2].Role != "assistant" ||
+			body.Messages[3].Role != "tool" || body.Messages[3].ToolCallID != "call-1" ||
+			!strings.Contains(string(body.Messages[3].Content), "Coffee")) {
 			t.Error("read-only discovery result not replayed to model")
 		}
 		var choice map[string]any
 		switch round {
 		case 1:
-			choice=map[string]any{"finish_reason":"tool_calls","message":map[string]any{
-				"role":"assistant","content":nil,
-				"tool_calls":[]any{map[string]any{"id":"call-1","type":"function",
-					"function":map[string]any{"name":"read_catalog","arguments":`{"query":"coffee"}`}}},
+			choice = map[string]any{"finish_reason": "tool_calls", "message": map[string]any{
+				"role": "assistant", "content": nil,
+				"tool_calls": []any{map[string]any{"id": "call-1", "type": "function",
+					"function": map[string]any{"name": "read_catalog", "arguments": `{"query":"coffee"}`}}},
 			}}
 		case 2:
 			// Read-only discovery can stop, but its plain text is NEVER
 			// accepted as a commercial proposal.
-			choice=map[string]any{"finish_reason":"stop","message":map[string]any{
-				"role":"assistant","content":"I have enough evidence",
+			choice = map[string]any{"finish_reason": "stop", "message": map[string]any{
+				"role": "assistant", "content": "I have enough evidence",
 			}}
 		case 3:
-			proposalJSON:=`{"schema_version":3,"status":"needs_more_data","operation":"ask_merchant","response_text":"ما السعر؟"}`
-			envelope,_:=json.Marshal(map[string]string{"canonical_proposal_json":proposalJSON})
-			choice=map[string]any{"finish_reason":"stop","message":map[string]any{
-				"role":"assistant","content":string(envelope),
+			proposalJSON := `{"schema_version":3,"status":"needs_more_data","operation":"ask_merchant","response_text":"ما السعر؟"}`
+			envelope, _ := json.Marshal(map[string]string{"canonical_proposal_json": proposalJSON})
+			choice = map[string]any{"finish_reason": "stop", "message": map[string]any{
+				"role": "assistant", "content": string(envelope),
 			}}
 		default:
-			return native.Response{},errors.New("merchant model called beyond expected final step")
+			return native.Response{}, errors.New("merchant model called beyond expected final step")
 		}
-		raw,_:=json.Marshal(map[string]any{
-			"choices":[]any{choice},
-			"usage":map[string]any{"prompt_tokens":90,"completion_tokens":12},
+		raw, _ := json.Marshal(map[string]any{
+			"choices": []any{choice},
+			"usage":   map[string]any{"prompt_tokens": 90, "completion_tokens": 12},
 		})
-		return native.Response{Payload:raw,Model:"gemini-2.5-flash",InputTokens:90,OutputTokens:12},nil
+		return native.Response{Payload: raw, Model: "gemini-2.5-flash", InputTokens: 90, OutputTokens: 12}, nil
 	}
-	adapter,err:=NewNativeMerchantCatalogAuthoringAdapter(nativeContractClient(t,provider),"mujeeb-merchant",2048,300000)
-	if err!=nil{t.Fatal(err)}
-	rounds:=0
-	adapter.SetUsageReporter(func(_ context.Context,businessID,sessionID string,usage ports.CustomerSalesUsageTelemetry)error{
+	adapter, err := NewNativeMerchantCatalogAuthoringAdapter(nativeContractClient(t, provider), "mujeeb-merchant", 2048, 300000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rounds := 0
+	adapter.SetUsageReporter(func(_ context.Context, businessID, sessionID string, usage ports.CustomerSalesUsageTelemetry) error {
 		rounds++
-		if businessID!="business-42"||sessionID!="session-3"||usage.Provider!="gemini"||
-			usage.InputTokens!=90||usage.ModelRequests!=1 {t.Errorf("invalid usage attribution %+v",usage)}
+		if businessID != "business-42" || sessionID != "session-3" || usage.Provider != "gemini" ||
+			usage.InputTokens != 90 || usage.ModelRequests != 1 {
+			t.Errorf("invalid usage attribution %+v", usage)
+		}
 		return nil
 	})
-	proposal,err:=adapter.Propose(context.Background(),merchantcatalogai.MerchantCatalogAuthoringInput{
-		BusinessID:"business-42",PrincipalID:"owner-17",SessionID:"session-3",
-		Message:"أريد تعديل الكتالوج",DefaultCurrency:"YER",
-		EntityContract:[]byte(`{"required":"item"}`),Capabilities:caps,
+	proposal, err := adapter.Propose(context.Background(), merchantcatalogai.MerchantCatalogAuthoringInput{
+		BusinessID: "business-42", PrincipalID: "owner-17", SessionID: "session-3",
+		Message: "أريد تعديل الكتالوج", DefaultCurrency: "YER",
+		EntityContract: []byte(`{"required":"item"}`), Capabilities: caps,
 	})
-	if err!=nil{t.Fatal(err)}
-	if proposal.Operation!=merchantcatalogai.OperationAskMerchant||proposal.ResponseText!="ما السعر؟"||
-		caps.calls!=1||caps.businessID!="business-42"||caps.principalID!="owner-17"||
-		round!=3||rounds!=3{
-		t.Fatalf("merchant scoped reads/strict final/usage drift: %+v calls=%d rounds=%d usage=%d",proposal,caps.calls,round,rounds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proposal.Operation != merchantcatalogai.OperationAskMerchant || proposal.ResponseText != "ما السعر؟" ||
+		caps.calls != 1 || caps.businessID != "business-42" || caps.principalID != "owner-17" ||
+		round != 3 || rounds != 3 {
+		t.Fatalf("merchant scoped reads/strict final/usage drift: %+v calls=%d rounds=%d usage=%d", proposal, caps.calls, round, rounds)
 	}
 }
 
 func TestNativeMerchantRejectsInvalidStrictProposalEnvelope(t *testing.T) {
-	provider:=&nativeContractProvider{name:"gemini"}
-	provider.call=func(req native.Request)(native.Response,error){
-		var body struct{ResponseFormat map[string]any `json:"response_format"`}
-		if err:=json.Unmarshal(req.Payload,&body);err!=nil||body.ResponseFormat["type"]!="json_schema" {
+	provider := &nativeContractProvider{name: "gemini"}
+	provider.call = func(req native.Request) (native.Response, error) {
+		var body struct {
+			ResponseFormat map[string]any `json:"response_format"`
+		}
+		if err := json.Unmarshal(req.Payload, &body); err != nil || body.ResponseFormat["type"] != "json_schema" {
 			t.Fatal("merchant provider called without strict final schema")
 		}
-		response:=map[string]any{"choices":[]any{map[string]any{
-			"finish_reason":"stop","message":map[string]any{
-				"role":"assistant","content":`{"canonical_proposal_json":"{\"schema_version\":3}","unexpected":"must reject"}`,
+		response := map[string]any{"choices": []any{map[string]any{
+			"finish_reason": "stop", "message": map[string]any{
+				"role": "assistant", "content": `{"canonical_proposal_json":"{\"schema_version\":3}","unexpected":"must reject"}`,
 			},
-		}}, "usage":map[string]any{"prompt_tokens":4,"completion_tokens":10}}
-		raw,_:=json.Marshal(response)
-		return native.Response{Payload:raw,Model:"gemini-2.5-flash",InputTokens:4,OutputTokens:10},nil
+		}}, "usage": map[string]any{"prompt_tokens": 4, "completion_tokens": 10}}
+		raw, _ := json.Marshal(response)
+		return native.Response{Payload: raw, Model: "gemini-2.5-flash", InputTokens: 4, OutputTokens: 10}, nil
 	}
-	adapter,err:=NewNativeMerchantCatalogAuthoringAdapter(nativeContractClient(t,provider),"mujeeb-merchant",2048,300000)
-	if err!=nil{t.Fatal(err)}
-	_,err=adapter.Propose(context.Background(),merchantcatalogai.MerchantCatalogAuthoringInput{
-		BusinessID:"business-42",PrincipalID:"owner-17",SessionID:"session-3",
-		Message:"أريد تعديل الكتالوج",DefaultCurrency:"YER",
+	adapter, err := NewNativeMerchantCatalogAuthoringAdapter(nativeContractClient(t, provider), "mujeeb-merchant", 2048, 300000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = adapter.Propose(context.Background(), merchantcatalogai.MerchantCatalogAuthoringInput{
+		BusinessID: "business-42", PrincipalID: "owner-17", SessionID: "session-3",
+		Message: "أريد تعديل الكتالوج", DefaultCurrency: "YER",
 	})
-	if err==nil{t.Fatal("invalid strict merchant envelope was accepted")}
+	if err == nil {
+		t.Fatal("invalid strict merchant envelope was accepted")
+	}
 }
