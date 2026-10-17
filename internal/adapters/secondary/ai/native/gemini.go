@@ -303,7 +303,12 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 	calls := make([]any, 0)
 	for _, part := range resp.Candidates[0].Content.Parts {
 		if part.ThoughtSignature != "" {
-			return Response{}, errors.New("Gemini thought signature requires a verified replay contract")
+			// Gemini 2.5 permits omitting thought signatures when replaying
+			// function history. For later models the signature is mandatory,
+			// so reject until a lossless continuation format is implemented.
+			if !strings.HasPrefix(c.model, "gemini-2.5-") {
+				return Response{}, errors.New("Gemini function continuation requires a supported thought-signature contract")
+			}
 		}
 		if part.FunctionCall != nil {
 			if strings.TrimSpace(part.FunctionCall.Name) == "" || !json.Valid(part.FunctionCall.Args) {
