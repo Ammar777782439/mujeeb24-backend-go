@@ -139,7 +139,9 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 			return Response{}, errors.New("DeepSeek refuses non-strict or malformed structured schema")
 		}
 		providerSchema, err := deepSeekSchema(format.JSONSchema.Schema)
-		if err != nil { return Response{}, fmt.Errorf("unsupported DeepSeek structured schema: %w", err) }
+		if err != nil {
+			return Response{}, fmt.Errorf("unsupported DeepSeek structured schema: %w", err)
+		}
 		toolSchemas[synthetic] = format.JSONSchema.Schema
 		body["tools"] = []any{map[string]any{"type": "function", "function": map[string]any{
 			"name": synthetic, "description": "Return the requested catalog batch JSON exactly as specified",
@@ -151,28 +153,36 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 			return Response{}, errors.New("unsupported function selection mode")
 		}
 		translatedTools := make([]any, 0, len(canonical.Tools))
-		for _,raw := range canonical.Tools {
+		for _, raw := range canonical.Tools {
 			var tool struct {
-				Type string `json:"type"`
+				Type     string `json:"type"`
 				Function struct {
-					Name string `json:"name"`
-					Strict bool `json:"strict"`
+					Name       string          `json:"name"`
+					Strict     bool            `json:"strict"`
 					Parameters json.RawMessage `json:"parameters"`
 				} `json:"function"`
 			}
-			if err := json.Unmarshal(raw,&tool);err != nil || tool.Type!="function" || tool.Function.Name=="" || !tool.Function.Strict {
+			if err := json.Unmarshal(raw, &tool); err != nil || tool.Type != "function" || tool.Function.Name == "" || !tool.Function.Strict {
 				return Response{}, errors.New("DeepSeek requires strictly declared functions")
 			}
-			if _,exists:=toolSchemas[tool.Function.Name];exists {return Response{},errors.New("duplicate DeepSeek function")}
-			providerSchema,err:=deepSeekSchema(tool.Function.Parameters)
-			if err != nil {return Response{},fmt.Errorf("DeepSeek unsupported function schema: %w",err)}
+			if _, exists := toolSchemas[tool.Function.Name]; exists {
+				return Response{}, errors.New("duplicate DeepSeek function")
+			}
+			providerSchema, err := deepSeekSchema(tool.Function.Parameters)
+			if err != nil {
+				return Response{}, fmt.Errorf("DeepSeek unsupported function schema: %w", err)
+			}
 			var encodedTool map[string]any
-			if err:=json.Unmarshal(raw,&encodedTool);err!=nil{return Response{},errors.New("invalid tool JSON")}
-			function,ok:=encodedTool["function"].(map[string]any)
-			if !ok{return Response{},errors.New("invalid canonical function")}
-			function["parameters"]=providerSchema
-			translatedTools=append(translatedTools,encodedTool)
-			toolSchemas[tool.Function.Name]=tool.Function.Parameters
+			if err := json.Unmarshal(raw, &encodedTool); err != nil {
+				return Response{}, errors.New("invalid tool JSON")
+			}
+			function, ok := encodedTool["function"].(map[string]any)
+			if !ok {
+				return Response{}, errors.New("invalid canonical function")
+			}
+			function["parameters"] = providerSchema
+			translatedTools = append(translatedTools, encodedTool)
+			toolSchemas[tool.Function.Name] = tool.Function.Parameters
 		}
 		body["tools"] = translatedTools
 		body["tool_choice"] = canonical.ToolChoice
@@ -269,9 +279,11 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 			if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil || args == nil {
 				return Response{}, errors.New("DeepSeek function arguments must be an object")
 			}
-			restored,err:=restoreDeepSeekNulls(call.Function.Arguments,toolSchemas[call.Function.Name])
-			if err != nil {return Response{},fmt.Errorf("DeepSeek function arguments violate schema: %w",err)}
-			call.Function.Arguments=restored
+			restored, err := restoreDeepSeekNulls(call.Function.Arguments, toolSchemas[call.Function.Name])
+			if err != nil {
+				return Response{}, fmt.Errorf("DeepSeek function arguments violate schema: %w", err)
+			}
+			call.Function.Arguments = restored
 		}
 	}
 	if structured {
@@ -297,19 +309,21 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 		(choice.FinishReason == "tool_calls" && len(choice.Message.ToolCalls) == 0) {
 		return Response{}, errors.New("DeepSeek completion incomplete or inconsistent")
 	}
-	if !structured && len(choice.Message.ToolCalls)>0 {
-		normalized,err:=json.Marshal(map[string]any{
-			"choices":[]any{map[string]any{
-				"finish_reason":choice.FinishReason,
-				"message":map[string]any{"role":"assistant","content":choice.Message.Content,"tool_calls":choice.Message.ToolCalls},
+	if !structured && len(choice.Message.ToolCalls) > 0 {
+		normalized, err := json.Marshal(map[string]any{
+			"choices": []any{map[string]any{
+				"finish_reason": choice.FinishReason,
+				"message":       map[string]any{"role": "assistant", "content": choice.Message.Content, "tool_calls": choice.Message.ToolCalls},
 			}},
-			"usage":map[string]any{
-				"prompt_tokens":envelope.Usage.PromptTokens,"completion_tokens":envelope.Usage.CompletionTokens,
-				"prompt_tokens_details":map[string]any{"cached_tokens":envelope.Usage.PromptCacheHitTokens},
+			"usage": map[string]any{
+				"prompt_tokens": envelope.Usage.PromptTokens, "completion_tokens": envelope.Usage.CompletionTokens,
+				"prompt_tokens_details": map[string]any{"cached_tokens": envelope.Usage.PromptCacheHitTokens},
 			},
 		})
-		if err!=nil {return Response{},err}
-		raw=normalized
+		if err != nil {
+			return Response{}, err
+		}
+		raw = normalized
 	}
 
 	if envelope.Usage.PromptTokens < 0 || envelope.Usage.CompletionTokens < 0 ||
