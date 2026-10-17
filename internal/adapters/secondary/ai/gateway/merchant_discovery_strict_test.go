@@ -9,8 +9,8 @@ func TestMerchantDiscoveryStrictSchemaRequiredAndNullable(t *testing.T) {
 		"type": "object",
 		"properties": map[string]any{
 			"item_id": map[string]any{"type": "string"},
-			"cursor": map[string]any{"type": "string"},
-			"limit": map[string]any{"type": "integer"},
+			"cursor":  map[string]any{"type": "string"},
+			"limit":   map[string]any{"type": "integer"},
 		},
 		"required": []string{"item_id"},
 	})
@@ -21,7 +21,7 @@ func TestMerchantDiscoveryStrictSchemaRequiredAndNullable(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
-		name string
+		name  string
 		input string
 		valid bool
 	}{
@@ -43,8 +43,8 @@ func TestMerchantDiscoveryStrictSchemaRequiredAndNullable(t *testing.T) {
 
 func TestMerchantDiscoveryRejectsOpenEndedSchema(t *testing.T) {
 	for _, bad := range []map[string]any{
-		{"type":"object", "properties": map[string]any{"free": map[string]any{"type":"object"}}},
-		{"type":"object", "properties": map[string]any{}, "additionalProperties": true},
+		{"type": "object", "properties": map[string]any{"free": map[string]any{"type": "object"}}},
+		{"type": "object", "properties": map[string]any{}, "additionalProperties": true},
 	} {
 		if _, err := strictDiscoverySchema(bad); err == nil {
 			t.Fatal("dynamic or open-ended merchant tool schema accepted")
