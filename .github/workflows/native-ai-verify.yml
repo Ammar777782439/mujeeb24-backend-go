@@ -1,0 +1,33 @@
+name: Native AI Contracts
+on:
+  push:
+    branches:
+      - feat/gemini-deepseek
+    paths:
+      - 'internal/adapters/secondary/ai/native/**'
+      - '.github/workflows/native-ai-verify.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.2'
+          cache: true
+      - name: Verify formatting
+        run: test -z "$(gofmt -l internal/adapters/secondary/ai/native/*.go)"
+      - name: Compile repository
+        run: go build ./...
+      - name: Test native provider routing
+        run: go test -count=1 -race ./internal/adapters/secondary/ai/native/...
+      - name: Verify cross-package compilation
+        run: go vet ./...
