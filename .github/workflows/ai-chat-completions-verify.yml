@@ -1,0 +1,39 @@
+name: LiteLLM Chat Completions Contract
+
+on:
+  push:
+    branches:
+      - feat/catalog-complete-commercial-entity-atomic
+    paths:
+      - 'internal/adapters/secondary/ai/gateway/**'
+      - 'internal/adapters/secondary/ai/litellm/**'
+      - 'internal/platform/config/**'
+      - '.github/workflows/ai-chat-completions-verify.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chat-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.2'
+          cache: true
+      - name: Ensure Go formatting
+        run: |
+          test -z "$(gofmt -l internal/adapters/secondary/ai/gateway/*.go internal/adapters/secondary/ai/litellm/*.go internal/platform/config/*.go)"
+      - name: Compile all packages
+        run: go build ./...
+      - name: Validate LiteLLM adapters and capability contracts
+        run: go test -count=1 ./internal/adapters/secondary/ai/litellm ./internal/adapters/secondary/ai/gateway ./internal/platform/config
+      - name: Run unit suite without deployment probes
+        run: go test -count=1 ./...
+      - name: Vet all packages
+        run: go vet ./...
