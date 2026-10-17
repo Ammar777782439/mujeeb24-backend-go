@@ -29,42 +29,42 @@ func decodeStrictStructuredJSON(raw []byte, target any) error {
 
 // The sole shared provider wire contract is LiteLLM Chat Completions.
 type chatCompletionMessage struct {
-	Role string `json:"role"`
+	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
 type chatCompletionToolFunction struct {
-	Name string `json:"name"`
-	Description string `json:"description"`
-	Strict bool `json:"strict"`
-	Parameters map[string]any `json:"parameters"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Strict      bool           `json:"strict"`
+	Parameters  map[string]any `json:"parameters"`
 }
 type chatCompletionTool struct {
-	Type string `json:"type"`
+	Type     string                     `json:"type"`
 	Function chatCompletionToolFunction `json:"function"`
 }
 type chatResponseFormat struct {
-	Type string `json:"type"`
+	Type       string `json:"type"`
 	JSONSchema struct {
-		Name string `json:"name"`
-		Strict bool `json:"strict"`
+		Name   string         `json:"name"`
+		Strict bool           `json:"strict"`
 		Schema map[string]any `json:"schema"`
 	} `json:"json_schema"`
 }
 type chatCompletionRequest struct {
-	Model string `json:"model"`
-	Messages []chatCompletionMessage `json:"messages"`
-	Tools []chatCompletionTool `json:"tools,omitempty"`
-	ToolChoice string `json:"tool_choice,omitempty"`
-	ParallelToolCalls *bool `json:"parallel_tool_calls,omitempty"`
-	ResponseFormat *chatResponseFormat `json:"response_format,omitempty"`
-	MaxTokens int `json:"max_tokens"`
-	Stream bool `json:"stream"`
+	Model             string                  `json:"model"`
+	Messages          []chatCompletionMessage `json:"messages"`
+	Tools             []chatCompletionTool    `json:"tools,omitempty"`
+	ToolChoice        string                  `json:"tool_choice,omitempty"`
+	ParallelToolCalls *bool                   `json:"parallel_tool_calls,omitempty"`
+	ResponseFormat    *chatResponseFormat     `json:"response_format,omitempty"`
+	MaxTokens         int                     `json:"max_tokens"`
+	Stream            bool                    `json:"stream"`
 }
 
 type capabilityCall struct {
-	ID string
-	Name string
+	ID        string
+	Name      string
 	Arguments json.RawMessage
 }
 type capabilityResponse struct {
@@ -72,9 +72,9 @@ type capabilityResponse struct {
 }
 
 type chatUsage struct {
-	PromptTokens int
+	PromptTokens     int
 	CompletionTokens int
-	CachedTokens int
+	CachedTokens     int
 }
 
 // validateStrictSchema refuses malformed strict tool/schema definitions before
@@ -126,7 +126,7 @@ func capabilityChatRequest(model, system, input string, tools []customerSalesToo
 		return chatCompletionRequest{}, errors.New("capability request requires model, output budget and offered tools")
 	}
 	req := chatCompletionRequest{Model: model,
-		Messages: []chatCompletionMessage{{Role: "system", Content: system}, {Role: "user", Content: input}},
+		Messages:   []chatCompletionMessage{{Role: "system", Content: system}, {Role: "user", Content: input}},
 		ToolChoice: "required", MaxTokens: maxTokens, Stream: false,
 	}
 	noParallel := false
@@ -145,8 +145,8 @@ func capabilityChatRequest(model, system, input string, tools []customerSalesToo
 	return req, nil
 }
 
- // validateStrictArguments enforces the exposed schema on the RETURNED model
- // arguments too. An upstream model is not trusted to honor strict mode.
+// validateStrictArguments enforces the exposed schema on the RETURNED model
+// arguments too. An upstream model is not trusted to honor strict mode.
 func validateStrictArguments(raw []byte, schema map[string]any) error {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
@@ -172,7 +172,9 @@ func validateStrictValue(value any, schema map[string]any) error {
 		case []any:
 			for _, item := range list {
 				label, ok := item.(string)
-				if !ok { return errors.New("invalid schema type") }
+				if !ok {
+					return errors.New("invalid schema type")
+				}
 				allowed = append(allowed, label)
 			}
 		default:
@@ -182,20 +184,35 @@ func validateStrictValue(value any, schema map[string]any) error {
 	okType := false
 	for _, declared := range allowed {
 		switch declared {
-		case "null": okType = okType || value == nil
-		case "object": _, ok := value.(map[string]any); okType = okType || ok
-		case "array": _, ok := value.([]any); okType = okType || ok
-		case "string": _, ok := value.(string); okType = okType || ok
-		case "boolean": _, ok := value.(bool); okType = okType || ok
+		case "null":
+			okType = okType || value == nil
+		case "object":
+			_, ok := value.(map[string]any)
+			okType = okType || ok
+		case "array":
+			_, ok := value.([]any)
+			okType = okType || ok
+		case "string":
+			_, ok := value.(string)
+			okType = okType || ok
+		case "boolean":
+			_, ok := value.(bool)
+			okType = okType || ok
 		case "integer":
 			if n, ok := value.(json.Number); ok && !strings.ContainsAny(string(n), ".eE") {
-				_, err := n.Int64(); okType = okType || err == nil
+				_, err := n.Int64()
+				okType = okType || err == nil
 			}
-		case "number": _, ok := value.(json.Number); okType = okType || ok
-		default: return errors.New("unsupported schema type")
+		case "number":
+			_, ok := value.(json.Number)
+			okType = okType || ok
+		default:
+			return errors.New("unsupported schema type")
 		}
 	}
-	if !okType { return errors.New("model argument violates schema type") }
+	if !okType {
+		return errors.New("model argument violates schema type")
+	}
 	if choices, found := schema["enum"]; found {
 		encodedValue, _ := json.Marshal(value)
 		match := false
@@ -203,24 +220,38 @@ func validateStrictValue(value any, schema map[string]any) error {
 		case []any:
 			for _, candidate := range enums {
 				test, _ := json.Marshal(candidate)
-				if bytes.Equal(test, encodedValue) { match = true; break }
+				if bytes.Equal(test, encodedValue) {
+					match = true
+					break
+				}
 			}
 		case []string:
 			for _, candidate := range enums {
 				test, _ := json.Marshal(candidate)
-				if bytes.Equal(test, encodedValue) { match = true; break }
+				if bytes.Equal(test, encodedValue) {
+					match = true
+					break
+				}
 			}
 		}
-		if !match { return errors.New("model argument is not in allowed enum") }
+		if !match {
+			return errors.New("model argument is not in allowed enum")
+		}
 	}
 	if object, ok := value.(map[string]any); ok {
 		props, _ := schema["properties"].(map[string]any)
-		if len(object) != len(props) { return errors.New("model object is missing or adding fields") }
+		if len(object) != len(props) {
+			return errors.New("model object is missing or adding fields")
+		}
 		for key, spec := range props {
 			item, present := object[key]
-			if !present { return fmt.Errorf("missing required model argument %q", key) }
+			if !present {
+				return fmt.Errorf("missing required model argument %q", key)
+			}
 			child, ok := spec.(map[string]any)
-			if !ok { return errors.New("invalid nested schema") }
+			if !ok {
+				return errors.New("invalid nested schema")
+			}
 			if err := validateStrictValue(item, child); err != nil {
 				return fmt.Errorf("model argument %s: %w", key, err)
 			}
@@ -228,7 +259,9 @@ func validateStrictValue(value any, schema map[string]any) error {
 	}
 	if array, ok := value.([]any); ok {
 		items, ok := schema["items"].(map[string]any)
-		if !ok { return errors.New("invalid array schema") }
+		if !ok {
+			return errors.New("invalid array schema")
+		}
 		for i, item := range array {
 			if err := validateStrictValue(item, items); err != nil {
 				return fmt.Errorf("model array item %d: %w", i, err)

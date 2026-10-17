@@ -11,32 +11,32 @@ import (
 // The gateway's Chat Completions choice is not an execution result.
 // Validate the full envelope before exposing one proposed capability or text.
 type normalizedLiteLLMResponse struct {
-	Text string
+	Text          string
 	FunctionCalls []capabilityCall
-	Usage chatUsage
+	Usage         chatUsage
 }
 
 func normalizeLiteLLMResponse(raw []byte) (normalizedLiteLLMResponse, error) {
 	var resp struct {
 		Choices []struct {
 			FinishReason string `json:"finish_reason"`
-			Message struct {
-				Role string `json:"role"`
-				Content json.RawMessage `json:"content"`
-				Refusal *string `json:"refusal"`
+			Message      struct {
+				Role      string          `json:"role"`
+				Content   json.RawMessage `json:"content"`
+				Refusal   *string         `json:"refusal"`
 				ToolCalls []struct {
-					ID string `json:"id"`
-					Type string `json:"type"`
+					ID       string `json:"id"`
+					Type     string `json:"type"`
 					Function struct {
-						Name string `json:"name"`
+						Name      string `json:"name"`
 						Arguments string `json:"arguments"`
 					} `json:"function"`
 				} `json:"tool_calls"`
 			} `json:"message"`
 		} `json:"choices"`
 		Usage struct {
-			PromptTokens int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
+			PromptTokens        int `json:"prompt_tokens"`
+			CompletionTokens    int `json:"completion_tokens"`
 			PromptTokensDetails struct {
 				CachedTokens int `json:"cached_tokens"`
 			} `json:"prompt_tokens_details"`

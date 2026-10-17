@@ -18,24 +18,24 @@ type customerSalesTool struct {
 // Messaging tools carry explicit empty selected arrays. Optional catalog refs
 // are null, not omitted, so the strict provider schema remains enforceable.
 type customerSalesMessageArguments struct {
-	ResponseText string `json:"response_text"`
-	Selected []ports.SelectedReference `json:"selected"`
+	ResponseText string                    `json:"response_text"`
+	Selected     []ports.SelectedReference `json:"selected"`
 }
 
 type customerSalesWorkflowArguments struct {
 	Sales struct {
-		WorkflowID *string `json:"workflow_id"`
-		ExpectedVersion *int64 `json:"expected_version"`
+		WorkflowID      *string `json:"workflow_id"`
+		ExpectedVersion *int64  `json:"expected_version"`
 		TransactionType *string `json:"transaction_type"`
-		Lines []struct {
-			ItemID string `json:"item_id"`
-			OfferID *string `json:"offer_id"`
-			VariantID *string `json:"variant_id"`
-			Quantity string `json:"quantity"`
-			SelectedAttributesJSON string `json:"selected_attributes_json"`
+		Lines           []struct {
+			ItemID                 string  `json:"item_id"`
+			OfferID                *string `json:"offer_id"`
+			VariantID              *string `json:"variant_id"`
+			Quantity               string  `json:"quantity"`
+			SelectedAttributesJSON string  `json:"selected_attributes_json"`
 		} `json:"lines"`
-		TransactionDataJSON string `json:"transaction_data_json"`
-		EvidenceMessageIDs []string `json:"evidence_message_ids"`
+		TransactionDataJSON string   `json:"transaction_data_json"`
+		EvidenceMessageIDs  []string `json:"evidence_message_ids"`
 	} `json:"sales"`
 }
 
@@ -52,7 +52,6 @@ func decodeCommercialAttributes(raw string) (map[string]any, error) {
 	}
 	return attributes, nil
 }
-
 
 func customerSalesTools(capabilities []ports.CustomerSalesCapability) []customerSalesTool {
 	tools := make([]customerSalesTool, 0, len(capabilities))

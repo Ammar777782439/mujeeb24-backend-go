@@ -59,7 +59,9 @@ func NewClient(cfg Config) (*Client, error) {
 // HTTPError deliberately contains no provider response body, prompt or secrets.
 type HTTPError struct{ StatusCode int }
 
-func (e *HTTPError) Error() string { return fmt.Sprintf("LiteLLM chat completions HTTP %d", e.StatusCode) }
+func (e *HTTPError) Error() string {
+	return fmt.Sprintf("LiteLLM chat completions HTTP %d", e.StatusCode)
+}
 func (e *HTTPError) Retryable() bool {
 	return e.StatusCode == http.StatusRequestTimeout || e.StatusCode == http.StatusTooManyRequests ||
 		e.StatusCode == http.StatusBadGateway || e.StatusCode == http.StatusServiceUnavailable ||

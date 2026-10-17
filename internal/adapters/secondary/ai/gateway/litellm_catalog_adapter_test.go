@@ -59,7 +59,7 @@ func TestLiteLLMCatalogBatchPreservesSchemaAndAllCommercialRelations(t *testing.
 			}
 			result := map[string]any{"choices": []any{map[string]any{
 				"finish_reason": "stop",
-				"message": map[string]any{"role": "assistant", "content": `{"candidates":[{"item_id":"11111111-1111-4111-8111-111111111111","variant_ids":["v1"],"offer_ids":["o1"],"reason":"requested model"}]}`},
+				"message":       map[string]any{"role": "assistant", "content": `{"candidates":[{"item_id":"11111111-1111-4111-8111-111111111111","variant_ids":["v1"],"offer_ids":["o1"],"reason":"requested model"}]}`},
 			}}, "usage": map[string]any{"prompt_tokens": 300, "completion_tokens": 22}}
 			_ = json.NewEncoder(w).Encode(result)
 		default:

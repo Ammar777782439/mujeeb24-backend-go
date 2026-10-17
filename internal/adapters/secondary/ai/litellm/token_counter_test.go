@@ -35,7 +35,7 @@ func TestCountChatTokensUsesGatewayModelAndConservativeBudget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := client.CountChatTokens(context.Background(), map[string]any{"model": "mujeeb-catalog", "messages": []map[string]string{{"role":"system","content":"system contract"},{"role":"user","content":"customer and batch"}}})
+	got, err := client.CountChatTokens(context.Background(), map[string]any{"model": "mujeeb-catalog", "messages": []map[string]string{{"role": "system", "content": "system contract"}, {"role": "user", "content": "customer and batch"}}})
 	if err != nil || got < 34 || got < 512 {
 		t.Fatalf("counter failed to reserve conservative budget count=%d err=%v", got, err)
 	}
@@ -50,7 +50,7 @@ func TestCountChatTokensFailsClosed(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := client.CountChatTokens(context.Background(), map[string]any{"model":"model","messages":[]map[string]string{{"role":"user","content":"batch"}}}); err == nil ||
+			if _, err := client.CountChatTokens(context.Background(), map[string]any{"model": "model", "messages": []map[string]string{{"role": "user", "content": "batch"}}}); err == nil ||
 				strings.Contains(err.Error(), "batch") {
 				t.Fatalf("unsafe count accepted: %v", err)
 			}

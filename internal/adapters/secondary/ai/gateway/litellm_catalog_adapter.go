@@ -39,7 +39,9 @@ func (c *LiteLLMCatalogAdapter) builder() *catalogRequestBuilder {
 func (c *LiteLLMCatalogAdapter) batchRequest(input services.BatchEvaluationInput) (chatCompletionRequest, error) {
 	rc := &catalogRequestConfig{model: c.model, maxOutputTokens: c.maxOutputTokens}
 	request, err := c.builder().buildEvaluateBatchRequest(input, rc)
-	if err != nil { return chatCompletionRequest{}, err }
+	if err != nil {
+		return chatCompletionRequest{}, err
+	}
 	return batchChatRequest(request, c.model)
 }
 
@@ -55,7 +57,9 @@ func (c *LiteLLMCatalogAdapter) count(ctx context.Context, req chatCompletionReq
 		counter["tool_choice"] = req.ToolChoice
 		counter["parallel_tool_calls"] = false
 	}
-	if req.ResponseFormat != nil { counter["response_format"] = req.ResponseFormat }
+	if req.ResponseFormat != nil {
+		counter["response_format"] = req.ResponseFormat
+	}
 	return c.client.CountChatTokens(ctx, counter)
 }
 
@@ -88,7 +92,9 @@ func (c *LiteLLMCatalogAdapter) CountBatchTokens(ctx context.Context, input serv
 
 func (c *LiteLLMCatalogAdapter) CountFinalTokens(ctx context.Context, input services.FinalEvaluationInput, userPrompt string) (int, error) {
 	req, err := c.finalRequest(input, userPrompt)
-	if err != nil { return 0, err }
+	if err != nil {
+		return 0, err
+	}
 	return c.count(ctx, req)
 }
 
@@ -143,7 +149,9 @@ func (c *LiteLLMCatalogAdapter) EvaluateBatch(ctx context.Context, input service
 
 func (c *LiteLLMCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, input services.FinalEvaluationInput, userPrompt string) (ports.CapabilityDecision, ports.CustomerSalesUsageTelemetry, error) {
 	req, err := c.finalRequest(input, userPrompt)
-	if err != nil { return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err }
+	if err != nil {
+		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
+	}
 	tokens, err := c.count(ctx, req)
 	if err != nil {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
