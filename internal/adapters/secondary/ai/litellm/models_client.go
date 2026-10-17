@@ -46,7 +46,7 @@ func (c *ModelsClient) DiscoverModels(ctx context.Context, apiKey, baseURL strin
 	if err != nil {
 		return nil, err
 	}
-	root := strings.TrimSuffix(gateway.endpoint, "/v1beta/interactions")
+	root := strings.TrimSuffix(gateway.endpoint, "/v1/chat/completions")
 	reqCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, root+"/v1/models", nil)
@@ -98,7 +98,7 @@ func (c *ModelsClient) DiscoverModels(ctx context.Context, apiKey, baseURL strin
 	return models, nil
 }
 
-// TestConnection probes the exact LiteLLM interactions endpoint used by the
+// TestConnection probes the exact LiteLLM chat completions endpoint used by the
 // customer/catalog runtime. No merchant data, upstream key or prompt is sent.
 func (c *ModelsClient) TestConnection(ctx context.Context, apiKey, model, baseURL string) (bool, int64, string) {
 	if strings.TrimSpace(model) == "" {
@@ -109,7 +109,9 @@ func (c *ModelsClient) TestConnection(ctx context.Context, apiKey, model, baseUR
 		return false, 0, "LITELLM_CONFIG_INVALID"
 	}
 	requestBody, _ := json.Marshal(map[string]any{
-		"model": model, "input": "Hello", "store": false,
+		"model": model,
+		"messages": []map[string]string{{"role": "user", "content": "Hello"}},
+		"max_tokens": 16, "stream": false,
 	})
 	reqCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
@@ -134,9 +136,21 @@ func (c *ModelsClient) TestConnection(ctx context.Context, apiKey, model, baseUR
 		return false, latency, "LITELLM_INVALID_RESPONSE"
 	}
 	var result struct {
-		Status string `json:"status"`
+		Choices []struct {
+			FinishReason string `json:"finish_reason"`
+			Message struct {
+				Role string `json:"role"`
+				Content *string `json:"content"`
+				Refusal *string `json:"refusal"`
+			} `json:"message"`
+		} `json:"choices"`
 	}
-	if err := json.Unmarshal(body, &result); err != nil || result.Status != "completed" {
+	if err := json.Unmarshal(body, &result); err != nil || len(result.Choices) != 1 ||
+		result.Choices[0].FinishReason != "stop" ||
+		result.Choices[0].Message.Role != "assistant" ||
+		result.Choices[0].Message.Refusal != nil ||
+		result.Choices[0].Message.Content == nil ||
+		strings.TrimSpace(*result.Choices[0].Message.Content) == "" {
 		return false, latency, "LITELLM_INCOMPLETE_RESPONSE"
 	}
 	return true, latency, ""
