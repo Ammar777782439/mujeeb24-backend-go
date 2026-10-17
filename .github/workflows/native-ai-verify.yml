@@ -8,6 +8,10 @@ on:
       - '.github/workflows/native-ai-verify.yml'
   workflow_dispatch:
 
+concurrency:
+  group: native-ai-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
