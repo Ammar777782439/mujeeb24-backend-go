@@ -1,15 +1,12 @@
-# Mujeeb 24 API ONLY: existing backend service, NOT LiteLLM.
-# Gateway is managed by an independent Blueprint at
-# deploy/litellm/render.blueprint.yaml in the SAME GitHub branch.
-# Keep existing DATABASE_URL/JWT/encryption/SocialAPI secrets in Render.
-# LiteLLM_BASE_URL and LITELLM_API_KEY are supplied manually in API Environment.
-# Do NOT sync this root Blueprint to create a gateway.
+# Mujeeb 24 API only. Direct Gemini primary and DeepSeek standby.
+# No external AI proxy or gateway is deployed by this blueprint.
+# Secrets remain environment-managed; auto-deploy is disabled.
 services:
   - type: web
     name: mujeeb24-api
     runtime: docker
     plan: free
-    branch: feat/ai-litellm-multi-provider-gateway
+    branch: feat/gemini-deepseek
     dockerfilePath: ./Dockerfile
     autoDeployTrigger: off
     healthCheckPath: /
@@ -49,10 +46,8 @@ services:
         value: https://mujeeb24-api.onrender.com/oauth/socialapi/callback
       - key: FRONTEND_URL
         value: https://mujeeb24.com/landing
-      - key: LLM_ENABLED
-        value: "false"
       # Current Mujeeb production feature-flag values supplied by the owner.
-      # AutoReply requires working LiteLLM credentials before its first deploy.
+      # AutoReply requires BOTH configured native provider secrets and catalog qualification.
       - key: AUTOREPLY_ENABLED
         value: "true"
       - key: CUSTOMER_SALES_ENABLED
@@ -78,31 +73,23 @@ services:
         value: 2s
       - key: SHUTDOWN_TIMEOUT
         value: 10s
-      - key: LITELLM_GATEWAY_ONLY
+      - key: NATIVE_AI_ENABLED
         value: "true"
-      # LiteLLM has its OWN Blueprint; set its Render URL in this API service.
-      # Example: https://<your-litellm-service>.onrender.com (no /v1 suffix)
-      - key: LITELLM_BASE_URL
+      - key: GEMINI_API_KEY
         sync: false
-      # Must be a valid Virtual Key created in LiteLLM (not an arbitrary secret).
-      - key: LITELLM_API_KEY
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: DEEPSEEK_API_KEY
         sync: false
-      - key: LITELLM_CUSTOMER_MODEL
-        value: mujeeb-customer
-      - key: LITELLM_CATALOG_MODEL
-        value: mujeeb-catalog
-      - key: LITELLM_MERCHANT_MODEL
-        value: mujeeb-merchant
-      - key: LITELLM_HTTP_TIMEOUT
-        value: 200s
-      - key: LITELLM_MAX_CONTEXT_TOKENS
+      - key: DEEPSEEK_MODEL
+        value: deepseek-chat
+      - key: NATIVE_AI_HTTP_TIMEOUT
+        value: 20s
+      - key: NATIVE_AI_MAX_CONTEXT_TOKENS
         value: "32768"
-      - key: LITELLM_MAX_OUTPUT_TOKENS
+      - key: NATIVE_AI_MAX_OUTPUT_TOKENS
         value: "4096"
-      - key: LITELLM_MAX_INPUT_CHARACTERS
+      - key: NATIVE_AI_MAX_INPUT_CHARACTERS
         value: "48000"
-      - key: LITELLM_MERCHANT_MAX_REQUEST_BYTES
+      - key: NATIVE_AI_MERCHANT_MAX_REQUEST_BYTES
         value: "524288"
-      # Explicit accounting decision; never invent a USD/YER rate.
-      - key: LITELLM_USD_TO_YER_RATE
-        sync: false

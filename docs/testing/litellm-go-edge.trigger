@@ -1,1 +1,0 @@
-One-time diagnostic requested to distinguish external Cloudflare Error 1010 for Python urllib and Go net/http from the same GitHub Actions runner. Reads encrypted LITELLM_API_KEY; performs only GET /health/readiness and GET /v1/models, without AI inference or merchant data.

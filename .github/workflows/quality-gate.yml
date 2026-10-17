@@ -9,13 +9,8 @@ on:
       - feat/universal-catalog-ai-v3
       - feat/customer-sales-workflow-interactive
       - feat/catalog-complete-commercial-entity-atomic
+      - feat/gemini-deepseek
   workflow_dispatch:
-    inputs:
-      verify_gateway:
-        description: "Probe deployed public LiteLLM endpoint (only when gateway is running)"
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -51,30 +46,6 @@ jobs:
         with:
           go-version: "1.22.2"
           cache: true
-      - name: Verify provider smoke script Python syntax
-        run: python3 -m py_compile scripts/test-litellm-live-catalog.py
       - name: Verify repository contract
         run: bash scripts/verify-repository.sh
 
-  lite-llm-edge:
-    name: Public LiteLLM HTTPS endpoint (unauthenticated, feature branch only)
-    if: github.event_name == 'workflow_dispatch' && inputs.verify_gateway == true
-    runs-on: ubuntu-latest
-    timeout-minutes: 3
-    steps:
-      - name: Identify the actual public gateway route without secrets
-        shell: bash
-        run: |
-          set -euo pipefail
-          base='https://webhook.mujeeb24.com'
-          echo "HTTPS endpoint: ${base}"
-          ready="$(curl --silent --show-error --max-redirs 0 --connect-timeout 10 --max-time 20 --output /dev/null --write-out '%{http_code}' "${base}/health/readiness")" || ready=000
-          models="$(curl --silent --show-error --max-redirs 0 --connect-timeout 10 --max-time 20 --output /dev/null --write-out '%{http_code}' "${base}/v1/models")" || models=000
-          echo "GET /health/readiness: HTTP ${ready}"
-          echo "GET /v1/models without key: HTTP ${models}"
-          if [[ "${ready}" == 200 || "${models}" == 401 || "${models}" == 200 ]]; then
-            echo 'Public LiteLLM route detected; no AI model/authenticated request has been verified.'
-          else
-            echo "::error::Public LiteLLM route not confirmed (Cloudflare, Caddy or origin routing)."
-            exit 1
-          fi

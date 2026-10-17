@@ -1,4 +1,4 @@
--- Preserve LiteLLM's native USD cost without reimplementing token pricing.
+-- Preserve optional verified USD cost metadata and historical usage attribution.
 -- Legacy provider_cost_yer rows remain valid for historical reporting.
 ALTER TABLE ai_usage_records
     ADD COLUMN gateway_cost_usd NUMERIC(24,12),
