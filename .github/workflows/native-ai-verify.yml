@@ -4,9 +4,13 @@ on:
     branches:
       - feat/gemini-deepseek
     paths:
-      - 'internal/adapters/secondary/ai/native/**'
-      - 'internal/adapters/secondary/ai/gateway/native_*_adapter*.go'
-      - 'internal/bootstrap/integrations.go'
+      - 'internal/**'
+      - 'cmd/**'
+      - 'scripts/**'
+      - 'api/openapi/**'
+      - 'migrations/**'
+      - '.env.example'
+      - 'render.yaml'
       - '.github/workflows/native-ai-verify.yml'
   workflow_dispatch:
 
@@ -15,7 +19,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   native-contracts:
@@ -37,18 +41,7 @@ jobs:
         run: go build ./...
       - name: Test native provider routing
         run: go test -count=1 -race ./internal/adapters/secondary/ai/native/... ./internal/adapters/secondary/ai/gateway
+      - name: Full Go tests
+        run: go test ./...
       - name: Verify cross-package compilation
         run: go vet ./...
-      - name: Commit generated formatting back to feature branch
-        shell: bash
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- internal/adapters/secondary/ai/native/ internal/adapters/secondary/ai/gateway/native_*_adapter*.go; then
-            echo "Formatting already canonical"
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add internal/adapters/secondary/ai/native/ internal/adapters/secondary/ai/gateway/native_*_adapter*.go
-          git commit -m 'style(ai): gofmt native provider source and tests'
-          git push origin HEAD:feat/gemini-deepseek
