@@ -211,6 +211,41 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	if choice.Message.Role != "assistant" {
 		return Response{}, errors.New("DeepSeek unexpected response role")
 	}
+	// A forced customer decision is always one capability. Do not trust a
+	// provider to honor parallel_tool_calls or its strict function contract.
+	if !structured && canonical.ToolChoice == "required" &&
+		(choice.FinishReason != "tool_calls" || len(choice.Message.ToolCalls) != 1) {
+		return Response{}, errors.New("DeepSeek must return exactly one required capability")
+	}
+	if choice.FinishReason == "tool_calls" {
+		if len(choice.Message.ToolCalls) == 0 || (len(choice.Message.Content) != 0 &&
+			string(choice.Message.Content) != "null" && string(choice.Message.Content) != "\"\"") {
+			return Response{}, errors.New("DeepSeek mixed text with tool calls")
+		}
+		allowed := make(map[string]struct{}, len(canonical.Tools))
+		if structured { allowed[synthetic] = struct{}{} }
+		for _, rawTool := range canonical.Tools {
+			var tool struct { Function struct{ Name string `json:"name"` } `json:"function"` }
+			if err := json.Unmarshal(rawTool, &tool); err != nil { return Response{}, errors.New("malformed declared function") }
+			allowed[tool.Function.Name] = struct{}{}
+		}
+		ids := make(map[string]struct{}, len(choice.Message.ToolCalls))
+		for _, call := range choice.Message.ToolCalls {
+			if call.ID == "" || call.Type != "function" || call.Function.Name == "" ||
+				!json.Valid([]byte(call.Function.Arguments)) {
+				return Response{}, errors.New("DeepSeek returned invalid function call")
+			}
+			if _, ok := allowed[call.Function.Name]; !ok {
+				return Response{}, errors.New("DeepSeek returned function not offered by Mujeeb")
+			}
+			if _, duplicate := ids[call.ID]; duplicate { return Response{}, errors.New("duplicate DeepSeek call ID") }
+			ids[call.ID] = struct{}{}
+			var args map[string]json.RawMessage
+			if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil || args == nil {
+				return Response{}, errors.New("DeepSeek function arguments must be an object")
+			}
+		}
+	}
 	if structured {
 		if choice.FinishReason != "tool_calls" || len(choice.Message.ToolCalls) != 1 ||
 			choice.Message.ToolCalls[0].Function.Name != synthetic ||
