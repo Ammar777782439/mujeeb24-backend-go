@@ -124,7 +124,7 @@ func (c *NativeCatalogAdapter) EvaluateBatch(ctx context.Context, input services
 	if err != nil {
 		return ports.CatalogBatchResult{}, fmt.Errorf("send catalog batch %d: %w", input.BatchNumber, err)
 	}
-	normalized, err := normalizenativeResponse(raw)
+	normalized, err := normalizeNativeResponse(raw)
 	if err != nil {
 		return ports.CatalogBatchResult{}, err
 	}
@@ -175,7 +175,7 @@ func (c *NativeCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, inp
 	if err != nil {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, fmt.Errorf("send final catalog evaluation: %w", err)
 	}
-	normalized, err := normalizenativeResponse(raw)
+	normalized, err := normalizeNativeResponse(raw)
 	if err != nil {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
 	}
