@@ -223,10 +223,18 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 			return Response{}, errors.New("DeepSeek mixed text with tool calls")
 		}
 		allowed := make(map[string]struct{}, len(canonical.Tools))
-		if structured { allowed[synthetic] = struct{}{} }
+		if structured {
+			allowed[synthetic] = struct{}{}
+		}
 		for _, rawTool := range canonical.Tools {
-			var tool struct { Function struct{ Name string `json:"name"` } `json:"function"` }
-			if err := json.Unmarshal(rawTool, &tool); err != nil { return Response{}, errors.New("malformed declared function") }
+			var tool struct {
+				Function struct {
+					Name string `json:"name"`
+				} `json:"function"`
+			}
+			if err := json.Unmarshal(rawTool, &tool); err != nil {
+				return Response{}, errors.New("malformed declared function")
+			}
 			allowed[tool.Function.Name] = struct{}{}
 		}
 		ids := make(map[string]struct{}, len(choice.Message.ToolCalls))
@@ -238,7 +246,9 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 			if _, ok := allowed[call.Function.Name]; !ok {
 				return Response{}, errors.New("DeepSeek returned function not offered by Mujeeb")
 			}
-			if _, duplicate := ids[call.ID]; duplicate { return Response{}, errors.New("duplicate DeepSeek call ID") }
+			if _, duplicate := ids[call.ID]; duplicate {
+				return Response{}, errors.New("duplicate DeepSeek call ID")
+			}
 			ids[call.ID] = struct{}{}
 			var args map[string]json.RawMessage
 			if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil || args == nil {
