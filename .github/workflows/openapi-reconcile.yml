@@ -1,0 +1,73 @@
+name: Reconcile generated OpenAPI
+
+on:
+  push:
+    branches:
+      - feat/catalog-complete-commercial-entity-atomic
+    paths:
+      - '.github/workflows/openapi-reconcile.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    name: Regenerate and commit dashboard OpenAPI from Go source
+    if: github.ref == 'refs/heads/feat/catalog-complete-commercial-entity-atomic'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    concurrency:
+      group: atomic-openapi-generated
+      cancel-in-progress: false
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/catalog-complete-commercial-entity-atomic
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.2'
+          cache: true
+      - name: Recompute canonical contract and show exact drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          file='api/openapi/mujeeb24-dashboard-v1.generated.yaml'
+          before="$(sha256sum "$file" | cut -d' ' -f1)"
+          go run ./cmd/openapi-gen
+          after="$(sha256sum "$file" | cut -d' ' -f1)"
+          echo "Tracked SHA256: $before"
+          echo "Generated SHA256: $after"
+          echo "OpenAPI diff summary:"
+          git diff --numstat -- "$file"
+          if git diff --quiet -- "$file"; then
+            echo 'No OpenAPI drift; no commit necessary.'
+            exit 0
+          fi
+          echo 'First 250 changed diff lines (full change retained in git commit):'
+          git diff --unified=2 -- "$file" | sed -n '1,250p'
+          git diff --check -- "$file"
+          changed="$(git diff --name-only)"
+          if [ "$changed" != "$file" ]; then
+            echo "::error::Generator touched unexpected files: $changed"
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- "$file"
+          git commit -m 'chore(openapi): synchronize generated dashboard contract with Go source'
+          # If HEAD moved, rebase only this generated artifact commit.
+          for attempt in 1 2 3; do
+            git fetch origin feat/catalog-complete-commercial-entity-atomic
+            git rebase origin/feat/catalog-complete-commercial-entity-atomic
+            if git push origin HEAD:feat/catalog-complete-commercial-entity-atomic; then
+              echo 'Committed regenerated OpenAPI on Atomic only.'
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Unable to push generated OpenAPI after retries"
+          exit 1
