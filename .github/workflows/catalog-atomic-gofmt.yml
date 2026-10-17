@@ -5,6 +5,7 @@ on:
     branches:
       - feat/catalog-complete-commercial-entity-atomic
     paths:
+      - '.github/workflows/catalog-atomic-gofmt.yml'
       - 'internal/adapters/secondary/ai/gateway/*.go'
       - 'internal/adapters/secondary/ai/litellm/*.go'
       - 'internal/platform/config/*.go'
