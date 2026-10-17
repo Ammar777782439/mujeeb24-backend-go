@@ -108,7 +108,7 @@ func (a *LiteLLMMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, in
 		MaxTokens: a.maxOutputTokens,
 		Stream:    false,
 	}
-	allowed := map[string]struct{}{}
+	allowed := map[string]map[string]any{}
 	if input.Capabilities != nil {
 		for _, def := range input.Capabilities.Definitions() {
 			if def.Name == "" {
@@ -117,10 +117,17 @@ func (a *LiteLLMMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, in
 			if _, exists := allowed[def.Name]; exists {
 				return merchantcatalogai.Proposal{}, errors.New("duplicate merchant discovery tool")
 			}
-			allowed[def.Name] = struct{}{}
+			strictParams, err := strictDiscoverySchema(def.Parameters)
+			if err != nil {
+				return merchantcatalogai.Proposal{}, fmt.Errorf("invalid merchant discovery tool %s: %w", def.Name, err)
+			}
+			allowed[def.Name] = strictParams
 			req.Tools = append(req.Tools, map[string]any{
-				"type":     "function",
-				"function": map[string]any{"name": def.Name, "description": def.Description, "parameters": def.Parameters},
+				"type": "function",
+				"function": map[string]any{
+					"name": def.Name, "description": def.Description,
+					"parameters": strictParams, "strict": true,
+				},
 			})
 		}
 	}
@@ -195,8 +202,12 @@ func (a *LiteLLMMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, in
 				if call.Type != "function" || call.ID == "" || call.Function.Name == "" {
 					return merchantcatalogai.Proposal{}, errors.New("invalid merchant catalog tool call")
 				}
-				if _, ok := allowed[call.Function.Name]; !ok {
+				toolSchema, ok := allowed[call.Function.Name]
+				if !ok {
 					return merchantcatalogai.Proposal{}, errors.New("merchant model requested an unauthorized tool")
+				}
+				if err := validateStrictArguments([]byte(call.Function.Arguments), toolSchema); err != nil {
+					return merchantcatalogai.Proposal{}, fmt.Errorf("invalid merchant tool parameters: %w", err)
 				}
 				if _, duplicate := seenCalls[call.ID]; duplicate {
 					return merchantcatalogai.Proposal{}, errors.New("duplicate merchant tool call ID")
