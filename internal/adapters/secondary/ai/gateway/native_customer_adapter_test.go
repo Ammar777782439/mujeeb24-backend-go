@@ -20,7 +20,22 @@ func(p *customerNativeProvider) Name()string{return p.name}
 func(p *customerNativeProvider) Generate(_ context.Context,_ native.Request)(native.Response,error){
 	p.calls++
 	if p.unavailable{return native.Response{},&native.StatusError{Provider:p.name,Code:http.StatusServiceUnavailable}}
-	response:=json.RawMessage(`{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"respond_without_action","arguments":"{\\"response_text\\":\\"مرحبًا\\",\\"selected\\":[]}"}}]}}],"usage":{"prompt_tokens":11,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":2}}}`)
+	args,err:=json.Marshal(map[string]any{"response_text":"مرحبًا","selected":[]any{}})
+	if err!=nil{return native.Response{},err}
+	response,err:=json.Marshal(map[string]any{
+		"choices":[]any{map[string]any{
+			"finish_reason":"tool_calls","message":map[string]any{
+				"role":"assistant","content":nil,"tool_calls":[]any{map[string]any{
+					"id":"call-1","type":"function","function":map[string]any{
+						"name":"respond_without_action","arguments":string(args),
+					},
+				}},
+			},
+		}},
+		"usage":map[string]any{"prompt_tokens":11,"completion_tokens":5,
+			"prompt_tokens_details":map[string]any{"cached_tokens":2}},
+	})
+	if err!=nil{return native.Response{},err}
 	return native.Response{Payload:response,Model:p.name+"-model",InputTokens:11,CachedTokens:2,OutputTokens:5},nil
 }
 func TestNativeCustomerDecisionUsesExactCanonicalCapabilities(t *testing.T){
