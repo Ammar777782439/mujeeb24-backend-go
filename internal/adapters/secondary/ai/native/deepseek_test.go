@@ -109,3 +109,19 @@ func TestDeepSeekRejectsTruncatedResponse(t *testing.T) {
 		t.Fatal("truncated response accepted")
 	}
 }
+
+func TestDeepSeekRejectsParallelUnknownOrMixedForcedCalls(t *testing.T) {
+	tool := `[{"type":"function","function":{"name":"evaluate_full_catalog","strict":true,"parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}}]`
+	responses := []string{
+		`{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","tool_calls":[{"id":"a","type":"function","function":{"name":"evaluate_full_catalog","arguments":"{}"}},{"id":"b","type":"function","function":{"name":"evaluate_full_catalog","arguments":"{}"}}]}}]}`,
+		`{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","tool_calls":[{"id":"a","type":"function","function":{"name":"not_offered","arguments":"{}"}}]}}]}`,
+		`{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","content":"already done","tool_calls":[{"id":"a","type":"function","function":{"name":"evaluate_full_catalog","arguments":"{}"}}]}}]}`,
+		`{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","tool_calls":[{"id":"a","type":"function","function":{"name":"evaluate_full_catalog","arguments":"not JSON"}}]}}]}`,
+	}
+	for i, body := range responses {
+		api,done:=newFakeDeepSeek(t,func(w http.ResponseWriter,r *http.Request){ _,_ = fmt.Fprint(w,body) })
+		_,err:=api.Generate(context.Background(),deepSeekReq(tool,""))
+		done()
+		if err==nil {t.Fatalf("unsafe forced function response %d accepted",i)}
+	}
+}
