@@ -23,10 +23,10 @@ func TestGatewayPlatformAISettingsUseRuntimeAliasesNotLegacyGeminiCredentials(t 
 		switch r.URL.Path {
 		case "/v1/models":
 			modelsCalls++
-			_, _ = fmt.Fprint(w, `{"data":[{"id":"mujeeb-customer"},{"id":"mujeeb-catalog"},{"id":"mujeeb-merchant"}]}`)
-		case "/v1beta/interactions":
+			_, _ = fmt.Fprint(w, `{"data":[{"id":"mujeeb-sales"},{"id":"mujeeb-catalog"},{"id":"mujeeb-merchant"}]}`)
+		case "/v1/chat/completions":
 			probeCalls++
-			_, _ = fmt.Fprint(w, `{"status":"completed"}`)
+			_, _ = fmt.Fprint(w, `{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"OK"}}]}`)
 		default:
 			t.Errorf("unexpected LiteLLM settings request %q", r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
@@ -38,7 +38,7 @@ func TestGatewayPlatformAISettingsUseRuntimeAliasesNotLegacyGeminiCredentials(t 
 		ModelDiscovery: litellm.NewModelsClient(),
 		LiteLLMSettings: &ports.LiteLLMPlatformConfig{
 			BaseURL: server.URL, APIKey: "runtime-virtual-key",
-			CustomerModel: "mujeeb-customer", CatalogModel: "mujeeb-catalog", MerchantModel: "mujeeb-merchant",
+			CustomerModel: "mujeeb-sales", CatalogModel: "mujeeb-catalog", MerchantModel: "mujeeb-merchant",
 			MaxOutputTokens: 4096, MaxInputCharacters: 48000,
 		},
 	})
@@ -48,9 +48,9 @@ func TestGatewayPlatformAISettingsUseRuntimeAliasesNotLegacyGeminiCredentials(t 
 		t.Fatal("get configuration not handled")
 	}
 	conf := rawConfig.(*contract.Single[dto.AIConfigurationView]).Body.Data
-	if conf.Provider != "litellm" || conf.CustomerModel != "mujeeb-customer" || conf.CatalogModel != "mujeeb-catalog" ||
+	if conf.Provider != "litellm" || conf.CustomerModel != "mujeeb-sales" || conf.CatalogModel != "mujeeb-catalog" ||
 		conf.MerchantModel != "mujeeb-merchant" || conf.ConfigurationSource != "environment" ||
-		conf.Model != "mujeeb-customer" || conf.CredentialID != "" {
+		conf.Model != "mujeeb-sales" || conf.CredentialID != "" {
 		t.Fatalf("platform reported a legacy provider or fake credential: %+v", conf)
 	}
 	rawProviders, ok := s.platformListAIProvidersConfig(ctx)
@@ -74,7 +74,7 @@ func TestGatewayPlatformAISettingsUseRuntimeAliasesNotLegacyGeminiCredentials(t 
 		t.Fatal("connection test not handled")
 	}
 	conn := rawConnection.(*contract.Single[dto.TestConnectionResult]).Body.Data
-	if !conn.Success || conn.Provider != "litellm" || conn.Model != "mujeeb-customer" || probeCalls != 1 {
+	if !conn.Success || conn.Provider != "litellm" || conn.Model != "mujeeb-sales" || probeCalls != 1 {
 		t.Fatalf("platform did not probe gateway runtime: %+v", conn)
 	}
 	// Admin form writes must not claim to change environment-owned routes.
@@ -93,7 +93,7 @@ func TestGatewayPlatformProviderRejectsGeminiAlias(t *testing.T) {
 	s := &Server{}
 	s.WithPlatformDeps(PlatformDeps{
 		ModelDiscovery:  litellm.NewModelsClient(),
-		LiteLLMSettings: &ports.LiteLLMPlatformConfig{BaseURL: "http://localhost:4000", APIKey: "test", CustomerModel: "mujeeb-customer"},
+		LiteLLMSettings: &ports.LiteLLMPlatformConfig{BaseURL: "http://localhost:4000", APIKey: "test", CustomerModel: "mujeeb-sales"},
 	})
 	for _, provider := range []string{"google_gemini", "openai"} {
 		m, ok := s.platformDiscoverAIModels(context.Background(), &dto.DiscoverModelsInput{Provider: provider})
@@ -115,7 +115,7 @@ func TestGatewayDiscoveryFailureDoesNotReturnFakeEmptyModelList(t *testing.T) {
 	defer srv.Close()
 	s := &Server{}
 	s.WithPlatformDeps(PlatformDeps{ModelDiscovery: litellm.NewModelsClient(),
-		LiteLLMSettings: &ports.LiteLLMPlatformConfig{BaseURL: srv.URL, APIKey: "a-secret", CustomerModel: "mujeeb-customer"},
+		LiteLLMSettings: &ports.LiteLLMPlatformConfig{BaseURL: srv.URL, APIKey: "a-secret", CustomerModel: "mujeeb-sales"},
 	})
 	raw, ok := s.platformDiscoverAIModels(context.Background(), &dto.DiscoverModelsInput{Provider: "litellm"})
 	if !ok || raw == nil {
