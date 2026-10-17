@@ -31,7 +31,9 @@ jobs:
       - name: Apply gofmt to touched catalog files
         run: |
           set -euo pipefail
-          gofmt -w internal/adapters/secondary/ai/litellm/client.go \
+          gofmt -w internal/adapters/secondary/ai/litellm/models_client.go \
+            internal/adapters/secondary/ai/litellm/models_client_test.go \
+            internal/adapters/secondary/ai/litellm/client.go \
             internal/adapters/secondary/ai/litellm/client_test.go \
             internal/adapters/secondary/ai/litellm/token_counter.go \
             internal/adapters/secondary/ai/litellm/token_counter_test.go \
