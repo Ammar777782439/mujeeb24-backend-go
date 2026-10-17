@@ -101,3 +101,29 @@ func TestLiteLLMModelProbeRejectsIncompleteAndAuthenticationFailure(t *testing.T
 		})
 	}
 }
+
+func TestLiteLLMModelProbeFailsClosedOnMalformedChoices(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"missing choices", `{"choices":[]}`},
+		{"multiple choices", `{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"ok"}},{"finish_reason":"stop","message":{"role":"assistant","content":"ok"}}]}`},
+		{"missing assistant role", `{"choices":[{"finish_reason":"stop","message":{"role":"user","content":"ok"}}]}`},
+		{"empty content", `{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":" "}}]}`},
+		{"refusal", `{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"ok","refusal":"refused"}}]}`},
+		{"missing finish reason", `{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				_, _ = fmt.Fprint(w, tc.body)
+			}))
+			defer srv.Close()
+			ok, _, code := NewModelsClient().TestConnection(context.Background(), "sk-private", "mujeeb-sales", srv.URL)
+			if ok || code != "LITELLM_INCOMPLETE_RESPONSE" {
+				t.Fatalf("unsafe LiteLLM probe accepted: ok=%t code=%q", ok, code)
+			}
+		})
+	}
+}
