@@ -65,7 +65,7 @@ type nativeMerchantChatRequest struct {
 	Messages       []nativeMerchantChatMessage `json:"messages"`
 	Tools          []map[string]any            `json:"tools,omitempty"`
 	ToolChoice     string                      `json:"tool_choice,omitempty"`
-	ResponseFormat any                         `json:"response_format"`
+	ResponseFormat any                         `json:"response_format,omitempty"`
 	MaxTokens      int                         `json:"max_tokens"`
 	Stream         bool                        `json:"stream"`
 }
@@ -98,13 +98,33 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 		return merchantcatalogai.Proposal{}, err
 	}
 
+	proposalSchema, err := json.Marshal(merchantCatalogProposalSchema())
+	if err != nil { return merchantcatalogai.Proposal{}, errors.New("unable to encode canonical merchant proposal schema") }
+	// The full proposal may contain dynamic attributes that provider strict
+	// schemas cannot represent without altering the merchant contract.
+	// A strict, reversible transport envelope carries the complete proposal
+	// as JSON text; Go validates that canonical JSON before any mutation.
+	proposalEnvelopeSchema := map[string]any{
+		"type":"object",
+		"properties":map[string]any{
+			"canonical_proposal_json":map[string]any{"type":"string"},
+		},
+		"required":[]string{"canonical_proposal_json"},
+		"additionalProperties":false,
+	}
+	proposalFormat := map[string]any{
+		"type":"json_schema",
+		"json_schema":map[string]any{
+			"name":"merchant_catalog_transport",
+			"strict":true,
+			"schema":proposalEnvelopeSchema,
+		},
+	}
+	trustedProposalInstruction := system+"\n\n# Canonical merchant proposal JSON schema\n"+string(proposalSchema)+
+		"\nReturn the complete proposal matching this canonical contract as the string value of canonical_proposal_json. Never omit commercial fields."
 	req := nativeMerchantChatRequest{
 		Model:    a.model,
 		Messages: []nativeMerchantChatMessage{{Role: "system", Content: system}, {Role: "user", Content: contextualInput}},
-		ResponseFormat: map[string]any{
-			"type":        "json_schema",
-			"json_schema": map[string]any{"name": "merchant_catalog_proposal", "strict": true, "schema": merchantCatalogProposalSchema()},
-		},
 		MaxTokens: a.maxOutputTokens,
 		Stream:    false,
 	}
@@ -141,6 +161,14 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 		if err := ctx.Err(); err != nil {
 			return merchantcatalogai.Proposal{}, err
 		}
+		// Build the correct provider request before checking its byte budget.
+		if len(req.Tools)>0 {
+			req.ResponseFormat=nil
+		} else {
+			req.ToolChoice=""
+			req.ResponseFormat=proposalFormat
+			req.Messages[0].Content=trustedProposalInstruction
+		}
 		body, err := json.Marshal(req)
 		if err != nil {
 			return merchantcatalogai.Proposal{}, fmt.Errorf("marshal merchant catalog request: %w", err)
@@ -148,12 +176,7 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 		if len(body) > a.maxRequestBytes {
 			return merchantcatalogai.Proposal{}, fmt.Errorf("merchant catalog request exceeds context byte limit: %d > %d", len(body), a.maxRequestBytes)
 		}
-		// Read-only discovery tools and the provider's structured response mode
-		// cannot be combined reliably on Gemini 2.5. Canonical proposal
-		// decoding/validation below remains mandatory for every response.
-		wire := req
-		wire.ResponseFormat = nil
-		raw, info, err := a.client.Complete(ctx, wire)
+		raw, info, err := a.client.Complete(ctx, req)
 		if err != nil {
 			return merchantcatalogai.Proposal{}, fmt.Errorf("merchant catalog native request: %w", err)
 		}
@@ -240,12 +263,28 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 		if choice.FinishReason != "stop" {
 			return merchantcatalogai.Proposal{}, errors.New("merchant catalog model did not finish proposal")
 		}
-		var content string
-		if err := json.Unmarshal(choice.Message.Content, &content); err != nil || strings.TrimSpace(content) == "" {
-			return merchantcatalogai.Proposal{}, errors.New("merchant catalog model returned no structured proposal")
+		if len(req.Tools)>0 {
+			// A discovery response is NOT a final commercial proposal.
+			// End read-only discovery and request one separately validated
+			// structured transport envelope on the next inference round.
+			req.Tools=nil
+			req.ToolChoice=""
+			continue
 		}
-		// The unchanged canonical parser rejects unknown fields and trailing data.
-		proposal, err := parseMerchantCatalogProposal(content)
+		var content string
+		if err := json.Unmarshal(choice.Message.Content,&content);err != nil || strings.TrimSpace(content)=="" {
+			return merchantcatalogai.Proposal{}, errors.New("merchant catalog returned no strict structured result")
+		}
+		if err := validateStrictArguments([]byte(content),proposalEnvelopeSchema);err!=nil {
+			return merchantcatalogai.Proposal{}, fmt.Errorf("invalid native merchant transport envelope: %w",err)
+		}
+		var wrapped struct{CanonicalProposalJSON string `json:"canonical_proposal_json"`}
+		if err := json.Unmarshal([]byte(content),&wrapped);err!=nil || strings.TrimSpace(wrapped.CanonicalProposalJSON)=="" {
+			return merchantcatalogai.Proposal{}, errors.New("merchant catalog returned an empty canonical proposal")
+		}
+		// The authoritative Go parser rejects unknown fields and invalid
+		// commercial relations; the model never executes the proposal.
+		proposal, err := parseMerchantCatalogProposal(wrapped.CanonicalProposalJSON)
 		if err != nil {
 			return merchantcatalogai.Proposal{}, err
 		}
