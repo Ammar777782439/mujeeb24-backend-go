@@ -9,6 +9,7 @@ on:
       - 'internal/adapters/secondary/ai/native/router.go'
       - 'internal/platform/config/config.go'
       - 'internal/platform/config/config_test.go'
+      - 'internal/platform/database/migrator_test.go'
       - 'internal/bootstrap/integrations.go'
       - 'internal/bootstrap/integrations_test.go'
       - 'internal/adapters/primary/http/handlers/platform_native_ai_config.go'
@@ -53,7 +54,8 @@ jobs:
             internal/bootstrap/integrations.go \
             internal/bootstrap/integrations_test.go \
             internal/platform/config/config.go \
-            internal/platform/config/config_test.go
+            internal/platform/config/config_test.go \
+            internal/platform/database/migrator_test.go
           git diff --check
           if git diff --quiet; then
             echo "All migration files already formatted"
