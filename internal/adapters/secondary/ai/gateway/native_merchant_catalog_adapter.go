@@ -25,9 +25,9 @@ type NativeMerchantCatalogAuthoringAdapter struct {
 }
 
 const (
-	maxMerchantToolRounds    = 12
-	maxMerchantToolCalls     = 32
-	maxMerchantCallsPerRound = 8
+	nativeMaxMerchantToolRounds    = 12
+	nativeMaxMerchantToolCalls     = 32
+	nativeMaxMerchantCallsPerRound = 8
 )
 
 func NewNativeMerchantCatalogAuthoringAdapter(client *native.CompletionClient, model string, maxOutputTokens, maxRequestBytes int) (*NativeMerchantCatalogAuthoringAdapter, error) {
@@ -45,31 +45,31 @@ func (a *NativeMerchantCatalogAuthoringAdapter) SetUsageReporter(report func(con
 	}
 }
 
-type merchantChatFunction struct {
+type nativeMerchantChatFunction struct {
 	Name      string `json:"name"`
 	Arguments string `json:"arguments"`
 }
-type merchantChatCall struct {
+type nativeMerchantChatCall struct {
 	ID       string               `json:"id"`
 	Type     string               `json:"type"`
-	Function merchantChatFunction `json:"function"`
+	Function nativeMerchantChatFunction `json:"function"`
 }
-type merchantChatMessage struct {
+type nativeMerchantChatMessage struct {
 	Role       string             `json:"role"`
 	Content    any                `json:"content,omitempty"`
-	ToolCalls  []merchantChatCall `json:"tool_calls,omitempty"`
+	ToolCalls  []nativeMerchantChatCall `json:"tool_calls,omitempty"`
 	ToolCallID string             `json:"tool_call_id,omitempty"`
 }
-type merchantChatRequest struct {
+type nativeMerchantChatRequest struct {
 	Model          string                `json:"model"`
-	Messages       []merchantChatMessage `json:"messages"`
+	Messages       []nativeMerchantChatMessage `json:"messages"`
 	Tools          []map[string]any      `json:"tools,omitempty"`
 	ToolChoice     string                `json:"tool_choice,omitempty"`
 	ResponseFormat any                   `json:"response_format"`
 	MaxTokens      int                   `json:"max_tokens"`
 	Stream         bool                  `json:"stream"`
 }
-type merchantChatResponse struct {
+type nativeMerchantChatResponse struct {
 	Usage struct {
 		PromptTokens        int `json:"prompt_tokens"`
 		CompletionTokens    int `json:"completion_tokens"`
@@ -82,7 +82,7 @@ type merchantChatResponse struct {
 		Message      struct {
 			Role      string             `json:"role"`
 			Content   json.RawMessage    `json:"content"`
-			ToolCalls []merchantChatCall `json:"tool_calls"`
+			ToolCalls []nativeMerchantChatCall `json:"tool_calls"`
 			Refusal   *string            `json:"refusal"`
 		} `json:"message"`
 	} `json:"choices"`
@@ -98,9 +98,9 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 		return merchantcatalogai.Proposal{}, err
 	}
 
-	req := merchantChatRequest{
+	req := nativeMerchantChatRequest{
 		Model:    a.model,
-		Messages: []merchantChatMessage{{Role: "system", Content: system}, {Role: "user", Content: contextualInput}},
+		Messages: []nativeMerchantChatMessage{{Role: "system", Content: system}, {Role: "user", Content: contextualInput}},
 		ResponseFormat: map[string]any{
 			"type":        "json_schema",
 			"json_schema": map[string]any{"name": "merchant_catalog_proposal", "strict": true, "schema": merchantCatalogProposalSchema()},
@@ -137,7 +137,7 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 
 	totalCalls := 0
 	seenCalls := map[string]struct{}{}
-	for round := 0; round < maxMerchantToolRounds; round++ {
+	for round := 0; round < nativeMaxMerchantToolRounds; round++ {
 		if err := ctx.Err(); err != nil {
 			return merchantcatalogai.Proposal{}, err
 		}
@@ -157,7 +157,7 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 		if err != nil {
 			return merchantcatalogai.Proposal{}, fmt.Errorf("merchant catalog native request: %w", err)
 		}
-		var response merchantChatResponse
+		var response nativeMerchantChatResponse
 		if err := json.Unmarshal(raw, &response); err != nil {
 			return merchantcatalogai.Proposal{}, errors.New("merchant catalog native provider returned invalid chat schema")
 		}
@@ -187,7 +187,7 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 			if choice.FinishReason != "tool_calls" {
 				return merchantcatalogai.Proposal{}, errors.New("merchant tool calls had invalid completion reason")
 			}
-			if len(choice.Message.ToolCalls) > maxMerchantCallsPerRound || totalCalls+len(choice.Message.ToolCalls) > maxMerchantToolCalls {
+			if len(choice.Message.ToolCalls) > nativeMaxMerchantCallsPerRound || totalCalls+len(choice.Message.ToolCalls) > nativeMaxMerchantToolCalls {
 				return merchantcatalogai.Proposal{}, errors.New("merchant discovery call budget exceeded")
 			}
 			if input.Capabilities == nil {
@@ -220,7 +220,7 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 					return merchantcatalogai.Proposal{}, errors.New("merchant tool arguments must be a JSON object")
 				}
 			}
-			req.Messages = append(req.Messages, merchantChatMessage{Role: "assistant", ToolCalls: choice.Message.ToolCalls})
+			req.Messages = append(req.Messages, nativeMerchantChatMessage{Role: "assistant", ToolCalls: choice.Message.ToolCalls})
 			for _, call := range choice.Message.ToolCalls {
 				result, err := input.Capabilities.Execute(ctx, merchantcatalogai.MerchantCatalogDiscoveryExecutionContext{
 					BusinessID: input.BusinessID, ConversationID: input.SessionID, PrincipalID: input.PrincipalID,
@@ -232,7 +232,7 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 				if err != nil {
 					return merchantcatalogai.Proposal{}, errors.New("unable to serialize merchant read-only tool result")
 				}
-				req.Messages = append(req.Messages, merchantChatMessage{Role: "tool", ToolCallID: call.ID, Content: string(encoded)})
+				req.Messages = append(req.Messages, nativeMerchantChatMessage{Role: "tool", ToolCallID: call.ID, Content: string(encoded)})
 			}
 			totalCalls += len(choice.Message.ToolCalls)
 			continue
