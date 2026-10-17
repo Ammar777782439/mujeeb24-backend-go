@@ -5,6 +5,7 @@ on:
       - feat/gemini-deepseek
     paths:
       - 'internal/adapters/secondary/ai/native/**'
+      - 'internal/adapters/secondary/ai/gateway/native_customer_adapter*.go'
       - '.github/workflows/native-ai-verify.yml'
   workflow_dispatch:
 
@@ -30,23 +31,23 @@ jobs:
           go-version: '1.22.2'
           cache: true
       - name: Canonical Go format
-        run: gofmt -w internal/adapters/secondary/ai/native/*.go
+        run: gofmt -w internal/adapters/secondary/ai/native/*.go internal/adapters/secondary/ai/gateway/native_customer_adapter*.go
       - name: Compile repository
         run: go build ./...
       - name: Test native provider routing
-        run: go test -count=1 -race ./internal/adapters/secondary/ai/native/...
+        run: go test -count=1 -race ./internal/adapters/secondary/ai/native/... ./internal/adapters/secondary/ai/gateway
       - name: Verify cross-package compilation
         run: go vet ./...
       - name: Commit generated formatting back to feature branch
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- internal/adapters/secondary/ai/native/; then
+          if git diff --quiet -- internal/adapters/secondary/ai/native/ internal/adapters/secondary/ai/gateway/native_customer_adapter.go internal/adapters/secondary/ai/gateway/native_customer_adapter_test.go; then
             echo "Formatting already canonical"
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add internal/adapters/secondary/ai/native/
+          git add internal/adapters/secondary/ai/native/ internal/adapters/secondary/ai/gateway/native_customer_adapter.go internal/adapters/secondary/ai/gateway/native_customer_adapter_test.go
           git commit -m 'style(ai): gofmt native provider source and tests'
           git push origin HEAD:feat/gemini-deepseek
