@@ -2,9 +2,11 @@ package bootstrap
 
 import (
 	"errors"
+	"time"
 
 	gatewayai "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gateway"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/litellm"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/native"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/providers/socialapi"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
@@ -12,6 +14,9 @@ import (
 )
 
 type ExternalAdapters struct {
+	NativeCustomerDecision ports.CustomerSalesDecisionPort
+	NativeCatalogClient *gatewayai.NativeCatalogAdapter
+	NativeMerchantAuthoring merchantcatalogai.MerchantCatalogAuthoringPort
 	LiteLLMPlatformConfig          *ports.LiteLLMPlatformConfig
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
@@ -39,6 +44,9 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 		"litellm_customer":     "disabled",
 		"litellm_catalog":      "disabled",
 		"litellm_merchant":     "disabled",
+		"native_customer": "disabled",
+		"native_catalog": "disabled",
+		"native_merchant": "disabled",
 	}
 	if a.SocialWebhook != nil {
 		checks["socialapi_webhook"] = "configured"
@@ -56,7 +64,8 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 			checks["channel_provisioning"] = "configured"
 		}
 	}
-	if a.LiteLLMCustomerDecision != nil && a.LiteLLMCatalogClient != nil && a.LiteLLMMerchantAuthoring != nil {
+	if (a.NativeCustomerDecision != nil && a.NativeCatalogClient != nil && a.NativeMerchantAuthoring != nil) ||
+		(a.LiteLLMCustomerDecision != nil && a.LiteLLMCatalogClient != nil && a.LiteLLMMerchantAuthoring != nil) {
 		checks["llm_runtime"] = "configured"
 	}
 	if a.LiteLLMCustomerDecision != nil {
@@ -68,6 +77,9 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 	if a.LiteLLMMerchantAuthoring != nil {
 		checks["litellm_merchant"] = "configured"
 	}
+	if a.NativeCustomerDecision != nil { checks["native_customer"]="configured" }
+	if a.NativeCatalogClient != nil { checks["native_catalog"]="configured" }
+	if a.NativeMerchantAuthoring != nil { checks["native_merchant"]="configured" }
 	return checks
 }
 
@@ -125,6 +137,32 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 						adapters.LiteLLMCustomerDecision = customer
 						adapters.LiteLLMMerchantAuthoring = merchant
 						adapters.LiteLLMCatalogClient = catalog
+					}
+				}
+			}
+		}
+	}
+	if cfg.NativeAIEnabled {
+		primary,err:=native.NewGemini(native.GeminiConfig{Model:cfg.GeminiModel,APIKey:cfg.GeminiAPIKey,Timeout:cfg.NativeHTTPTimeout})
+		if err!=nil {adapters.LLMConfigError=err} else {
+			backup,err:=native.NewDeepSeek(native.DeepSeekConfig{Model:cfg.DeepSeekModel,APIKey:cfg.DeepSeekAPIKey,Timeout:cfg.NativeHTTPTimeout})
+			if err!=nil {adapters.LLMConfigError=err} else {
+				router,err:=native.NewRouter(primary,backup,native.Policy{ConsecutiveFailures:3,Cooldown:time.Minute})
+				if err!=nil {adapters.LLMConfigError=err} else {
+					client,err:=native.NewCompletionClient(router)
+					if err!=nil {adapters.LLMConfigError=err} else {
+						customer,err:=gatewayai.NewNativeCustomerSalesAdapter(client,"mujeeb-sales",cfg.NativeMaxOutputTokens,cfg.NativeMaxInputCharacters)
+						if err!=nil {adapters.LLMConfigError=err} else {
+							catalog,err:=gatewayai.NewNativeCatalogAdapter(client,"mujeeb-catalog",cfg.NativeMaxOutputTokens,cfg.NativeMaxContextTokens)
+							if err!=nil {adapters.LLMConfigError=err} else {
+								merchant,err:=gatewayai.NewNativeMerchantCatalogAuthoringAdapter(client,"mujeeb-merchant",cfg.NativeMaxOutputTokens,cfg.NativeMerchantMaxRequestBytes)
+								if err!=nil {adapters.LLMConfigError=err} else {
+									adapters.NativeCustomerDecision=customer
+									adapters.NativeCatalogClient=catalog
+									adapters.NativeMerchantAuthoring=merchant
+								}
+							}
+						}
 					}
 				}
 			}
