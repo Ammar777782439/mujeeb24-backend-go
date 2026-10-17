@@ -109,7 +109,7 @@ type CustomerSalesUsageTelemetry struct {
 	Provider            string
 	Model               string
 	EstimatedCostMicros int64
-	// Native LiteLLM spend metadata; USD is a decimal string, not a token estimate.
+	// Optional provider-verified USD spend metadata; unknown cost must not be fabricated.
 	GatewayCallID       string
 	GatewayDeploymentID string
 	GatewayCostUSD      string

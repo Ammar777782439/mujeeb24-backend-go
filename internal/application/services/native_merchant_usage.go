@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// NativeMerchantUsageRecorder is a thin application ledger: LiteLLM owns
+// NativeMerchantUsageRecorder is a thin application ledger: Provider pricing is separately verified; Mujeeb owns
 // token pricing, while Mujeeb owns subscription association and entitlement.
 // Tool-round calls are internal expenses, never customer AI replies.
 type NativeMerchantUsageRecorder struct {

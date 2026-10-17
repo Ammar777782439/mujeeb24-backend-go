@@ -7,7 +7,7 @@ import (
 )
 
 // nativeProviderSpend never multiplies token quantities by homemade model prices.
-// LiteLLM owns USD spend; PostgreSQL converts accumulated native USD to YER
+// Provider-verified USD spend, when present, is converted to YER
 // using an explicitly configured exchange rate. Missing is NOT equivalent to $0.
 func nativeProviderSpend(usage ports.CustomerSalesUsageTelemetry, fxRate string) (string, string, string, bool) {
 	if (usage.Provider != "gemini" && usage.Provider != "deepseek") || !usage.GatewayCostKnown ||

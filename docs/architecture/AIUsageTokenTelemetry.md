@@ -318,7 +318,7 @@ internal_ai_cost_budget_yer
 | أعمال (`business`) | 7,500 YER / month |
 | مؤسسات/وكالات (`enterprise`) | حد نقدي متفق عليه |
 
-تثبت الميزانية في Plan Version والاشتراك، ولا يعاد حسابها آليًا كنسبة متحركة. هذه hard economic allowance، بينما authoritative consumption يأتي من LiteLLM native spend وFX snapshot.
+تثبت الميزانية في Plan Version والاشتراك، ولا يعاد حسابها آليًا كنسبة متحركة. هذه hard economic allowance، بينما authoritative consumption يأتي من Usage المثبت وقواعد تسعير المزود الموثقة؛ والتكلفة المجهولة لا تعتبر صفرًا.
 
 وهذه ليست رسومًا إضافية على التاجر وليست Token Quota.
 
