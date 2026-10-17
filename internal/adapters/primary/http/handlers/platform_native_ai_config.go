@@ -38,7 +38,7 @@ func (s *Server) platformGatewayListAIProvidersConfig(_ context.Context) (any, b
 
 func (s *Server) platformGatewayAddAICredential(_ context.Context, _ *dto.AddCredentialInput) (any, bool) {
 	return mapApplicationError(appErrors.New(appErrors.CodeConflict,
-		"Gemini and DeepSeek API credentials are deployment-owned; this endpoint does not accept keys")), true
+		"Native provider API credentials are deployment-owned; this endpoint does not accept keys")), true
 }
 
 func (s *Server) platformGatewayTestAIConnection(ctx context.Context, in *dto.TestConnectionInput) (any, bool) {
@@ -93,7 +93,7 @@ func (s *Server) platformGatewayGetAIConfiguration(_ context.Context) (any, bool
 		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "native AI settings are unavailable")), true
 	}
 	status := "INACTIVE"
-	if cfg.GeminiConfigured && cfg.DeepSeekConfigured {
+	if cfg.GeminiConfigured {
 		status = "ACTIVE"
 	}
 	out := &contract.Single[dto.AIConfigurationView]{}

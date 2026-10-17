@@ -1,4 +1,4 @@
-# Mujeeb 24 API only. Direct Gemini primary and DeepSeek standby.
+# Mujeeb 24 API only. Direct Gemini primary; optional DeepSeek standby.
 # No external AI proxy or gateway is deployed by this blueprint.
 # Secrets remain environment-managed; auto-deploy is disabled.
 services:
@@ -47,7 +47,7 @@ services:
       - key: FRONTEND_URL
         value: https://mujeeb24.com/landing
       # Current Mujeeb production feature-flag values supplied by the owner.
-      # AutoReply requires BOTH configured native provider secrets and catalog qualification.
+      # AutoReply requires the Gemini key; DeepSeek is optional. Qualify models and accounting before production.
       - key: AUTOREPLY_ENABLED
         value: "true"
       - key: CUSTOMER_SALES_ENABLED
@@ -79,8 +79,9 @@ services:
         sync: false
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
-      - key: DEEPSEEK_API_KEY
-        sync: false
+      # DEEPSEEK_API_KEY is OPTIONAL. Add it manually as a secret in
+      # Render Environment when standby access becomes available.
+      # Gemini remains the only provider when the key is absent.
       - key: DEEPSEEK_MODEL
         value: deepseek-chat
       - key: NATIVE_AI_HTTP_TIMEOUT

@@ -97,18 +97,28 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 		}
 	}
 	if !cfg.NativeAIEnabled && (cfg.AutoReplyEnabled || cfg.CustomerSalesEnabled) {
-		adapters.LLMConfigError = errors.New("customer AI requires a configured native Gemini and DeepSeek runtime")
+		adapters.LLMConfigError = errors.New("customer AI requires a configured native Gemini runtime")
 	}
 	if cfg.NativeAIEnabled {
 		primary, err := native.NewGemini(native.GeminiConfig{Model: cfg.GeminiModel, APIKey: cfg.GeminiAPIKey, Timeout: cfg.NativeHTTPTimeout})
 		if err != nil {
 			adapters.LLMConfigError = err
 		} else {
-			backup, err := native.NewDeepSeek(native.DeepSeekConfig{Model: cfg.DeepSeekModel, APIKey: cfg.DeepSeekAPIKey, Timeout: cfg.NativeHTTPTimeout})
-			if err != nil {
-				adapters.LLMConfigError = err
-			} else {
-				router, err := native.NewRouter(primary, backup, native.Policy{ConsecutiveFailures: 3, Cooldown: time.Minute})
+			// DeepSeek is optional. No standby client, key or outgoing request
+			// is constructed when the merchant deployment uses Gemini only.
+			var standby native.Provider
+			if cfg.DeepSeekAPIKey != "" {
+				backup, backupErr := native.NewDeepSeek(native.DeepSeekConfig{
+					Model: cfg.DeepSeekModel, APIKey: cfg.DeepSeekAPIKey, Timeout: cfg.NativeHTTPTimeout,
+				})
+				if backupErr != nil {
+					adapters.LLMConfigError = backupErr
+				} else {
+					standby = backup
+				}
+			}
+			if adapters.LLMConfigError == nil {
+				router, err := native.NewRouter(primary, standby, native.Policy{ConsecutiveFailures: 3, Cooldown: time.Minute})
 				if err != nil {
 					adapters.LLMConfigError = err
 				} else {

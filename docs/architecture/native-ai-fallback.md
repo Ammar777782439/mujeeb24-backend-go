@@ -6,7 +6,7 @@ This is an **implementation log**, not a declaration of production readiness.
 ## Invariants
 
 - Customer Sales, Catalog Batch, Final Catalog and Merchant AI continue using the existing canonical business contracts.
-- Gemini is the primary model provider; DeepSeek is standby for operational unavailability (initial trigger: HTTP 503).
+- Gemini is the required primary provider. DeepSeek is an optional standby for HTTP 503 when a DeepSeek API key is provided.
 - Only inference generation attempts may switch providers. Retry and fallback must never execute a commercial tool or mutate a transaction.
 - No response that fails canonical schema, capability selection, referential integrity or catalog coverage may be accepted.
 - Previously completed catalog batches must not be rerun as a side effect of provider failure.
@@ -39,7 +39,7 @@ All changes below are **on the feature branch only**. GitHub's `Native AI Contra
 ## Current verified status and production blockers
 
 - Native Customer Sales, full catalog batch and final decision, and read-only Merchant AI adapters are connected in bootstrap. CI validates the branch HEAD on every code update; specific passing runs must match the final commit.
-- The previous proxy runtime and files were removed. Deployment variables are now `NATIVE_AI_ENABLED`, `GEMINI_API_KEY`, and `DEEPSEEK_API_KEY`. Automatic deployment remains disabled.
+- The previous proxy runtime and files were removed. Deployment requires `NATIVE_AI_ENABLED=true` and `GEMINI_API_KEY`. `DEEPSEEK_API_KEY` is optional. Automatic deployment remains disabled.
 - The historical SQL migration version 75 is retained byte-for-byte in its DDL, with a provider-neutral filename. The migration version and columns are not removed.
 - HTTP 503 provider fallback is tested against mock HTTP servers. It does not prove real provider compatibility.
 - Native catalog admission currently uses a conservative serialized-byte bound, not verified tokenization for both models. Context capacity must be qualified per deployed model.
@@ -51,3 +51,11 @@ All changes below are **on the feature branch only**. GitHub's `Native AI Contra
 - Run PostgreSQL integration, race, secret, full Go and live provider contract qualification before authorizing production. No actual model credentials were used in these mock tests.
 
 **Runtime status:** Native source cutover is complete; production qualification and model/cost accounting are **not** complete. Do not declare production readiness merely from green unit tests.
+
+## Optional DeepSeek standby — Gemini-only configuration
+
+- Leave `DEEPSEEK_API_KEY` absent/unset to start the native AI runtime with Gemini alone. Set `NATIVE_AI_ENABLED=true` and a valid `GEMINI_API_KEY`.
+- Bootstrap never constructs a DeepSeek client when its API key is absent. The router always invokes Gemini, including subsequent requests after 503, without opening a breaker that could suppress the only provider.
+- On Gemini 503 without a standby, the inference fails with an explicit operational error. No fabricated response, silent provider substitution, business tool execution or repeated transaction is permitted.
+- Once the DeepSeek key is added, restarting the API configures the existing HTTP 503 fallback and bounded breaker. Nothing in Customer Sales, Universal Catalog or Merchant AI business contracts changes.
+- Platform Admin shows Gemini as active and does not list an unconfigured DeepSeek credential or model. Live model qualification remains required before production.
