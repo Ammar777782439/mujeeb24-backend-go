@@ -167,8 +167,11 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.NativeMerchantMaxRequestBytes, err = intEnv("NATIVE_AI_MERCHANT_MAX_REQUEST_BYTES", cfg.NativeMerchantMaxRequestBytes); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.NativeAIEnabled && (cfg.GeminiAPIKey == "" || cfg.DeepSeekAPIKey == "" || cfg.GeminiModel == "" || cfg.DeepSeekModel == "" || cfg.NativeHTTPTimeout <= 0 || cfg.NativeMaxOutputTokens <= 0 || cfg.NativeMaxContextTokens <= cfg.NativeMaxOutputTokens || cfg.NativeMaxInputCharacters <= 0 || cfg.NativeMerchantMaxRequestBytes <= 0) {
-		return ProcessConfig{}, errors.New("NATIVE_AI_ENABLED requires Gemini and DeepSeek credentials, models, and positive limits")
+	if cfg.NativeAIEnabled && (cfg.GeminiAPIKey == "" || cfg.GeminiModel == "" || cfg.NativeHTTPTimeout <= 0 || cfg.NativeMaxOutputTokens <= 0 || cfg.NativeMaxContextTokens <= cfg.NativeMaxOutputTokens || cfg.NativeMaxInputCharacters <= 0 || cfg.NativeMerchantMaxRequestBytes <= 0) {
+		return ProcessConfig{}, errors.New("NATIVE_AI_ENABLED requires a Gemini credential, model, and positive limits")
+	}
+	if cfg.NativeAIEnabled && cfg.DeepSeekAPIKey != "" && cfg.DeepSeekModel == "" {
+		return ProcessConfig{}, errors.New("DEEPSEEK_MODEL is required when DEEPSEEK_API_KEY is provided")
 	}
 	if cfg.AuthEnabled && (cfg.JWTEd25519PrivateKey == "" || cfg.JWTEd25519PublicKey == "" || strings.TrimSpace(cfg.JWTIssuer) == "" || cfg.JWTAccessTTL <= 0 || cfg.RefreshSessionTTL <= 0) {
 		return ProcessConfig{}, errors.New("AUTH_ENABLED requires JWT_ED25519_PRIVATE_KEY, JWT_ED25519_PUBLIC_KEY, JWT_ISSUER, and positive token lifetimes")

@@ -73,16 +73,27 @@ func TestLoadFromEnvRejectsIncompleteExternalFeatureEnablement(t *testing.T) {
 	}
 }
 
-func TestLoadFromEnvRejectsMissingNativeStandby(t *testing.T) {
+func TestLoadFromEnvAcceptsGeminiWithoutOptionalDeepSeek(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
 	t.Setenv("AUTOREPLY_ENABLED", "true")
 	t.Setenv("SOCIALAPI_WEBHOOK_SECRET", "test-webhook-secret")
 	t.Setenv("SOCIALAPI_API_KEY", "test-socialapi-key")
 	t.Setenv("NATIVE_AI_ENABLED", "true")
 	t.Setenv("GEMINI_API_KEY", "test-primary-only-key")
-	t.Setenv("LLM_ENABLED", "true")
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	cfg, err := LoadFromEnv()
+	if err != nil || !cfg.NativeAIEnabled || cfg.GeminiAPIKey == "" || cfg.DeepSeekAPIKey != "" {
+		t.Fatalf("Gemini-only native AI should start: cfg=%+v err=%v", cfg, err)
+	}
+}
+
+func TestLoadFromEnvStillRequiresGeminiPrimary(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
+	t.Setenv("NATIVE_AI_ENABLED", "true")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("DEEPSEEK_API_KEY", "test-deepseek-key")
 	if _, err := LoadFromEnv(); err == nil {
-		t.Fatal("a missing DeepSeek standby must fail a native AI deployment")
+		t.Fatal("DeepSeek alone must not replace required Gemini primary")
 	}
 }
 
