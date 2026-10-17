@@ -55,6 +55,7 @@ All changes below are **on the feature branch only**. GitHub's `Native AI Contra
 ## Optional DeepSeek standby — Gemini-only configuration
 
 - Leave `DEEPSEEK_API_KEY` absent/unset to start the native AI runtime with Gemini alone. Set `NATIVE_AI_ENABLED=true` and a valid `GEMINI_API_KEY`.
+- The Render blueprint intentionally does not declare `DEEPSEEK_API_KEY` as a mandatory secret. Add it in the Render environment only after obtaining a working DeepSeek API key; then redeploy. Existing Gemini-only configuration requires no placeholder DeepSeek value.
 - Bootstrap never constructs a DeepSeek client when its API key is absent. The router always invokes Gemini, including subsequent requests after 503, without opening a breaker that could suppress the only provider.
 - On Gemini 503 without a standby, the inference fails with an explicit operational error. No fabricated response, silent provider substitution, business tool execution or repeated transaction is permitted.
 - Once the DeepSeek key is added, restarting the API configures the existing HTTP 503 fallback and bounded breaker. Nothing in Customer Sales, Universal Catalog or Merchant AI business contracts changes.
