@@ -11,6 +11,7 @@ on:
       - 'migrations/**'
       - '.env.example'
       - 'render.yaml'
+      - 'docs/architecture/native-ai-fallback.md'
       - '.github/workflows/native-ai-verify.yml'
   workflow_dispatch:
 

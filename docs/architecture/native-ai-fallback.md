@@ -38,13 +38,15 @@ All changes below are **on the feature branch only**. GitHub's `Native AI Contra
 
 ## Current verified status and production blockers
 
-- Native Customer Sales, full catalog batch and final decision, and read-only Merchant AI adapters are connected in bootstrap. Go compilation and full unit tests passed for HEAD 684ec3e (2026-10-17).
+- Native Customer Sales, full catalog batch and final decision, and read-only Merchant AI adapters are connected in bootstrap. CI validates the branch HEAD on every code update; specific passing runs must match the final commit.
 - The previous proxy runtime and files were removed. Deployment variables are now `NATIVE_AI_ENABLED`, `GEMINI_API_KEY`, and `DEEPSEEK_API_KEY`. Automatic deployment remains disabled.
 - The historical SQL migration version 75 is retained byte-for-byte in its DDL, with a provider-neutral filename. The migration version and columns are not removed.
 - HTTP 503 provider fallback is tested against mock HTTP servers. It does not prove real provider compatibility.
 - Native catalog admission currently uses a conservative serialized-byte bound, not verified tokenization for both models. Context capacity must be qualified per deployed model.
 - The provider-direct usage values report tokens, but there is **no independently validated actual USD price for every inference attempt or failed primary request**. Unknown spend must not be treated as zero. Pricing-version-based provider accounting and budget-enforcement acceptance remain incomplete.
-- Merchant discovery-to-final structured output equivalence across both models must be qualified; schema coercion/downgrade is not acceptable.
+- Merchant AI uses read-only discovery calls first, with parallel function calls explicitly disabled. The final commercial proposal is requested in an independent strict `json_schema` transport envelope with exactly one required `canonical_proposal_json` string field.
+- This envelope preserves arbitrary merchant-defined attributes instead of silently stripping dynamic fields. Go strictly parses and validates the *entire* nested canonical proposal, including authorization and reference checks before execution. The envelope **does not mean** the provider itself enforces the full dynamic merchant JSON Schema; actual model reliability must be separately qualified.
+- Provider-specific strict mode and response framing for both models are not claimed live-qualified until verified on the selected account and model versions.
 - Regenerate OpenAPI from Go with `go run ./cmd/openapi-gen` and check the generated contract. Do not edit generated YAML manually.
 - Run PostgreSQL integration, race, secret, full Go and live provider contract qualification before authorizing production. No actual model credentials were used in these mock tests.
 
