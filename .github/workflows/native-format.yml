@@ -1,0 +1,56 @@
+name: Format native AI cutover
+
+on:
+  push:
+    branches:
+      - feat/gemini-deepseek
+    paths:
+      - '.github/workflows/native-format.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  native-gofmt:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/gemini-deepseek
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.2'
+          cache: true
+      - name: Format migration-owned Go packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          gofmt -w \
+            internal/adapters/primary/http/handlers/platform_native_ai_config.go \
+            internal/adapters/primary/http/handlers/platform_native_ai_config_test.go \
+            internal/adapters/secondary/ai/gateway/native_customer_adapter.go \
+            internal/adapters/secondary/ai/native/router.go \
+            internal/application/ports/ai_provider_config.go \
+            internal/application/services/ai_provider_failure_test.go \
+            internal/application/services/native_merchant_usage.go \
+            internal/application/services/platform_operations_service.go \
+            internal/bootstrap/api.go \
+            internal/bootstrap/integrations.go \
+            internal/platform/config/config.go \
+            internal/platform/config/config_test.go
+          git diff --check
+          if git diff --quiet; then
+            echo "All migration files already formatted"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add internal/
+          git commit -m 'style(ai): apply canonical gofmt to native provider cutover'
+          git fetch origin feat/gemini-deepseek
+          git rebase origin/feat/gemini-deepseek
+          git push origin HEAD:feat/gemini-deepseek
