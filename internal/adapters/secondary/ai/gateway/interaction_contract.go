@@ -28,7 +28,7 @@ func decodeStrictStructuredJSON(raw []byte, target any) error {
 	return nil
 }
 
-// The sole shared provider wire contract is LiteLLM Chat Completions.
+// Canonical request uses the validated provider-neutral Chat Completions envelope.
 type chatCompletionMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`

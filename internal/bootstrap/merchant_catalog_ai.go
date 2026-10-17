@@ -13,22 +13,22 @@ func wireMerchantCatalogAuthoringAI(
 	dashboardServer *handlers.Server,
 	database *postgres.Adapter,
 	authoring merchantcatalogai.MerchantCatalogAuthoringPort,
-	gatewaySettings ...*ports.LiteLLMPlatformConfig,
+	gatewaySettings ...*ports.NativeAIPlatformConfig,
 ) (*handlers.Server, error) {
 	if authoring == nil {
 		return dashboardServer, nil
 	}
 
-	// The gateway adapter emits each successful model round for native USD spend.
+	// The native adapter records each model round; unknown provider prices are not fabricated.
 	// A legacy/fake authoring implementation is not required to implement this.
 	if len(gatewaySettings) != 0 && gatewaySettings[0] != nil {
 		if reporter, ok := authoring.(interface {
 			SetUsageReporter(func(context.Context, string, string, ports.CustomerSalesUsageTelemetry) error)
 		}); ok {
-			recorder := services.GatewayMerchantUsageRecorder{
+			recorder := services.NativeMerchantUsageRecorder{
 				Usage:         postgres.NewAIUsageRepository(database),
 				Subscriptions: postgres.NewSubscriptionRepository(database),
-				FXRateYER:     gatewaySettings[0].USDToYERRate,
+				FXRateYER:     "",
 			}
 			reporter.SetUsageReporter(recorder.Record)
 		}

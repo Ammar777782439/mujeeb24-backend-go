@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/litellm"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/native"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
@@ -24,8 +24,8 @@ func (h workerContextInspection) Handle(ctx context.Context, _ commands.AutoRepl
 }
 
 // The worker must not cancel the provider at 120 seconds (or any independent
-// shorter duration); LITELLM_HTTP_TIMEOUT is enforced by the HTTP client.
-func TestWorkerDoesNotImposeDeadlineOnGateway(t *testing.T) {
+// shorter duration); NATIVE_AI_HTTP_TIMEOUT is enforced by the HTTP client.
+func TestWorkerDoesNotImposeDeadlineOnNative(t *testing.T) {
 	pool := NewAutoReplyWorkerPool(1, 1)
 	probe := workerContextInspection{deadline: make(chan bool, 1)}
 	if !pool.Submit(autoReplyTask{handler: probe}) {
@@ -50,9 +50,9 @@ func TestAIProviderErrorClassification(t *testing.T) {
 	}{
 		{"deadline", fmt.Errorf("gateway call: %w", context.DeadlineExceeded), string(ports.AIRunFailureCategoryTimeout)},
 		{"canceled", context.Canceled, string(ports.AIRunFailureCategoryInfrastructure)},
-		{"gateway 503", &litellm.HTTPError{StatusCode: 503}, string(ports.AIRunFailureCategoryProviderTemporary)},
-		{"gateway 429", &litellm.HTTPError{StatusCode: 429}, string(ports.AIRunFailureCategoryProviderTemporary)},
-		{"gateway 401", &litellm.HTTPError{StatusCode: 401}, string(ports.AIRunFailureCategoryProviderPermanent)},
+		{"gateway 503", &native.StatusError{Provider:"gemini",Code: 503}, string(ports.AIRunFailureCategoryProviderTemporary)},
+		{"gateway 429", &native.StatusError{Provider:"gemini",Code: 429}, string(ports.AIRunFailureCategoryProviderTemporary)},
+		{"gateway 401", &native.StatusError{Provider:"gemini",Code: 401}, string(ports.AIRunFailureCategoryProviderPermanent)},
 		{"network timeout", &net.DNSError{IsTimeout: true}, string(ports.AIRunFailureCategoryTimeout)},
 		{"other", errors.New("invalid function arguments"), string(ports.AIRunFailureCategoryProviderPermanent)},
 	}

@@ -5,17 +5,18 @@ import (
 	"time"
 )
 
-// LiteLLMPlatformConfig describes gateway-owned route settings. APIKey is
-// secret server-side configuration and MUST never be returned to HTTP clients.
-type LiteLLMPlatformConfig struct {
-	BaseURL            string
-	APIKey             string
-	CustomerModel      string
-	CatalogModel       string
-	MerchantModel      string
-	MaxOutputTokens    int
+// NativeAIPlatformConfig exposes only deployment model identifiers and
+// credential-presence flags. Provider secrets never enter HTTP responses.
+type NativeAIPlatformConfig struct {
+	GeminiModel string
+	DeepSeekModel string
+	CustomerModel string
+	CatalogModel string
+	MerchantModel string
+	MaxOutputTokens int
 	MaxInputCharacters int
-	USDToYERRate       string
+	GeminiConfigured bool
+	DeepSeekConfigured bool
 }
 
 // AIProviderModel is provider-neutral model discovery metadata. It is retained
@@ -41,8 +42,8 @@ type AIProviderModel struct {
 	DiscoveredAt      time.Time
 }
 
-// ModelDiscoveryClient queries LiteLLM's model catalog and tests a configured
-// route via the gateway. It never reads merchant conversations for probes.
+// ModelDiscoveryClient queries native providers' model catalogs and tests a configured
+// provider directly. It never reads merchant conversations for probes.
 type ModelDiscoveryClient interface {
 	DiscoverModels(ctx context.Context, apiKey, baseURL string) ([]AIProviderModel, error)
 	TestConnection(ctx context.Context, apiKey, model, baseURL string) (bool, int64, string)

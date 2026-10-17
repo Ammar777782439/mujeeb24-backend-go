@@ -76,7 +76,7 @@ func (c *NativeCatalogAdapter) BatchTokenBudget() (int, error) {
 	if c == nil {
 		return 0, errors.New("native catalog adapter is nil")
 	}
-	return services.LiteLLMCatalogTokenBudget(c.maxInputTokens, c.maxOutputTokens)
+	return services.NativeCatalogTokenBudget(c.maxInputTokens, c.maxOutputTokens)
 }
 
 // Splitting must receive the oversized count so the CatalogBatchController
@@ -124,7 +124,7 @@ func (c *NativeCatalogAdapter) EvaluateBatch(ctx context.Context, input services
 	if err != nil {
 		return ports.CatalogBatchResult{}, fmt.Errorf("send catalog batch %d: %w", input.BatchNumber, err)
 	}
-	normalized, err := normalizeLiteLLMResponse(raw)
+	normalized, err := normalizenativeResponse(raw)
 	if err != nil {
 		return ports.CatalogBatchResult{}, err
 	}
@@ -175,7 +175,7 @@ func (c *NativeCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, inp
 	if err != nil {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, fmt.Errorf("send final catalog evaluation: %w", err)
 	}
-	normalized, err := normalizeLiteLLMResponse(raw)
+	normalized, err := normalizenativeResponse(raw)
 	if err != nil {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
 	}

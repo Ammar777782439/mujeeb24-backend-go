@@ -14,10 +14,10 @@ import (
 //   §75 — /admin/ai view exposes: AI Runtime + AI Provider + Model +
 //         Health + Usage + Failures.
 //
-//   §76 — Production AI Provider: LiteLLM gateway, with deployment-defined model aliases.
+//   §76 — Production AI Provider: Native Gemini primary and DeepSeek standby, with deployment-owned model versions.
 //
 //   §77 — Layered architecture: Mujeeb AI Runtime → AI Provider Port →
-//         Gateway Adapter → LiteLLM → upstream AI providers. The Domain does
+//         Native AI transport → Gemini / DeepSeek. The Domain does
 //         NOT bind to any upstream provider.
 //
 //   §78 — Provider Registry: provider_id, provider_type, display_name,
@@ -60,14 +60,14 @@ import (
 //   §86 — V1 does NOT allow admin to switch models from the dashboard.
 //          Model selection is a Deployment Configuration Change.
 //
-//   §88 — Dashboard reports LiteLLM as the gateway, rather than claiming
+//   §88 — Dashboard reports Gemini and DeepSeek as direct providers, rather than claiming
 //          a specific upstream AI model is always active.
 //
 //   §102 — Operational Events audited: ai.disabled, ai.enabled,
 //          provider.health_checked, channel.health_checked,
 //          platform.channel_action.
 //
-//   §104 — Provider Secrets Boundary: LiteLLM virtual key, SocialAPI Secret,
+//   §104 — Provider Secrets Boundary: Gemini/DeepSeek API key, SocialAPI Secret,
 //          Signing Keys, DB Credentials are NEVER exposed via Platform UI.
 //          Dashboard sees only `configured = true` (boolean), not the secret.
 // ----------------------------------------------------------------------------
@@ -124,7 +124,7 @@ type AIRuntimeState struct {
 // against a provider. Per Contract §84: the probe MUST NOT use merchant data.
 //
 // Implementations:
-//   - AIHealthProbe: sends a minimal prompt through LiteLLM with no business context.
+//   - AIHealthProbe: sends a minimal prompt through direct provider API with no business context.
 //   - ChannelHealthProbe: verifies SocialAPI reachability.
 type HealthCheckProbe interface {
 	// Probe returns the observed health state + latency + failure code (if any).

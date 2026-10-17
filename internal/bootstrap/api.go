@@ -15,7 +15,6 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/handlers"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/middleware"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/litellm"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/auth/ed25519jwt"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
 	realtimePostgres "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/realtime/postgres"
@@ -161,8 +160,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		external.NativeCustomerDecision != nil && external.LLMConfigError == nil,
 		external.SocialAPI != nil,
 	)
-	if external.LiteLLMPlatformConfig != nil {
-		platformOperations.SetAIModel(external.LiteLLMPlatformConfig.CustomerModel)
+	if external.NativeAISettings != nil {
+		platformOperations.SetAIModel(external.NativeAISettings.GeminiModel)
 	}
 	if external.SocialAPIHealthProbe != nil {
 		platformOperations.RegisterProbe("socialapi", external.SocialAPIHealthProbe)
@@ -195,9 +194,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// every model request's tokens + cost are recorded to ai_usage_records
 		// and flow through to the Platform Admin AI Usage view.
 		service.AIUsage = postgres.NewAIUsageRepository(database)
-		if external.LiteLLMPlatformConfig != nil {
-			service.GatewayFXRateYER = external.LiteLLMPlatformConfig.USDToYERRate
-		}
+		
 		service.Subscriptions = postgres.NewSubscriptionRepository(database)
 		// Per contract ⑤ §7, build the Catalog Entity Contract payload
 		// once and reuse for every call.
@@ -395,14 +392,6 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		}
 	}
 	dashboardServer := handlers.NewServer(dependencies)
-	var modelDiscovery ports.ModelDiscoveryClient
-	if external.LiteLLMPlatformConfig != nil {
-		modelDiscovery = litellm.NewModelsClient()
-		platformOperations.RegisterProbe("litellm", gatewayHealthProbe{
-			settings:  external.LiteLLMPlatformConfig,
-			discovery: modelDiscovery,
-		})
-	}
 	dashboardServer = dashboardServer.WithPlatformDeps(handlers.PlatformDeps{
 		Plans:               postgres.NewPlanRepository(database),
 		PlatformBusiness:    postgres.NewPlatformBusinessRepository(database),
@@ -415,13 +404,13 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		Transactions:        database,
 		Operations:          platformOperations,
 		ChannelReader:       postgres.NewPlatformChannelReadRepository(database),
-		ModelDiscovery:      modelDiscovery,
-		LiteLLMSettings:     external.LiteLLMPlatformConfig,
+		
+		NativeAISettings:    external.NativeAISettings,
 		AssignBusinessOwner: assignBusinessOwner,
 	})
 
 	var merchantCatalogErr error
-	dashboardServer, merchantCatalogErr = wireMerchantCatalogAuthoringAI(dashboardServer, database, external.NativeMerchantAuthoring, external.LiteLLMPlatformConfig)
+	dashboardServer, merchantCatalogErr = wireMerchantCatalogAuthoringAI(dashboardServer, database, external.NativeMerchantAuthoring, external.NativeAISettings)
 	if merchantCatalogErr != nil {
 		return nil, merchantCatalogErr
 	}
@@ -595,7 +584,7 @@ func (r *APIRuntime) Shutdown(ctx context.Context) error {
 		// the HTTP server + database. The pool's Stop() closes the
 		// tasks channel + waits for all workers to finish their
 		// in-flight + queued tasks. Without this, in-flight AutoReply
-		// work (which invokes LiteLLM + writes to Postgres) would be
+		// work (which invokes Native AI + writes to Postgres) would be
 		// dropped silently when the database closes.
 		if r.AutoReplyWorkerPool != nil {
 			r.AutoReplyWorkerPool.Stop()

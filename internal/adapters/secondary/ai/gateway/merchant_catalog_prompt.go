@@ -9,7 +9,7 @@ import (
 )
 
 // buildMerchantCatalogAuthoringPrompt is shared by the direct Gemini
-// implementation and the LiteLLM implementation. Neither provider owns the
+// implementation and the Native Gemini/DeepSeek implementation. Neither provider owns the
 // prompt or merchant-scoped context contract.
 func buildMerchantCatalogAuthoringPrompt(input merchantcatalogai.MerchantCatalogAuthoringInput) (string, string, error) {
 	contextPayload := map[string]any{

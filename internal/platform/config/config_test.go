@@ -56,14 +56,10 @@ func TestLoadFromEnvDisablesAutoReplyByDefaultAndReadsOverride(t *testing.T) {
 	t.Setenv("AUTOREPLY_ENABLED", "true")
 	t.Setenv("SOCIALAPI_WEBHOOK_SECRET", "test-webhook-secret")
 	t.Setenv("SOCIALAPI_API_KEY", "test-socialapi-key")
-	t.Setenv("LITELLM_GATEWAY_ONLY", "true")
-	t.Setenv("LITELLM_BASE_URL", "http://127.0.0.1:4000")
-	t.Setenv("LITELLM_API_KEY", "test-gateway-virtual-key")
-	t.Setenv("LITELLM_USD_TO_YER_RATE", "500")
-	t.Setenv("LITELLM_CUSTOMER_MODEL", "mujeeb-customer")
-	t.Setenv("LITELLM_CATALOG_MODEL", "mujeeb-catalog")
-	t.Setenv("LITELLM_MERCHANT_MODEL", "mujeeb-merchant")
-	cfg, err = LoadFromEnv()
+	t.Setenv("NATIVE_AI_ENABLED","true")
+	t.Setenv("GEMINI_API_KEY","test-gemini-key")
+	t.Setenv("DEEPSEEK_API_KEY","test-deepseek-key")
+		cfg, err = LoadFromEnv()
 	if err != nil || !cfg.AutoReplyEnabled {
 		t.Fatalf("AutoReply override: cfg=%#v err=%v", cfg, err)
 	}
@@ -77,16 +73,16 @@ func TestLoadFromEnvRejectsIncompleteExternalFeatureEnablement(t *testing.T) {
 	}
 }
 
-func TestLoadFromEnvRejectsDirectGeminiAsCustomerRuntime(t *testing.T) {
+func TestLoadFromEnvRejectsMissingNativeStandby(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
 	t.Setenv("AUTOREPLY_ENABLED", "true")
 	t.Setenv("SOCIALAPI_WEBHOOK_SECRET", "test-webhook-secret")
 	t.Setenv("SOCIALAPI_API_KEY", "test-socialapi-key")
-	t.Setenv("LITELLM_GATEWAY_ONLY", "false")
-	t.Setenv("GEMINI_API_KEY", "obsolete-direct-key")
+	t.Setenv("NATIVE_AI_ENABLED", "true")
+	t.Setenv("GEMINI_API_KEY", "test-primary-only-key")
 	t.Setenv("LLM_ENABLED", "true")
 	if _, err := LoadFromEnv(); err == nil {
-		t.Fatal("direct Gemini or legacy LLM configuration unexpectedly satisfied the gateway-only requirement")
+		t.Fatal("a missing DeepSeek standby must fail a native AI deployment")
 	}
 }
 

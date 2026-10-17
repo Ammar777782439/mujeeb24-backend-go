@@ -22,7 +22,7 @@ import (
 //   - The AI Runtime is the master gate — even when providers are
 //     ENABLED + HEALTHY, no AI execution can start with Runtime = DISABLED.
 //
-// The AI provider is the LiteLLM gateway; upstream model routing belongs to LiteLLM.
+// The AI provider is the native Gemini and DeepSeek gateway; upstream model routing belongs to native Gemini and DeepSeek.
 type InMemoryPlatformOperationsRepository struct {
 	mu        sync.RWMutex
 	runtime   ports.AIRuntimeState
@@ -32,7 +32,7 @@ type InMemoryPlatformOperationsRepository struct {
 
 // NewInMemoryPlatformOperationsRepository seeds the registry with the
 // active deployment providers:
-//   - AI: LiteLLM Gateway (configured customer model alias)
+//   - AI: Gemini + DeepSeek native providers (configured customer model alias)
 //   - Channel Transport: SocialAPI (Facebook + Instagram + WhatsApp)
 //
 // `aiConfigured` and `channelConfigured` are determined by the bootstrap
@@ -47,13 +47,15 @@ func NewInMemoryPlatformOperationsRepository(aiConfigured, channelConfigured boo
 		probes:    map[string]ports.HealthCheckProbe{},
 	}
 	// Seed the AI provider (Contract §76)
-	registry.providers["litellm"] = ports.ProviderRecord{
-		ProviderID:   "litellm",
-		ProviderType: ports.ProviderTypeAI,
-		DisplayName:  "LiteLLM Gateway",
-		AdminState:   ports.ProviderAdminEnabled,
-		HealthState:  ports.ProviderHealthUnknown,
-		Configured:   aiConfigured,
+	for _, ai := range []struct{id,name string}{
+		{"gemini","Google Gemini primary"},
+		{"deepseek","DeepSeek standby"},
+	} {
+		registry.providers[ai.id] = ports.ProviderRecord{
+			ProviderID:ai.id, ProviderType:ports.ProviderTypeAI,
+			DisplayName:ai.name,AdminState:ports.ProviderAdminEnabled,
+			HealthState:ports.ProviderHealthUnknown,Configured:aiConfigured,
+		}
 	}
 	// Seed the channel transport provider (Contract §90)
 	registry.providers["socialapi"] = ports.ProviderRecord{
@@ -68,16 +70,16 @@ func NewInMemoryPlatformOperationsRepository(aiConfigured, channelConfigured boo
 }
 
 // RegisterProbe attaches a HealthCheckProbe to a provider. Probes are
-// implementation-specific (LiteLLM probe, SocialAPI probe) and are wired
+// implementation-specific (native Gemini and DeepSeek probe, SocialAPI probe) and are wired
 // by the bootstrap layer.
 // SetAIModel reports the deployment-defined customer route alias without
 // implying that any single upstream provider is permanently selected.
 func (r *InMemoryPlatformOperationsRepository) SetAIModel(model string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	p := r.providers["litellm"]
+	p := r.providers["gemini"]
 	p.Model = strings.TrimSpace(model)
-	r.providers["litellm"] = p
+	r.providers["gemini"] = p
 }
 
 func (r *InMemoryPlatformOperationsRepository) RegisterProbe(providerID string, probe ports.HealthCheckProbe) {
@@ -158,7 +160,7 @@ func (r *InMemoryPlatformOperationsRepository) RunHealthCheck(ctx context.Contex
 	}
 
 	// Network I/O must NEVER hold the runtime registry lock: an emergency AI
-	// disable must work even when the LiteLLM provider is timing out.
+	// disable must work even when the native Gemini and DeepSeek provider is timing out.
 	healthState := ports.ProviderHealthUnknown
 	var failureCode *string
 	if probe == nil {

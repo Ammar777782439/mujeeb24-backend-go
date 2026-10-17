@@ -312,7 +312,7 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 				}
 				log.Printf("[Webhook] AUTO_REPLY_TRIGGER business=%s conversation=%s text=%q", connection.BusinessID, materialized.ConversationID, truncate(event.Text, 60))
 				// The worker is detached from the webhook HTTP request. The
-				// LiteLLM transport enforces LITELLM_HTTP_TIMEOUT per model call.
+				// Native Gemini/DeepSeek transport enforces LITELLM_HTTP_TIMEOUT per model call.
 				// The worker must not impose a second, shorter AI deadline.
 				autoReplyCmd := commands.AutoReplyCommand{
 					Meta:                   commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(connection.BusinessID)}},

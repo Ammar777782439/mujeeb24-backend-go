@@ -76,7 +76,7 @@ func (p *AutoReplyWorkerPool) runTask(task autoReplyTask) {
 		}
 	}()
 	// The webhook's HTTP context is already finished by the time this task
-	// executes. Each LiteLLM request owns its timeout through
+	// executes. Each Native Gemini/DeepSeek request owns its timeout through
 	// LITELLM_HTTP_TIMEOUT; a second deadline here must not truncate it.
 	if _, autoReplyErr := task.handler.Handle(context.Background(), task.cmd); autoReplyErr != nil {
 		log.Printf("[WorkerPool] AUTO_REPLY_ERROR business=%s conversation=%s err=%v", task.businessID, task.conversationID, autoReplyErr)

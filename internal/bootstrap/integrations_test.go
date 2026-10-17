@@ -39,12 +39,12 @@ func TestBuildExternalAdaptersKeepsAutoReplyDisabledByDefault(t *testing.T) {
 }
 
 func TestBuildExternalAdaptersRejectsLegacyAIWhenCustomerSalesEnabled(t *testing.T) {
-	t.Setenv("GEMINI_API_KEY", "legacy-test-key-ignored-by-gateway-runtime")
+	t.Setenv("GEMINI_API_KEY", "test-primary-only-key")
 	adapters := BuildExternalAdapters(config.ProcessConfig{
 		CustomerSalesEnabled: true,
 	})
-	if adapters.LLMConfigError == nil || adapters.LiteLLMCustomerDecision != nil {
-		t.Fatal("legacy direct AI must never serve customer replies")
+	if adapters.LLMConfigError == nil || adapters.NativeCustomerDecision != nil {
+		t.Fatal("native fallback must not start without both provider keys")
 	}
 }
 

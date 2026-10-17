@@ -73,7 +73,7 @@ func (c *NativeCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cus
 	if err != nil {
 		return ports.CustomerSalesDecisionOutput{}, err
 	}
-	normalized, err := normalizeLiteLLMResponse(raw)
+	normalized, err := normalizeNativeResponse(raw)
 	if err != nil {
 		return ports.CustomerSalesDecisionOutput{}, err
 	}
@@ -110,3 +110,12 @@ func (c *NativeCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cus
 }
 
 var _ ports.CustomerSalesDecisionPort = (*NativeCustomerSalesAdapter)(nil)
+
+// summarizeDecisionResponseShape exposes only structural diagnostics.
+func summarizeDecisionResponseShape(resp normalizedNativeResponse) string {
+	parts:=[]string{fmt.Sprintf("tool_calls=%d text_present=%t",len(resp.FunctionCalls),resp.Text!="")}
+	for i,call:=range resp.FunctionCalls {
+		parts=append(parts,fmt.Sprintf("call[%d]={id_present=%t name=%q arguments_bytes=%d}",i,strings.TrimSpace(call.ID)!="",call.Name,len(call.Arguments)))
+	}
+	return strings.Join(parts," ")
+}

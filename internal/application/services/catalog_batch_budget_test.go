@@ -2,8 +2,8 @@ package services
 
 import "testing"
 
-func TestLiteLLMCatalogTokenBudgetReservesOutputAndMargin(t *testing.T) {
-	budget, err := LiteLLMCatalogTokenBudget(32768, 4096)
+func TestNativeCatalogTokenBudgetReservesOutputAndMargin(t *testing.T) {
+	budget, err := NativeCatalogTokenBudget(32768, 4096)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -15,14 +15,14 @@ func TestLiteLLMCatalogTokenBudgetReservesOutputAndMargin(t *testing.T) {
 	}
 }
 
-func TestLiteLLMCatalogTokenBudgetFailsClosedForUndersizedFallback(t *testing.T) {
+func TestNativeCatalogTokenBudgetFailsClosedForUndersizedFallback(t *testing.T) {
 	for _, tc := range []struct{ context, output int }{
 		{8192, 8000},
 		{4096, 2048},
 		{0, 1024},
 		{32768, 0},
 	} {
-		if _, err := LiteLLMCatalogTokenBudget(tc.context, tc.output); err == nil {
+		if _, err := NativeCatalogTokenBudget(tc.context, tc.output); err == nil {
 			t.Fatalf("accepted context=%d output=%d without safety margin", tc.context, tc.output)
 		}
 	}

@@ -1006,7 +1006,7 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 		nonCachedInput = 0
 	}
 	providerCostYER := 0
-	pricingVersion, gatewayCostUSD, gatewayFXRate, pricingFailed := gatewayNativeSpend(usage, c.GatewayFXRateYER)
+	pricingVersion, gatewayCostUSD, gatewayFXRate, pricingFailed := nativeProviderSpend(usage, c.GatewayFXRateYER)
 	recordStatus := "success"
 	if pricingFailed {
 		recordStatus = "pricing_failed"

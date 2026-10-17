@@ -10,7 +10,7 @@ import (
 
 // classifyAIProviderError keeps transport timeouts and transient gateway
 // failures retryable in AI trace, not permanently attributed to the model.
-// Retry/routing policy remains owned by LiteLLM.
+// Native provider failover remains isolated from commercial execution.
 func classifyAIProviderError(err error) string {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return string(ports.AIRunFailureCategoryTimeout)

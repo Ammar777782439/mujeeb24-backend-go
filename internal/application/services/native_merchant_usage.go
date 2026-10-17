@@ -9,16 +9,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// GatewayMerchantUsageRecorder is a thin application ledger: LiteLLM owns
+// NativeMerchantUsageRecorder is a thin application ledger: LiteLLM owns
 // token pricing, while Mujeeb owns subscription association and entitlement.
 // Tool-round calls are internal expenses, never customer AI replies.
-type GatewayMerchantUsageRecorder struct {
+type NativeMerchantUsageRecorder struct {
 	Usage         ports.AIUsageRepository
 	Subscriptions ports.SubscriptionRepository
 	FXRateYER     string
 }
 
-func (r GatewayMerchantUsageRecorder) Record(ctx context.Context, businessID, sessionID string, usage ports.CustomerSalesUsageTelemetry) error {
+func (r NativeMerchantUsageRecorder) Record(ctx context.Context, businessID, sessionID string, usage ports.CustomerSalesUsageTelemetry) error {
 	if r.Usage == nil || r.Subscriptions == nil {
 		return errors.New("merchant AI accounting is not configured")
 	}
@@ -29,19 +29,21 @@ func (r GatewayMerchantUsageRecorder) Record(ctx context.Context, businessID, se
 	if len(page.Items) == 0 {
 		return errors.New("merchant AI has no active subscription for usage accounting")
 	}
-	version, usd, rate, failed := gatewayNativeSpend(usage, r.FXRateYER)
+	version, usd, rate, failed := nativeProviderSpend(usage, r.FXRateYER)
 	status := "success"
 	if failed {
 		status = "pricing_failed"
 	}
 	now := time.Now().UTC()
-	correlation := "merchant:" + sessionID + ":" + usage.GatewayCallID
+	attemptID := usage.GatewayCallID
+	if attemptID == "" { attemptID = uuid.NewString() }
+	correlation := "merchant:" + sessionID + ":" + attemptID
 	input := ports.AIUsageAppend{
 		ID: uuid.NewString(), BusinessID: businessID, SubscriptionID: page.Items[0].ID,
 		Provider: usageProvider(usage.Provider), Model: usage.Model,
 		InputTokens:       int64(usage.InputTokens - usage.CachedTokens),
 		CachedInputTokens: int64(usage.CachedTokens), OutputTokens: int64(usage.OutputTokens),
-		ModelRequests: 1, ToolCalls: 0, FinalAIReplies: 0,
+		ModelRequests: maxNativeRequests(usage.ModelRequests), ToolCalls: 0, FinalAIReplies: 0,
 		ProviderCostYER: 0, PricingVersion: version, Status: status,
 		CorrelationID: &correlation, StartedAt: now, CompletedAt: now, Now: now,
 	}
@@ -53,3 +55,5 @@ func (r GatewayMerchantUsageRecorder) Record(ctx context.Context, businessID, se
 	_, err = r.Usage.AppendRecord(ctx, input)
 	return err
 }
+
+func maxNativeRequests(n int) int { if n<1 { return 1 }; return n }

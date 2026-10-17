@@ -7,7 +7,7 @@ import (
 )
 
 func TestCatalogBatchBudgetAccommodatesObserved9625Estimate(t *testing.T) {
-	budget, err := LiteLLMCatalogTokenBudget(32768, 4096)
+	budget, err := NativeCatalogTokenBudget(32768, 4096)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	gatewayai "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gateway"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/litellm"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/native"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/providers/socialapi"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
@@ -14,15 +13,12 @@ import (
 )
 
 type ExternalAdapters struct {
+	NativeAISettings *ports.NativeAIPlatformConfig
 	NativeCustomerDecision ports.CustomerSalesDecisionPort
 	NativeCatalogClient *gatewayai.NativeCatalogAdapter
 	NativeMerchantAuthoring merchantcatalogai.MerchantCatalogAuthoringPort
-	LiteLLMPlatformConfig          *ports.LiteLLMPlatformConfig
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
-	LiteLLMCustomerDecision        ports.CustomerSalesDecisionPort
-	LiteLLMCatalogClient           *gatewayai.LiteLLMCatalogAdapter
-	LiteLLMMerchantAuthoring       merchantcatalogai.MerchantCatalogAuthoringPort
 	SocialAPIHealthProbe           ports.HealthCheckProbe
 	LLMConfigError                 error
 	CustomerSalesEnabled           bool
@@ -41,9 +37,6 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 		"auto_reply":           "disabled",
 		"channel_provisioning": "disabled",
 		"llm_runtime":          "disabled",
-		"litellm_customer":     "disabled",
-		"litellm_catalog":      "disabled",
-		"litellm_merchant":     "disabled",
 		"native_customer": "disabled",
 		"native_catalog": "disabled",
 		"native_merchant": "disabled",
@@ -64,18 +57,8 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 			checks["channel_provisioning"] = "configured"
 		}
 	}
-	if (a.NativeCustomerDecision != nil && a.NativeCatalogClient != nil && a.NativeMerchantAuthoring != nil) ||
-		(a.LiteLLMCustomerDecision != nil && a.LiteLLMCatalogClient != nil && a.LiteLLMMerchantAuthoring != nil) {
-		checks["llm_runtime"] = "configured"
-	}
-	if a.LiteLLMCustomerDecision != nil {
-		checks["litellm_customer"] = "configured"
-	}
-	if a.LiteLLMCatalogClient != nil {
-		checks["litellm_catalog"] = "configured"
-	}
-	if a.LiteLLMMerchantAuthoring != nil {
-		checks["litellm_merchant"] = "configured"
+	if a.NativeCustomerDecision != nil && a.NativeCatalogClient != nil && a.NativeMerchantAuthoring != nil {
+		checks["llm_runtime"]="configured"
 	}
 	if a.NativeCustomerDecision != nil { checks["native_customer"]="configured" }
 	if a.NativeCatalogClient != nil { checks["native_catalog"]="configured" }
@@ -85,14 +68,12 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 
 func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 	adapters := ExternalAdapters{}
-	if cfg.LiteLLMGatewayOnly {
-		adapters.LiteLLMPlatformConfig = &ports.LiteLLMPlatformConfig{
-			BaseURL: cfg.LiteLLMBaseURL, APIKey: cfg.LiteLLMAPIKey,
-			CustomerModel: cfg.LiteLLMCustomerModel, CatalogModel: cfg.LiteLLMCatalogModel,
-			MerchantModel:   cfg.LiteLLMMerchantModel,
-			MaxOutputTokens: cfg.LiteLLMMaxOutputTokens, MaxInputCharacters: cfg.LiteLLMMaxInputCharacters,
-			USDToYERRate: cfg.LiteLLMUSDToYERRate,
-		}
+	adapters.NativeAISettings = &ports.NativeAIPlatformConfig{
+		GeminiModel:cfg.GeminiModel, DeepSeekModel:cfg.DeepSeekModel,
+		CustomerModel:"mujeeb-sales", CatalogModel:"mujeeb-catalog", MerchantModel:"mujeeb-merchant",
+		MaxOutputTokens:cfg.NativeMaxOutputTokens, MaxInputCharacters:cfg.NativeMaxInputCharacters,
+		GeminiConfigured:cfg.NativeAIEnabled && cfg.GeminiAPIKey!="",
+		DeepSeekConfigured:cfg.NativeAIEnabled && cfg.DeepSeekAPIKey!="",
 	}
 	if cfg.SocialAPIAPIKey != "" || cfg.SocialAPIWebhookSecret != "" {
 		client := socialapi.NewClient(socialapi.Config{BaseURL: cfg.SocialAPIBaseURL, APIKey: cfg.SocialAPIAPIKey, WebhookSecret: cfg.SocialAPIWebhookSecret, HTTPTimeout: cfg.SocialAPIHTTPTimeout})
@@ -109,38 +90,8 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 			adapters.ChannelProvisioningError = errors.New("channel provisioning adapters are not configured")
 		}
 	}
-	if !cfg.NativeAIEnabled && !cfg.LiteLLMGatewayOnly && (cfg.AutoReplyEnabled || cfg.CustomerSalesEnabled) {
+	if !cfg.NativeAIEnabled && (cfg.AutoReplyEnabled || cfg.CustomerSalesEnabled) {
 		adapters.LLMConfigError = errors.New("customer AI requires a configured native Gemini and DeepSeek runtime")
-	}
-	if cfg.LiteLLMGatewayOnly && adapters.LLMConfigError == nil {
-		gateway, err := litellm.NewClient(litellm.Config{
-			BaseURL: cfg.LiteLLMBaseURL, APIKey: cfg.LiteLLMAPIKey, Timeout: cfg.LiteLLMHTTPTimeout,
-		})
-		if err != nil {
-			adapters.LLMConfigError = err
-		} else {
-			customer, customerErr := gatewayai.NewLiteLLMCustomerSalesAdapter(gateway, cfg.LiteLLMCustomerModel,
-				cfg.LiteLLMMaxOutputTokens, cfg.LiteLLMMaxInputCharacters)
-			if customerErr != nil {
-				adapters.LLMConfigError = customerErr
-			} else {
-				merchant, merchantErr := gatewayai.NewLiteLLMMerchantCatalogAuthoringAdapter(gateway, cfg.LiteLLMMerchantModel,
-					cfg.LiteLLMMaxOutputTokens, cfg.LiteLLMMerchantMaxRequestBytes)
-				if merchantErr != nil {
-					adapters.LLMConfigError = merchantErr
-				} else {
-					catalog, catalogErr := gatewayai.NewLiteLLMCatalogAdapter(gateway, cfg.LiteLLMCatalogModel,
-						cfg.LiteLLMMaxOutputTokens, cfg.LiteLLMMaxContextTokens)
-					if catalogErr != nil {
-						adapters.LLMConfigError = catalogErr
-					} else {
-						adapters.LiteLLMCustomerDecision = customer
-						adapters.LiteLLMMerchantAuthoring = merchant
-						adapters.LiteLLMCatalogClient = catalog
-					}
-				}
-			}
-		}
 	}
 	if cfg.NativeAIEnabled {
 		primary,err:=native.NewGemini(native.GeminiConfig{Model:cfg.GeminiModel,APIKey:cfg.GeminiAPIKey,Timeout:cfg.NativeHTTPTimeout})

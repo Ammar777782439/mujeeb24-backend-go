@@ -41,7 +41,7 @@ type PlatformDeps struct {
 	ChannelReader ports.PlatformChannelReadPort
 	// Gateway-owned model discovery and deployment configuration only.
 	ModelDiscovery      ports.ModelDiscoveryClient
-	LiteLLMSettings     *ports.LiteLLMPlatformConfig
+	NativeAISettings    *ports.NativeAIPlatformConfig
 	AssignBusinessOwner *services.AssignBusinessOwnerService
 }
 
@@ -1497,7 +1497,7 @@ func (s *Server) platformAIEnable(ctx context.Context, _ *dto.PlatformAIRuntimeE
 	return out, true
 }
 
-// platformAIHealthCheck probes LiteLLM's active customer route.
+// platformAIHealthCheck probes Native AI's active customer route.
 // Per Contract §84: the probe uses a standalone prompt — no merchant_id,
 // business_id, customer data, or merchant catalog.
 //
@@ -1508,10 +1508,10 @@ func (s *Server) platformAIHealthCheck(ctx context.Context, _ *dto.PlatformAIHea
 	}
 	now := time.Now().UTC()
 	// The gateway is the sole AI provider exposed by the platform registry.
-	provider, err := s.platformDeps.Operations.RunHealthCheck(ctx, "litellm", now)
+	provider, err := s.platformDeps.Operations.RunHealthCheck(ctx, "gemini", now)
 	if err != nil {
 		failureCode := classifyPlatformRepoErrorKind(err)
-		s.appendPlatformAudit(ctx, "provider.health_checked", "ai_provider", nil, nil, "FAILURE", failureCode, map[string]any{"provider": "litellm"})
+		s.appendPlatformAudit(ctx, "provider.health_checked", "ai_provider", nil, nil, "FAILURE", failureCode, map[string]any{"provider": "gemini"})
 		return mapApplicationError(err), true
 	}
 	s.appendPlatformAudit(ctx, "provider.health_checked", "ai_provider", &provider.ProviderID, nil, "SUCCESS", "", map[string]any{
@@ -2153,7 +2153,7 @@ func (s *Server) platformCreateBusiness(ctx context.Context, in *dto.CreateBusin
 // AI Provider Configuration façades (§13)
 // ----------------------------------------------------------------------------
 
-// Existing Platform Admin API operations remain stable; LiteLLM is the
+// Existing Platform Admin API operations remain stable; Native AI is the
 // authoritative source of route status, credentials and model discovery.
 // Disabled credential writes and model activation cannot silently change
 // historical Gemini rows that are not used by the runtime.

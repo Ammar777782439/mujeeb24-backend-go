@@ -59,7 +59,7 @@ type AutoReplyService struct {
 	Sales                       *CustomerSalesWorkflowService
 	DisableInformationalReplies bool
 	// CustomerSalesDecision is the contract ④ §8 customer-sales application port.
-	// Its current implementation is LiteLLMCustomerSalesAdapter.
+	// Its current implementation is Native Gemini/DeepSeekCustomerSalesAdapter.
 	// Per contract ④ §8, this is the only port for customer AI decisions.
 	CustomerSalesDecision ports.CustomerSalesDecisionPort
 
@@ -119,7 +119,7 @@ type AutoReplyService struct {
 	// computing provider_cost_yer. If nil, cost is recorded as 0.
 	AIPricing ports.AIProviderPricingRepository
 
-	// Currency conversion for LiteLLM native USD spend, supplied by deployment.
+	// Currency conversion for Native Gemini/DeepSeek native USD spend, supplied by deployment.
 	GatewayFXRateYER string
 
 	// SubscriptionRepository looks up the business's active subscription ID
@@ -803,7 +803,7 @@ func (s AutoReplyService) markFailedSafe(ctx context.Context, run ports.AIRunRec
 	}
 	// Even if the caller was canceled by the model transport, the failure
 	// state must be persisted. This short deadline only bounds database
-	// finalization; it does not shorten LiteLLM's request timeout.
+	// finalization; it does not shorten Native Gemini/DeepSeek's request timeout.
 	persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	lc := NewAIRunLifecycle(s.RunRepository)
@@ -1111,7 +1111,7 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
 	// The frontend Platform Admin AI Usage view shows the failed pricing
 	// records separately so operators can investigate pricing gaps.
 	providerCostYER := 0
-	pricingVersion, gatewayCostUSD, gatewayFXRate, pricingFailed := gatewayNativeSpend(out.Usage, s.GatewayFXRateYER)
+	pricingVersion, gatewayCostUSD, gatewayFXRate, pricingFailed := nativeProviderSpend(out.Usage, s.GatewayFXRateYER)
 	totalInput := out.Usage.InputTokens
 	cachedInput := out.Usage.CachedTokens
 	nonCachedInput := totalInput - cachedInput
