@@ -153,8 +153,9 @@ func TestNativeMerchantReadOnlyToolAndCanonicalFinalValidation(t *testing.T) {
 				Content    json.RawMessage `json:"content"`
 				ToolCallID string          `json:"tool_call_id"`
 			} `json:"messages"`
-			Tools          []map[string]any `json:"tools"`
-			ResponseFormat map[string]any   `json:"response_format"`
+			Tools             []map[string]any `json:"tools"`
+			ResponseFormat    map[string]any   `json:"response_format"`
+			ParallelToolCalls *bool            `json:"parallel_tool_calls"`
 		}
 		if err := json.Unmarshal(req.Payload, &body); err != nil {
 			t.Fatal(err)
