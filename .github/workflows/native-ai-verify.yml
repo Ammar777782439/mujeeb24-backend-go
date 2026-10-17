@@ -35,8 +35,16 @@ jobs:
         with:
           go-version: '1.22.2'
           cache: true
-      - name: Canonical Go format
-        run: gofmt -w internal/adapters/secondary/ai/native/*.go internal/adapters/secondary/ai/gateway/native_*_adapter*.go
+      - name: Validate canonical Go formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          files="$(git ls-files '*.go' | xargs gofmt -l)"
+          if [ -n "$files" ]; then
+            echo "::error::Unformatted Go source:"
+            printf '%s\n' "$files"
+            exit 1
+          fi
       - name: Compile repository
         run: go build ./...
       - name: Test native provider routing
