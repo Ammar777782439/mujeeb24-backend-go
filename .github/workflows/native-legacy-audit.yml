@@ -2,8 +2,6 @@ name: Native AI Legacy Reference Audit
 on:
   push:
     branches: [feat/gemini-deepseek]
-    paths:
-      - '.github/workflows/native-legacy-audit.yml'
   workflow_dispatch:
 
 permissions:
@@ -15,15 +13,18 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Enumerate all old files and references
+      - name: Reject obsolete provider gateway paths and references
         shell: bash
         run: |
           set -euo pipefail
-          echo '=== FILE PATHS CONTAINING LEGACY PROVIDER NAME ==='
-          git ls-files | grep -i 'litellm' || true
-          echo '=== SOURCE FILES WITH LEGACY REFERENCES ==='
-          git grep -il -i 'litellm' -- ':!migrations/**' ':!.github/workflows/native-legacy-audit.yml' || true
-          echo '=== REFERENCE COUNTS PER FILE ==='
-          git grep -i -n 'litellm' -- ':!migrations/**' ':!.github/workflows/native-legacy-audit.yml' | cut -d: -f1 | sort | uniq -c | sort -k2 || true
-          echo '=== CANDIDATE GO SOURCE IMPORTS ==='
-          git grep -n 'adapters/secondary/ai/litellm' -- '*.go' || true
+          # Compose obsolete identifier to avoid matching this audit source.
+          identifier="$(printf '%s%s' lite llm)"
+          if git ls-files | grep -i "${identifier}"; then
+            echo "::error::Obsolete gateway-named files remain"
+            exit 1
+          fi
+          if git grep -i -n "${identifier}" -- ':!.github/workflows/native-legacy-audit.yml'; then
+            echo "::error::Obsolete gateway references remain"
+            exit 1
+          fi
+          echo 'No obsolete gateway filenames or source references.'
