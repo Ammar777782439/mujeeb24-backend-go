@@ -38,3 +38,7 @@ Logical aliases in Go defaults:
 Test all three roles on each exact deployment and on forced provider failures/429/503, malformed/multiple tool calls, incomplete responses, invalid selected references, oversized full items, token-budget denial, and real catalog schema/offer preservation. Check the gateway's actual `model_id`, usage, and cost. **Do not claim provider compatibility from Go mocks alone.**
 
 No production LiteLLM database or dashboard is modified by this commit.
+
+## Rollout gate
+
+The public HTTPS readiness probe is a separate deployment prerequisite; a passing Go unit test is not a live LiteLLM routing or credential test. Block automatic production rollout until both the Go contract job and per-provider end-to-end checks pass. This document does not enable fallback models or modify the LiteLLM database.
