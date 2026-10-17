@@ -39,6 +39,8 @@ jobs:
             internal/adapters/secondary/ai/litellm/token_counter.go \
             internal/adapters/secondary/ai/litellm/token_counter_test.go \
             internal/adapters/secondary/ai/litellm/metadata_test.go \
+            internal/adapters/secondary/ai/gateway/litellm_merchant_catalog_adapter.go \
+            internal/adapters/secondary/ai/gateway/merchant_discovery_strict_test.go \
             internal/adapters/secondary/ai/gateway/interaction_contract.go \
             internal/adapters/secondary/ai/gateway/litellm_response.go \
             internal/adapters/secondary/ai/gateway/customer_sales_capabilities.go \
