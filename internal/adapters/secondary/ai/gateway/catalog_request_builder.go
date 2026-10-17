@@ -141,7 +141,7 @@ func batchCandidateResponseSchema() map[string]any {
 						"offer_ids":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 						"reason":      map[string]any{"type": "string"},
 					},
-					"required": []string{"item_id"},
+					"required": []string{"item_id", "variant_ids", "offer_ids", "reason"},
 				},
 			},
 		},
@@ -232,7 +232,10 @@ type batchUsageMetadata struct {
 	TotalTokenCount         int `json:"totalTokenCount,omitempty"`
 }
 
-func batchInteractionRequest(request catalogPromptRequest, model string) interactionRequest {
+// batchChatRequest turns the existing catalog prompt builder's two trust
+// domains into the shared Chat Completions wire contract. No Gemini endpoint
+// or provider-specific response envelope is used for generation.
+func batchChatRequest(request catalogPromptRequest, model string) (chatCompletionRequest, error) {
 	var system, input []string
 	if request.SystemInstruction != nil {
 		for _, part := range request.SystemInstruction.Parts {
@@ -240,14 +243,33 @@ func batchInteractionRequest(request catalogPromptRequest, model string) interac
 		}
 	}
 	for _, content := range request.Contents {
+		if content.Role != "user" {
+			return chatCompletionRequest{}, errors.New("catalog data must be carried only in user messages")
+		}
 		for _, part := range content.Parts {
 			input = append(input, part.Text)
 		}
 	}
 	if len(request.capabilityTools) > 0 {
-		return interactionRequest{Model: model, Store: false, Input: strings.Join(input, "\n\n"), SystemInstruction: strings.Join(system, "\n\n"), Tools: request.capabilityTools, GenerationConfig: interactionGenerationConfig{MaxOutputTokens: request.GenerationConfig.MaxOutputTokens, ToolChoice: "any"}}
+		return capabilityChatRequest(model, strings.Join(system, "\n\n"), strings.Join(input, "\n\n"), request.capabilityTools, request.GenerationConfig.MaxOutputTokens)
 	}
-	return interactionRequest{Model: model, Store: false, Input: strings.Join(input, "\n\n"), SystemInstruction: strings.Join(system, "\n\n"), ResponseFormat: &interactionResponseFormat{Type: "text", MimeType: "application/json", Schema: request.GenerationConfig.ResponseSchema}, GenerationConfig: interactionGenerationConfig{MaxOutputTokens: request.GenerationConfig.MaxOutputTokens}}
+	schema := request.GenerationConfig.ResponseSchema
+	if err := validateStrictSchema(schema); err != nil {
+		return chatCompletionRequest{}, fmt.Errorf("catalog batch schema invalid: %w", err)
+	}
+	format := &chatResponseFormat{Type: "json_schema"}
+	format.JSONSchema.Name = "catalog_batch_candidates"
+	format.JSONSchema.Strict = true
+	format.JSONSchema.Schema = schema
+	return chatCompletionRequest{
+		Model: model,
+		Messages: []chatCompletionMessage{
+			{Role: "system", Content: strings.Join(system, "\n\n")},
+			{Role: "user", Content: strings.Join(input, "\n\n")},
+		},
+		ResponseFormat: format, MaxTokens: request.GenerationConfig.MaxOutputTokens,
+		Stream: false,
+	}, nil
 }
 
 func finalCustomerSalesInstruction(contract services.CatalogEntityContractPayload) *batchContent {

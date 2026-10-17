@@ -15,11 +15,44 @@ type customerSalesTool struct {
 	Parameters  map[string]any `json:"parameters"`
 }
 
-type customerSalesToolArguments struct {
-	Sales        *ports.SalesWorkflowProposal `json:"sales,omitempty"`
-	ResponseText string                       `json:"response_text"`
-	Selected     []ports.SelectedReference    `json:"selected,omitempty"`
+// Messaging tools carry explicit empty selected arrays. Optional catalog refs
+// are null, not omitted, so the strict provider schema remains enforceable.
+type customerSalesMessageArguments struct {
+	ResponseText string `json:"response_text"`
+	Selected []ports.SelectedReference `json:"selected"`
 }
+
+type customerSalesWorkflowArguments struct {
+	Sales struct {
+		WorkflowID *string `json:"workflow_id"`
+		ExpectedVersion *int64 `json:"expected_version"`
+		TransactionType *string `json:"transaction_type"`
+		Lines []struct {
+			ItemID string `json:"item_id"`
+			OfferID *string `json:"offer_id"`
+			VariantID *string `json:"variant_id"`
+			Quantity string `json:"quantity"`
+			SelectedAttributesJSON string `json:"selected_attributes_json"`
+		} `json:"lines"`
+		TransactionDataJSON string `json:"transaction_data_json"`
+		EvidenceMessageIDs []string `json:"evidence_message_ids"`
+	} `json:"sales"`
+}
+
+func decodeCommercialAttributes(raw string) (map[string]any, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, errors.New("missing structured sales JSON")
+	}
+	var attributes map[string]any
+	if err := decodeStrictStructuredJSON([]byte(raw), &attributes); err != nil {
+		return nil, errors.New("invalid structured sales JSON")
+	}
+	if attributes == nil {
+		return nil, errors.New("structured sales JSON must be an object")
+	}
+	return attributes, nil
+}
+
 
 func customerSalesTools(capabilities []ports.CustomerSalesCapability) []customerSalesTool {
 	tools := make([]customerSalesTool, 0, len(capabilities))
@@ -40,7 +73,7 @@ func customerSalesTools(capabilities []ports.CustomerSalesCapability) []customer
 				Type:        "function",
 				Name:        string(capability),
 				Description: "Request complete merchant catalog evidence when the current trusted context is not sufficient. This is an internal retrieval step only: it does not choose customer-facing presentation and it is never a final customer response. After complete coverage, Gemini must choose one terminal capability from the evidence.",
-				Parameters:  map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{}},
+				Parameters:  map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{}, "required": []string{}},
 			})
 			continue
 		default:
@@ -51,34 +84,25 @@ func customerSalesTools(capabilities []ports.CustomerSalesCapability) []customer
 	return tools
 }
 
-// parseCustomerSalesCapability accepts exactly one offered function call.
-// Text, unknown tools, parallel calls and extra arguments fail closed.
-func parseCustomerSalesCapability(resp interactionResponse, tools []customerSalesTool) (ports.CapabilityDecision, error) {
-	var call *interactionStep
-	for i := range resp.Steps {
-		step := &resp.Steps[i]
-		if step.Type == "function_call" {
-			if call != nil {
-				return ports.CapabilityDecision{}, errors.New("customer sales requires exactly one capability call")
-			}
-			call = step
-		}
+// parseCustomerSalesCapability accepts one identified, offered capability.
+// Backend validation and execution are never delegated to the model.
+func parseCustomerSalesCapability(resp capabilityResponse, tools []customerSalesTool) (ports.CapabilityDecision, error) {
+	if len(resp.Calls) != 1 || strings.TrimSpace(resp.Calls[0].ID) == "" {
+		return ports.CapabilityDecision{}, errors.New("customer sales requires exactly one identified capability call")
 	}
-	if call == nil || strings.TrimSpace(call.ID) == "" {
-		return ports.CapabilityDecision{}, errors.New("customer sales requires an identified capability call")
-	}
-	offered := false
-	for _, tool := range tools {
-		if tool.Name == call.Name {
-			offered = true
+	call := resp.Calls[0]
+	var offered *customerSalesTool
+	for i := range tools {
+		if tools[i].Name == call.Name {
+			offered = &tools[i]
 			break
 		}
 	}
-	if !offered {
+	if offered == nil {
 		return ports.CapabilityDecision{}, fmt.Errorf("unavailable customer sales capability %q", call.Name)
 	}
-	if len(call.Arguments) == 0 || strings.TrimSpace(string(call.Arguments)) == "null" {
-		return ports.CapabilityDecision{}, errors.New("capability arguments must be an object")
+	if err := validateStrictArguments(call.Arguments, offered.Parameters); err != nil {
+		return ports.CapabilityDecision{}, fmt.Errorf("strict capability arguments: %w", err)
 	}
 	capability := ports.CustomerSalesCapability(call.Name)
 	if capability == ports.CustomerSalesCapabilityFullCatalog {
@@ -88,23 +112,54 @@ func parseCustomerSalesCapability(resp interactionResponse, tools []customerSale
 		}
 		return ports.CapabilityDecision{Capability: capability}, nil
 	}
-	var args customerSalesToolArguments
-	if err := decodeStrictStructuredJSON(call.Arguments, &args); err != nil {
-		return ports.CapabilityDecision{}, fmt.Errorf("decode capability arguments: %w", err)
+	definition, ok := ports.CustomerSalesCapabilityDefinitionFor(capability)
+	if !ok {
+		return ports.CapabilityDecision{}, errors.New("capability definition missing")
 	}
-	definition, _ := ports.CustomerSalesCapabilityDefinitionFor(capability)
 	if definition.Executor == "sales" {
-		if args.Sales == nil || args.ResponseText != "" || len(args.Selected) > 0 {
-			return ports.CapabilityDecision{}, errors.New("sales capability requires only structured sales arguments")
+		var args customerSalesWorkflowArguments
+		if err := decodeStrictStructuredJSON(call.Arguments, &args); err != nil {
+			return ports.CapabilityDecision{}, fmt.Errorf("decode sales capability arguments: %w", err)
 		}
-		decision := ports.CapabilityDecision{Capability: capability, Sales: args.Sales}
+		// Decode explicitly typed wire fields. JSON strings for dynamic
+		// transaction data avoid open-ended objects in strict tool schemas.
+		details, err := decodeCommercialAttributes(args.Sales.TransactionDataJSON)
+		if err != nil {
+			return ports.CapabilityDecision{}, err
+		}
+		sales := &ports.SalesWorkflowProposal{
+			TransactionData: details, EvidenceMessageIDs: args.Sales.EvidenceMessageIDs,
+		}
+		if args.Sales.WorkflowID != nil {
+			sales.WorkflowID = *args.Sales.WorkflowID
+		}
+		if args.Sales.ExpectedVersion != nil {
+			sales.ExpectedVersion = *args.Sales.ExpectedVersion
+		}
+		if args.Sales.TransactionType != nil {
+			sales.TransactionType = *args.Sales.TransactionType
+		}
 		for _, line := range args.Sales.Lines {
-			decision.Selected = append(decision.Selected, ports.SelectedReference{ItemID: line.ItemID, OfferID: line.OfferID, VariantID: line.VariantID})
+			attributes, err := decodeCommercialAttributes(line.SelectedAttributesJSON)
+			if err != nil {
+				return ports.CapabilityDecision{}, err
+			}
+			sales.Lines = append(sales.Lines, ports.SalesWorkflowLine{
+				ItemID: line.ItemID, OfferID: line.OfferID, VariantID: line.VariantID,
+				Quantity: line.Quantity, SelectedAttributes: attributes,
+			})
+		}
+		decision := ports.CapabilityDecision{Capability: capability, Sales: sales}
+		for _, line := range sales.Lines {
+			decision.Selected = append(decision.Selected, ports.SelectedReference{
+				ItemID: line.ItemID, OfferID: line.OfferID, VariantID: line.VariantID,
+			})
 		}
 		return decision, nil
 	}
-	if args.Sales != nil {
-		return ports.CapabilityDecision{}, errors.New("messaging capability cannot carry sales arguments")
+	var args customerSalesMessageArguments
+	if err := decodeStrictStructuredJSON(call.Arguments, &args); err != nil {
+		return ports.CapabilityDecision{}, fmt.Errorf("decode capability arguments: %w", err)
 	}
 	if strings.TrimSpace(args.ResponseText) == "" {
 		return ports.CapabilityDecision{}, errors.New("capability requires response_text")
@@ -129,10 +184,10 @@ func customerSalesResponseParameters(capability ports.CustomerSalesCapability) m
 			"response_text": map[string]any{"type": "string", "description": customerSalesResponseTextDescription(capability)},
 			"selected": map[string]any{"type": "array", "items": map[string]any{
 				"type": "object", "additionalProperties": false,
-				"properties": map[string]any{"item_id": map[string]any{"type": "string"}, "variant_id": map[string]any{"type": "string"}, "offer_id": map[string]any{"type": "string"}},
-				"required":   []string{"item_id"},
+				"properties": map[string]any{"item_id": map[string]any{"type": "string"}, "variant_id": map[string]any{"type": []string{"string", "null"}}, "offer_id": map[string]any{"type": []string{"string", "null"}}},
+				"required":   []string{"item_id", "variant_id", "offer_id"},
 			}},
-		}, "required": []string{"response_text"},
+		}, "required": []string{"response_text", "selected"},
 	}
 }
 

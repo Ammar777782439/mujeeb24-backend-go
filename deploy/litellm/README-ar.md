@@ -7,7 +7,7 @@
 - **أسرار جديدة تُنشأ تلقائياً في Blueprint البوابة فقط:** `UI_PASSWORD` و`LITELLM_MASTER_KEY_SEED` و`LITELLM_SALT_KEY_SEED` مع `generateValue: true`. سكربت البوابة يحول البذور إلى مفاتيح إدارة فعلية، ولا تطبع القيم في السجلات. القيم ليست متغيرات داخل باك مجيب.
 - **ما تدخله بنفسك:** `DATABASE_URL` للبوابة (قاعدة PostgreSQL مستقلة دائمة لإعدادات LiteLLM، لا قاعدة مجيب)، مفاتيح النماذج التي تضيفها من لوحة LiteLLM، وإنشاء Virtual Key لمجيب. في Environment لخدمة `mujeeb24-api` ضع `LITELLM_BASE_URL` بالرابط الفعلي لبوابة LiteLLM دون `/v1`، و`LITELLM_API_KEY` بالـVirtual Key، و`LITELLM_USD_TO_YER_RATE` بقيمتك المحاسبية المعتمدة.
 - **لماذا الربط يدوي:** الخدمتان في Blueprint مختلفتين، لذا أزلنا `fromService` من ملف الجذر؛ هذه الإعدادات `sync: false` في الخدمة الأصلية. متغيرات باك مجيب الحساسة الحالية تبقى محفوظة في Render.
-- أسماء نماذج `mujeeb-customer` و`mujeeb-catalog` و`mujeeb-merchant` لها قيم افتراضية في كود Go، لكن يجب **إنشاء وتعريف النماذج والأسماء فعلياً في LiteLLM**. لا تشغل ردود العملاء قبل نجاح الربط واختبار Function Calling وJSON Schema والكتالوج.
+- أسماء نماذج `mujeeb-sales` و`mujeeb-catalog` و`mujeeb-merchant` لها قيم افتراضية في كود Go، لكن يجب **إنشاء وتعريف النماذج والأسماء فعلياً في LiteLLM**. لا تشغل ردود العملاء قبل نجاح الربط واختبار Function Calling وJSON Schema والكتالوج.
 - خدمة Render المجانية قد تدخل وضع النوم، وقد لا تكفي ذاكرتها لبوابة LiteLLM. **تم تعديل GitHub فقط؛ لم ننشر على Render أو نؤكد الإقلاع.**
 
 الخطوة التالية في الصورة التي عرضتها: في **Blueprint Path** امسح `deploy/litellm/` وحدها واختر الملف الكامل **`deploy/litellm/render.blueprint.yaml`** بعد تحديث قائمة الملفات/الصفحة. اختيار `deploy/litellm/Dockerfile.render` هنا غير صحيح؛ هذا Dockerfile وليس Blueprint YAML.
@@ -61,7 +61,7 @@ curl.exe http://127.0.0.1:4000/health/readiness
 
 من لوحة LiteLLM أضف النماذج التي تملك مفاتيحها، وأنشئ ثلاثة aliases:
 
-- `mujeeb-customer` — النموذج يجب أن يدعم tools/Function Calling لاختيار Capability واحدة.
+- `mujeeb-sales` — النموذج يجب أن يدعم tools/Function Calling لاختيار Capability واحدة.
 - `mujeeb-catalog` — نموذج يدعم JSON Schema والكتالوج الكامل والدفعات والسياق المطلوب.
 - `mujeeb-merchant` — نموذج يدعم Chat Completions + tools + JSON Schema الصارم في نفس الطلب.
 
@@ -78,7 +78,7 @@ LITELLM_GATEWAY_ONLY=true
 LITELLM_BASE_URL=http://127.0.0.1:4000
 LITELLM_API_KEY=YOUR_GATEWAY_VIRTUAL_KEY
 LITELLM_USD_TO_YER_RATE=YOUR_ACCOUNTING_RATE
-LITELLM_CUSTOMER_MODEL=mujeeb-customer
+LITELLM_CUSTOMER_MODEL=mujeeb-sales
 LITELLM_CATALOG_MODEL=mujeeb-catalog
 LITELLM_MERCHANT_MODEL=mujeeb-merchant
 LITELLM_HTTP_TIMEOUT=20s

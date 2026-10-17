@@ -62,61 +62,36 @@ func (c *LiteLLMCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cu
 	if len([]rune(systemInstruction))+len([]rune(userPrompt))+len([]rune(string(encodedTools))) > c.maxInputCharacters {
 		return ports.CustomerSalesDecisionOutput{}, errors.New("LiteLLM customer sales request exceeds configured context limit")
 	}
-	// This is a stateless, non-executing tool selection request. Neither model
-	// response nor tool-call ID is used as proof of a commercial operation.
-	req := interactionRequest{
-		Model: c.model, Input: userPrompt, SystemInstruction: systemInstruction,
-		Store: false, Tools: tools,
-		GenerationConfig: interactionGenerationConfig{MaxOutputTokens: c.maxOutputTokens, ToolChoice: "any"},
-	}
-	started := time.Now()
-	ctx = litellm.WithSpendAttribution(ctx, input.Request.BusinessID, input.AIRunID, "customer_decision")
-	raw, meta, err := c.client.SendInteractionWithMetadata(ctx, req)
+	// A proposed tool call never constitutes evidence of execution.
+	// System context is isolated from user-controlled text in the request.
+	req, err := capabilityChatRequest(c.model, systemInstruction, userPrompt, tools, c.maxOutputTokens)
 	if err != nil {
 		return ports.CustomerSalesDecisionOutput{}, err
 	}
-
-	var resp liteLLMDecisionResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("decode LiteLLM interaction: %w", err)
-	}
-	if resp.Status != "completed" && resp.Status != "requires_action" {
-		return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("LiteLLM interaction not complete: %s", resp.Status)
-	}
-	// LiteLLM may return outputs[] (documented bridge) or steps[] (native).
-	// Never allow a second tool call to disappear during normalization.
-	steps := append([]interactionStep(nil), resp.Steps...)
-	for _, output := range resp.Outputs {
-		if output.Type != "function_call" {
-			continue
-		}
-		callID := output.ID
-		if callID == "" {
-			callID = output.CallID
-		}
-		args := output.Arguments
-		if len(args) > 0 && args[0] == '"' {
-			var argumentsString string
-			if err := json.Unmarshal(args, &argumentsString); err != nil {
-				return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("decode LiteLLM tool arguments: %w", err)
-			}
-			args = json.RawMessage(argumentsString)
-		}
-		steps = append(steps, interactionStep{
-			ID: callID, Name: output.Name, Type: output.Type, Arguments: args,
-		})
-	}
-	decision, err := parseCustomerSalesCapability(interactionResponse{Steps: steps}, tools)
+	started := time.Now()
+	ctx = litellm.WithSpendAttribution(ctx, input.Request.BusinessID, input.AIRunID, "customer_decision")
+	raw, meta, err := c.client.SendChatCompletionWithMetadata(ctx, req)
 	if err != nil {
-		return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("%w; LiteLLM response shape: %s", err, summarizeDecisionResponseShape(resp))
+		return ports.CustomerSalesDecisionOutput{}, err
+	}
+	normalized, err := normalizeLiteLLMResponse(raw)
+	if err != nil {
+		return ports.CustomerSalesDecisionOutput{}, err
+	}
+	if normalized.Text != "" {
+		return ports.CustomerSalesDecisionOutput{}, errors.New("customer decision returned plain text instead of one capability")
+	}
+	decision, err := parseCustomerSalesCapability(capabilityResponse{Calls: normalized.FunctionCalls}, tools)
+	if err != nil {
+		return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("%w; LiteLLM response shape: %s", err, summarizeDecisionResponseShape(normalized))
 	}
 
 	latencyMs := time.Since(started).Milliseconds()
 	return ports.CustomerSalesDecisionOutput{
 		Decision: decision,
 		Usage: ports.CustomerSalesUsageTelemetry{
-			Provider: "litellm", InputTokens: resp.Usage.TotalInputTokens,
-			CachedTokens: resp.Usage.TotalCachedTokens, OutputTokens: resp.Usage.TotalOutputTokens,
+			Provider: "litellm", InputTokens: normalized.Usage.PromptTokens,
+			CachedTokens: normalized.Usage.CachedTokens, OutputTokens: normalized.Usage.CompletionTokens,
 			Model: c.model, LatencyMs: latencyMs, ModelRequests: 1,
 			GatewayCallID: meta.CallID, GatewayDeploymentID: meta.DeploymentID,
 			GatewayCostUSD: meta.CostUSD, GatewayCostKnown: meta.HasCost,
@@ -125,33 +100,14 @@ func (c *LiteLLMCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cu
 	}, nil
 }
 
-// summarizeDecisionResponseShape exposes only the structural fields needed to
-// diagnose gateway tool-call normalization. It deliberately excludes text and
-// argument contents because both may contain customer or merchant data.
-func summarizeDecisionResponseShape(resp liteLLMDecisionResponse) string {
-	parts := []string{fmt.Sprintf("status=%q steps=%d outputs=%d", resp.Status, len(resp.Steps), len(resp.Outputs))}
-	for i, step := range resp.Steps {
-		parts = append(parts, fmt.Sprintf("step[%d]={type=%q id_present=%t name=%q arguments_bytes=%d}",
-			i, step.Type, strings.TrimSpace(step.ID) != "", step.Name, len(step.Arguments)))
-	}
-	for i, output := range resp.Outputs {
-		parts = append(parts, fmt.Sprintf("output[%d]={type=%q id_present=%t call_id_present=%t name=%q arguments_bytes=%d}",
-			i, output.Type, strings.TrimSpace(output.ID) != "", strings.TrimSpace(output.CallID) != "", output.Name, len(output.Arguments)))
+// Only structural diagnostics are emitted. Arguments and customer text are private.
+func summarizeDecisionResponseShape(resp normalizedLiteLLMResponse) string {
+	parts := []string{fmt.Sprintf("tool_calls=%d text_present=%t", len(resp.FunctionCalls), resp.Text != "")}
+	for i, call := range resp.FunctionCalls {
+		parts = append(parts, fmt.Sprintf("call[%d]={id_present=%t name=%q arguments_bytes=%d}",
+			i, strings.TrimSpace(call.ID) != "", call.Name, len(call.Arguments)))
 	}
 	return strings.Join(parts, " ")
-}
-
-type liteLLMDecisionResponse struct {
-	Status  string            `json:"status"`
-	Steps   []interactionStep `json:"steps"`
-	Outputs []struct {
-		Type      string          `json:"type"`
-		ID        string          `json:"id"`
-		CallID    string          `json:"call_id"`
-		Name      string          `json:"name"`
-		Arguments json.RawMessage `json:"arguments"`
-	} `json:"outputs"`
-	Usage interactionUsage `json:"usage"`
 }
 
 var _ ports.CustomerSalesDecisionPort = (*LiteLLMCustomerSalesAdapter)(nil)

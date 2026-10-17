@@ -97,7 +97,7 @@ func LoadFromEnv() (ProcessConfig, error) {
 		LiteLLMMaxContextTokens:        32768,
 		LiteLLMBaseURL:                 strings.TrimRight(strings.TrimSpace(os.Getenv("LITELLM_BASE_URL")), "/"),
 		LiteLLMAPIKey:                  strings.TrimSpace(os.Getenv("LITELLM_API_KEY")),
-		LiteLLMCustomerModel:           envOr("LITELLM_CUSTOMER_MODEL", "mujeeb-customer"),
+		LiteLLMCustomerModel:           envOr("LITELLM_CUSTOMER_MODEL", "mujeeb-sales"),
 		LiteLLMHTTPTimeout:             20 * time.Second,
 		LiteLLMMaxOutputTokens:         4096,
 		LiteLLMMaxInputCharacters:      48000,

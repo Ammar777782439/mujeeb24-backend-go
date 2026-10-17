@@ -9,7 +9,7 @@ func setLiteLLMGatewayConfig(t *testing.T) {
 	t.Setenv("LITELLM_BASE_URL", "http://127.0.0.1:4000")
 	t.Setenv("LITELLM_API_KEY", "test-only-virtual-key")
 	t.Setenv("LITELLM_USD_TO_YER_RATE", "500")
-	t.Setenv("LITELLM_CUSTOMER_MODEL", "mujeeb-customer")
+	t.Setenv("LITELLM_CUSTOMER_MODEL", "mujeeb-sales")
 	t.Setenv("LITELLM_CATALOG_MODEL", "mujeeb-catalog")
 	t.Setenv("LITELLM_MERCHANT_MODEL", "mujeeb-merchant")
 	t.Setenv("GEMINI_API_KEY", "")
@@ -22,7 +22,7 @@ func TestGatewayOnlyConfigNeedsNoGeminiKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("valid gateway-only config: %v", err)
 	}
-	if !cfg.LiteLLMGatewayOnly || cfg.LiteLLMCustomerModel != "mujeeb-customer" {
+	if !cfg.LiteLLMGatewayOnly || cfg.LiteLLMCustomerModel != "mujeeb-sales" {
 		t.Fatal("gateway-only mode still requires Gemini")
 	}
 }
@@ -35,7 +35,7 @@ func TestGatewayOnlyAppliesAgreedModelRouteDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gateway-only should use agreed route names: %v", err)
 	}
-	if cfg.LiteLLMCustomerModel != "mujeeb-customer" ||
+	if cfg.LiteLLMCustomerModel != "mujeeb-sales" ||
 		cfg.LiteLLMCatalogModel != "mujeeb-catalog" ||
 		cfg.LiteLLMMerchantModel != "mujeeb-merchant" {
 		t.Fatalf("wrong LiteLLM route defaults: customer=%q catalog=%q merchant=%q",

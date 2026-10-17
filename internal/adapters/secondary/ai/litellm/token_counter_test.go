@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestCountInteractionTokensUsesGatewayModelAndConservativeBudget(t *testing.T) {
+func TestCountChatTokensUsesGatewayModelAndConservativeBudget(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/utils/token_counter" || r.Header.Get("Authorization") != "Bearer private-key" {
 			t.Errorf("unexpected token counter request %s %s", r.URL.Path, r.Header.Get("Authorization"))
@@ -35,13 +35,13 @@ func TestCountInteractionTokensUsesGatewayModelAndConservativeBudget(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := client.CountInteractionTokens(context.Background(), "mujeeb-catalog", "system contract", "customer and batch", nil)
+	got, err := client.CountChatTokens(context.Background(), map[string]any{"model": "mujeeb-catalog", "messages": []map[string]string{{"role":"system","content":"system contract"},{"role":"user","content":"customer and batch"}}})
 	if err != nil || got < 34 || got < 512 {
 		t.Fatalf("counter failed to reserve conservative budget count=%d err=%v", got, err)
 	}
 }
 
-func TestCountInteractionTokensFailsClosed(t *testing.T) {
+func TestCountChatTokensFailsClosed(t *testing.T) {
 	for _, body := range []string{`{"total_tokens":0}`, `{"error":true,"total_tokens":19}`, `not json`} {
 		t.Run(body, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(body)) }))
@@ -50,7 +50,7 @@ func TestCountInteractionTokensFailsClosed(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := client.CountInteractionTokens(context.Background(), "model", "system", "batch", nil); err == nil ||
+			if _, err := client.CountChatTokens(context.Background(), map[string]any{"model":"model","messages":[]map[string]string{{"role":"user","content":"batch"}}}); err == nil ||
 				strings.Contains(err.Error(), "batch") {
 				t.Fatalf("unsafe count accepted: %v", err)
 			}

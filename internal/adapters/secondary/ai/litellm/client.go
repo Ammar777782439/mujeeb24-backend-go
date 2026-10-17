@@ -51,7 +51,7 @@ func NewClient(cfg Config) (*Client, error) {
 		}}
 	}
 	return &Client{
-		endpoint: strings.TrimRight(u.String(), "/") + "/v1beta/interactions",
+		endpoint: strings.TrimRight(u.String(), "/") + "/v1/chat/completions",
 		apiKey:   cfg.APIKey, client: client, timeout: cfg.Timeout,
 	}, nil
 }
@@ -59,47 +59,26 @@ func NewClient(cfg Config) (*Client, error) {
 // HTTPError deliberately contains no provider response body, prompt or secrets.
 type HTTPError struct{ StatusCode int }
 
-func (e *HTTPError) Error() string { return fmt.Sprintf("LiteLLM interactions HTTP %d", e.StatusCode) }
+func (e *HTTPError) Error() string { return fmt.Sprintf("LiteLLM chat completions HTTP %d", e.StatusCode) }
 func (e *HTTPError) Retryable() bool {
 	return e.StatusCode == http.StatusRequestTimeout || e.StatusCode == http.StatusTooManyRequests ||
 		e.StatusCode == http.StatusBadGateway || e.StatusCode == http.StatusServiceUnavailable ||
 		e.StatusCode == http.StatusGatewayTimeout || e.StatusCode == http.StatusInternalServerError
 }
 
-// SendInteraction invokes a single proxy request, without nested retries.
-// LiteLLM owns upstream routing. Context cancellation is authoritative.
-func (c *Client) SendInteraction(ctx context.Context, payload any) (json.RawMessage, error) {
-	body, _, err := c.SendInteractionWithMetadata(ctx, payload)
-	return body, err
-}
-
-// SendInteractionWithMetadata returns the gateway's native accounting headers.
-// A missing cost header means unknown cost, never a free request.
-func (c *Client) SendInteractionWithMetadata(ctx context.Context, payload any) (json.RawMessage, ResponseMetadata, error) {
-	if c == nil {
-		return nil, ResponseMetadata{}, errors.New("LiteLLM client is not configured")
-	}
-	return c.sendJSONWithMetadata(ctx, c.endpoint, payload)
-}
-
-// SendChatCompletion is used for stateless, explicitly replayed B2B tool
-// exchanges. All provider credentials and routing stay inside LiteLLM.
+// SendChatCompletion transports one stateless Chat Completions request.
+// No application-level retry: LiteLLM owns provider routing and retries.
 func (c *Client) SendChatCompletion(ctx context.Context, payload any) (json.RawMessage, error) {
-	if c == nil {
-		return nil, errors.New("LiteLLM client is not configured")
-	}
-	endpoint := strings.TrimSuffix(c.endpoint, "/v1beta/interactions") + "/v1/chat/completions"
-	body, _, err := c.sendJSONWithMetadata(ctx, endpoint, payload)
+	body, _, err := c.SendChatCompletionWithMetadata(ctx, payload)
 	return body, err
 }
 
-// SendChatCompletionWithMetadata serves B2B tool loops without hiding gateway spend.
+// SendChatCompletionWithMetadata preserves native gateway spend attribution.
 func (c *Client) SendChatCompletionWithMetadata(ctx context.Context, payload any) (json.RawMessage, ResponseMetadata, error) {
 	if c == nil {
 		return nil, ResponseMetadata{}, errors.New("LiteLLM client is not configured")
 	}
-	endpoint := strings.TrimSuffix(c.endpoint, "/v1beta/interactions") + "/v1/chat/completions"
-	return c.sendJSONWithMetadata(ctx, endpoint, payload)
+	return c.sendJSONWithMetadata(ctx, c.endpoint, payload)
 }
 
 func (c *Client) sendJSON(ctx context.Context, endpoint string, payload any) (json.RawMessage, error) {

@@ -12,101 +12,83 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
-func TestLiteLLMCustomerSalesUsesExistingCapabilityBoundary(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var request struct {
-			Model             string                      `json:"model"`
-			Store             bool                        `json:"store"`
-			Tools             []customerSalesTool         `json:"tools"`
-			GenerationConfig  interactionGenerationConfig `json:"generation_config"`
-			SystemInstruction string                      `json:"system_instruction"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			t.Error(err)
-		}
-		if request.Model != "mujeeb-customer" || request.Store || request.GenerationConfig.ToolChoice != "any" {
-			t.Errorf("contract changed: %+v", request)
-		}
-		if len(request.Tools) != 1 || request.Tools[0].Name != "respond_without_action" ||
-			!strings.Contains(request.SystemInstruction, "Catalog Entity Contract") {
-			t.Errorf("capability or system contract changed")
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"completed","outputs":[{"type":"function_call","id":"call-1","name":"respond_without_action","arguments":{"response_text":"وعليكم السلام"}}],"usage":{"total_input_tokens":23,"total_output_tokens":8}}`))
-	}))
-	defer server.Close()
+func chatToolResponse(name, arguments string) string {
+	encoded, _ := json.Marshal(arguments)
+	return `{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"`+name+`","arguments":`+string(encoded)+`}}]}}],"usage":{"prompt_tokens":23,"completion_tokens":8,"prompt_tokens_details":{"cached_tokens":5}}}`
+}
 
-	client, err := litellm.NewClient(litellm.Config{BaseURL: server.URL, APIKey: "test-secret"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	adapter, err := NewLiteLLMCustomerSalesAdapter(client, "mujeeb-customer", 4096, 48000)
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestCustomerChatCompletionTrustSeparationAndToolContract(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("wrong LiteLLM endpoint %s %s", r.Method, r.URL.Path)
+		}
+		var request chatCompletionRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil { t.Error(err) }
+		if request.Model != "mujeeb-sales" || request.ToolChoice != "required" ||
+			request.ParallelToolCalls == nil || *request.ParallelToolCalls ||
+			len(request.Messages) != 2 || request.Messages[0].Role != "system" ||
+			request.Messages[1].Role != "user" || !strings.Contains(request.Messages[0].Content, "Catalog Entity Contract") ||
+			!strings.Contains(request.Messages[1].Content, "السلام عليكم") {
+			t.Errorf("Chat Completions contract violated: %+v", request)
+		}
+		if len(request.Tools) != 1 || request.Tools[0].Function.Name != "respond_without_action" ||
+			!request.Tools[0].Function.Strict || validateStrictSchema(request.Tools[0].Function.Parameters) != nil {
+			t.Error("strict capability tool invalid")
+		}
+		_, _ = w.Write([]byte(chatToolResponse("respond_without_action", `{"response_text":"وعليكم السلام","selected":[]}`)))
+	}))
+	defer srv.Close()
+	client, err := litellm.NewClient(litellm.Config{BaseURL: srv.URL, APIKey: "test-key"})
+	if err != nil { t.Fatal(err) }
+	adapter, err := NewLiteLLMCustomerSalesAdapter(client, "mujeeb-sales", 2048, 48000)
+	if err != nil { t.Fatal(err) }
 	out, err := adapter.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		Capabilities:          []ports.CustomerSalesCapability{ports.CustomerSalesCapabilityRespondWithoutAction},
-		Request:               ports.CustomerSalesDecisionRequest{Text: "السلام عليكم"},
+		Capabilities: []ports.CustomerSalesCapability{ports.CustomerSalesCapabilityRespondWithoutAction},
+		Request: ports.CustomerSalesDecisionRequest{Text: "السلام عليكم"},
 		EntityContractPayload: []byte(`{"catalog":"contract"}`),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	if out.Decision.Capability != ports.CustomerSalesCapabilityRespondWithoutAction ||
-		out.Decision.ResponseText != "وعليكم السلام" || out.Usage.Provider != "litellm" ||
-		out.Usage.Model != "mujeeb-customer" || out.Usage.InputTokens != 23 || out.Usage.OutputTokens != 8 {
-		t.Fatalf("unexpected output: %+v", out)
+		out.Decision.ResponseText != "وعليكم السلام" || out.Usage.InputTokens != 23 ||
+		out.Usage.CachedTokens != 5 || out.Usage.OutputTokens != 8 {
+		t.Fatalf("bad decision or billing metadata: %+v", out)
 	}
 }
 
-func TestLiteLLMCustomerSalesRejectsUnknownAndParallelTools(t *testing.T) {
-	for _, test := range []struct {
-		name string
-		body string
-	}{
-		{"unknown", `{"status":"completed","outputs":[{"type":"function_call","id":"id-1","name":"unsupported_tool","arguments":{}}]}`},
-		{"parallel", `{"status":"completed","outputs":[{"type":"function_call","id":"id-1","name":"respond_without_action","arguments":{"response_text":"yes"}},{"type":"function_call","id":"id-2","name":"respond_without_action","arguments":{"response_text":"yes"}}]}`},
-		{"text_only", `{"status":"completed","outputs":[{"type":"text","text":"unverified"}]}`},
-		{"incomplete", `{"status":"incomplete","outputs":[{"type":"function_call","id":"id-1","name":"respond_without_action","arguments":{"response_text":"hi"}}]}`},
-		{"extra_arguments", `{"status":"completed","outputs":[{"type":"function_call","id":"id-1","name":"respond_without_action","arguments":{"response_text":"hi","business_id":"other"}}]}`},
-		{"missing_call_id", `{"status":"completed","outputs":[{"type":"function_call","name":"respond_without_action","arguments":{"response_text":"hi"}}]}`},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				_, _ = w.Write([]byte(test.body))
-			}))
-			defer server.Close()
-			client, err := litellm.NewClient(litellm.Config{BaseURL: server.URL, APIKey: "test-key"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			adapter, err := NewLiteLLMCustomerSalesAdapter(client, "mujeeb-customer", 4096, 48000)
-			if err != nil {
-				t.Fatal(err)
-			}
+func TestCustomerChatRejectsUntrustedOrIncompleteResponses(t *testing.T) {
+	tests := []struct{name, body string}{
+		{"unknown", chatToolResponse("other", `{}`)},
+		{"unexpected_field", chatToolResponse("respond_without_action", `{"response_text":"hi","selected":[],"authorized":true}`)},
+		{"missing_required", chatToolResponse("respond_without_action", `{"response_text":"hi"}`)},
+		{"missing_call_id", strings.Replace(chatToolResponse("respond_without_action", `{"response_text":"hi","selected":[]}`), `"id":"call-1"`, `"id":""`, 1)},
+		{"text_only", `{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"hello"}}]}`},
+		{"truncated", `{"choices":[{"finish_reason":"length","message":{"role":"assistant","content":null}}]}`},
+		{"parallel", `{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","tool_calls":[{"id":"a","type":"function","function":{"name":"respond_without_action","arguments":"{}"}},{"id":"b","type":"function","function":{"name":"respond_without_action","arguments":"{}"}}]}}]}`},
+		{"mixed", `{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","content":"unverified","tool_calls":[{"id":"a","type":"function","function":{"name":"respond_without_action","arguments":"{}"}}]}}]}`},
+		{"invalid_json_arguments", chatToolResponse("respond_without_action", `not-json`)},
+		{"refusal", `{"choices":[{"finish_reason":"stop","message":{"role":"assistant","refusal":"no","content":"no"}}]}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(tc.body)) }))
+			defer srv.Close()
+			client, err := litellm.NewClient(litellm.Config{BaseURL: srv.URL, APIKey: "key"})
+			if err != nil { t.Fatal(err) }
+			adapter, err := NewLiteLLMCustomerSalesAdapter(client, "mujeeb-sales", 2048, 48000)
+			if err != nil { t.Fatal(err) }
 			_, err = adapter.Decide(context.Background(), ports.CustomerSalesDecisionInput{
 				Capabilities: []ports.CustomerSalesCapability{ports.CustomerSalesCapabilityRespondWithoutAction},
-				Request:      ports.CustomerSalesDecisionRequest{Text: "Test"},
+				Request: ports.CustomerSalesDecisionRequest{Text: "hello"},
 			})
-			if err == nil {
-				t.Fatalf("unsafe model output was accepted: %s", test.body)
-			}
+			if err == nil { t.Fatal("unsafe model response accepted") }
 		})
 	}
 }
 
-func TestSummarizeDecisionResponseShapeDoesNotExposeArguments(t *testing.T) {
-	secretText := "customer-private-text"
-	resp := liteLLMDecisionResponse{
-		Status: "completed",
-		Steps:  []interactionStep{{Type: "function_call", Name: "respond_without_action", Arguments: json.RawMessage(`{"response_text":"` + secretText + `"}`)}},
-	}
-
-	got := summarizeDecisionResponseShape(resp)
-	if strings.Contains(got, secretText) || strings.Contains(got, "response_text") {
-		t.Fatalf("diagnostic leaked arguments: %s", got)
-	}
-	if !strings.Contains(got, "id_present=false") || !strings.Contains(got, `name="respond_without_action"`) {
-		t.Fatalf("diagnostic omitted required response shape: %s", got)
-	}
+func TestDecisionDiagnosticsNeverIncludeCustomerArguments(t *testing.T) {
+	secret := "customer-private-text"
+	report := summarizeDecisionResponseShape(normalizedLiteLLMResponse{
+		FunctionCalls: []capabilityCall{{ID:"x",Name:"respond_without_action",Arguments:json.RawMessage(`{"response_text":"`+secret+`"}`)}},
+	})
+	if strings.Contains(report, secret) || strings.Contains(report, "response_text") { t.Fatalf("leaked customer content: %s",report) }
 }

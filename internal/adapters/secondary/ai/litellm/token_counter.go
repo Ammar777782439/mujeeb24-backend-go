@@ -11,20 +11,12 @@ import (
 	"strings"
 )
 
-// CountInteractionTokens estimates model-specific input size via LiteLLM's
-// /utils/token_counter endpoint. It fails closed if the gateway cannot count.
-// This is NOT an exact upstream-token guarantee for all model providers.
-func (c *Client) CountInteractionTokens(ctx context.Context, model, system, input string, tools any) (int, error) {
-	if c == nil || strings.TrimSpace(model) == "" {
-		return 0, errors.New("LiteLLM token counter needs a client and model")
-	}
-	messages := []map[string]string{
-		{"role": "system", "content": system},
-		{"role": "user", "content": input},
-	}
-	request := map[string]any{"model": model, "messages": messages}
-	if tools != nil {
-		request["tools"] = tools
+// CountChatTokens counts the SAME unified Chat Completions payload sent for generation.
+// It fails closed if the proxy cannot provide a count. This remains conservative,
+// not a provider-tokenizer guarantee across all models in a fallback group.
+func (c *Client) CountChatTokens(ctx context.Context, request any) (int, error) {
+	if c == nil {
+		return 0, errors.New("LiteLLM token counter requires client")
 	}
 	payload, err := json.Marshal(request)
 	if err != nil {
@@ -32,7 +24,7 @@ func (c *Client) CountInteractionTokens(ctx context.Context, model, system, inpu
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
-	target := strings.TrimSuffix(c.endpoint, "/v1beta/interactions") + "/utils/token_counter"
+	target := strings.TrimSuffix(c.endpoint, "/v1/chat/completions") + "/utils/token_counter"
 	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, target, bytes.NewReader(payload))
 	if err != nil {
 		return 0, fmt.Errorf("build LiteLLM token count: %w", err)

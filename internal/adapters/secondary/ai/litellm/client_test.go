@@ -22,9 +22,9 @@ func TestNewClientRejectsInvalidConfiguration(t *testing.T) {
 	}
 }
 
-func TestSendInteractionSendsAuthenticatedPayload(t *testing.T) {
+func TestSendChatCompletionSendsAuthenticatedPayload(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/v1beta/interactions" {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/chat/completions" {
 			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
 		if r.Header.Get("Authorization") != "Bearer private-token" {
@@ -35,20 +35,20 @@ func TestSendInteractionSendsAuthenticatedPayload(t *testing.T) {
 			t.Errorf("unexpected payload: %v %v", input, err)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"completed","outputs":[]}`))
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
 	}))
 	defer server.Close()
 	client, err := NewClient(Config{BaseURL: server.URL, APIKey: "private-token"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := client.SendInteraction(context.Background(), map[string]any{"model": "mujeeb-customer"})
+	raw, err := client.SendChatCompletion(context.Background(), map[string]any{"model": "mujeeb-customer"})
 	if err != nil || !json.Valid(raw) {
-		t.Fatalf("send interaction: %v, %s", err, raw)
+		t.Fatalf("send chat completion: %v, %s", err, raw)
 	}
 }
 
-func TestSendInteractionDoesNotLeakProviderBodyOrSecrets(t *testing.T) {
+func TestSendChatCompletionDoesNotLeakProviderBodyOrSecrets(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte("sensitive customer transcript and api-key"))
@@ -58,7 +58,7 @@ func TestSendInteractionDoesNotLeakProviderBodyOrSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = client.SendInteraction(context.Background(), map[string]any{"input": "customer secrets"})
+	_, err = client.SendChatCompletion(context.Background(), map[string]any{"input": "customer secrets"})
 	var status *HTTPError
 	if !errors.As(err, &status) || !status.Retryable() || status.StatusCode != 503 {
 		t.Fatalf("expected retryable 503, got %v", err)
@@ -71,14 +71,14 @@ func TestSendInteractionDoesNotLeakProviderBodyOrSecrets(t *testing.T) {
 	}
 }
 
-func TestSendInteractionRespectsCanceledContext(t *testing.T) {
+func TestSendChatCompletionRespectsCanceledContext(t *testing.T) {
 	client, err := NewClient(Config{BaseURL: "https://example.com", APIKey: "key", Timeout: time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := client.SendInteraction(ctx, map[string]any{}); !errors.Is(err, context.Canceled) {
+	if _, err := client.SendChatCompletion(ctx, map[string]any{}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected canceled context, got %v", err)
 	}
 }

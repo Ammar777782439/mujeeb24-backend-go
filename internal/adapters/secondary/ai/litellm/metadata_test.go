@@ -19,7 +19,7 @@ func TestGatewayNativeCostAndCallID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, meta, err := client.SendInteractionWithMetadata(context.Background(), map[string]any{"model": "mujeeb-customer"})
+	_, meta, err := client.SendChatCompletionWithMetadata(context.Background(), map[string]any{"model": "mujeeb-customer"})
 	if err != nil {
 		t.Fatal(err)
 	}

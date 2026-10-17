@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -37,40 +36,27 @@ func (c *LiteLLMCatalogAdapter) builder() *catalogRequestBuilder {
 	return &catalogRequestBuilder{systemPrompt: prompts.BatchEvaluationSystemPrompt}
 }
 
-func (c *LiteLLMCatalogAdapter) batchRequest(input services.BatchEvaluationInput) (interactionRequest, error) {
+func (c *LiteLLMCatalogAdapter) batchRequest(input services.BatchEvaluationInput) (chatCompletionRequest, error) {
 	rc := &catalogRequestConfig{model: c.model, maxOutputTokens: c.maxOutputTokens}
 	request, err := c.builder().buildEvaluateBatchRequest(input, rc)
-	if err != nil {
-		return interactionRequest{}, err
-	}
-	return batchInteractionRequest(request, c.model), nil
+	if err != nil { return chatCompletionRequest{}, err }
+	return batchChatRequest(request, c.model)
 }
 
-func (c *LiteLLMCatalogAdapter) finalRequest(input services.FinalEvaluationInput, userPrompt string) interactionRequest {
+func (c *LiteLLMCatalogAdapter) finalRequest(input services.FinalEvaluationInput, userPrompt string) (chatCompletionRequest, error) {
 	rc := &catalogRequestConfig{model: c.model, maxOutputTokens: c.maxOutputTokens}
-	return batchInteractionRequest(c.builder().buildFinalEvaluateRequest(input, userPrompt, rc), c.model)
+	return batchChatRequest(c.builder().buildFinalEvaluateRequest(input, userPrompt, rc), c.model)
 }
 
-func (c *LiteLLMCatalogAdapter) count(ctx context.Context, request interactionRequest) (int, error) {
-	var contractOverhead string
-	if request.ResponseFormat != nil {
-		encoded, err := json.Marshal(request.ResponseFormat)
-		if err != nil {
-			return 0, fmt.Errorf("serialize catalog response schema: %w", err)
-		}
-		contractOverhead = "\nResponse format contract:\n" + string(encoded)
+func (c *LiteLLMCatalogAdapter) count(ctx context.Context, req chatCompletionRequest) (int, error) {
+	counter := map[string]any{"model": req.Model, "messages": req.Messages}
+	if len(req.Tools) > 0 {
+		counter["tools"] = req.Tools
+		counter["tool_choice"] = req.ToolChoice
+		counter["parallel_tool_calls"] = false
 	}
-	var tools any
-	if len(request.Tools) > 0 {
-		tools = request.Tools
-	}
-	count, err := c.client.CountInteractionTokens(ctx, request.Model, request.SystemInstruction+contractOverhead, request.Input, tools)
-	if err != nil {
-		return 0, err
-	}
-	// A catalog route is configured for the SMALLEST supported provider
-	// context; require headroom for the final model output.
-	return count, nil
+	if req.ResponseFormat != nil { counter["response_format"] = req.ResponseFormat }
+	return c.client.CountChatTokens(ctx, counter)
 }
 
 // BatchTokenBudget reserves output and a safety margin inside the smallest
@@ -101,7 +87,9 @@ func (c *LiteLLMCatalogAdapter) CountBatchTokens(ctx context.Context, input serv
 }
 
 func (c *LiteLLMCatalogAdapter) CountFinalTokens(ctx context.Context, input services.FinalEvaluationInput, userPrompt string) (int, error) {
-	return c.count(ctx, c.finalRequest(input, userPrompt))
+	req, err := c.finalRequest(input, userPrompt)
+	if err != nil { return 0, err }
+	return c.count(ctx, req)
 }
 
 func (c *LiteLLMCatalogAdapter) EvaluateBatch(ctx context.Context, input services.BatchEvaluationInput) (ports.CatalogBatchResult, error) {
@@ -121,7 +109,7 @@ func (c *LiteLLMCatalogAdapter) EvaluateBatch(ctx context.Context, input service
 	}
 	started := time.Now()
 	ctx = litellm.WithSpendAttribution(ctx, input.BusinessID, input.AIRunID, "catalog_batch")
-	raw, meta, err := c.client.SendInteractionWithMetadata(ctx, req)
+	raw, meta, err := c.client.SendChatCompletionWithMetadata(ctx, req)
 	if err != nil {
 		return ports.CatalogBatchResult{}, fmt.Errorf("send catalog batch %d: %w", input.BatchNumber, err)
 	}
@@ -129,11 +117,12 @@ func (c *LiteLLMCatalogAdapter) EvaluateBatch(ctx context.Context, input service
 	if err != nil {
 		return ports.CatalogBatchResult{}, err
 	}
-	if normalized.Status != "completed" {
-		return ports.CatalogBatchResult{}, fmt.Errorf("catalog batch did not complete: %s", normalized.Status)
-	}
+
 	if len(normalized.FunctionCalls) > 0 {
 		return ports.CatalogBatchResult{}, errors.New("catalog batch returned unexpected function call")
+	}
+	if err := validateStrictArguments([]byte(normalized.Text), req.ResponseFormat.JSONSchema.Schema); err != nil {
+		return ports.CatalogBatchResult{}, fmt.Errorf("invalid catalog candidates schema: %w", err)
 	}
 	candidates, err := parseBatchCandidates(catalogCandidateResponse{Candidates: []batchCandidate{{Content: batchContent{Parts: []batchPart{{Text: normalized.Text}}}}}})
 	if err != nil {
@@ -144,8 +133,8 @@ func (c *LiteLLMCatalogAdapter) EvaluateBatch(ctx context.Context, input service
 		BatchNumber: input.BatchNumber,
 		Candidates:  candidates,
 		Usage: ports.CustomerSalesUsageTelemetry{
-			Provider: "litellm", Model: c.model, InputTokens: normalized.Usage.TotalInputTokens,
-			CachedTokens: normalized.Usage.TotalCachedTokens, OutputTokens: normalized.Usage.TotalOutputTokens,
+			Provider: "litellm", Model: c.model, InputTokens: normalized.Usage.PromptTokens,
+			CachedTokens: normalized.Usage.CachedTokens, OutputTokens: normalized.Usage.CompletionTokens,
 			ModelRequests: 1, LatencyMs: latency, GatewayCallID: meta.CallID, GatewayDeploymentID: meta.DeploymentID, GatewayCostUSD: meta.CostUSD, GatewayCostKnown: meta.HasCost,
 		},
 		LatencyMs: latency,
@@ -153,7 +142,8 @@ func (c *LiteLLMCatalogAdapter) EvaluateBatch(ctx context.Context, input service
 }
 
 func (c *LiteLLMCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, input services.FinalEvaluationInput, userPrompt string) (ports.CapabilityDecision, ports.CustomerSalesUsageTelemetry, error) {
-	req := c.finalRequest(input, userPrompt)
+	req, err := c.finalRequest(input, userPrompt)
+	if err != nil { return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err }
 	tokens, err := c.count(ctx, req)
 	if err != nil {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
@@ -163,7 +153,7 @@ func (c *LiteLLMCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, in
 	}
 	started := time.Now()
 	ctx = litellm.WithSpendAttribution(ctx, input.BusinessID, input.AIRunID, "catalog_final")
-	raw, meta, err := c.client.SendInteractionWithMetadata(ctx, req)
+	raw, meta, err := c.client.SendChatCompletionWithMetadata(ctx, req)
 	if err != nil {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, fmt.Errorf("send final catalog evaluation: %w", err)
 	}
@@ -171,14 +161,12 @@ func (c *LiteLLMCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, in
 	if err != nil {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
 	}
-	if normalized.Status != "completed" && normalized.Status != "requires_action" {
-		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, fmt.Errorf("final catalog interaction not complete: %s", normalized.Status)
-	}
+
 	tools := customerSalesTools(ports.CustomerSalesCapabilities(false, input.ConversationContext.Sales != nil && input.ConversationContext.Sales.Enabled && input.ConversationContext.Sales.AllowInteractions))
 	if normalized.Text != "" {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, errors.New("final catalog returned plain text alongside capability")
 	}
-	decision, err := parseCustomerSalesCapability(interactionResponse{Steps: normalized.FunctionCalls}, tools)
+	decision, err := parseCustomerSalesCapability(capabilityResponse{Calls: normalized.FunctionCalls}, tools)
 	if err != nil {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
 	}
@@ -187,8 +175,8 @@ func (c *LiteLLMCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, in
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, errors.New("non-terminal capability after full catalog evaluation")
 	}
 	return decision, ports.CustomerSalesUsageTelemetry{
-		Provider: "litellm", Model: c.model, InputTokens: normalized.Usage.TotalInputTokens,
-		CachedTokens: normalized.Usage.TotalCachedTokens, OutputTokens: normalized.Usage.TotalOutputTokens,
+		Provider: "litellm", Model: c.model, InputTokens: normalized.Usage.PromptTokens,
+		CachedTokens: normalized.Usage.CachedTokens, OutputTokens: normalized.Usage.CompletionTokens,
 		ModelRequests: 1, LatencyMs: time.Since(started).Milliseconds(), GatewayCallID: meta.CallID, GatewayDeploymentID: meta.DeploymentID, GatewayCostUSD: meta.CostUSD, GatewayCostKnown: meta.HasCost,
 	}, nil
 }

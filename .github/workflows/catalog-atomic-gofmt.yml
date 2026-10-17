@@ -5,6 +5,9 @@ on:
     branches:
       - feat/catalog-complete-commercial-entity-atomic
     paths:
+      - 'internal/adapters/secondary/ai/gateway/*.go'
+      - 'internal/adapters/secondary/ai/litellm/*.go'
+      - 'internal/platform/config/*.go'
       - 'internal/application/services/*.go'
       - 'scripts/litellm-go-edge-probe/main.go'
       - 'scripts/litellm-go-catalog-live/main.go'
@@ -28,7 +31,24 @@ jobs:
       - name: Apply gofmt to touched catalog files
         run: |
           set -euo pipefail
-          gofmt -w internal/application/services/catalog_ai_projection.go \
+          gofmt -w internal/adapters/secondary/ai/litellm/client.go \
+            internal/adapters/secondary/ai/litellm/client_test.go \
+            internal/adapters/secondary/ai/litellm/token_counter.go \
+            internal/adapters/secondary/ai/litellm/token_counter_test.go \
+            internal/adapters/secondary/ai/litellm/metadata_test.go \
+            internal/adapters/secondary/ai/gateway/interaction_contract.go \
+            internal/adapters/secondary/ai/gateway/litellm_response.go \
+            internal/adapters/secondary/ai/gateway/customer_sales_capabilities.go \
+            internal/adapters/secondary/ai/gateway/sales_workflow_tools.go \
+            internal/adapters/secondary/ai/gateway/litellm_customer_adapter.go \
+            internal/adapters/secondary/ai/gateway/litellm_customer_adapter_test.go \
+            internal/adapters/secondary/ai/gateway/catalog_request_builder.go \
+            internal/adapters/secondary/ai/gateway/litellm_catalog_adapter.go \
+            internal/adapters/secondary/ai/gateway/litellm_catalog_adapter_test.go \
+            internal/adapters/secondary/ai/gateway/capability_contract_test.go \
+            internal/platform/config/config.go \
+            internal/platform/config/litellm_gateway_only_test.go \
+            internal/application/services/catalog_ai_projection.go \
             internal/application/services/catalog_ai_runtime.go \
             internal/application/services/catalog_semantic_projection.go \
             internal/application/services/catalog_batch_controller.go \
@@ -47,7 +67,7 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add internal/application/services/ internal/adapters/secondary/persistence/postgres/ai_context_builder_integration_test.go scripts/litellm-go-edge-probe/main.go scripts/litellm-go-catalog-live/main.go
+          git add internal/adapters/secondary/ai/gateway/ internal/adapters/secondary/ai/litellm/ internal/platform/config/ internal/application/services/ internal/adapters/secondary/persistence/postgres/ai_context_builder_integration_test.go scripts/litellm-go-edge-probe/main.go scripts/litellm-go-catalog-live/main.go
           git commit -m 'chore(catalog): apply gofmt to atomic entity change'
           for attempt in 1 2 3 4 5; do
             # GitHub integration commits may race with this formatting job.
