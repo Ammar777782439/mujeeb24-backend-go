@@ -103,9 +103,7 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 		return Response{}, err
 	}
 	var canonical canonicalDeepSeekRequest
-	decoder := json.NewDecoder(bytes.NewReader(req.Payload))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&canonical); err != nil {
+	if err := strictUnmarshal(req.Payload, &canonical); err != nil {
 		return Response{}, fmt.Errorf("invalid canonical request: %w", err)
 	}
 	if canonical.Model == "" || canonical.MaxTokens <= 0 || canonical.Stream || len(canonical.Messages) == 0 {
@@ -113,6 +111,7 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 	}
 	out := geminiWireRequest{GenerationConfig: map[string]any{"maxOutputTokens": canonical.MaxTokens}}
 	callName := make(map[string]string)
+	toolSchemas := make(map[string]json.RawMessage)
 	for i, raw := range canonical.Messages {
 		var message struct {
 			Role      string          `json:"role"`
@@ -213,6 +212,9 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 		if format.Type != "json_schema" || !format.JSONSchema.Strict || !json.Valid(format.JSONSchema.Schema) {
 			return Response{}, errors.New("Gemini refuses non-strict structured schema")
 		}
+		if _, err := compileNativeSchema(format.JSONSchema.Schema); err != nil {
+			return Response{}, fmt.Errorf("unsupported Gemini structured schema: %w", err)
+		}
 		out.GenerationConfig["responseMimeType"] = "application/json"
 		out.GenerationConfig["responseJsonSchema"] = format.JSONSchema.Schema
 	}
@@ -238,6 +240,13 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 				tool.Function.Name == "" || !tool.Function.Strict || !json.Valid(tool.Function.Parameters) {
 				return Response{}, errors.New("invalid strict Gemini function declaration")
 			}
+			if _, exists := toolSchemas[tool.Function.Name]; exists {
+				return Response{}, errors.New("duplicate Gemini function schema")
+			}
+			if _, err := compileNativeSchema(tool.Function.Parameters); err != nil {
+				return Response{}, fmt.Errorf("invalid Gemini function schema: %w", err)
+			}
+			toolSchemas[tool.Function.Name] = tool.Function.Parameters
 			declarations = append(declarations, map[string]any{
 				"name": tool.Function.Name, "description": tool.Function.Description,
 				"parametersJsonSchema": tool.Function.Parameters,
@@ -314,6 +323,13 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 			if strings.TrimSpace(part.FunctionCall.Name) == "" || !json.Valid(part.FunctionCall.Args) {
 				return Response{}, errors.New("Gemini returned invalid function arguments")
 			}
+			schema, offered := toolSchemas[part.FunctionCall.Name]
+			if !offered {
+				return Response{}, errors.New("Gemini returned function that was not offered")
+			}
+			if err := validateNativeSchemaResult(part.FunctionCall.Args, schema); err != nil {
+				return Response{}, fmt.Errorf("Gemini function arguments violate schema: %w", err)
+			}
 			var args map[string]any
 			if err := json.Unmarshal(part.FunctionCall.Args, &args); err != nil || args == nil {
 				return Response{}, errors.New("Gemini function args must be object")
@@ -344,6 +360,14 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 	}
 	if len(calls) == 0 && strings.TrimSpace(content) == "" {
 		return Response{}, errors.New("Gemini returned no output")
+	}
+	if canonical.ResponseFormat != nil {
+		if len(calls) != 0 {
+			return Response{}, errors.New("Gemini structured result unexpectedly called a function")
+		}
+		if err := validateNativeSchemaResult(json.RawMessage(content), canonical.ResponseFormat.JSONSchema.Schema); err != nil {
+			return Response{}, fmt.Errorf("Gemini structured output violates schema: %w", err)
+		}
 	}
 	reason := "stop"
 	var contentOut any = content

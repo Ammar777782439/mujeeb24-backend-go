@@ -111,9 +111,7 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 		return Response{}, err
 	}
 	var canonical canonicalDeepSeekRequest
-	decoder := json.NewDecoder(bytes.NewReader(request.Payload))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&canonical); err != nil {
+	if err := strictUnmarshal(request.Payload, &canonical); err != nil {
 		return Response{}, fmt.Errorf("invalid canonical inference request: %w", err)
 	}
 	if len(canonical.Messages) == 0 || canonical.MaxTokens <= 0 || canonical.Stream || canonical.Model == "" {
@@ -130,6 +128,7 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 		"stream": false, "thinking": map[string]string{"type": "disabled"},
 	}
 	const synthetic = "submit_catalog_batch"
+	toolSchemas := make(map[string]json.RawMessage)
 	structured := canonical.ResponseFormat != nil
 	if structured {
 		if len(canonical.Tools) != 0 {
@@ -139,6 +138,10 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 		if format.Type != "json_schema" || !format.JSONSchema.Strict || !json.Valid(format.JSONSchema.Schema) {
 			return Response{}, errors.New("DeepSeek refuses non-strict or malformed structured schema")
 		}
+		if _, err := compileNativeSchema(format.JSONSchema.Schema); err != nil {
+			return Response{}, fmt.Errorf("unsupported DeepSeek structured schema: %w", err)
+		}
+		toolSchemas[synthetic] = format.JSONSchema.Schema
 		body["tools"] = []any{map[string]any{"type": "function", "function": map[string]any{
 			"name": synthetic, "description": "Return the requested catalog batch JSON exactly as specified",
 			"strict": true, "parameters": format.JSONSchema.Schema,
@@ -154,11 +157,19 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 				Function struct {
 					Name   string `json:"name"`
 					Strict bool   `json:"strict"`
+					Parameters json.RawMessage `json:"parameters"`
 				} `json:"function"`
 			}
 			if err := json.Unmarshal(raw, &tool); err != nil || tool.Type != "function" || tool.Function.Name == "" || !tool.Function.Strict {
 				return Response{}, errors.New("DeepSeek requires strictly declared tool schemas")
 			}
+			if _, err := compileNativeSchema(tool.Function.Parameters); err != nil {
+				return Response{}, fmt.Errorf("invalid DeepSeek tool schema: %w", err)
+			}
+			if _, exists := toolSchemas[tool.Function.Name]; exists {
+				return Response{}, errors.New("duplicate DeepSeek tool schema")
+			}
+			toolSchemas[tool.Function.Name] = tool.Function.Parameters
 		}
 		body["tools"] = canonical.Tools
 		body["tool_choice"] = canonical.ToolChoice
@@ -253,6 +264,9 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 			var args map[string]json.RawMessage
 			if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil || args == nil {
 				return Response{}, errors.New("DeepSeek function arguments must be an object")
+			}
+			if err := validateNativeSchemaResult(json.RawMessage(call.Function.Arguments), toolSchemas[call.Function.Name]); err != nil {
+				return Response{}, fmt.Errorf("DeepSeek function arguments violate schema: %w", err)
 			}
 		}
 	}
