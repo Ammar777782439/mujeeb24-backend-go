@@ -110,3 +110,44 @@ func TestFailedStandbyCannotBeMistakenForSuccess(t *testing.T) {
 		t.Fatalf("standby failure: %+v %+v %v", res, trace, err)
 	}
 }
+
+func TestGeminiOnlyNeverFallsBackOrOpensCircuit(t *testing.T) {
+	primary := &fakeProvider{name: "gemini", err: &StatusError{Provider: "gemini", Code: 503}}
+	router, err := NewRouter(primary, nil, Policy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 4; i++ {
+		response, trace, err := router.Generate(context.Background(), validRequest())
+		if !IsUnavailable(err) || trace.FallbackUsed || len(trace.Attempts) != 1 ||
+			trace.Attempts[0].Provider != "gemini" || trace.Attempts[0].HTTPStatus != 503 ||
+			len(response.Payload) != 0 {
+			t.Fatalf("Gemini-only 503 must fail closed: attempt=%d trace=%+v err=%v", i, trace, err)
+		}
+	}
+	if primary.count() != 4 {
+		t.Fatalf("Gemini-only must retry only on new requests, got %d calls", primary.count())
+	}
+	primary.mu.Lock()
+	primary.err = nil
+	primary.mu.Unlock()
+	response, trace, err := router.Generate(context.Background(), validRequest())
+	if err != nil || trace.FallbackUsed || len(trace.Attempts) != 1 || primary.count() != 5 ||
+		string(response.Payload) != `{"ok":true}` {
+		t.Fatalf("Gemini-only recovery failed: response=%+v trace=%+v err=%v", response, trace, err)
+	}
+}
+
+func TestOptionalStandbyDoesNotRelaxProviderValidation(t *testing.T) {
+	if _, err := NewRouter(nil, nil, Policy{}); err == nil {
+		t.Fatal("nil primary accepted")
+	}
+	if _, err := NewRouter(&fakeProvider{name: ""}, nil, Policy{}); err == nil {
+		t.Fatal("nameless primary accepted")
+	}
+	if _, err := NewRouter(&fakeProvider{name: "gemini"}, &fakeProvider{name: "gemini"}, Policy{
+		ConsecutiveFailures: 1, Cooldown: time.Minute,
+	}); err == nil {
+		t.Fatal("same provider incorrectly configured as standby")
+	}
+}

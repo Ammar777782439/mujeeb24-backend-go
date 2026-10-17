@@ -89,12 +89,17 @@ type Router struct {
 	now       func() time.Time
 }
 
+// NewRouter requires Gemini as primary. A nil standby deliberately runs in
+// Gemini-only mode: no fallback and no circuit breaker that could skip Gemini.
 func NewRouter(primary, standby Provider, policy Policy) (*Router, error) {
-	if primary == nil || standby == nil ||
-		strings.TrimSpace(primary.Name()) == "" ||
-		strings.TrimSpace(standby.Name()) == "" ||
-		primary.Name() == standby.Name() {
-		return nil, errors.New("two distinct named inference providers are required")
+	if primary == nil || strings.TrimSpace(primary.Name()) == "" {
+		return nil, errors.New("a named primary inference provider is required")
+	}
+	if standby == nil {
+		return &Router{primary: primary, now: time.Now}, nil
+	}
+	if strings.TrimSpace(standby.Name()) == "" || primary.Name() == standby.Name() {
+		return nil, errors.New("standby must be named and distinct from primary")
 	}
 	if policy.ConsecutiveFailures < 1 || policy.Cooldown <= 0 {
 		return nil, errors.New("circuit breaker threshold and cooldown must be positive")
@@ -115,6 +120,16 @@ func (r *Router) Generate(ctx context.Context, req Request) (Response, Trace, er
 	}
 	if len(req.Payload) == 0 || !json.Valid(req.Payload) {
 		return Response{}, trace, errors.New("canonical model request must be valid JSON")
+	}
+	// Without a standby, attempt Gemini on every request, including after 503.
+	// Skipping it would result in a false success or a nil-provider panic.
+	if r.standby == nil {
+		out, err := r.primary.Generate(ctx, req)
+		trace.Attempts = append(trace.Attempts, makeAttempt(r.primary.Name(), err))
+		if err != nil {
+			return Response{}, trace, err
+		}
+		return out, trace, nil
 	}
 	tryPrimary := r.reservePrimary()
 	if tryPrimary {
