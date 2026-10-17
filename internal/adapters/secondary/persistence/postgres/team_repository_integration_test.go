@@ -106,7 +106,7 @@ func TestTeamRepositoriesAgainstPostgres(t *testing.T) {
 	if _, err := subscriptionRepo.Create(ctx, ports.SubscriptionCreate{
 		ID: subscriptionID, BusinessID: businessID,
 		// Pricing V2 Growth has three seats: owner + two invitees.
-		PlanID: "00000000-0000-0000-0000-00000000a103",
+		PlanID:           "00000000-0000-0000-0000-00000000a103",
 		PriceYERSnapshot: 10000, AmountDueYER: 10000,
 		PeriodStart: now.Add(-time.Hour), PeriodEnd: now.Add(30 * 24 * time.Hour),
 		AIReplyLimit: 500, AICatalogLimit: 200,
