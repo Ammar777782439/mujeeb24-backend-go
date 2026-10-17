@@ -24,7 +24,7 @@ func TestSpendAttributionIsAppliedToGatewayRequests(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := WithSpendAttribution(context.Background(), "business-1", "run-123", "catalog_batch")
-	if _, _, err := client.SendInteractionWithMetadata(ctx, map[string]any{"model": "mujeeb-catalog"}); err != nil {
+	if _, _, err := client.SendChatCompletionWithMetadata(ctx, map[string]any{"model": "mujeeb-catalog"}); err != nil {
 		t.Fatal(err)
 	}
 	if gotCustomer != "business-1" || gotMetadata["mujeeb_business_id"] != "business-1" ||
