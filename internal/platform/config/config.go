@@ -63,7 +63,7 @@ func LoadFromEnv() (ProcessConfig, error) {
 		GeminiAPIKey:                   strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
 		GeminiModel:                    envOr("GEMINI_MODEL", "gemini-2.5-flash"),
 		DeepSeekAPIKey:                 strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")),
-		DeepSeekModel:                  envOr("DEEPSEEK_MODEL", "deepseek-flash"),
+		DeepSeekModel:                  envOr("DEEPSEEK_MODEL", "deepseek-chat"),
 		NativeHTTPTimeout:              20 * time.Second,
 		NativeMaxContextTokens:         32768,
 		NativeMaxOutputTokens:          4096,
