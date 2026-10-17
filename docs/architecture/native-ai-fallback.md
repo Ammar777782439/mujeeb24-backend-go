@@ -62,3 +62,19 @@ All changes below are **on the feature branch only**. GitHub's `Native AI Contra
 - On Gemini 503 without a standby, the inference fails with an explicit operational error. No fabricated response, silent provider substitution, business tool execution or repeated transaction is permitted.
 - Once the DeepSeek key is added, restarting the API configures the existing HTTP 503 fallback and bounded breaker. Nothing in Customer Sales, Universal Catalog or Merchant AI business contracts changes.
 - Platform Admin shows Gemini as active and does not list an unconfigured DeepSeek credential or model. Live model qualification remains required before production.
+
+## Render deployment migration identity incident (version 000075)
+
+An earlier cleanup renamed the already-applied version 75 SQL files, but the
+PostgreSQL `schema_migrations` table persisted the original version/name pair.
+Render correctly refused to start with a migration name mismatch. Resolution:
+
+- Restore the **original** `000075` up/down filenames and content exactly as
+  originally deployed, without editing or rerunning this migration.
+- Keep the original version/name pair as permanent historical database metadata.
+- The legacy filename is the only exception to the zero-obsolete-runtime audit.
+- Do **not** update, delete, or recreate `schema_migrations` rows in production.
+- After this fix passes CI, redeploy the current feature-branch HEAD.
+  A successful GitHub build is not proof that Render has already deployed it.
+- If another migration fails after version 75, stop and inspect that
+  migration rather than modifying production state manually.
