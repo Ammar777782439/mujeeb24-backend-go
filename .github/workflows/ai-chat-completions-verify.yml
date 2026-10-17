@@ -8,6 +8,7 @@ on:
       - 'internal/adapters/secondary/ai/gateway/**'
       - 'internal/adapters/secondary/ai/litellm/**'
       - 'internal/platform/config/**'
+      - 'internal/adapters/primary/http/handlers/platform_litellm_config_test.go'
       - '.github/workflows/ai-chat-completions-verify.yml'
   workflow_dispatch:
 
