@@ -127,3 +127,18 @@ func TestLiteLLMModelProbeFailsClosedOnMalformedChoices(t *testing.T) {
 		})
 	}
 }
+
+func TestLiteLLMModelDiscoveryRetainsReverseProxyPrefix(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodGet || req.URL.Path != "/gateway/v1/models" {
+			t.Errorf("discovery escaped configured gateway prefix: %s %s", req.Method, req.URL.Path)
+		}
+		_, _ = fmt.Fprint(w, `{"data":[{"id":"mujeeb-sales"}]}`)
+	}))
+	defer srv.Close()
+
+	models, err := NewModelsClient().DiscoverModels(context.Background(), "sk-test", srv.URL+"/gateway")
+	if err != nil || len(models) != 1 || models[0].ModelName != "mujeeb-sales" {
+		t.Fatalf("prefixed LiteLLM discovery failed: models=%+v err=%v", models, err)
+	}
+}
