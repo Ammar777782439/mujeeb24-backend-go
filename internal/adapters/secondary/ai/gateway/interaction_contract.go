@@ -87,8 +87,24 @@ func validateStrictSchema(schema map[string]any) error {
 		if !ok || schema["additionalProperties"] != false {
 			return errors.New("strict object requires properties and additionalProperties=false")
 		}
-		required, ok := schema["required"].([]string)
-		if !ok || len(required) != len(props) {
+		// json.Unmarshal into map[string]any produces []any, while Go-built
+		// schemas use []string. Both encode to the identical JSON array.
+		var required []string
+		switch raw := schema["required"].(type) {
+		case []string:
+			required = raw
+		case []any:
+			for _, entry := range raw {
+				name, ok := entry.(string)
+				if !ok {
+					return errors.New("strict object has non-string required field")
+				}
+				required = append(required, name)
+			}
+		default:
+			return errors.New("strict object requires explicit required array")
+		}
+		if len(required) != len(props) {
 			return errors.New("strict object requires every declared property")
 		}
 		seen := make(map[string]bool, len(required))
