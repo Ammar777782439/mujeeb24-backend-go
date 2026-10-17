@@ -129,8 +129,8 @@ func TestChannelProvisioningRepositoriesAgainstPostgres(t *testing.T) {
 
 func stringPtrIntegration(value string) *string { return &value }
 
- // activateChannelFixtureSubscription uses the same public repository API as
- // production. A Pricing V2 Basic snapshot grants exactly one included channel.
+// activateChannelFixtureSubscription uses the same public repository API as
+// production. A Pricing V2 Basic snapshot grants exactly one included channel.
 func activateChannelFixtureSubscription(ctx context.Context, t *testing.T, adapter *Adapter, businessID string) {
 	t.Helper()
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -138,7 +138,7 @@ func activateChannelFixtureSubscription(ctx context.Context, t *testing.T, adapt
 	repo := NewSubscriptionRepository(adapter)
 	if _, err := repo.Create(ctx, ports.SubscriptionCreate{
 		ID: subscriptionID, BusinessID: businessID,
-		PlanID: "00000000-0000-0000-0000-00000000a102",
+		PlanID:           "00000000-0000-0000-0000-00000000a102",
 		PriceYERSnapshot: 6500, AmountDueYER: 6500,
 		PeriodStart: now.Add(-time.Minute), PeriodEnd: now.Add(24 * time.Hour),
 		AIReplyLimit: 200, AICatalogLimit: 60,
