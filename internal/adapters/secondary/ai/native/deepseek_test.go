@@ -164,3 +164,34 @@ func TestDeepSeekRefusesUnsupportedSchemaWithoutCallingProvider(t *testing.T) {
 		t.Fatalf("unsupported schema silently downgraded calls=%d err=%v", calls, err)
 	}
 }
+
+func TestDeepSeekToolRequestRoundTripsNullableSelectedReferences(t *testing.T) {
+	api, closeFn := newFakeDeepSeek(t, func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil { t.Fatal(err) }
+		if body["tool_choice"] != "required" || body["thinking"].(map[string]any)["type"] != "disabled" {
+			t.Fatal("DeepSeek forced non-thinking contract lost")
+		}
+		schema := body["tools"].([]any)[0].(map[string]any)["function"].(map[string]any)["parameters"].(map[string]any)
+		selected := schema["properties"].(map[string]any)["selected"].(map[string]any)
+		variant := selected["items"].(map[string]any)["properties"].(map[string]any)["variant_id"].(map[string]any)
+		if variant["anyOf"] == nil { t.Fatalf("DeepSeek nullable field not translated: %+v",variant) }
+		_,_ = fmt.Fprint(w,`{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"respond_without_action","arguments":"{\\"response_text\\":\\"available\\",\\"selected\\":[{\\"item_id\\":\\"item-1\\",\\"offer_id\\":{\\"__mujeeb_null_v1\\":true},\\"variant_id\\":{\\"__mujeeb_null_v1\\":true}}]}"}}]}}],"usage":{"prompt_tokens":20,"completion_tokens":10}}`)
+	})
+	defer closeFn()
+	tool:=`[{"type":"function","function":{"name":"respond_without_action","strict":true,"parameters":{"type":"object","properties":{"response_text":{"type":"string"},"selected":{"type":"array","items":{"type":"object","properties":{"item_id":{"type":"string"},"variant_id":{"type":["string","null"]},"offer_id":{"type":["string","null"]}},"required":["item_id","variant_id","offer_id"],"additionalProperties":false}}},"required":["response_text","selected"],"additionalProperties":false}}}]`
+	resp,err:=api.Generate(context.Background(),deepSeekReq(tool,""))
+	if err!=nil {t.Fatal(err)}
+	var decoded struct{
+		Choices []struct{Message struct{ToolCalls []struct{Function struct{Arguments string `json:"arguments"`} `json:"function"`} `json:"tool_calls"`} `json:"message"`} `json:"choices"`
+	}
+	if err:=json.Unmarshal(resp.Payload,&decoded);err!=nil {t.Fatal(err)}
+	if len(decoded.Choices)!=1||len(decoded.Choices[0].Message.ToolCalls)!=1{t.Fatal("unexpected normalized call count")}
+	var args struct{
+		Selected []struct{ItemID string `json:"item_id"`; OfferID *string `json:"offer_id"`; VariantID *string `json:"variant_id"`} `json:"selected"`
+	}
+	if err:=json.Unmarshal([]byte(decoded.Choices[0].Message.ToolCalls[0].Function.Arguments),&args);err!=nil{t.Fatal(err)}
+	if len(args.Selected)!=1||args.Selected[0].ItemID!="item-1"||args.Selected[0].VariantID!=nil||args.Selected[0].OfferID!=nil{
+		t.Fatalf("nullable canonical round trip failed: %+v",args)
+	}
+}
