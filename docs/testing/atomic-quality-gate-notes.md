@@ -15,3 +15,7 @@ Accepting an employee invitation requires an active subscription with a free tea
 ## Offline gateway
 
 The public LiteLLM readiness probe is **manual opt-in**, via Quality gate → Run workflow → `verify_gateway=true`. Do not block Go/OpenAPI/PostgreSQL source verification while the separate LiteLLM service is intentionally powered off. Passing Quality gate does not prove live Gemini/DeepSeek model compatibility; that requires dedicated live qualification when LiteLLM is running.
+
+## Channel activation and global uniqueness integration fixtures
+
+A successful OAuth callback is not a subscription entitlement. PostgreSQL channel activation requires a current ACTIVE subscription with an unused included channel slot (plus any paid channel add-ons). Channel provisioning integration first asserts activation fails without a subscription, then creates and activates a Pricing V2 Basic subscription for the business. Provider-account uniqueness tests seed independent active Basic subscriptions for both businesses so the test reaches the global uniqueness constraint instead of failing earlier at billing. No production channel guard was removed; subscriptions are deleted before fixture businesses in teardown.
