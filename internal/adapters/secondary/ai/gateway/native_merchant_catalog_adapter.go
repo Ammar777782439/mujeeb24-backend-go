@@ -50,24 +50,24 @@ type nativeMerchantChatFunction struct {
 	Arguments string `json:"arguments"`
 }
 type nativeMerchantChatCall struct {
-	ID       string               `json:"id"`
-	Type     string               `json:"type"`
+	ID       string                     `json:"id"`
+	Type     string                     `json:"type"`
 	Function nativeMerchantChatFunction `json:"function"`
 }
 type nativeMerchantChatMessage struct {
-	Role       string             `json:"role"`
-	Content    any                `json:"content,omitempty"`
+	Role       string                   `json:"role"`
+	Content    any                      `json:"content,omitempty"`
 	ToolCalls  []nativeMerchantChatCall `json:"tool_calls,omitempty"`
-	ToolCallID string             `json:"tool_call_id,omitempty"`
+	ToolCallID string                   `json:"tool_call_id,omitempty"`
 }
 type nativeMerchantChatRequest struct {
-	Model          string                `json:"model"`
+	Model          string                      `json:"model"`
 	Messages       []nativeMerchantChatMessage `json:"messages"`
-	Tools          []map[string]any      `json:"tools,omitempty"`
-	ToolChoice     string                `json:"tool_choice,omitempty"`
-	ResponseFormat any                   `json:"response_format"`
-	MaxTokens      int                   `json:"max_tokens"`
-	Stream         bool                  `json:"stream"`
+	Tools          []map[string]any            `json:"tools,omitempty"`
+	ToolChoice     string                      `json:"tool_choice,omitempty"`
+	ResponseFormat any                         `json:"response_format"`
+	MaxTokens      int                         `json:"max_tokens"`
+	Stream         bool                        `json:"stream"`
 }
 type nativeMerchantChatResponse struct {
 	Usage struct {
@@ -80,10 +80,10 @@ type nativeMerchantChatResponse struct {
 	Choices []struct {
 		FinishReason string `json:"finish_reason"`
 		Message      struct {
-			Role      string             `json:"role"`
-			Content   json.RawMessage    `json:"content"`
+			Role      string                   `json:"role"`
+			Content   json.RawMessage          `json:"content"`
 			ToolCalls []nativeMerchantChatCall `json:"tool_calls"`
-			Refusal   *string            `json:"refusal"`
+			Refusal   *string                  `json:"refusal"`
 		} `json:"message"`
 	} `json:"choices"`
 }
