@@ -373,7 +373,7 @@ func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, bus
 	// Compute provider_cost from the pricing table (per P1-6: never
 	// silently store cost=0 as "success").
 	providerCostYER := 0
-	pricingVersion, gatewayCostUSD, gatewayFXRate, pricingFailed := gatewayNativeSpend(usage, s.GatewayFXRateYER)
+	pricingVersion, gatewayCostUSD, gatewayFXRate, pricingFailed := nativeProviderSpend(usage, s.GatewayFXRateYER)
 	totalInput := usage.InputTokens
 	cachedInput := usage.CachedTokens
 	nonCachedInput := totalInput - cachedInput
