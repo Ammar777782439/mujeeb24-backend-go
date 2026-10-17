@@ -109,8 +109,8 @@ func (c *ModelsClient) TestConnection(ctx context.Context, apiKey, model, baseUR
 		return false, 0, "LITELLM_CONFIG_INVALID"
 	}
 	requestBody, _ := json.Marshal(map[string]any{
-		"model": model,
-		"messages": []map[string]string{{"role": "user", "content": "Hello"}},
+		"model":      model,
+		"messages":   []map[string]string{{"role": "user", "content": "Hello"}},
 		"max_tokens": 16, "stream": false,
 	})
 	reqCtx, cancel := context.WithTimeout(ctx, c.timeout)
@@ -138,8 +138,8 @@ func (c *ModelsClient) TestConnection(ctx context.Context, apiKey, model, baseUR
 	var result struct {
 		Choices []struct {
 			FinishReason string `json:"finish_reason"`
-			Message struct {
-				Role string `json:"role"`
+			Message      struct {
+				Role    string  `json:"role"`
 				Content *string `json:"content"`
 				Refusal *string `json:"refusal"`
 			} `json:"message"`
