@@ -6,6 +6,13 @@ on:
       - feat/gemini-deepseek
     paths:
       - '.github/workflows/native-format.yml'
+      - 'internal/adapters/secondary/ai/native/router.go'
+      - 'internal/platform/config/config.go'
+      - 'internal/platform/config/config_test.go'
+      - 'internal/bootstrap/integrations.go'
+      - 'internal/bootstrap/integrations_test.go'
+      - 'internal/adapters/primary/http/handlers/platform_native_ai_config.go'
+      - 'internal/adapters/primary/http/handlers/platform_native_ai_config_test.go'
       - 'internal/adapters/secondary/ai/gateway/native_merchant_catalog_adapter.go'
       - 'internal/adapters/secondary/ai/gateway/native_adapters_contract_test.go'
   workflow_dispatch:
@@ -44,6 +51,7 @@ jobs:
             internal/application/services/platform_operations_service.go \
             internal/bootstrap/api.go \
             internal/bootstrap/integrations.go \
+            internal/bootstrap/integrations_test.go \
             internal/platform/config/config.go \
             internal/platform/config/config_test.go
           git diff --check
