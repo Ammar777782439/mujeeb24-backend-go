@@ -33,6 +33,7 @@ func TestChannelConnectionProviderAccountGlobalUniquenessAgainstPostgres(t *test
 	cleanup := func() {
 		_, _ = adapter.Pool().Exec(context.Background(), `DELETE FROM channel_provisioning_sessions WHERE business_id IN ($1::uuid, $2::uuid)`, businessA, businessB)
 		_, _ = adapter.Pool().Exec(context.Background(), `DELETE FROM channel_connections WHERE business_id IN ($1::uuid, $2::uuid)`, businessA, businessB)
+		_, _ = adapter.Pool().Exec(context.Background(), `DELETE FROM subscriptions WHERE business_id IN ($1::uuid, $2::uuid)`, businessA, businessB)
 		_, _ = adapter.Pool().Exec(context.Background(), `DELETE FROM businesses WHERE id IN ($1::uuid, $2::uuid)`, businessA, businessB)
 	}
 	cleanup()
@@ -43,6 +44,10 @@ func TestChannelConnectionProviderAccountGlobalUniquenessAgainstPostgres(t *test
 		}
 	}
 
+	// Both merchants must have an independently active one-channel entitlement
+	// before the global provider-account uniqueness rule is exercised.
+	activateChannelFixtureSubscription(ctx, t, adapter, businessA)
+	activateChannelFixtureSubscription(ctx, t, adapter, businessB)
 	repo := NewChannelConnectionRepository(adapter)
 	// Business A creates connection with account-a
 	connA, err := repo.CreatePending(ctx, businessA, "socialapi", "whatsapp", "pending-conn-unique", "secret://a")
@@ -111,6 +116,7 @@ func TestChannelProvisioningOAuthStateGlobalUniquenessAgainstPostgres(t *testing
 	cleanup := func() {
 		_, _ = adapter.Pool().Exec(context.Background(), `DELETE FROM channel_provisioning_sessions WHERE business_id IN ($1::uuid, $2::uuid)`, businessA, businessB)
 		_, _ = adapter.Pool().Exec(context.Background(), `DELETE FROM channel_connections WHERE business_id IN ($1::uuid, $2::uuid)`, businessA, businessB)
+		_, _ = adapter.Pool().Exec(context.Background(), `DELETE FROM subscriptions WHERE business_id IN ($1::uuid, $2::uuid)`, businessA, businessB)
 		_, _ = adapter.Pool().Exec(context.Background(), `DELETE FROM businesses WHERE id IN ($1::uuid, $2::uuid)`, businessA, businessB)
 	}
 	cleanup()
