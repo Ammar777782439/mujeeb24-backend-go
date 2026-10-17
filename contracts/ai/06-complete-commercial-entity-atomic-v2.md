@@ -2,7 +2,7 @@
 
 Status: **Proposed for acceptance on feat/catalog-complete-commercial-entity-atomic**.
 Supersedes the conflicting transport details in ① §3 and ② §§2–4, 6–7; it does not replace the Universal Catalog domain, merchant data, or the ⑤ entity/data boundary.
-Source branch: `feat/ai-litellm-multi-provider-gateway`.
+Source branch: `feat/gemini-deepseek` (native provider cutover).
 No changes to backend `main`.
 
 ## Non-negotiable invariant
@@ -13,7 +13,7 @@ No changes to backend `main`.
 - The commercial child records and their source IDs must not be removed when a batch nominates a candidate. Candidate child IDs describe relevance, not authorization to delete siblings in later model evaluations.
 - When an item is too large for a vetted request budget, the run **fails closed**, without a partial or invented answer. An operator can deliberately configure a validated larger-context route; legacy item fragmentation and truncation are forbidden.
 - This guarantees **transport completeness** in successful runs, NOT that any LLM actually reasons correctly about every submitted fact. Semantic reliability requires separate evaluations.
-- All merchant data remains tenant-scoped, read-only at the AI data boundary. Gemini/other LiteLLM routed models choose capabilities; Go only assembles, verifies, authorizes and executes.
+- All merchant data remains tenant-scoped, read-only at the AI data boundary. Gemini / qualified DeepSeek native models choose capabilities; Go only assembles, verifies, authorizes and executes.
 
 ## Representation
 
@@ -29,7 +29,7 @@ Active offers without `variant_id` belong directly to their item; an offer with 
 
 1. Hydrate eligible records and schema definitions before serialization.
 2. Assemble complete self-describing items, then count the **actual complete model request** including system instructions, catalog contract, customer message and conversational context.
-3. Partition only between complete items, according to the configured LiteLLM route's vetted context allowance. There is no product-count heuristic.
+3. Partition only between complete items, according to the smallest verified native provider context allowance. There is no product-count heuristic.
 4. Reject any item that cannot fit intact. Reject duplicated, missing, cross-item or mutated entities before provider dispatch.
 5. Send independent batches. Track batch completion and reject partial overall coverage.
 6. Model-selected candidates may undergo bounded reductions, but every selected commercial entity stays whole in every reduction/decision stage.
@@ -52,7 +52,7 @@ When focusing an item, offer, variant or comparison, retrieve every active varia
 - `gofmt`, `go build ./...`, `go vet ./...`, `go test ./... -count=1` and repository Quality gate, including the configured PostgreSQL 16 integration service.
 - Real PostgreSQL integration must cover >200 variants/offers of one item and must detect a price change even when item/offer counts remain unchanged.
 - Tests must assert: exactly one occurrence of each original item; full equality of item and nested facts; no splitting of an oversize item; semantic key-label/type resolution and variant inheritance; all paginated options/offers in scoped AI context; rejection of orphan offers, changed prices, duplicate IDs or missing definitions.
-- Live LiteLLM/provider model behavior requires real configured credentials and a separate reproducible run; a stubbed adapter is never described as a successful live provider test.
+- Live native provider model behavior requires real configured credentials and a separate reproducible run; a stubbed adapter is never described as a successful live provider test.
 
 ## Explicit exclusions
 

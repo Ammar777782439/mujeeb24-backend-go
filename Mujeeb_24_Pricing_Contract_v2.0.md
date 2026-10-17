@@ -52,7 +52,7 @@
 1. ميزانية AI يجب أن تحسب مع SocialAPI والاستضافة والدعم والتحصيل، لا بمعزل عنها.
 2. SocialAPI يغيّر التكلفة على شكل قفزات سعة؛ تجاوز 10 profiles ينقل التشغيل إلى فئة 50 profile المعلنة حاليًا.
 3. تشغيل الكتالوج الكامل قد يحتاج عدة batch/model calls لإنتاج رد واحد، لذلك تكلفة الرد ليست ثابتة.
-4. Fallback أو retry داخل LiteLLM قد ينتج أكثر من تكلفة مزود لرد تجاري واحد.
+4. قد ينتج عن المحاولة الأساسية ثم الاحتياطية أكثر من تكلفة مزود لرد تجاري واحد، ويجب رصد كل محاولة قابلة للفوترة.
 5. أسعار الموردين بالدولار، بينما الإيراد بالريال؛ تجاهل الصرف يجعل الهامش وهميًا.
 6. السوق يحتاج درجات سعرية متعددة تعطي البائع المنزلي والمتجر المتناهي الصغر مدخلًا مناسبًا.
 7. الوحدة المفهومة للتاجر هي “منتجات نشطة للـAI”، مع بقاء تفاصيل المنتج والـvariants والـoffers ضمن المنتج.
@@ -68,9 +68,9 @@
 
 - قاعدة البيانات الحالية تدعم Plan Versions ولا تسمح بتعديل التاريخ القديم بصمت.
 - الحقول المنفذة حاليًا هي: السعر، AI replies، AI catalog limit، channel limit، وinternal AI cost budget.
-- مجيب يسجل التوكنات وطلبات النماذج وtool calls وتكلفة LiteLLM بالدولار بعد تحويل محاسبي معتمد.
-- LiteLLM OSS يدعم Virtual Keys والميزانيات وحدود RPM/TPM وتتبع الإنفاق مع PostgreSQL.
-- المشروع يشغّل LiteLLM كبوابة متعددة المزودين؛ Mujeeb لا يبيع اسم مزود بعينه للتاجر.
+- مجيب يسجل التوكنات وطلبات النماذج وtool calls حسب هوية المزود الفعلية. لا تُختلق تكلفة بالدولار عند غياب بيان سعر موثوق.
+- يتصل backend مباشرة بـGemini (أساسي) وDeepSeek (احتياطي عند 503)؛ لا توجد بوابة نماذج مستقلة.
+- حدود حصة التاجر وتكلفة الاشتراك تبقى داخل Mujeeb/PostgreSQL، بينما توضع الحدود الخارجية أيضًا في حسابات المزودين.
 - SocialAPI يعلن حاليًا: 29 USD لعشرة profiles، و109 USD لخمسين، و349 USD لمئتين؛ الأسعار قابلة للتغير.
 - خطة Gemini المجانية ليست أساسًا صالحًا لاقتصاد SaaS إنتاجي: حدودها أقل، وسياسة البيانات والتوفر تختلف عن paid tier.
 - البنك الدولي ذكر في 2025 أن نصيب الفرد الحقيقي من الناتج في اليمن انخفض 58% منذ 2015، وأن تضخم مناطق الحكومة المعترف بها دوليًا تجاوز 30% في 2024؛ وهذه قرائن قوية ضد نسخ سعر SaaS عالمي إلى السوق المحلي.
@@ -83,7 +83,7 @@
 - التاجر يشتري AI Replies وليس tokens أو model calls.
 - لا توجد رسوم overage تلقائية أو فاتورة مفاجئة؛ عند انتهاء الحصة يتوقف Auto AI أو يشتري التاجر إضافة/ترقية بعد تفعيل نظام الإضافات.
 - Gemini المدفوع هو أساس تخطيط التكلفة، وOpenAI أو غيره Fallback مدفوع محتمل؛ الأرصدة المجانية لا تدخل الإيرادات المتوقعة.
-- Mujeeb كله هو عميل LiteLLM التشغيلي، وليس مطلوبًا إنشاء Virtual Key أو Customer budget لكل تاجر.
+- مجيب يستخدم مفاتيح خدمة للخلفية لدى Gemini وDeepSeek؛ ولا يحتاج التاجر مفاتيح مزود أو فواتير منفصلة.
 - كل باقة أساسية تشمل قناة واحدة، بينما تحدد درجتها سقف 1/1/2/3/5 قنوات. القنوات الإضافية تُفعّل برسوم موحدة حتى لا يتحمل صاحب قناة واحدة تكلفة توسع غيره.
 
 ### UNKNOWN — لا يجوز اختلاقه
@@ -117,7 +117,7 @@
 - Catalog batches.
 - Gemini calls.
 - OpenAI calls.
-- LiteLLM retries أو fallback attempts.
+- عدد محاولات التوليد لدى Gemini وDeepSeek بما فيها Fallback.
 - RPM أو TPM.
 - الميزانية الداخلية بالدولار أو الريال.
 
@@ -301,42 +301,19 @@ Active AI Catalog Product
 
 ---
 
-## 11. LiteLLM: الوضع الحالي والمسار المستقبلي
+## 11. المزوّدون المباشرون وحدود المسؤولية
 
-### الوضع الحالي — OSS
+### البنية المعتمدة
 
-- LiteLLM self-hosted مع PostgreSQL.
-- Virtual Key واحد لخدمة Mujeeb.
-- Global/key budget، RPM، TPM، concurrency، model allowlist، routing وfallback.
-- حدود التاجر وباقته في Mujeeb/PostgreSQL.
-- التكلفة الفعلية تأتي من LiteLLM native spend بالدولار وتتحول بسعر محاسبي صريح.
-- حدود الإنفاق لدى Gemini/OpenAI تبقى خط دفاع خارجيًا أخيرًا.
+- Gemini الأساسي وDeepSeek الاحتياطي متصلان مباشرة بطبقة Native داخل Go، دون بوابة خارجية أو مفاتيح افتراضية.
+- Mujeeb/PostgreSQL هو مصدر الحقيقة الوحيد لخطط التجار والحصص والدفعات والتكلفة.
+- نموذج الذكاء الاصطناعي يقترح Capability أو نتيجة معرفة فقط؛ التحقق من السعر والهوية والاشتراكات وتنفيذ العمليات داخل Go.
+- نموذج الاحتياط لا يُستخدم تلقائيًا إلا عند 503 من الأساسي بحسب سياسة النقل المعتمدة، ولا يُعاد تنفيذ أي صفقة في محاولة توليد ثانية.
+- الحدود المتاحة في حساب كل مزود هي حماية إضافية؛ لا تُعد بديلًا عن الحصص والفوترة في مجيب.
+- عند عدم توافر بيانات تسعير موثقة أو رموز محاولة فاشلة، يُسجل الإنفاق غير المعروف كحالة تحتاج تسوية، ولا يفترض أنه صفر.
+- لا يُنشأ حساب مزود لكل تاجر؛ ترتبط سجلات الاستهلاك بالتاجر والاشتراك في قاعدة مجيب نفسها.
 
-لا تعتمد v2 على:
-
-- Tag budgets المدفوعة.
-- Model-specific budgets per key المدفوعة.
-- Projects/organizations المدفوعة.
-- Enterprise SSO أو audit logs الخاصة بالبوابة.
-
-### ملاحظة صادقة عن الوضع البرمجي الحالي
-
-الكود الحالي يرسل `business_id` في `x-litellm-customer-id`. هذا يجعل LiteLLM يسجل استخدامًا لكل تاجر. القرار التجاري الجديد هو أن Mujeeb هو العميل التشغيلي الواحد، لذا يلزم في دفعة تنفيذ مستقلة وقف الاعتماد على هذا الحقل كميزانية/Customer للتاجر أو توحيده على هوية خدمة Mujeeb. هذه الوثيقة لا تدعي أن ذلك عُدّل.
-
-### ترقية Enterprise مستقبلًا
-
-يمكن لاحقًا إضافة Enterprise دون تغيير أسعار التجار أو مصدر الحقيقة:
-
-```text
-Mujeeb subscription/usage remains authoritative
-        ↓
-optional Enterprise mirrors:
-tag / project / model-specific budget / advanced governance
-        ↓
-LiteLLM remains enforcement + routing layer
-```
-
-لا تُنقل Plan أو Subscription إلى LiteLLM، ولا تصبح البوابة نظام الفوترة. الميزات المدفوعة تضيف حوكمة وحواجز أدق فقط.
+**فجوة تشغيلية معلنة:** رصد التوكنات من استجابة النموذج لا يعادل معرفة تكلفة جميع المحاولات، ولا سيما 503 التي لا تُرجع Usage. يحتاج الإنتاج إلى جدول أسعار موثق حسب المزود والنموذج وإصدار السعر، أو فواتير موثقة، وضوابط الإنفاق واختبارات مطابقة مستقلة.
 
 ---
 
@@ -359,35 +336,29 @@ LiteLLM remains enforcement + routing layer
 - التكلفة الفعلية المسجلة.
 - تطابق fallback مع نفس schema والسياسات.
 
-أسعار النموذج لا تُخزن كحق تجاري داخل Plan. تحفظ تاريخيًا عبر LiteLLM spend/pricing metadata، لأن الأسعار والنماذج تتغير.
+أسعار النموذج لا تُخزن كحق تجاري داخل Plan. تُحفظ تاريخيًا بمراجع الأسعار المعتمدة لدى المزود وسجل الاستخدام في قاعدة مجيب، لأن أسعار النماذج تتغير.
 
 ---
 
-## 13. ميزانية LiteLLM الإجمالية لمجيب
+## 13. ميزانية تكلفة النماذج الإجمالية لمجيب
 
-لا تُنشأ ميزانية LiteLLM لكل تاجر في الوضع الحالي. تحسب البوابة سقف مجيب كله:
+لا تُنشأ ميزانية مزود لكل تاجر. يحتفظ Mujeeb بحسابات التكاليف والسقوف داخليًا:
 
 ```text
 subscription_hard_ai_budget_usd =
   subscription_internal_ai_cost_budget_yer
   / approved_cost_fx_yer_per_usd
 
-gateway_monthly_budget_usd =
+platform_monthly_ai_budget_usd =
   min(
     approved_cash_spend_ceiling_usd,
     sum(active subscription hard AI budgets in USD) + fallback_reserve
   )
 ```
 
-الاحتياطي المقترح للـfallback والمحاسبة المتأخرة يبدأ عند 10%، ثم يعدّل بالقياس. لا يُستخدم الاحتياطي لبيع ردود إضافية؛ هو لمنع توقف المنصة بسبب فروق تسجيل أو محاولة مزود إضافية.
+يبقى احتياطي الـFallback والمحاسبة المتأخرة المقترح 10% مبدئيًا ثم يعدّل بناء على القياس الحقيقي. لا يتحول إلى ردود إضافية معروضة للتاجر.
 
-يجب وجود ثلاثة حواجز:
-
-1. Mujeeb entitlement لكل تاجر.
-2. LiteLLM global/key/provider limits لمجيب.
-3. Spend caps لدى حساب المزود نفسه.
-
-إذا تعارضت الحدود، يطبق الأكثر تقييدًا، ويُسجل السبب بوضوح.
+ثلاثة حواجز لازمة: (1) Entitlements مجيب لكل تاجر، (2) حماية الإنفاق على مستوى تشغيل مجيب مع محاسبة دقيقة وصريحة للبيانات الناقصة، (3) حد إنفاق لدى Gemini وDeepSeek في حسابات المزودين. إذا غاب أحد الحواجز أو تعذرت محاسبة التكاليف، يلزم اعتباره فجوة جاهزية إنتاج لا نجاحًا ضمنيًا.
 
 ---
 
@@ -578,7 +549,7 @@ Post-expansion contribution
 - model requests وtool calls.
 - catalog batch calls وfinal decision calls.
 - fallback/retry attempts المدفوعة.
-- LiteLLM actual spend USD.
+- Verified provider spend USD where available; otherwise explicit unknown/settlement status.
 - FX snapshot وprovider cost YER.
 - average cost per successful AI reply.
 - P50/P90/P95 cost per reply.
@@ -607,7 +578,7 @@ Post-expansion contribution
 
 1. اعتماد سعر صرف التكلفة والمحاسبة كتابةً، مع بقاء أسعار التاجر الثابتة بالريال داخل Plan Version.
 2. تشغيل paid Gemini في بيئة مصرح بها؛ لا تعتمد النتائج على free tier.
-3. إثبات تسجيل LiteLLM cost لكل call ولكل fallback attempt.
+3. إثبات تسجيل Usage وتكلفة موثقة أو حالة تكلفة مجهولة لكل اتصال بالمزود، بما فيه محاولات Fallback.
 4. عينة ممثلة لا تقل عن 100 customer-reply scenarios موزعة على كتالوج صغير ومتوسط وكبير، أو عينة إنتاج مدققة أكبر إن توفرت.
 5. قياس P50/P90/P95 للتوكن والتكلفة والـlatency، لا المتوسط فقط.
 6. إثبات أن 95% من الاستخدام الطبيعي يستطيع استهلاك الحصة المعلنة دون بلوغ cost guard مبكرًا.
@@ -663,7 +634,7 @@ Post-expansion contribution
 - seat limits وadd-ons period-bound: إنشاء، قائمة، دفع idempotent، إلغاء آمن، وإسقاط تلقائي عند إلغاء/انتهاء الاشتراك.
 - Channel Pass capacity approval قبل البيع، مع حد الباقة وسجل تدقيق Platform.
 - AI token/cost telemetry foundation.
-- LiteLLM gateway integration وnative cost metadata foundation.
+- Native Gemini/DeepSeek adapters and token-usage tracking foundation; complete actual-cost accounting remains pending verification.
 
 ### يحتاج تنفيذًا/تحققًا مستقلًا
 
@@ -674,8 +645,7 @@ Post-expansion contribution
 - اختبار PostgreSQL المعزول لمسار add-on الكامل قبل تفعيل البيع في الإنتاج.
 - trial/promotion lifecycle.
 - merchant B2B AI operation entitlement.
-- إزالة/توحيد per-business `x-litellm-customer-id` حسب قرار “Mujeeb customer واحد”.
-- اختبار global Virtual Key budget وprovider limits في نسخة LiteLLM المثبتة.
+- إثبات سقوف التكلفة الفعلية في Go وحسابي Gemini وDeepSeek، بما يشمل فشل المزود ومحاولة الاحتياط.
 - لوحة contribution/P95/fallback cost.
 
 وجود هذه الوثيقة لا يثبت اكتمال هذه البنود.
@@ -686,13 +656,13 @@ Post-expansion contribution
 
 تمت مراجعة المصادر الرسمية بتاريخ 2026-10-16:
 
-- [LiteLLM Enterprise comparison](https://docs.litellm.ai/docs/enterprise) — يوضح أن Virtual Keys والميزانيات وrate limits وتتبع التكلفة في AI Gateway المفتوح، وما تضيفه Enterprise.
-- [LiteLLM Budgets and Rate Limits](https://docs.litellm.ai/docs/proxy/users) — الميزانية العامة وVirtual Key واشتراط PostgreSQL.
-- [LiteLLM Virtual Keys](https://docs.litellm.ai/docs/proxy/virtual_keys) — budget/RPM/TPM/max parallel/model access.
-- [LiteLLM Provider Budget Routing](https://docs.litellm.ai/docs/proxy/provider_budget_routing) — حدود المزودين وRedis عند تعدد النسخ.
+
+
+
+
 - [Gemini API Pricing](https://ai.google.dev/gemini-api/docs/pricing) — paid/free tiers وأسعار token المتغيرة حسب النموذج.
 - [Gemini API Billing](https://ai.google.dev/gemini-api/docs/billing) — عناصر الفوترة وحصص الحساب.
-- [OpenAI API Pricing](https://developers.openai.com/api/docs/pricing) — أسعار المدخلات والمخرجات حسب النموذج.
+- [DeepSeek API documentation](https://api-docs.deepseek.com/) — توثيق نماذج DeepSeek وتسعيرها وقيودها (يتطلب التحقق للإصدار المثبت).
 - [SocialAPI Pricing](https://social-api.ai/pricing) — profiles والخطط الحالية.
 - [World Bank — Economic Fragmentation and External Shocks Hamper Yemen’s Recovery Path (2025-06-02)](https://www.worldbank.org/en/news/press-release/2025/06/02/economic-fragmentation-and-external-shocks-hamper-yemen-s-recovery-path) — تراجع نصيب الفرد والتضخم وتعدد مناطق وأسعار الصرف.
 - [World Bank — Economic Strain Deepens in Yemen as Regional Risks Intensify (2026-05-21)](https://www.worldbank.org/en/news/press-release/2026/05/21/economic-strain-deepens-in-yemen-as-regional-risks-intensify) — ضعف الطلب والقدرة الشرائية واتساع الفقر.
@@ -722,13 +692,13 @@ Supplier-cost conversion
   = approved internal accounting FX; never a daily customer-price formula
 
 Provider consumption
-  = actual LiteLLM spend across primary + retry + fallback
+  = documented direct provider token usage + independently verified price, or unknown
 
-Current gateway licensing
-  = LiteLLM OSS + PostgreSQL, one Mujeeb service key/budget
+Current provider transport
+  = native Gemini primary + DeepSeek 503 standby; no third-party gateway
 
-Future Enterprise
-  = optional extra enforcement/governance, never billing source of truth
+Future capacity controls
+  = Mujeeb-owned budgets and provider account spend caps
 
 Production AI assumption
   = paid Gemini + paid fallback where used; free credits excluded

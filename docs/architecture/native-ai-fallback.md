@@ -11,7 +11,7 @@ This is an **implementation log**, not a declaration of production readiness.
 - No response that fails canonical schema, capability selection, referential integrity or catalog coverage may be accepted.
 - Previously completed catalog batches must not be rerun as a side effect of provider failure.
 - Provider-specific HTTP schemas are transport concerns. No provider detection in the application business logic.
-- Do not delete deployed migration history or cost records. Remove old LiteLLM runtime code, routing and documentation only after every caller has a native replacement.
+- Do not delete deployed migration history or cost records. The old proxy runtime has been retired from Go and its deployment files removed.
 
 ## Staged delivery
 
@@ -19,7 +19,7 @@ This is an **implementation log**, not a declaration of production readiness.
 2. Direct Gemini transport (structured outputs and function selection) and transport-contract tests.
 3. Direct DeepSeek transport (forced functions and structured parsing) and transport-contract tests.
 4. Connect existing sales, catalog, merchant and token/usage ports to native providers with a single consistent contract.
-5. Remove obsolete LiteLLM clients, configuration/UI contracts and deployment scripts; generate OpenAPI and update migration-backed metadata safely.
+5. Remove obsolete proxy clients, configuration/UI contracts and deployment scripts; generate OpenAPI and update migration-backed metadata safely.
 6. Full automated acceptance including Go, DB, OpenAPI and provider integration. Live model qualification is separate and cannot be inferred from HTTP mocks.
 
 Operational breaker settings belong to infrastructure/configuration and must not be hard-coded into business rules.
@@ -36,12 +36,16 @@ All changes below are **on the feature branch only**. GitHub's `Native AI Contra
 - `NativeCatalogAdapter`: preserves catalog projection, batch coverage controller, strict candidate decoding, final terminal capability evaluation. Uses conservative serialized-byte count plus protocol reserve for admission budgeting; it is **not** an exact provider tokenizer. Both providers' minimum verified context capacity must still be configured before production.
 - Strict validation and ref checks do not prove live provider behavior, pricing, or actual uptime. A 503 simulation only qualifies code behavior under the mocked response.
 
-## Pending blockers before replacing LiteLLM in runtime
+## Current verified status and production blockers
 
-1. Implement and contract-test Native Merchant AI's read-only tool loop and canonical structured final proposal without dropping any required attributes.
-2. Wire Native adapters in `internal/bootstrap` with explicit secure Gemini and DeepSeek configuration; reject missing credentials and unknown model versions, and remove Gateway-Only runtime flags only after every caller is migrated.
-3. Replace gateway usage and cost metadata with exact native provider accounting, including failed attempts, and preserve historical financial data through a new migration.
-4. Remove obsolete LiteLLM clients, Docker/Render configuration, scripts, handlers, documentation and disabled code paths. Keep applied migrations immutable.
-5. Regenerate OpenAPI and frontend types for the final Admin AI configuration contract. Run full PostgreSQL, race, security and provider-compatibility acceptance tests before enabling production.
+- Native Customer Sales, full catalog batch and final decision, and read-only Merchant AI adapters are connected in bootstrap. Go compilation and full unit tests passed for HEAD 684ec3e (2026-10-17).
+- The previous proxy runtime and files were removed. Deployment variables are now `NATIVE_AI_ENABLED`, `GEMINI_API_KEY`, and `DEEPSEEK_API_KEY`. Automatic deployment remains disabled.
+- The historical SQL migration version 75 is retained byte-for-byte in its DDL, with a provider-neutral filename. The migration version and columns are not removed.
+- HTTP 503 provider fallback is tested against mock HTTP servers. It does not prove real provider compatibility.
+- Native catalog admission currently uses a conservative serialized-byte bound, not verified tokenization for both models. Context capacity must be qualified per deployed model.
+- The provider-direct usage values report tokens, but there is **no independently validated actual USD price for every inference attempt or failed primary request**. Unknown spend must not be treated as zero. Pricing-version-based provider accounting and budget-enforcement acceptance remain incomplete.
+- Merchant discovery-to-final structured output equivalence across both models must be qualified; schema coercion/downgrade is not acceptable.
+- Regenerate OpenAPI from Go with `go run ./cmd/openapi-gen` and check the generated contract. Do not edit generated YAML manually.
+- Run PostgreSQL integration, race, secret, full Go and live provider contract qualification before authorizing production. No actual model credentials were used in these mock tests.
 
-**Current deployment status:** not enabled; old LiteLLM runtime wiring remains in place until the migration is complete. Do not mistake a passing CI build for production readiness.
+**Runtime status:** Native source cutover is complete; production qualification and model/cost accounting are **not** complete. Do not declare production readiness merely from green unit tests.

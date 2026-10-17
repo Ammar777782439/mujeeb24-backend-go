@@ -12,9 +12,9 @@ Verification: `bash scripts/check-openapi-generated.sh`; `scripts/verify-reposit
 
 Accepting an employee invitation requires an active subscription with a free team seat. The PostgreSQL integration fixture now explicitly asserts that an unsubscribed merchant cannot accept a new-account invitation, then creates and activates a Pricing V2 Growth subscription with three seats (owner plus two accepted agents). The seat-entitlement production guard remains enforced. Fixture teardown deletes the subscription before the business.
 
-## Offline gateway
+## Native providers are tested separately
 
-The public LiteLLM readiness probe is **manual opt-in**, via Quality gate → Run workflow → `verify_gateway=true`. Do not block Go/OpenAPI/PostgreSQL source verification while the separate LiteLLM service is intentionally powered off. Passing Quality gate does not prove live Gemini/DeepSeek model compatibility; that requires dedicated live qualification when LiteLLM is running.
+The source Quality gate verifies Go/OpenAPI/PostgreSQL without reaching Gemini or DeepSeek. Live provider qualification, billable test requests, secret rotation and outbound message permissions require an explicit operator-approved procedure. A successful mock 503 fallback does not prove upstream compatibility.
 
 ## Channel activation and global uniqueness integration fixtures
 
