@@ -39,6 +39,7 @@ func TestTeamRepositoriesAgainstPostgres(t *testing.T) {
 		newInviteeID      = "49000000-0000-0000-0000-000000000014"
 		invitationID      = "49000000-0000-0000-0000-000000000020"
 		newInvitationID   = "49000000-0000-0000-0000-000000000021"
+		subscriptionID    = "49000000-0000-0000-0000-000000000030"
 	)
 	pool := adapter.Pool()
 	cleanupTeamRepositoryFixture(t, pool, businessID, []string{ownerID, inviteeID, wrongInviteeID, platformPrincipal, newInviteeID})
@@ -93,6 +94,31 @@ func TestTeamRepositoriesAgainstPostgres(t *testing.T) {
 	if err != nil || inspected.AccountState != "new" || inspected.BusinessName != "Team Integration" {
 		t.Fatalf("inspect new-account invitation: record=%#v err=%v", inspected, err)
 	}
+	// A token is not a free seat: accepting an invitation must fail closed
+	// until this merchant has an active subscription with enough seats.
+	if _, err := team.AcceptInvitationNewAccount(ctx, ports.TeamInvitationNewAccountAcceptance{
+		TokenHash: newInvitation.TokenHash, PrincipalID: newInviteeID, DisplayName: "New Agent Chosen",
+		PasswordHash: "$2a$10$new-agent-placeholder", AcceptedAt: now.Add(2 * time.Minute),
+	}); !IsRepositoryKind(err, RepositoryConflict) {
+		t.Fatalf("new account invitation without an active subscription must be rejected: %v", err)
+	}
+	subscriptionRepo := NewSubscriptionRepository(adapter)
+	if _, err := subscriptionRepo.Create(ctx, ports.SubscriptionCreate{
+		ID: subscriptionID, BusinessID: businessID,
+		// Pricing V2 Growth has three seats: owner + two invitees.
+		PlanID: "00000000-0000-0000-0000-00000000a103",
+		PriceYERSnapshot: 10000, AmountDueYER: 10000,
+		PeriodStart: now.Add(-time.Hour), PeriodEnd: now.Add(30 * 24 * time.Hour),
+		AIReplyLimit: 500, AICatalogLimit: 200,
+		ChannelLimit: 1, ChannelCeiling: 2, SeatLimit: 3,
+		InternalAICostBudgetYER: 2000, Now: now,
+	}); err != nil {
+		t.Fatalf("create fixture subscription with three seats: %v", err)
+	}
+	if _, err := subscriptionRepo.Activate(ctx, subscriptionID, now); err != nil {
+		t.Fatalf("activate fixture subscription: %v", err)
+	}
+
 	acceptedNew, err := team.AcceptInvitationNewAccount(ctx, ports.TeamInvitationNewAccountAcceptance{
 		TokenHash: newInvitation.TokenHash, PrincipalID: newInviteeID, DisplayName: "New Agent Chosen",
 		PasswordHash: "$2a$10$new-agent-placeholder", AcceptedAt: now.Add(2 * time.Minute),
@@ -157,6 +183,7 @@ func cleanupTeamRepositoryFixture(t *testing.T, pool *pgxpool.Pool, businessID s
 		{sql: `DELETE FROM team_invitations WHERE business_id = $1::uuid`, args: []any{businessID}},
 		{sql: `DELETE FROM platform_super_admins WHERE principal_id = ANY($1::uuid[])`, args: []any{principalIDs}},
 		{sql: `DELETE FROM business_memberships WHERE business_id = $1::uuid OR principal_id = ANY($2::uuid[])`, args: []any{businessID, principalIDs}},
+		{sql: `DELETE FROM subscriptions WHERE business_id = $1::uuid`, args: []any{businessID}},
 		{sql: `DELETE FROM principals WHERE id = ANY($1::uuid[])`, args: []any{principalIDs}},
 		{sql: `DELETE FROM businesses WHERE id = $1::uuid`, args: []any{businessID}},
 	} {
