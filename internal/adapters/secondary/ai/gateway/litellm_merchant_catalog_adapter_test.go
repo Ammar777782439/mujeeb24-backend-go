@@ -83,6 +83,16 @@ func TestLiteLLMMerchantReplaysReadOnlyToolAndPreservesScope(t *testing.T) {
 		if req.Model != "mujeeb-merchant" || len(req.Tools) != 1 || req.ResponseFormat["type"] != "json_schema" {
 			t.Errorf("lost model/tool/schema contract")
 		}
+		if len(req.Tools) == 1 {
+			function, ok := req.Tools[0]["function"].(map[string]any)
+			if !ok || function["strict"] != true {
+				t.Fatal("merchant read tool must require strict function schema")
+			}
+			parameters, ok := function["parameters"].(map[string]any)
+			if !ok || validateStrictSchema(parameters) != nil {
+				t.Fatal("merchant read tool has non-closed parameters")
+			}
+		}
 		if len(req.Messages) < 2 || !strings.Contains(string(req.Messages[0].Content), "Catalog Entity Contract") ||
 			!strings.Contains(string(req.Messages[1].Content), "business-42") ||
 			!strings.Contains(string(req.Messages[1].Content), "merchant_message") {
