@@ -97,8 +97,8 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 			adapters.ChannelProvisioningError = errors.New("channel provisioning adapters are not configured")
 		}
 	}
-	if !cfg.LiteLLMGatewayOnly && (cfg.AutoReplyEnabled || cfg.CustomerSalesEnabled) {
-		adapters.LLMConfigError = errors.New("customer AI requires LiteLLM Gateway; direct Gemini and legacy LLM runtimes were retired")
+	if !cfg.NativeAIEnabled && !cfg.LiteLLMGatewayOnly && (cfg.AutoReplyEnabled || cfg.CustomerSalesEnabled) {
+		adapters.LLMConfigError = errors.New("customer AI requires a configured native Gemini and DeepSeek runtime")
 	}
 	if cfg.LiteLLMGatewayOnly && adapters.LLMConfigError == nil {
 		gateway, err := litellm.NewClient(litellm.Config{

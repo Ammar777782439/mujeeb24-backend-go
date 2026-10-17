@@ -158,7 +158,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	// is stateless except for its runtime flag, so creating it early
 	// is safe.
 	platformOperations := services.NewInMemoryPlatformOperationsRepository(
-		external.LiteLLMCustomerDecision != nil && external.LLMConfigError == nil,
+		external.NativeCustomerDecision != nil && external.LLMConfigError == nil,
 		external.SocialAPI != nil,
 	)
 	if external.LiteLLMPlatformConfig != nil {
@@ -175,10 +175,10 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 
 	if external.AutoReplyEnabled || external.CustomerSalesEnabled {
 		// One customer-sales decision interface owns B2C and summary requests.
-		// In gateway-only mode there is NO direct Gemini dependency or Go fallback.
-		customerSalesDecision := external.LiteLLMCustomerDecision
+		// Native provider selection is isolated from Customer Sales business decisions.
+		customerSalesDecision := external.NativeCustomerDecision
 		if customerSalesDecision == nil {
-			return nil, errors.New("AutoReply requires a configured LiteLLM customer-sales decision provider")
+			return nil, errors.New("AutoReply requires a configured native customer-sales decision provider")
 		}
 		referenceRepository := postgres.NewConversationReferenceRepository(database)
 		service := services.NewAutoReplyService(
@@ -220,8 +220,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		contextBuilder.Knowledge = postgres.NewKnowledgeDocumentRepository(database)
 		contextBuilder.Policies = postgres.NewBusinessPolicyRepository(database)
 		service.CustomerSalesContextBuilder = contextBuilder
-		// Summaries use the same LiteLLM customer decision port as AutoReply.
-		// Provider fallback belongs to the gateway, not this application.
+		// Summaries use the same native customer decision port as AutoReply.
+		// Provider fallback belongs to native transport, not this application.
 		service.SummaryService = services.NewConversationSummaryService(
 			postgres.NewConversationStateRepository(database),
 			postgres.NewMessageRepository(database),
@@ -285,17 +285,17 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// page catalog → exact-token batches → evaluate → aggregate → final.
 		//
 		// Per contract ② §2, batching retains full commercial evidence.
-		// LiteLLM uses the configured route capacity to budget catalog batches.
-		if external.LiteLLMCatalogClient == nil {
-			return nil, errors.New("AutoReply requires a configured LiteLLM catalog model")
+		// Native transport uses a conservative minimum context to budget catalog batches.
+		if external.NativeCatalogClient == nil {
+			return nil, errors.New("AutoReply requires a configured native catalog model")
 		}
-		catalogBudget, err := external.LiteLLMCatalogClient.BatchTokenBudget()
+		catalogBudget, err := external.NativeCatalogClient.BatchTokenBudget()
 		if err != nil {
-			return nil, fmt.Errorf("configure LiteLLM catalog token budget: %w", err)
+			return nil, fmt.Errorf("configure native catalog token budget: %w", err)
 		}
 		service.CatalogBatch = &services.CatalogBatchController{
 			CatalogAI:   postgres.NewCatalogAIReadRepository(database),
-			Evaluator:   external.LiteLLMCatalogClient,
+			Evaluator:   external.NativeCatalogClient,
 			RunRepo:     postgres.NewAIRunTraceRepository(database),
 			TokenBudget: catalogBudget,
 			Now:         func() time.Time { return time.Now().UTC() },
@@ -323,7 +323,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	// PlatformDeps wire-up). The previous local declaration here has
 	// been removed. The flags below remain here for the
 	// aiConfigured/channelConfigured dashboard view.
-	aiConfigured := external.LiteLLMCustomerDecision != nil && external.LLMConfigError == nil
+	aiConfigured := external.NativeCustomerDecision != nil && external.LLMConfigError == nil
 	channelConfigured := external.SocialAPI != nil
 	_ = aiConfigured
 	_ = channelConfigured
@@ -421,7 +421,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	})
 
 	var merchantCatalogErr error
-	dashboardServer, merchantCatalogErr = wireMerchantCatalogAuthoringAI(dashboardServer, database, external.LiteLLMMerchantAuthoring, external.LiteLLMPlatformConfig)
+	dashboardServer, merchantCatalogErr = wireMerchantCatalogAuthoringAI(dashboardServer, database, external.NativeMerchantAuthoring, external.LiteLLMPlatformConfig)
 	if merchantCatalogErr != nil {
 		return nil, merchantCatalogErr
 	}
