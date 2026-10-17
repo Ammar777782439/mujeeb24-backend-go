@@ -16,20 +16,20 @@ import (
 // Request contains a complete canonical inference request, not a business
 // command. Provider implementations own wire encoding; no provider executes tools.
 type Request struct {
-	Payload json.RawMessage
+	Payload   json.RawMessage
 	Operation string
 }
 
 // Response is validated again by Mujeeb application adapters before any
 // capability can enter business authorization/execution.
 type Response struct {
-	Payload json.RawMessage
-	Model string
-	InputTokens int64
-	OutputTokens int64
-	CachedTokens int64
+	Payload         json.RawMessage
+	Model           string
+	InputTokens     int64
+	OutputTokens    int64
+	CachedTokens    int64
 	ProviderCostUSD float64
-	CostKnown bool
+	CostKnown       bool
 }
 
 // Provider is one direct inference endpoint. It must not retry or mutate
@@ -42,8 +42,9 @@ type Provider interface {
 // StatusError contains no response body, prompt, secrets, or customer data.
 type StatusError struct {
 	Provider string
-	Code int
+	Code     int
 }
+
 func (e *StatusError) Error() string {
 	return fmt.Sprintf("%s model request HTTP %d", e.Provider, e.Code)
 }
@@ -54,31 +55,31 @@ func IsUnavailable(err error) bool {
 
 type Policy struct {
 	ConsecutiveFailures int
-	Cooldown time.Duration
+	Cooldown            time.Duration
 }
 
 type Attempt struct {
-	Provider string
-	Failed bool
+	Provider   string
+	Failed     bool
 	HTTPStatus int
 }
 
 type Trace struct {
-	Attempts []Attempt
+	Attempts     []Attempt
 	FallbackUsed bool
 }
 
 // Router is safe for concurrent use. The breaker is deliberately in-memory
 // and per-process; sharing breaker state is not required for correctness.
 type Router struct {
-	primary Provider
-	standby Provider
-	policy Policy
-	mu sync.Mutex
-	failures int
+	primary   Provider
+	standby   Provider
+	policy    Policy
+	mu        sync.Mutex
+	failures  int
 	openUntil time.Time
-	probing bool
-	now func() time.Time
+	probing   bool
+	now       func() time.Time
 }
 
 func NewRouter(primary, standby Provider, policy Policy) (*Router, error) {
@@ -91,7 +92,7 @@ func NewRouter(primary, standby Provider, policy Policy) (*Router, error) {
 	if policy.ConsecutiveFailures < 1 || policy.Cooldown <= 0 {
 		return nil, errors.New("circuit breaker threshold and cooldown must be positive")
 	}
-	return &Router{primary:primary, standby:standby, policy:policy, now:time.Now},nil
+	return &Router{primary: primary, standby: standby, policy: policy, now: time.Now}, nil
 }
 
 // Generate retries only the model-generation call, never a tool or business
@@ -102,7 +103,9 @@ func (r *Router) Generate(ctx context.Context, req Request) (Response, Trace, er
 	if r == nil {
 		return Response{}, trace, errors.New("native model router is not configured")
 	}
-	if err := ctx.Err(); err != nil { return Response{}, trace, err }
+	if err := ctx.Err(); err != nil {
+		return Response{}, trace, err
+	}
 	if len(req.Payload) == 0 || !json.Valid(req.Payload) {
 		return Response{}, trace, errors.New("canonical model request must be valid JSON")
 	}
@@ -111,29 +114,43 @@ func (r *Router) Generate(ctx context.Context, req Request) (Response, Trace, er
 		out, err := r.primary.Generate(ctx, req)
 		trace.Attempts = append(trace.Attempts, makeAttempt(r.primary.Name(), err))
 		r.observePrimary(err)
-		if err == nil { return out, trace, nil }
-		if !IsUnavailable(err) || ctx.Err() != nil { return Response{}, trace, err }
+		if err == nil {
+			return out, trace, nil
+		}
+		if !IsUnavailable(err) || ctx.Err() != nil {
+			return Response{}, trace, err
+		}
 	}
-	if err := ctx.Err(); err != nil { return Response{}, trace, err }
+	if err := ctx.Err(); err != nil {
+		return Response{}, trace, err
+	}
 	trace.FallbackUsed = true
 	out, err := r.standby.Generate(ctx, req)
 	trace.Attempts = append(trace.Attempts, makeAttempt(r.standby.Name(), err))
-	if err != nil { return Response{}, trace, fmt.Errorf("DeepSeek standby inference failed: %w", err) }
+	if err != nil {
+		return Response{}, trace, fmt.Errorf("DeepSeek standby inference failed: %w", err)
+	}
 	return out, trace, nil
 }
 
 func makeAttempt(provider string, err error) Attempt {
-	a := Attempt{Provider:provider,Failed:err != nil}
+	a := Attempt{Provider: provider, Failed: err != nil}
 	var status *StatusError
-	if errors.As(err,&status) { a.HTTPStatus = status.Code }
+	if errors.As(err, &status) {
+		a.HTTPStatus = status.Code
+	}
 	return a
 }
 
 func (r *Router) reservePrimary() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.openUntil.IsZero() { return true }
-	if r.now().Before(r.openUntil) || r.probing { return false }
+	if r.openUntil.IsZero() {
+		return true
+	}
+	if r.now().Before(r.openUntil) || r.probing {
+		return false
+	}
 	r.probing = true
 	return true
 }
