@@ -19,12 +19,21 @@ jobs:
           set -euo pipefail
           # Compose obsolete identifier to avoid matching this audit source.
           identifier="$(printf '%s%s' lite llm)"
-          if git ls-files | grep -i "${identifier}"; then
-            echo "::error::Obsolete gateway-named files remain"
+          # Migration names already recorded in schema_migrations are
+          # immutable. Require exactly the two original SQL history files;
+          # they are NOT runtime gateway code.
+          historic="migrations/000075_${identifier}_native_spend"
+          expected="$(printf '%s\n%s' "${historic}.down.sql" "${historic}.up.sql")"
+          actual="$(git ls-files | grep -i "${identifier}" || true)"
+          if [ "$actual" != "$expected" ]; then
+            printf 'Unexpected obsolete filenames or missing history:\n%s\n' "$actual"
+            echo "::error::Only the two historical version-75 migration filenames are permitted"
             exit 1
           fi
-          if git grep -i -n "${identifier}" -- ':!.github/workflows/native-legacy-audit.yml'; then
-            echo "::error::Obsolete gateway references remain"
+          if git grep -i -n "${identifier}" -- \
+            ":!${historic}.up.sql" ":!${historic}.down.sql" \
+            ':!.github/workflows/native-legacy-audit.yml'; then
+            echo "::error::Obsolete gateway references outside immutable migration SQL remain"
             exit 1
           fi
-          echo 'No obsolete gateway filenames or source references.'
+          echo 'Historical migration 000075 preserved; no obsolete gateway runtime references.'

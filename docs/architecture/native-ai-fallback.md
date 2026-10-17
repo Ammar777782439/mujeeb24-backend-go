@@ -40,7 +40,9 @@ All changes below are **on the feature branch only**. GitHub's `Native AI Contra
 
 - Native Customer Sales, full catalog batch and final decision, and read-only Merchant AI adapters are connected in bootstrap. CI validates the branch HEAD on every code update; specific passing runs must match the final commit.
 - The previous proxy runtime and files were removed. Deployment requires `NATIVE_AI_ENABLED=true` and `GEMINI_API_KEY`. `DEEPSEEK_API_KEY` is optional. Automatic deployment remains disabled.
-- The historical SQL migration version 75 is retained byte-for-byte in its DDL, with a provider-neutral filename. The migration version and columns are not removed.
+- Historical migration `000075` retains its **original applied filename and embedded migration name**. Production PostgreSQL already records that name in `schema_migrations`; renaming the file causes a startup failure even when the SQL is unchanged. This is immutable database history, not live provider runtime. Its original SQL bytes, version, and existing cost records are preserved.
+- The legacy-name audit permits exactly the historical `000075` up/down SQL files and rejects all other obsolete proxy filenames or source references. `TestMigration75PreservesProductionAppliedName` prevents this exact regression.
+- Never rewrite `schema_migrations` in production merely to hide a renamed file; new schema corrections require new versions.
 - HTTP 503 provider fallback is tested against mock HTTP servers. It does not prove real provider compatibility.
 - Native catalog admission currently uses a conservative serialized-byte bound, not verified tokenization for both models. Context capacity must be qualified per deployed model.
 - The provider-direct usage values report tokens, but there is **no independently validated actual USD price for every inference attempt or failed primary request**. Unknown spend must not be treated as zero. Pricing-version-based provider accounting and budget-enforcement acceptance remain incomplete.
