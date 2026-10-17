@@ -33,6 +33,7 @@ jobs:
             internal/adapters/primary/http/handlers/platform_native_ai_config.go \
             internal/adapters/primary/http/handlers/platform_native_ai_config_test.go \
             internal/adapters/secondary/ai/gateway/native_customer_adapter.go \
+            internal/adapters/secondary/ai/gateway/native_adapters_contract_test.go \
             internal/adapters/secondary/ai/native/router.go \
             internal/application/ports/ai_provider_config.go \
             internal/application/services/ai_provider_failure_test.go \
