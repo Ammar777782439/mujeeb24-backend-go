@@ -49,9 +49,10 @@ type nativeMerchantChatFunction struct {
 	Arguments string `json:"arguments"`
 }
 type nativeMerchantChatCall struct {
-	ID       string                     `json:"id"`
-	Type     string                     `json:"type"`
-	Function nativeMerchantChatFunction `json:"function"`
+	ID               string                     `json:"id"`
+	Type             string                     `json:"type"`
+	Function         nativeMerchantChatFunction `json:"function"`
+	ThoughtSignature string                     `json:"thought_signature,omitempty"`
 }
 type nativeMerchantChatMessage struct {
 	Role       string                   `json:"role"`

@@ -123,8 +123,15 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	if canonical.ParallelToolCalls != nil && *canonical.ParallelToolCalls {
 		return Response{}, errors.New("DeepSeek native only accepts non-parallel customer capability calls")
 	}
+	// Remove Gemini-only opaque reasoning metadata when an in-progress
+	// read-only tool conversation switches to DeepSeek after HTTP 503.
+	// Canonical tool IDs, names, arguments and results remain unchanged.
+	messages, err := deepSeekMessagesWithoutGeminiSignatures(canonical.Messages)
+	if err != nil {
+		return Response{}, err
+	}
 	body := map[string]any{
-		"model": c.model, "messages": canonical.Messages, "max_tokens": canonical.MaxTokens,
+		"model": c.model, "messages": messages, "max_tokens": canonical.MaxTokens,
 		"stream": false, "thinking": map[string]string{"type": "disabled"},
 	}
 	const synthetic = "submit_catalog_batch"
@@ -332,4 +339,54 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	}
 	return Response{Payload: raw, Model: c.model, InputTokens: envelope.Usage.PromptTokens,
 		OutputTokens: envelope.Usage.CompletionTokens, CachedTokens: envelope.Usage.PromptCacheHitTokens}, nil
+}
+
+// deepSeekMessagesWithoutGeminiSignatures removes only provider-private
+// transport metadata. It never removes or changes application tool arguments,
+// results, ordering or IDs. DeepSeek cannot accept Google's opaque signatures.
+func deepSeekMessagesWithoutGeminiSignatures(messages []json.RawMessage) ([]json.RawMessage, error) {
+	sanitized := make([]json.RawMessage, len(messages))
+	for i, raw := range messages {
+		sanitized[i] = raw
+		var message map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &message); err != nil {
+			return nil, errors.New("invalid canonical provider message")
+		}
+		var role string
+		if err := json.Unmarshal(message["role"], &role); err != nil {
+			return nil, errors.New("canonical provider message missing role")
+		}
+		if role != "assistant" {
+			continue
+		}
+		toolRaw, exists := message["tool_calls"]
+		if !exists {
+			continue
+		}
+		var calls []map[string]json.RawMessage
+		if err := json.Unmarshal(toolRaw, &calls); err != nil {
+			return nil, errors.New("invalid canonical assistant tool calls")
+		}
+		changed := false
+		for _, call := range calls {
+			if _, present := call["thought_signature"]; present {
+				delete(call, "thought_signature")
+				changed = true
+			}
+		}
+		if !changed {
+			continue
+		}
+		encodedCalls, err := json.Marshal(calls)
+		if err != nil {
+			return nil, errors.New("cannot encode provider-neutral tool history")
+		}
+		message["tool_calls"] = encodedCalls
+		encodedMessage, err := json.Marshal(message)
+		if err != nil {
+			return nil, errors.New("cannot encode provider-neutral message history")
+		}
+		sanitized[i] = encodedMessage
+	}
+	return sanitized, nil
 }

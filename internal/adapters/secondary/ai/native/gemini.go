@@ -117,9 +117,10 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 			Role      string          `json:"role"`
 			Content   json.RawMessage `json:"content"`
 			ToolCalls []struct {
-				ID       string `json:"id"`
-				Type     string `json:"type"`
-				Function struct {
+				ID               string `json:"id"`
+				Type             string `json:"type"`
+				ThoughtSignature string `json:"thought_signature,omitempty"`
+				Function         struct {
 					Name      string `json:"name"`
 					Arguments string `json:"arguments"`
 				} `json:"function"`
@@ -170,7 +171,7 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 					Name string          `json:"name"`
 					Args json.RawMessage `json:"args"`
 					ID   string          `json:"id,omitempty"`
-				}{Name: call.Function.Name, Args: payload, ID: call.ID}}
+				}{Name: call.Function.Name, Args: payload, ID: call.ID}, ThoughtSignature: call.ThoughtSignature}
 				parts = append(parts, part)
 				if _, exists := callName[call.ID]; exists {
 					return Response{}, errors.New("duplicate replayed tool identifier")
@@ -311,14 +312,6 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 	var content string
 	calls := make([]any, 0)
 	for _, part := range resp.Candidates[0].Content.Parts {
-		if part.ThoughtSignature != "" {
-			// Gemini 2.5 permits omitting thought signatures when replaying
-			// function history. For later models the signature is mandatory,
-			// so reject until a lossless continuation format is implemented.
-			if !strings.HasPrefix(c.model, "gemini-2.5-") {
-				return Response{}, errors.New("Gemini function continuation requires a supported thought-signature contract")
-			}
-		}
 		if part.FunctionCall != nil {
 			if strings.TrimSpace(part.FunctionCall.Name) == "" || !json.Valid(part.FunctionCall.Args) {
 				return Response{}, errors.New("Gemini returned invalid function arguments")
@@ -343,9 +336,17 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 				}
 				id = "call_" + hex.EncodeToString(randBytes[:])
 			}
-			calls = append(calls, map[string]any{"id": id, "type": "function", "function": map[string]any{
+			// Preserve Google's opaque signature as provider transport metadata.
+			// The merchant adapter carries it through its read-only tool rounds;
+			// the next Gemini Generate reconstructs the signed functionCall part
+			// exactly where Google supplied the signature. Do not synthesize one.
+			call := map[string]any{"id": id, "type": "function", "function": map[string]any{
 				"name": part.FunctionCall.Name, "arguments": argString,
-			}})
+			}}
+			if part.ThoughtSignature != "" {
+				call["thought_signature"] = part.ThoughtSignature
+			}
+			calls = append(calls, call)
 		} else if part.FunctionResponse != nil {
 			return Response{}, errors.New("Gemini returned unsolicited function response")
 		} else {
