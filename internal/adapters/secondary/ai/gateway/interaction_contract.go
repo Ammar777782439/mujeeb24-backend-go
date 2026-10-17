@@ -306,11 +306,15 @@ func strictDiscoverySchema(input map[string]any) (map[string]any, error) {
 	switch r := input["required"].(type) {
 	case nil:
 	case []string:
-		for _, s := range r { originalRequired[s] = true }
+		for _, s := range r {
+			originalRequired[s] = true
+		}
 	case []any:
 		for _, x := range r {
 			s, ok := x.(string)
-			if !ok { return nil, errors.New("non-string required tool field") }
+			if !ok {
+				return nil, errors.New("non-string required tool field")
+			}
 			originalRequired[s] = true
 		}
 	default:
@@ -320,13 +324,17 @@ func strictDiscoverySchema(input map[string]any) (map[string]any, error) {
 	required := make([]string, 0, len(props))
 	for name, raw := range props {
 		field, ok := raw.(map[string]any)
-		if !ok { return nil, errors.New("merchant tool has invalid property") }
+		if !ok {
+			return nil, errors.New("merchant tool has invalid property")
+		}
 		typ, ok := field["type"].(string)
 		if !ok || (typ != "string" && typ != "integer" && typ != "number" && typ != "boolean") {
 			return nil, errors.New("merchant discovery has unsupported dynamic or nested parameter")
 		}
 		copyField := make(map[string]any, len(field))
-		for k, v := range field { copyField[k] = v }
+		for k, v := range field {
+			copyField[k] = v
+		}
 		if !originalRequired[name] {
 			copyField["type"] = []string{typ, "null"}
 		}
@@ -334,7 +342,9 @@ func strictDiscoverySchema(input map[string]any) (map[string]any, error) {
 		required = append(required, name)
 	}
 	for name := range originalRequired {
-		if _, ok := props[name]; !ok { return nil, errors.New("unknown merchant required field") }
+		if _, ok := props[name]; !ok {
+			return nil, errors.New("unknown merchant required field")
+		}
 	}
 	sort.Strings(required)
 	out := map[string]any{"type": "object", "properties": outProps,
