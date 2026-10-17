@@ -55,14 +55,18 @@ func (c *NativeCatalogAdapter) finalRequest(input services.FinalEvaluationInput,
 // plus a fixed protocol overhead is a conservative admission estimate, not
 // a claim of exact provider token usage. Never truncate catalog evidence.
 func (c *NativeCatalogAdapter) count(ctx context.Context, req chatCompletionRequest) (int, error) {
-	if err := ctx.Err(); err != nil { return 0, err }
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	encoded, err := json.Marshal(req)
-	if err != nil { return 0, err }
+	if err != nil {
+		return 0, err
+	}
 	const protocolReserve = 4096
 	if len(encoded) > int(^uint(0)>>1)-protocolReserve {
 		return 0, errors.New("native catalog request size overflow")
 	}
-	return len(encoded)+protocolReserve, nil
+	return len(encoded) + protocolReserve, nil
 }
 
 // BatchTokenBudget reserves output and a safety margin inside the smallest
@@ -138,7 +142,9 @@ func (c *NativeCatalogAdapter) EvaluateBatch(ctx context.Context, input services
 	if int64(normalized.Usage.PromptTokens) != info.InputTokens ||
 		int64(normalized.Usage.CompletionTokens) != info.OutputTokens ||
 		int64(normalized.Usage.CachedTokens) != info.CachedTokens ||
-		len(info.Trace.Attempts)==0 { return ports.CatalogBatchResult{}, errors.New("native catalog usage mismatch") }
+		len(info.Trace.Attempts) == 0 {
+		return ports.CatalogBatchResult{}, errors.New("native catalog usage mismatch")
+	}
 	latency := time.Since(started).Milliseconds()
 	return ports.CatalogBatchResult{
 		BatchNumber: input.BatchNumber,
@@ -189,7 +195,7 @@ func (c *NativeCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, inp
 	if int64(normalized.Usage.PromptTokens) != info.InputTokens ||
 		int64(normalized.Usage.CompletionTokens) != info.OutputTokens ||
 		int64(normalized.Usage.CachedTokens) != info.CachedTokens ||
-		len(info.Trace.Attempts)==0 {
+		len(info.Trace.Attempts) == 0 {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, errors.New("native final catalog usage mismatch")
 	}
 	return decision, ports.CustomerSalesUsageTelemetry{
