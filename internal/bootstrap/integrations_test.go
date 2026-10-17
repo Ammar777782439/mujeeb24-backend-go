@@ -66,13 +66,13 @@ func TestBuildExternalAdaptersMarksIncompleteProvisioningWithoutBlockingOtherRun
 
 func TestBuildExternalAdaptersGeminiOnlyAndOptionalStandby(t *testing.T) {
 	base := config.ProcessConfig{
-		NativeAIEnabled: true,
-		GeminiAPIKey: "test-gemini-key",
-		GeminiModel: "gemini-2.5-flash",
-		NativeHTTPTimeout: 10 * time.Second,
-		NativeMaxContextTokens: 32768,
-		NativeMaxOutputTokens: 4096,
-		NativeMaxInputCharacters: 48000,
+		NativeAIEnabled:               true,
+		GeminiAPIKey:                  "test-gemini-key",
+		GeminiModel:                   "gemini-2.5-flash",
+		NativeHTTPTimeout:             10 * time.Second,
+		NativeMaxContextTokens:        32768,
+		NativeMaxOutputTokens:         4096,
+		NativeMaxInputCharacters:      48000,
 		NativeMerchantMaxRequestBytes: 524288,
 	}
 	geminiOnly := BuildExternalAdapters(base)

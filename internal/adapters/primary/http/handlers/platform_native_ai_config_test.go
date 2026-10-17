@@ -60,13 +60,17 @@ func TestNativePlatformConfigurationGeminiOnlyIsActive(t *testing.T) {
 	}})
 	ctx := context.Background()
 	out, ok := s.platformGetAIConfiguration(ctx)
-	if !ok { t.Fatal("Gemini-only configuration was not handled") }
+	if !ok {
+		t.Fatal("Gemini-only configuration was not handled")
+	}
 	cfg := out.(*contract.Single[dto.AIConfigurationView]).Body.Data
 	if cfg.Status != "ACTIVE" || cfg.CredentialStatus != "ACTIVE" {
 		t.Fatalf("Gemini-only runtime incorrectly shown as inactive: %+v", cfg)
 	}
 	list, ok := s.platformListAIProvidersConfig(ctx)
-	if !ok { t.Fatal("Gemini-only provider list was not handled") }
+	if !ok {
+		t.Fatal("Gemini-only provider list was not handled")
+	}
 	providers := list.(*contract.List[dto.AICredentialView]).Body.Data
 	if len(providers) != 1 || providers[0].Provider != "google_gemini" {
 		t.Fatalf("unconfigured DeepSeek must not appear as active credential: %+v", providers)
