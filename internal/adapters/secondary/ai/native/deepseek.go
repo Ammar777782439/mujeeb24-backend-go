@@ -155,8 +155,8 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 			var tool struct {
 				Type     string `json:"type"`
 				Function struct {
-					Name   string `json:"name"`
-					Strict bool   `json:"strict"`
+					Name       string          `json:"name"`
+					Strict     bool            `json:"strict"`
 					Parameters json.RawMessage `json:"parameters"`
 				} `json:"function"`
 			}

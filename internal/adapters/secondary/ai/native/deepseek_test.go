@@ -128,33 +128,39 @@ func TestDeepSeekRejectsParallelUnknownOrMixedForcedCalls(t *testing.T) {
 	}
 }
 
-
 func TestDeepSeekRejectsSchemaViolationsBeforeAndAfterHTTP(t *testing.T) {
-	for _,tc:=range []struct{name,argument string;wantHTTP int}{
-		{name:"unexpected offer ref",argument:`{"candidates":[{"item_id":"item-1","variant_ids":[],"offer_ids":["fabricated"],"reason":"fake"}]}`,wantHTTP:1},
-		{name:"missing required",argument:`{"candidates":[{"item_id":"item-1","variant_ids":[],"offer_ids":[]}]}`,wantHTTP:1},
-		{name:"valid empty batch",argument:`{"candidates":[]}`,wantHTTP:1},
+	for _, tc := range []struct {
+		name, argument string
+		wantHTTP       int
 	}{
-		t.Run(tc.name,func(t *testing.T){
-			count:=0
-			api,done:=newFakeDeepSeek(t,func(w http.ResponseWriter,r *http.Request){
+		{name: "unexpected offer ref", argument: `{"candidates":[{"item_id":"item-1","variant_ids":[],"offer_ids":["fabricated"],"reason":"fake"}]}`, wantHTTP: 1},
+		{name: "missing required", argument: `{"candidates":[{"item_id":"item-1","variant_ids":[],"offer_ids":[]}]}`, wantHTTP: 1},
+		{name: "valid empty batch", argument: `{"candidates":[]}`, wantHTTP: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			count := 0
+			api, done := newFakeDeepSeek(t, func(w http.ResponseWriter, r *http.Request) {
 				count++
-				resp:=map[string]any{"choices":[]any{map[string]any{"finish_reason":"tool_calls","message":map[string]any{"role":"assistant","tool_calls":[]any{map[string]any{"id":"one","type":"function","function":map[string]any{"name":"submit_catalog_batch","arguments":tc.argument}}}}}}}
+				resp := map[string]any{"choices": []any{map[string]any{"finish_reason": "tool_calls", "message": map[string]any{"role": "assistant", "tool_calls": []any{map[string]any{"id": "one", "type": "function", "function": map[string]any{"name": "submit_catalog_batch", "arguments": tc.argument}}}}}}}
 				_ = json.NewEncoder(w).Encode(resp)
 			})
 			defer done()
-			format:=`{"type":"json_schema","json_schema":{"name":"batch","strict":true,"schema":`+strictCatalogExample+`}}`
-			_,err:=api.Generate(context.Background(),deepSeekReq("",format))
-			wantOK:=tc.name=="valid empty batch"
-			if (err==nil)!=wantOK||count!=tc.wantHTTP {t.Fatalf("success=%t http=%d err=%v",wantOK,count,err)}
+			format := `{"type":"json_schema","json_schema":{"name":"batch","strict":true,"schema":` + strictCatalogExample + `}}`
+			_, err := api.Generate(context.Background(), deepSeekReq("", format))
+			wantOK := tc.name == "valid empty batch"
+			if (err == nil) != wantOK || count != tc.wantHTTP {
+				t.Fatalf("success=%t http=%d err=%v", wantOK, count, err)
+			}
 		})
 	}
 }
-func TestDeepSeekRefusesUnsupportedSchemaWithoutCallingProvider(t *testing.T){
-	calls:=0
-	api,done:=newFakeDeepSeek(t,func(w http.ResponseWriter,r *http.Request){calls++;w.WriteHeader(200)})
+func TestDeepSeekRefusesUnsupportedSchemaWithoutCallingProvider(t *testing.T) {
+	calls := 0
+	api, done := newFakeDeepSeek(t, func(w http.ResponseWriter, r *http.Request) { calls++; w.WriteHeader(200) })
 	defer done()
-	unsupported:=`{"type":"json_schema","json_schema":{"name":"merchant","strict":true,"schema":{"type":"object","properties":{},"required":[],"additionalProperties":false,"propertyNames":{"pattern":"^x$"}}}}`
-	_,err:=api.Generate(context.Background(),deepSeekReq("",unsupported))
-	if err==nil||calls!=0{t.Fatalf("unsupported schema silently downgraded calls=%d err=%v",calls,err)}
+	unsupported := `{"type":"json_schema","json_schema":{"name":"merchant","strict":true,"schema":{"type":"object","properties":{},"required":[],"additionalProperties":false,"propertyNames":{"pattern":"^x$"}}}}`
+	_, err := api.Generate(context.Background(), deepSeekReq("", unsupported))
+	if err == nil || calls != 0 {
+		t.Fatalf("unsupported schema silently downgraded calls=%d err=%v", calls, err)
+	}
 }

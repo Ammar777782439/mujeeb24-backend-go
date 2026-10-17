@@ -105,35 +105,34 @@ func TestGemini25AcceptsOptionalThoughtSignatureForSingleCapability(t *testing.T
 	}
 }
 
-
 func TestGeminiRejectsInvalidCatalogCandidates(t *testing.T) {
-	api,done:=fakeGemini(t,func(w http.ResponseWriter,r *http.Request){
+	api, done := fakeGemini(t, func(w http.ResponseWriter, r *http.Request) {
 		catalogText := `{"candidates":[{"item_id":"invented","variant_ids":[],"offer_ids":[],"reason":"fake"}]}`
 		response := map[string]any{"candidates": []any{map[string]any{
-			"finishReason":"STOP","content":map[string]any{"parts":[]any{map[string]any{"text":catalogText}}},
+			"finishReason": "STOP", "content": map[string]any{"parts": []any{map[string]any{"text": catalogText}}},
 		}}}
 		_ = json.NewEncoder(w).Encode(response)
 	})
 	defer done()
-	req:=`{"model":"mujeeb-catalog","messages":[{"role":"system","content":"trusted"},{"role":"user","content":"batch"}],"response_format":{"type":"json_schema","json_schema":{"name":"batch","strict":true,"schema":`+strictCatalogExample+`}},"max_tokens":512,"stream":false}`
-	if _,err:=api.Generate(context.Background(),Request{Payload:json.RawMessage(req)});err==nil{
+	req := `{"model":"mujeeb-catalog","messages":[{"role":"system","content":"trusted"},{"role":"user","content":"batch"}],"response_format":{"type":"json_schema","json_schema":{"name":"batch","strict":true,"schema":` + strictCatalogExample + `}},"max_tokens":512,"stream":false}`
+	if _, err := api.Generate(context.Background(), Request{Payload: json.RawMessage(req)}); err == nil {
 		t.Fatal("Gemini invalid catalog reference accepted")
 	}
 }
 func TestGeminiRejectsUnknownToolsAndMalformedParameters(t *testing.T) {
-	calls:=0
-	api,done:=fakeGemini(t,func(w http.ResponseWriter,r *http.Request){
+	calls := 0
+	api, done := fakeGemini(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		_,_=fmt.Fprint(w,`{"candidates":[{"finishReason":"STOP","content":{"parts":[{"functionCall":{"name":"unauthorized","args":{}}}]}}]}`)
+		_, _ = fmt.Fprint(w, `{"candidates":[{"finishReason":"STOP","content":{"parts":[{"functionCall":{"name":"unauthorized","args":{}}}]}}]}`)
 	})
 	defer done()
-	req:=`{"model":"sales","messages":[{"role":"system","content":"system"},{"role":"user","content":"user"}],"max_tokens":512,"tool_choice":"required","parallel_tool_calls":false,"tools":[{"type":"function","function":{"name":"safe","strict":true,"parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}}]}`
-	if _,err:=api.Generate(context.Background(),Request{Payload:json.RawMessage(req)});err==nil||calls!=1{
-		t.Fatalf("unknown function should be rejected: calls=%d err=%v",calls,err)
+	req := `{"model":"sales","messages":[{"role":"system","content":"system"},{"role":"user","content":"user"}],"max_tokens":512,"tool_choice":"required","parallel_tool_calls":false,"tools":[{"type":"function","function":{"name":"safe","strict":true,"parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}}]}`
+	if _, err := api.Generate(context.Background(), Request{Payload: json.RawMessage(req)}); err == nil || calls != 1 {
+		t.Fatalf("unknown function should be rejected: calls=%d err=%v", calls, err)
 	}
-	calls=0
-	invalid:=strings.Replace(req,`"required":[],"additionalProperties":false`,`"required":[],"additionalProperties":true`,1)
-	if _,err:=api.Generate(context.Background(),Request{Payload:json.RawMessage(invalid)});err==nil||calls!=0{
-		t.Fatalf("invalid outbound tool schema should be denied: calls=%d err=%v",calls,err)
+	calls = 0
+	invalid := strings.Replace(req, `"required":[],"additionalProperties":false`, `"required":[],"additionalProperties":true`, 1)
+	if _, err := api.Generate(context.Background(), Request{Payload: json.RawMessage(invalid)}); err == nil || calls != 0 {
+		t.Fatalf("invalid outbound tool schema should be denied: calls=%d err=%v", calls, err)
 	}
 }
