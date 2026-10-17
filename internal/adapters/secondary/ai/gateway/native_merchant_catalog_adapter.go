@@ -27,7 +27,6 @@ type NativeMerchantCatalogAuthoringAdapter struct {
 const (
 	nativeMaxMerchantToolRounds    = 12
 	nativeMaxMerchantToolCalls     = 32
-	nativeMaxMerchantCallsPerRound = 8
 )
 
 func NewNativeMerchantCatalogAuthoringAdapter(client *native.CompletionClient, model string, maxOutputTokens, maxRequestBytes int) (*NativeMerchantCatalogAuthoringAdapter, error) {
@@ -65,6 +64,7 @@ type nativeMerchantChatRequest struct {
 	Messages       []nativeMerchantChatMessage `json:"messages"`
 	Tools          []map[string]any            `json:"tools,omitempty"`
 	ToolChoice     string                      `json:"tool_choice,omitempty"`
+	ParallelToolCalls *bool                    `json:"parallel_tool_calls,omitempty"`
 	ResponseFormat any                         `json:"response_format,omitempty"`
 	MaxTokens      int                         `json:"max_tokens"`
 	Stream         bool                        `json:"stream"`
@@ -124,11 +124,13 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 	}
 	trustedProposalInstruction := system + "\n\n# Canonical merchant proposal JSON schema\n" + string(proposalSchema) +
 		"\nReturn the complete proposal matching this canonical contract as the string value of canonical_proposal_json. Never omit commercial fields."
+	allowParallel := false
 	req := nativeMerchantChatRequest{
 		Model:     a.model,
 		Messages:  []nativeMerchantChatMessage{{Role: "system", Content: system}, {Role: "user", Content: contextualInput}},
 		MaxTokens: a.maxOutputTokens,
 		Stream:    false,
+		ParallelToolCalls: &allowParallel,
 	}
 	allowed := map[string]map[string]any{}
 	if input.Capabilities != nil {
@@ -212,7 +214,7 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 			if choice.FinishReason != "tool_calls" {
 				return merchantcatalogai.Proposal{}, errors.New("merchant tool calls had invalid completion reason")
 			}
-			if len(choice.Message.ToolCalls) > nativeMaxMerchantCallsPerRound || totalCalls+len(choice.Message.ToolCalls) > nativeMaxMerchantToolCalls {
+			if len(choice.Message.ToolCalls) != 1 || totalCalls+len(choice.Message.ToolCalls) > nativeMaxMerchantToolCalls {
 				return merchantcatalogai.Proposal{}, errors.New("merchant discovery call budget exceeded")
 			}
 			if input.Capabilities == nil {

@@ -159,6 +159,9 @@ func TestNativeMerchantReadOnlyToolAndCanonicalFinalValidation(t *testing.T) {
 		if err := json.Unmarshal(req.Payload, &body); err != nil {
 			t.Fatal(err)
 		}
+		if body.ParallelToolCalls == nil || *body.ParallelToolCalls {
+			t.Error("merchant allowed parallel model tool calls")
+		}
 		if len(body.Messages) < 2 || body.Messages[0].Role != "system" || body.Messages[1].Role != "user" {
 			t.Error("merchant trusted and untrusted messages merged")
 		}
@@ -238,6 +241,7 @@ func TestNativeMerchantRejectsInvalidStrictProposalEnvelope(t *testing.T) {
 	provider.call = func(req native.Request) (native.Response, error) {
 		var body struct {
 			ResponseFormat map[string]any `json:"response_format"`
+			ParallelToolCalls *bool `json:"parallel_tool_calls"`
 		}
 		if err := json.Unmarshal(req.Payload, &body); err != nil || body.ResponseFormat["type"] != "json_schema" {
 			t.Fatal("merchant provider called without strict final schema")
