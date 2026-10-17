@@ -176,7 +176,24 @@ func TestDeepSeekToolRequestRoundTripsNullableSelectedReferences(t *testing.T) {
 		selected := schema["properties"].(map[string]any)["selected"].(map[string]any)
 		variant := selected["items"].(map[string]any)["properties"].(map[string]any)["variant_id"].(map[string]any)
 		if variant["anyOf"] == nil { t.Fatalf("DeepSeek nullable field not translated: %+v",variant) }
-		_,_ = fmt.Fprint(w,`{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"respond_without_action","arguments":"{\\"response_text\\":\\"available\\",\\"selected\\":[{\\"item_id\\":\\"item-1\\",\\"offer_id\\":{\\"__mujeeb_null_v1\\":true},\\"variant_id\\":{\\"__mujeeb_null_v1\\":true}}]}"}}]}}],"usage":{"prompt_tokens":20,"completion_tokens":10}}`)
+		args := map[string]any{
+			"response_text": "available",
+			"selected": []any{map[string]any{
+				"item_id": "item-1",
+				"offer_id": map[string]any{"__mujeeb_null_v1": true},
+				"variant_id": map[string]any{"__mujeeb_null_v1": true},
+			}},
+		}
+		encodedArgs, err := json.Marshal(args)
+		if err != nil { t.Fatal(err) }
+		reply := map[string]any{"choices": []any{map[string]any{
+			"finish_reason": "tool_calls",
+			"message": map[string]any{"role":"assistant", "content":nil, "tool_calls":[]any{map[string]any{
+				"id":"call-1", "type":"function",
+				"function":map[string]any{"name":"respond_without_action","arguments":string(encodedArgs)},
+			}}},
+		}}, "usage": map[string]any{"prompt_tokens":20,"completion_tokens":10}}
+		if err:=json.NewEncoder(w).Encode(reply); err != nil { t.Fatal(err) }
 	})
 	defer closeFn()
 	tool:=`[{"type":"function","function":{"name":"respond_without_action","strict":true,"parameters":{"type":"object","properties":{"response_text":{"type":"string"},"selected":{"type":"array","items":{"type":"object","properties":{"item_id":{"type":"string"},"variant_id":{"type":["string","null"]},"offer_id":{"type":["string","null"]}},"required":["item_id","variant_id","offer_id"],"additionalProperties":false}}},"required":["response_text","selected"],"additionalProperties":false}}}]`
