@@ -30,7 +30,6 @@ func TestLoadMigrations_SequenceIntegrity(t *testing.T) {
 	}
 }
 
-
 // Migration versions and names are permanent identifiers once recorded in
 // schema_migrations. Restoring the historical name is not restoring a provider
 // runtime: version 75 must match the already-applied production record.
