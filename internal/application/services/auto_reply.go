@@ -326,7 +326,9 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	// Never infer that a handoff occurred from response_text or the customer's
 	// wording; only an authorized handoff capability changes lifecycle state.
 	decisionSource := "initial"
-	if fullCatalogRequired { decisionSource = "full_catalog_final" }
+	if fullCatalogRequired {
+		decisionSource = "full_catalog_final"
+	}
 	log.Printf("[AutoReply] CAPABILITY_SELECTED business=%s conversation=%s run=%s source=%s capability=%s selected_refs=%d response_chars=%d",
 		businessID, conversationID, run.ID, decisionSource, proposal.Capability, len(proposal.Selected), len([]rune(proposal.ResponseText)))
 
