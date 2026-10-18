@@ -1,4 +1,4 @@
-//go:build gemini_live
+//go:build gemini_live || provider_live
 
 package gateway
 

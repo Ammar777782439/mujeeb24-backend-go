@@ -1,0 +1,43 @@
+name: Real Gemini and DeepSeek Context Validation
+on:
+  push:
+    branches: [feat/gemini-deepseek]
+    paths:
+      - 'internal/adapters/secondary/ai/gateway/native_provider_context_live_test.go'
+      - '.github/workflows/provider-context-live.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: provider-context-live-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-provider-context:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    env:
+      GOTOOLCHAIN: local
+      MUJEEB_PROVIDER_CONTEXT_LIVE: '1'
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/gemini-deepseek
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.2'
+          cache: true
+      - name: Verify both live keys are present without exposing them
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$GEMINI_API_KEY" || -z "$DEEPSEEK_API_KEY" ]]; then
+            echo "::error::Both GEMINI_API_KEY and DEEPSEEK_API_KEY secrets are required to claim two-provider live validation"
+            exit 1
+          fi
+      - name: Run real two-provider context and independent summary evaluation
+        run: go test -tags=provider_live -v -count=1 -run '^TestNativeProviderContextLive$' -timeout=15m ./internal/adapters/secondary/ai/gateway
