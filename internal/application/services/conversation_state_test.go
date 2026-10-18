@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -147,3 +148,54 @@ type errNotFoundStub struct{}
 
 func (errNotFoundStub) Error() string     { return "not found" }
 func (errNotFoundStub) ErrorKind() string { return "not_found" }
+
+// The summary model has access to statements, not authenticated action records.
+type verifiedSummaryStub struct {
+    input ports.CustomerSalesDecisionInput
+    cap ports.CustomerSalesCapability
+    text string
+}
+
+func (s *verifiedSummaryStub) Decide(_ context.Context, input ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
+    s.input = input
+    return ports.CustomerSalesDecisionOutput{Decision: ports.CapabilityDecision{Capability: s.cap, ResponseText: s.text}}, nil
+}
+
+func TestSummarySeparatesCustomerRequestsAndPromisesFromExecution(t *testing.T) {
+    stub := &verifiedSummaryStub{
+        cap: ports.CustomerSalesCapabilityRespondWithoutAction,
+        text: "طلبات العميل: يريد الاشتراك.\nوعود المساعد: وعد بتحويله لموظف.\nالتنفيذ الموثق: تم التحويل بالفعل.",
+    }
+    service := &ConversationSummaryService{CustomerSalesDecisionPort: stub}
+    summary, err := service.generateSummary(context.Background(), "business", "conversation", "العميل: أريد الاشتراك", "تم التواصل مع الفريق")
+    if err != nil {
+        t.Fatal(err)
+    }
+    if len(stub.input.Capabilities) != 1 || stub.input.Capabilities[0] != ports.CustomerSalesCapabilityRespondWithoutAction {
+        t.Fatal("summary agent was allowed to request business or human operations")
+    }
+    if !strings.Contains(stub.input.Request.Text, "NEVER promote") {
+        t.Fatal("summarizer does not distinguish past AI claims from execution")
+    }
+    if !strings.HasPrefix(summary, "طلبات العميل:") || !strings.Contains(summary, "\nوعود المساعد:") ||
+        !strings.Contains(summary, "\nالتنفيذ الموثق: غير متاح من نص المحادثة") ||
+        strings.Contains(summary, "التنفيذ الموثق: تم التحويل") {
+        t.Fatalf("unverified execution claim entered stored summary: %q", summary)
+    }
+}
+
+func TestSummaryRejectsNonInformationalDecisionsAndMalformedSections(t *testing.T) {
+    for _, tc := range []struct {
+        cap ports.CustomerSalesCapability
+        text string
+    }{
+        {ports.CustomerSalesCapabilityRespondWithoutAction, "تم التحويل"},
+        {ports.CustomerSalesCapabilityHandoff, "طلبات العميل: طلب\nوعود المساعد: وعد\nالتنفيذ الموثق: غير معلوم"},
+    } {
+        stub := &verifiedSummaryStub{cap: tc.cap, text: tc.text}
+        service := &ConversationSummaryService{CustomerSalesDecisionPort: stub}
+        if _, err := service.generateSummary(context.Background(), "b", "c", "رسالة", ""); err == nil {
+            t.Fatal("accepted unsafe summarization response")
+        }
+    }
+}
