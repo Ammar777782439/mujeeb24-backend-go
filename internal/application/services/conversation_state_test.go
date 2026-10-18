@@ -149,53 +149,42 @@ type errNotFoundStub struct{}
 func (errNotFoundStub) Error() string     { return "not found" }
 func (errNotFoundStub) ErrorKind() string { return "not_found" }
 
-// The summary model has access to statements, not authenticated action records.
-type verifiedSummaryStub struct {
-	input ports.CustomerSalesDecisionInput
-	cap   ports.CustomerSalesCapability
-	text  string
+// Summarization is generation-only. It never receives a sales capability and
+// preserves the trust boundary even when a model returns an unsupported claim.
+type summaryGenerationStub struct {
+ system string
+ user string
+ output string
+ err error
+ calls int
 }
-
-func (s *verifiedSummaryStub) Decide(_ context.Context, input ports.CustomerSalesDecisionInput) (ports.CustomerSalesDecisionOutput, error) {
-	s.input = input
-	return ports.CustomerSalesDecisionOutput{Decision: ports.CapabilityDecision{Capability: s.cap, ResponseText: s.text}}, nil
+func (s *summaryGenerationStub) Summarize(_ context.Context,system,user string)(string,ports.CustomerSalesUsageTelemetry,error){
+ s.calls++
+ s.system=system
+ s.user=user
+ return s.output,ports.CustomerSalesUsageTelemetry{},s.err
 }
-
-func TestSummarySeparatesCustomerRequestsAndPromisesFromExecution(t *testing.T) {
-	stub := &verifiedSummaryStub{
-		cap:  ports.CustomerSalesCapabilityRespondWithoutAction,
-		text: "طلبات العميل: يريد الاشتراك.\nوعود المساعد: وعد بتحويله لموظف.\nالتنفيذ الموثق: تم التحويل بالفعل.",
-	}
-	service := &ConversationSummaryService{CustomerSalesDecisionPort: stub}
-	summary, err := service.generateSummary(context.Background(), "business", "conversation", "العميل: أريد الاشتراك", "تم التواصل مع الفريق")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(stub.input.Capabilities) != 1 || stub.input.Capabilities[0] != ports.CustomerSalesCapabilityRespondWithoutAction {
-		t.Fatal("summary agent was allowed to request business or human operations")
-	}
-	if !strings.Contains(stub.input.Request.Text, "NEVER promote") {
-		t.Fatal("summarizer does not distinguish past AI claims from execution")
-	}
-	if !strings.HasPrefix(summary, "طلبات العميل:") || !strings.Contains(summary, "\nوعود المساعد:") ||
-		!strings.Contains(summary, "\nالتنفيذ الموثق: غير متاح من نص المحادثة") ||
-		strings.Contains(summary, "التنفيذ الموثق: تم التحويل") {
-		t.Fatalf("unverified execution claim entered stored summary: %q", summary)
-	}
+func TestSummaryKeepsCustomerGoalsSeparateFromOperationalClaims(t *testing.T) {
+ stub:=&summaryGenerationStub{output:"العميل يريد الاشتراك مع توضيح الأسعار وشروط الدفع. المساعد سبق أن وعد بالتواصل مع الفريق لكن لم يقدم النص إثباتًا لتنفيذ التحويل."}
+ service:=&ConversationSummaryService{SummaryPort:stub}
+ summary,err:=service.generateSummary(context.Background(),"business","conversation","العميل: أريد الاشتراك\nالمساعد: تم تحويلك إلى الموظف","معلومات قديمة غير مؤكدة")
+ if err!=nil{t.Fatal(err)}
+ if stub.calls!=1{t.Fatalf("expected one independent summary call, got %d",stub.calls)}
+ if !strings.Contains(stub.system,"NOT evidence") || !strings.Contains(stub.system,"No database execution events") {
+  t.Fatalf("summary instructions lost trust boundary: %q",stub.system)
+ }
+ if !strings.Contains(stub.user,"معلومات قديمة غير مؤكدة") || !strings.Contains(stub.user,"أريد الاشتراك") {
+  t.Fatalf("missing rolling summary context: %q",stub.user)
+ }
+ if summary!=stub.output {t.Fatalf("summary was modified unexpectedly: %q",summary)}
 }
-
-func TestSummaryRejectsNonInformationalDecisionsAndMalformedSections(t *testing.T) {
-	for _, tc := range []struct {
-		cap  ports.CustomerSalesCapability
-		text string
-	}{
-		{ports.CustomerSalesCapabilityRespondWithoutAction, "تم التحويل"},
-		{ports.CustomerSalesCapabilityHandoff, "طلبات العميل: طلب\nوعود المساعد: وعد\nالتنفيذ الموثق: غير معلوم"},
-	} {
-		stub := &verifiedSummaryStub{cap: tc.cap, text: tc.text}
-		service := &ConversationSummaryService{CustomerSalesDecisionPort: stub}
-		if _, err := service.generateSummary(context.Background(), "b", "c", "رسالة", ""); err == nil {
-			t.Fatal("accepted unsafe summarization response")
-		}
-	}
+func TestSummaryRejectsEmptyAndOversizedProviderOutput(t *testing.T){
+ cases:=[]string{"",strings.Repeat("ن",4000)}
+ for _,out:=range cases{
+  stub:=&summaryGenerationStub{output:out}
+  service:=&ConversationSummaryService{SummaryPort:stub}
+  if _,err:=service.generateSummary(context.Background(),"b","c","رسالة","");err==nil{
+   t.Fatal("invalid summary accepted")
+  }
+ }
 }
