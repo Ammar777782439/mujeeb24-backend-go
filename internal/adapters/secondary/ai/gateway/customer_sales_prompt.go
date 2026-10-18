@@ -26,9 +26,9 @@ func buildUserPrompt(input ports.CustomerSalesDecisionRequest) string {
 }
 
 type customerSalesVerifiedExecutionState struct {
-	Source string `json:"source"`
-	ConversationState string `json:"conversation_state"`
-	Ownership string `json:"ownership"`
+	Source              string `json:"source"`
+	ConversationState   string `json:"conversation_state"`
+	Ownership           string `json:"ownership"`
 	AssignmentReference string `json:"assignment_reference"`
 }
 
@@ -36,9 +36,9 @@ type customerSalesVerifiedExecutionState struct {
 // repository via CustomerSalesContext, not inferred from summary text.
 func verifiedExecutionStateFrom(value *ports.CustomerSalesContext) customerSalesVerifiedExecutionState {
 	return customerSalesVerifiedExecutionState{
-		Source: "conversation_repository",
-		ConversationState: value.Conversation.State,
-		Ownership: value.Conversation.Ownership,
+		Source:              "conversation_repository",
+		ConversationState:   value.Conversation.State,
+		Ownership:           value.Conversation.Ownership,
 		AssignmentReference: value.Conversation.AssignmentReference,
 	}
 }
@@ -55,7 +55,7 @@ func modelConversationStateFrom(value *ports.ConversationStateRecord) *ports.Con
 }
 
 type customerSalesPromptContext struct {
-	VerifiedExecutionState customerSalesVerifiedExecutionState `json:"verified_execution_state"`
+	VerifiedExecutionState customerSalesVerifiedExecutionState         `json:"verified_execution_state"`
 	Sales                  *ports.SalesWorkflowContext                 `json:"sales,omitempty"`
 	SchemaVersion          int                                         `json:"schema_version"`
 	Freshness              string                                      `json:"freshness"`
@@ -87,11 +87,11 @@ type customerSalesPromptCustomer struct {
 func customerSalesPromptContextFrom(value *ports.CustomerSalesContext) customerSalesPromptContext {
 	return customerSalesPromptContext{
 		VerifiedExecutionState: verifiedExecutionStateFrom(value),
-		Sales:         value.Sales,
-		SchemaVersion: value.SchemaVersion,
-		Freshness:     value.Freshness,
-		Business:      value.Business,
-		Conversation:  value.Conversation,
+		Sales:                  value.Sales,
+		SchemaVersion:          value.SchemaVersion,
+		Freshness:              value.Freshness,
+		Business:               value.Business,
+		Conversation:           value.Conversation,
 		Customer: customerSalesPromptCustomer{
 			Reference:        value.Customer.Reference,
 			LocalePreference: value.Customer.LocalePreference,
@@ -115,7 +115,7 @@ func customerSalesPromptContextFrom(value *ports.CustomerSalesContext) customerS
 }
 
 type catalogBatchPromptContext struct {
-	VerifiedExecutionState customerSalesVerifiedExecutionState `json:"verified_execution_state"`
+	VerifiedExecutionState customerSalesVerifiedExecutionState         `json:"verified_execution_state"`
 	Business               ports.CustomerSalesContextBusiness          `json:"business"`
 	Conversation           ports.CustomerSalesContextConversation      `json:"conversation"`
 	Customer               customerSalesPromptCustomer                 `json:"customer"`
@@ -133,8 +133,8 @@ func catalogBatchPromptContextFrom(value *ports.CustomerSalesContext) catalogBat
 	}
 	return catalogBatchPromptContext{
 		VerifiedExecutionState: verifiedExecutionStateFrom(value),
-		Business:     value.Business,
-		Conversation: value.Conversation,
+		Business:               value.Business,
+		Conversation:           value.Conversation,
 		Customer: customerSalesPromptCustomer{
 			Reference:        value.Customer.Reference,
 			LocalePreference: value.Customer.LocalePreference,
