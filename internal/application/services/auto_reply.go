@@ -322,6 +322,14 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		}
 	}
 
+	// The final capability may differ from the initial catalog-retrieval call.
+	// Never infer that a handoff occurred from response_text or the customer's
+	// wording; only an authorized handoff capability changes lifecycle state.
+	decisionSource := "initial"
+	if fullCatalogRequired { decisionSource = "full_catalog_final" }
+	log.Printf("[AutoReply] CAPABILITY_SELECTED business=%s conversation=%s run=%s source=%s capability=%s selected_refs=%d response_chars=%d",
+		businessID, conversationID, run.ID, decisionSource, proposal.Capability, len(proposal.Selected), len([]rune(proposal.ResponseText)))
+
 	// Per contract ⑨ §3, mark VALIDATING.
 	if err := s.transitionRun(ctx, run, ports.AIRunStatusValidating); err != nil {
 		return commands.AutoReplyResult{}, err
@@ -348,7 +356,14 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			Evidence:       catalogEvidence,
 		})
 		if failure != nil {
-			log.Printf("[AutoReply] VALIDATION_FAILED run=%s stage=%s category=%s reason=%s", run.ID, failure.Stage, failure.Category, failure.Reason)
+			log.Printf("[AutoReply] VALIDATION_FAILED business=%s conversation=%s run=%s capability=%s stage=%s category=%s reason=%s",
+				businessID, conversationID, run.ID, proposal.Capability, failure.Stage, failure.Category, failure.Reason)
+			if failure.Reason == "unexecuted_handoff_claim_in_response_text" {
+				// Structured, stable operational signal. Customer text is
+				// deliberately excluded from this log.
+				log.Printf("[AutoReply] UNEXECUTED_HANDOFF_CLAIM_BLOCKED business=%s conversation=%s run=%s capability=%s reason_code=unexecuted_handoff_claim_in_response_text outbound_enqueued=false handoff_performed=false",
+					businessID, conversationID, run.ID, proposal.Capability)
+			}
 			s.markFailedSafe(ctx, run, failure.Stage, string(failure.Category), failure.Reason)
 			// Per contract ⑥ §21, no Execution when validation fails.
 			// Persist a "blocked" decision for audit trail.
@@ -401,6 +416,8 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	if !ok || !definition.Terminal || effective.Capability != proposal.Capability {
 		return commands.AutoReplyResult{}, errors.New("effective capability is not the validated terminal decision")
 	}
+	log.Printf("[AutoReply] CAPABILITY_AUTHORIZED business=%s conversation=%s run=%s proposed=%s effective=%s policy=%s requires_human=%t",
+		businessID, conversationID, run.ID, proposal.Capability, effective.Capability, effective.PolicyDecision, definition.RequiresHuman)
 	now := s.now()
 	decisionID := s.id()
 
@@ -500,10 +517,13 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		}
 		log.Printf("[AutoReply] STATE→EXECUTING run=%s", run.ID)
 
-		// Per contract ③ §1, Mujeeb owns the conversation state. After a
-		// successful AI reply (answer or clarification), transition the
-		// conversation to "waiting_customer" with ownership "ai" so the
-		// dashboard reflects the current state.
+		// Per contract ③ §1, Mujeeb owns the conversation state. A human
+		// handoff must persist waiting_human before its reply is enqueued;
+		// otherwise a promise would exist without an actionable state.
+		if definition.RequiresHuman && s.Conversations == nil {
+			return errors.New("human handoff cannot proceed without conversation lifecycle repository")
+		}
+		// Answers and clarifications transition to waiting_customer.
 		if s.Conversations != nil {
 			var targetState *string
 			var targetOwnership *string
@@ -615,6 +635,14 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		return commands.AutoReplyResult{}, err
 	}
 
+	if definition.RequiresHuman && effective.PolicyDecision == "allowed" {
+		// This confirms the waiting_human lifecycle change and the outbox
+		// entry committed together. It does NOT claim employee assignment
+		// or delivery by the external channel provider.
+		log.Printf("[AutoReply] HUMAN_HANDOFF_COMMITTED business=%s conversation=%s run=%s decision=%s state=waiting_human ownership=unchanged enqueued=%t outbound=%s",
+			businessID, conversationID, run.ID, decisionID, result.Enqueued, result.OutboundMessageID)
+	}
+
 	// Persist deterministic conversation focus from the validated proposal.
 	// This is especially important after full-catalog evaluation, where the
 	// provider interaction chain is intentionally reset. State is derived only
@@ -627,8 +655,9 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 
 	// Per contract ⑨ §31, Mark COMPLETED.
 	s.markCompletedSafe(ctx, run)
-	log.Printf("[AutoReply] COMPLETED business=%s action=%s enqueued=%v outbound=%s outbox=%s",
-		businessID, result.Action, result.Enqueued, result.OutboundMessageID, result.OutboxEntryID)
+	log.Printf("[AutoReply] COMPLETED business=%s conversation=%s run=%s capability=%s policy=%s action=%s enqueued=%v outbound=%s outbox=%s",
+		businessID, conversationID, run.ID, proposal.Capability, effective.PolicyDecision,
+		result.Action, result.Enqueued, result.OutboundMessageID, result.OutboxEntryID)
 
 	// Per Item 4: recordAIUsage now returns an error when AppendRecord
 	// fails. The reply is already enqueued (customer received it), but

@@ -396,3 +396,49 @@ func TestFullCatalogCapabilityPolicyGatePreventsExecution(t *testing.T) {
 		})
 	}
 }
+
+func TestInformationalPromiseNeverSendsOrChangesConversationOwnership(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		capability ports.CustomerSalesCapability
+		text string
+	}{
+		{"initial informational promise",ports.CustomerSalesCapabilityRespondWithoutAction,"سيتم تحويلك إلى أحد ممثلي خدمة العملاء."},
+		{"followup disguised as clarification",ports.CustomerSalesCapabilityAsk,"سأقوم برفع طلبك للفريق. هل معك رقم الطلب؟"},
+	} {
+		t.Run(tc.name,func(t *testing.T) {
+			service,runtime,outbox,runRepo:=capabilityService()
+			conversations:=&fakeConversationRuntimeRepository{}
+			service.Conversations=conversations
+			runtime.Decision=ports.CapabilityDecision{Capability:tc.capability,ResponseText:tc.text}
+			result,err:=service.Handle(context.Background(),capabilityCommand())
+			if err!=nil||result.Enqueued||outbox.calls!=0 {
+				t.Fatalf("unexecuted promise escaped into outbox: %+v err=%v",result,err)
+			}
+			if len(conversations.transitions)!=0 {
+				t.Fatalf("blocked decision caused a conversation transition: %+v",conversations.transitions)
+			}
+			audit:=service.DecisionRepository.(*fakeDecisionRepository).record
+			if audit.Lifecycle!="expired"||audit.RequestedCapability==nil||
+				*audit.RequestedCapability!=string(tc.capability) {
+				t.Fatalf("blocked decision was not safely audited: %+v",audit)
+			}
+			if runRepo.run.Status!=ports.AIRunStatusFailed {
+				t.Fatalf("invalid promise did not fail AI Run: %s",runRepo.run.Status)
+			}
+		})
+	}
+}
+
+func TestHumanHandoffRequiresConversationLifecycleBeforeOutbound(t *testing.T) {
+	service,runtime,outbox,_:=capabilityService()
+	service.Conversations=nil
+	runtime.Decision=ports.CapabilityDecision{
+		Capability:ports.CustomerSalesCapabilityHandoff,
+		ResponseText:"سأحوّلك إلى الفريق المختص.",
+	}
+	result,err:=service.Handle(context.Background(),capabilityCommand())
+	if err==nil||result.Enqueued||outbox.calls!=0 {
+		t.Fatalf("handoff without state transition must fail closed: %+v err=%v",result,err)
+	}
+}

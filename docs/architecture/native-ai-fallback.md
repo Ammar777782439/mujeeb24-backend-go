@@ -112,3 +112,20 @@ even when the upstream request itself succeeded.
   a green Render `Deploy succeeded` status.
 
 Google REST reference: https://ai.google.dev/gemini-api/docs/generate-content/thought-signatures
+
+## Human-handoff integrity and operational diagnostics
+
+The model proposes one canonical capability. An `respond_without_action` or `ask_customer` result is NEVER converted into `handoff_to_human` based on the reply text. The text is not evidence of an executed human transfer.
+
+The output-side safety check rejects high-confidence employee-transfer promises if the selected terminal capability does not authorize human handoff. This is **not** a keyword intent engine: it neither classifies the customer's intention nor selects a different capability. Detection has deliberately limited linguistic coverage, so tool descriptions and system instructions must also prohibit unexecuted promises. A rejected AI proposal is persisted as blocked, with `invalid_ai_output` and stable reason code `unexecuted_handoff_claim_in_response_text`. No outbound is queued, and no conversation lifecycle change occurs.
+
+Authorized `handoff_to_human` requires the conversation lifecycle repository and commits `waiting_human` before creating the associated outbound reply. This marks the conversation for human attention, **not** an employee assignment or external message delivery confirmation.
+
+Relevant low-PII operational logs:
+- `[AutoReply] CAPABILITY_SELECTED`: model's terminal capability and whether the source was the initial decision or full-catalog finalization.
+- `[AutoReply] UNEXECUTED_HANDOFF_CLAIM_BLOCKED`: a false handoff promise was blocked with a reason code and `outbound_enqueued=false`.
+- `[AutoReply] CAPABILITY_AUTHORIZED`: the canonical capability and merchant policy outcome.
+- `[AutoReply] HUMAN_HANDOFF_COMMITTED`: a committed `waiting_human` transition with outbound-enqueued status; does not claim an employee accepted the case.
+- `[AutoReply] COMPLETED`: execution result with run/conversation/capability/policy and outbox IDs.
+
+Log lines must never dump free-form customer messages, API secrets or model response text. Provider delivery/retry outcomes are tracked separately by the existing outbox-worker logs. No automatic retry of a rejected semantic output is permitted under the runtime contract.
