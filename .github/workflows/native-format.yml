@@ -26,6 +26,7 @@ on:
       - 'internal/application/services/customer_handoff_claim_guard_test.go'
       - 'internal/application/services/auto_reply.go'
       - 'internal/application/services/auto_reply_capabilities_test.go'
+      - 'internal/application/services/conversation_blueprint_test.go'
   workflow_dispatch:
 
 permissions:
@@ -68,6 +69,7 @@ jobs:
             internal/application/services/customer_handoff_claim_guard_test.go \
             internal/application/services/auto_reply.go \
             internal/application/services/auto_reply_capabilities_test.go \
+            internal/application/services/conversation_blueprint_test.go \
             internal/application/services/native_merchant_usage.go \
             internal/application/services/platform_operations_service.go \
             internal/bootstrap/api.go \

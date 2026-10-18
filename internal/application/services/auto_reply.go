@@ -170,7 +170,7 @@ func NewAutoReplyService(customerSalesDecision ports.CustomerSalesDecisionPort, 
 func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReplyCommand) (commands.AutoReplyResult, error) {
 	businessID := string(command.Meta.Actor.BusinessID)
 	conversationID := string(command.ConversationID)
-	log.Printf("[AutoReply] START business=%s conversation=%s text=%q", businessID, conversationID, truncate(command.Text, 80))
+	log.Printf("[AutoReply] START business=%s conversation=%s message_chars=%d", businessID, conversationID, len([]rune(command.Text)))
 
 	if err := s.validate(command); err != nil {
 		log.Printf("[AutoReply] VALIDATE_FAILED business=%s err=%v", businessID, err)
