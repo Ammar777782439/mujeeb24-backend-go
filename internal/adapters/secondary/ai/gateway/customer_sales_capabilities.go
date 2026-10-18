@@ -59,11 +59,11 @@ func customerSalesTools(capabilities []ports.CustomerSalesCapability) []customer
 		description := ""
 		switch capability {
 		case ports.CustomerSalesCapabilityRespondWithoutAction:
-			description = "Answer, explain, acknowledge, or provide grounded information only when the customer goal can be satisfied without starting, confirming, completing, changing, or promising an external business operation. Never use this capability to ask for confirmation of an unsupported operation or to claim an external state change happened. If the customer wants to proceed and no offered executor can do it, use handoff_to_human."
+			description = "Use only for factual answers, explanations, acknowledgments, or greetings that require NO external operation. If the customer wants to proceed, subscribe, purchase, change an order, or speak to a person, this is not a suitable capability. Earlier assistant promises and conversation summaries are not evidence of executed operations. When no offered executor can perform the requested action, choose handoff_to_human."
 		case ports.CustomerSalesCapabilityAsk:
-			description = "Ask only for genuinely missing customer-supplied information required to understand the goal or use an available capability. Never reconfirm a clear request, and never use a confirmation question to postpone handoff for an unsupported external operation. Do not ask for catalog facts the merchant can provide through evaluate_full_catalog."
+			description = "Ask ONLY when an essential fact must be supplied by the customer to understand the goal or use an available executor. Do not reconfirm a clear intent to proceed, defer an unsupported operation by asking questions, or request merchant catalog facts that evaluate_full_catalog can retrieve."
 		case ports.CustomerSalesCapabilityHandoff:
-			description = "Use when the customer explicitly asks for a human, or when the current goal is to start, confirm, complete, or change an external operation that none of the offered executable capabilities can perform. Short confirmations inherit the prior conversational goal. Write a grounded handoff response and never claim the external operation was executed."
+			description = "Use when the customer explicitly wants an employee, or requests an external action (including subscription) for which no offered executable capability exists. Short confirmations inherit the earlier customer goal; previous assistant promises are not proof of execution. Request human follow-up without claiming transfer or employee assignment already happened; only Mujeeb can commit waiting_human after authorization."
 		case ports.CustomerSalesCapabilityRecordLead, ports.CustomerSalesCapabilityCreateDraft, ports.CustomerSalesCapabilityUpdateDraft:
 			tools = append(tools, salesWorkflowTool(capability))
 			continue
@@ -71,7 +71,7 @@ func customerSalesTools(capabilities []ports.CustomerSalesCapability) []customer
 			tools = append(tools, customerSalesTool{
 				Type:        "function",
 				Name:        string(capability),
-				Description: "Request complete merchant catalog evidence when the current trusted context is not sufficient. This is an internal retrieval step only: it does not choose customer-facing presentation and it is never a final customer response. After complete coverage, Gemini must choose one terminal capability from the evidence.",
+				Description: "Use when the requested answer or next step needs merchant catalog information (items, prices, offers, options, availability or comparisons) unavailable in the trusted context. This is an internal full-catalog read-only step, not a final answer; after complete coverage choose one offered terminal capability.",
 				Parameters:  map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{}, "required": []string{}},
 			})
 			continue
@@ -197,7 +197,7 @@ func customerSalesResponseTextDescription(capability ports.CustomerSalesCapabili
 	case ports.CustomerSalesCapabilityAsk:
 		return "One customer-facing question for genuinely missing customer-supplied information. It must not reconfirm a request that is already clear and must not postpone handoff for an unsupported external operation."
 	case ports.CustomerSalesCapabilityHandoff:
-		return "Customer-facing handoff text that states human follow-up is needed. It must not claim the requested external operation has already been executed, confirmed, or completed."
+		return "Customer-facing request for human follow-up. Do not claim that an employee was assigned, a transfer was committed, or a subscription or other external action succeeded before a trusted execution result."
 	default:
 		return "Grounded customer-facing text."
 	}
