@@ -189,13 +189,18 @@ func (s *ConversationSummaryService) MaybeSummarize(
 	state, err := s.StateRepository.Get(ctx, businessID, conversationID)
 	if err != nil {
 		if isRepositoryNotFound(err) {
-   // An informational-only conversation must have memory too. The insert-only
-   // operation is safe if another worker creates a focus concurrently.
-   bootstrap,ok:=s.StateRepository.(ports.ConversationSummaryCheckpointRepository)
-   if !ok {result.SkippedReason="summary_checkpoint_repository_not_configured";return result,nil}
-   state,err=bootstrap.EnsureSummaryState(ctx,businessID,conversationID)
-   if err!=nil{return result,err}
-  }
+			// An informational-only conversation must have memory too. The insert-only
+			// operation is safe if another worker creates a focus concurrently.
+			bootstrap, ok := s.StateRepository.(ports.ConversationSummaryCheckpointRepository)
+			if !ok {
+				result.SkippedReason = "summary_checkpoint_repository_not_configured"
+				return result, nil
+			}
+			state, err = bootstrap.EnsureSummaryState(ctx, businessID, conversationID)
+			if err != nil {
+				return result, err
+			}
+		}
 		result.SkippedReason = fmt.Sprintf("state_load_failed: %v", err)
 		return result, err
 	}
