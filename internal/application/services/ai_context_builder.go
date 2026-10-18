@@ -1,9 +1,9 @@
 package services
 
 import (
- "slices"
 	"context"
 	"errors"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -148,21 +148,24 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 		context.ConversationSummary = input.ConversationState.Summary
 	}
 
-
- // A checkpointed summary covers the conversation only up to its message
- // ID. Provide EVERY newer message so the model sees no gap during the
- // four-turn refresh cadence, regardless of provider or customer cadence.
- if input.ConversationState != nil && input.ConversationState.SummaryLastMessageID != "" {
-  uncovered, err := listMessagesAfterCheckpoint(ctx,b.Messages,input.BusinessID,input.ConversationID,input.ConversationState.SummaryLastMessageID)
-  if err != nil {return ports.CustomerSalesContext{},err}
-  context.RecentMessages=buildRecentMessageEvidence(uncovered,input.SourceMessageReference,now)
- } else {
-  // Legacy summaries have no trusted coverage boundary. Preserve the
-  // previous bounded window until the summarizer rebuilds a checkpoint.
-  page,err:=b.Messages.ListByConversation(ctx,input.BusinessID,input.ConversationID,b.maxMessages(),"")
-  if err!=nil {return ports.CustomerSalesContext{},err}
-  context.RecentMessages=buildRecentMessageEvidence(page.Items,input.SourceMessageReference,now)
- }
+	// A checkpointed summary covers the conversation only up to its message
+	// ID. Provide EVERY newer message so the model sees no gap during the
+	// four-turn refresh cadence, regardless of provider or customer cadence.
+	if input.ConversationState != nil && input.ConversationState.SummaryLastMessageID != "" {
+		uncovered, err := listMessagesAfterCheckpoint(ctx, b.Messages, input.BusinessID, input.ConversationID, input.ConversationState.SummaryLastMessageID)
+		if err != nil {
+			return ports.CustomerSalesContext{}, err
+		}
+		context.RecentMessages = buildRecentMessageEvidence(uncovered, input.SourceMessageReference, now)
+	} else {
+		// Legacy summaries have no trusted coverage boundary. Preserve the
+		// previous bounded window until the summarizer rebuilds a checkpoint.
+		page, err := b.Messages.ListByConversation(ctx, input.BusinessID, input.ConversationID, b.maxMessages(), "")
+		if err != nil {
+			return ports.CustomerSalesContext{}, err
+		}
+		context.RecentMessages = buildRecentMessageEvidence(page.Items, input.SourceMessageReference, now)
+	}
 
 	// Universal Catalog AI v3: every turn gets a bounded map of the whole
 	// active catalog. This is discovery metadata, not executable evidence.
@@ -209,37 +212,43 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 	return b.finalizeContext(ctx, context, input, now)
 }
 
-
- // listMessagesAfterCheckpoint collects a chronological, complete delta since
- // the summary's last persisted message. The repository pages DESC. Never
- // silently truncate uncovered history or assume a missing cursor is valid.
- func listMessagesAfterCheckpoint(ctx context.Context, repo ports.MessageRepository, businessID, conversationID, checkpointID string) ([]ports.CommunicationMessageRecord,error) {
-  const pageSize=64
-  const maxUncovered=256
-  cursor:=""
-  collected:=make([]ports.CommunicationMessageRecord,0,pageSize)
-  for {
-   page,err:=repo.ListByConversation(ctx,businessID,conversationID,pageSize,cursor)
-   if err!=nil{return nil,err}
-   found:=false
-   for _,m:=range page.Items {
-    if m.ID==checkpointID {found=true;break}
-    collected=append(collected,m)
-    if len(collected)>maxUncovered {
-      return nil,errors.New("conversation has too many messages not covered by committed summary")
-    }
-   }
-   if found {
-    slices.Reverse(collected)
-    return collected,nil
-   }
-   if !page.HasMore {return nil,errors.New("conversation summary checkpoint cannot be found in current history")}
-   if page.NextCursor==""||page.NextCursor==cursor {
-    return nil,errors.New("conversation checkpoint paging cursor did not advance")
-   }
-   cursor=page.NextCursor
-  }
- }
+// listMessagesAfterCheckpoint collects a chronological, complete delta since
+// the summary's last persisted message. The repository pages DESC. Never
+// silently truncate uncovered history or assume a missing cursor is valid.
+func listMessagesAfterCheckpoint(ctx context.Context, repo ports.MessageRepository, businessID, conversationID, checkpointID string) ([]ports.CommunicationMessageRecord, error) {
+	const pageSize = 64
+	const maxUncovered = 256
+	cursor := ""
+	collected := make([]ports.CommunicationMessageRecord, 0, pageSize)
+	for {
+		page, err := repo.ListByConversation(ctx, businessID, conversationID, pageSize, cursor)
+		if err != nil {
+			return nil, err
+		}
+		found := false
+		for _, m := range page.Items {
+			if m.ID == checkpointID {
+				found = true
+				break
+			}
+			collected = append(collected, m)
+			if len(collected) > maxUncovered {
+				return nil, errors.New("conversation has too many messages not covered by committed summary")
+			}
+		}
+		if found {
+			slices.Reverse(collected)
+			return collected, nil
+		}
+		if !page.HasMore {
+			return nil, errors.New("conversation summary checkpoint cannot be found in current history")
+		}
+		if page.NextCursor == "" || page.NextCursor == cursor {
+			return nil, errors.New("conversation checkpoint paging cursor did not advance")
+		}
+		cursor = page.NextCursor
+	}
+}
 
 func buildRecentMessageEvidence(records []ports.CommunicationMessageRecord, sourceReference string, now time.Time) []ports.CustomerSalesRecentMessageEvidence {
 	items := make([]ports.CustomerSalesRecentMessageEvidence, 0, len(records))
