@@ -141,3 +141,11 @@ No prompts, capability descriptions, business execution or catalog contracts wer
 - Case B: all twelve previous messages -> `handoff_to_human` (4,537 input and 116 output tokens).
 - Calls were separated by a 90-second pause; no automatic retry. Both real decisions met the expected capability. These results do **not** reproduce the original production-selected `respond_without_action`, whose exact request context, offered sales capabilities and sampled model response are not available. No claim of root cause or overall live reliability is implied.
 - CI tests using mocked providers check schema, routing and executor boundaries, **not** semantic choice accuracy. Live test lives behind the `gemini_live` build tag and is separately run by a secret-scoped GitHub Actions workflow.
+
+
+## Customer capability and conversation-memory authority — 18 October 2026
+
+- Customer and terminal evaluation system prompts now contain global guardrails only; the offered native tool descriptions define capability selection, including explicit requests to proceed, human handoff, catalog retrieval and available sales draft executors.
+- Conversation summarization is a READ-only informational inference and stores separate labeled lines for the customer's requests and the assistant's promises. Its third line explicitly states execution data is unavailable from the transcript. Summary text never establishes operational success.
+- The model's `verified_execution_state` is projected from the scoped current conversation repository record. It carries the current state, ownership and assignment. Sales transactions are taken from the trusted `sales` context only if available. Neither this snapshot nor a summary is a full historical operations ledger.
+- Semantic selection still belongs to the model; Go performs structural validation, policy authorization and execution. Historical memory cannot change a database lifecycle state. Tests for this trust separation are deterministic; previously passing live Gemini tests do not automatically qualify the new prompt until rerun.
