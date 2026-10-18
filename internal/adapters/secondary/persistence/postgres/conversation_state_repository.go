@@ -176,21 +176,27 @@ func (r *ConversationStateRepository) UpsertValidated(ctx context.Context, recor
 	return result, nil
 }
 
+// SaveSummaryIfVersion updates only summarization fields and requires the
+// state version seen before inference. No other writer can be overwritten.
+func (r *ConversationStateRepository) SaveSummaryIfVersion(ctx context.Context, businessID, conversationID string, expectedVersion int64, summary, lastMessageID string, coveredInbound int) (bool, error) {
+	if r == nil || r.adapter == nil {
+		return false, ErrPoolClosed
+	}
+	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(conversationID) == "" || strings.TrimSpace(lastMessageID) == "" || strings.TrimSpace(summary) == "" || coveredInbound < 0 || expectedVersion < 1 {
+		return false, invalidRepositoryInput("conversation_state.save_summary", "scope, version, checkpoint and summary required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return false, err
+	}
+	tag, err := executor.Exec(ctx, "UPDATE conversation_state SET summary=$1, summary_turn_count=$2, summary_last_message_id=$3::uuid, version=version+1, updated_at=NOW() WHERE business_id=$4::uuid AND conversation_id=$5::uuid AND version=$6", summary, coveredInbound, lastMessageID, businessID, conversationID, expectedVersion)
+	if err != nil {
+		return false, &RepositoryError{Operation: "conversation_state.save_summary", Kind: RepositoryInvalid, Err: err}
+	}
+	return tag.RowsAffected() == 1, nil
+}
 
- // SaveSummaryIfVersion updates only summarization fields and requires the
- // state version seen before inference. No other writer can be overwritten.
- func (r *ConversationStateRepository) SaveSummaryIfVersion(ctx context.Context, businessID, conversationID string, expectedVersion int64, summary, lastMessageID string, coveredInbound int) (bool, error) {
-  if r == nil || r.adapter == nil { return false, ErrPoolClosed }
-  if strings.TrimSpace(businessID) == "" || strings.TrimSpace(conversationID) == "" || strings.TrimSpace(lastMessageID) == "" || strings.TrimSpace(summary) == "" || coveredInbound < 0 || expectedVersion < 1 {
-   return false, invalidRepositoryInput("conversation_state.save_summary", "scope, version, checkpoint and summary required")
-  }
-  executor, err := r.adapter.Executor(ctx)
-  if err != nil { return false, err }
-  tag, err := executor.Exec(ctx, "UPDATE conversation_state SET summary=$1, summary_turn_count=$2, summary_last_message_id=$3::uuid, version=version+1, updated_at=NOW() WHERE business_id=$4::uuid AND conversation_id=$5::uuid AND version=$6", summary, coveredInbound, lastMessageID, businessID, conversationID, expectedVersion)
-  if err != nil { return false, &RepositoryError{Operation:"conversation_state.save_summary", Kind:RepositoryInvalid, Err:err} }
-  return tag.RowsAffected() == 1, nil
- }
- var _ ports.ConversationSummaryCheckpointRepository = (*ConversationStateRepository)(nil)
+var _ ports.ConversationSummaryCheckpointRepository = (*ConversationStateRepository)(nil)
 
 func nullableJSON(b []byte) any {
 	if len(b) == 0 || string(b) == "null" {

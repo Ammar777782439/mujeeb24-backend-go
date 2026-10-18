@@ -33,9 +33,9 @@ type ConversationStateRecord struct {
 	// SummaryLastMessageID is the database message ID at the end of the
 	// committed summary. Empty means an old, uncheckpointed summary.
 	SummaryLastMessageID string
-	Version          int64
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	Version              int64
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 type ConversationComparison struct {
