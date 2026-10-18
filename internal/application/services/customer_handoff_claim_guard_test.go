@@ -5,7 +5,7 @@ import "testing"
 func TestUnexecutedHandoffCommitmentSafetyCheck(t *testing.T) {
 	for _, tc := range []struct {
 		name, text string
-		claim bool
+		claim      bool
 	}{
 		{"promised direct transfer", "سأحوّلك لأحد الموظفين الآن.", true},
 		{"future passive transfer", "سيتم تحويلك إلى فريق خدمة العملاء.", true},
@@ -21,9 +21,9 @@ func TestUnexecutedHandoffCommitmentSafetyCheck(t *testing.T) {
 		{"plain greeting", "وعليكم السلام ورحمة الله وبركاته", false},
 		{"request for clarification", "ما المشكلة التي ترغب في حلها؟", false},
 	} {
-		t.Run(tc.name,func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			if got := containsUnexecutedHandoffCommitment(tc.text); got != tc.claim {
-				t.Fatalf("claim=%t want=%t for case=%s",got,tc.claim,tc.name)
+				t.Fatalf("claim=%t want=%t for case=%s", got, tc.claim, tc.name)
 			}
 		})
 	}

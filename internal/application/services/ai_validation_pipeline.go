@@ -133,9 +133,9 @@ func (p *ValidationPipeline) validateStructural(decision ports.CapabilityDecisio
 	if definition.SendsCustomerMessage && !definition.RequiresHuman &&
 		containsUnexecutedHandoffCommitment(decision.ResponseText) {
 		return &StageFailure{
-			Stage: ports.AIRunFailureStageValidation,
+			Stage:    ports.AIRunFailureStageValidation,
 			Category: ports.AIRunFailureCategoryInvalidAIOutput,
-			Reason: "unexecuted_handoff_claim_in_response_text",
+			Reason:   "unexecuted_handoff_claim_in_response_text",
 		}
 	}
 	for i, ref := range decision.Selected {

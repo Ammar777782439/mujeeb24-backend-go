@@ -88,24 +88,29 @@ func TestAuthorizationCannotReplaceCapabilityOrBypassPolicy(t *testing.T) {
 
 func TestStructuralValidationRejectsUnexecutedHumanHandoffPromises(t *testing.T) {
 	pipeline := &ValidationPipeline{}
-	for _,tc:=range []struct{name string;capability ports.CustomerSalesCapability;text string;reject bool}{
-		{"answer promises transfer",ports.CustomerSalesCapabilityRespondWithoutAction,"سأحوّلك إلى موظف خدمة العملاء",true},
-		{"answer says transfer complete",ports.CustomerSalesCapabilityRespondWithoutAction,"تم تحويل طلبك للفريق المختص.",true},
-		{"ask falsely promises followup",ports.CustomerSalesCapabilityAsk,"فريقنا سيتواصل معك قريباً. ما رقم الطلب؟",true},
-		{"neutral process explanation",ports.CustomerSalesCapabilityRespondWithoutAction,"يمكنك طلب المساعدة من موظف من خلال لوحة التحكم.",false},
-		{"genuine human handoff capability",ports.CustomerSalesCapabilityHandoff,"سأحوّلك إلى موظف خدمة العملاء",false},
-		{"ordinary clarification",ports.CustomerSalesCapabilityAsk,"هل تريد الشرح بالتفصيل؟",false},
+	for _, tc := range []struct {
+		name       string
+		capability ports.CustomerSalesCapability
+		text       string
+		reject     bool
 	}{
-		t.Run(tc.name,func(t *testing.T){
-			failure:=pipeline.validateStructural(ports.CapabilityDecision{Capability:tc.capability,ResponseText:tc.text})
-			if tc.reject{
-				if failure==nil||failure.Stage!=ports.AIRunFailureStageValidation||
-					failure.Category!=ports.AIRunFailureCategoryInvalidAIOutput||
-					failure.Reason!="unexecuted_handoff_claim_in_response_text"{
-					t.Fatalf("unsafe customer claim bypassed validation: %+v",failure)
+		{"answer promises transfer", ports.CustomerSalesCapabilityRespondWithoutAction, "سأحوّلك إلى موظف خدمة العملاء", true},
+		{"answer says transfer complete", ports.CustomerSalesCapabilityRespondWithoutAction, "تم تحويل طلبك للفريق المختص.", true},
+		{"ask falsely promises followup", ports.CustomerSalesCapabilityAsk, "فريقنا سيتواصل معك قريباً. ما رقم الطلب؟", true},
+		{"neutral process explanation", ports.CustomerSalesCapabilityRespondWithoutAction, "يمكنك طلب المساعدة من موظف من خلال لوحة التحكم.", false},
+		{"genuine human handoff capability", ports.CustomerSalesCapabilityHandoff, "سأحوّلك إلى موظف خدمة العملاء", false},
+		{"ordinary clarification", ports.CustomerSalesCapabilityAsk, "هل تريد الشرح بالتفصيل؟", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			failure := pipeline.validateStructural(ports.CapabilityDecision{Capability: tc.capability, ResponseText: tc.text})
+			if tc.reject {
+				if failure == nil || failure.Stage != ports.AIRunFailureStageValidation ||
+					failure.Category != ports.AIRunFailureCategoryInvalidAIOutput ||
+					failure.Reason != "unexecuted_handoff_claim_in_response_text" {
+					t.Fatalf("unsafe customer claim bypassed validation: %+v", failure)
 				}
-			}else if failure!=nil{
-				t.Fatalf("safe decision rejected: %+v",failure)
+			} else if failure != nil {
+				t.Fatalf("safe decision rejected: %+v", failure)
 			}
 		})
 	}
