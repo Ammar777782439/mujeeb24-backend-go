@@ -79,27 +79,29 @@ func TestTranscriptChunksBoundInferenceCalls(t *testing.T) {
 }
 
 func TestLoadMessagesAfterCheckpointNeverLosesUncoveredTurns(t *testing.T) {
- m:=checkpointMessages{pages:map[string]ports.MessagePage{
- "":{Items:[]ports.CommunicationMessageRecord{
- checkpointMsg("m6","inbound","أريد حجز موعد",0),
- checkpointMsg("m5","outbound","هذا مجرد وعد بالاتصال",-time.Minute),
- checkpointMsg("m4","inbound","طلب آخر",-2*time.Minute),
- },HasMore:true,NextCursor:"older"},
- "older":{Items:[]ports.CommunicationMessageRecord{
- checkpointMsg("m3","outbound","أهلاً",-3*time.Minute),
- checkpointMsg("m2","inbound","مرحباً",-4*time.Minute),
- }},
- }}
- got,err:=listMessagesAfterCheckpoint(context.Background(),m,"biz","conv","m2")
- if err!=nil{t.Fatal(err)}
- if len(got)!=4 || got[0].ID!="m3" || got[1].ID!="m4" || got[2].ID!="m5" || got[3].ID!="m6" {
-  t.Fatalf("uncovered messages must arrive in chronological order: %#v",got)
- }
+	m := checkpointMessages{pages: map[string]ports.MessagePage{
+		"": {Items: []ports.CommunicationMessageRecord{
+			checkpointMsg("m6", "inbound", "أريد حجز موعد", 0),
+			checkpointMsg("m5", "outbound", "هذا مجرد وعد بالاتصال", -time.Minute),
+			checkpointMsg("m4", "inbound", "طلب آخر", -2*time.Minute),
+		}, HasMore: true, NextCursor: "older"},
+		"older": {Items: []ports.CommunicationMessageRecord{
+			checkpointMsg("m3", "outbound", "أهلاً", -3*time.Minute),
+			checkpointMsg("m2", "inbound", "مرحباً", -4*time.Minute),
+		}},
+	}}
+	got, err := listMessagesAfterCheckpoint(context.Background(), m, "biz", "conv", "m2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 4 || got[0].ID != "m3" || got[1].ID != "m4" || got[2].ID != "m5" || got[3].ID != "m6" {
+		t.Fatalf("uncovered messages must arrive in chronological order: %#v", got)
+	}
 }
 func TestLoadMessagesAfterCheckpointRejectsUnknownAnchor(t *testing.T) {
- m:=checkpointMessages{pages:map[string]ports.MessagePage{
- "":{Items:[]ports.CommunicationMessageRecord{checkpointMsg("m3","inbound","test",0)}}}}
- if _,err:=listMessagesAfterCheckpoint(context.Background(),m,"biz","conv","missing");err==nil {
-  t.Fatal("missing summary checkpoint must not silently discard context")
- }
+	m := checkpointMessages{pages: map[string]ports.MessagePage{
+		"": {Items: []ports.CommunicationMessageRecord{checkpointMsg("m3", "inbound", "test", 0)}}}}
+	if _, err := listMessagesAfterCheckpoint(context.Background(), m, "biz", "conv", "missing"); err == nil {
+		t.Fatal("missing summary checkpoint must not silently discard context")
+	}
 }
