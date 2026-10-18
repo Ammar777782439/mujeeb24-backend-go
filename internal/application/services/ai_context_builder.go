@@ -56,7 +56,7 @@ func NewAutoReplyContextBuilder(businesses ports.BusinessRepository, conversatio
 		MaxItems:      5,
 		MaxOffers:     5,
 		MaxVariants:   5,
-		MaxMessages:   4, // Per ADR-038: reduced from 8 to 6 per IrisAgent/Microsoft Learn best-practice research (sliding window threshold).
+		MaxMessages:   4, // Exact recent context retained until the per-provider live comparisons pass.
 		MaxKnowledge:  10,
 		MaxPolicies:   10,
 	}

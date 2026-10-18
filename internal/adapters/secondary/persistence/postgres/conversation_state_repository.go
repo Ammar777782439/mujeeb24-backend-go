@@ -31,9 +31,9 @@ func (r *ConversationStateRepository) Get(ctx context.Context, businessID, conve
 	}
 	var rec ports.ConversationStateRecord
 	var focusJSON, previousJSON, comparisonJSON, preferencesJSON, constraintsJSON, pendingJSON []byte
-	var summary *string // nullable
-	err = executor.QueryRow(ctx, `SELECT business_id::text, conversation_id::text, focus, previous, comparison, preferences, constraints, pending, summary, summary_turn_count, version, created_at, updated_at FROM conversation_state WHERE business_id = $1::uuid AND conversation_id = $2::uuid`, businessID, conversationID).Scan(
-		&rec.BusinessID, &rec.ConversationID, &focusJSON, &previousJSON, &comparisonJSON, &preferencesJSON, &constraintsJSON, &pendingJSON, &summary, &rec.SummaryTurnCount, &rec.Version, &rec.CreatedAt, &rec.UpdatedAt,
+	var summary, checkpoint *string // nullable
+	err = executor.QueryRow(ctx, `SELECT business_id::text, conversation_id::text, focus, previous, comparison, preferences, constraints, pending, summary, summary_turn_count, summary_last_message_id::text, version, created_at, updated_at FROM conversation_state WHERE business_id = $1::uuid AND conversation_id = $2::uuid`, businessID, conversationID).Scan(
+		&rec.BusinessID, &rec.ConversationID, &focusJSON, &previousJSON, &comparisonJSON, &preferencesJSON, &constraintsJSON, &pendingJSON, &summary, &rec.SummaryTurnCount, &checkpoint, &rec.Version, &rec.CreatedAt, &rec.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -43,6 +43,9 @@ func (r *ConversationStateRepository) Get(ctx context.Context, businessID, conve
 	}
 	if summary != nil {
 		rec.Summary = *summary
+	}
+	if checkpoint != nil {
+		rec.SummaryLastMessageID = *checkpoint
 	}
 	if len(focusJSON) > 0 && string(focusJSON) != "null" {
 		var focus ports.ConversationFocus
@@ -125,10 +128,10 @@ func (r *ConversationStateRepository) UpsertValidated(ctx context.Context, recor
 	}
 	var result ports.ConversationStateRecord
 	var outFocus, outPrevious, outComparison, outPreferences, outConstraints, outPending []byte
-	var outSummary *string
+	var outSummary, outCheckpoint *string
 	err = executor.QueryRow(ctx, `
-                INSERT INTO conversation_state (business_id, conversation_id, focus, previous, comparison, preferences, constraints, pending, summary, summary_turn_count, version, created_at, updated_at)
-                VALUES ($1::uuid, $2::uuid, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10, $11, $12, $12)
+                INSERT INTO conversation_state (business_id, conversation_id, focus, previous, comparison, preferences, constraints, pending, summary, summary_turn_count, summary_last_message_id, version, created_at, updated_at)
+                VALUES ($1::uuid, $2::uuid, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10, $11::uuid, $12, $13, $13)
                 ON CONFLICT (business_id, conversation_id) DO UPDATE SET
                         focus = EXCLUDED.focus,
                         previous = EXCLUDED.previous,
@@ -136,20 +139,24 @@ func (r *ConversationStateRepository) UpsertValidated(ctx context.Context, recor
                         preferences = EXCLUDED.preferences,
                         constraints = EXCLUDED.constraints,
                         pending = EXCLUDED.pending,
-                        summary = EXCLUDED.summary,
-                        summary_turn_count = EXCLUDED.summary_turn_count,
+                        summary = conversation_state.summary,
+                        summary_turn_count = conversation_state.summary_turn_count,
+                        summary_last_message_id = conversation_state.summary_last_message_id,
                         version = conversation_state.version + 1,
                         updated_at = EXCLUDED.updated_at
-                RETURNING business_id::text, conversation_id::text, focus, previous, comparison, preferences, constraints, pending, summary, summary_turn_count, version, created_at, updated_at
+                RETURNING business_id::text, conversation_id::text, focus, previous, comparison, preferences, constraints, pending, summary, summary_turn_count, summary_last_message_id::text, version, created_at, updated_at
         `, record.BusinessID, record.ConversationID, nullableJSON(focusJSON), previousJSON, nullableJSON(comparisonJSON), preferencesJSON, constraintsJSON, pendingJSON,
-		nullableText(record.Summary), record.SummaryTurnCount, record.Version, now).Scan(
-		&result.BusinessID, &result.ConversationID, &outFocus, &outPrevious, &outComparison, &outPreferences, &outConstraints, &outPending, &outSummary, &result.SummaryTurnCount, &result.Version, &result.CreatedAt, &result.UpdatedAt,
+		nullableText(record.Summary), record.SummaryTurnCount, nullableText(record.SummaryLastMessageID), record.Version, now).Scan(
+		&result.BusinessID, &result.ConversationID, &outFocus, &outPrevious, &outComparison, &outPreferences, &outConstraints, &outPending, &outSummary, &result.SummaryTurnCount, &outCheckpoint, &result.Version, &result.CreatedAt, &result.UpdatedAt,
 	)
 	if err != nil {
 		return ports.ConversationStateRecord{}, &RepositoryError{Operation: "conversation_state.upsert", Kind: RepositoryInvalid, Err: err}
 	}
 	if outSummary != nil {
 		result.Summary = *outSummary
+	}
+	if outCheckpoint != nil {
+		result.SummaryLastMessageID = *outCheckpoint
 	}
 	if len(outFocus) > 0 && string(outFocus) != "null" {
 		var focus ports.ConversationFocus
@@ -168,6 +175,22 @@ func (r *ConversationStateRepository) UpsertValidated(ctx context.Context, recor
 	_ = json.Unmarshal(outPending, &result.Pending)
 	return result, nil
 }
+
+
+ // SaveSummaryIfVersion updates only summarization fields and requires the
+ // state version seen before inference. No other writer can be overwritten.
+ func (r *ConversationStateRepository) SaveSummaryIfVersion(ctx context.Context, businessID, conversationID string, expectedVersion int64, summary, lastMessageID string, coveredInbound int) (bool, error) {
+  if r == nil || r.adapter == nil { return false, ErrPoolClosed }
+  if strings.TrimSpace(businessID) == "" || strings.TrimSpace(conversationID) == "" || strings.TrimSpace(lastMessageID) == "" || strings.TrimSpace(summary) == "" || coveredInbound < 0 || expectedVersion < 1 {
+   return false, invalidRepositoryInput("conversation_state.save_summary", "scope, version, checkpoint and summary required")
+  }
+  executor, err := r.adapter.Executor(ctx)
+  if err != nil { return false, err }
+  tag, err := executor.Exec(ctx, "UPDATE conversation_state SET summary=$1, summary_turn_count=$2, summary_last_message_id=$3::uuid, version=version+1, updated_at=NOW() WHERE business_id=$4::uuid AND conversation_id=$5::uuid AND version=$6", summary, coveredInbound, lastMessageID, businessID, conversationID, expectedVersion)
+  if err != nil { return false, &RepositoryError{Operation:"conversation_state.save_summary", Kind:RepositoryInvalid, Err:err} }
+  return tag.RowsAffected() == 1, nil
+ }
+ var _ ports.ConversationSummaryCheckpointRepository = (*ConversationStateRepository)(nil)
 
 func nullableJSON(b []byte) any {
 	if len(b) == 0 || string(b) == "null" {
