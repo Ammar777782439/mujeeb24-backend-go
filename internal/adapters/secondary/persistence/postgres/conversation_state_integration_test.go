@@ -71,6 +71,25 @@ func TestConversationStateTenantIsolationAgainstPostgres(t *testing.T) {
 	if err != nil || got.Focus == nil || got.Focus.ID != focusID {
 		t.Fatalf("get: %#v err=%v", got, err)
 	}
+
+ // PostgreSQL integration: a background summarizer must never overwrite
+ // focus changes or a newer checkpoint. No production database is used here.
+ current,err:=repo.EnsureSummaryState(ctx,businessA,convA)
+ if err!=nil || current.Focus==nil || current.Focus.ID!=focusID{
+  t.Fatalf("idempotent summary initialization changed focus: %#v %v",current,err)
+ }
+ checkpointID:="70000000-0000-0000-0000-000000000041"
+ saved,err:=repo.SaveSummaryIfVersion(ctx,businessA,convA,current.Version,"ملخص محادثة عام",checkpointID,2)
+ if err!=nil||!saved{t.Fatalf("checkpoint save failed: %v saved=%t",err,saved)}
+ repeated,err:=repo.SaveSummaryIfVersion(ctx,businessA,convA,current.Version,"ملخص قديم",checkpointID,1)
+ if err!=nil||repeated{t.Fatalf("stale writer overwrote summary: %v saved=%t",err,repeated)}
+ _,err=repo.UpsertValidated(ctx,rec)
+ if err!=nil{t.Fatalf("concurrent state writer: %v",err)}
+ latest,err:=repo.Get(ctx,businessA,convA)
+ if err!=nil || latest.Summary!="ملخص محادثة عام" || latest.SummaryTurnCount!=2 ||
+ latest.SummaryLastMessageID!=checkpointID {
+  t.Fatalf("normal state update clobbered verified checkpoint: %#v %v",latest,err)
+ }
 	// Tenant isolation: B must not see A's state
 	if _, err := repo.Get(ctx, businessB, convA); !IsRepositoryKind(err, RepositoryNotFound) {
 		t.Fatalf("cross-tenant get must be not_found, got %v", err)
