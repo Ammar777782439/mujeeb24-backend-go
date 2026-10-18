@@ -217,8 +217,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		contextBuilder.Knowledge = postgres.NewKnowledgeDocumentRepository(database)
 		contextBuilder.Policies = postgres.NewBusinessPolicyRepository(database)
 		service.CustomerSalesContextBuilder = contextBuilder
-		// Summaries use the same native customer decision port as AutoReply.
-		// Provider fallback belongs to native transport, not this application.
+		// Summaries use the same configured provider router as AutoReply,
+		// but a generation-only port, never a customer-sales tool decision.
+		// Fallback belongs to native transport, not this application.
 		service.SummaryService = services.NewConversationSummaryService(
 			postgres.NewConversationStateRepository(database),
 			postgres.NewMessageRepository(database),

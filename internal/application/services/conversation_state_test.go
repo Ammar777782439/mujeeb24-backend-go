@@ -195,3 +195,10 @@ func TestSummaryRejectsEmptyAndOversizedProviderOutput(t *testing.T) {
 		}
 	}
 }
+
+func TestSummaryMissingProviderFailsClosed(t *testing.T) {
+	service := &ConversationSummaryService{}
+	if _, err := service.generateSummary(context.Background(), "biz", "conv", "customer", ""); err == nil {
+		t.Fatal("missing summarization port must return a safe error")
+	}
+}

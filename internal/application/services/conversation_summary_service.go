@@ -1,29 +1,8 @@
-// Package services — ConversationSummaryService implements the Summary +
-// Sliding Window hybrid context strategy (ADR-039).
-//
-// Per research findings (Microsoft Learn, getmaxim.ai, IrisAgent, mem0.ai,
-// Oracle blogs), the gold-standard pattern for managing LLM conversation
-// context is:
-//
-//	[Running Summary of older turns] + [Last N turns verbatim]
-//
-// The summary is regenerated every N turns (default 4) and captures:
-//   - Customer's stated intent and what they asked about
-//   - Products mentioned (item names, IDs)
-//   - Pricing / availability facts already disclosed
-//   - Open questions (pending)
-//   - Whether the customer asked for human handoff
-//
-// This dramatically reduces token consumption for long conversations while
-// preserving long-term context that would otherwise fall out of the
-// sliding window. The summary is stored in conversation_state.summary +
-// summary_turn_count.
-//
-// Trigger logic: After each successful AutoReply completion, the
-// ConversationSummaryService.MaybeSummarize() method is called. It counts
-// the conversation turns since the last summary; if >= SummaryInterval,
-// it calls Gemini to summarize the older turns (everything before the
-// sliding window) and persists the result.
+// Package services provides a checkpointed, provider-neutral conversation
+// memory strategy. PostgreSQL retains complete history; an Arabic rolling
+// summary records covered older messages, and recent uncheckpointed messages
+// are attached verbatim. Summary generation is distinct from sales capabilities
+// and never serves as evidence of operational execution.
 package services
 
 import (
@@ -66,17 +45,14 @@ func isRepositoryNotFound(err error) bool {
 	return strings.Contains(err.Error(), "not found")
 }
 
-// SummaryInterval is the number of conversation turns between summary
-// regenerations. Per Microsoft Learn guidance: "update the summary after
-// every 3-5 turns". We use 4 as the midpoint.
+// SummaryInterval is the minimum number of new inbound messages covered
+// before refreshing an existing checkpoint. Initial summaries are rebuilt
+// from actual history when no trusted checkpoint is present.
 const SummaryInterval = 4
 
-// SlidingWindowSize is the number of recent messages kept verbatim
-// alongside the summary. The summary covers everything older than this
-// window. Per IrisAgent: "switch to summarization if average turns >10";
-// our 4-turn summary + 4-turn sliding window = 8 turns covered, which
-// keeps us under the 10-turn threshold where summarization alone becomes
-// preferable.
+// SlidingWindowSize is the number of latest raw messages reserved outside
+// each summary checkpoint. The request builder additionally includes any
+// messages after the checkpoint, without assuming reply/customer alternation.
 const SlidingWindowSize = 4
 
 // ConversationSummaryService generates and maintains the running summary
@@ -400,6 +376,9 @@ func (s *ConversationSummaryService) generateSummary(
 	ctx context.Context,
 	businessID, conversationID, transcript, previousSummary string,
 ) (string, error) {
+	if s == nil || s.SummaryPort == nil {
+		return "", errors.New("conversation summary provider is not configured")
+	}
 
 	systemPrompt := `You are a context-memory summarizer for a multilingual, multi-sector merchant assistant.
 Summarize only the dialogue supplied. Produce concise, natural Arabic prose, not a fixed scenario or template.
