@@ -25,6 +25,9 @@ on:
       - 'internal/adapters/secondary/ai/gateway/customer_sales_capabilities.go'
       - 'internal/adapters/secondary/ai/gateway/sales_workflow_tools.go'
       - 'internal/application/services/conversation_state_test.go'
+      - 'internal/application/ports/conversation_state.go'
+      - 'internal/adapters/secondary/persistence/postgres/conversation_state_repository.go'
+      - 'internal/application/services/conversation_history_checkpoint_test.go'
       - 'internal/application/services/conversation_summary_service.go'
       - 'internal/domain/ai/prompts/prompts.go'
       - 'internal/adapters/secondary/ai/gateway/native_adapters_contract_test.go'
@@ -66,6 +69,9 @@ jobs:
             internal/adapters/secondary/ai/gateway/customer_sales_capabilities.go \
             internal/adapters/secondary/ai/gateway/sales_workflow_tools.go \
             internal/application/services/conversation_state_test.go \
+            internal/application/ports/conversation_state.go \
+            internal/adapters/secondary/persistence/postgres/conversation_state_repository.go \
+            internal/application/services/conversation_history_checkpoint_test.go \
             internal/application/services/conversation_summary_service.go \
             internal/adapters/secondary/ai/gateway/native_customer_adapter.go \
             internal/adapters/secondary/ai/gateway/native_adapters_contract_test.go \
