@@ -132,3 +132,12 @@ Low-PII trace fields:
 To troubleshoot an alleged transfer, correlate `run` and `conversation`, inspect `CAPABILITY_SELECTED`, confirm `CAPABILITY_AUTHORIZED`, then require `HUMAN_HANDOFF_COMMITTED` if a real handoff was selected. Delivery problems are tracked separately by outbox/worker logs. Never infer handoff from a reply's words.
 
 No prompts, capability descriptions, business execution or catalog contracts were changed as part of removing the Go lexical guard.
+
+## Real Gemini subscription-decision reproduction — 18 October 2026
+
+- Workflow: `Gemini 3.1 Live Subscription Selection`, run `39150209406`, on commit `9fbcca578d34561f698cd8dc706456d5d41ba9da`.
+- Google Gemini `gemini-3.1-flash-lite` was invoked directly with the existing GitHub Actions `GEMINI_API_KEY` secret and no DeepSeek standby or mocked response. The script uses an anonymized continuation of the user-provided customer conversation; it never calls a sales executor or sends a channel message.
+- Case A: last four previous messages plus an explicit reconstructed summary -> `handoff_to_human` (4,072 input and 125 output tokens).
+- Case B: all twelve previous messages -> `handoff_to_human` (4,537 input and 116 output tokens).
+- Calls were separated by a 90-second pause; no automatic retry. Both real decisions met the expected capability. These results do **not** reproduce the original production-selected `respond_without_action`, whose exact request context, offered sales capabilities and sampled model response are not available. No claim of root cause or overall live reliability is implied.
+- CI tests using mocked providers check schema, routing and executor boundaries, **not** semantic choice accuracy. Live test lives behind the `gemini_live` build tag and is separately run by a secret-scoped GitHub Actions workflow.
