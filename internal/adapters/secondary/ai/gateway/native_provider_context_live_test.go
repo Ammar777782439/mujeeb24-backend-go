@@ -49,7 +49,9 @@ func TestNativeProviderContextLive(t *testing.T) {
 		{"memory_plus_recent_four", history[len(history)-4:], summary},
 		{"entire_conversation", history, ""},
 	}
+	filter := strings.TrimSpace(os.Getenv("MUJEEB_LIVE_PROVIDER"))
 	for _, provider := range providers {
+		if filter != "" && provider.name != filter { continue }
 		t.Run(provider.name, func(t *testing.T) {
 			if strings.TrimSpace(provider.key) == "" {
 				t.Fatalf("required real %s API secret unavailable", provider.name)

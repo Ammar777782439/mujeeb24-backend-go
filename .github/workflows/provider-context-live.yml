@@ -6,22 +6,44 @@ on:
       - 'internal/adapters/secondary/ai/gateway/native_provider_context_live_test.go'
       - '.github/workflows/provider-context-live.yml'
   workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
   group: provider-context-live-${{ github.ref }}
   cancel-in-progress: false
-
 jobs:
-  real-provider-context:
+  real-gemini:
     runs-on: ubuntu-latest
-    timeout-minutes: 17
+    timeout-minutes: 15
     env:
       GOTOOLCHAIN: local
       MUJEEB_PROVIDER_CONTEXT_LIVE: '1'
+      MUJEEB_LIVE_PROVIDER: gemini
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/gemini-deepseek
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.2'
+          cache: true
+      - name: Require real gemini key
+        shell: bash
+        run: |
+          if [[ -z "$GEMINI_API_KEY" ]]; then
+            echo "::error::GEMINI_API_KEY secret missing: gemini live verification NOT performed"
+            exit 1
+          fi
+      - name: Run real gemini capability strategies and summary generation
+        run: go test -tags=provider_live -v -count=1 -run '^TestNativeProviderContextLive$' -timeout=13m ./internal/adapters/secondary/ai/gateway
+  real-deepseek:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GOTOOLCHAIN: local
+      MUJEEB_PROVIDER_CONTEXT_LIVE: '1'
+      MUJEEB_LIVE_PROVIDER: deepseek
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
     steps:
       - uses: actions/checkout@v4
@@ -31,13 +53,12 @@ jobs:
         with:
           go-version: '1.22.2'
           cache: true
-      - name: Verify both live keys are present without exposing them
+      - name: Require real deepseek key
         shell: bash
         run: |
-          set -euo pipefail
-          if [[ -z "$GEMINI_API_KEY" || -z "$DEEPSEEK_API_KEY" ]]; then
-            echo "::error::Both GEMINI_API_KEY and DEEPSEEK_API_KEY secrets are required to claim two-provider live validation"
+          if [[ -z "$DEEPSEEK_API_KEY" ]]; then
+            echo "::error::DEEPSEEK_API_KEY secret missing: deepseek live verification NOT performed"
             exit 1
           fi
-      - name: Run real two-provider context and independent summary evaluation
-        run: go test -tags=provider_live -v -count=1 -run '^TestNativeProviderContextLive$' -timeout=15m ./internal/adapters/secondary/ai/gateway
+      - name: Run real deepseek capability strategies and summary generation
+        run: go test -tags=provider_live -v -count=1 -run '^TestNativeProviderContextLive$' -timeout=8m ./internal/adapters/secondary/ai/gateway
