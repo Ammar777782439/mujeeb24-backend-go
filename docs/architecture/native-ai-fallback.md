@@ -113,27 +113,22 @@ even when the upstream request itself succeeded.
 
 Google REST reference: https://ai.google.dev/gemini-api/docs/generate-content/thought-signatures
 
-## Human-handoff integrity and operational diagnostics
+## Model-selected human handoff and operational diagnostics
 
-The model proposes one canonical capability. An `respond_without_action` or `ask_customer` result is NEVER converted into `handoff_to_human` based on the reply text. The text is not evidence of an executed human transfer.
+Gemini is responsible for interpreting the customer's intent and selecting exactly one offered canonical capability. Go does **not** classify natural-language customer-facing text, inspect handoff keywords, or relabel `respond_without_action` / `ask_customer` to `handoff_to_human`. This avoids a second heuristic intent engine in the application.
 
-The output-side safety check rejects high-confidence employee-transfer promises if the selected terminal capability does not authorize human handoff. This is **not** a keyword intent engine: it neither classifies the customer's intention nor selects a different capability. Detection has deliberately limited linguistic coverage, so tool descriptions and system instructions must also prohibit unexecuted promises.
+`handoff_to_human` must be explicitly selected by the model, then pass normal business policy and authorization. Authorized handoff requires the conversation lifecycle repository and commits `waiting_human` before creating its outbound reply. A promise in `response_text` is **not proof** that a handoff or employee assignment happened.
 
-This is defense-in-depth for explicit handoff commitments, not a claim of universal semantic equivalence for arbitrary wording. Production acceptance must track blocked-claim counts, model-selected Handoff frequency, policy outcomes, and delivered outbox states. Never auto-relabel an informational capability as human handoff or invent a human-assignment record. A rejected AI proposal is persisted as blocked, with `invalid_ai_output` and stable reason code `unexecuted_handoff_claim_in_response_text`. No outbound is queued, and no conversation lifecycle change occurs.
+**Known model risk:** A model can produce a misleading promise in an informational capability. By design, removing the Go phrase-check means that natural-language contradictions alone are not automatically blocked. Do not claim that this change guarantees correct model intent selection. Review model-selected capability rates and reply quality in provider evaluations, and refine the model contract or user experience through separately approved changes. No new Go language heuristics or silently invented handoff events are permitted.
 
-Authorized `handoff_to_human` requires the conversation lifecycle repository and commits `waiting_human` before creating the associated outbound reply. This marks the conversation for human attention, **not** an employee assignment or external message delivery confirmation.
+Go retains deterministic structural checks (offered capability, `response_text` presence, sales payload shape), catalog evidence and tenant ownership validation, merchant policy and authorization, and the single authorized execution/outbox path. These checks do not infer intent from text.
 
-Relevant low-PII operational logs:
-- `[AutoReply] CAPABILITY_SELECTED`: model's terminal capability and whether the source was the initial decision or full-catalog finalization.
-- `[AutoReply] UNEXECUTED_HANDOFF_CLAIM_BLOCKED`: a false handoff promise was blocked with a reason code and `outbound_enqueued=false`.
-- `[AutoReply] CAPABILITY_AUTHORIZED`: the canonical capability and merchant policy outcome.
-- `[AutoReply] HUMAN_HANDOFF_COMMITTED`: a committed `waiting_human` transition with outbound-enqueued status; does not claim an employee accepted the case.
-- `[AutoReply] COMPLETED`: execution result with run/conversation/capability/policy and outbox IDs.
+Low-PII trace fields:
+- `[AutoReply] CAPABILITY_SELECTED`: the model's terminal capability and whether source was initial or full-catalog decision.
+- `[AutoReply] CAPABILITY_AUTHORIZED`: the selected capability and policy outcome.
+- `[AutoReply] HUMAN_HANDOFF_COMMITTED`: persisted `waiting_human` and queued outbound in the same committed operation; it does not prove employee acceptance or external delivery.
+- `[AutoReply] COMPLETED`: operation outcome and outbox IDs.
 
-Production log-tracing sequence for one inbound message:
-1. Filter by the `run` and `conversation` fields from `CAPABILITY_SELECTED`.
-2. If `UNEXECUTED_HANDOFF_CLAIM_BLOCKED` appears, the message was rejected by validation, was NOT queued, and did not transition to human ownership.
-3. If `CAPABILITY_AUTHORIZED` has `effective=handoff_to_human` and `policy=allowed`, look for `HUMAN_HANDOFF_COMMITTED`; it proves `waiting_human` and outbound queueing were committed together (not employee assignment or provider delivery).
-4. If a message is queued but not delivered, investigate worker/outbox logs rather than changing AI capabilities. A transport error does not undo a committed state transition.
+To troubleshoot an alleged transfer, correlate `run` and `conversation`, inspect `CAPABILITY_SELECTED`, confirm `CAPABILITY_AUTHORIZED`, then require `HUMAN_HANDOFF_COMMITTED` if a real handoff was selected. Delivery problems are tracked separately by outbox/worker logs. Never infer handoff from a reply's words.
 
-Log lines must never dump free-form customer messages, API secrets or model response text. Provider delivery/retry outcomes are tracked separately by the existing outbox-worker logs. No automatic retry of a rejected semantic output is permitted under the runtime contract.
+No prompts, capability descriptions, business execution or catalog contracts were changed as part of removing the Go lexical guard.

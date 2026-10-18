@@ -360,12 +360,6 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		if failure != nil {
 			log.Printf("[AutoReply] VALIDATION_FAILED business=%s conversation=%s run=%s capability=%s stage=%s category=%s reason=%s",
 				businessID, conversationID, run.ID, proposal.Capability, failure.Stage, failure.Category, failure.Reason)
-			if failure.Reason == "unexecuted_handoff_claim_in_response_text" {
-				// Structured, stable operational signal. Customer text is
-				// deliberately excluded from this log.
-				log.Printf("[AutoReply] UNEXECUTED_HANDOFF_CLAIM_BLOCKED business=%s conversation=%s run=%s capability=%s reason_code=unexecuted_handoff_claim_in_response_text outbound_enqueued=false handoff_performed=false",
-					businessID, conversationID, run.ID, proposal.Capability)
-			}
 			s.markFailedSafe(ctx, run, failure.Stage, string(failure.Category), failure.Reason)
 			// Per contract ⑥ §21, no Execution when validation fails.
 			// Persist a "blocked" decision for audit trail.
