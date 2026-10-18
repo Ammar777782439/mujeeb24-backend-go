@@ -397,34 +397,40 @@ func TestFullCatalogCapabilityPolicyGatePreventsExecution(t *testing.T) {
 	}
 }
 
-func TestInformationalPromiseNeverSendsOrChangesConversationOwnership(t *testing.T) {
+func TestInformationalCapabilitiesDoNotExecuteHandoffBasedOnReplyWording(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		capability ports.CustomerSalesCapability
 		text       string
 	}{
-		{"initial informational promise", ports.CustomerSalesCapabilityRespondWithoutAction, "سيتم تحويلك إلى أحد ممثلي خدمة العملاء."},
-		{"followup disguised as clarification", ports.CustomerSalesCapabilityAsk, "سأقوم برفع طلبك للفريق. هل معك رقم الطلب؟"},
+		{"informational capability contains a handoff promise", ports.CustomerSalesCapabilityRespondWithoutAction, "سيتم تحويلك إلى أحد ممثلي خدمة العملاء."},
+		{"clarification capability contains a team promise", ports.CustomerSalesCapabilityAsk, "سأقوم برفع طلبك للفريق. هل معك رقم الطلب؟"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			service, runtime, outbox, runRepo := capabilityService()
 			conversations := &fakeConversationRuntimeRepository{}
 			service.Conversations = conversations
 			runtime.Decision = ports.CapabilityDecision{Capability: tc.capability, ResponseText: tc.text}
+
 			result, err := service.Handle(context.Background(), capabilityCommand())
-			if err != nil || result.Enqueued || outbox.calls != 0 {
-				t.Fatalf("unexecuted promise escaped into outbox: %+v err=%v", result, err)
+			if err != nil || !result.Enqueued || outbox.calls != 1 {
+				t.Fatalf("model-selected informational capability was not executed unchanged: result=%+v err=%v", result, err)
 			}
-			if len(conversations.transitions) != 0 {
-				t.Fatalf("blocked decision caused a conversation transition: %+v", conversations.transitions)
+			if result.Capability != string(tc.capability) {
+				t.Fatalf("Go replaced model-selected capability: %+v", result)
+			}
+			if len(conversations.transitions) != 1 || conversations.transitions[0].State == nil ||
+				*conversations.transitions[0].State != "waiting_customer" {
+				t.Fatalf("Go inferred human handoff from text: %+v", conversations.transitions)
 			}
 			audit := service.DecisionRepository.(*fakeDecisionRepository).record
-			if audit.Lifecycle != "expired" || audit.RequestedCapability == nil ||
-				*audit.RequestedCapability != string(tc.capability) {
-				t.Fatalf("blocked decision was not safely audited: %+v", audit)
+			if audit.RequestedCapability == nil || *audit.RequestedCapability != string(tc.capability) ||
+				audit.EffectiveCapability == nil || *audit.EffectiveCapability != string(tc.capability) ||
+				audit.RequiresHuman {
+				t.Fatalf("Go silently upgraded non-handoff decision: %+v", audit)
 			}
-			if runRepo.run.Status != ports.AIRunStatusFailed {
-				t.Fatalf("invalid promise did not fail AI Run: %s", runRepo.run.Status)
+			if runRepo.run.Status != ports.AIRunStatusCompleted {
+				t.Fatalf("informational capability was not completed: %s", runRepo.run.Status)
 			}
 		})
 	}
