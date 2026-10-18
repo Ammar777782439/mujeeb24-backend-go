@@ -130,4 +130,10 @@ Relevant low-PII operational logs:
 - `[AutoReply] HUMAN_HANDOFF_COMMITTED`: a committed `waiting_human` transition with outbound-enqueued status; does not claim an employee accepted the case.
 - `[AutoReply] COMPLETED`: execution result with run/conversation/capability/policy and outbox IDs.
 
+Production log-tracing sequence for one inbound message:
+1. Filter by the `run` and `conversation` fields from `CAPABILITY_SELECTED`.
+2. If `UNEXECUTED_HANDOFF_CLAIM_BLOCKED` appears, the message was rejected by validation, was NOT queued, and did not transition to human ownership.
+3. If `CAPABILITY_AUTHORIZED` has `effective=handoff_to_human` and `policy=allowed`, look for `HUMAN_HANDOFF_COMMITTED`; it proves `waiting_human` and outbound queueing were committed together (not employee assignment or provider delivery).
+4. If a message is queued but not delivered, investigate worker/outbox logs rather than changing AI capabilities. A transport error does not undo a committed state transition.
+
 Log lines must never dump free-form customer messages, API secrets or model response text. Provider delivery/retry outcomes are tracked separately by the existing outbox-worker logs. No automatic retry of a rejected semantic output is permitted under the runtime contract.
