@@ -218,9 +218,9 @@ func TestAutoReplyHandoffPreservesModelResponse(t *testing.T) {
 	if !result.Decision.RequiresHuman {
 		t.Fatal("handoff must require human follow-up")
 	}
-	if len(conversations.transitions)!=1 || conversations.transitions[0].State==nil ||
-		*conversations.transitions[0].State!="waiting_human" {
-		t.Fatalf("handoff response cannot be enqueued without waiting_human: %+v",conversations.transitions)
+	if len(conversations.transitions) != 1 || conversations.transitions[0].State == nil ||
+		*conversations.transitions[0].State != "waiting_human" {
+		t.Fatalf("handoff response cannot be enqueued without waiting_human: %+v", conversations.transitions)
 	}
 	text, err := DecodeInlineTextContentReference(outbound.record.ContentReference)
 	if err != nil || text != "model suggests subscribe" {
