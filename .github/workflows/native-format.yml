@@ -30,6 +30,8 @@ on:
       - 'internal/application/ports/conversation_state.go'
       - 'internal/adapters/secondary/persistence/postgres/conversation_state_repository.go'
       - 'internal/application/services/conversation_history_checkpoint_test.go'
+      - 'internal/application/services/ai_context_builder.go'
+      - 'internal/adapters/secondary/persistence/postgres/conversation_state_integration_test.go'
       - 'internal/application/services/conversation_summary_service.go'
       - 'internal/domain/ai/prompts/prompts.go'
       - 'internal/adapters/secondary/ai/gateway/native_adapters_contract_test.go'
@@ -76,6 +78,8 @@ jobs:
             internal/application/ports/conversation_state.go \
             internal/adapters/secondary/persistence/postgres/conversation_state_repository.go \
             internal/application/services/conversation_history_checkpoint_test.go \
+            internal/application/services/ai_context_builder.go \
+            internal/adapters/secondary/persistence/postgres/conversation_state_integration_test.go \
             internal/application/services/conversation_summary_service.go \
             internal/adapters/secondary/ai/gateway/native_customer_adapter.go \
             internal/adapters/secondary/ai/gateway/native_adapters_contract_test.go \
