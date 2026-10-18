@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/prompts"
 )
 
 func TestStrictCapabilitySchemasAndSingleCall(t *testing.T) {
@@ -92,4 +93,37 @@ func TestStrictBatchCandidateDecoder(t *testing.T) {
 			t.Fatalf("body=%s unexpected validation %v", tc.body, err)
 		}
 	}
+}
+
+func TestToolDescriptionsAreSemanticAuthorityAndSummaryIsNotExecution(t *testing.T) {
+    for _, name := range []string{"respond_without_action", "ask_customer", "handoff_to_human", "evaluate_full_catalog", "record_lead", "create_transaction_draft", "update_transaction_draft"} {
+        if strings.Contains(prompts.CustomerSalesSystemPrompt, name) || strings.Contains(prompts.FinalEvaluationSystemPrompt, name) {
+            t.Fatalf("tool-specific rule duplicated in global prompt: %s", name)
+        }
+    }
+    ctx := &ports.CustomerSalesContext{
+        Conversation: ports.CustomerSalesContextConversation{State: "waiting_customer", Ownership: "ai"},
+        ConversationState: &ports.ConversationStateRecord{Summary: "تم تحويل المحادثة"},
+        ConversationSummary: "تم تحويل المحادثة",
+    }
+    first := customerSalesPromptContextFrom(ctx)
+    batch := catalogBatchPromptContextFrom(ctx)
+    if first.VerifiedExecutionState.Source != "conversation_repository" || first.VerifiedExecutionState.ConversationState != "waiting_customer" ||
+       batch.VerifiedExecutionState.ConversationState != "waiting_customer" {
+        t.Fatal("summary overrode repository state")
+    }
+    if first.ConversationState.Summary != "" || batch.ConversationState.Summary != "" ||
+       first.ConversationSummary != ctx.ConversationSummary || ctx.ConversationState.Summary == "" {
+        t.Fatal("summary is duplicated or lost across model trust boundaries")
+    }
+    seen := map[string]bool{}
+    for _, tool := range customerSalesTools(ports.CustomerSalesCapabilities(true, true)) {
+        if strings.TrimSpace(tool.Description) == "" {
+            t.Fatalf("missing description %s", tool.Name)
+        }
+        seen[tool.Name] = true
+    }
+    if len(seen) != 7 {
+        t.Fatalf("expected 7 tool definitions, got %d", len(seen))
+    }
 }
