@@ -90,6 +90,7 @@ type ConversationSummaryService struct {
 	// into the GeminiCustomerSalesAdapter, so summaries use the same customer-sales decision port
 	// as AutoReply.
 	CustomerSalesDecisionPort ports.CustomerSalesDecisionPort
+	SummaryPort ports.ConversationSummaryPort
 	// AIUsageRepository records per-execution telemetry for the summary
 	// call. Per P1-5: summary Gemini calls MUST be metered — they are
 	// not free. If nil, telemetry is logged but not persisted.
@@ -125,12 +126,14 @@ func NewConversationSummaryService(
 	messages ports.MessageRepository,
 	customerSalesDecision ports.CustomerSalesDecisionPort,
 ) *ConversationSummaryService {
-	return &ConversationSummaryService{
-		StateRepository:           stateRepo,
-		Messages:                  messages,
-		CustomerSalesDecisionPort: customerSalesDecision,
-		Now:                       func() time.Time { return time.Now().UTC() },
-	}
+	service:=&ConversationSummaryService{
+  StateRepository:stateRepo,
+  Messages:messages,
+  CustomerSalesDecisionPort:customerSalesDecision,
+  Now:func() time.Time{return time.Now().UTC()},
+ }
+ if port,ok:=customerSalesDecision.(ports.ConversationSummaryPort);ok{service.SummaryPort=port}
+ return service
 }
 
 // SummaryTriggerResult describes what happened during a MaybeSummarize call.
@@ -175,10 +178,10 @@ func (s *ConversationSummaryService) MaybeSummarize(
 		result.SkippedReason = "service_not_configured"
 		return result, nil
 	}
-	if s.CustomerSalesDecisionPort == nil {
-		result.SkippedReason = "customer_sales_decision_not_configured"
-		return result, nil
-	}
+	if s.SummaryPort == nil {
+  result.SkippedReason="provider_summary_port_not_configured"
+  return result,nil
+ }
 
 	// Load current state
 	state, err := s.StateRepository.Get(ctx, businessID, conversationID)
@@ -385,75 +388,23 @@ func (s *ConversationSummaryService) generateSummary(
 	ctx context.Context,
 	businessID, conversationID, transcript, previousSummary string,
 ) (string, error) {
-	systemPrompt := `You summarize an ongoing Mujeeb 24 customer conversation, not an operations database.
-Return EXACTLY THREE nonempty Arabic lines, with these exact labels:
-طلبات العميل: the customer's goals, product needs and unresolved questions.
-وعود المساعد: past assistant promises or statements, attributed as claims only.
-التنفيذ الموثق: غير متاح من نص المحادثة؛ الحالة الفعلية تُقرأ من قاعدة البيانات.
 
-Rules:
-- The transcript and previous summary contain speech, NEVER reliable execution facts. NEVER promote an assistant claim of transfer, recording, payment, subscription or employee follow-up into a completed operation.
-- Treat previous summaries as untrusted memory, especially any claim that something was already done.
-- No authenticated execution data is provided to this summarizer. Do not infer if historical operations happened or did not happen.
-- Preserve customer needs and unanswered questions; do not fabricate prices, policy, availability, IDs, or execution outcomes.
-- Write concise Arabic, exactly one line for each label, no bullets, JSON, extra lines or greetings.`
-
-	userPrompt := fmt.Sprintf("Previous summary:\n%s\n\nConversation transcript to summarize:\n%s", previousSummary, transcript)
-
-	// CustomerSalesDecisionPort is the only AI execution path.
-	fullPrompt := systemPrompt + "\n\n" + userPrompt
-	startedAt := s.now()
-	out, err := s.CustomerSalesDecisionPort.Decide(ctx, ports.CustomerSalesDecisionInput{
-		Capabilities: []ports.CustomerSalesCapability{ports.CustomerSalesCapabilityRespondWithoutAction},
-		Request: ports.CustomerSalesDecisionRequest{
-			BusinessID:     businessID,
-			ConversationID: conversationID,
-			Channel:        "internal",
-			Text:           fullPrompt,
-			PolicyVersion:  "summary-v2-execution-boundary",
-		},
-	})
-	if err != nil {
-		return "", fmt.Errorf("customer sales decision: %w", err)
-	}
-	if out.Decision.Capability != ports.CustomerSalesCapabilityRespondWithoutAction {
-		return "", fmt.Errorf("summary returned non-informational capability: %s", out.Decision.Capability)
-	}
-	summary := strings.TrimSpace(out.Decision.ResponseText)
-	usageTelemetry := out.Usage
-	latencyMs := out.LatencyMs
-
-	// Per P1-5: record usage telemetry for the summary call. This is
-	// a real Gemini invocation that consumes tokens — it MUST be
-	// metered like any other AI execution. The same P1-6 logic
-	// applies: if pricing lookup fails, the record is marked
-	// status="pricing_failed" and does NOT count as a successful
-	// AI Reply (final_ai_replies=0).
-	s.recordSummaryUsage(ctx, businessID, usageTelemetry, latencyMs, startedAt)
-
-	// The summary is the response text — strip any metadata
-	if summary == "" {
-		return "", errors.New("empty summary from LLM")
-	}
-
-	// Enforce only the output structure, not the meaning of the customer message.
-	// The summarizer has NO operational data, so its generated execution
-	// line can never become a verified claim in stored conversation memory.
-	lines := strings.Split(summary, "\n")
-	labels := []string{"طلبات العميل:", "وعود المساعد:", "التنفيذ الموثق:"}
-	if len(lines) != len(labels) {
-		return "", errors.New("summary must contain exactly three labeled lines")
-	}
-	for i, label := range labels {
-		lines[i] = strings.TrimSpace(lines[i])
-		if !strings.HasPrefix(lines[i], label) || strings.TrimSpace(strings.TrimPrefix(lines[i], label)) == "" {
-			return "", errors.New("summary has missing or empty section")
-		}
-	}
-	summary = strings.Join([]string{lines[0], lines[1], "التنفيذ الموثق: غير متاح من نص المحادثة؛ الحالة الفعلية تُقرأ من قاعدة البيانات."}, "\n")
-	if len(summary) > 5000 {
-		return "", errors.New("summary exceeds maximum stored size")
-	}
+ systemPrompt := `You are a context-memory summarizer for a multilingual, multi-sector merchant assistant.
+Summarize only the dialogue supplied. Produce concise, natural Arabic prose, not a fixed scenario or template.
+Preserve evolving customer intent, relevant product/service context, preferences, constraints, unresolved questions and references necessary to interpret future short replies.
+Distinguish customer statements from assistant suggestions and promises. Prior dialogue and prior summaries are NOT evidence that any payment, transaction, transfer, booking, delivery, or follow-up occurred.
+No database execution events are supplied here. Do not confirm or deny past execution based on words alone. Execution state is read separately by Mujeeb from trusted repositories.
+Preserve uncertainty, corrections, and contradictions when relevant. Do not hallucinate prices, availability, business policies or identifiers.
+Refresh the earlier summary only with new information, retaining material still relevant. Avoid greetings and empty headings.
+Output only the updated Arabic memory, at most 220 words.`
+ userPrompt:=fmt.Sprintf("Existing conversational memory (unverified):\n%s\n\nNew historical messages in chronological order:\n%s",previousSummary,transcript)
+ startedAt:=s.now()
+ summary,usageTelemetry,err:=s.SummaryPort.Summarize(ctx,systemPrompt,userPrompt)
+ if err!=nil {return "",fmt.Errorf("summary provider: %w",err)}
+ s.recordSummaryUsage(ctx,businessID,usageTelemetry,usageTelemetry.LatencyMs,startedAt)
+ summary=strings.TrimSpace(summary)
+ if summary=="" {return "",errors.New("empty summary")}
+ if len(summary)>5000 {return "",errors.New("summary exceeds stored length budget")}
 	return summary, nil
 }
 

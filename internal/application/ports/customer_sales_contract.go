@@ -75,6 +75,13 @@ type CustomerSalesDecisionPort interface {
 	Decide(ctx context.Context, input CustomerSalesDecisionInput) (CustomerSalesDecisionOutput, error)
 }
 
+// ConversationSummaryPort is a provider-neutral, generation-only task.
+// It deliberately exposes NO customer-sales capability tools or execution.
+// Gemini and DeepSeek receive the same system/user messages through this port.
+type ConversationSummaryPort interface {
+ Summarize(ctx context.Context, systemInstruction, transcript string) (string, CustomerSalesUsageTelemetry, error)
+}
+
 // CustomerSalesDecisionInput is the complete request envelope for CustomerSalesDecisionPort.Decide.
 type CustomerSalesDecisionInput struct {
 	Capabilities []CustomerSalesCapability
