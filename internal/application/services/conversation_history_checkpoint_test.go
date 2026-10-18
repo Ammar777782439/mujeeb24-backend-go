@@ -1,8 +1,8 @@
 package services
 
 import (
-	"fmt"
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -108,39 +108,44 @@ func TestLoadMessagesAfterCheckpointRejectsUnknownAnchor(t *testing.T) {
 }
 
 type initiallyMissingSummaryState struct {
- ensured int
- saved bool
+	ensured int
+	saved   bool
 }
-func (s *initiallyMissingSummaryState) Get(context.Context,string,string)(ports.ConversationStateRecord,error){
- return ports.ConversationStateRecord{},errNotFoundStub{}
+
+func (s *initiallyMissingSummaryState) Get(context.Context, string, string) (ports.ConversationStateRecord, error) {
+	return ports.ConversationStateRecord{}, errNotFoundStub{}
 }
-func (s *initiallyMissingSummaryState) UpsertValidated(_ context.Context,r ports.ConversationStateRecord)(ports.ConversationStateRecord,error){
- return r,nil
+func (s *initiallyMissingSummaryState) UpsertValidated(_ context.Context, r ports.ConversationStateRecord) (ports.ConversationStateRecord, error) {
+	return r, nil
 }
-func (s *initiallyMissingSummaryState) EnsureSummaryState(_ context.Context,businessID,conversationID string)(ports.ConversationStateRecord,error){
- s.ensured++
- return ports.ConversationStateRecord{BusinessID:businessID,ConversationID:conversationID,Version:1},nil
+func (s *initiallyMissingSummaryState) EnsureSummaryState(_ context.Context, businessID, conversationID string) (ports.ConversationStateRecord, error) {
+	s.ensured++
+	return ports.ConversationStateRecord{BusinessID: businessID, ConversationID: conversationID, Version: 1}, nil
 }
-func (s *initiallyMissingSummaryState) SaveSummaryIfVersion(_ context.Context,_,_ string,version int64,summary,lastID string,coveredInbound int)(bool,error){
- s.saved=version==1 && lastID=="m6" && summary!="" && coveredInbound==3
- return s.saved,nil
+func (s *initiallyMissingSummaryState) SaveSummaryIfVersion(_ context.Context, _, _ string, version int64, summary, lastID string, coveredInbound int) (bool, error) {
+	s.saved = version == 1 && lastID == "m6" && summary != "" && coveredInbound == 3
+	return s.saved, nil
 }
-func TestSummaryColdStartContinuesAfterCreatingMissingState(t *testing.T){
- repo:=&initiallyMissingSummaryState{}
- var msgs []ports.CommunicationMessageRecord
- for i:=10;i>=1;i--{
-  id:=fmt.Sprintf("m%d",i)
-  direction:="outbound"
-  if i%2==1 {direction="inbound"}
-  msgs=append(msgs,checkpointMsg(id,direction,id,time.Duration(-i)*time.Minute))
- }
- provider:=&summaryGenerationStub{output:"العميل ما زال بحاجة إلى معلومات عن موعد خدمة ولم يتأكد تنفيذ أي إجراء"}
- service:=&ConversationSummaryService{StateRepository:repo,Messages:checkpointMessages{pages:map[string]ports.MessagePage{
-   "":{Items:msgs},
- }},SummaryPort:provider}
- out,err:=service.MaybeSummarize(context.Background(),"business","conversation")
- if err!=nil {t.Fatal(err)}
- if !out.Summarized || repo.ensured!=1 || !repo.saved || provider.calls!=1 {
-  t.Fatalf("cold-start summary did not commit: result=%#v, state=%#v, provider_calls=%d",out,repo,provider.calls)
- }
+func TestSummaryColdStartContinuesAfterCreatingMissingState(t *testing.T) {
+	repo := &initiallyMissingSummaryState{}
+	var msgs []ports.CommunicationMessageRecord
+	for i := 10; i >= 1; i-- {
+		id := fmt.Sprintf("m%d", i)
+		direction := "outbound"
+		if i%2 == 1 {
+			direction = "inbound"
+		}
+		msgs = append(msgs, checkpointMsg(id, direction, id, time.Duration(-i)*time.Minute))
+	}
+	provider := &summaryGenerationStub{output: "العميل ما زال بحاجة إلى معلومات عن موعد خدمة ولم يتأكد تنفيذ أي إجراء"}
+	service := &ConversationSummaryService{StateRepository: repo, Messages: checkpointMessages{pages: map[string]ports.MessagePage{
+		"": {Items: msgs},
+	}}, SummaryPort: provider}
+	out, err := service.MaybeSummarize(context.Background(), "business", "conversation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.Summarized || repo.ensured != 1 || !repo.saved || provider.calls != 1 {
+		t.Fatalf("cold-start summary did not commit: result=%#v, state=%#v, provider_calls=%d", out, repo, provider.calls)
+	}
 }
