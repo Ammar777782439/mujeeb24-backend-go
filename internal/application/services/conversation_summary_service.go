@@ -90,7 +90,7 @@ type ConversationSummaryService struct {
 	// into the GeminiCustomerSalesAdapter, so summaries use the same customer-sales decision port
 	// as AutoReply.
 	CustomerSalesDecisionPort ports.CustomerSalesDecisionPort
-	SummaryPort ports.ConversationSummaryPort
+	SummaryPort               ports.ConversationSummaryPort
 	// AIUsageRepository records per-execution telemetry for the summary
 	// call. Per P1-5: summary Gemini calls MUST be metered — they are
 	// not free. If nil, telemetry is logged but not persisted.
@@ -126,14 +126,16 @@ func NewConversationSummaryService(
 	messages ports.MessageRepository,
 	customerSalesDecision ports.CustomerSalesDecisionPort,
 ) *ConversationSummaryService {
-	service:=&ConversationSummaryService{
-  StateRepository:stateRepo,
-  Messages:messages,
-  CustomerSalesDecisionPort:customerSalesDecision,
-  Now:func() time.Time{return time.Now().UTC()},
- }
- if port,ok:=customerSalesDecision.(ports.ConversationSummaryPort);ok{service.SummaryPort=port}
- return service
+	service := &ConversationSummaryService{
+		StateRepository:           stateRepo,
+		Messages:                  messages,
+		CustomerSalesDecisionPort: customerSalesDecision,
+		Now:                       func() time.Time { return time.Now().UTC() },
+	}
+	if port, ok := customerSalesDecision.(ports.ConversationSummaryPort); ok {
+		service.SummaryPort = port
+	}
+	return service
 }
 
 // SummaryTriggerResult describes what happened during a MaybeSummarize call.
@@ -179,9 +181,9 @@ func (s *ConversationSummaryService) MaybeSummarize(
 		return result, nil
 	}
 	if s.SummaryPort == nil {
-  result.SkippedReason="provider_summary_port_not_configured"
-  return result,nil
- }
+		result.SkippedReason = "provider_summary_port_not_configured"
+		return result, nil
+	}
 
 	// Load current state
 	state, err := s.StateRepository.Get(ctx, businessID, conversationID)
@@ -389,7 +391,7 @@ func (s *ConversationSummaryService) generateSummary(
 	businessID, conversationID, transcript, previousSummary string,
 ) (string, error) {
 
- systemPrompt := `You are a context-memory summarizer for a multilingual, multi-sector merchant assistant.
+	systemPrompt := `You are a context-memory summarizer for a multilingual, multi-sector merchant assistant.
 Summarize only the dialogue supplied. Produce concise, natural Arabic prose, not a fixed scenario or template.
 Preserve evolving customer intent, relevant product/service context, preferences, constraints, unresolved questions and references necessary to interpret future short replies.
 Distinguish customer statements from assistant suggestions and promises. Prior dialogue and prior summaries are NOT evidence that any payment, transaction, transfer, booking, delivery, or follow-up occurred.
@@ -397,14 +399,20 @@ No database execution events are supplied here. Do not confirm or deny past exec
 Preserve uncertainty, corrections, and contradictions when relevant. Do not hallucinate prices, availability, business policies or identifiers.
 Refresh the earlier summary only with new information, retaining material still relevant. Avoid greetings and empty headings.
 Output only the updated Arabic memory, at most 220 words.`
- userPrompt:=fmt.Sprintf("Existing conversational memory (unverified):\n%s\n\nNew historical messages in chronological order:\n%s",previousSummary,transcript)
- startedAt:=s.now()
- summary,usageTelemetry,err:=s.SummaryPort.Summarize(ctx,systemPrompt,userPrompt)
- if err!=nil {return "",fmt.Errorf("summary provider: %w",err)}
- s.recordSummaryUsage(ctx,businessID,usageTelemetry,usageTelemetry.LatencyMs,startedAt)
- summary=strings.TrimSpace(summary)
- if summary=="" {return "",errors.New("empty summary")}
- if len(summary)>5000 {return "",errors.New("summary exceeds stored length budget")}
+	userPrompt := fmt.Sprintf("Existing conversational memory (unverified):\n%s\n\nNew historical messages in chronological order:\n%s", previousSummary, transcript)
+	startedAt := s.now()
+	summary, usageTelemetry, err := s.SummaryPort.Summarize(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return "", fmt.Errorf("summary provider: %w", err)
+	}
+	s.recordSummaryUsage(ctx, businessID, usageTelemetry, usageTelemetry.LatencyMs, startedAt)
+	summary = strings.TrimSpace(summary)
+	if summary == "" {
+		return "", errors.New("empty summary")
+	}
+	if len(summary) > 5000 {
+		return "", errors.New("summary exceeds stored length budget")
+	}
 	return summary, nil
 }
 

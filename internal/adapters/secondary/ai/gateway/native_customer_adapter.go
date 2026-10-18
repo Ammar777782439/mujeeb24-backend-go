@@ -112,36 +112,42 @@ func (c *NativeCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cus
 // Summarize is a separate non-tool call to the same configured gateway.
 // No capability can be selected or executed during memory compression.
 func (c *NativeCustomerSalesAdapter) Summarize(ctx context.Context, systemInstruction, transcript string) (string, ports.CustomerSalesUsageTelemetry, error) {
- if c==nil || c.client==nil || strings.TrimSpace(systemInstruction)=="" || strings.TrimSpace(transcript)=="" {
-  return "", ports.CustomerSalesUsageTelemetry{}, errors.New("summary requires a configured model and content")
- }
- if len([]rune(systemInstruction))+len([]rune(transcript))>c.maxInputCharacters {
-  return "", ports.CustomerSalesUsageTelemetry{}, errors.New("summary exceeds provider context budget")
- }
- outputLimit:=c.maxOutputTokens
- if outputLimit>1200 {outputLimit=1200}
- request:=chatCompletionRequest{Model:c.model,Messages:[]chatCompletionMessage{
-  {Role:"system",Content:systemInstruction},{Role:"user",Content:transcript},
- },MaxTokens:outputLimit,Stream:false}
- started:=time.Now()
- raw,modelInfo,err:=c.client.Complete(ctx,request)
- if err!=nil {return "",ports.CustomerSalesUsageTelemetry{},err}
- normalized,err:=normalizeNativeResponse(raw)
- if err!=nil{return "",ports.CustomerSalesUsageTelemetry{},err}
- if len(normalized.FunctionCalls)!=0 || strings.TrimSpace(normalized.Text)=="" {
-  return "",ports.CustomerSalesUsageTelemetry{},errors.New("summary must be plain text without tool calls")
- }
- if int64(normalized.Usage.PromptTokens)!=modelInfo.InputTokens ||
-  int64(normalized.Usage.CompletionTokens)!=modelInfo.OutputTokens ||
-  int64(normalized.Usage.CachedTokens)!=modelInfo.CachedTokens ||
-  len(modelInfo.Trace.Attempts)<1 {
-  return "",ports.CustomerSalesUsageTelemetry{},errors.New("summary provider usage mismatch")
- }
- return strings.TrimSpace(normalized.Text), ports.CustomerSalesUsageTelemetry{
-  Provider:modelInfo.Provider,Model:modelInfo.Model,InputTokens:normalized.Usage.PromptTokens,
-  OutputTokens:normalized.Usage.CompletionTokens,CachedTokens:normalized.Usage.CachedTokens,
-  ModelRequests:len(modelInfo.Trace.Attempts),LatencyMs:time.Since(started).Milliseconds(),
- },nil
+	if c == nil || c.client == nil || strings.TrimSpace(systemInstruction) == "" || strings.TrimSpace(transcript) == "" {
+		return "", ports.CustomerSalesUsageTelemetry{}, errors.New("summary requires a configured model and content")
+	}
+	if len([]rune(systemInstruction))+len([]rune(transcript)) > c.maxInputCharacters {
+		return "", ports.CustomerSalesUsageTelemetry{}, errors.New("summary exceeds provider context budget")
+	}
+	outputLimit := c.maxOutputTokens
+	if outputLimit > 1200 {
+		outputLimit = 1200
+	}
+	request := chatCompletionRequest{Model: c.model, Messages: []chatCompletionMessage{
+		{Role: "system", Content: systemInstruction}, {Role: "user", Content: transcript},
+	}, MaxTokens: outputLimit, Stream: false}
+	started := time.Now()
+	raw, modelInfo, err := c.client.Complete(ctx, request)
+	if err != nil {
+		return "", ports.CustomerSalesUsageTelemetry{}, err
+	}
+	normalized, err := normalizeNativeResponse(raw)
+	if err != nil {
+		return "", ports.CustomerSalesUsageTelemetry{}, err
+	}
+	if len(normalized.FunctionCalls) != 0 || strings.TrimSpace(normalized.Text) == "" {
+		return "", ports.CustomerSalesUsageTelemetry{}, errors.New("summary must be plain text without tool calls")
+	}
+	if int64(normalized.Usage.PromptTokens) != modelInfo.InputTokens ||
+		int64(normalized.Usage.CompletionTokens) != modelInfo.OutputTokens ||
+		int64(normalized.Usage.CachedTokens) != modelInfo.CachedTokens ||
+		len(modelInfo.Trace.Attempts) < 1 {
+		return "", ports.CustomerSalesUsageTelemetry{}, errors.New("summary provider usage mismatch")
+	}
+	return strings.TrimSpace(normalized.Text), ports.CustomerSalesUsageTelemetry{
+		Provider: modelInfo.Provider, Model: modelInfo.Model, InputTokens: normalized.Usage.PromptTokens,
+		OutputTokens: normalized.Usage.CompletionTokens, CachedTokens: normalized.Usage.CachedTokens,
+		ModelRequests: len(modelInfo.Trace.Attempts), LatencyMs: time.Since(started).Milliseconds(),
+	}, nil
 }
 
 var _ ports.ConversationSummaryPort = (*NativeCustomerSalesAdapter)(nil)
