@@ -195,150 +195,184 @@ func (s *ConversationSummaryService) MaybeSummarize(
 	result.OldSummary = state.Summary
 	result.PreviousTurnCount = state.SummaryTurnCount
 
-
- // Fetch in pages because the default repository page is newest-first.
- // Stop rather than claim context coverage when the history exceeds the
- // configured safety bound. No change is persisted on an incomplete read.
- allMessages, err := listConversationHistory(ctx, s.Messages, businessID, conversationID)
- if err != nil {
-   result.SkippedReason = "history_incomplete"
-   return result, err
- }
- totalInbound := 0
- for _, m := range allMessages {
-   if strings.EqualFold(m.Direction, "inbound") { totalInbound++ }
- }
- result.NewTurnCount = totalInbound
- // Keep the latest four *messages* verbatim. Counting inbound messages as
- // two-message pairs is unsafe when customers send consecutive messages.
- if len(allMessages) <= SlidingWindowSize {
-   result.SkippedReason = "within_live_window"
-   return result, nil
- }
- covered := allMessages[:len(allMessages)-SlidingWindowSize]
- firstNew := 0
- seedSummary := state.Summary
- if state.SummaryLastMessageID != "" {
-   checkpointFound := false
-   for i, m := range covered {
-     if m.ID == state.SummaryLastMessageID {
-       firstNew = i+1
-       checkpointFound = true
-       break
-     }
-   }
-   if !checkpointFound {
-     // A checkpoint may be in the last four messages until enough messages
-     // arrive to advance the summary. Never summarize that overlap twice.
-     for _, m := range allMessages[len(covered):] {
-       if m.ID == state.SummaryLastMessageID {
-         result.SkippedReason = "checkpoint_in_live_window"
-         return result, nil
-       }
-     }
-     result.SkippedReason = "checkpoint_not_found"
-     return result, errors.New("summary checkpoint missing from complete conversation history")
-   }
- } else {
-   // Legacy summaries were built using the wrong DESC-order slice. Rebuild
-   // them from original messages rather than trusting an unmarked summary.
-   seedSummary = ""
- }
- newCovered := covered[firstNew:]
- newInbound := 0
- for _, m := range newCovered {
-   if strings.EqualFold(m.Direction,"inbound") { newInbound++ }
- }
- if newInbound < SummaryInterval && state.SummaryLastMessageID != "" {
-   result.SkippedReason = "below_summary_interval"
-   return result, nil
- }
- if len(newCovered) == 0 {
-   result.SkippedReason = "no_new_covered_messages"
-   return result, nil
- }
- chunks, err := transcriptChunks(newCovered, 3900, 8)
- if err != nil {
-   result.SkippedReason = "history_exceeds_summary_budget"
-   return result, err
- }
- summaryText := seedSummary
- for _, transcript := range chunks {
-   summaryText, err = s.generateSummary(ctx, businessID, conversationID, transcript, summaryText)
-   if err != nil {
-     result.SkippedReason = fmt.Sprintf("summary_generation_failed: %v", err)
-     return result, err
-   }
- }
- checkpointRepo, ok := s.StateRepository.(ports.ConversationSummaryCheckpointRepository)
- if !ok {
-   return result, errors.New("summary repository lacks optimistic checkpoint update")
- }
- coveredInbound := 0
- for _, m := range covered {
-   if strings.EqualFold(m.Direction, "inbound") { coveredInbound++ }
- }
- committed, err := checkpointRepo.SaveSummaryIfVersion(ctx, businessID, conversationID, state.Version, summaryText, covered[len(covered)-1].ID, coveredInbound)
- if err != nil { return result, err }
- if !committed {
-   result.SkippedReason = "concurrent_summary_update"
-   return result, nil
- }
- result.Summarized = true
- result.NewTurnCount = totalInbound
- result.NewSummary = summaryText
- log.Printf("[SummaryService] SUMMARY_UPDATED business=%s conversation=%s turns=%d summary_len=%d", businessID, conversationID, totalInbound, len(summaryText))
+	// Fetch in pages because the default repository page is newest-first.
+	// Stop rather than claim context coverage when the history exceeds the
+	// configured safety bound. No change is persisted on an incomplete read.
+	allMessages, err := listConversationHistory(ctx, s.Messages, businessID, conversationID)
+	if err != nil {
+		result.SkippedReason = "history_incomplete"
+		return result, err
+	}
+	totalInbound := 0
+	for _, m := range allMessages {
+		if strings.EqualFold(m.Direction, "inbound") {
+			totalInbound++
+		}
+	}
+	result.NewTurnCount = totalInbound
+	// Keep the latest four *messages* verbatim. Counting inbound messages as
+	// two-message pairs is unsafe when customers send consecutive messages.
+	if len(allMessages) <= SlidingWindowSize {
+		result.SkippedReason = "within_live_window"
+		return result, nil
+	}
+	covered := allMessages[:len(allMessages)-SlidingWindowSize]
+	firstNew := 0
+	seedSummary := state.Summary
+	if state.SummaryLastMessageID != "" {
+		checkpointFound := false
+		for i, m := range covered {
+			if m.ID == state.SummaryLastMessageID {
+				firstNew = i + 1
+				checkpointFound = true
+				break
+			}
+		}
+		if !checkpointFound {
+			// A checkpoint may be in the last four messages until enough messages
+			// arrive to advance the summary. Never summarize that overlap twice.
+			for _, m := range allMessages[len(covered):] {
+				if m.ID == state.SummaryLastMessageID {
+					result.SkippedReason = "checkpoint_in_live_window"
+					return result, nil
+				}
+			}
+			result.SkippedReason = "checkpoint_not_found"
+			return result, errors.New("summary checkpoint missing from complete conversation history")
+		}
+	} else {
+		// Legacy summaries were built using the wrong DESC-order slice. Rebuild
+		// them from original messages rather than trusting an unmarked summary.
+		seedSummary = ""
+	}
+	newCovered := covered[firstNew:]
+	newInbound := 0
+	for _, m := range newCovered {
+		if strings.EqualFold(m.Direction, "inbound") {
+			newInbound++
+		}
+	}
+	if newInbound < SummaryInterval && state.SummaryLastMessageID != "" {
+		result.SkippedReason = "below_summary_interval"
+		return result, nil
+	}
+	if len(newCovered) == 0 {
+		result.SkippedReason = "no_new_covered_messages"
+		return result, nil
+	}
+	chunks, err := transcriptChunks(newCovered, 3900, 8)
+	if err != nil {
+		result.SkippedReason = "history_exceeds_summary_budget"
+		return result, err
+	}
+	summaryText := seedSummary
+	for _, transcript := range chunks {
+		summaryText, err = s.generateSummary(ctx, businessID, conversationID, transcript, summaryText)
+		if err != nil {
+			result.SkippedReason = fmt.Sprintf("summary_generation_failed: %v", err)
+			return result, err
+		}
+	}
+	checkpointRepo, ok := s.StateRepository.(ports.ConversationSummaryCheckpointRepository)
+	if !ok {
+		return result, errors.New("summary repository lacks optimistic checkpoint update")
+	}
+	coveredInbound := 0
+	for _, m := range covered {
+		if strings.EqualFold(m.Direction, "inbound") {
+			coveredInbound++
+		}
+	}
+	committed, err := checkpointRepo.SaveSummaryIfVersion(ctx, businessID, conversationID, state.Version, summaryText, covered[len(covered)-1].ID, coveredInbound)
+	if err != nil {
+		return result, err
+	}
+	if !committed {
+		result.SkippedReason = "concurrent_summary_update"
+		return result, nil
+	}
+	result.Summarized = true
+	result.NewTurnCount = totalInbound
+	result.NewSummary = summaryText
+	log.Printf("[SummaryService] SUMMARY_UPDATED business=%s conversation=%s turns=%d summary_len=%d", businessID, conversationID, totalInbound, len(summaryText))
 	return result, nil
 }
 
+// listConversationHistory reads each page exactly once and normalizes the
+// repository's DESC order to chronological order for every provider.
+func listConversationHistory(ctx context.Context, repo ports.MessageRepository, businessID, conversationID string) ([]ports.CommunicationMessageRecord, error) {
+	const pageSize = 1000
+	const maxMessages = 10000
+	var history []ports.CommunicationMessageRecord
+	cursor := ""
+	for {
+		page, err := repo.ListByConversation(ctx, businessID, conversationID, pageSize, cursor)
+		if err != nil {
+			return nil, err
+		}
+		if len(page.Items) == 0 && page.HasMore {
+			return nil, errors.New("empty conversation page with continuation")
+		}
+		history = append(history, page.Items...)
+		if len(history) > maxMessages {
+			return nil, errors.New("conversation exceeds safe summary history bound")
+		}
+		if !page.HasMore {
+			break
+		}
+		if page.NextCursor == "" || page.NextCursor == cursor {
+			return nil, errors.New("conversation history cursor did not advance")
+		}
+		cursor = page.NextCursor
+	}
+	slices.Reverse(history)
+	return history, nil
+}
 
- // listConversationHistory reads each page exactly once and normalizes the
- // repository's DESC order to chronological order for every provider.
- func listConversationHistory(ctx context.Context, repo ports.MessageRepository, businessID, conversationID string) ([]ports.CommunicationMessageRecord,error) {
-  const pageSize=1000
-  const maxMessages=10000
-  var history []ports.CommunicationMessageRecord
-  cursor:=""
-  for {
-    page,err:=repo.ListByConversation(ctx,businessID,conversationID,pageSize,cursor)
-    if err!=nil{return nil,err}
-    if len(page.Items)==0 && page.HasMore{return nil,errors.New("empty conversation page with continuation")}
-    history=append(history,page.Items...)
-    if len(history)>maxMessages{return nil,errors.New("conversation exceeds safe summary history bound")}
-    if !page.HasMore {break}
-    if page.NextCursor=="" || page.NextCursor==cursor{return nil,errors.New("conversation history cursor did not advance")}
-    cursor=page.NextCursor
-  }
-  slices.Reverse(history)
-  return history,nil
- }
-
- // transcriptChunks preserves complete messages and never truncates Unicode
- // or erases an older message to fit the AI provider's context budget.
- func transcriptChunks(records []ports.CommunicationMessageRecord, maxBytes, maxChunks int) ([]string,error) {
-  if maxBytes<1 || maxChunks<1 {return nil,errors.New("invalid summarization budget")}
-  var chunks []string
-  var current strings.Builder
-  for _,r:=range records {
-   text:=""
-   if r.TextContent!=nil {text=strings.TrimSpace(*r.TextContent)}
-   if text=="" {continue}
-   role:="العميل"
-   if strings.EqualFold(r.Direction,"outbound"){role="المساعد"}
-   line:=fmt.Sprintf("[%s] %s: %s\n",r.OccurredAt.Format("15:04:05"),role,text)
-   if len(line)>maxBytes{return nil,errors.New("one conversation message exceeds the summary chunk budget")}
-   if current.Len()+len(line)>maxBytes {
-      chunks=append(chunks,current.String())
-      current.Reset()
-   }
-   current.WriteString(line)
-   if len(chunks)>=maxChunks{return nil,errors.New("summary chunk budget exceeded")}
-  }
-  if current.Len()>0 {chunks=append(chunks,current.String())}
-  if len(chunks)>maxChunks{return nil,errors.New("summary chunk budget exceeded")}
-  if len(chunks)==0{return nil,errors.New("no summarizable conversation messages")}
-  return chunks,nil
- }
+// transcriptChunks preserves complete messages and never truncates Unicode
+// or erases an older message to fit the AI provider's context budget.
+func transcriptChunks(records []ports.CommunicationMessageRecord, maxBytes, maxChunks int) ([]string, error) {
+	if maxBytes < 1 || maxChunks < 1 {
+		return nil, errors.New("invalid summarization budget")
+	}
+	var chunks []string
+	var current strings.Builder
+	for _, r := range records {
+		text := ""
+		if r.TextContent != nil {
+			text = strings.TrimSpace(*r.TextContent)
+		}
+		if text == "" {
+			continue
+		}
+		role := "العميل"
+		if strings.EqualFold(r.Direction, "outbound") {
+			role = "المساعد"
+		}
+		line := fmt.Sprintf("[%s] %s: %s\n", r.OccurredAt.Format("15:04:05"), role, text)
+		if len(line) > maxBytes {
+			return nil, errors.New("one conversation message exceeds the summary chunk budget")
+		}
+		if current.Len()+len(line) > maxBytes {
+			chunks = append(chunks, current.String())
+			current.Reset()
+		}
+		current.WriteString(line)
+		if len(chunks) >= maxChunks {
+			return nil, errors.New("summary chunk budget exceeded")
+		}
+	}
+	if current.Len() > 0 {
+		chunks = append(chunks, current.String())
+	}
+	if len(chunks) > maxChunks {
+		return nil, errors.New("summary chunk budget exceeded")
+	}
+	if len(chunks) == 0 {
+		return nil, errors.New("no summarizable conversation messages")
+	}
+	return chunks, nil
+}
 
 // generateSummary calls the active Gemini/DeepSeek inference route with the older-turn transcript + the
 // previous running summary, and returns a fresh compressed summary.
