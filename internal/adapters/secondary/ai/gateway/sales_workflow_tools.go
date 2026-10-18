@@ -5,12 +5,12 @@ import "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports
 // Dynamic merchant-defined values remain JSON data, not open-ended object
 // properties in the provider strict schema. Go decodes them before execution.
 func salesWorkflowTool(capability ports.CustomerSalesCapability) customerSalesTool {
-	description := "Record customer buying interest supported by referenced messages. No sale or external state change is implied."
+	description := "Record a customer lead only when this executor is offered and interest is grounded in customer messages. A lead is not a subscription, sale, payment or completed handoff."
 	switch capability {
 	case ports.CustomerSalesCapabilityCreateDraft:
-		description = "Create a universal commercial draft for a clear customer request. Select only verified catalog references; exact quantity is a decimal string. Never claim activation, reservation, payment or fulfillment."
+		description = "Create a commercial DRAFT for a clear customer request to proceed when this executor is offered, with grounded catalog refs and decimal quantities. This is not activation, reservation, payment or fulfillment. When this executor is absent, do not simulate it using text."
 	case ports.CustomerSalesCapabilityUpdateDraft:
-		description = "Update an explicitly identified workflow and version with grounded customer data. Never select between ambiguous workflows; prior confirmation must be superseded."
+		description = "Update an unambiguously identified commercial draft using the actual workflow ID and expected version from the trusted sales context. Never guess between workflows, claim completion before execution or promise an update if the executor is absent."
 	}
 	nullableString := map[string]any{"type": []string{"string", "null"}}
 	nullableInteger := map[string]any{"type": []string{"integer", "null"}}
