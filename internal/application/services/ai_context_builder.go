@@ -164,6 +164,9 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 		if err != nil {
 			return ports.CustomerSalesContext{}, err
 		}
+		// The repository is newest-first. Normalize to chronological order
+		// before attaching evidence so timestamp ties retain insertion order.
+		slices.Reverse(page.Items)
 		context.RecentMessages = buildRecentMessageEvidence(page.Items, input.SourceMessageReference, now)
 	}
 
@@ -277,8 +280,8 @@ func buildRecentMessageEvidence(records []ports.CommunicationMessageRecord, sour
 		if !items[i].OccurredAt.Equal(items[j].OccurredAt) {
 			return items[i].OccurredAt.Before(items[j].OccurredAt)
 		}
-		// Per ADR-051: tiebreaker — Reference (message ID), to fix time inversion
-		return items[i].Reference < items[j].Reference
+		// Preserve the repository's (occurred_at, created_at, id) order on ties.
+		return false
 	})
 	return items
 }
