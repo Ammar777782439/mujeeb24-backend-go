@@ -29,10 +29,15 @@ Scope: customer-sales automatic replies on `feat/gemini-deepseek`. Does not rede
 - No production database operations or customer-message sends occur from the live model-only tests.
 
 ## Test matrix and what it proves
-- Go regression: descending multi-page history normalized to chronological order; cursor corruption detected; no Unicode truncation; chunk budget bounded; unsummarized gap retrieval and missing checkpoint fail closed.
+- Go regression: descending multi-page history normalized to chronological order (including equal-timestamp ties); cursor corruption detected; no Unicode truncation; chunk budget bounded; unsummarized gap retrieval and missing checkpoint fail closed. A cold-start test verifies that creating memory for an informational-only conversation continues through generation and checkpoint commit.
 - PostgreSQL integration: idempotent state initialization; checkpoint CAS rejects stale version; normal state writes preserve committed summary.
 - Gemini/DeepSeek real integration workflow: three context representations plus independent tool-free summary generation, each using a real provider secret. Missing secrets / provider HTTP 503 are explicit incomplete results, not passes.
 - Do not choose summary+one-message as an unconditional default until live comparisons prove it safe. The checkpoint-based delta design reduces duplication without discarding messages.
 
 ## Deployment note
 Apply migration 000080 **before** starting the new binary, because state readers now select `summary_last_message_id`. Keep all existing summaries and messages; do not reset production history. No merge to backend main is part of this work.
+
+## Verification limitations
+- The latest live Gemini context-comparison attempt returned Google HTTP 503 before a model decision was received. Earlier real subscription handoff checks succeeded, but do not prove the new memory-strategy comparison.
+- `DEEPSEEK_API_KEY` was not present in GitHub Actions during the last attempt; a real DeepSeek response has **not** been verified. The workflow fails explicitly rather than reporting success for an unexecuted provider.
+- PostgreSQL integration in `quality-gate.yml` uses a disposable PostgreSQL 16 database, not `PLATFORM_DATABASE_URL` or customer data. Production remains unchanged. These checks establish schema/transaction compatibility only after the workflow completes successfully.
