@@ -126,6 +126,18 @@ func (p *ValidationPipeline) validateStructural(decision ports.CapabilityDecisio
 	if definition.SendsCustomerMessage && strings.TrimSpace(decision.ResponseText) == "" {
 		return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidAIOutput, Reason: "customer-facing capability requires response_text"}
 	}
+	// Output-side execution proof: a normal reply or clarification cannot
+	// announce employee transfer when no handoff_to_human operation was
+	// selected. This NEVER infers customer intent or upgrades capabilities.
+	// Fail closed before authorization, lifecycle changes, or the outbox.
+	if definition.SendsCustomerMessage && !definition.RequiresHuman &&
+		containsUnexecutedHandoffCommitment(decision.ResponseText) {
+		return &StageFailure{
+			Stage: ports.AIRunFailureStageValidation,
+			Category: ports.AIRunFailureCategoryInvalidAIOutput,
+			Reason: "unexecuted_handoff_claim_in_response_text",
+		}
+	}
 	for i, ref := range decision.Selected {
 		if strings.TrimSpace(ref.ItemID) == "" {
 			return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidAIOutput, Reason: fmt.Sprintf("selected[%d].item_id is required", i)}

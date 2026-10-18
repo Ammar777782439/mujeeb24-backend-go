@@ -20,6 +20,12 @@ on:
       - 'internal/adapters/primary/http/handlers/platform_native_ai_config_test.go'
       - 'internal/adapters/secondary/ai/gateway/native_merchant_catalog_adapter.go'
       - 'internal/adapters/secondary/ai/gateway/native_adapters_contract_test.go'
+      - 'internal/application/services/ai_validation_pipeline.go'
+      - 'internal/application/services/ai_validation_pipeline_fail_closed_test.go'
+      - 'internal/application/services/customer_handoff_claim_guard.go'
+      - 'internal/application/services/customer_handoff_claim_guard_test.go'
+      - 'internal/application/services/auto_reply.go'
+      - 'internal/application/services/auto_reply_capabilities_test.go'
   workflow_dispatch:
 
 permissions:
@@ -56,6 +62,12 @@ jobs:
             internal/adapters/secondary/ai/native/gemini.go \
             internal/application/ports/ai_provider_config.go \
             internal/application/services/ai_provider_failure_test.go \
+            internal/application/services/ai_validation_pipeline.go \
+            internal/application/services/ai_validation_pipeline_fail_closed_test.go \
+            internal/application/services/customer_handoff_claim_guard.go \
+            internal/application/services/customer_handoff_claim_guard_test.go \
+            internal/application/services/auto_reply.go \
+            internal/application/services/auto_reply_capabilities_test.go \
             internal/application/services/native_merchant_usage.go \
             internal/application/services/platform_operations_service.go \
             internal/bootstrap/api.go \
