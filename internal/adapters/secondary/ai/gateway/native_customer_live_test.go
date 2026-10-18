@@ -120,12 +120,12 @@ func TestGeminiSubscriptionConversationLive(t *testing.T) {
 		requestCtx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		result, callErr := adapter.Decide(requestCtx, ports.CustomerSalesDecisionInput{
 			EntityContractPayload: contract,
-			Capabilities:         offered,
+			Capabilities:          offered,
 			Request: ports.CustomerSalesDecisionRequest{
-				BusinessID: "live-eval-business",
-				ConversationID: "ongoing-customer-conversation",
+				BusinessID:             "live-eval-business",
+				ConversationID:         "ongoing-customer-conversation",
 				SourceMessageReference: "new-subscribe-message",
-				Text: "طيب اريد الاشتراك ؟", Channel: "facebook",
+				Text:                   "طيب اريد الاشتراك ؟", Channel: "facebook",
 				Context: requestContext,
 			},
 		})
@@ -184,7 +184,7 @@ func subscriptionHistory() []ports.CustomerSalesRecentMessageEvidence {
 		history = append(history, ports.CustomerSalesRecentMessageEvidence{
 			Reference: fmt.Sprintf("historical-message-%02d", i),
 			Direction: turn.direction, Origin: turn.origin, Text: turn.text,
-			OccurredAt: time.Date(2026, time.October, 18, turn.hour, turn.minute, i, 0, loc),
+			OccurredAt:    time.Date(2026, time.October, 18, turn.hour, turn.minute, i, 0, loc),
 			EvidenceState: "fresh", SchemaVersion: 1,
 		})
 	}
