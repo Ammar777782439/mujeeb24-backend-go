@@ -19,6 +19,8 @@ on:
       - 'internal/adapters/primary/http/handlers/platform_native_ai_config.go'
       - 'internal/adapters/primary/http/handlers/platform_native_ai_config_test.go'
       - 'internal/adapters/secondary/ai/gateway/native_merchant_catalog_adapter.go'
+      - 'internal/adapters/secondary/ai/gateway/native_provider_context_live_test.go'
+      - 'internal/application/ports/customer_sales_contract.go'
       - 'internal/adapters/secondary/ai/gateway/native_customer_live_test.go'
       - 'internal/adapters/secondary/ai/gateway/capability_contract_test.go'
       - 'internal/adapters/secondary/ai/gateway/customer_sales_prompt.go'
@@ -62,6 +64,8 @@ jobs:
           gofmt -w \
             internal/adapters/primary/http/handlers/platform_native_ai_config.go \
             internal/adapters/primary/http/handlers/platform_native_ai_config_test.go \
+            internal/adapters/secondary/ai/gateway/native_provider_context_live_test.go \
+            internal/application/ports/customer_sales_contract.go \
             internal/adapters/secondary/ai/gateway/native_customer_live_test.go \
             internal/domain/ai/prompts/prompts.go \
             internal/adapters/secondary/ai/gateway/capability_contract_test.go \
