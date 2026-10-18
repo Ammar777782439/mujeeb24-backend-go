@@ -64,6 +64,9 @@ type StatePending struct {
 // the conversation state has not changed in the meantime. It avoids stale
 // background summarizers overwriting newer conversational memory.
 type ConversationSummaryCheckpointRepository interface {
+ // EnsureSummaryState is an idempotent insert-only creation for conversations
+ // that have no catalog focus yet; it cannot overwrite another writer.
+ EnsureSummaryState(ctx context.Context, businessID, conversationID string) (ConversationStateRecord, error)
 	SaveSummaryIfVersion(ctx context.Context, businessID, conversationID string, expectedVersion int64, summary, lastMessageID string, coveredInbound int) (bool, error)
 }
 

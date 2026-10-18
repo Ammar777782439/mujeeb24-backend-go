@@ -176,6 +176,20 @@ func (r *ConversationStateRepository) UpsertValidated(ctx context.Context, recor
 	return result, nil
 }
 
+// EnsureSummaryState creates memory state for ordinary conversations that have
+// no selected catalog focus. It never changes an existing state row.
+func (r *ConversationStateRepository) EnsureSummaryState(ctx context.Context, businessID, conversationID string) (ports.ConversationStateRecord,error) {
+ if r==nil || r.adapter==nil {return ports.ConversationStateRecord{},ErrPoolClosed}
+ if strings.TrimSpace(businessID)=="" || strings.TrimSpace(conversationID)=="" {
+  return ports.ConversationStateRecord{},invalidRepositoryInput("conversation_state.ensure", "scope required")
+ }
+ exec,err:=r.adapter.Executor(ctx)
+ if err!=nil{return ports.ConversationStateRecord{},err}
+ _,err=exec.Exec(ctx,"INSERT INTO conversation_state (business_id,conversation_id,created_at,updated_at) VALUES ($1::uuid,$2::uuid,NOW(),NOW()) ON CONFLICT (business_id,conversation_id) DO NOTHING",businessID,conversationID)
+ if err!=nil{return ports.ConversationStateRecord{},&RepositoryError{Operation:"conversation_state.ensure",Kind:RepositoryInvalid,Err:err}}
+ return r.Get(ctx,businessID,conversationID)
+}
+
 // SaveSummaryIfVersion updates only summarization fields and requires the
 // state version seen before inference. No other writer can be overwritten.
 func (r *ConversationStateRepository) SaveSummaryIfVersion(ctx context.Context, businessID, conversationID string, expectedVersion int64, summary, lastMessageID string, coveredInbound int) (bool, error) {
