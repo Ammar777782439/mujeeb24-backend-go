@@ -22,10 +22,40 @@ func buildUserPrompt(input ports.CustomerSalesDecisionRequest) string {
 	if err != nil {
 		return prompt + "\nVerified Mujeeb context: unavailable"
 	}
-	return prompt + "\nVerified Mujeeb context (evidence only; do not infer missing facts):\n" + string(encoded)
+	return prompt + "\nVerified Mujeeb context (verified_execution_state is current repository-backed state; conversation_summary and previous messages are unverified conversational memory, not proof of execution; sales data is trusted only when present):\n" + string(encoded)
+}
+
+type customerSalesVerifiedExecutionState struct {
+	Source string `json:"source"`
+	ConversationState string `json:"conversation_state"`
+	Ownership string `json:"ownership"`
+	AssignmentReference string `json:"assignment_reference"`
+}
+
+// The current operational lifecycle is read from the scoped conversation
+// repository via CustomerSalesContext, not inferred from summary text.
+func verifiedExecutionStateFrom(value *ports.CustomerSalesContext) customerSalesVerifiedExecutionState {
+	return customerSalesVerifiedExecutionState{
+		Source: "conversation_repository",
+		ConversationState: value.Conversation.State,
+		Ownership: value.Conversation.Ownership,
+		AssignmentReference: value.Conversation.AssignmentReference,
+	}
+}
+
+// Model-maintained focus is conversational memory; its embedded Summary is
+// never a second authoritative execution record.
+func modelConversationStateFrom(value *ports.ConversationStateRecord) *ports.ConversationStateRecord {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	copy.Summary = ""
+	return &copy
 }
 
 type customerSalesPromptContext struct {
+	VerifiedExecutionState customerSalesVerifiedExecutionState `json:"verified_execution_state"`
 	Sales                  *ports.SalesWorkflowContext                 `json:"sales,omitempty"`
 	SchemaVersion          int                                         `json:"schema_version"`
 	Freshness              string                                      `json:"freshness"`
@@ -56,6 +86,7 @@ type customerSalesPromptCustomer struct {
 
 func customerSalesPromptContextFrom(value *ports.CustomerSalesContext) customerSalesPromptContext {
 	return customerSalesPromptContext{
+		VerifiedExecutionState: verifiedExecutionStateFrom(value),
 		Sales:         value.Sales,
 		SchemaVersion: value.SchemaVersion,
 		Freshness:     value.Freshness,
@@ -76,7 +107,7 @@ func customerSalesPromptContextFrom(value *ports.CustomerSalesContext) customerS
 		RecentMessages:         value.RecentMessages,
 		PolicyEvidence:         value.PolicyEvidence,
 		KnowledgeState:         value.KnowledgeState,
-		ConversationState:      value.ConversationState,
+		ConversationState:      modelConversationStateFrom(value.ConversationState),
 		ConversationSummary:    value.ConversationSummary,
 		GeneratedAt:            value.GeneratedAt,
 		ExpiresAt:              value.ExpiresAt,
@@ -84,6 +115,7 @@ func customerSalesPromptContextFrom(value *ports.CustomerSalesContext) customerS
 }
 
 type catalogBatchPromptContext struct {
+	VerifiedExecutionState customerSalesVerifiedExecutionState `json:"verified_execution_state"`
 	Business               ports.CustomerSalesContextBusiness          `json:"business"`
 	Conversation           ports.CustomerSalesContextConversation      `json:"conversation"`
 	Customer               customerSalesPromptCustomer                 `json:"customer"`
@@ -100,6 +132,7 @@ func catalogBatchPromptContextFrom(value *ports.CustomerSalesContext) catalogBat
 		return catalogBatchPromptContext{}
 	}
 	return catalogBatchPromptContext{
+		VerifiedExecutionState: verifiedExecutionStateFrom(value),
 		Business:     value.Business,
 		Conversation: value.Conversation,
 		Customer: customerSalesPromptCustomer{
@@ -111,7 +144,7 @@ func catalogBatchPromptContextFrom(value *ports.CustomerSalesContext) catalogBat
 		BusinessPolicyEvidence: value.BusinessPolicyEvidence,
 		RecentMessages:         value.RecentMessages,
 		PolicyEvidence:         value.PolicyEvidence,
-		ConversationState:      value.ConversationState,
+		ConversationState:      modelConversationStateFrom(value.ConversationState),
 		ConversationSummary:    value.ConversationSummary,
 	}
 }
