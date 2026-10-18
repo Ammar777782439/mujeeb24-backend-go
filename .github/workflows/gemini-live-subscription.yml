@@ -1,0 +1,44 @@
+name: Gemini 3.1 Live Subscription Selection
+on:
+  push:
+    branches:
+      - feat/gemini-deepseek
+    paths:
+      - 'internal/adapters/secondary/ai/gateway/native_customer_live_test.go'
+      - '.github/workflows/gemini-live-subscription.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemini-live-subscription-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  live-subscription:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GOTOOLCHAIN: local
+      MUJEEB_GEMINI_LIVE_EVAL: '1'
+      GEMINI_MODEL: gemini-3.1-flash-lite
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/gemini-deepseek
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.2'
+          cache: true
+      - name: Require preconfigured Gemini API secret
+        shell: bash
+        run: |
+          if [[ -z "$GEMINI_API_KEY" ]]; then
+            echo '::error::GEMINI_API_KEY GitHub Actions secret is missing or unavailable'
+            exit 1
+          fi
+      - name: Real Gemini decisions on continued customer conversation
+        shell: bash
+        run: go test -tags=gemini_live -count=1 -v -run '^TestGeminiSubscriptionConversationLive$' -timeout=8m ./internal/adapters/secondary/ai/gateway
