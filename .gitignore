@@ -23,3 +23,6 @@ tmp/
 # Local catalog diagnostic payloads
 /tmp/catalog-debug/
 /catalog-evaluation.jsonl
+
+# Full catalog diagnostic files written under the repository root.
+/catalog-debug/
