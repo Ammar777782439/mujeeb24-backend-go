@@ -35,11 +35,19 @@ func Raw(body []byte) any {
 	return string(body)
 }
 
+// Enabled limits capture and additional response-body reads to one explicit catalog run.
+func Enabled(ctx context.Context) bool {
+	if ctx == nil || !strings.EqualFold(strings.TrimSpace(os.Getenv("MUJEEB_CATALOG_DEBUG_DUMP")), "true") {
+		return false
+	}
+	runID, _ := ctx.Value(contextKey{}).(string)
+	return runID != "" && strings.TrimSpace(os.Getenv("MUJEEB_CATALOG_DEBUG_FILE")) != ""
+}
+
 // Record writes complete stage payloads to a file, never standard output.
 // A failed write does not alter model or commercial execution.
 func Record(ctx context.Context, stage string, payload any) {
-	if !strings.EqualFold(strings.TrimSpace(os.Getenv("MUJEEB_CATALOG_DEBUG_DUMP")), "true") ||
-		ctx == nil || strings.TrimSpace(stage) == "" {
+	if !Enabled(ctx) || strings.TrimSpace(stage) == "" {
 		return
 	}
 	runID, _ := ctx.Value(contextKey{}).(string)
