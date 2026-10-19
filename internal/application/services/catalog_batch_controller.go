@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/catalogdump"
 )
 
 // CatalogBatchController drives a contract ② §9 evaluation.
@@ -184,8 +185,10 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 		}
 
 		if len(page.Items) > 0 {
+			catalogdump.Record(catalogdump.WithRun(ctx, input.AIRunID), "database_catalog_page", page)
 			pageProjection := ProjectionFromBundles(page.Items)
 			appendCatalogRecordsToProjection(&pageProjection, page.Catalogs)
+			catalogdump.Record(catalogdump.WithRun(ctx, input.AIRunID), "catalog_projection_page", pageProjection)
 			batches, err := c.splitIntoBatches(ctx, pageProjection, input, nextBatchNumber)
 			if err != nil {
 				return CatalogEvaluationResult{}, fmt.Errorf("split catalog page into budgeted batches: %w", err)
@@ -284,6 +287,7 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 	if revisionAfterFinal != revisionStart {
 		return CatalogEvaluationResult{}, errors.New("catalog changed during final evaluation; refusing stale commercial AI result")
 	}
+	catalogdump.Record(catalogdump.WithRun(ctx, input.AIRunID), "final_validation_evidence", EvidenceFromProjection(finalProjection))
 	return CatalogEvaluationResult{
 		Decision: proposal,
 		// Validation trusts exactly the projection exposed to the final model
@@ -743,6 +747,7 @@ func (c *CatalogBatchController) runFinalEvaluation(
 		}
 
 		finalInput, userPrompt := buildFinalEvaluationPayload(input, candidates, candidateProjection)
+		catalogdump.Record(catalogdump.WithRun(ctx, input.AIRunID), "final_candidate_projection", candidateProjection)
 
 		if estimator, ok := c.Evaluator.(FinalRequestTokenEstimator); ok {
 			tokens, err := estimator.CountFinalTokens(ctx, finalInput, userPrompt)

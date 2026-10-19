@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/catalogdump"
 )
 
 const nativeResponseLimit = 4 << 20
@@ -203,6 +205,7 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	if err != nil {
 		return Response{}, err
 	}
+	catalogdump.Record(ctx, "deepseek_wire_request", catalogdump.Raw(encoded))
 	timeoutCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	httpReq, err := http.NewRequestWithContext(timeoutCtx, http.MethodPost, c.endpoint, bytes.NewReader(encoded))
@@ -219,10 +222,12 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 		return Response{}, errors.New("DeepSeek transport failure")
 	}
 	defer httpRes.Body.Close()
+	catalogdump.Record(ctx, "deepseek_http_status", httpRes.StatusCode)
 	if httpRes.StatusCode < 200 || httpRes.StatusCode >= 300 {
 		return Response{}, &StatusError{Provider: "deepseek", Code: httpRes.StatusCode}
 	}
 	raw, err := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
+	catalogdump.Record(ctx, "deepseek_raw_response", catalogdump.Raw(raw))
 	if err != nil || len(raw) > nativeResponseLimit {
 		return Response{}, errors.New("DeepSeek response read/size failure")
 	}

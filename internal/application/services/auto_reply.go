@@ -32,6 +32,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/catalogdump"
 )
 
 const (
@@ -332,6 +333,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	log.Printf("[AutoReply] CAPABILITY_SELECTED business=%s conversation=%s run=%s source=%s capability=%s selected_refs=%d response_chars=%d",
 		businessID, conversationID, run.ID, decisionSource, proposal.Capability, len(proposal.Selected), len([]rune(proposal.ResponseText)))
 
+	catalogdump.Record(catalogdump.WithRun(ctx, run.ID), "final_selection_and_validation_evidence", map[string]any{"decision": proposal, "evidence": catalogEvidence})
 	// Per contract ⑨ §3, mark VALIDATING.
 	if err := s.transitionRun(ctx, run, ports.AIRunStatusValidating); err != nil {
 		return commands.AutoReplyResult{}, err
@@ -358,6 +360,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			Evidence:       catalogEvidence,
 		})
 		if failure != nil {
+			catalogdump.Record(catalogdump.WithRun(ctx, run.ID), "validation_rejection", failure)
 			log.Printf("[AutoReply] VALIDATION_FAILED business=%s conversation=%s run=%s capability=%s stage=%s category=%s reason=%s",
 				businessID, conversationID, run.ID, proposal.Capability, failure.Stage, failure.Category, failure.Reason)
 			s.markFailedSafe(ctx, run, failure.Stage, string(failure.Category), failure.Reason)

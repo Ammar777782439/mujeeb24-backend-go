@@ -15,6 +15,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/catalogdump"
 )
 
 var geminiModelName = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
@@ -266,6 +268,7 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
+	catalogdump.Record(ctx, "gemini_wire_request", catalogdump.Raw(encoded))
 	requestCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	httpReq, err := http.NewRequestWithContext(requestCtx, http.MethodPost, c.endpoint, bytes.NewReader(encoded))
@@ -282,10 +285,12 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 		return Response{}, errors.New("Gemini transport failure")
 	}
 	defer httpRes.Body.Close()
+	catalogdump.Record(ctx, "gemini_http_status", httpRes.StatusCode)
 	if httpRes.StatusCode < 200 || httpRes.StatusCode >= 300 {
 		return Response{}, &StatusError{Provider: "gemini", Code: httpRes.StatusCode}
 	}
 	raw, err := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
+	catalogdump.Record(ctx, "gemini_raw_response", catalogdump.Raw(raw))
 	if err != nil || len(raw) > nativeResponseLimit {
 		return Response{}, errors.New("Gemini response read/size failure")
 	}
