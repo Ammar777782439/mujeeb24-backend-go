@@ -282,7 +282,7 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 		if requestCtx.Err() != nil {
 			return Response{}, requestCtx.Err()
 		}
-		return Response{}, errors.New("Gemini transport failure")
+		return Response{}, fmt.Errorf("Gemini transport failure: %w", err)
 	}
 	defer httpRes.Body.Close()
 	catalogdump.Record(ctx, "gemini_http_status", httpRes.StatusCode)
