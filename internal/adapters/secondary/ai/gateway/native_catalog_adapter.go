@@ -12,6 +12,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/prompts"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/aierrors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/catalogdump"
 )
 
@@ -120,7 +121,7 @@ func (c *NativeCatalogAdapter) EvaluateBatch(ctx context.Context, input services
 		return ports.CatalogBatchResult{}, err
 	}
 	if err := c.ensureModelCapacity(tokens); err != nil {
-		return ports.CatalogBatchResult{}, err
+		return ports.CatalogBatchResult{}, aierrors.Wrap(aierrors.CatalogBudget, err)
 	}
 	catalogdump.Record(ctx, "catalog_canonical_request", req)
 	started := time.Now()
@@ -138,7 +139,7 @@ func (c *NativeCatalogAdapter) EvaluateBatch(ctx context.Context, input services
 		return ports.CatalogBatchResult{}, errors.New("catalog batch returned unexpected function call")
 	}
 	if err := validateStrictArguments([]byte(normalized.Text), req.ResponseFormat.JSONSchema.Schema); err != nil {
-		return ports.CatalogBatchResult{}, fmt.Errorf("invalid catalog candidates schema: %w", err)
+		return ports.CatalogBatchResult{}, aierrors.Wrap(aierrors.ModelOutput, fmt.Errorf("invalid catalog candidates schema: %w", err))
 	}
 	candidates, err := parseBatchCandidates(catalogCandidateResponse{Candidates: []batchCandidate{{Content: batchContent{Parts: []batchPart{{Text: normalized.Text}}}}}})
 	if err != nil {
@@ -176,7 +177,7 @@ func (c *NativeCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, inp
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
 	}
 	if err := c.ensureModelCapacity(tokens); err != nil {
-		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
+		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, aierrors.Wrap(aierrors.CatalogBudget, err)
 	}
 	catalogdump.Record(ctx, "catalog_canonical_request", req)
 	started := time.Now()

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/aierrors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/catalogdump"
 )
 
@@ -226,7 +227,7 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 				c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, result.Usage, fmt.Sprintf("batch_%d", batch.BatchNumber))
 				if err := validateBatchCandidates(batch, result.Candidates); err != nil {
 					_ = c.markBatchFailed(ctx, rec.ID, err.Error())
-					return CatalogEvaluationResult{}, fmt.Errorf("batch %d returned invalid candidate evidence: %w", batch.BatchNumber, err)
+					return CatalogEvaluationResult{}, aierrors.Wrap(aierrors.ModelOutput, fmt.Errorf("batch %d returned invalid candidate evidence: %w", batch.BatchNumber, err))
 				}
 				if err := c.markBatchCompleted(ctx, rec.ID, len(result.Candidates)); err != nil {
 					return CatalogEvaluationResult{}, err
@@ -762,14 +763,14 @@ func (c *CatalogBatchController) runFinalEvaluation(
 					)
 				}
 				if lastOversizeTokens > 0 && tokens >= lastOversizeTokens {
-					return ports.CapabilityDecision{}, CatalogAIProjection{}, fmt.Errorf(
+					return ports.CapabilityDecision{}, CatalogAIProjection{}, aierrors.Wrap(aierrors.CatalogBudget, fmt.Errorf(
 						"candidate reduction made no token progress: previous=%d current=%d budget=%d",
 						lastOversizeTokens, tokens, budget,
-					)
+					))
 				}
 				lastOversizeTokens = tokens
 				if reductionRounds >= maxReductionRounds {
-					return ports.CapabilityDecision{}, CatalogAIProjection{}, fmt.Errorf("candidate reduction exceeded %d bounded rounds with %d estimated tokens; use a validated larger-context route for complete comparison", maxReductionRounds, tokens)
+					return ports.CapabilityDecision{}, CatalogAIProjection{}, aierrors.Wrap(aierrors.CatalogBudget, fmt.Errorf("candidate reduction exceeded %d bounded rounds with %d estimated tokens; use a validated larger-context route for complete comparison", maxReductionRounds, tokens))
 				}
 				reductionRounds++
 
