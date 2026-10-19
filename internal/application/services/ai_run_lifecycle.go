@@ -301,6 +301,11 @@ func isValidFailureCategory(category string) bool {
 		ports.AIRunFailureCategoryUnsupportedAction,
 		ports.AIRunFailureCategoryExecutionFailure,
 		ports.AIRunFailureCategoryInfrastructure,
+		ports.AIRunFailureCategoryApplicationInternal,
+		ports.AIRunFailureCategoryCatalogBudget,
+		ports.AIRunFailureCategoryCatalogData,
+		ports.AIRunFailureCategoryUnclassified,
+		ports.AIRunFailureCategoryCancelled,
 		"":
 		return true
 	}
