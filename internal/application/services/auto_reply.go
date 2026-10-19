@@ -32,6 +32,8 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/aierrors"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/catalogdump"
 )
 
 const (
@@ -270,7 +272,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	})
 	if err != nil {
 		log.Printf("[AutoReply] AI_GATEWAY_FAILED business=%s err=%v", businessID, err)
-		s.markFailedSafe(ctx, run, ports.AIRunFailureStageProviderRequest, classifyAIProviderError(err), err.Error())
+		s.markFailedSafe(ctx, run, classifyAIErrorStage(err), classifyAIProviderError(err), err.Error())
 		return commands.AutoReplyResult{}, err
 	}
 	proposal := out.Decision
@@ -284,8 +286,8 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	// Invalid references are rejected by validation; they never expand evidence.
 	fullCatalogRequired := out.Decision.Capability == ports.CustomerSalesCapabilityFullCatalog
 	if fullCatalogRequired && !s.fullCatalogReady(run) {
-		err := errors.New("AI model requested full catalog evaluation but CatalogBatchController is not configured")
-		s.markFailedSafe(ctx, run, ports.AIRunFailureStageProviderRequest, classifyAIProviderError(err), err.Error())
+		err := aierrors.Wrap(aierrors.Application, errors.New("AI model requested full catalog evaluation but CatalogBatchController is not configured"))
+		s.markFailedSafe(ctx, run, classifyAIErrorStage(err), classifyAIProviderError(err), err.Error())
 		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
 	}
 	if fullCatalogRequired {
@@ -312,8 +314,9 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			EntityContract:      entityContract,
 		})
 		if err != nil {
+			catalogdump.Record(catalogdump.WithRun(ctx, run.ID), "catalog_evaluation_failed", err.Error())
 			log.Printf("[AutoReply] CATALOG_EVAL_FAILED run=%s err=%v", run.ID, err)
-			s.markFailedSafe(ctx, run, ports.AIRunFailureStageProviderRequest, classifyAIProviderError(err), "catalog evaluation: "+err.Error())
+			s.markFailedSafe(ctx, run, classifyAIErrorStage(err), classifyAIProviderError(err), "catalog evaluation: "+err.Error())
 			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, fmt.Errorf("catalog evaluation failed: %w", err)
 		} else {
 			log.Printf("[AutoReply] CATALOG_EVAL_OK run=%s capability=%s", run.ID, catalogResult.Decision.Capability)
@@ -332,6 +335,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	log.Printf("[AutoReply] CAPABILITY_SELECTED business=%s conversation=%s run=%s source=%s capability=%s selected_refs=%d response_chars=%d",
 		businessID, conversationID, run.ID, decisionSource, proposal.Capability, len(proposal.Selected), len([]rune(proposal.ResponseText)))
 
+	catalogdump.Record(catalogdump.WithRun(ctx, run.ID), "final_selection_and_validation_evidence", map[string]any{"decision": proposal, "evidence": catalogEvidence})
 	// Per contract ⑨ §3, mark VALIDATING.
 	if err := s.transitionRun(ctx, run, ports.AIRunStatusValidating); err != nil {
 		return commands.AutoReplyResult{}, err
@@ -358,6 +362,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			Evidence:       catalogEvidence,
 		})
 		if failure != nil {
+			catalogdump.Record(catalogdump.WithRun(ctx, run.ID), "validation_rejection", failure)
 			log.Printf("[AutoReply] VALIDATION_FAILED business=%s conversation=%s run=%s capability=%s stage=%s category=%s reason=%s",
 				businessID, conversationID, run.ID, proposal.Capability, failure.Stage, failure.Category, failure.Reason)
 			s.markFailedSafe(ctx, run, failure.Stage, string(failure.Category), failure.Reason)

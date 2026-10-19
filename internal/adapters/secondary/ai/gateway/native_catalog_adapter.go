@@ -12,6 +12,8 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/prompts"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/aierrors"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/catalogdump"
 )
 
 // NativeCatalogAdapter reuses the existing COMPLETE catalog projection,
@@ -105,6 +107,8 @@ func (c *NativeCatalogAdapter) CountFinalTokens(ctx context.Context, input servi
 }
 
 func (c *NativeCatalogAdapter) EvaluateBatch(ctx context.Context, input services.BatchEvaluationInput) (ports.CatalogBatchResult, error) {
+	ctx = catalogdump.WithRun(ctx, input.AIRunID)
+	catalogdump.Record(ctx, "batch_catalog_input", input.Batch)
 	if len(input.Batch.Items) == 0 {
 		return ports.CatalogBatchResult{BatchNumber: input.BatchNumber}, nil
 	}
@@ -117,13 +121,16 @@ func (c *NativeCatalogAdapter) EvaluateBatch(ctx context.Context, input services
 		return ports.CatalogBatchResult{}, err
 	}
 	if err := c.ensureModelCapacity(tokens); err != nil {
-		return ports.CatalogBatchResult{}, err
+		return ports.CatalogBatchResult{}, aierrors.Wrap(aierrors.CatalogBudget, err)
 	}
+	catalogdump.Record(ctx, "catalog_canonical_request", req)
 	started := time.Now()
 	raw, info, err := c.client.Complete(ctx, req)
 	if err != nil {
+		catalogdump.Record(ctx, "batch_model_call_failed", err.Error())
 		return ports.CatalogBatchResult{}, fmt.Errorf("send catalog batch %d: %w", input.BatchNumber, err)
 	}
+	catalogdump.Record(ctx, "catalog_normalized_response", catalogdump.Raw(raw))
 	normalized, err := normalizeNativeResponse(raw)
 	if err != nil {
 		return ports.CatalogBatchResult{}, err
@@ -133,7 +140,7 @@ func (c *NativeCatalogAdapter) EvaluateBatch(ctx context.Context, input services
 		return ports.CatalogBatchResult{}, errors.New("catalog batch returned unexpected function call")
 	}
 	if err := validateStrictArguments([]byte(normalized.Text), req.ResponseFormat.JSONSchema.Schema); err != nil {
-		return ports.CatalogBatchResult{}, fmt.Errorf("invalid catalog candidates schema: %w", err)
+		return ports.CatalogBatchResult{}, aierrors.Wrap(aierrors.ModelOutput, fmt.Errorf("invalid catalog candidates schema: %w", err))
 	}
 	candidates, err := parseBatchCandidates(catalogCandidateResponse{Candidates: []batchCandidate{{Content: batchContent{Parts: []batchPart{{Text: normalized.Text}}}}}})
 	if err != nil {
@@ -145,6 +152,7 @@ func (c *NativeCatalogAdapter) EvaluateBatch(ctx context.Context, input services
 		len(info.Trace.Attempts) == 0 {
 		return ports.CatalogBatchResult{}, errors.New("native catalog usage mismatch")
 	}
+	catalogdump.Record(ctx, "batch_parsed_candidates", candidates)
 	latency := time.Since(started).Milliseconds()
 	return ports.CatalogBatchResult{
 		BatchNumber: input.BatchNumber,
@@ -159,6 +167,8 @@ func (c *NativeCatalogAdapter) EvaluateBatch(ctx context.Context, input services
 }
 
 func (c *NativeCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, input services.FinalEvaluationInput, userPrompt string) (ports.CapabilityDecision, ports.CustomerSalesUsageTelemetry, error) {
+	ctx = catalogdump.WithRun(ctx, input.AIRunID)
+	catalogdump.Record(ctx, "final_catalog_input", input)
 	req, err := c.finalRequest(input, userPrompt)
 	if err != nil {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
@@ -168,13 +178,16 @@ func (c *NativeCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, inp
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
 	}
 	if err := c.ensureModelCapacity(tokens); err != nil {
-		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
+		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, aierrors.Wrap(aierrors.CatalogBudget, err)
 	}
+	catalogdump.Record(ctx, "catalog_canonical_request", req)
 	started := time.Now()
 	raw, info, err := c.client.Complete(ctx, req)
 	if err != nil {
+		catalogdump.Record(ctx, "final_model_call_failed", err.Error())
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, fmt.Errorf("send final catalog evaluation: %w", err)
 	}
+	catalogdump.Record(ctx, "catalog_normalized_response", catalogdump.Raw(raw))
 	normalized, err := normalizeNativeResponse(raw)
 	if err != nil {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
@@ -198,6 +211,7 @@ func (c *NativeCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, inp
 		len(info.Trace.Attempts) == 0 {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, errors.New("native final catalog usage mismatch")
 	}
+	catalogdump.Record(ctx, "final_parsed_decision", decision)
 	return decision, ports.CustomerSalesUsageTelemetry{
 		Provider: info.Provider, Model: info.Model, InputTokens: normalized.Usage.PromptTokens,
 		CachedTokens: normalized.Usage.CachedTokens, OutputTokens: normalized.Usage.CompletionTokens,

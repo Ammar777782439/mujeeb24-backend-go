@@ -56,6 +56,7 @@ const (
 	AIRunFailureStagePolicy          = "policy"
 	AIRunFailureStageAuthorization   = "authorization"
 	AIRunFailureStageExecution       = "execution"
+	AIRunFailureStageUnclassified    = "unclassified"
 )
 
 // AIRunFailureCategory per contract ⑨ §6-7 and ⑧ §10 — Retryable vs Non-Retryable.
@@ -85,6 +86,12 @@ const (
 	AIRunFailureCategoryExecutionFailure     = "execution_failure"
 	AIRunFailureCategoryInfrastructure       = "infrastructure"
 )
+
+const AIRunFailureCategoryApplicationInternal = "application_internal"
+const AIRunFailureCategoryCatalogBudget = "catalog_budget_exceeded"
+const AIRunFailureCategoryCatalogData = "catalog_data_error"
+const AIRunFailureCategoryUnclassified = "unclassified"
+const AIRunFailureCategoryCancelled = "cancelled"
 
 // IsRetryable returns true when the failure category represents a transient
 // error that may succeed on a fresh attempt, per contract ⑨ §6.

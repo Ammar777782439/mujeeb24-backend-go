@@ -45,6 +45,9 @@ type StatusError struct {
 	Code     int
 }
 
+// ProviderHTTPStatus confirms the status was returned by the actual provider.
+func (e *StatusError) ProviderHTTPStatus() int { return e.Code }
+
 func (e *StatusError) Error() string {
 	return fmt.Sprintf("%s model request HTTP %d", e.Provider, e.Code)
 }

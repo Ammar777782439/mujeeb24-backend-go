@@ -11,6 +11,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/native"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/aierrors"
 )
 
 type workerContextInspection struct {
@@ -49,12 +50,14 @@ func TestAIProviderErrorClassification(t *testing.T) {
 		want string
 	}{
 		{"deadline", fmt.Errorf("gateway call: %w", context.DeadlineExceeded), string(ports.AIRunFailureCategoryTimeout)},
-		{"canceled", context.Canceled, string(ports.AIRunFailureCategoryInfrastructure)},
+		{"canceled", context.Canceled, string(ports.AIRunFailureCategoryCancelled)},
 		{"gateway 503", &native.StatusError{Provider: "gemini", Code: 503}, string(ports.AIRunFailureCategoryProviderTemporary)},
-		{"gateway 429", &native.StatusError{Provider: "gemini", Code: 429}, string(ports.AIRunFailureCategoryProviderTemporary)},
+		{"gateway 429", &native.StatusError{Provider: "gemini", Code: 429}, string(ports.AIRunFailureCategoryRateLimit)},
 		{"gateway 401", &native.StatusError{Provider: "gemini", Code: 401}, string(ports.AIRunFailureCategoryProviderPermanent)},
 		{"network timeout", &net.DNSError{IsTimeout: true}, string(ports.AIRunFailureCategoryTimeout)},
-		{"other", errors.New("invalid function arguments"), string(ports.AIRunFailureCategoryProviderPermanent)},
+		{"other", errors.New("invalid function arguments"), string(ports.AIRunFailureCategoryUnclassified)},
+		{"catalog budget", fmt.Errorf("wrapper: %w", aierrors.Wrap(aierrors.CatalogBudget, errors.New("no progress"))), string(ports.AIRunFailureCategoryCatalogBudget)},
+		{"model output", aierrors.Wrap(aierrors.ModelOutput, errors.New("schema")), string(ports.AIRunFailureCategoryInvalidAIOutput)},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {

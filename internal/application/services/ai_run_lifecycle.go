@@ -279,6 +279,7 @@ func isValidFailureStage(stage string) bool {
 		ports.AIRunFailureStagePolicy,
 		ports.AIRunFailureStageAuthorization,
 		ports.AIRunFailureStageExecution,
+		ports.AIRunFailureStageUnclassified,
 		"":
 		return true
 	}
@@ -301,6 +302,11 @@ func isValidFailureCategory(category string) bool {
 		ports.AIRunFailureCategoryUnsupportedAction,
 		ports.AIRunFailureCategoryExecutionFailure,
 		ports.AIRunFailureCategoryInfrastructure,
+		ports.AIRunFailureCategoryApplicationInternal,
+		ports.AIRunFailureCategoryCatalogBudget,
+		ports.AIRunFailureCategoryCatalogData,
+		ports.AIRunFailureCategoryUnclassified,
+		ports.AIRunFailureCategoryCancelled,
 		"":
 		return true
 	}
