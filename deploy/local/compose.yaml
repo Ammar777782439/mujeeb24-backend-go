@@ -39,7 +39,10 @@ services:
       - ${LOCAL_ENV_FILE:-.env}
     environment:
       HTTP_ADDR: :3001
+      MUJEEB_CATALOG_DEBUG_FILE: /var/lib/mujeeb/catalog-debug/catalog-evaluation.jsonl
       DATABASE_URL: postgres://${MUJEEB_POSTGRES_USERNAME}:${MUJEEB_POSTGRES_PASSWORD}@mujeeb-postgres:5432/${MUJEEB_POSTGRES_DATABASE}?sslmode=disable
+    volumes:
+      - mujeeb_catalog_debug:/var/lib/mujeeb/catalog-debug
     ports:
       - "127.0.0.1:${MUJEEB_HOST_PORT:-3001}:3001"
     depends_on:
@@ -106,3 +109,4 @@ services:
 volumes:
   mujeeb_postgres:
   pgadmin_data:
+  mujeeb_catalog_debug:

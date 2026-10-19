@@ -81,3 +81,13 @@ docker compose --env-file deploy\local\.env -f deploy\local\compose.yaml down
 
 [1]: https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/ "Cloudflare Quick Tunnels"
 [2]: https://developers.cloudflare.com/tunnel/setup/ "Cloudflare Named Tunnel setup"
+
+## تشخيص الكتالوج إلى ملف
+فعّل `MUJEEB_CATALOG_DEBUG_DUMP=true` في `deploy/local/.env`.
+عند استخدام `scripts/dev-local.ps1 -NoAir` يعمل Go على Windows خارج Docker، ويُكتب الملف في `tmp/catalog-debug/catalog-evaluation.jsonl`.
+عند تشغيل `mujeeb-api` في Docker، يكتب في `/var/lib/mujeeb/catalog-debug/catalog-evaluation.jsonl` على Volume دائم باسم `mujeeb_catalog_debug`.
+```cmd
+docker compose --env-file deploy/local/.env -f deploy/local/compose.yaml --profile docker-api up -d --build
+docker compose --env-file deploy/local/.env -f deploy/local/compose.yaml cp mujeeb-api:/var/lib/mujeeb/catalog-debug/catalog-evaluation.jsonl ./catalog-evaluation.jsonl
+```
+كل سطر في الملف يحتوي `run_id` و`stage` و`payload` بصيغة JSON. لا تُطبع حمولات الكتالوج في الطرفية. لا يتم حفظ Authorization headers أو مفاتيح المزود. قد يحتوي الملف على بيانات محادثة حقيقية، فلا ترفعه إلى Git.

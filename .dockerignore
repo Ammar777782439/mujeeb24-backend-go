@@ -9,3 +9,6 @@ dist
 tmp
 coverage.out
 coverage.html
+
+/tmp/catalog-debug/
+/catalog-evaluation.jsonl
