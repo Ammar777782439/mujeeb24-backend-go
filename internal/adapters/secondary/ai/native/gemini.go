@@ -287,6 +287,10 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 	defer httpRes.Body.Close()
 	catalogdump.Record(ctx, "gemini_http_status", httpRes.StatusCode)
 	if httpRes.StatusCode < 200 || httpRes.StatusCode >= 300 {
+		if catalogdump.Enabled(ctx) {
+			body, _ := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
+			catalogdump.Record(ctx, "gemini_raw_error_response", catalogdump.Raw(body))
+		}
 		return Response{}, &StatusError{Provider: "gemini", Code: httpRes.StatusCode}
 	}
 	raw, err := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
