@@ -127,6 +127,7 @@ func (c *NativeCatalogAdapter) EvaluateBatch(ctx context.Context, input services
 	started := time.Now()
 	raw, info, err := c.client.Complete(ctx, req)
 	if err != nil {
+		catalogdump.Record(ctx, "batch_model_call_failed", err.Error())
 		return ports.CatalogBatchResult{}, fmt.Errorf("send catalog batch %d: %w", input.BatchNumber, err)
 	}
 	catalogdump.Record(ctx, "catalog_normalized_response", catalogdump.Raw(raw))
@@ -183,6 +184,7 @@ func (c *NativeCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, inp
 	started := time.Now()
 	raw, info, err := c.client.Complete(ctx, req)
 	if err != nil {
+		catalogdump.Record(ctx, "final_model_call_failed", err.Error())
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, fmt.Errorf("send final catalog evaluation: %w", err)
 	}
 	catalogdump.Record(ctx, "catalog_normalized_response", catalogdump.Raw(raw))
