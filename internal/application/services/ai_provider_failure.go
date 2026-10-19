@@ -33,7 +33,7 @@ func classifyAIProviderError(err error) string {
 		}
 	}
 	// Do not manufacture provider HTTP errors from ordinary Go errors.
-	var status interface { ProviderHTTPStatus() int }
+	var status interface{ ProviderHTTPStatus() int }
 	if errors.As(err, &status) {
 		switch code := status.ProviderHTTPStatus(); {
 		case code == 429:
@@ -65,7 +65,7 @@ func classifyAIErrorStage(err error) string {
 			return ports.AIRunFailureStageValidation
 		}
 	}
-	var status interface { ProviderHTTPStatus() int }
+	var status interface{ ProviderHTTPStatus() int }
 	var networkError net.Error
 	if errors.As(err, &status) || errors.As(err, &networkError) || errors.Is(err, context.DeadlineExceeded) {
 		return ports.AIRunFailureStageProviderRequest
