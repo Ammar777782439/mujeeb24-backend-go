@@ -82,12 +82,24 @@ docker compose --env-file deploy\local\.env -f deploy\local\compose.yaml down
 [1]: https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/ "Cloudflare Quick Tunnels"
 [2]: https://developers.cloudflare.com/tunnel/setup/ "Cloudflare Named Tunnel setup"
 
-## تشخيص الكتالوج إلى ملف
-فعّل `MUJEEB_CATALOG_DEBUG_DUMP=true` في `deploy/local/.env`.
-عند استخدام `scripts/dev-local.ps1 -NoAir` يعمل Go على Windows خارج Docker، ويُكتب الملف في `tmp/catalog-debug/catalog-evaluation.jsonl`.
-عند تشغيل `mujeeb-api` في Docker، يكتب في `/var/lib/mujeeb/catalog-debug/catalog-evaluation.jsonl` على Volume دائم باسم `mujeeb_catalog_debug`.
-```cmd
-docker compose --env-file deploy/local/.env -f deploy/local/compose.yaml --profile docker-api up -d --build
-docker compose --env-file deploy/local/.env -f deploy/local/compose.yaml cp mujeeb-api:/var/lib/mujeeb/catalog-debug/catalog-evaluation.jsonl ./catalog-evaluation.jsonl
+## تشخيص الكتالوج: حفظ مباشر في جذر المستودع
+
+فعّل `MUJEEB_CATALOG_DEBUG_DUMP=true` في `deploy/local/.env`، وستُكتب تفاصيل التقييم تلقائيًا هنا:
+
+```text
+mujeeb24-backend-go/catalog-debug/catalog-evaluation.jsonl
 ```
-كل سطر في الملف يحتوي `run_id` و`stage` و`payload` بصيغة JSON. لا تُطبع حمولات الكتالوج في الطرفية. لا يتم حفظ Authorization headers أو مفاتيح المزود. قد يحتوي الملف على بيانات محادثة حقيقية، فلا ترفعه إلى Git.
+
+عند التشغيل بواسطة Docker Compose، يربط `deploy/local/compose.yaml` المجلد المحلي `../../catalog-debug` مباشرةً بالمسار `/var/lib/mujeeb/catalog-debug` داخل الحاوية (**Bind Mount**). Docker Compose ينشئ المجلد على الجهاز عند الحاجة. لا تستخدم `docker cp` ولا تحتاج إلى استخراج الملف من Volume.
+
+من جذر المستودع، أعد إنشاء خدمة API لتطبيق التغيير:
+
+```cmd
+docker compose --env-file deploy/local/.env -f deploy/local/compose.yaml --profile docker-api up -d --build --force-recreate mujeeb-api
+```
+
+عند استخدام `scripts/dev-local.ps1 -NoAir` بدل Docker، يعمل Go من جذر المستودع أيضًا؛ تأكد أن ملف `deploy/local/.env` يحتوي `MUJEEB_CATALOG_DEBUG_FILE=catalog-debug/catalog-evaluation.jsonl` بدل المسار القديم.
+
+**تنبيه انتقال:** سجل التشغيلات السابقة داخل الـNamed Volume القديم `mujeeb_catalog_debug` لا ينتقل تلقائيًا إلى المجلد الجديد. يبقى الـVolume القديم منفصلًا ما لم تحذفه عمدًا. على Linux قد تحتاج ضبط صلاحيات الكتابة للمستخدم غير الجذري بالحاوية (UID 65532) على المجلد المحلي؛ Docker Desktop على Windows يتعامل عادةً مع مشاركة ملفات المضيف دون هذه الخطوة.
+
+كل سطر في الملف يحتوي `run_id` و`stage` و`payload` بصيغة JSON. تظل السجلات التشغيلية العادية في الطرفية، لكن حمولات الكتالوج التفصيلية تُكتب في الملف. لا تُسجّل ترويسات Authorization أو مفاتيح المزود. مجلد `catalog-debug/` مستبعد من Git لأن المحتوى قد يتضمن بيانات محادثات وكتالوج حقيقية.
