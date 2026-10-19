@@ -56,6 +56,7 @@ const (
 	AIRunFailureStagePolicy          = "policy"
 	AIRunFailureStageAuthorization   = "authorization"
 	AIRunFailureStageExecution       = "execution"
+	AIRunFailureStageUnclassified    = "unclassified"
 )
 
 // AIRunFailureCategory per contract ⑨ §6-7 and ⑧ §10 — Retryable vs Non-Retryable.
