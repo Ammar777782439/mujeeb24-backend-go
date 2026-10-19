@@ -279,6 +279,7 @@ func isValidFailureStage(stage string) bool {
 		ports.AIRunFailureStagePolicy,
 		ports.AIRunFailureStageAuthorization,
 		ports.AIRunFailureStageExecution,
+		ports.AIRunFailureStageUnclassified,
 		"":
 		return true
 	}
