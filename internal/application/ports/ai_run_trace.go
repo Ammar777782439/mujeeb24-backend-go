@@ -85,12 +85,13 @@ const (
 	AIRunFailureCategoryUnsupportedAction    = "unsupported_action"
 	AIRunFailureCategoryExecutionFailure     = "execution_failure"
 	AIRunFailureCategoryInfrastructure       = "infrastructure"
-	AIRunFailureCategoryApplicationInternal = "application_internal"
-	AIRunFailureCategoryCatalogBudget       = "catalog_budget_exceeded"
-	AIRunFailureCategoryCatalogData         = "catalog_data_error"
-	AIRunFailureCategoryUnclassified        = "unclassified"
-	AIRunFailureCategoryCancelled           = "cancelled"
 )
+
+const AIRunFailureCategoryApplicationInternal = "application_internal"
+const AIRunFailureCategoryCatalogBudget = "catalog_budget_exceeded"
+const AIRunFailureCategoryCatalogData = "catalog_data_error"
+const AIRunFailureCategoryUnclassified = "unclassified"
+const AIRunFailureCategoryCancelled = "cancelled"
 
 // IsRetryable returns true when the failure category represents a transient
 // error that may succeed on a fresh attempt, per contract ⑨ §6.
