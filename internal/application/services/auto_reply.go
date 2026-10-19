@@ -314,6 +314,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			EntityContract:      entityContract,
 		})
 		if err != nil {
+			catalogdump.Record(catalogdump.WithRun(ctx, run.ID), "catalog_evaluation_failed", err.Error())
 			log.Printf("[AutoReply] CATALOG_EVAL_FAILED run=%s err=%v", run.ID, err)
 			s.markFailedSafe(ctx, run, classifyAIErrorStage(err), classifyAIProviderError(err), "catalog evaluation: "+err.Error())
 			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, fmt.Errorf("catalog evaluation failed: %w", err)
