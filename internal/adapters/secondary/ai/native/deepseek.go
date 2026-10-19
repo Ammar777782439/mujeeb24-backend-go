@@ -219,7 +219,7 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 		if timeoutCtx.Err() != nil {
 			return Response{}, timeoutCtx.Err()
 		}
-		return Response{}, errors.New("DeepSeek transport failure")
+		return Response{}, fmt.Errorf("DeepSeek transport failure: %w", err)
 	}
 	defer httpRes.Body.Close()
 	catalogdump.Record(ctx, "deepseek_http_status", httpRes.StatusCode)
