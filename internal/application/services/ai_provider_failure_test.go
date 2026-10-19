@@ -57,7 +57,7 @@ func TestAIProviderErrorClassification(t *testing.T) {
 		{"network timeout", &net.DNSError{IsTimeout: true}, string(ports.AIRunFailureCategoryTimeout)},
 		{"other", errors.New("invalid function arguments"), string(ports.AIRunFailureCategoryUnclassified)},
 		{"catalog budget", fmt.Errorf("wrapper: %w", aierrors.Wrap(aierrors.CatalogBudget, errors.New("no progress"))), string(ports.AIRunFailureCategoryCatalogBudget)},
-		{"model output", aierrors.Wrap(aierrors.ModelOutput, errors.New("schema")), string(ports.AIRunFailureCategoryInvalidAIOutput)}
+		{"model output", aierrors.Wrap(aierrors.ModelOutput, errors.New("schema")), string(ports.AIRunFailureCategoryInvalidAIOutput)},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
