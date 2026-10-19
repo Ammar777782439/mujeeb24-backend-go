@@ -3,3 +3,8 @@ ALTER TABLE ai_runs DROP CONSTRAINT ai_runs_failure_category_chk;
 ALTER TABLE ai_runs ADD CONSTRAINT ai_runs_failure_category_chk CHECK (failure_category IS NULL OR failure_category IN ('provider_temporary', 'provider_permanent', 'network', 'timeout', 'rate_limit', 'invalid_ai_output', 'invalid_tool_arguments', 'tenant_violation', 'invalid_reference', 'policy_denial', 'authorization_denial', 'unsupported_action', 'execution_failure', 'infrastructure', 'application_internal', 'catalog_budget_exceeded', 'catalog_data_error', 'unclassified', 'cancelled'));
 ALTER TABLE ai_run_attempts DROP CONSTRAINT ai_run_attempts_failure_category_chk;
 ALTER TABLE ai_run_attempts ADD CONSTRAINT ai_run_attempts_failure_category_chk CHECK (failure_category IS NULL OR failure_category IN ('provider_temporary', 'provider_permanent', 'network', 'timeout', 'rate_limit', 'invalid_ai_output', 'invalid_tool_arguments', 'tenant_violation', 'invalid_reference', 'policy_denial', 'authorization_denial', 'unsupported_action', 'execution_failure', 'infrastructure', 'application_internal', 'catalog_budget_exceeded', 'catalog_data_error', 'unclassified', 'cancelled'));
+
+ALTER TABLE ai_runs DROP CONSTRAINT ai_runs_failure_stage_chk;
+ALTER TABLE ai_runs ADD CONSTRAINT ai_runs_failure_stage_chk CHECK (failure_stage IS NULL OR failure_stage IN ('context_build', 'gemini_request', 'tool_call', 'validation', 'policy', 'authorization', 'execution', 'unclassified'));
+ALTER TABLE ai_run_attempts DROP CONSTRAINT ai_run_attempts_failure_stage_chk;
+ALTER TABLE ai_run_attempts ADD CONSTRAINT ai_run_attempts_failure_stage_chk CHECK (failure_stage IS NULL OR failure_stage IN ('context_build', 'gemini_request', 'tool_call', 'validation', 'policy', 'authorization', 'execution', 'unclassified'));
