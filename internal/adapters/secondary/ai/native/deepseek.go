@@ -224,6 +224,10 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	defer httpRes.Body.Close()
 	catalogdump.Record(ctx, "deepseek_http_status", httpRes.StatusCode)
 	if httpRes.StatusCode < 200 || httpRes.StatusCode >= 300 {
+		if catalogdump.Enabled(ctx) {
+			body, _ := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
+			catalogdump.Record(ctx, "deepseek_raw_error_response", catalogdump.Raw(body))
+		}
 		return Response{}, &StatusError{Provider: "deepseek", Code: httpRes.StatusCode}
 	}
 	raw, err := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
