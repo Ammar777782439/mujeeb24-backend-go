@@ -70,5 +70,5 @@ func classifyAIErrorStage(err error) string {
 	if errors.As(err, &status) || errors.As(err, &networkError) || errors.Is(err, context.DeadlineExceeded) {
 		return ports.AIRunFailureStageProviderRequest
 	}
-	return ""
+	return ports.AIRunFailureStageUnclassified
 }
