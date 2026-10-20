@@ -335,3 +335,91 @@ func TestSalesStartContinuationRecognizesPersistedHumanHandoff(t *testing.T) {
 		t.Fatalf("handoff duplicated an effect: outbox=%d workflows=%d leads=%d", outboxCount, workflowCount, leadCount)
 	}
 }
+
+// TestSalesStartContinuationRecognizesHumanOwnershipHandoff reproduces the
+// previous split: the worker detected state-based handoff but missed ownership-based handoff.
+func TestSalesStartContinuationRecognizesHumanOwnershipHandoff(t *testing.T) {
+	f := newSalesWorkflowFixture(t)
+	startID := createPendingStart(t, f)
+	payload := "m24.sales.start:" + startID + ":accept"
+	eventMessage := saveStartPostback(t, f, payload)
+	jobs := NewSalesActionJobs(f.a)
+	first := fixtureClaimSalesJob(t, f, eventMessage, time.Now().UTC())
+
+	result, err := startFixtureService(f).HandleStartButton(context.Background(), ports.SalesButtonAction{
+		BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation,
+		SourceMessageID: eventMessage, Payload: payload, Now: time.Now().UTC(),
+	})
+	if err != nil || result.Workflow.ID == "" {
+		t.Fatalf("start consent failed: result=%+v err=%v", result, err)
+	}
+	if err := jobs.Finish(context.Background(), first.ID, first.LeaseToken, "sales_continuation_queued", time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	// The workflow is still gathering; only the conversation has been
+	// durably handed over to an employee.
+	var workflowState string
+	if err := f.a.Pool().QueryRow(context.Background(), `SELECT state FROM sales_workflows
+		WHERE business_id=$1::uuid AND id=$2::uuid`, f.business, result.Workflow.ID).Scan(&workflowState); err != nil {
+		t.Fatal(err)
+	}
+	if workflowState != "gathering" {
+		t.Fatalf("expected a gathering workflow, got %q", workflowState)
+	}
+	if _, err := f.a.Pool().Exec(context.Background(), `UPDATE conversations
+		SET ownership='human',updated_at=now()
+		WHERE business_id=$1::uuid AND id=$2::uuid`, f.business, f.conversation); err != nil {
+		t.Fatal(err)
+	}
+	var conversationState, ownership string
+	if err := f.a.Pool().QueryRow(context.Background(), `SELECT state,ownership FROM conversations
+		WHERE business_id=$1::uuid AND id=$2::uuid`, f.business, f.conversation).Scan(&conversationState, &ownership); err != nil {
+		t.Fatal(err)
+	}
+	if conversationState == "waiting_human" || ownership != "human" {
+		t.Fatalf("test must isolate ownership-based handoff: state=%s ownership=%s", conversationState, ownership)
+	}
+
+	continued := fixtureClaimSalesJob(t, f, eventMessage, time.Now().UTC())
+	snapshot, err := jobs.LoadContinuation(context.Background(), continued)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !snapshot.AwaitingHumanReview || snapshot.Completed || snapshot.WorkflowID != result.Workflow.ID {
+		t.Fatalf("persisted human ownership must be detected before AI runs: %+v", snapshot)
+	}
+	// Same persisted condition must also authorize the final state transition.
+	if err := f.a.Within(context.Background(), func(tx context.Context) error {
+		return jobs.CompleteContinuation(tx, continued, startID)
+	}); err != nil {
+		t.Fatalf("human handoff was detected but not completable: %v", err)
+	}
+	if err := jobs.Finish(context.Background(), continued.ID, continued.LeaseToken, "", time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	var jobState, continuationState string
+	if err := f.a.Pool().QueryRow(context.Background(), `SELECT j.state,s.continuation_state
+		FROM sales_action_jobs j JOIN sales_start_requests s
+		ON s.business_id=j.business_id AND s.decision_message_id=j.message_id
+		WHERE j.id=$1::uuid`, continued.ID).Scan(&jobState, &continuationState); err != nil {
+		t.Fatal(err)
+	}
+	if jobState != "completed" || continuationState != "completed" {
+		t.Fatalf("handoff was not durably finalized: job=%s continuation=%s", jobState, continuationState)
+	}
+	var outboxCount, workflowCount, leadCount int
+	if err := f.a.Pool().QueryRow(context.Background(), `SELECT count(*) FROM outbox_entries WHERE business_id=$1::uuid`, f.business).Scan(&outboxCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.a.Pool().QueryRow(context.Background(), `SELECT count(*) FROM sales_workflows WHERE business_id=$1::uuid`, f.business).Scan(&workflowCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.a.Pool().QueryRow(context.Background(), `SELECT count(*) FROM leads WHERE business_id=$1::uuid`, f.business).Scan(&leadCount); err != nil {
+		t.Fatal(err)
+	}
+	if outboxCount != 0 || workflowCount != 1 || leadCount != 1 {
+		t.Fatalf("handoff duplicated an effect: outbox=%d workflows=%d leads=%d", outboxCount, workflowCount, leadCount)
+	}
+}
