@@ -15,9 +15,9 @@ import (
 )
 
 type SalesActionProcessor struct {
-	Jobs      ports.SalesActionJobRepository
-	Sales     CustomerSalesWorkflowService
-	AutoReply commands.AutoReplyHandler
+	Jobs           ports.SalesActionJobRepository
+	Sales          CustomerSalesWorkflowService
+	AutoReply      commands.AutoReplyHandler
 	CostProtection AICostProtectionChecker
 }
 
@@ -82,17 +82,17 @@ func (p SalesActionProcessor) continueSales(ctx context.Context, j ports.SalesAc
 		return errors.New("customer sales AI continuation is not wired")
 	}
 	if strings.TrimSpace(continuation.Text) == "" {
-		return &permanentContinuationError{reason:"original customer message has no reusable text"}
+		return &permanentContinuationError{reason: "original customer message has no reusable text"}
 	}
-	if p.CostProtection==nil {
-		return &permanentContinuationError{reason:"customer AI cost protection unavailable"}
+	if p.CostProtection == nil {
+		return &permanentContinuationError{reason: "customer AI cost protection unavailable"}
 	}
-	allowed,reason:=p.CostProtection.IsAIExecutionAllowed(ctx,continuation.BusinessID)
-	if !allowed{
+	allowed, reason := p.CostProtection.IsAIExecutionAllowed(ctx, continuation.BusinessID)
+	if !allowed {
 		// The existing cost/entitlement gate also applies to durable AI.
 		// A blocked execution remains visible as a terminal job, not a
 		// falsely completed reply or an invented employee handoff.
-		return &permanentContinuationError{reason:"customer AI continuation denied by "+reason}
+		return &permanentContinuationError{reason: "customer AI continuation denied by " + reason}
 	}
 	_, err = p.AutoReply.Handle(ctx, commands.AutoReplyCommand{
 		Meta:                   commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(continuation.BusinessID)}},
@@ -120,18 +120,21 @@ func (p SalesActionProcessor) continueSales(ctx context.Context, j ports.SalesAc
 	return nil
 }
 
-type permanentContinuationError struct{reason string}
-func (e *permanentContinuationError) Error() string {return e.reason}
+type permanentContinuationError struct{ reason string }
+
+func (e *permanentContinuationError) Error() string { return e.reason }
 
 func retryableSalesContinuation(err error) bool {
 	if err == nil {
 		return false
 	}
 	var permanent *permanentContinuationError
-	if errors.As(err,&permanent){return false}
+	if errors.As(err, &permanent) {
+		return false
+	}
 	var appErr *appErrors.Error
-	if errors.As(err,&appErr) {
-		return appErr.Retryable || appErr.Code==appErrors.CodeExternalDependency
+	if errors.As(err, &appErr) {
+		return appErr.Retryable || appErr.Code == appErrors.CodeExternalDependency
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return true

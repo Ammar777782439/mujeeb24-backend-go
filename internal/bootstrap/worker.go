@@ -66,11 +66,11 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 		autoReply.ContinuationJobs = jobs
 		sales := buildSalesWorkflowService(database, outbox)
 		runtime.SalesActions = &services.SalesActionProcessor{
-			Jobs:jobs,Sales:sales,AutoReply:autoReply,
-			CostProtection:&services.AICostProtectionService{
-				Subscriptions:postgres.NewSubscriptionRepository(database),
-				AIUsage:postgres.NewAIUsageRepository(database),
-				PlatformOperations:platformOperations,
+			Jobs: jobs, Sales: sales, AutoReply: autoReply,
+			CostProtection: &services.AICostProtectionService{
+				Subscriptions:      postgres.NewSubscriptionRepository(database),
+				AIUsage:            postgres.NewAIUsageRepository(database),
+				PlatformOperations: platformOperations,
 			},
 		}
 	}
