@@ -17,23 +17,29 @@ import (
 
 // fixtureClaimSalesJob selects the intended event from PostgreSQL's shared test queue.
 // Other test events are immediately released without changing their attempt budget.
-func fixtureClaimSalesJob(t *testing.T,f salesWorkflowFixture,message string,now time.Time) ports.SalesActionJob {
+func fixtureClaimSalesJob(t *testing.T, f salesWorkflowFixture, message string, now time.Time) ports.SalesActionJob {
 	t.Helper()
-	jobs,err:=NewSalesActionJobs(f.a).Claim(context.Background(),100,now)
-	if err!=nil {t.Fatal(err)}
+	jobs, err := NewSalesActionJobs(f.a).Claim(context.Background(), 100, now)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var desired ports.SalesActionJob
-	for _,j:=range jobs {
-		if j.Action.BusinessID==f.business && j.Action.SourceMessageID==message {
-			desired=j
+	for _, j := range jobs {
+		if j.Action.BusinessID == f.business && j.Action.SourceMessageID == message {
+			desired = j
 			continue
 		}
-		_,err:=f.a.Pool().Exec(context.Background(),`UPDATE sales_action_jobs SET
+		_, err := f.a.Pool().Exec(context.Background(), `UPDATE sales_action_jobs SET
 			state='pending',lease_token=NULL,lease_until=NULL,
 			attempts=GREATEST(attempts-1,0)
-			WHERE id=$1::uuid AND lease_token=$2::uuid`,j.ID,j.LeaseToken)
-		if err!=nil{t.Fatal(err)}
+			WHERE id=$1::uuid AND lease_token=$2::uuid`, j.ID, j.LeaseToken)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
-	if desired.ID==""{t.Fatalf("fixture job not claimable: business=%s message=%s",f.business,message)}
+	if desired.ID == "" {
+		t.Fatalf("fixture job not claimable: business=%s message=%s", f.business, message)
+	}
 	return desired
 }
 
@@ -44,7 +50,7 @@ func TestSalesStartButtonQueuesSingleResumableContinuation(t *testing.T) {
 	message := saveStartPostback(t, f, payload)
 	repo := NewSalesActionJobs(f.a)
 	now := time.Now().UTC()
-	j := fixtureClaimSalesJob(t,f,message,now)
+	j := fixtureClaimSalesJob(t, f, message, now)
 	if j.Phase != "apply_action" {
 		t.Fatalf("wrong first phase %q", j.Phase)
 	}
@@ -68,7 +74,7 @@ func TestSalesStartButtonQueuesSingleResumableContinuation(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Crash after committed acceptance / before resumption: re-claim the SAME job.
-	next := fixtureClaimSalesJob(t,f,message,time.Now().UTC())
+	next := fixtureClaimSalesJob(t, f, message, time.Now().UTC())
 	if next.ID != j.ID || next.Phase != "continue_ai" {
 		t.Fatalf("wrong recovery job: %+v", next)
 	}
@@ -103,7 +109,7 @@ func TestSalesStartContinuationOutboxCommitSurvivesWorkerCrash(t *testing.T) {
 	payload := "m24.sales.start:" + id + ":accept"
 	msg := saveStartPostback(t, f, payload)
 	repo := NewSalesActionJobs(f.a)
-	first := fixtureClaimSalesJob(t,f,msg,time.Now().UTC())
+	first := fixtureClaimSalesJob(t, f, msg, time.Now().UTC())
 	_, err = startFixtureService(f).HandleStartButton(context.Background(), ports.SalesButtonAction{
 		BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation,
 		SourceMessageID: msg, Payload: payload, Now: time.Now().UTC()})
@@ -113,7 +119,7 @@ func TestSalesStartContinuationOutboxCommitSurvivesWorkerCrash(t *testing.T) {
 	if err := repo.Finish(context.Background(), first.ID, first.LeaseToken, "sales_continuation_queued", time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
-	job := fixtureClaimSalesJob(t,f,msg,time.Now().UTC())
+	job := fixtureClaimSalesJob(t, f, msg, time.Now().UTC())
 	// This is the same short transaction used by AutoReplyService after AI.
 	err = f.a.Within(context.Background(), func(tx context.Context) error {
 		now := time.Now().UTC()
@@ -145,7 +151,7 @@ func TestSalesStartContinuationOutboxCommitSurvivesWorkerCrash(t *testing.T) {
 		WHERE id=$1::uuid`, job.ID); err != nil {
 		t.Fatal(err)
 	}
-	next := fixtureClaimSalesJob(t,f,msg,time.Now().UTC())
+	next := fixtureClaimSalesJob(t, f, msg, time.Now().UTC())
 	info, err := repo.LoadContinuation(context.Background(), next)
 	if err != nil || !info.Completed {
 		t.Fatalf("lost committed reply on recovery: %+v %v", info, err)
@@ -174,7 +180,7 @@ func TestSalesStartContinuationRetryIsDelayedAndLeaseFenced(t *testing.T) {
 	msg := saveStartPostback(t, f, payload)
 	repo := NewSalesActionJobs(f.a)
 	now := time.Now().UTC()
-	first:=fixtureClaimSalesJob(t,f,msg,now)
+	first := fixtureClaimSalesJob(t, f, msg, now)
 	if _, err := startFixtureService(f).HandleStartButton(context.Background(), ports.SalesButtonAction{
 		BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation,
 		SourceMessageID: msg, Payload: payload, Now: now}); err != nil {
@@ -183,7 +189,7 @@ func TestSalesStartContinuationRetryIsDelayedAndLeaseFenced(t *testing.T) {
 	if err := repo.Finish(context.Background(), first.ID, first.LeaseToken, "sales_continuation_queued", time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
-	cont:=fixtureClaimSalesJob(t,f,msg,time.Now().UTC())
+	cont := fixtureClaimSalesJob(t, f, msg, time.Now().UTC())
 	if err := repo.Finish(context.Background(), cont.ID, cont.LeaseToken, "sales_continuation_transient", time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
@@ -196,10 +202,14 @@ func TestSalesStartContinuationRetryIsDelayedAndLeaseFenced(t *testing.T) {
 		t.Fatalf("transient failure had no retry backoff: %s %s", state, next)
 	}
 	var due bool
-	if err:=f.a.Pool().QueryRow(context.Background(),`SELECT EXISTS(SELECT 1 FROM sales_action_jobs
-		WHERE id=$1::uuid AND state='pending' AND next_attempt_at<=now())`,cont.ID).Scan(&due);err!=nil{t.Fatal(err)}
-	if due{t.Fatal("retry was scheduled too soon")}
-	after:=fixtureClaimSalesJob(t,f,msg,next.Add(time.Second))
+	if err := f.a.Pool().QueryRow(context.Background(), `SELECT EXISTS(SELECT 1 FROM sales_action_jobs
+		WHERE id=$1::uuid AND state='pending' AND next_attempt_at<=now())`, cont.ID).Scan(&due); err != nil {
+		t.Fatal(err)
+	}
+	if due {
+		t.Fatal("retry was scheduled too soon")
+	}
+	after := fixtureClaimSalesJob(t, f, msg, next.Add(time.Second))
 	if err := repo.Finish(context.Background(), cont[0].ID, cont[0].LeaseToken, "", time.Now().UTC()); err == nil {
 		t.Fatal("lost lease token still able to complete")
 	}
@@ -220,7 +230,7 @@ func TestSalesStartRetryNeverReAcceptsAnAlreadyExpiredRequest(t *testing.T) {
 	payload := "m24.sales.start:" + id + ":accept"
 	msg := saveStartPostback(t, f, payload)
 	repo := NewSalesActionJobs(f.a)
-	job:=fixtureClaimSalesJob(t,f,msg,time.Now().UTC())
+	job := fixtureClaimSalesJob(t, f, msg, time.Now().UTC())
 	_, err = startFixtureService(f).HandleStartButton(context.Background(), ports.SalesButtonAction{
 		BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation,
 		SourceMessageID: msg, Payload: payload, Now: f.now.Add(25 * time.Hour)})
