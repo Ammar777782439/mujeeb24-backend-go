@@ -52,8 +52,8 @@ func TestSalesActionProcessorDoesNotCallAIForPersistedHumanHandoff(t *testing.T)
 	jobs := &persistedHumanHandoffJobs{}
 	ai := &forbiddenHandoffAI{}
 	processor := SalesActionProcessor{
-		Jobs: jobs,
-		Sales: CustomerSalesWorkflowService{Transactions: fakeTransactionManager{}},
+		Jobs:      jobs,
+		Sales:     CustomerSalesWorkflowService{Transactions: fakeTransactionManager{}},
 		AutoReply: ai,
 	}
 	count, err := processor.Process(context.Background(), 1)

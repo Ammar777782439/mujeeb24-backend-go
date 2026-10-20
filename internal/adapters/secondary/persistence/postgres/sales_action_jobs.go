@@ -151,7 +151,7 @@ func (r *SalesActionJobs) LoadContinuation(ctx context.Context, j ports.SalesAct
 		return out, err
 	}
 	out.Completed = continuationState == "completed"
-		return out, nil
+	return out, nil
 }
 
 // CompleteContinuation must be called in the same short DB transaction as
