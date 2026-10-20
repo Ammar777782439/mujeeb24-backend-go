@@ -14,9 +14,9 @@ import (
 )
 
 type salesWorkflowFixture struct {
-	a                                                                             *Adapter
+	a                                                                                    *Adapter
 	business, customer, conversation, reference, connection, item, offer, message, start string
-	now                                                                           time.Time
+	now                                                                                  time.Time
 }
 
 func newSalesWorkflowFixture(t *testing.T) salesWorkflowFixture {
@@ -57,10 +57,10 @@ func newSalesWorkflowFixture(t *testing.T) salesWorkflowFixture {
 	outbound := uuid.NewString()
 	exec(`INSERT INTO outbound_messages(id,business_id,conversation_id,conversation_reference_id,connection_id,provider_ref,channel,origin,direction,transport,content_reference,provider_idempotency_key,status,created_at,updated_at)
 		VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,'socialapi','instagram','ai','outbound','provider','test-content',$6,'pending',now(),now())`,
-		outbound,f.business,f.conversation,f.reference,f.connection,"fixture-start:"+outbound)
+		outbound, f.business, f.conversation, f.reference, f.connection, "fixture-start:"+outbound)
 	exec(`INSERT INTO sales_start_requests(id,business_id,customer_id,conversation_id,outbound_message_id,source_message_id,status,accept_token_hash,decline_token_hash,expires_at,resolved_at,decision_message_id,continuation_state,created_at,updated_at)
 		VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::uuid,'accepted',$7,$8,now()+interval '24 hours',now(),$6::uuid,'pending',now(),now())`,
-		f.start,f.business,f.customer,f.conversation,outbound,f.message,"fixture-accept:"+f.start,"fixture-decline:"+f.start)
+		f.start, f.business, f.customer, f.conversation, outbound, f.message, "fixture-accept:"+f.start, "fixture-decline:"+f.start)
 	// Append-only audit remains; fixtures use unique tenant ids and are confined to the test database.
 	return f
 }

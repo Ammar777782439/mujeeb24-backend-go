@@ -48,7 +48,7 @@ type SalesRequirementDefinition struct {
 }
 type SalesWorkflowContext struct {
 	// Server-owned consent for the active sales workflow. Never model-authored.
-	StartRequestID string `json:"start_request_id,omitempty"`
+	StartRequestID    string                `json:"start_request_id,omitempty"`
 	Enabled           bool                  `json:"enabled"`
 	AllowInteractions bool                  `json:"allow_interactions"`
 	Active            []SalesWorkflowRecord `json:"active"`
@@ -112,13 +112,13 @@ const SalesStartTTL = 24 * time.Hour
 // The start decision is only permission to prepare a sale, never agreement confirmation.
 type SalesStartRequest struct {
 	ID, BusinessID, CustomerID, ConversationID string
-	OutboundMessageID, SourceMessageID string
-	CreatedAt, ExpiresAt time.Time
+	OutboundMessageID, SourceMessageID         string
+	CreatedAt, ExpiresAt                       time.Time
 }
 
 type SalesStartDecision struct {
 	ID, BusinessID, CustomerID, ConversationID, SourceMessageID string
-	Accepted, Duplicate, RequiresApproval bool
+	Accepted, Duplicate, RequiresApproval                       bool
 }
 
 type SalesStartRepository interface {

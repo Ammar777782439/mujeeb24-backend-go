@@ -413,7 +413,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	}
 
 	if s.DisableInformationalReplies && effective.Capability == ports.CustomerSalesCapabilityOfferSalesStart {
-		return commands.AutoReplyResult{Action:"no_action"},nil
+		return commands.AutoReplyResult{Action: "no_action"}, nil
 	}
 	if s.DisableInformationalReplies && (effective.Capability == ports.CustomerSalesCapabilityRespondWithoutAction || (effective.Capability == ports.CustomerSalesCapabilityAsk && (builtContext == nil || builtContext.Sales == nil || len(builtContext.Sales.Active) == 0))) {
 		return commands.AutoReplyResult{Action: "no_action"}, nil
@@ -589,13 +589,15 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			message := ports.InteractiveMessage{
 				Text: replyText,
 				Buttons: []ports.InteractiveButton{
-					{Title:"نعم، جهز طلبي",Payload:"m24.sales.start:"+startRequestID+":accept"},
-					{Title:"لا، أستفسر فقط",Payload:"m24.sales.start:"+startRequestID+":decline"},
+					{Title: "نعم، جهز طلبي", Payload: "m24.sales.start:" + startRequestID + ":accept"},
+					{Title: "لا، أستفسر فقط", Payload: "m24.sales.start:" + startRequestID + ":decline"},
 				},
 			}
 			var encodeErr error
-			contentReference,encodeErr = EncodeInteractiveContentReference(message)
-			if encodeErr != nil { return encodeErr }
+			contentReference, encodeErr = EncodeInteractiveContentReference(message)
+			if encodeErr != nil {
+				return encodeErr
+			}
 		}
 		outbound, outboundErr := s.OutboundRepository.CreatePending(txCtx, ports.OutboundMessageDraft{
 			ID:                      outboundID,
@@ -616,11 +618,13 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			return mapAIRepositoryError(outboundErr)
 		}
 		if startRequestID != "" {
-			if err := s.Sales.SalesStarts.Create(txCtx,ports.SalesStartRequest{
-				ID:startRequestID,BusinessID:businessID,CustomerID:builtContext.Customer.Reference,
-				ConversationID:conversationID,OutboundMessageID:outbound.ID,
-				SourceMessageID:sourceMessageRef,CreatedAt:now,ExpiresAt:now.Add(ports.SalesStartTTL),
-			});err!=nil{return err}
+			if err := s.Sales.SalesStarts.Create(txCtx, ports.SalesStartRequest{
+				ID: startRequestID, BusinessID: businessID, CustomerID: builtContext.Customer.Reference,
+				ConversationID: conversationID, OutboundMessageID: outbound.ID,
+				SourceMessageID: sourceMessageRef, CreatedAt: now, ExpiresAt: now.Add(ports.SalesStartTTL),
+			}); err != nil {
+				return err
+			}
 		}
 		if s.MessageRepository != nil {
 			msgDraft := ports.CommunicationMessageDraft{

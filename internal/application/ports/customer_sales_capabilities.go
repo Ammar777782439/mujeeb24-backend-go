@@ -9,7 +9,7 @@ const (
 	CustomerSalesCapabilityAsk                  CustomerSalesCapability = "ask_customer"
 	CustomerSalesCapabilityHandoff              CustomerSalesCapability = "handoff_to_human"
 	CustomerSalesCapabilityFullCatalog          CustomerSalesCapability = "evaluate_full_catalog"
-	CustomerSalesCapabilityOfferSalesStart       CustomerSalesCapability = "offer_sales_start"
+	CustomerSalesCapabilityOfferSalesStart      CustomerSalesCapability = "offer_sales_start"
 	CustomerSalesCapabilityRecordLead           CustomerSalesCapability = "record_lead"
 	CustomerSalesCapabilityCreateDraft          CustomerSalesCapability = "create_transaction_draft"
 	CustomerSalesCapabilityUpdateDraft          CustomerSalesCapability = "update_transaction_draft"
@@ -75,16 +75,20 @@ func CustomerSalesCapabilityDefinitionFor(capability CustomerSalesCapability) (C
 	return CustomerSalesCapabilityDefinition{}, false
 }
 
- // CustomerSalesCapabilitiesForConsent exposes the start offer before customer acceptance,
- // and ordinary sales actions only after a server-verified, active start request.
+// CustomerSalesCapabilitiesForConsent exposes the start offer before customer acceptance,
+// and ordinary sales actions only after a server-verified, active start request.
 func CustomerSalesCapabilitiesForConsent(fullCatalog, salesEnabled, startAuthorized bool) []CustomerSalesCapability {
 	base := CustomerSalesCapabilities(fullCatalog, salesEnabled)
-	result := make([]CustomerSalesCapability,0,len(base))
+	result := make([]CustomerSalesCapability, 0, len(base))
 	for _, capability := range base {
-		definition,_ := CustomerSalesCapabilityDefinitionFor(capability)
-		if definition.Executor=="sales" && !startAuthorized { continue }
-		if capability==CustomerSalesCapabilityOfferSalesStart && startAuthorized { continue }
-		result=append(result,capability)
+		definition, _ := CustomerSalesCapabilityDefinitionFor(capability)
+		if definition.Executor == "sales" && !startAuthorized {
+			continue
+		}
+		if capability == CustomerSalesCapabilityOfferSalesStart && startAuthorized {
+			continue
+		}
+		result = append(result, capability)
 	}
 	return result
 }

@@ -139,15 +139,15 @@ func (p *ValidationPipeline) validateStructural(decision ports.CapabilityDecisio
 // Gemini cannot invent references; even a syntactically valid UUID fails
 // if it wasn't in the evidence sent.
 func (p *ValidationPipeline) validateReferences(ctx context.Context, input ValidationInput) *StageFailure {
-	definition,_ := ports.CustomerSalesCapabilityDefinitionFor(input.Decision.Capability)
+	definition, _ := ports.CustomerSalesCapabilityDefinitionFor(input.Decision.Capability)
 	if definition.Executor == "sales" {
-		if input.Context==nil || input.Context.Sales==nil || input.Context.Sales.StartRequestID=="" {
-			return &StageFailure{Stage:ports.AIRunFailureStageValidation,Category:ports.AIRunFailureCategoryInvalidReference,Reason:"customer has not accepted sales start consent"}
+		if input.Context == nil || input.Context.Sales == nil || input.Context.Sales.StartRequestID == "" {
+			return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidReference, Reason: "customer has not accepted sales start consent"}
 		}
 	}
-	if input.Decision.Capability==ports.CustomerSalesCapabilityOfferSalesStart {
-		if input.Context==nil || input.Context.Sales==nil || !input.Context.Sales.Enabled || !input.Context.Sales.AllowInteractions || input.Context.Sales.StartRequestID!="" {
-			return &StageFailure{Stage:ports.AIRunFailureStageValidation,Category:ports.AIRunFailureCategoryInvalidReference,Reason:"sales start offer is not eligible"}
+	if input.Decision.Capability == ports.CustomerSalesCapabilityOfferSalesStart {
+		if input.Context == nil || input.Context.Sales == nil || !input.Context.Sales.Enabled || !input.Context.Sales.AllowInteractions || input.Context.Sales.StartRequestID != "" {
+			return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidReference, Reason: "sales start offer is not eligible"}
 		}
 	}
 	if input.Decision.Sales != nil {
