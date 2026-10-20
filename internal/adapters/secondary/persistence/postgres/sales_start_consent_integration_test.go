@@ -50,10 +50,10 @@ func saveStartPostback(t *testing.T, f salesWorkflowFixture, payload string) str
 		(id,provider_ref,provider_connection_ref,provider_event_id,dedupe_strategy,
 		business_id,connection_id,event_type,interaction_kind,provider_message_id,
 		provider_conversation_id,external_user_id,received_at,raw_payload_reference,payload_hash,
-		signature_verified,processing_state,created_at,updated_at)
+		signature_verified,processing_state,processed_at,created_at,updated_at)
 		VALUES($1::uuid,'socialapi',$2,$3,'provider_event_id',$4::uuid,$5::uuid,
 		'interaction_received','dm',$6,$7,'customer-test',now(),'inline://fixture',$8,
-		true,'processed',now(),now())`,
+		true,'processed',now(),now(),now())`,
 		eventID, f.connection, eventID, f.business, f.connection, messageID, f.conversation, uuid.NewString())
 	if err != nil {
 		t.Fatal(err)
