@@ -51,6 +51,10 @@ func (c *NativeCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cus
 		return ports.CustomerSalesDecisionOutput{}, errors.New("no customer sales capabilities available")
 	}
 	systemInstruction := prompts.CustomerSalesSystemPrompt
+	if input.Request.Context!=nil && input.Request.Context.SalesStartContinuation!=nil {
+		// This is verified server state, not a synthetic customer utterance.
+		systemInstruction += "\n\n# Verified sales-start continuation\nThe customer already accepted starting preparation of the existing sales workflow. The customer message shown is the ORIGINAL earlier customer message for context, NOT a new request. Do not offer sales-start confirmation again, do not claim the final transaction was confirmed, and do not repeat information the customer already provided. Ask only what is still missing or answer from verified catalog evidence; hand off when necessary."
+	}
 	if len(input.EntityContractPayload) > 0 {
 		systemInstruction += "\n\n# Catalog Entity Contract\n" + string(input.EntityContractPayload)
 	}

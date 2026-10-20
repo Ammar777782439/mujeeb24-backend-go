@@ -48,8 +48,16 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 		}
 	}
 	if cfg.CustomerSalesEnabled {
-		sales := buildSalesWorkflowService(database, outbox)
-		runtime.SalesActions = &services.SalesActionProcessor{Jobs: postgres.NewSalesActionJobs(database), Sales: sales}
+		if external.LLMConfigError!=nil {database.Close();return nil,external.LLMConfigError}
+		platformOperations:=services.NewInMemoryPlatformOperationsRepository(
+			external.NativeCustomerDecision!=nil && external.LLMConfigError==nil,external.SocialAPI!=nil)
+		if external.NativeAISettings!=nil {platformOperations.SetAIModel(external.NativeAISettings.GeminiModel)}
+		autoReply,err:=buildCustomerAutoReplyService(database,outbox,external,platformOperations,nil)
+		if err!=nil {database.Close();return nil,err}
+		jobs:=postgres.NewSalesActionJobs(database)
+		autoReply.ContinuationJobs=jobs
+		sales:=buildSalesWorkflowService(database,outbox)
+		runtime.SalesActions=&services.SalesActionProcessor{Jobs:jobs,Sales:sales,AutoReply:autoReply}
 	}
 	return runtime, nil
 }
@@ -80,9 +88,11 @@ func (r *WorkerRuntime) Run(ctx context.Context) error {
 }
 
 func (r *WorkerRuntime) cycleTimeout() time.Duration {
-	if r != nil && r.CycleTimeout > 0 {
-		return r.CycleTimeout
+	if r!=nil && r.SalesActions!=nil {
+		if r.CycleTimeout > 0 && r.CycleTimeout>2*time.Minute {return r.CycleTimeout}
+		return 2*time.Minute
 	}
+	if r != nil && r.CycleTimeout > 0 { return r.CycleTimeout }
 	return 10 * time.Second
 }
 
@@ -103,7 +113,8 @@ func (r *WorkerRuntime) RunOnce(ctx context.Context) (int, error) {
 		processed += count
 	}
 	if r.SalesActions != nil {
-		count, err := r.SalesActions.Process(ctx, limit)
+		// Bound one external AI continuation to each worker cycle/lease.
+		count, err := r.SalesActions.Process(ctx, 1)
 		if err != nil {
 			return count, err
 		}

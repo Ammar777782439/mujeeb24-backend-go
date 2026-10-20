@@ -59,6 +59,7 @@ const (
 // (per contract ⑥ §11 we do NOT re-interpret intent).
 type AutoReplyService struct {
 	Sales                       *CustomerSalesWorkflowService
+	ContinuationJobs            ports.SalesActionJobRepository
 	DisableInformationalReplies bool
 	// CustomerSalesDecision is the contract ④ §8 customer-sales application port.
 	// Its current implementation is Native Gemini/DeepSeekCustomerSalesAdapter.
@@ -184,6 +185,12 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	}
 
 	sourceMessageRef := command.SourceMessageReference
+	continuing := command.SalesStartContinuationID != ""
+	if continuing && (command.SalesStartJobID=="" || command.SalesStartLeaseToken=="" || s.ContinuationJobs==nil) {
+		return commands.AutoReplyResult{}, errors.New("customer sales continuation requires a claimed durable job")
+	}
+	runDedupeKey := "auto-reply:"+sourceMessageRef
+	if continuing { runDedupeKey = "sales-start-cont:"+command.SalesStartContinuationID }
 	policyVersion := s.policyVersionOr()
 
 	// Per contract ⑨ §1, start an AI Run. Per ⑨ §16, the (business_id, key)
@@ -195,7 +202,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			BusinessID:     businessID,
 			ConversationID: conversationID,
 			MessageID:      sourceMessageRef,
-			IdempotencyKey: "auto-reply:" + sourceMessageRef,
+			IdempotencyKey: runDedupeKey,
 			AgentRole:      ports.AIRunAgentRoleCustomerSales,
 			NewRunID:       s.NewID,
 		})
@@ -242,6 +249,23 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			}
 			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, nil
 		}
+		if continuing {
+			if bc.Sales==nil || bc.Sales.StartRequestID!=command.SalesStartContinuationID {
+				return commands.AutoReplyResult{},errors.New("sales continuation has no matching accepted workflow context")
+			}
+			foundWorkflow:=false
+			for _,active:=range bc.Sales.Active {
+				if active.ID==command.SalesStartWorkflowID {foundWorkflow=true;break}
+			}
+			if !foundWorkflow {
+				return commands.AutoReplyResult{},errors.New("sales continuation has no matching accepted workflow context")
+			}
+			bc.SalesStartContinuation=&ports.SalesStartContinuationEvidence{
+				RequestID:command.SalesStartContinuationID,
+				WorkflowID:command.SalesStartWorkflowID,
+				Accepted:true,ResumeOnly:true,
+			}
+		}
 		builtContext = &bc
 	}
 
@@ -255,6 +279,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	hasSales := s.Sales != nil && builtContext != nil && builtContext.Sales != nil && builtContext.Sales.Enabled && builtContext.Sales.AllowInteractions
 	startAuthorized := hasSales && builtContext.Sales.StartRequestID != ""
 	capabilities := ports.CustomerSalesCapabilitiesForConsent(s.fullCatalogReady(run), hasSales, startAuthorized)
+	if continuing { capabilities=ports.CustomerSalesCapabilitiesForStartContinuation(s.fullCatalogReady(run)) }
 	out, err := s.CustomerSalesDecision.Decide(ctx, ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{
 			BusinessID:             businessID,
@@ -412,10 +437,19 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
 	}
 
-	if s.DisableInformationalReplies && effective.Capability == ports.CustomerSalesCapabilityOfferSalesStart {
+	if continuing {
+		permitted:=false
+		for _,allowed:=range ports.CustomerSalesCapabilitiesForStartContinuation(false){
+			if effective.Capability==allowed {permitted=true;break}
+		}
+		if !permitted {
+			return commands.AutoReplyResult{},aierrors.Wrap(aierrors.ModelOutput,errors.New("continuation returned an unsafe commercial capability"))
+		}
+	}
+	if s.DisableInformationalReplies && !continuing && effective.Capability == ports.CustomerSalesCapabilityOfferSalesStart {
 		return commands.AutoReplyResult{Action: "no_action"}, nil
 	}
-	if s.DisableInformationalReplies && (effective.Capability == ports.CustomerSalesCapabilityRespondWithoutAction || (effective.Capability == ports.CustomerSalesCapabilityAsk && (builtContext == nil || builtContext.Sales == nil || len(builtContext.Sales.Active) == 0))) {
+	if s.DisableInformationalReplies && !continuing && (effective.Capability == ports.CustomerSalesCapabilityRespondWithoutAction || (effective.Capability == ports.CustomerSalesCapabilityAsk && (builtContext == nil || builtContext.Sales == nil || len(builtContext.Sales.Active) == 0))) {
 		return commands.AutoReplyResult{Action: "no_action"}, nil
 	}
 	definition, ok := ports.CustomerSalesCapabilityDefinitionFor(effective.Capability)
@@ -510,6 +544,11 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 					return mapAIRepositoryError(convErr)
 				}
 			}
+			if continuing {
+				return s.ContinuationJobs.CompleteContinuation(txCtx,ports.SalesActionJob{
+					ID:command.SalesStartJobID,LeaseToken:command.SalesStartLeaseToken,
+				},command.SalesStartContinuationID)
+			}
 			return nil
 		}
 
@@ -576,7 +615,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		}
 
 		replyText := proposal.ResponseText
-		dedupeKey := "auto-reply:" + sourceMessageRef
+		dedupeKey := runDedupeKey
 		outboundID := s.id()
 		contentReference := EncodeInlineTextContentReference(replyText)
 		startRequestID := ""
@@ -662,6 +701,11 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		result.OutboundMessageID = commands.MessageID(outbound.ID)
 		result.OutboxEntryID = commands.ID(outboxEntry.ID)
 		result.Enqueued = true
+		if continuing {
+			return s.ContinuationJobs.CompleteContinuation(txCtx,ports.SalesActionJob{
+				ID:command.SalesStartJobID,LeaseToken:command.SalesStartLeaseToken,
+			},command.SalesStartContinuationID)
+		}
 		return nil
 	})
 	if err != nil {

@@ -92,3 +92,16 @@ func CustomerSalesCapabilitiesForConsent(fullCatalog, salesEnabled, startAuthori
 	}
 	return result
 }
+
+ // The first continuation only asks for missing information or hands off.
+ // Subsequent real customer turns can run the normal verified sales tools.
+func CustomerSalesCapabilitiesForStartContinuation(fullCatalog bool) []CustomerSalesCapability {
+	out:=make([]CustomerSalesCapability,0,4)
+	for _,c:=range CustomerSalesCapabilitiesForConsent(fullCatalog,true,true){
+		switch c {
+		case CustomerSalesCapabilityRespondWithoutAction,CustomerSalesCapabilityAsk,CustomerSalesCapabilityHandoff,CustomerSalesCapabilityFullCatalog:
+			out=append(out,c)
+		}
+	}
+	return out
+}

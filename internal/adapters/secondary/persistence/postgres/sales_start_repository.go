@@ -180,11 +180,24 @@ func (r *SalesStartRepository) Decide(ctx context.Context, in ports.SalesButtonA
 		next = "accepted"
 		continuation = "pending"
 	}
-	_, err = e.Exec(ctx, `UPDATE sales_start_requests SET status=$3,resolved_at=$4,
+	tag, err := e.Exec(ctx, `UPDATE sales_start_requests SET status=$3,resolved_at=$4,
 		decision_message_id=$5::uuid,continuation_state=$6,updated_at=$4
 		WHERE business_id=$1::uuid AND id=$2::uuid AND status='pending'`,
 		in.BusinessID, out.ID, next, in.Now, verified, continuation)
-	return out, err
+	if err!=nil{return out,err}
+	if tag.RowsAffected()!=1{return out,errors.New("start consent transition lost")}
+	if out.Accepted{
+		// Same transaction as customer consent and the existing workflow effect.
+		tag,err=e.Exec(ctx,`UPDATE sales_action_jobs
+			SET phase='continue_ai',attempts=0,next_attempt_at=$3,updated_at=$3
+			WHERE business_id=$1::uuid AND message_id=$2::uuid
+				AND payload=$4 AND phase='apply_action'
+				AND state IN ('pending','processing')`,
+			in.BusinessID,in.SourceMessageID,in.Now,in.Payload)
+		if err!=nil{return out,err}
+		if tag.RowsAffected()!=1{return out,errors.New("accepted consent has no durable continuation job")}
+	}
+	return out,nil
 }
 
 var _ ports.SalesStartRepository = (*SalesStartRepository)(nil)

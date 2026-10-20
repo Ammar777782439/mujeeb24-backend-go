@@ -86,7 +86,7 @@ func (c *catalogRequestBuilder) buildFinalEvaluateRequest(input services.FinalEv
 	return catalogPromptRequest{
 		Model:             "models/" + strings.TrimPrefix(rc.model, "models/"),
 		SystemInstruction: finalCustomerSalesInstruction(input.EntityContract),
-		capabilityTools:   customerSalesTools(ports.CustomerSalesCapabilitiesForConsent(false, input.ConversationContext.Sales != nil && input.ConversationContext.Sales.Enabled && input.ConversationContext.Sales.AllowInteractions, input.ConversationContext.Sales != nil && input.ConversationContext.Sales.StartRequestID != "")),
+		capabilityTools:   finalCatalogCapabilities(input.ConversationContext),
 		Contents: []batchContent{
 			{Role: "user", Parts: []batchPart{{Text: userPrompt}}},
 		},
@@ -275,4 +275,13 @@ func batchChatRequest(request catalogPromptRequest, model string) (chatCompletio
 func finalCustomerSalesInstruction(contract services.CatalogEntityContractPayload) *batchContent {
 	encoded, _ := json.Marshal(contract)
 	return &batchContent{Role: "system", Parts: []batchPart{{Text: prompts.FinalEvaluationSystemPrompt}, {Text: "Catalog Entity Contract\n" + string(encoded)}}}
+}
+
+func finalCatalogCapabilities(ctx ports.CustomerSalesContext) []customerSalesTool {
+	if ctx.SalesStartContinuation!=nil {
+		return customerSalesTools(ports.CustomerSalesCapabilitiesForStartContinuation(false))
+	}
+	return customerSalesTools(ports.CustomerSalesCapabilitiesForConsent(false,
+		ctx.Sales!=nil && ctx.Sales.Enabled && ctx.Sales.AllowInteractions,
+		ctx.Sales!=nil && ctx.Sales.StartRequestID!=""))
 }
