@@ -110,7 +110,7 @@ func TestSalesStartContinuationOutboxCommitSurvivesWorkerCrash(t *testing.T) {
 	msg := saveStartPostback(t, f, payload)
 	repo := NewSalesActionJobs(f.a)
 	first := fixtureClaimSalesJob(t, f, msg, time.Now().UTC())
-	_, err = startFixtureService(f).HandleStartButton(context.Background(), ports.SalesButtonAction{
+	_, err := startFixtureService(f).HandleStartButton(context.Background(), ports.SalesButtonAction{
 		BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation,
 		SourceMessageID: msg, Payload: payload, Now: time.Now().UTC()})
 	if err != nil {
@@ -210,7 +210,7 @@ func TestSalesStartContinuationRetryIsDelayedAndLeaseFenced(t *testing.T) {
 		t.Fatal("retry was scheduled too soon")
 	}
 	after := fixtureClaimSalesJob(t, f, msg, next.Add(time.Second))
-	if err := repo.Finish(context.Background(), cont[0].ID, cont[0].LeaseToken, "", time.Now().UTC()); err == nil {
+	if err := repo.Finish(context.Background(), cont.ID, cont.LeaseToken, "", time.Now().UTC()); err == nil {
 		t.Fatal("lost lease token still able to complete")
 	}
 	if err := repo.Finish(context.Background(), after.ID, after.LeaseToken, "sales_continuation_permanent", time.Now().UTC()); err != nil {
@@ -231,7 +231,7 @@ func TestSalesStartRetryNeverReAcceptsAnAlreadyExpiredRequest(t *testing.T) {
 	msg := saveStartPostback(t, f, payload)
 	repo := NewSalesActionJobs(f.a)
 	job := fixtureClaimSalesJob(t, f, msg, time.Now().UTC())
-	_, err = startFixtureService(f).HandleStartButton(context.Background(), ports.SalesButtonAction{
+	_, err := startFixtureService(f).HandleStartButton(context.Background(), ports.SalesButtonAction{
 		BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation,
 		SourceMessageID: msg, Payload: payload, Now: f.now.Add(25 * time.Hour)})
 	if err != nil {
