@@ -22,3 +22,10 @@
 - [ ] اختبارات المزود الحية عند التصريح بها وتهيئة بيانات الاعتماد خارج Git.
 
 Chatwoot غير موجود في runtime ولا توجد مهام لإعادته أو تشغيله. migrations التاريخية محفوظة؛ لا حذف للبيانات ضمن تنظيف الكود.
+
+## متابعة مؤجلة — Sales Lifecycle E2E
+
+- [ ] عند التفرغ، أكمل قائمة التحقق الشاملة لدورة حياة البيع على فرع `feat/customer-sales-start-consent`: [قائمة اختبار Sales Lifecycle E2E](docs/testing/sales-lifecycle-e2e-checklist-ar.md).
+- [ ] تشمل القائمة موافقة بدء البيع، وربط العميل والمحادثة، والتحقق من الكتالوج والعرض والسعر والتوفر، وإنشاء الـ Lead والـ `CommercialTransaction` وفق التنفيذ الفعلي، والرد/Outbox، وHuman Handoff، والتكرار، والـ leases، وإعادة المحاولة والتعافي.
+- [ ] تحقق من نجاح `bash scripts/verify-repository.sh` مع `RUN_INTEGRATION=1` و`POSTGRES_TEST_DSN` على PostgreSQL معزولة، ثم تحقق من نتيجة GitHub Actions.
+- [ ] لا تعتبر المسار مغلقًا ولا تعلّم هذه البنود كمكتملة حتى تُنفّذ الاختبارات فعليًا وتُراجع نتائجها. الاختبارات المتخطاة ليست ناجحة.
