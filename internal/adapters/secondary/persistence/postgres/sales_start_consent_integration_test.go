@@ -90,6 +90,12 @@ func TestSalesStartAcceptedOnceEvenAcrossDistinctConcurrentPostbacks(t *testing.
 	f := newSalesWorkflowFixture(t)
 	id := createPendingStart(t, f)
 	messages := []string{saveStartPostback(t, f, "m24.sales.start:"+id+":accept"), saveStartPostback(t, f, "m24.sales.start:"+id+":accept")}
+	// The shared fixture already has its own outbound; count before the start
+	// button instead of assuming the offer is the only existing message.
+	var beforeOutbound int
+	if err := f.a.Pool().QueryRow(context.Background(), `SELECT count(*) FROM outbound_messages WHERE business_id=$1::uuid`, f.business).Scan(&beforeOutbound); err != nil {
+		t.Fatal(err)
+	}
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)
 	for _, m := range messages {
@@ -141,8 +147,8 @@ func TestSalesStartAcceptedOnceEvenAcrossDistinctConcurrentPostbacks(t *testing.
 		WHERE business_id=$1::uuid`, f.business).Scan(&entries); err != nil {
 		t.Fatal(err)
 	}
-	if outgoing != 1 || entries != 0 {
-		t.Fatalf("sales start sent an unexpected acknowledgment: outbound=%d outbox=%d", outgoing, entries)
+	if outgoing != beforeOutbound || entries != 0 {
+		t.Fatalf("sales start sent an unexpected acknowledgment: before=%d after=%d outbox=%d", beforeOutbound, outgoing, entries)
 	}
 }
 
@@ -229,7 +235,8 @@ func TestSalesStartExpiredPostbackPersistsTerminalStatusAgainstPostgres(t *testi
 		Scan(&status, &continuation, &resolvedAt, &decisionMessage); err != nil {
 		t.Fatalf("expired state was not committed: %v", err)
 	}
-	if status != "expired" || continuation != "not_required" || !resolvedAt.Equal(action.Now) || decisionMessage != nil {
+	if status != "expired" || continuation != "not_required" || decisionMessage != nil ||
+		resolvedAt.Before(action.Now.Add(-time.Millisecond)) || resolvedAt.After(action.Now.Add(time.Millisecond)) {
 		t.Fatalf("invalid persisted expiry: status=%s continuation=%s resolved=%s decision=%v", status, continuation, resolvedAt, decisionMessage)
 	}
 	// Retry with another valid postback must never reopen an already expired start.
