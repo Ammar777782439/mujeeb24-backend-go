@@ -6,12 +6,12 @@ type AutoReplyCommand struct {
 	SourceMessageReference string
 	// Only the trusted sales-action worker supplies these continuation fields.
 	SalesStartContinuationID string
-	SalesStartJobID string
-	SalesStartWorkflowID string
-	SalesStartLeaseToken string
-	Text                   string
-	Channel                string
-	ProviderRef            string
+	SalesStartJobID          string
+	SalesStartWorkflowID     string
+	SalesStartLeaseToken     string
+	Text                     string
+	Channel                  string
+	ProviderRef              string
 }
 
 type AutoReplyResult struct {

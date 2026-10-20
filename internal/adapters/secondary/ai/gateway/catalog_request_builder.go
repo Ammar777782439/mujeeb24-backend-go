@@ -278,10 +278,10 @@ func finalCustomerSalesInstruction(contract services.CatalogEntityContractPayloa
 }
 
 func finalCatalogCapabilities(ctx ports.CustomerSalesContext) []customerSalesTool {
-	if ctx.SalesStartContinuation!=nil {
+	if ctx.SalesStartContinuation != nil {
 		return customerSalesTools(ports.CustomerSalesCapabilitiesForStartContinuation(false))
 	}
 	return customerSalesTools(ports.CustomerSalesCapabilitiesForConsent(false,
-		ctx.Sales!=nil && ctx.Sales.Enabled && ctx.Sales.AllowInteractions,
-		ctx.Sales!=nil && ctx.Sales.StartRequestID!=""))
+		ctx.Sales != nil && ctx.Sales.Enabled && ctx.Sales.AllowInteractions,
+		ctx.Sales != nil && ctx.Sales.StartRequestID != ""))
 }

@@ -57,7 +57,7 @@ func modelConversationStateFrom(value *ports.ConversationStateRecord) *ports.Con
 type customerSalesPromptContext struct {
 	VerifiedExecutionState customerSalesVerifiedExecutionState         `json:"verified_execution_state"`
 	Sales                  *ports.SalesWorkflowContext                 `json:"sales,omitempty"`
-	SalesStartContinuation *ports.SalesStartContinuationEvidence `json:"sales_start_continuation,omitempty"`
+	SalesStartContinuation *ports.SalesStartContinuationEvidence       `json:"sales_start_continuation,omitempty"`
 	SchemaVersion          int                                         `json:"schema_version"`
 	Freshness              string                                      `json:"freshness"`
 	Business               ports.CustomerSalesContextBusiness          `json:"business"`
@@ -118,7 +118,7 @@ func customerSalesPromptContextFrom(value *ports.CustomerSalesContext) customerS
 
 type catalogBatchPromptContext struct {
 	VerifiedExecutionState customerSalesVerifiedExecutionState         `json:"verified_execution_state"`
-	SalesStartContinuation *ports.SalesStartContinuationEvidence `json:"sales_start_continuation,omitempty"`
+	SalesStartContinuation *ports.SalesStartContinuationEvidence       `json:"sales_start_continuation,omitempty"`
 	Business               ports.CustomerSalesContextBusiness          `json:"business"`
 	Conversation           ports.CustomerSalesContextConversation      `json:"conversation"`
 	Customer               customerSalesPromptCustomer                 `json:"customer"`

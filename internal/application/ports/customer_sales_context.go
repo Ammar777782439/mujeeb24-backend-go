@@ -48,15 +48,15 @@ type CustomerSalesPolicyPort interface {
 
 // Trusted continuation metadata is not a fabricated customer utterance.
 type SalesStartContinuationEvidence struct {
-	RequestID string `json:"request_id"`
+	RequestID  string `json:"request_id"`
 	WorkflowID string `json:"workflow_id"`
-	Accepted bool `json:"accepted"`
-	ResumeOnly bool `json:"resume_only"`
+	Accepted   bool   `json:"accepted"`
+	ResumeOnly bool   `json:"resume_only"`
 }
 
 type CustomerSalesContext struct {
 	SalesStartContinuation *SalesStartContinuationEvidence `json:"sales_start_continuation,omitempty"`
-	Sales                  *SalesWorkflowContext `json:"sales,omitempty"`
+	Sales                  *SalesWorkflowContext           `json:"sales,omitempty"`
 	SchemaVersion          int
 	Freshness              string
 	Business               CustomerSalesContextBusiness

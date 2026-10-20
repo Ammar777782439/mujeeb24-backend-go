@@ -171,9 +171,11 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	// This prevents competing catalog-read paths and keeps evidence deterministic.
 
 	if external.AutoReplyEnabled || external.CustomerSalesEnabled {
-		service,err:=buildCustomerAutoReplyService(database,outboxStore,external,platformOperations,realtimeBroker)
-		if err!=nil{return nil,err}
-		autoReply=service
+		service, err := buildCustomerAutoReplyService(database, outboxStore, external, platformOperations, realtimeBroker)
+		if err != nil {
+			return nil, err
+		}
+		autoReply = service
 	}
 
 	inboundAutomation := services.InboundAutomationService{

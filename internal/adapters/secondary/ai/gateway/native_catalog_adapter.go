@@ -196,8 +196,8 @@ func (c *NativeCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, inp
 	hasSales := input.ConversationContext.Sales != nil && input.ConversationContext.Sales.Enabled && input.ConversationContext.Sales.AllowInteractions
 	startAuthorized := hasSales && input.ConversationContext.Sales.StartRequestID != ""
 	tools := customerSalesTools(ports.CustomerSalesCapabilitiesForConsent(false, hasSales, startAuthorized))
-	if input.ConversationContext.SalesStartContinuation!=nil {
-		tools=customerSalesTools(ports.CustomerSalesCapabilitiesForStartContinuation(false))
+	if input.ConversationContext.SalesStartContinuation != nil {
+		tools = customerSalesTools(ports.CustomerSalesCapabilitiesForStartContinuation(false))
 	}
 	if normalized.Text != "" {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, errors.New("final catalog returned plain text alongside capability")
