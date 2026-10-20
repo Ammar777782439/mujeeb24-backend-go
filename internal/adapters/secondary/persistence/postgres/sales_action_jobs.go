@@ -131,7 +131,7 @@ func (r *SalesActionJobs) LoadContinuation(ctx context.Context, j ports.SalesAct
 	err = e.QueryRow(ctx, `SELECT s.id::text,s.workflow_id::text,s.business_id::text,
 		s.customer_id::text,s.conversation_id::text,s.source_message_id::text,
 		COALESCE(m.text_content,''),cc.channel,cr.provider_ref,s.continuation_state,
-		(w.state='awaiting_review' OR c.state='waiting_human')
+		(w.state='awaiting_review' OR c.state='waiting_human' OR c.ownership='human')
 		FROM sales_action_jobs j JOIN sales_start_requests s
 		ON s.business_id=j.business_id AND s.decision_message_id=j.message_id
 		JOIN sales_workflows w ON w.business_id=s.business_id AND w.id=s.workflow_id
@@ -181,6 +181,9 @@ func (r *SalesActionJobs) CompleteContinuation(ctx context.Context, j ports.Sale
 				OR EXISTS(SELECT 1 FROM conversations c
 					WHERE c.business_id=s.business_id AND c.id=s.conversation_id
 					AND c.state='waiting_human')
+				OR EXISTS(SELECT 1 FROM conversations c
+					WHERE c.business_id=s.business_id AND c.id=s.conversation_id
+					AND c.ownership='human')
 			)`,
 		startID, j.ID, j.LeaseToken)
 	if err != nil {
