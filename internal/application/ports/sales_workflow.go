@@ -118,7 +118,7 @@ type SalesStartRequest struct {
 
 type SalesStartDecision struct {
 	ID, BusinessID, CustomerID, ConversationID, SourceMessageID string
-	Accepted, Duplicate, RequiresApproval                       bool
+	Accepted, Duplicate, RequiresApproval, Expired              bool
 }
 
 type SalesStartRepository interface {

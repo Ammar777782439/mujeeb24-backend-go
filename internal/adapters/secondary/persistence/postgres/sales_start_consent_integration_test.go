@@ -130,6 +130,20 @@ func TestSalesStartAcceptedOnceEvenAcrossDistinctConcurrentPostbacks(t *testing.
 	if status != "accepted" || followup != "pending" {
 		t.Fatalf("bad consent state: %s %s", status, followup)
 	}
+	// The original offer outbound remains; starting sales creates neither
+	// a generic receipt nor an outbox send that would race with future AI resume.
+	var outgoing, entries int
+	if err := f.a.Pool().QueryRow(context.Background(), `SELECT count(*) FROM outbound_messages
+		WHERE business_id=$1::uuid`, f.business).Scan(&outgoing); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.a.Pool().QueryRow(context.Background(), `SELECT count(*) FROM outbox_entries
+		WHERE business_id=$1::uuid`, f.business).Scan(&entries); err != nil {
+		t.Fatal(err)
+	}
+	if outgoing != 1 || entries != 0 {
+		t.Fatalf("sales start sent an unexpected acknowledgment: outbound=%d outbox=%d", outgoing, entries)
+	}
 }
 
 func TestSalesStartDeclinedExpiredAndSupersededAreNotAccepted(t *testing.T) {
@@ -177,8 +191,7 @@ func TestSalesStartRejectsExpiredAndForeignIdentity(t *testing.T) {
 		name, business, customer, conversation string
 		now                                    time.Time
 	}{
-		{"expired", f.business, f.customer, f.conversation, f.now.Add(25 * time.Hour)},
-		{"foreign customer", f.business, uuid.NewString(), f.conversation, f.now.Add(time.Minute)},
+				{"foreign customer", f.business, uuid.NewString(), f.conversation, f.now.Add(time.Minute)},
 		{"foreign business", uuid.NewString(), f.customer, f.conversation, f.now.Add(time.Minute)},
 		{"foreign conversation", f.business, f.customer, uuid.NewString(), f.now.Add(time.Minute)},
 	} {
@@ -192,4 +205,77 @@ func TestSalesStartRejectsExpiredAndForeignIdentity(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The expected expired-button outcome must COMMIT; an error return from Decide
+// would silently roll back the UPDATE when CustomerSalesWorkflowService.Within exits.
+func TestSalesStartExpiredPostbackPersistsTerminalStatusAgainstPostgres(t *testing.T) {
+	f := newSalesWorkflowFixture(t)
+	id := createPendingStart(t, f)
+	message := saveStartPostback(t, f, "m24.sales.start:"+id+":accept")
+	action := ports.SalesButtonAction{
+		BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation,
+		SourceMessageID: message, Payload: "m24.sales.start:"+id+":accept",
+		Now: f.now.Add(ports.SalesStartTTL),
+	}
+	if _, err := startFixtureService(f).HandleStartButton(context.Background(), action); err != nil {
+		t.Fatalf("expired button should be an expected outcome: %v", err)
+	}
+	var status, continuation string
+	var resolvedAt time.Time
+	var decisionMessage *string
+	if err := f.a.Pool().QueryRow(context.Background(), `SELECT status,continuation_state,resolved_at,decision_message_id::text
+		FROM sales_start_requests WHERE business_id=$1::uuid AND id=$2::uuid`, f.business, id).
+		Scan(&status, &continuation, &resolvedAt, &decisionMessage); err != nil {
+		t.Fatalf("expired state was not committed: %v", err)
+	}
+	if status != "expired" || continuation != "not_required" || !resolvedAt.Equal(action.Now) || decisionMessage != nil {
+		t.Fatalf("invalid persisted expiry: status=%s continuation=%s resolved=%s decision=%v", status, continuation, resolvedAt, decisionMessage)
+	}
+	// Retry with another valid postback must never reopen an already expired start.
+	action.SourceMessageID = saveStartPostback(t, f, action.Payload)
+	if _, err := startFixtureService(f).HandleStartButton(context.Background(), action); err != nil {
+		t.Fatalf("already-expired button should not produce an operational failure: %v", err)
+	}
+	var workflows, leads, entries int
+	if err := f.a.Pool().QueryRow(context.Background(), `SELECT count(*) FROM sales_workflows WHERE business_id=$1::uuid`, f.business).Scan(&workflows); err != nil { t.Fatal(err) }
+	if err := f.a.Pool().QueryRow(context.Background(), `SELECT count(*) FROM leads WHERE business_id=$1::uuid`, f.business).Scan(&leads); err != nil { t.Fatal(err) }
+	if err := f.a.Pool().QueryRow(context.Background(), `SELECT count(*) FROM outbox_entries WHERE business_id=$1::uuid`, f.business).Scan(&entries); err != nil { t.Fatal(err) }
+	if workflows != 0 || leads != 0 || entries != 0 {
+		t.Fatalf("expired start created effects: workflows=%d leads=%d outbox=%d", workflows, leads, entries)
+	}
+}
+
+// Confirmation of a real transaction still sends the existing customer receipt.
+func TestSalesStartNoReceiptDoesNotSuppressFinalTransactionConfirmationAgainstPostgres(t *testing.T) {
+	f := newSalesWorkflowFixture(t)
+	draft, err := f.apply(t, "final-confirmation-regression")
+	if err != nil { t.Fatal(err) }
+	responseID := uuid.NewString()
+	if _, err := f.a.Pool().Exec(context.Background(), `INSERT INTO communication_messages(
+		id,business_id,conversation_reference_id,direction,origin,transport,provider_message_id,
+		content_type,text_content,content_reference,occurred_at,created_at)
+		VALUES($1::uuid,$2::uuid,$3::uuid,'inbound','customer','provider',$1::text,
+		'text','نعم','inline://fixture',now(),now())`, responseID, f.business, f.reference); err != nil {
+		t.Fatal(err)
+	}
+	result, err := startFixtureService(f).HandleButton(context.Background(), ports.SalesButtonAction{
+		BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation,
+		SourceMessageID: responseID, Payload: "m24.sales:"+draft.ConfirmationID+":accept",
+		Now: f.now.Add(time.Minute),
+	})
+	if err != nil || result.Workflow.State != "confirmed" {
+		t.Fatalf("final customer confirmation failed: %+v, %v", result, err)
+	}
+	var reference string
+	if err := f.a.Pool().QueryRow(context.Background(), `SELECT o.content_reference
+		FROM outbound_messages o WHERE o.business_id=$1::uuid
+		ORDER BY o.created_at DESC LIMIT 1`, f.business).Scan(&reference); err != nil { t.Fatal(err) }
+	message, err := services.DecodeInteractiveContentReference(reference)
+	if err != nil || message.Text != "تم اعتماد طلبك." {
+		t.Fatalf("final-confirmation receipt was changed: %+v, %v", message, err)
+	}
+	var entries int
+	if err := f.a.Pool().QueryRow(context.Background(), `SELECT count(*) FROM outbox_entries WHERE business_id=$1::uuid`, f.business).Scan(&entries); err != nil { t.Fatal(err) }
+	if entries != 1 { t.Fatalf("expected exactly one final-confirmation send, got %d", entries) }
 }

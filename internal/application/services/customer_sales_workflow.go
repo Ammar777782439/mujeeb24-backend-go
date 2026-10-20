@@ -26,6 +26,13 @@ type CustomerSalesWorkflowService struct {
 }
 
 func (s CustomerSalesWorkflowService) Execute(ctx context.Context, in ports.SalesWorkflowInput) (ports.SalesWorkflowResult, error) {
+	return s.execute(ctx, in, true)
+}
+
+// Only start-consent activation suppresses its generic receipt. The already-durable
+// continuation_state=pending will drive the single conversational follow-up later;
+// subsequent drafts and final transaction confirmations still send their own receipts.
+func (s CustomerSalesWorkflowService) execute(ctx context.Context, in ports.SalesWorkflowInput, sendReceipt bool) (ports.SalesWorkflowResult, error) {
 	result, err := s.Repository.Apply(ctx, in)
 	if err != nil {
 		return result, err
@@ -37,7 +44,7 @@ func (s CustomerSalesWorkflowService) Execute(ctx context.Context, in ports.Sale
 		return result, err
 	}
 	// Human approval mode stores a proposal without claiming a sale or sending AI text.
-	if !in.RequiresApproval {
+	if !in.RequiresApproval && sendReceipt {
 		err = s.notify(ctx, in.BusinessID, result, in.IdempotencyKey, in.Now)
 	}
 	return result, err
@@ -75,14 +82,14 @@ func (s CustomerSalesWorkflowService) HandleStartButton(ctx context.Context, in 
 		if err != nil || decision.Duplicate || !decision.Accepted {
 			return err
 		}
-		result, err = s.Execute(tx, ports.SalesWorkflowInput{
+		result, err = s.execute(tx, ports.SalesWorkflowInput{
 			BusinessID: decision.BusinessID, CustomerID: decision.CustomerID,
 			ConversationID: decision.ConversationID, SourceMessageID: in.SourceMessageID,
 			SalesStartRequestID: decision.ID, IdempotencyKey: "sales-start:" + decision.ID,
 			Capability:       ports.CustomerSalesCapabilityRecordLead,
 			Proposal:         ports.SalesWorkflowProposal{EvidenceMessageIDs: []string{decision.SourceMessageID}},
 			RequiresApproval: decision.RequiresApproval, Now: in.Now,
-		})
+		}, false)
 		return err
 	})
 	return result, err

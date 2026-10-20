@@ -123,8 +123,13 @@ func (r *SalesStartRepository) Decide(ctx context.Context, in ports.SalesButtonA
 		out.Duplicate = true
 		return out, nil
 	}
-	if status != "pending" || !in.Now.Before(expires) {
-		return out, invalidRepositoryInput("sales.start.action", "start request expired, cancelled or superseded")
+	if status == "expired" {
+		// Expiry is a normal, already-finalized customer action outcome, not a worker failure.
+		out.Expired = true
+		return out, nil
+	}
+	if status != "pending" {
+		return out, invalidRepositoryInput("sales.start.action", "start request was cancelled or superseded")
 	}
 	source, err := salesSourceMessage(ctx, e, in.BusinessID, in.ConversationID, in.CustomerID, in.SourceMessageID)
 	if err != nil {
@@ -143,6 +148,22 @@ func (r *SalesStartRepository) Decide(ctx context.Context, in ports.SalesButtonA
 		in.BusinessID, source, in.ConversationID, in.Payload, originalOutbound).Scan(&verified)
 	if err != nil {
 		return out, invalidRepositoryInput("sales.start.action", "untrusted or unbound postback")
+	}
+	if !in.Now.Before(expires) {
+		// Commit the terminal expiry in the caller's transaction; returning an error
+		// would roll this UPDATE back, and the worker would incorrectly dead-letter.
+		tag, err := e.Exec(ctx, `UPDATE sales_start_requests
+			SET status='expired',resolved_at=$3,updated_at=$3
+			WHERE business_id=$1::uuid AND id=$2::uuid AND status='pending'`,
+			in.BusinessID, out.ID, in.Now)
+		if err != nil {
+			return out, err
+		}
+		if tag.RowsAffected() != 1 {
+			return out, invalidRepositoryInput("sales.start.action", "concurrent expiry transition failed")
+		}
+		out.Expired = true
+		return out, nil
 	}
 	policy, err := NewBusinessRepository(r.adapter).GetRuntimePolicy(ctx, in.BusinessID)
 	if err != nil {
