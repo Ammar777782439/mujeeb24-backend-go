@@ -127,13 +127,15 @@ func (r *SalesActionJobs) LoadContinuation(ctx context.Context, j ports.SalesAct
 	if err != nil {
 		return out, err
 	}
-	var workflowState, continuationState string
+	var continuationState string
 	err = e.QueryRow(ctx, `SELECT s.id::text,s.workflow_id::text,s.business_id::text,
 		s.customer_id::text,s.conversation_id::text,s.source_message_id::text,
-		COALESCE(m.text_content,''),cc.channel,cr.provider_ref,s.continuation_state,w.state
+		COALESCE(m.text_content,''),cc.channel,cr.provider_ref,s.continuation_state,
+		(w.state='awaiting_review' OR c.state='waiting_human')
 		FROM sales_action_jobs j JOIN sales_start_requests s
 		ON s.business_id=j.business_id AND s.decision_message_id=j.message_id
 		JOIN sales_workflows w ON w.business_id=s.business_id AND w.id=s.workflow_id
+		JOIN conversations c ON c.business_id=s.business_id AND c.id=s.conversation_id
 		JOIN communication_messages m ON m.business_id=s.business_id AND m.id=s.source_message_id
 		JOIN conversation_references cr ON cr.business_id=s.business_id AND cr.conversation_id=s.conversation_id
 			AND cr.is_current AND cr.system='provider'
@@ -144,13 +146,12 @@ func (r *SalesActionJobs) LoadContinuation(ctx context.Context, j ports.SalesAct
 			AND s.conversation_id=$5::uuid`, j.ID, j.LeaseToken, j.Action.BusinessID,
 		j.Action.CustomerID, j.Action.ConversationID).Scan(
 		&out.RequestID, &out.WorkflowID, &out.BusinessID, &out.CustomerID, &out.ConversationID,
-		&out.SourceMessageID, &out.Text, &out.Channel, &out.ProviderRef, &continuationState, &workflowState)
+		&out.SourceMessageID, &out.Text, &out.Channel, &out.ProviderRef, &continuationState, &out.AwaitingHumanReview)
 	if err != nil {
 		return out, err
 	}
 	out.Completed = continuationState == "completed"
-	out.AwaitingHumanReview = workflowState == "awaiting_review"
-	return out, nil
+		return out, nil
 }
 
 // CompleteContinuation must be called in the same short DB transaction as
