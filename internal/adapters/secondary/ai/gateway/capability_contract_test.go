@@ -123,7 +123,7 @@ func TestToolDescriptionsAreSemanticAuthorityAndSummaryIsNotExecution(t *testing
 		}
 		seen[tool.Name] = true
 	}
-	if len(seen) != 7 {
-		t.Fatalf("expected 7 tool definitions, got %d", len(seen))
+	if len(seen) != 8 {
+		t.Fatalf("expected 8 tool definitions, got %d", len(seen))
 	}
 }
