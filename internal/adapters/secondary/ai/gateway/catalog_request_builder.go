@@ -86,7 +86,7 @@ func (c *catalogRequestBuilder) buildFinalEvaluateRequest(input services.FinalEv
 	return catalogPromptRequest{
 		Model:             "models/" + strings.TrimPrefix(rc.model, "models/"),
 		SystemInstruction: finalCustomerSalesInstruction(input.EntityContract),
-		capabilityTools:   customerSalesTools(ports.CustomerSalesCapabilities(false, input.ConversationContext.Sales != nil && input.ConversationContext.Sales.Enabled && input.ConversationContext.Sales.AllowInteractions)),
+		capabilityTools:   customerSalesTools(ports.CustomerSalesCapabilitiesForConsent(false, input.ConversationContext.Sales != nil && input.ConversationContext.Sales.Enabled && input.ConversationContext.Sales.AllowInteractions, input.ConversationContext.Sales != nil && input.ConversationContext.Sales.StartRequestID != "")),
 		Contents: []batchContent{
 			{Role: "user", Parts: []batchPart{{Text: userPrompt}}},
 		},
