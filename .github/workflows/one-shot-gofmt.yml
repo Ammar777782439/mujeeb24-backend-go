@@ -1,29 +1,64 @@
-name: Temporary durable continuation gofmt
+name: One-shot gofmt
+
 on:
   push:
     branches:
-      - feat/customer-sales-start-consent
+      - feat/universal-catalog-ai-v3
+
 permissions:
   contents: write
+
 jobs:
-  format:
+  gofmt:
     if: ${{ github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out branch
+        uses: actions/checkout@v4
         with:
-          ref: feat/customer-sales-start-consent
+          ref: feat/universal-catalog-ai-v3
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
           go-version: '1.22.2'
-      - shell: bash
+      - name: Format files reported by quality gate
+        shell: bash
         run: |
           set -euo pipefail
-          gofmt -w internal/application/services/sales_action_processor.go internal/bootstrap/worker.go internal/application/services/sales_action_continuation_test.go
-          if git diff --quiet; then exit 0; fi
+          gofmt -w \
+            internal/adapters/primary/http/dto/inputs.go \
+            internal/adapters/primary/http/handlers/command_facades.go \
+            internal/adapters/primary/http/handlers/merchant_catalog_ai_v2_handler.go \
+            internal/adapters/secondary/ai/gemini/merchant_catalog_schema.go \
+            internal/application/catalogvalidation/attributes_test.go \
+            internal/application/commands/customers_catalog.go \
+            internal/application/merchantcatalogai/execution.go \
+            internal/application/merchantcatalogai/execution_test.go \
+            internal/application/merchantcatalogai/proposal.go \
+            internal/application/ports/catalog_repository.go \
+            internal/application/services/catalog_commands.go \
+            internal/application/services/catalog_item_atomic_test.go \
+            internal/application/services/catalog_item_update_test.go
+          if git diff --quiet; then
+            echo "No formatting changes needed."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add internal/application/services/sales_action_processor.go internal/bootstrap/worker.go internal/application/services/sales_action_continuation_test.go
-          git commit -m "chore(sales): format entitlement guard tests"
-          git push origin HEAD:feat/customer-sales-start-consent
+          git add \
+            internal/adapters/primary/http/dto/inputs.go \
+            internal/adapters/primary/http/handlers/command_facades.go \
+            internal/adapters/primary/http/handlers/merchant_catalog_ai_v2_handler.go \
+            internal/adapters/secondary/ai/gemini/merchant_catalog_schema.go \
+            internal/application/catalogvalidation/attributes_test.go \
+            internal/application/commands/customers_catalog.go \
+            internal/application/merchantcatalogai/execution.go \
+            internal/application/merchantcatalogai/execution_test.go \
+            internal/application/merchantcatalogai/proposal.go \
+            internal/application/ports/catalog_repository.go \
+            internal/application/services/catalog_commands.go \
+            internal/application/services/catalog_item_atomic_test.go \
+            internal/application/services/catalog_item_update_test.go
+          git commit -m "chore: apply gofmt"
+          git push origin HEAD:feat/universal-catalog-ai-v3
