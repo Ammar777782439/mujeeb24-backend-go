@@ -14,6 +14,7 @@ import (
 
 // The sales executor has no LLM or transport client. All effects share one local transaction.
 type CustomerSalesWorkflowService struct {
+	SalesStarts ports.SalesStartRepository
 	Repository   ports.SalesWorkflowRepository
 	Transactions ports.TransactionManager
 	References   ports.ConversationReferenceRepository
@@ -57,6 +58,33 @@ func (s CustomerSalesWorkflowService) HandleButton(ctx context.Context, in ports
 			return err
 		}
 		return s.notify(tx, in.BusinessID, result, "sales-button:"+in.SourceMessageID, in.Now)
+	})
+	return result, err
+}
+
+
+ // HandleStartButton consumes customer consent and opens at most one existing workflow.
+ // Its transaction never calls AI. The durable start request records continuation_pending
+ // for the later conversation-resumption phase.
+func (s CustomerSalesWorkflowService) HandleStartButton(ctx context.Context, in ports.SalesButtonAction) (ports.SalesWorkflowResult, error) {
+	var result ports.SalesWorkflowResult
+	if s.SalesStarts == nil || s.Repository == nil || s.Transactions == nil {
+		return result, fmt.Errorf("sales start consent dependencies are required")
+	}
+	err := s.Transactions.Within(ctx, func(tx context.Context) error {
+		decision, err := s.SalesStarts.Decide(tx, in)
+		if err != nil || decision.Duplicate || !decision.Accepted {
+			return err
+		}
+		result, err = s.Execute(tx, ports.SalesWorkflowInput{
+			BusinessID: decision.BusinessID, CustomerID: decision.CustomerID,
+			ConversationID: decision.ConversationID, SourceMessageID: in.SourceMessageID,
+			SalesStartRequestID: decision.ID, IdempotencyKey: "sales-start:" + decision.ID,
+			Capability: ports.CustomerSalesCapabilityRecordLead,
+			Proposal: ports.SalesWorkflowProposal{EvidenceMessageIDs: []string{decision.SourceMessageID}},
+			RequiresApproval: decision.RequiresApproval, Now: in.Now,
+		})
+		return err
 	})
 	return result, err
 }

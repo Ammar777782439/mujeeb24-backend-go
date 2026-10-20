@@ -252,7 +252,9 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 
 	// Per contract ④ §8, call the AI gateway via the CustomerSalesDecisionPort.
 	log.Printf("[AutoReply] AI_GATEWAY_CALL business=%s conversation=%s run=%s", businessID, conversationID, run.ID)
-	capabilities := ports.CustomerSalesCapabilities(s.fullCatalogReady(run), s.Sales != nil && builtContext != nil && builtContext.Sales != nil && builtContext.Sales.Enabled && builtContext.Sales.AllowInteractions)
+	hasSales := s.Sales != nil && builtContext != nil && builtContext.Sales != nil && builtContext.Sales.Enabled && builtContext.Sales.AllowInteractions
+	startAuthorized := hasSales && builtContext.Sales.StartRequestID != ""
+	capabilities := ports.CustomerSalesCapabilitiesForConsent(s.fullCatalogReady(run), hasSales, startAuthorized)
 	out, err := s.CustomerSalesDecision.Decide(ctx, ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{
 			BusinessID:             businessID,
@@ -410,6 +412,9 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
 	}
 
+	if s.DisableInformationalReplies && effective.Capability == ports.CustomerSalesCapabilityOfferSalesStart {
+		return commands.AutoReplyResult{Action:"no_action"},nil
+	}
 	if s.DisableInformationalReplies && (effective.Capability == ports.CustomerSalesCapabilityRespondWithoutAction || (effective.Capability == ports.CustomerSalesCapabilityAsk && (builtContext == nil || builtContext.Sales == nil || len(builtContext.Sales.Active) == 0))) {
 		return commands.AutoReplyResult{Action: "no_action"}, nil
 	}
@@ -477,7 +482,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 					return err
 				}
 			}
-			salesResult, err := s.Sales.Execute(txCtx, ports.SalesWorkflowInput{BusinessID: businessID, CustomerID: builtContext.Customer.Reference, ConversationID: conversationID, SourceMessageID: sourceMessageRef, IdempotencyKey: "sales:" + sourceMessageRef, DecisionID: decision.ID, Capability: proposal.Capability, Proposal: *proposal.Sales, RequiresApproval: effective.PolicyDecision == "requires_approval", Now: now})
+			salesResult, err := s.Sales.Execute(txCtx, ports.SalesWorkflowInput{BusinessID: businessID, CustomerID: builtContext.Customer.Reference, ConversationID: conversationID, SourceMessageID: sourceMessageRef, IdempotencyKey: "sales:" + sourceMessageRef, DecisionID: decision.ID, SalesStartRequestID: builtContext.Sales.StartRequestID, Capability: proposal.Capability, Proposal: *proposal.Sales, RequiresApproval: effective.PolicyDecision == "requires_approval", Now: now})
 			if err != nil {
 				return err
 			}
@@ -574,6 +579,24 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		dedupeKey := "auto-reply:" + sourceMessageRef
 		outboundID := s.id()
 		contentReference := EncodeInlineTextContentReference(replyText)
+		startRequestID := ""
+		if effective.Capability == ports.CustomerSalesCapabilityOfferSalesStart {
+			if s.Sales == nil || s.Sales.SalesStarts == nil || builtContext == nil || builtContext.Sales == nil {
+				return errors.New("sales start offer requires the consent repository and sales context")
+			}
+			startRequestID = s.id()
+			replyText = strings.TrimSpace(replyText) + "\n\nهل تريد أن أبدأ تجهيز طلبك؟"
+			message := ports.InteractiveMessage{
+				Text: replyText,
+				Buttons: []ports.InteractiveButton{
+					{Title:"نعم، جهز طلبي",Payload:"m24.sales.start:"+startRequestID+":accept"},
+					{Title:"لا، أستفسر فقط",Payload:"m24.sales.start:"+startRequestID+":decline"},
+				},
+			}
+			var encodeErr error
+			contentReference,encodeErr = EncodeInteractiveContentReference(message)
+			if encodeErr != nil { return encodeErr }
+		}
 		outbound, outboundErr := s.OutboundRepository.CreatePending(txCtx, ports.OutboundMessageDraft{
 			ID:                      outboundID,
 			BusinessID:              businessID,
@@ -591,6 +614,13 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		})
 		if outboundErr != nil {
 			return mapAIRepositoryError(outboundErr)
+		}
+		if startRequestID != "" {
+			if err := s.Sales.SalesStarts.Create(txCtx,ports.SalesStartRequest{
+				ID:startRequestID,BusinessID:businessID,CustomerID:builtContext.Customer.Reference,
+				ConversationID:conversationID,OutboundMessageID:outbound.ID,
+				SourceMessageID:sourceMessageRef,CreatedAt:now,ExpiresAt:now.Add(ports.SalesStartTTL),
+			});err!=nil{return err}
 		}
 		if s.MessageRepository != nil {
 			msgDraft := ports.CommunicationMessageDraft{

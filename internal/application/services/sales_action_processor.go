@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -23,7 +24,13 @@ func (p SalesActionProcessor) Process(ctx context.Context, limit int) (int, erro
 	}
 	for i, j := range jobs {
 		code := ""
-		if _, err := p.Sales.HandleButton(ctx, j.Action); err != nil {
+		var err error
+		if strings.HasPrefix(j.Action.Payload, "m24.sales.start:") {
+			_, err = p.Sales.HandleStartButton(ctx, j.Action)
+		} else {
+			_, err = p.Sales.HandleButton(ctx, j.Action)
+		}
+		if err != nil {
 			code = "sales_action_failed"
 			log.Printf("[SalesAction] FAILED job=%s business=%s", j.ID, j.Action.BusinessID)
 		}

@@ -64,6 +64,8 @@ func customerSalesTools(capabilities []ports.CustomerSalesCapability) []customer
 			description = "Ask ONLY when an essential fact must be supplied by the customer to understand the goal or use an available executor. Do not reconfirm a clear intent to proceed, defer an unsupported operation by asking questions, or request merchant catalog facts that evaluate_full_catalog can retrieve."
 		case ports.CustomerSalesCapabilityHandoff:
 			description = "Use when the customer explicitly wants an employee, or requests an external action (including subscription) for which no offered executable capability exists. Short confirmations inherit the earlier customer goal; previous assistant promises are not proof of execution. Request human follow-up without claiming transfer or employee assignment already happened; only Mujeeb can commit waiting_human after authorization."
+		case ports.CustomerSalesCapabilityOfferSalesStart:
+			description = "Offer the customer a clear, optional choice to start preparing a purchase or service request. The backend, not the model, will add Yes/No buttons. Do not claim a lead, draft, reservation or confirmed sale already exists; ask only when the prior conversation supports likely purchase intent."
 		case ports.CustomerSalesCapabilityRecordLead, ports.CustomerSalesCapabilityCreateDraft, ports.CustomerSalesCapabilityUpdateDraft:
 			tools = append(tools, salesWorkflowTool(capability))
 			continue

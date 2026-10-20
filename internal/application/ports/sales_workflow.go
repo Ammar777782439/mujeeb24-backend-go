@@ -47,6 +47,8 @@ type SalesRequirementDefinition struct {
 	Rules    map[string]any `json:"validation_rules"`
 }
 type SalesWorkflowContext struct {
+	// Server-owned consent for the active sales workflow. Never model-authored.
+	StartRequestID string `json:"start_request_id,omitempty"`
 	Enabled           bool                  `json:"enabled"`
 	AllowInteractions bool                  `json:"allow_interactions"`
 	Active            []SalesWorkflowRecord `json:"active"`
@@ -55,6 +57,7 @@ type SalesWorkflowContext struct {
 type SalesWorkflowInput struct {
 	BusinessID, CustomerID, ConversationID, SourceMessageID, IdempotencyKey string
 	DecisionID                                                              string
+	SalesStartRequestID                                                     string
 	Capability                                                              CustomerSalesCapability
 	Proposal                                                                SalesWorkflowProposal
 	HumanApproved                                                           bool
@@ -101,4 +104,24 @@ type SalesReceiptLine struct {
 type SalesReceiptDetail struct {
 	Label string `json:"label"`
 	Value any    `json:"value"`
+}
+
+// SalesStartTTL is the initial validity window for starting a customer sales journey.
+const SalesStartTTL = 24 * time.Hour
+
+// The start decision is only permission to prepare a sale, never agreement confirmation.
+type SalesStartRequest struct {
+	ID, BusinessID, CustomerID, ConversationID string
+	OutboundMessageID, SourceMessageID string
+	CreatedAt, ExpiresAt time.Time
+}
+
+type SalesStartDecision struct {
+	ID, BusinessID, CustomerID, ConversationID, SourceMessageID string
+	Accepted, Duplicate, RequiresApproval bool
+}
+
+type SalesStartRepository interface {
+	Create(context.Context, SalesStartRequest) error
+	Decide(context.Context, SalesButtonAction) (SalesStartDecision, error)
 }

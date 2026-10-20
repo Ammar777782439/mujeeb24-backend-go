@@ -15,7 +15,7 @@ import (
 
 type salesWorkflowFixture struct {
 	a                                                                             *Adapter
-	business, customer, conversation, reference, connection, item, offer, message string
+	business, customer, conversation, reference, connection, item, offer, message, start string
 	now                                                                           time.Time
 }
 
@@ -34,7 +34,7 @@ func newSalesWorkflowFixture(t *testing.T) salesWorkflowFixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(a.Close)
-	f := salesWorkflowFixture{a: a, business: uuid.NewString(), customer: uuid.NewString(), conversation: uuid.NewString(), reference: uuid.NewString(), connection: uuid.NewString(), item: uuid.NewString(), offer: uuid.NewString(), message: uuid.NewString(), now: time.Now().UTC()}
+	f := salesWorkflowFixture{a: a, business: uuid.NewString(), customer: uuid.NewString(), conversation: uuid.NewString(), reference: uuid.NewString(), connection: uuid.NewString(), item: uuid.NewString(), offer: uuid.NewString(), message: uuid.NewString(), start: uuid.NewString(), now: time.Now().UTC()}
 	catalog := uuid.NewString()
 	exec := func(q string, args ...any) {
 		t.Helper()
@@ -52,6 +52,15 @@ func newSalesWorkflowFixture(t *testing.T) salesWorkflowFixture {
 	exec(`INSERT INTO catalogs(id,business_id,name,description,status,created_at,updated_at) VALUES($1::uuid,$2::uuid,'Items','','active',now(),now())`, catalog, f.business)
 	exec(`INSERT INTO catalog_items(id,business_id,catalog_id,item_type,name,status,pricing_mode,availability_mode,fulfillment_mode,requires_confirmation,attributes,created_at,updated_at) VALUES($1::uuid,$2::uuid,$3::uuid,'service','سماعة','active','fixed','always_available','pickup',true,'{}',now(),now())`, f.item, f.business, catalog)
 	exec(`INSERT INTO offers(id,business_id,catalog_item_id,name,pricing_mode,amount,currency,price_source,price_verification_status,availability_mode,availability_status,availability_source,fulfillment_mode,status,created_at,updated_at) VALUES($1::uuid,$2::uuid,$3::uuid,'Offer','fixed',5000,'YER','merchant','verified','always_available','available','merchant','pickup','active',now(),now())`, f.offer, f.business, f.item)
+	// Tests of the old order/confirmation lifecycle begin with a trusted accepted start.
+	// Separate tests verify the actual postback-based consent transition.
+	outbound := uuid.NewString()
+	exec(`INSERT INTO outbound_messages(id,business_id,conversation_id,conversation_reference_id,connection_id,provider_ref,channel,origin,direction,transport,content_reference,provider_idempotency_key,status,created_at,updated_at)
+		VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,'socialapi','instagram','ai','outbound','provider','test-content',$6,'pending',now(),now())`,
+		outbound,f.business,f.conversation,f.reference,f.connection,"fixture-start:"+outbound)
+	exec(`INSERT INTO sales_start_requests(id,business_id,customer_id,conversation_id,outbound_message_id,source_message_id,status,accept_token_hash,decline_token_hash,expires_at,resolved_at,decision_message_id,continuation_state,created_at,updated_at)
+		VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::uuid,'accepted',$7,$8,now()+interval '24 hours',now(),$6::uuid,'pending',now(),now())`,
+		f.start,f.business,f.customer,f.conversation,outbound,f.message,"fixture-accept:"+f.start,"fixture-decline:"+f.start)
 	// Append-only audit remains; fixtures use unique tenant ids and are confined to the test database.
 	return f
 }
@@ -61,7 +70,7 @@ func (f salesWorkflowFixture) apply(t *testing.T, key string) (ports.SalesWorkfl
 	repo := NewSalesWorkflowRepository(f.a)
 	err := f.a.Within(context.Background(), func(tx context.Context) error {
 		var err error
-		result, err = repo.Apply(tx, ports.SalesWorkflowInput{BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation, SourceMessageID: f.message, IdempotencyKey: key, Capability: ports.CustomerSalesCapabilityCreateDraft, Proposal: ports.SalesWorkflowProposal{TransactionType: "order", EvidenceMessageIDs: []string{f.message}, Lines: []ports.SalesWorkflowLine{{ItemID: f.item, OfferID: &f.offer, Quantity: "1"}}}, Now: f.now})
+		result, err = repo.Apply(tx, ports.SalesWorkflowInput{SalesStartRequestID: f.start, BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation, SourceMessageID: f.message, IdempotencyKey: key, Capability: ports.CustomerSalesCapabilityCreateDraft, Proposal: ports.SalesWorkflowProposal{TransactionType: "order", EvidenceMessageIDs: []string{f.message}, Lines: []ports.SalesWorkflowLine{{ItemID: f.item, OfferID: &f.offer, Quantity: "1"}}}, Now: f.now})
 		return err
 	})
 	return result, err
@@ -163,7 +172,7 @@ func TestSalesWorkflowNotificationUsesExistingOutboxAgainstPostgres(t *testing.T
 	f := newSalesWorkflowFixture(t)
 	s := services.CustomerSalesWorkflowService{Repository: NewSalesWorkflowRepository(f.a), Transactions: f.a, References: NewConversationReferenceRepository(f.a), Connections: NewChannelConnectionRepository(f.a), Outbound: NewOutboundMessageRepository(f.a), Messages: NewMessageRepository(f.a), Outbox: NewPostgresOutboxStore(f.a), Audit: NewAuditEventRepository(f.a)}
 	err := f.a.Within(context.Background(), func(tx context.Context) error {
-		_, err := s.Execute(tx, ports.SalesWorkflowInput{BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation, SourceMessageID: f.message, IdempotencyKey: "notify", Capability: ports.CustomerSalesCapabilityCreateDraft, Proposal: ports.SalesWorkflowProposal{TransactionType: "order", EvidenceMessageIDs: []string{f.message}, Lines: []ports.SalesWorkflowLine{{ItemID: f.item, OfferID: &f.offer, Quantity: "1"}}}, Now: f.now})
+		_, err := s.Execute(tx, ports.SalesWorkflowInput{SalesStartRequestID: f.start, BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation, SourceMessageID: f.message, IdempotencyKey: "notify", Capability: ports.CustomerSalesCapabilityCreateDraft, Proposal: ports.SalesWorkflowProposal{TransactionType: "order", EvidenceMessageIDs: []string{f.message}, Lines: []ports.SalesWorkflowLine{{ItemID: f.item, OfferID: &f.offer, Quantity: "1"}}}, Now: f.now})
 		return err
 	})
 	if err != nil {
@@ -223,7 +232,7 @@ func TestSalesWorkflowIncompleteAgreementsHaveNoButtonsAgainstPostgres(t *testin
 			var result ports.SalesWorkflowResult
 			err := f.a.Within(context.Background(), func(tx context.Context) error {
 				var err error
-				result, err = NewSalesWorkflowRepository(f.a).Apply(tx, ports.SalesWorkflowInput{BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation, SourceMessageID: f.message, IdempotencyKey: kind, Capability: ports.CustomerSalesCapabilityCreateDraft, Proposal: proposal, Now: f.now})
+				result, err = NewSalesWorkflowRepository(f.a).Apply(tx, ports.SalesWorkflowInput{SalesStartRequestID: f.start, BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation, SourceMessageID: f.message, IdempotencyKey: kind, Capability: ports.CustomerSalesCapabilityCreateDraft, Proposal: proposal, Now: f.now})
 				return err
 			})
 			if err != nil || result.Workflow.State != "draft" || result.ConfirmationID != "" {
@@ -281,7 +290,7 @@ func TestSalesWorkflowDraftUpdateSupersedesPreviousButtonsAgainstPostgres(t *tes
 	var updated ports.SalesWorkflowResult
 	err = f.a.Within(context.Background(), func(tx context.Context) error {
 		var err error
-		updated, err = NewSalesWorkflowRepository(f.a).Apply(tx, ports.SalesWorkflowInput{BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation, SourceMessageID: f.message, IdempotencyKey: "after-update", Capability: ports.CustomerSalesCapabilityUpdateDraft, Proposal: proposal, Now: f.now})
+		updated, err = NewSalesWorkflowRepository(f.a).Apply(tx, ports.SalesWorkflowInput{SalesStartRequestID: f.start, BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation, SourceMessageID: f.message, IdempotencyKey: "after-update", Capability: ports.CustomerSalesCapabilityUpdateDraft, Proposal: proposal, Now: f.now})
 		return err
 	})
 	if err != nil || updated.ConfirmationID == previous.ConfirmationID || updated.TotalAmount == nil || *updated.TotalAmount != "10000.0000" {
@@ -326,7 +335,7 @@ func TestSalesWorkflowRequirementsRemainPinnedAndGuardHumanConfirmationAgainstPo
 	var r ports.SalesWorkflowResult
 	err := f.a.Within(context.Background(), func(tx context.Context) error {
 		var err error
-		r, err = repo.Apply(tx, ports.SalesWorkflowInput{BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation, SourceMessageID: f.message, IdempotencyKey: "booking", Capability: ports.CustomerSalesCapabilityCreateDraft, Proposal: ports.SalesWorkflowProposal{TransactionType: "booking", TransactionData: map[string]any{"date": "2026-11-01"}, EvidenceMessageIDs: []string{f.message}, Lines: []ports.SalesWorkflowLine{{ItemID: f.item, OfferID: &f.offer, Quantity: "1"}}}, Now: f.now})
+		r, err = repo.Apply(tx, ports.SalesWorkflowInput{SalesStartRequestID: f.start, BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation, SourceMessageID: f.message, IdempotencyKey: "booking", Capability: ports.CustomerSalesCapabilityCreateDraft, Proposal: ports.SalesWorkflowProposal{TransactionType: "booking", TransactionData: map[string]any{"date": "2026-11-01"}, EvidenceMessageIDs: []string{f.message}, Lines: []ports.SalesWorkflowLine{{ItemID: f.item, OfferID: &f.offer, Quantity: "1"}}}, Now: f.now})
 		return err
 	})
 	if err != nil || r.ConfirmationID == "" {

@@ -55,6 +55,15 @@ func (r *SalesWorkflowRepository) GetContext(ctx context.Context, business, conv
 	if len(result.Active) > 10 {
 		return result, invalidRepositoryInput("sales.context", "too many open workflows; a human must select the current request")
 	}
+	// Only an accepted start that already owns an active workflow can authorize later AI updates.
+	err = e.QueryRow(ctx, `SELECT s.id::text FROM sales_start_requests s
+		JOIN sales_workflows w ON w.business_id=s.business_id AND w.id=s.workflow_id
+		WHERE s.business_id=$1::uuid AND s.customer_id=$2::uuid AND s.conversation_id=$3::uuid
+		AND s.status='accepted' AND w.state IN ('gathering','draft','awaiting_confirmation','awaiting_review')
+		ORDER BY s.created_at DESC LIMIT 1`, business, customer, conversation).Scan(&result.StartRequestID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return result, err
+	}
 	rows, err = e.Query(ctx, `SELECT DISTINCT ON (transaction_type) transaction_type,schema_version,definitions FROM sales_transaction_requirements WHERE business_id=$1::uuid ORDER BY transaction_type,schema_version DESC`, business)
 	if err != nil {
 		return result, err
@@ -119,6 +128,26 @@ func (r *SalesWorkflowRepository) Apply(ctx context.Context, in ports.SalesWorkf
 		}
 		result.Duplicate = true
 		return result, nil
+	}
+	// This repository gate is authoritative even if an AI tool was wrongly exposed.
+	if !in.HumanApproved {
+		if in.SalesStartRequestID == "" {
+			return result, invalidRepositoryInput("sales.start", "accepted start consent required")
+		}
+		var existingWorkflow *string
+		err := e.QueryRow(ctx, `SELECT workflow_id::text FROM sales_start_requests
+			WHERE business_id=$1::uuid AND id=$2::uuid AND customer_id=$3::uuid
+			AND conversation_id=$4::uuid AND status='accepted' FOR UPDATE`,
+			in.BusinessID, in.SalesStartRequestID, in.CustomerID, in.ConversationID).Scan(&existingWorkflow)
+		if err != nil {
+			return result, invalidRepositoryInput("sales.start", "no accepted start consent for this customer and conversation")
+		}
+		if existingWorkflow != nil && in.Proposal.WorkflowID != *existingWorkflow {
+			return result, invalidRepositoryInput("sales.start", "consent already belongs to a different workflow")
+		}
+		if existingWorkflow == nil && in.Proposal.WorkflowID != "" {
+			return result, invalidRepositoryInput("sales.start", "cannot attach consent to an existing unverified workflow")
+		}
 	}
 	policy, err := NewBusinessRepository(r.adapter).GetRuntimePolicy(ctx, in.BusinessID)
 	if err != nil {
@@ -189,6 +218,16 @@ func (r *SalesWorkflowRepository) Apply(ctx context.Context, in ports.SalesWorkf
 	}
 	if err := saveSalesWorkflow(ctx, e, in.BusinessID, w, in.Now); err != nil {
 		return result, err
+	}
+	if !in.HumanApproved {
+		tag, err := e.Exec(ctx, `UPDATE sales_start_requests
+			SET workflow_id=$3::uuid,updated_at=$4
+			WHERE business_id=$1::uuid AND id=$2::uuid AND status='accepted'
+			AND (workflow_id IS NULL OR workflow_id=$3::uuid)`,
+			in.BusinessID, in.SalesStartRequestID, w.ID, in.Now)
+		if err != nil || tag.RowsAffected() != 1 {
+			return result, invalidRepositoryInput("sales.start", "consent workflow binding failed")
+		}
 	}
 	result.Workflow = w
 	if err := writeSalesCommand(ctx, e, in.BusinessID, "workflow", in.IdempotencyKey, hash, result, in.Now); err != nil {

@@ -101,7 +101,7 @@ func (s *ProviderInboundStore) Materialize(ctx context.Context, draft ports.Prov
 		if err != nil {
 			return err
 		}
-		if strings.HasPrefix(draft.ActionPayload, "m24.sales:") {
+		if draft.ActionPayload != "" && (strings.HasPrefix(draft.ActionPayload, "m24.sales:") || strings.HasPrefix(draft.ActionPayload, "m24.sales.start:")) {
 			if _, err := executor.Exec(txCtx, `INSERT INTO sales_action_jobs(id,business_id,customer_id,conversation_id,message_id,payload,created_at,updated_at) VALUES(gen_random_uuid(),$1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6,$6) ON CONFLICT(business_id,message_id) DO NOTHING`, draft.BusinessID, customerID, conversationID, messageID, draft.ActionPayload, draft.ReceivedAt); err != nil {
 				return err
 			}

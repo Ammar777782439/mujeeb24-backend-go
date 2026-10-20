@@ -7,5 +7,5 @@ import (
 )
 
 func buildSalesWorkflowService(database *postgres.Adapter, outbox ports.OutboxStore) services.CustomerSalesWorkflowService {
-	return services.CustomerSalesWorkflowService{Repository: postgres.NewSalesWorkflowRepository(database), Transactions: database, References: postgres.NewConversationReferenceRepository(database), Connections: postgres.NewChannelConnectionRepository(database), Outbound: postgres.NewOutboundMessageRepository(database), Messages: postgres.NewMessageRepository(database), Outbox: outbox, Audit: postgres.NewAuditEventRepository(database)}
+	return services.CustomerSalesWorkflowService{SalesStarts: postgres.NewSalesStartRepository(database), Repository: postgres.NewSalesWorkflowRepository(database), Transactions: database, References: postgres.NewConversationReferenceRepository(database), Connections: postgres.NewChannelConnectionRepository(database), Outbound: postgres.NewOutboundMessageRepository(database), Messages: postgres.NewMessageRepository(database), Outbox: outbox, Audit: postgres.NewAuditEventRepository(database)}
 }

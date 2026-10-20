@@ -9,6 +9,7 @@ const (
 	CustomerSalesCapabilityAsk                  CustomerSalesCapability = "ask_customer"
 	CustomerSalesCapabilityHandoff              CustomerSalesCapability = "handoff_to_human"
 	CustomerSalesCapabilityFullCatalog          CustomerSalesCapability = "evaluate_full_catalog"
+	CustomerSalesCapabilityOfferSalesStart       CustomerSalesCapability = "offer_sales_start"
 	CustomerSalesCapabilityRecordLead           CustomerSalesCapability = "record_lead"
 	CustomerSalesCapabilityCreateDraft          CustomerSalesCapability = "create_transaction_draft"
 	CustomerSalesCapabilityUpdateDraft          CustomerSalesCapability = "update_transaction_draft"
@@ -59,6 +60,7 @@ var customerSalesCapabilityRegistry = [...]struct {
 	{CustomerSalesCapabilityAsk, CustomerSalesCapabilityDefinition{Terminal: true, SendsCustomerMessage: true, ConversationState: "waiting_customer", ConversationOwnership: "ai"}},
 	{CustomerSalesCapabilityHandoff, CustomerSalesCapabilityDefinition{Terminal: true, SendsCustomerMessage: true, RequiresHuman: true, ConversationState: "waiting_human"}},
 	{CustomerSalesCapabilityFullCatalog, CustomerSalesCapabilityDefinition{RequiresFullCatalogRuntime: true}},
+	{CustomerSalesCapabilityOfferSalesStart, CustomerSalesCapabilityDefinition{Terminal: true, RequiresSalesRuntime: true, SendsCustomerMessage: true, ConversationState: "waiting_customer", ConversationOwnership: "ai"}},
 	{CustomerSalesCapabilityRecordLead, CustomerSalesCapabilityDefinition{Terminal: true, Executor: "sales", RequiresSalesRuntime: true}},
 	{CustomerSalesCapabilityCreateDraft, CustomerSalesCapabilityDefinition{Terminal: true, Executor: "sales", RequiresSalesRuntime: true}},
 	{CustomerSalesCapabilityUpdateDraft, CustomerSalesCapabilityDefinition{Terminal: true, Executor: "sales", RequiresSalesRuntime: true}},
@@ -71,4 +73,18 @@ func CustomerSalesCapabilityDefinitionFor(capability CustomerSalesCapability) (C
 		}
 	}
 	return CustomerSalesCapabilityDefinition{}, false
+}
+
+ // CustomerSalesCapabilitiesForConsent exposes the start offer before customer acceptance,
+ // and ordinary sales actions only after a server-verified, active start request.
+func CustomerSalesCapabilitiesForConsent(fullCatalog, salesEnabled, startAuthorized bool) []CustomerSalesCapability {
+	base := CustomerSalesCapabilities(fullCatalog, salesEnabled)
+	result := make([]CustomerSalesCapability,0,len(base))
+	for _, capability := range base {
+		definition,_ := CustomerSalesCapabilityDefinitionFor(capability)
+		if definition.Executor=="sales" && !startAuthorized { continue }
+		if capability==CustomerSalesCapabilityOfferSalesStart && startAuthorized { continue }
+		result=append(result,capability)
+	}
+	return result
 }
