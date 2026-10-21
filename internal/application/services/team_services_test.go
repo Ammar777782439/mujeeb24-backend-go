@@ -24,9 +24,9 @@ func (e teamTestRepositoryError) Error() string { return e.message }
 
 func TestTeamInvitationErrorMappingExposesSafeActionableCauses(t *testing.T) {
 	tests := []struct {
-		reason string
-		kind string
-		code appErrors.Code
+		reason   string
+		kind     string
+		code     appErrors.Code
 		expected string
 	}{
 		{"an active subscription is required to add a team seat", "conflict",
