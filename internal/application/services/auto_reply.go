@@ -1142,6 +1142,13 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
 	// records separately so operators can investigate pricing gaps.
 	providerCostYER := 0
 	pricingVersion, gatewayCostUSD, gatewayFXRate, pricingFailed := nativeProviderSpend(out.Usage, s.GatewayFXRateYER)
+	if pricingFailed {
+		if calculatedYER, version, unpriced := nativeTokenPricedSpend(ctx, s.AIPricing, out.Usage); !unpriced {
+			providerCostYER = calculatedYER
+			pricingVersion = version
+			pricingFailed = false
+		}
+	}
 	totalInput := out.Usage.InputTokens
 	cachedInput := out.Usage.CachedTokens
 	nonCachedInput := totalInput - cachedInput
