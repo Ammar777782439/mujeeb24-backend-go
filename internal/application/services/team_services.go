@@ -394,24 +394,45 @@ func invitationTokenHash(token string) string {
 
 func validTeamPrincipalID(id commands.PrincipalID) bool { return uuid.Validate(string(id)) == nil }
 
+// Only map known, business-actionable repository conflicts. Never put raw
+// PostgreSQL errors, SQL values, personal details or schema names in the API.
 func mapTeamRepositoryError(err error) error {
-	var kinded interface{ ErrorKind() string }
-	if !errors.As(err, &kinded) {
-		return err
-	}
-	switch kinded.ErrorKind() {
-	case "not_found":
-		return appErrors.New(appErrors.CodeNotFound, "team member or invitation was not found")
-	case "conflict":
-		return appErrors.New(appErrors.CodeInvalidState, "team operation is not allowed in its current state")
-	case "invalid":
-		return appErrors.New(appErrors.CodeValidation, "team persistence rejected the request")
-	default:
-		return err
-	}
+  var kinded interface{ ErrorKind() string }
+  if !errors.As(err, &kinded) {
+    return err
+  }
+  switch kinded.ErrorKind() {
+  case "not_found":
+    return appErrors.New(appErrors.CodeNotFound, "team member or invitation was not found")
+  case "conflict":
+    switch {
+    case strings.Contains(err.Error(), "an active subscription is required to add a team seat"):
+      return appErrors.New(appErrors.CodeInvalidState, "An active subscription is required before accepting a team invitation.")
+    case strings.Contains(err.Error(), "active seat limit "):
+      return appErrors.New(appErrors.CodeInvalidState, "The subscription has no available employee seat.")
+    case strings.Contains(err.Error(), "principal already exists"):
+      return appErrors.New(appErrors.CodeInvalidState, "An account already exists for the invited email. Sign in to accept this invitation.")
+    case strings.Contains(err.Error(), "invitation is not pending"):
+      return appErrors.New(appErrors.CodeInvalidState, "The invitation is no longer pending. Ask for a new invitation.")
+    case strings.Contains(err.Error(), "business is not active"):
+      return appErrors.New(appErrors.CodeInvalidState, "The business is not active and cannot accept new members.")
+    case strings.Contains(err.Error(), "accepted invitation cannot be resent"):
+      return appErrors.New(appErrors.CodeInvalidState, "An accepted invitation cannot be resent.")
+    default:
+      return appErrors.New(appErrors.CodeInvalidState, "The team invitation cannot be completed in its current state.")
+    }
+  case "invalid":
+    // The persistence layer could have rejected a database constraint,
+    // schema mismatch, or infrastructure command. This is NOT proof that
+    // the merchant entered invalid values. Server-side logs/request_id
+    // must be inspected to identify the specific underlying SQLSTATE.
+    return appErrors.New(appErrors.CodeExternalDependency,
+      "Team invitation could not be saved. Please contact support with the request ID.")
+  default:
+    return err
+  }
 }
 
-var _ queries.ListTeamMembersHandler = ListTeamMembersQueryService{}
 var _ queries.ListTeamInvitationsHandler = ListTeamInvitationsQueryService{}
 var _ queries.InspectTeamInvitationHandler = InspectTeamInvitationQueryService{}
 var _ commands.InviteTeamMemberHandler = InviteTeamMemberCommandService{}
