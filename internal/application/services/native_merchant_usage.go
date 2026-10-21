@@ -15,6 +15,7 @@ import (
 type NativeMerchantUsageRecorder struct {
 	Usage         ports.AIUsageRepository
 	Subscriptions ports.SubscriptionRepository
+	AIPricing     ports.AIProviderPricingRepository
 	FXRateYER     string
 }
 
@@ -30,6 +31,14 @@ func (r NativeMerchantUsageRecorder) Record(ctx context.Context, businessID, ses
 		return errors.New("merchant AI has no active subscription for usage accounting")
 	}
 	version, usd, rate, failed := nativeProviderSpend(usage, r.FXRateYER)
+	providerCostYER := 0
+	if failed {
+		if ratedCostYER, pricedVersion, unknown := nativeTokenPricedSpend(ctx, r.AIPricing, usage); !unknown {
+			providerCostYER = ratedCostYER
+			version = pricedVersion
+			failed = false
+		}
+	}
 	status := "success"
 	if failed {
 		status = "pricing_failed"
@@ -46,7 +55,7 @@ func (r NativeMerchantUsageRecorder) Record(ctx context.Context, businessID, ses
 		InputTokens:       int64(usage.InputTokens - usage.CachedTokens),
 		CachedInputTokens: int64(usage.CachedTokens), OutputTokens: int64(usage.OutputTokens),
 		ModelRequests: maxNativeRequests(usage.ModelRequests), ToolCalls: 0, FinalAIReplies: 0,
-		ProviderCostYER: 0, PricingVersion: version, Status: status,
+		ProviderCostYER: providerCostYER, PricingVersion: version, Status: status,
 		CorrelationID: &correlation, StartedAt: now, CompletedAt: now, Now: now,
 	}
 	if input.InputTokens < 0 {
