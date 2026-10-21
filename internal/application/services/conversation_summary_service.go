@@ -474,7 +474,7 @@ func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, bus
 		InputTokens:       int64(nonCachedInput),
 		CachedInputTokens: int64(cachedInput),
 		OutputTokens:      int64(usage.OutputTokens),
-		ModelRequests:     1,
+		ModelRequests:     maxNativeRequests(usage.ModelRequests),
 		ToolCalls:         0,
 		FinalAIReplies:    finalAIReplies,
 		ProviderCostYER:   providerCostYER,
