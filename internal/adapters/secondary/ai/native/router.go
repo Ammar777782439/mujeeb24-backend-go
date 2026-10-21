@@ -205,6 +205,12 @@ func (r *Router) CountTokens(ctx context.Context, req Request) (count int64, exa
 	if err := ctx.Err(); err != nil {
 		return 0, false, r.standby != nil, err
 	}
+	// The fallback model uses a different tokenizer. Gemini's exact count
+	// cannot relax a conservative shared-model context limit, so avoid an
+	// extra network call for every proposed catalog partition.
+	if r.standby != nil {
+		return 0, false, true, nil
+	}
 	counter, supported := r.primary.(interface {
 		CountTokens(context.Context, Request) (int64, error)
 	})
