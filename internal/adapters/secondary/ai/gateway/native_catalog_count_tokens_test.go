@@ -53,8 +53,8 @@ func TestNativeCatalogUsesGeminiCountTokensWithoutStandby(t *testing.T) {
 		t.Fatal(err)
 	}
 	request := chatCompletionRequest{
-		Model:     "mujeeb-catalog",
-		Messages:  []chatCompletionMessage{
+		Model: "mujeeb-catalog",
+		Messages: []chatCompletionMessage{
 			{Role: "system", Content: "Only verified catalog facts"},
 			{Role: "user", Content: "Find the correct item"},
 		},
