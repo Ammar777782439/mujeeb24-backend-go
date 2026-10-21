@@ -9,9 +9,9 @@ import (
 )
 
 type verifiedPricingStub struct {
-	version ports.AIProviderPricingVersion
+	version  ports.AIProviderPricingVersion
 	provider string
-	model string
+	model    string
 }
 
 func (p *verifiedPricingStub) GetCurrentForProvider(_ context.Context, provider, model string) (ports.AIProviderPricingVersion, error) {
@@ -33,10 +33,10 @@ func (*verifiedPricingStub) ListByProvider(context.Context, string) ([]ports.AIP
 
 func TestNativeTokenPricedSpendUsesImmutableModelVersion(t *testing.T) {
 	pricing := &verifiedPricingStub{version: ports.AIProviderPricingVersion{
-		PricingVersion: "verified-example-1",
-		InputPerMillionYER: 1000000,
+		PricingVersion:           "verified-example-1",
+		InputPerMillionYER:       1000000,
 		CachedInputPerMillionYER: 500000,
-		OutputPerMillionYER: 2000000,
+		OutputPerMillionYER:      2000000,
 	}}
 	cost, version, failed := nativeTokenPricedSpend(context.Background(), pricing, ports.CustomerSalesUsageTelemetry{
 		Provider: "gemini", Model: "gemini-3.1-flash-lite",
