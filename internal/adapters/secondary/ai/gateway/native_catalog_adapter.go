@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -68,7 +69,33 @@ func (c *NativeCatalogAdapter) count(ctx context.Context, req chatCompletionRequ
 	if len(encoded) > int(^uint(0)>>1)-protocolReserve {
 		return 0, errors.New("native catalog request size overflow")
 	}
-	return len(encoded) + protocolReserve, nil
+	conservative := len(encoded) + protocolReserve
+	measured, exact, standby, err := c.client.CountTokens(ctx, req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return 0, ctx.Err()
+		}
+		// When Google's countTokens endpoint is unavailable, retain the
+		// original conservative estimate rather than risk lost evidence.
+		log.Printf("[CatalogTokens] countTokens unavailable; conservative estimate used: %v", err)
+		return conservative, nil
+	}
+	if !exact {
+		return conservative, nil
+	}
+	maxInt := int(^uint(0) >> 1)
+	if measured > int64(maxInt) {
+		return conservative, nil
+	}
+	estimate := int(measured)
+	if standby && conservative > estimate {
+		// DeepSeek uses another tokenizer; Gemini's result cannot prove its
+		// model context is safe. Keep the conservative shared route bound.
+		log.Printf("[CatalogTokens] gemini_measured=%d shared_conservative=%d standby=true", estimate, conservative)
+		return conservative, nil
+	}
+	log.Printf("[CatalogTokens] gemini_measured=%d shared_conservative=%d standby=%t", estimate, conservative, standby)
+	return estimate, nil
 }
 
 // BatchTokenBudget reserves output and a safety margin inside the smallest
