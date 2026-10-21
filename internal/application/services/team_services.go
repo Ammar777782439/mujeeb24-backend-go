@@ -418,6 +418,9 @@ func mapTeamRepositoryError(err error) error {
 			return appErrors.New(appErrors.CodeInvalidState, "The business is not active and cannot accept new members.")
 		case strings.Contains(err.Error(), "accepted invitation cannot be resent"):
 			return appErrors.New(appErrors.CodeInvalidState, "An accepted invitation cannot be resent.")
+		case strings.Contains(err.Error(), "a newer pending invitation already exists"):
+			return appErrors.New(appErrors.CodeInvalidState,
+				"A newer pending invitation already exists for this email. Refresh the invitation list.")
 		default:
 			return appErrors.New(appErrors.CodeInvalidState, "The team invitation cannot be completed in its current state.")
 		}
