@@ -80,3 +80,19 @@ func (c *CompletionClient) Complete(ctx context.Context, payload any) (json.RawM
 	info.CostKnown = response.CostKnown
 	return response.Payload, info, nil
 }
+
+// CountTokens applies the same canonical request serialization as Complete,
+// without triggering generation or executing a commercial capability.
+func (c *CompletionClient) CountTokens(ctx context.Context, payload any) (int64, bool, bool, error) {
+	if c == nil || c.router == nil {
+		return 0, false, false, errors.New("native inference is unconfigured")
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return 0, false, false, err
+	}
+	if len(body) == 0 || !json.Valid(body) || string(body) == "null" {
+		return 0, false, false, errors.New("canonical token count request must be valid JSON")
+	}
+	return c.router.CountTokens(ctx, Request{Payload: body})
+}
