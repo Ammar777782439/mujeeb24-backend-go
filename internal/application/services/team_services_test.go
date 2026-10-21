@@ -15,52 +15,52 @@ import (
 )
 
 type teamTestRepositoryError struct {
-  kind    string
-  message string
+	kind    string
+	message string
 }
 
 func (e teamTestRepositoryError) ErrorKind() string { return e.kind }
 func (e teamTestRepositoryError) Error() string { return e.message }
 
 func TestTeamInvitationErrorMappingExposesSafeActionableCauses(t *testing.T) {
-  tests := []struct{
-    reason string
-    kind string
-    code appErrors.Code
-    expected string
-  }{
-    {"an active subscription is required to add a team seat", "conflict",
-      appErrors.CodeInvalidState, "active subscription"},
-    {"active seat limit 2 has been reached", "conflict",
-      appErrors.CodeInvalidState, "available employee seat"},
-    {"principal already exists", "conflict",
-      appErrors.CodeInvalidState, "Sign in"},
-    {"invitation is not pending", "conflict",
-      appErrors.CodeInvalidState, "no longer pending"},
-    {"business is not active", "conflict",
-      appErrors.CodeInvalidState, "business is not active"},
-    {"accepted invitation cannot be resent", "conflict",
-      appErrors.CodeInvalidState, "cannot be resent"},
-    {"unknown foreign key violation (private SQL)", "invalid",
-      appErrors.CodeExternalDependency, "contact support"},
-  }
-  for _, tt := range tests {
-    t.Run(tt.reason, func(t *testing.T) {
-      got := mapTeamRepositoryError(teamTestRepositoryError{
-        kind: tt.kind, message: tt.reason,
-      })
-      var appErr *appErrors.Error
-      if !errors.As(got, &appErr) {
-        t.Fatalf("wanted application error, got %T: %v", got, got)
-      }
-      if appErr.Code != tt.code || !strings.Contains(appErr.Message, tt.expected) {
-        t.Fatalf("wrong safe mapping: %#v", appErr)
-      }
-      if strings.Contains(appErr.Message, "private SQL") {
-        t.Fatal("repository error details must not leak")
-      }
-    })
-  }
+	tests := []struct {
+		reason string
+		kind string
+		code appErrors.Code
+		expected string
+	}{
+		{"an active subscription is required to add a team seat", "conflict",
+			appErrors.CodeInvalidState, "active subscription"},
+		{"active seat limit 2 has been reached", "conflict",
+			appErrors.CodeInvalidState, "available employee seat"},
+		{"principal already exists", "conflict",
+			appErrors.CodeInvalidState, "Sign in"},
+		{"invitation is not pending", "conflict",
+			appErrors.CodeInvalidState, "no longer pending"},
+		{"business is not active", "conflict",
+			appErrors.CodeInvalidState, "business is not active"},
+		{"accepted invitation cannot be resent", "conflict",
+			appErrors.CodeInvalidState, "cannot be resent"},
+		{"unknown foreign key violation (private SQL)", "invalid",
+			appErrors.CodeExternalDependency, "contact support"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.reason, func(t *testing.T) {
+			got := mapTeamRepositoryError(teamTestRepositoryError{
+				kind: tt.kind, message: tt.reason,
+			})
+			var appErr *appErrors.Error
+			if !errors.As(got, &appErr) {
+				t.Fatalf("wanted application error, got %T: %v", got, got)
+			}
+			if appErr.Code != tt.code || !strings.Contains(appErr.Message, tt.expected) {
+				t.Fatalf("wrong safe mapping: %#v", appErr)
+			}
+			if strings.Contains(appErr.Message, "private SQL") {
+				t.Fatal("repository error details must not leak")
+			}
+		})
+	}
 }
 
 func TestInviteTeamMemberCreatesHashedNormalizedInvitation(t *testing.T) {
