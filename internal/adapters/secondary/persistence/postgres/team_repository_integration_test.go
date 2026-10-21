@@ -90,6 +90,47 @@ func TestTeamRepositoriesAgainstPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create new-account invitation: %v", err)
 	}
+	// A resend atomically revokes the old invite and issues exactly one
+	// new pending token. Replaying a stale invitation must NOT create
+	// a second pending invite for the same email.
+	const resendOriginalID = "49000000-0000-0000-0000-000000000022"
+	const resendNewID = "49000000-0000-0000-0000-000000000023"
+	resendOriginal, err := team.CreateInvitation(ctx, ports.TeamInvitationCreate{
+		ID: resendOriginalID, BusinessID: businessID,
+		Email: "resend@team.example.test", DisplayName: "Resend Employee",
+		Role: "agent", Permissions: []string{"conversations:read"},
+		TokenHash: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+		InvitedBy: ownerID, ExpiresAt: now.Add(24 * time.Hour),
+		CreatedAt: now, UpdatedAt: now,
+	})
+	if err != nil {
+		t.Fatalf("prepare resend fixture: %v", err)
+	}
+	resent, err := team.ResendInvitation(ctx, ports.TeamInvitationResend{
+		BusinessID: businessID, InvitationID: resendOriginalID,
+		NewInvitationID: resendNewID,
+		TokenHash: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+		InvitedBy: ownerID, CreatedAt: now.Add(time.Minute),
+		ExpiresAt: now.Add(48 * time.Hour),
+	})
+	if err != nil || resent.ID != resendNewID || resent.Status != "pending" {
+		t.Fatalf("resend must create a fresh pending invitation: record=%#v err=%v", resent, err)
+	}
+	oldState, err := team.InspectInvitation(ctx, resendOriginal.TokenHash, now.Add(2*time.Minute))
+	if err != nil || oldState.Status != "revoked" {
+		t.Fatalf("previous invitation must be revoked: %#v err=%v", oldState, err)
+	}
+	_, err = team.ResendInvitation(ctx, ports.TeamInvitationResend{
+		BusinessID: businessID, InvitationID: resendOriginalID,
+		NewInvitationID: "49000000-0000-0000-0000-000000000024",
+		TokenHash: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+		InvitedBy: ownerID, CreatedAt: now.Add(2*time.Minute),
+		ExpiresAt: now.Add(48 * time.Hour),
+	})
+	if !IsRepositoryKind(err, RepositoryConflict) {
+		t.Fatalf("stale resend should be a conflict, got: %v", err)
+	}
+
 	inspected, err := team.InspectInvitation(ctx, newInvitation.TokenHash, now.Add(time.Minute))
 	if err != nil || inspected.AccountState != "new" || inspected.BusinessName != "Team Integration" {
 		t.Fatalf("inspect new-account invitation: record=%#v err=%v", inspected, err)
