@@ -95,4 +95,10 @@ func TestNativeCatalogCountPreservesStandbySafety(t *testing.T) {
 	if err != nil || actual < len(encoded)+4096 {
 		t.Fatalf("unsafe cross-provider token admission: %d, %v", actual, err)
 	}
+	// No Gemini tokenizer HTTP call should be made when its result cannot
+	// relax DeepSeek's independent fallback context budget.
+	measured, exact, standby, err := client.CountTokens(context.Background(), request)
+	if err != nil || measured != 0 || exact || !standby {
+		t.Fatalf("fallback-aware token count should skip unused Gemini request: measured=%d exact=%t standby=%t err=%v", measured, exact, standby, err)
+	}
 }
