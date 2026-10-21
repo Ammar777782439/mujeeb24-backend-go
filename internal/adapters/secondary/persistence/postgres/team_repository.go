@@ -353,8 +353,8 @@ func (r *TeamRepository) ResendInvitation(ctx context.Context, resend ports.Team
 		if competingPending {
 			return &RepositoryError{
 				Operation: "team.resend_invitation",
-				Kind: RepositoryConflict,
-				Err: errors.New("a newer pending invitation already exists"),
+				Kind:      RepositoryConflict,
+				Err:       errors.New("a newer pending invitation already exists"),
 			}
 		}
 		if previous.Status == "pending" {
@@ -388,8 +388,8 @@ func (r *TeamRepository) ResendInvitation(ctx context.Context, resend ports.Team
 				pgErr.ConstraintName == "team_invitations_pending_email_uq" {
 				return ports.TeamInvitationRecord{}, &RepositoryError{
 					Operation: "team.resend_invitation",
-					Kind: RepositoryConflict,
-					Err: errors.New("a newer pending invitation already exists"),
+					Kind:      RepositoryConflict,
+					Err:       errors.New("a newer pending invitation already exists"),
 				}
 			}
 		} else {

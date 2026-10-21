@@ -109,8 +109,8 @@ func TestTeamRepositoriesAgainstPostgres(t *testing.T) {
 	resent, err := team.ResendInvitation(ctx, ports.TeamInvitationResend{
 		BusinessID: businessID, InvitationID: resendOriginalID,
 		NewInvitationID: resendNewID,
-		TokenHash: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-		InvitedBy: ownerID, CreatedAt: now.Add(time.Minute),
+		TokenHash:       "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+		InvitedBy:       ownerID, CreatedAt: now.Add(time.Minute),
 		ExpiresAt: now.Add(48 * time.Hour),
 	})
 	if err != nil || resent.ID != resendNewID || resent.Status != "pending" {
@@ -123,8 +123,8 @@ func TestTeamRepositoriesAgainstPostgres(t *testing.T) {
 	_, err = team.ResendInvitation(ctx, ports.TeamInvitationResend{
 		BusinessID: businessID, InvitationID: resendOriginalID,
 		NewInvitationID: "49000000-0000-0000-0000-000000000024",
-		TokenHash: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-		InvitedBy: ownerID, CreatedAt: now.Add(2*time.Minute),
+		TokenHash:       "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+		InvitedBy:       ownerID, CreatedAt: now.Add(2 * time.Minute),
 		ExpiresAt: now.Add(48 * time.Hour),
 	})
 	if !IsRepositoryKind(err, RepositoryConflict) {

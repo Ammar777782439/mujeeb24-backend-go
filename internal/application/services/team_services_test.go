@@ -20,7 +20,7 @@ type teamTestRepositoryError struct {
 }
 
 func (e teamTestRepositoryError) ErrorKind() string { return e.kind }
-func (e teamTestRepositoryError) Error() string { return e.message }
+func (e teamTestRepositoryError) Error() string     { return e.message }
 
 func TestTeamInvitationErrorMappingExposesSafeActionableCauses(t *testing.T) {
 	tests := []struct {
