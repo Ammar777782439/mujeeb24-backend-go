@@ -194,6 +194,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// every model request's tokens + cost are recorded to ai_usage_records
 		// and flow through to the Platform Admin AI Usage view.
 		service.AIUsage = postgres.NewAIUsageRepository(database)
+		service.AIPricing = postgres.NewAIProviderPricingRepository(database)
 
 		service.Subscriptions = postgres.NewSubscriptionRepository(database)
 		// Per contract ⑤ §7, build the Catalog Entity Contract payload
@@ -226,6 +227,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			customerSalesDecision,
 		)
 		service.SummaryService.AIUsage = postgres.NewAIUsageRepository(database)
+		service.SummaryService.AIPricing = service.AIPricing
 		service.SummaryService.GatewayFXRateYER = service.GatewayFXRateYER
 		service.SummaryService.Subscriptions = postgres.NewSubscriptionRepository(database)
 		service.SummaryService.NewID = uuid.NewString
@@ -299,6 +301,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			Now:         func() time.Time { return time.Now().UTC() },
 			NewID:       uuid.NewString,
 			AIUsage:     postgres.NewAIUsageRepository(database),
+			AIPricing:   service.AIPricing,
 
 			Subscriptions: postgres.NewSubscriptionRepository(database),
 		}
