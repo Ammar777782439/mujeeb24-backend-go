@@ -96,19 +96,21 @@ type geminiWireRequest struct {
 	GenerationConfig map[string]any  `json:"generationConfig"`
 }
 
-func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
-	if c == nil {
-		return Response{}, errors.New("Gemini is not configured")
-	}
-	if err := ctx.Err(); err != nil {
-		return Response{}, err
-	}
+type geminiPreparedRequest struct {
+	wire        geminiWireRequest
+	canonical   canonicalDeepSeekRequest
+	toolSchemas map[string]json.RawMessage
+}
+
+// prepareRequest guarantees that generation and token measurement serialize
+// identical model instructions, messages, schemas and tool declarations.
+func (c *Gemini) prepareRequest(req Request) (geminiPreparedRequest, error) {
 	var canonical canonicalDeepSeekRequest
 	if err := strictUnmarshal(req.Payload, &canonical); err != nil {
-		return Response{}, fmt.Errorf("invalid canonical request: %w", err)
+		return geminiPreparedRequest{}, fmt.Errorf("invalid canonical request: %w", err)
 	}
 	if canonical.Model == "" || canonical.MaxTokens <= 0 || canonical.Stream || len(canonical.Messages) == 0 {
-		return Response{}, errors.New("Gemini requires valid stateless messages and output budget")
+		return geminiPreparedRequest{}, errors.New("Gemini requires valid stateless messages and output budget")
 	}
 	out := geminiWireRequest{GenerationConfig: map[string]any{"maxOutputTokens": canonical.MaxTokens}}
 	callName := make(map[string]string)
@@ -129,16 +131,16 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 			ToolCallID string `json:"tool_call_id"`
 		}
 		if err := json.Unmarshal(raw, &message); err != nil {
-			return Response{}, errors.New("invalid canonical message")
+			return geminiPreparedRequest{}, errors.New("invalid canonical message")
 		}
 		switch message.Role {
 		case "system":
 			if i != 0 || out.SystemInstruction != nil {
-				return Response{}, errors.New("system instruction must be first and unique")
+				return geminiPreparedRequest{}, errors.New("system instruction must be first and unique")
 			}
 			var text string
 			if err := json.Unmarshal(message.Content, &text); err != nil || text == "" {
-				return Response{}, errors.New("invalid system instruction")
+				return geminiPreparedRequest{}, errors.New("invalid system instruction")
 			}
 			out.SystemInstruction = &struct {
 				Parts []geminiPart `json:"parts"`
@@ -146,14 +148,14 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 		case "user":
 			var text string
 			if err := json.Unmarshal(message.Content, &text); err != nil {
-				return Response{}, errors.New("Gemini text request requires user text")
+				return geminiPreparedRequest{}, errors.New("Gemini text request requires user text")
 			}
 			out.Contents = append(out.Contents, geminiContent{Role: "user", Parts: []geminiPart{{Text: text}}})
 		case "assistant":
 			if len(message.ToolCalls) == 0 {
 				var text string
 				if err := json.Unmarshal(message.Content, &text); err != nil {
-					return Response{}, errors.New("invalid assistant continuation")
+					return geminiPreparedRequest{}, errors.New("invalid assistant continuation")
 				}
 				out.Contents = append(out.Contents, geminiContent{Role: "model", Parts: []geminiPart{{Text: text}}})
 				continue
@@ -161,11 +163,11 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 			parts := make([]geminiPart, 0, len(message.ToolCalls))
 			for _, call := range message.ToolCalls {
 				if call.Type != "function" || call.Function.Name == "" || call.ID == "" || !json.Valid([]byte(call.Function.Arguments)) {
-					return Response{}, errors.New("invalid assistant function call replay")
+					return geminiPreparedRequest{}, errors.New("invalid assistant function call replay")
 				}
 				var params map[string]any
 				if err := json.Unmarshal([]byte(call.Function.Arguments), &params); err != nil || params == nil {
-					return Response{}, errors.New("replayed function arguments must be object")
+					return geminiPreparedRequest{}, errors.New("replayed function arguments must be object")
 				}
 				payload, _ := json.Marshal(params)
 				part := geminiPart{FunctionCall: &struct {
@@ -175,7 +177,7 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 				}{Name: call.Function.Name, Args: payload, ID: call.ID}, ThoughtSignature: call.ThoughtSignature}
 				parts = append(parts, part)
 				if _, exists := callName[call.ID]; exists {
-					return Response{}, errors.New("duplicate replayed tool identifier")
+					return geminiPreparedRequest{}, errors.New("duplicate replayed tool identifier")
 				}
 				callName[call.ID] = call.Function.Name
 			}
@@ -183,15 +185,15 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 		case "tool":
 			name := callName[message.ToolCallID]
 			if name == "" {
-				return Response{}, errors.New("tool result does not match prior tool call")
+				return geminiPreparedRequest{}, errors.New("tool result does not match prior tool call")
 			}
 			var text string
 			if err := json.Unmarshal(message.Content, &text); err != nil {
-				return Response{}, errors.New("invalid tool response text")
+				return geminiPreparedRequest{}, errors.New("invalid tool response text")
 			}
 			var value any
 			if err := json.Unmarshal([]byte(text), &value); err != nil {
-				return Response{}, errors.New("invalid JSON tool result")
+				return geminiPreparedRequest{}, errors.New("invalid JSON tool result")
 			}
 			part := geminiPart{FunctionResponse: &struct {
 				Name     string         `json:"name"`
@@ -200,32 +202,32 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 			}{Name: name, ID: message.ToolCallID, Response: map[string]any{"result": value}}}
 			out.Contents = append(out.Contents, geminiContent{Role: "user", Parts: []geminiPart{part}})
 		default:
-			return Response{}, errors.New("unsupported Gemini message role")
+			return geminiPreparedRequest{}, errors.New("unsupported Gemini message role")
 		}
 	}
 	if len(out.Contents) == 0 {
-		return Response{}, errors.New("Gemini request missing user content")
+		return geminiPreparedRequest{}, errors.New("Gemini request missing user content")
 	}
 	if canonical.ResponseFormat != nil {
 		if len(canonical.Tools) != 0 {
-			return Response{}, errors.New("combined tools and structured output require a verified merchant adapter")
+			return geminiPreparedRequest{}, errors.New("combined tools and structured output require a verified merchant adapter")
 		}
 		format := canonical.ResponseFormat
 		if format.Type != "json_schema" || !format.JSONSchema.Strict || !json.Valid(format.JSONSchema.Schema) {
-			return Response{}, errors.New("Gemini refuses non-strict structured schema")
+			return geminiPreparedRequest{}, errors.New("Gemini refuses non-strict structured schema")
 		}
 		if _, err := compileNativeSchema(format.JSONSchema.Schema); err != nil {
-			return Response{}, fmt.Errorf("unsupported Gemini structured schema: %w", err)
+			return geminiPreparedRequest{}, fmt.Errorf("unsupported Gemini structured schema: %w", err)
 		}
 		out.GenerationConfig["responseMimeType"] = "application/json"
 		out.GenerationConfig["responseJsonSchema"] = format.JSONSchema.Schema
 	}
 	if len(canonical.Tools) > 0 {
 		if canonical.ToolChoice != "required" && canonical.ToolChoice != "auto" {
-			return Response{}, errors.New("invalid Gemini tool choice")
+			return geminiPreparedRequest{}, errors.New("invalid Gemini tool choice")
 		}
 		if canonical.ParallelToolCalls != nil && *canonical.ParallelToolCalls {
-			return Response{}, errors.New("parallel customer capabilities not supported")
+			return geminiPreparedRequest{}, errors.New("parallel customer capabilities not supported")
 		}
 		declarations := make([]any, 0, len(canonical.Tools))
 		for _, raw := range canonical.Tools {
@@ -240,13 +242,13 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 			}
 			if err := json.Unmarshal(raw, &tool); err != nil || tool.Type != "function" ||
 				tool.Function.Name == "" || !tool.Function.Strict || !json.Valid(tool.Function.Parameters) {
-				return Response{}, errors.New("invalid strict Gemini function declaration")
+				return geminiPreparedRequest{}, errors.New("invalid strict Gemini function declaration")
 			}
 			if _, exists := toolSchemas[tool.Function.Name]; exists {
-				return Response{}, errors.New("duplicate Gemini function schema")
+				return geminiPreparedRequest{}, errors.New("duplicate Gemini function schema")
 			}
 			if _, err := compileNativeSchema(tool.Function.Parameters); err != nil {
-				return Response{}, fmt.Errorf("invalid Gemini function schema: %w", err)
+				return geminiPreparedRequest{}, fmt.Errorf("invalid Gemini function schema: %w", err)
 			}
 			toolSchemas[tool.Function.Name] = tool.Function.Parameters
 			declarations = append(declarations, map[string]any{
@@ -261,8 +263,23 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 		}
 		out.ToolConfig = map[string]any{"functionCallingConfig": map[string]any{"mode": mode}}
 	} else if canonical.ToolChoice != "" {
-		return Response{}, errors.New("Gemini tool choice without functions")
+		return geminiPreparedRequest{}, errors.New("Gemini tool choice without functions")
 	}
+	return geminiPreparedRequest{wire: out, canonical: canonical, toolSchemas: toolSchemas}, nil
+}
+
+func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
+	if c == nil {
+		return Response{}, errors.New("Gemini is not configured")
+	}
+	if err := ctx.Err(); err != nil {
+		return Response{}, err
+	}
+	prepared, prepareErr := c.prepareRequest(req)
+	if prepareErr != nil {
+		return Response{}, prepareErr
+	}
+	out, canonical, toolSchemas := prepared.wire, prepared.canonical, prepared.toolSchemas
 	encoded, err := json.Marshal(out)
 	if err != nil {
 		return Response{}, err
@@ -309,6 +326,8 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 		UsageMetadata struct {
 			PromptTokenCount        int64 `json:"promptTokenCount"`
 			CandidatesTokenCount    int64 `json:"candidatesTokenCount"`
+			ThoughtsTokenCount      int64 `json:"thoughtsTokenCount"`
+			ToolUsePromptTokenCount int64 `json:"toolUsePromptTokenCount"`
 			CachedContentTokenCount int64 `json:"cachedContentTokenCount"`
 		} `json:"usageMetadata"`
 	}
@@ -316,8 +335,14 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 		return Response{}, errors.New("Gemini returned malformed, blocked, or incomplete inference")
 	}
 	if resp.UsageMetadata.PromptTokenCount < 0 || resp.UsageMetadata.CandidatesTokenCount < 0 ||
+		resp.UsageMetadata.ThoughtsTokenCount < 0 || resp.UsageMetadata.ToolUsePromptTokenCount < 0 ||
 		resp.UsageMetadata.CachedContentTokenCount < 0 || resp.UsageMetadata.CachedContentTokenCount > resp.UsageMetadata.PromptTokenCount {
 		return Response{}, errors.New("Gemini usage invalid")
+	}
+	inputTokens := resp.UsageMetadata.PromptTokenCount + resp.UsageMetadata.ToolUsePromptTokenCount
+	outputTokens := resp.UsageMetadata.CandidatesTokenCount + resp.UsageMetadata.ThoughtsTokenCount
+	if inputTokens < resp.UsageMetadata.PromptTokenCount || outputTokens < resp.UsageMetadata.CandidatesTokenCount {
+		return Response{}, errors.New("Gemini usage counter overflow")
 	}
 	var content string
 	calls := make([]any, 0)
@@ -390,13 +415,74 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 		"choices": []any{map[string]any{"finish_reason": reason, "message": map[string]any{
 			"role": "assistant", "content": contentOut, "tool_calls": calls,
 		}}},
-		"usage": map[string]any{"prompt_tokens": resp.UsageMetadata.PromptTokenCount,
-			"completion_tokens":     resp.UsageMetadata.CandidatesTokenCount,
+		"usage": map[string]any{"prompt_tokens": inputTokens,
+			"completion_tokens":     outputTokens,
 			"prompt_tokens_details": map[string]any{"cached_tokens": resp.UsageMetadata.CachedContentTokenCount}},
 	})
 	if err != nil {
 		return Response{}, err
 	}
-	return Response{Payload: normalized, Model: c.model, InputTokens: resp.UsageMetadata.PromptTokenCount,
-		OutputTokens: resp.UsageMetadata.CandidatesTokenCount, CachedTokens: resp.UsageMetadata.CachedContentTokenCount}, nil
+	return Response{Payload: normalized, Model: c.model, InputTokens: inputTokens,
+		OutputTokens: outputTokens, CachedTokens: resp.UsageMetadata.CachedContentTokenCount}, nil
+}
+
+// CountTokens invokes the Gemini Developer API tokenizer on the exact
+// generation request, including system instructions and function schemas.
+// This is input admission data, not a prediction of output/thinking spend.
+func (c *Gemini) CountTokens(ctx context.Context, req Request) (int64, error) {
+	if c == nil {
+		return 0, errors.New("Gemini is not configured")
+	}
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	prepared, err := c.prepareRequest(req)
+	if err != nil {
+		return 0, err
+	}
+	wireJSON, err := json.Marshal(prepared.wire)
+	if err != nil {
+		return 0, err
+	}
+	var generateRequest map[string]json.RawMessage
+	if err := json.Unmarshal(wireJSON, &generateRequest); err != nil {
+		return 0, err
+	}
+	modelJSON, _ := json.Marshal("models/" + c.model)
+	generateRequest["model"] = modelJSON
+	body, err := json.Marshal(map[string]any{"generateContentRequest": generateRequest})
+	if err != nil {
+		return 0, err
+	}
+	requestCtx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+	endpoint := strings.TrimSuffix(c.endpoint, ":generateContent") + ":countTokens"
+	httpReq, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return 0, err
+	}
+	httpReq.Header.Set("x-goog-api-key", c.key)
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpRes, err := c.client.Do(httpReq)
+	if err != nil {
+		if requestCtx.Err() != nil {
+			return 0, requestCtx.Err()
+		}
+		return 0, fmt.Errorf("Gemini countTokens transport failure: %w", err)
+	}
+	defer httpRes.Body.Close()
+	if httpRes.StatusCode < 200 || httpRes.StatusCode >= 300 {
+		return 0, &StatusError{Provider: "gemini", Code: httpRes.StatusCode}
+	}
+	raw, err := readGeminiHTTPBody(httpRes.Body, httpRes.StatusCode)
+	if err != nil {
+		return 0, errors.New("Gemini countTokens response read failure")
+	}
+	var result struct {
+		TotalTokens int64 `json:"totalTokens"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil || result.TotalTokens <= 0 {
+		return 0, errors.New("Gemini countTokens response invalid")
+	}
+	return result.TotalTokens, nil
 }
