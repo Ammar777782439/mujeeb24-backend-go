@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -287,13 +286,15 @@ func (c *Gemini) Generate(ctx context.Context, req Request) (Response, error) {
 	defer httpRes.Body.Close()
 	catalogdump.Record(ctx, "gemini_http_status", httpRes.StatusCode)
 	if httpRes.StatusCode < 200 || httpRes.StatusCode >= 300 {
-		if catalogdump.Enabled(ctx) {
-			body, _ := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
+		// Capture Google's original response before the safe HTTP error
+		// classification. The ordinary catalog dump remains optional.
+		if geminiRawResponseLoggingEnabled() || catalogdump.Enabled(ctx) {
+			body, _ := readGeminiHTTPBody(httpRes.Body, httpRes.StatusCode)
 			catalogdump.Record(ctx, "gemini_raw_error_response", catalogdump.Raw(body))
 		}
 		return Response{}, &StatusError{Provider: "gemini", Code: httpRes.StatusCode}
 	}
-	raw, err := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
+	raw, err := readGeminiHTTPBody(httpRes.Body, httpRes.StatusCode)
 	catalogdump.Record(ctx, "gemini_raw_response", catalogdump.Raw(raw))
 	if err != nil || len(raw) > nativeResponseLimit {
 		return Response{}, errors.New("Gemini response read/size failure")
