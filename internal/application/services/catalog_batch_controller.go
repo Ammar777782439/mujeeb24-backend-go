@@ -1046,7 +1046,7 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 		InputTokens:       int64(nonCachedInput),
 		CachedInputTokens: int64(cachedInput),
 		OutputTokens:      int64(usage.OutputTokens),
-		ModelRequests:     1,
+		ModelRequests:     maxNativeRequests(usage.ModelRequests),
 		ToolCalls:         0,
 		FinalAIReplies:    0, // batch calls never count as final replies
 		ProviderCostYER:   providerCostYER,
