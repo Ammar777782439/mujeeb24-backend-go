@@ -195,3 +195,28 @@ func (r *Router) observePrimary(err error) {
 		r.openUntil = r.now().Add(r.policy.Cooldown)
 	}
 }
+
+// CountTokens returns Gemini's actual input count when available. A standby
+// provider has a distinct tokenizer and still requires conservative admission.
+func (r *Router) CountTokens(ctx context.Context, req Request) (count int64, exact bool, standby bool, err error) {
+	if r == nil {
+		return 0, false, false, errors.New("native model router is not configured")
+	}
+	if err := ctx.Err(); err != nil {
+		return 0, false, r.standby != nil, err
+	}
+	counter, supported := r.primary.(interface {
+		CountTokens(context.Context, Request) (int64, error)
+	})
+	if !supported {
+		return 0, false, r.standby != nil, nil
+	}
+	measured, err := counter.CountTokens(ctx, req)
+	if err != nil {
+		return 0, false, r.standby != nil, err
+	}
+	if measured <= 0 {
+		return 0, false, r.standby != nil, errors.New("invalid primary token count")
+	}
+	return measured, true, r.standby != nil, nil
+}
