@@ -28,6 +28,7 @@ func wireMerchantCatalogAuthoringAI(
 			recorder := services.NativeMerchantUsageRecorder{
 				Usage:         postgres.NewAIUsageRepository(database),
 				Subscriptions: postgres.NewSubscriptionRepository(database),
+				AIPricing:     postgres.NewAIProviderPricingRepository(database),
 				FXRateYER:     "",
 			}
 			reporter.SetUsageReporter(recorder.Record)
