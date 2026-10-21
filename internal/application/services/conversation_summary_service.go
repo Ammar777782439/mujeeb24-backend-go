@@ -439,6 +439,13 @@ func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, bus
 	// silently store cost=0 as "success").
 	providerCostYER := 0
 	pricingVersion, gatewayCostUSD, gatewayFXRate, pricingFailed := nativeProviderSpend(usage, s.GatewayFXRateYER)
+	if pricingFailed {
+		if ratedCostYER, version, unknown := nativeTokenPricedSpend(ctx, s.AIPricing, usage); !unknown {
+			providerCostYER = ratedCostYER
+			pricingVersion = version
+			pricingFailed = false
+		}
+	}
 	totalInput := usage.InputTokens
 	cachedInput := usage.CachedTokens
 	nonCachedInput := totalInput - cachedInput
