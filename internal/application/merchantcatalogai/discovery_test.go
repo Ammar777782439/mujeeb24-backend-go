@@ -213,10 +213,14 @@ func (s *cursorDiscoveryStub) Execute(_ context.Context, _ MerchantCatalogDiscov
 	if err := json.Unmarshal(raw, &params); err != nil {
 		return MerchantCatalogDiscoveryResult{}, err
 	}
-	if params.Cursor != nil && *params.Cursor != "" {
-		return MerchantCatalogDiscoveryResult{Data: []string{"last-item"}, Operation: s.name}, nil
+	data := any([]string{"first-item"})
+	if s.name == "merchant_catalog_list_attribute_schemas" {
+		data = map[string]any{"attribute_schemas": []map[string]any{{"id": "schema-one"}}}
 	}
-	return MerchantCatalogDiscoveryResult{Data: []string{"first-item"}, HasMore: true, NextCursor: "server-issued-page-2", Operation: s.name}, nil
+	if params.Cursor != nil && *params.Cursor != "" {
+		return MerchantCatalogDiscoveryResult{Data: data, Operation: s.name}, nil
+	}
+	return MerchantCatalogDiscoveryResult{Data: data, HasMore: true, NextCursor: "server-issued-page-2", Operation: s.name}, nil
 }
 
 func TestMerchantDiscoveryCursorIsIssuedForMatchingReadScope(t *testing.T) {
