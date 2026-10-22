@@ -258,7 +258,13 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 				if err != nil {
 					return merchantcatalogai.Proposal{}, fmt.Errorf("merchant catalog read tool %s: %w", call.Function.Name, err)
 				}
-				encoded, err := json.Marshal(result.Data)
+				// The model must receive the server's pagination contract, not
+				// only the page rows. This is shared by Gemini and DeepSeek.
+				encoded, err := json.Marshal(struct {
+					Data       any    `json:"data"`
+					HasMore    bool   `json:"has_more"`
+					NextCursor string `json:"next_cursor"`
+				}{Data: result.Data, HasMore: result.HasMore, NextCursor: result.NextCursor})
 				if err != nil {
 					return merchantcatalogai.Proposal{}, errors.New("unable to serialize merchant read-only tool result")
 				}
