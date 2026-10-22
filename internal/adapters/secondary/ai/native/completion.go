@@ -41,8 +41,9 @@ func (c *CompletionClient) Complete(ctx context.Context, payload any) (json.RawM
 	return c.CompletePinned(ctx, payload, "")
 }
 
-// CompletePinned keeps an in-progress tool-call sequence on its original
-// provider. An empty provider applies normal primary/fallback routing.
+// CompletePinned keeps DeepSeek-owned tool history on DeepSeek. A Gemini-owned
+// sequence may switch to DeepSeek on HTTP 503, but never back within the turn.
+// An empty provider applies normal primary/fallback routing.
 func (c *CompletionClient) CompletePinned(ctx context.Context, payload any, provider string) (json.RawMessage, CompletionInfo, error) {
 	var info CompletionInfo
 	if c == nil || c.router == nil {

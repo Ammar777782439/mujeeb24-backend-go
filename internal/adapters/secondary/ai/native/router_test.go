@@ -152,36 +152,75 @@ func TestOptionalStandbyDoesNotRelaxProviderValidation(t *testing.T) {
 	}
 }
 
-// A pinned continuation cannot switch models even if the primary recovers or
-// the pinned model fails. Unknown provider names must not reach the network.
-func TestRouterPinnedToolSequenceDoesNotCrossProviders(t *testing.T) {
+// A Gemini tool sequence can fail over once to DeepSeek on 503. DeepSeek's
+// continuation never attempts Gemini, even when the standby fails.
+func TestRouterPinnedContinuationsOnlyFailOverGemini503(t *testing.T) {
 	primary := &fakeProvider{name: "gemini", err: &StatusError{Provider: "gemini", Code: 503}}
 	standby := &fakeProvider{name: "deepseek"}
 	router := mkRouter(t, primary, standby, 3)
 	req := validRequest()
+
 	req.PinnedProvider = "deepseek"
 	if _, trace, err := router.Generate(context.Background(), req); err != nil ||
 		len(trace.Attempts) != 1 || trace.Attempts[0].Provider != "deepseek" || trace.FallbackUsed {
 		t.Fatalf("pinned standby was rerouted: trace=%+v err=%v", trace, err)
 	}
 	if primary.count() != 0 || standby.count() != 1 {
-		t.Fatal("pinned standby unexpectedly contacted primary")
+		t.Fatal("pinned DeepSeek request unexpectedly contacted Gemini")
 	}
 
 	req.PinnedProvider = "gemini"
-	if _, trace, err := router.Generate(context.Background(), req); !IsUnavailable(err) ||
-		len(trace.Attempts) != 1 || trace.Attempts[0].Provider != "gemini" || trace.FallbackUsed {
-		t.Fatalf("pinned primary failure silently fell back: trace=%+v err=%v", trace, err)
+	if _, trace, err := router.Generate(context.Background(), req); err != nil ||
+		!trace.FallbackUsed || len(trace.Attempts) != 2 ||
+		trace.Attempts[0].Provider != "gemini" || trace.Attempts[0].HTTPStatus != 503 ||
+		trace.Attempts[1].Provider != "deepseek" {
+		t.Fatalf("pinned Gemini 503 did not fail over: trace=%+v err=%v", trace, err)
 	}
-	if standby.count() != 1 {
-		t.Fatal("pinned primary failure reached standby")
+	if primary.count() != 1 || standby.count() != 2 {
+		t.Fatal("pinned Gemini 503 must call DeepSeek exactly once")
+	}
+
+	primary.err = &StatusError{Provider: "gemini", Code: 400}
+	if _, trace, err := router.Generate(context.Background(), req); err == nil ||
+		trace.FallbackUsed || len(trace.Attempts) != 1 || standby.count() != 2 {
+		t.Fatalf("pinned non-503 should fail closed: trace=%+v err=%v", trace, err)
+	}
+
+	standby.err = &StatusError{Provider: "deepseek", Code: 502}
+	req.PinnedProvider = "deepseek"
+	if _, trace, err := router.Generate(context.Background(), req); err == nil ||
+		trace.FallbackUsed || len(trace.Attempts) != 1 || primary.count() != 2 {
+		t.Fatalf("failed DeepSeek was rerouted to Gemini: trace=%+v err=%v", trace, err)
+	}
+
+	primary.err = &StatusError{Provider: "gemini", Code: 503}
+	req.PinnedProvider = "gemini"
+	res, trace, err := router.Generate(context.Background(), req)
+	if err == nil || len(res.Payload) > 0 || !trace.FallbackUsed ||
+		len(trace.Attempts) != 2 || !trace.Attempts[1].Failed {
+		t.Fatalf("failed DeepSeek fallback misreported success: trace=%+v err=%v", trace, err)
 	}
 
 	req.PinnedProvider = "unknown"
+	beforePrimary, beforeStandby := primary.count(), standby.count()
 	if _, _, err := router.Generate(context.Background(), req); err == nil {
 		t.Fatal("unknown pinned provider accepted")
 	}
-	if primary.count() != 1 || standby.count() != 1 {
-		t.Fatal("unknown pinned provider reached the network")
+	if primary.count() != beforePrimary || standby.count() != beforeStandby {
+		t.Fatal("unknown provider contacted the network")
+	}
+}
+
+func TestRouterPinnedGeminiOnly503DoesNotFailOver(t *testing.T) {
+	primary := &fakeProvider{name: "gemini", err: &StatusError{Provider: "gemini", Code: 503}}
+	router, err := NewRouter(primary, nil, Policy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := validRequest()
+	req.PinnedProvider = "gemini"
+	if _, trace, err := router.Generate(context.Background(), req); !IsUnavailable(err) ||
+		trace.FallbackUsed || len(trace.Attempts) != 1 || primary.count() != 1 {
+		t.Fatalf("Gemini-only pinned 503 must fail closed: trace=%+v err=%v", trace, err)
 	}
 }

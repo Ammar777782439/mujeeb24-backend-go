@@ -76,3 +76,37 @@ func TestNativeCompletionPinsProviderOnlyForActiveSequence(t *testing.T) {
 		t.Fatalf("independent request did not reconsider primary: %+v %v", info, err)
 	}
 }
+
+// Successful Gemini rounds do not prevent failover later in the same turn.
+// CompletionInfo must attribute the successful completion to DeepSeek.
+func TestNativeCompletionPinnedGemini503UsesDeepSeek(t *testing.T) {
+	primary := &fakeProvider{name: "gemini"}
+	standby := &fakeProvider{name: "deepseek"}
+	client, err := NewCompletionClient(mkRouter(t, primary, standby, 3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := map[string]any{"messages": []any{map[string]any{"role": "user", "content": "hello"}}}
+	if _, info, err := client.Complete(context.Background(), payload); err != nil || info.Provider != "gemini" {
+		t.Fatalf("initial Gemini round failed: %+v %v", info, err)
+	}
+
+	primary.err = &StatusError{Provider: "gemini", Code: 503}
+	_, info, err := client.CompletePinned(context.Background(), payload, "gemini")
+	if err != nil || info.Provider != "deepseek" || !info.Trace.FallbackUsed ||
+		len(info.Trace.Attempts) != 2 || info.Trace.Attempts[0].HTTPStatus != 503 {
+		t.Fatalf("pinned Gemini did not fail over: %+v %v", info, err)
+	}
+
+	primary.err = nil
+	if _, info, err := client.CompletePinned(context.Background(), payload, info.Provider); err != nil ||
+		info.Provider != "deepseek" || info.Trace.FallbackUsed || len(info.Trace.Attempts) != 1 {
+		t.Fatalf("DeepSeek continuation changed provider: %+v %v", info, err)
+	}
+	if primary.count() != 2 || standby.count() != 2 {
+		t.Fatal("DeepSeek continuation contacted Gemini")
+	}
+	if _, info, err := client.Complete(context.Background(), payload); err != nil || info.Provider != "gemini" {
+		t.Fatalf("new turn did not reconsider Gemini: %+v %v", info, err)
+	}
+}

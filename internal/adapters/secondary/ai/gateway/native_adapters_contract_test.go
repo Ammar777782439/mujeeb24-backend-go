@@ -455,3 +455,132 @@ func TestNativeMerchantToolResultPreservesPaginationForGeminiAndDeepSeek(t *test
 		})
 	}
 }
+
+// Reproduces a healthy Gemini discovery, followed by Gemini 503. The next
+// inference belongs to DeepSeek, including the strict proposal round.
+func TestNativeMerchantGemini503AfterToolCallSwitchesToDeepSeek(t *testing.T) {
+	for _, scenario := range []struct {
+		name         string
+		failureRound int
+		standbyCalls int
+	}{
+		{name: "after_read", failureRound: 2, standbyCalls: 2},
+		{name: "after_discovery_stop", failureRound: 3, standbyCalls: 1},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			reads := &nativeMerchantReadStub{}
+			geminiRounds, deepSeekRounds := 0, 0
+			makeReply := func(reason string, message map[string]any, model string) native.Response {
+				encoded, _ := json.Marshal(map[string]any{
+					"choices": []any{map[string]any{"finish_reason": reason, "message": message}},
+					"usage":   map[string]any{"prompt_tokens": 100, "completion_tokens": 20},
+				})
+				return native.Response{Payload: encoded, Model: model, InputTokens: 100, OutputTokens: 20}
+			}
+
+			primary := &nativeContractProvider{name: "gemini"}
+			primary.call = func(req native.Request) (native.Response, error) {
+				geminiRounds++
+				if geminiRounds == scenario.failureRound {
+					return native.Response{}, &native.StatusError{Provider: "gemini", Code: 503}
+				}
+				if geminiRounds == 1 {
+					return makeReply("tool_calls", map[string]any{
+						"role": "assistant", "content": nil,
+						"tool_calls": []any{map[string]any{
+							"id": "read-1", "type": "function",
+							"thought_signature": "gemini-signed-call",
+							"function": map[string]any{"name": "read_catalog", "arguments": `{"query":"coffee"}`},
+						}},
+					}, "gemini-flash"), nil
+				}
+				if geminiRounds == 2 && scenario.failureRound == 3 {
+					return makeReply("stop", map[string]any{
+						"role": "assistant", "content": "Read-only discovery completed",
+					}, "gemini-flash"), nil
+				}
+				return native.Response{}, errors.New("Gemini used after failover")
+			}
+
+			standby := &nativeContractProvider{name: "deepseek"}
+			standby.call = func(req native.Request) (native.Response, error) {
+				deepSeekRounds++
+				var body struct {
+					Messages []struct {
+						Role      string                   `json:"role"`
+						Content   json.RawMessage          `json:"content"`
+						ToolCalls []nativeMerchantChatCall `json:"tool_calls"`
+					} `json:"messages"`
+					Tools          []map[string]any `json:"tools"`
+					ResponseFormat map[string]any   `json:"response_format"`
+				}
+				if err := json.Unmarshal(req.Payload, &body); err != nil {
+					return native.Response{}, err
+				}
+				if len(body.Messages) != 4 || len(body.Messages[2].ToolCalls) != 1 ||
+					body.Messages[2].ToolCalls[0].ThoughtSignature != "gemini-signed-call" ||
+					body.Messages[3].Role != "tool" {
+					t.Error("tool call and result were lost during failover")
+				} else {
+					var toolText string
+					if err := json.Unmarshal(body.Messages[3].Content, &toolText); err != nil ||
+						!strings.Contains(toolText, `"has_more":false`) ||
+						!strings.Contains(toolText, `"data":`) {
+						t.Error("server-side tool evidence was lost during failover")
+					}
+				}
+				if scenario.failureRound == 2 && deepSeekRounds == 1 {
+					if len(body.Tools) != 1 || body.ResponseFormat != nil {
+						t.Error("DeepSeek discovery round lost tools")
+					}
+					return makeReply("stop", map[string]any{
+						"role": "assistant", "content": "Discovery complete",
+					}, "deepseek-flash"), nil
+				}
+				if len(body.Tools) != 0 || body.ResponseFormat["type"] != "json_schema" {
+					t.Error("DeepSeek strict proposal round was not preserved")
+				}
+				proposal := `{"schema_version":3,"status":"needs_more_data","operation":"ask_merchant","response_text":"ما السعر؟"}`
+				envelope, _ := json.Marshal(map[string]string{"canonical_proposal_json": proposal})
+				return makeReply("stop", map[string]any{
+					"role": "assistant", "content": string(envelope),
+				}, "deepseek-flash"), nil
+			}
+
+			router, err := native.NewRouter(primary, standby, native.Policy{
+				ConsecutiveFailures: 3, Cooldown: time.Minute,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			client, err := native.NewCompletionClient(router)
+			if err != nil {
+				t.Fatal(err)
+			}
+			adapter, err := NewNativeMerchantCatalogAuthoringAdapter(client, "mujeeb-merchant", 2048, 300000)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var providers []string
+			adapter.SetUsageReporter(func(_ context.Context, _, _ string, usage ports.CustomerSalesUsageTelemetry) error {
+				providers = append(providers, usage.Provider)
+				return nil
+			})
+			proposal, err := adapter.Propose(context.Background(), merchantcatalogai.MerchantCatalogAuthoringInput{
+				BusinessID: "business-1", PrincipalID: "owner-1", SessionID: "session-1",
+				Message: "اعرض المنتجات", DefaultCurrency: "YER",
+				EntityContract: []byte(`{"required":"item"}`), Capabilities: reads,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if proposal.ResponseText != "ما السعر؟" || reads.calls != 1 ||
+				geminiRounds != scenario.failureRound || deepSeekRounds != scenario.standbyCalls ||
+				len(providers) != scenario.failureRound-1+scenario.standbyCalls ||
+				providers[len(providers)-1] != "deepseek" {
+				t.Fatalf("failover did not preserve merchant proposal and usage: %+v reads=%d gemini=%d deepseek=%d providers=%v",
+					proposal, reads.calls, geminiRounds, deepSeekRounds, providers)
+			}
+		})
+	}
+}

@@ -18,7 +18,7 @@ import (
 type Request struct {
 	Payload        json.RawMessage
 	Operation      string
-	PinnedProvider string // Provider that owns an in-progress tool-call sequence.
+	PinnedProvider string // Provider owning this round; only a pinned primary may fail over on HTTP 503.
 }
 
 // Response is validated again by Mujeeb application adapters before any
@@ -125,8 +125,8 @@ func (r *Router) Generate(ctx context.Context, req Request) (Response, Trace, er
 	if len(req.Payload) == 0 || !json.Valid(req.Payload) {
 		return Response{}, trace, errors.New("canonical model request must be valid JSON")
 	}
-	// A tool-call sequence must stay with its original provider. A pinned
-	// failure ends the sequence; replaying another provider's tool history is unsafe.
+	// A pinned DeepSeek continuation never returns to Gemini. Pinned Gemini
+	// may fail over on HTTP 503: DeepSeek can remove Gemini-only signatures.
 	if req.PinnedProvider != "" {
 		var selected Provider
 		switch {
@@ -141,6 +141,9 @@ func (r *Router) Generate(ctx context.Context, req Request) (Response, Trace, er
 		trace.Attempts = append(trace.Attempts, makeAttempt(selected.Name(), err))
 		if selected == r.primary && r.standby != nil {
 			r.observePrimary(err)
+			if IsUnavailable(err) {
+				return r.generateStandby(ctx, req, trace)
+			}
 		}
 		return out, trace, err
 	}
@@ -166,6 +169,10 @@ func (r *Router) Generate(ctx context.Context, req Request) (Response, Trace, er
 			return Response{}, trace, err
 		}
 	}
+	return r.generateStandby(ctx, req, trace)
+}
+
+func (r *Router) generateStandby(ctx context.Context, req Request, trace Trace) (Response, Trace, error) {
 	if err := ctx.Err(); err != nil {
 		return Response{}, trace, err
 	}
