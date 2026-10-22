@@ -26,7 +26,9 @@ func logDeepSeekRawResponse(status int, raw []byte) {
 	log.Printf("[DeepSeek] RAW_RESPONSE_BEGIN status=%d encoding=go-quoted chunk_bytes=%d", status, chunkSize)
 	for start, part := 0, 1; start < len(raw); start, part = start+chunkSize, part+1 {
 		end := start + chunkSize
-		if end > len(raw) { end = len(raw) }
+		if end > len(raw) {
+			end = len(raw)
+		}
 		log.Printf("[DeepSeek] RAW_RESPONSE_CHUNK part=%d raw=%q", part, raw[start:end])
 	}
 	parts := (len(raw) + chunkSize - 1) / chunkSize
@@ -240,8 +242,12 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	if httpRes.StatusCode < 200 || httpRes.StatusCode >= 300 {
 		body, readErr := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
 		logDeepSeekRawResponse(httpRes.StatusCode, body)
-		if catalogdump.Enabled(ctx) { catalogdump.Record(ctx, "deepseek_raw_error_response", catalogdump.Raw(body)) }
-		if readErr != nil || len(body) > nativeResponseLimit { return Response{}, errors.New("DeepSeek error response read/size failure") }
+		if catalogdump.Enabled(ctx) {
+			catalogdump.Record(ctx, "deepseek_raw_error_response", catalogdump.Raw(body))
+		}
+		if readErr != nil || len(body) > nativeResponseLimit {
+			return Response{}, errors.New("DeepSeek error response read/size failure")
+		}
 		return Response{}, &StatusError{Provider: "deepseek", Code: httpRes.StatusCode}
 	}
 	raw, err := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
