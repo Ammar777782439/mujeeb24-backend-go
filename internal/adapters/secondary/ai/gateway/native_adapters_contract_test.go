@@ -141,7 +141,7 @@ func (s *nativeMerchantReadStub) Execute(_ context.Context, scope merchantcatalo
 		return merchantcatalogai.MerchantCatalogDiscoveryResult{}, errors.New("unexpected tool")
 	}
 	return merchantcatalogai.MerchantCatalogDiscoveryResult{
-		Data: map[string]any{"catalog_item": "Coffee", "currency": "YER"},
+		Data:    map[string]any{"catalog_item": "Coffee", "currency": "YER"},
 		HasMore: s.hasMore, NextCursor: s.nextCursor,
 	}, nil
 }
@@ -402,45 +402,57 @@ func TestNativeMerchantToolResultPreservesPaginationForGeminiAndDeepSeek(t *test
 				var choice map[string]any
 				switch rounds {
 				case 1:
-					choice = map[string]any{"finish_reason":"tool_calls", "message":map[string]any{
-						"role":"assistant","content":nil,"tool_calls":[]any{map[string]any{
-							"id":"call-1","type":"function","function":map[string]any{"name":"read_catalog","arguments":`{"query":"coffee"}`},
+					choice = map[string]any{"finish_reason": "tool_calls", "message": map[string]any{
+						"role": "assistant", "content": nil, "tool_calls": []any{map[string]any{
+							"id": "call-1", "type": "function", "function": map[string]any{"name": "read_catalog", "arguments": `{"query":"coffee"}`},
 						}},
 					}}
 				case 2:
-					choice = map[string]any{"finish_reason":"stop","message":map[string]any{"role":"assistant","content":"discovery complete"}}
+					choice = map[string]any{"finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": "discovery complete"}}
 				case 3:
 					proposal := `{"schema_version":3,"status":"needs_more_data","operation":"ask_merchant","response_text":"ما السعر؟"}`
-					envelope, _ := json.Marshal(map[string]string{"canonical_proposal_json":proposal})
-					choice = map[string]any{"finish_reason":"stop","message":map[string]any{"role":"assistant","content":string(envelope)}}
+					envelope, _ := json.Marshal(map[string]string{"canonical_proposal_json": proposal})
+					choice = map[string]any{"finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": string(envelope)}}
 				default:
 					return native.Response{}, errors.New("unexpected merchant model request")
 				}
-				b, _ := json.Marshal(map[string]any{"choices":[]any{choice},"usage":map[string]any{"prompt_tokens":10,"completion_tokens":10}})
-				return native.Response{Payload:b,Model:chosen,InputTokens:10,OutputTokens:10},nil
+				b, _ := json.Marshal(map[string]any{"choices": []any{choice}, "usage": map[string]any{"prompt_tokens": 10, "completion_tokens": 10}})
+				return native.Response{Payload: b, Model: chosen, InputTokens: 10, OutputTokens: 10}, nil
 			}
-			primary := &nativeContractProvider{name:"gemini"}
-			standby := &nativeContractProvider{name:"deepseek"}
+			primary := &nativeContractProvider{name: "gemini"}
+			standby := &nativeContractProvider{name: "deepseek"}
 			if chosen == "deepseek" {
-				primary.call = func(native.Request)(native.Response,error) {return native.Response{},&native.StatusError{Provider:"gemini",Code:503}}
+				primary.call = func(native.Request) (native.Response, error) {
+					return native.Response{}, &native.StatusError{Provider: "gemini", Code: 503}
+				}
 				standby.call = answer
 			} else {
 				primary.call = answer
-				standby.call = func(native.Request)(native.Response,error) {return native.Response{},errors.New("unexpected standby call")}
+				standby.call = func(native.Request) (native.Response, error) {
+					return native.Response{}, errors.New("unexpected standby call")
+				}
 			}
-			router,err := native.NewRouter(primary,standby,native.Policy{ConsecutiveFailures:3,Cooldown:time.Minute})
-			if err!=nil {t.Fatal(err)}
-			client,err:=native.NewCompletionClient(router)
-			if err!=nil {t.Fatal(err)}
-			adapter,err:=NewNativeMerchantCatalogAuthoringAdapter(client,"mujeeb-merchant",2048,300000)
-			if err!=nil {t.Fatal(err)}
-			proposal,err:=adapter.Propose(context.Background(),merchantcatalogai.MerchantCatalogAuthoringInput{
-				BusinessID:"business-1",PrincipalID:"owner-1",SessionID:"session-1",Message:"add coffee",
-				DefaultCurrency:"YER",EntityContract:[]byte(`{"required":"item"}`),Capabilities:reads,
+			router, err := native.NewRouter(primary, standby, native.Policy{ConsecutiveFailures: 3, Cooldown: time.Minute})
+			if err != nil {
+				t.Fatal(err)
+			}
+			client, err := native.NewCompletionClient(router)
+			if err != nil {
+				t.Fatal(err)
+			}
+			adapter, err := NewNativeMerchantCatalogAuthoringAdapter(client, "mujeeb-merchant", 2048, 300000)
+			if err != nil {
+				t.Fatal(err)
+			}
+			proposal, err := adapter.Propose(context.Background(), merchantcatalogai.MerchantCatalogAuthoringInput{
+				BusinessID: "business-1", PrincipalID: "owner-1", SessionID: "session-1", Message: "add coffee",
+				DefaultCurrency: "YER", EntityContract: []byte(`{"required":"item"}`), Capabilities: reads,
 			})
-			if err!=nil {t.Fatal(err)}
-			if rounds!=3 || reads.calls!=1 || proposal.ResponseText!="ما السعر؟" {
-				t.Fatalf("incomplete %s merchant tool sequence: rounds=%d reads=%d proposal=%+v",chosen,rounds,reads.calls,proposal)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rounds != 3 || reads.calls != 1 || proposal.ResponseText != "ما السعر؟" {
+				t.Fatalf("incomplete %s merchant tool sequence: rounds=%d reads=%d proposal=%+v", chosen, rounds, reads.calls, proposal)
 			}
 		})
 	}
