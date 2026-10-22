@@ -392,9 +392,7 @@ func TestNativeMerchantToolResultPreservesPaginationForGeminiAndDeepSeek(t *test
 							HasMore    bool           `json:"has_more"`
 							NextCursor string         `json:"next_cursor"`
 						}
-						if err := json.Unmarshal([]byte(body.Messages[3].Content), &toolResult); err != nil ||
-							toolResult.Data["catalog_item"] != "Coffee" ||
-							!toolResult.HasMore || toolResult.NextCursor != "server-next-cursor" {
+						if err := json.Unmarshal([]byte(body.Messages[3].Content), &toolResult); err != nil || toolResult.Data["catalog_item"] != "Coffee" || !toolResult.HasMore || toolResult.NextCursor != "server-next-cursor" {
 							t.Errorf("pagination metadata missing from %s tool result: %+v err=%v", chosen, toolResult, err)
 						}
 					}
