@@ -490,7 +490,7 @@ func TestNativeMerchantGemini503AfterToolCallSwitchesToDeepSeek(t *testing.T) {
 						"tool_calls": []any{map[string]any{
 							"id": "read-1", "type": "function",
 							"thought_signature": "gemini-signed-call",
-							"function": map[string]any{"name": "read_catalog", "arguments": `{"query":"coffee"}`},
+							"function":          map[string]any{"name": "read_catalog", "arguments": `{"query":"coffee"}`},
 						}},
 					}, "gemini-flash"), nil
 				}
