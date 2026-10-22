@@ -273,3 +273,91 @@ func TestNativeMerchantRejectsInvalidStrictProposalEnvelope(t *testing.T) {
 		t.Fatal("invalid strict merchant envelope was accepted")
 	}
 }
+
+// End-to-end merchant tool round: Gemini 503, DeepSeek takes the tool call,
+// and every subsequent inference round stays on DeepSeek even if Gemini heals.
+func TestNativeMerchantFallbackKeepsToolHistoryOnDeepSeek(t *testing.T) {
+	reads := &nativeMerchantReadStub{}
+	geminiCalls, deepSeekCalls := 0, 0
+	gemini := &nativeContractProvider{name: "gemini"}
+	gemini.call = func(native.Request) (native.Response, error) {
+		geminiCalls++
+		return native.Response{}, &native.StatusError{Provider: "gemini", Code: 503}
+	}
+	deepSeek := &nativeContractProvider{name: "deepseek"}
+	deepSeek.call = func(req native.Request) (native.Response, error) {
+		deepSeekCalls++
+		var body struct {
+			Messages []struct {
+				Role      string                   `json:"role"`
+				ToolCalls []nativeMerchantChatCall `json:"tool_calls"`
+			} `json:"messages"`
+			Tools          []map[string]any `json:"tools"`
+			ResponseFormat map[string]any   `json:"response_format"`
+		}
+		if err := json.Unmarshal(req.Payload, &body); err != nil {
+			return native.Response{}, err
+		}
+		if deepSeekCalls > 1 &&
+			(len(body.Messages) != 4 || body.Messages[2].Role != "assistant" ||
+				body.Messages[3].Role != "tool" ||
+				len(body.Messages[2].ToolCalls) != 1 ||
+				body.Messages[2].ToolCalls[0].ID != "read-1") {
+			t.Error("DeepSeek tool history was not preserved")
+		}
+		var choice map[string]any
+		switch deepSeekCalls {
+		case 1:
+			choice = map[string]any{"finish_reason": "tool_calls", "message": map[string]any{
+				"role": "assistant", "content": nil,
+				"tool_calls": []any{map[string]any{
+					"id": "read-1", "type": "function",
+					"function": map[string]any{"name": "read_catalog", "arguments": `{"query":"coffee"}`},
+				}},
+			}}
+		case 2:
+			choice = map[string]any{"finish_reason": "stop", "message": map[string]any{
+				"role": "assistant", "content": "Read-only discovery completed",
+			}}
+		case 3:
+			if len(body.Tools) != 0 || body.ResponseFormat["type"] != "json_schema" {
+				t.Error("final proposal was not requested with strict structured output")
+			}
+			proposal := `{"schema_version":3,"status":"needs_more_data","operation":"ask_merchant","response_text":"ما السعر؟"}`
+			envelope, _ := json.Marshal(map[string]string{"canonical_proposal_json": proposal})
+			choice = map[string]any{"finish_reason": "stop", "message": map[string]any{
+				"role": "assistant", "content": string(envelope),
+			}}
+		default:
+			return native.Response{}, errors.New("extra DeepSeek inference round")
+		}
+		raw, _ := json.Marshal(map[string]any{"choices": []any{choice},
+			"usage": map[string]any{"prompt_tokens": 100, "completion_tokens": 20}})
+		return native.Response{Payload: raw, Model: "deepseek-flash", InputTokens: 100, OutputTokens: 20}, nil
+	}
+	router, err := native.NewRouter(gemini, deepSeek, native.Policy{ConsecutiveFailures: 3, Cooldown: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := native.NewCompletionClient(router)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter, err := NewNativeMerchantCatalogAuthoringAdapter(client, "mujeeb-merchant", 2048, 300000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := adapter.Propose(context.Background(), merchantcatalogai.MerchantCatalogAuthoringInput{
+		BusinessID: "business-1", PrincipalID: "owner-1", SessionID: "session-1",
+		Message: "أضف قهوة", DefaultCurrency: "YER",
+		EntityContract: []byte(`{"required":"item"}`), Capabilities: reads,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Operation != merchantcatalogai.OperationAskMerchant || got.ResponseText != "ما السعر؟" ||
+		geminiCalls != 1 || deepSeekCalls != 3 || reads.calls != 1 {
+		t.Fatalf("merchant failed over repeatedly or lost tool result: %+v gemini=%d deepseek=%d reads=%d",
+			got, geminiCalls, deepSeekCalls, reads.calls)
+	}
+}

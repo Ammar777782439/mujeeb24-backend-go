@@ -162,6 +162,7 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 
 	totalCalls := 0
 	seenCalls := map[string]struct{}{}
+	provider := "" // Set after the first successful inference, then keep it for this turn.
 	for round := 0; round < nativeMaxMerchantToolRounds; round++ {
 		if err := ctx.Err(); err != nil {
 			return merchantcatalogai.Proposal{}, err
@@ -181,10 +182,11 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 		if len(body) > a.maxRequestBytes {
 			return merchantcatalogai.Proposal{}, fmt.Errorf("merchant catalog request exceeds context byte limit: %d > %d", len(body), a.maxRequestBytes)
 		}
-		raw, info, err := a.client.Complete(ctx, req)
+		raw, info, err := a.client.CompletePinned(ctx, req, provider)
 		if err != nil {
 			return merchantcatalogai.Proposal{}, fmt.Errorf("merchant catalog native request: %w", err)
 		}
+		provider = info.Provider
 		var response nativeMerchantChatResponse
 		if err := json.Unmarshal(raw, &response); err != nil {
 			return merchantcatalogai.Proposal{}, errors.New("merchant catalog native provider returned invalid chat schema")

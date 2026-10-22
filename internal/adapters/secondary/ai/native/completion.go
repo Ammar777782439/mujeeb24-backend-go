@@ -38,6 +38,12 @@ func NewCompletionClient(router *Router) (*CompletionClient, error) {
 // same normalized Chat Completions JSON envelope used by the current adapters.
 // No provider-specific endpoint, key, or retries reach application services.
 func (c *CompletionClient) Complete(ctx context.Context, payload any) (json.RawMessage, CompletionInfo, error) {
+	return c.CompletePinned(ctx, payload, "")
+}
+
+// CompletePinned keeps an in-progress tool-call sequence on its original
+// provider. An empty provider applies normal primary/fallback routing.
+func (c *CompletionClient) CompletePinned(ctx context.Context, payload any, provider string) (json.RawMessage, CompletionInfo, error) {
 	var info CompletionInfo
 	if c == nil || c.router == nil {
 		return nil, info, errors.New("native inference is unconfigured")
@@ -56,7 +62,7 @@ func (c *CompletionClient) Complete(ctx context.Context, payload any) (json.RawM
 	if err := json.Unmarshal(body, &root); err != nil || root == nil {
 		return nil, info, errors.New("canonical inference request must be JSON object")
 	}
-	response, trace, err := c.router.Generate(ctx, Request{Payload: body})
+	response, trace, err := c.router.Generate(ctx, Request{Payload: body, PinnedProvider: provider})
 	info.Trace = trace
 	if err != nil {
 		return nil, info, err

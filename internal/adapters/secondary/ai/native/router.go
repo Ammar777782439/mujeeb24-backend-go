@@ -16,8 +16,9 @@ import (
 // Request contains a complete canonical inference request, not a business
 // command. Provider implementations own wire encoding; no provider executes tools.
 type Request struct {
-	Payload   json.RawMessage
-	Operation string
+	Payload        json.RawMessage
+	Operation      string
+	PinnedProvider string // Provider that owns an in-progress tool-call sequence.
 }
 
 // Response is validated again by Mujeeb application adapters before any
@@ -123,6 +124,25 @@ func (r *Router) Generate(ctx context.Context, req Request) (Response, Trace, er
 	}
 	if len(req.Payload) == 0 || !json.Valid(req.Payload) {
 		return Response{}, trace, errors.New("canonical model request must be valid JSON")
+	}
+	// A tool-call sequence must stay with its original provider. A pinned
+	// failure ends the sequence; replaying another provider's tool history is unsafe.
+	if req.PinnedProvider != "" {
+		var selected Provider
+		switch {
+		case req.PinnedProvider == r.primary.Name():
+			selected = r.primary
+		case r.standby != nil && req.PinnedProvider == r.standby.Name():
+			selected = r.standby
+		default:
+			return Response{}, trace, errors.New("unknown pinned inference provider")
+		}
+		out, err := selected.Generate(ctx, req)
+		trace.Attempts = append(trace.Attempts, makeAttempt(selected.Name(), err))
+		if selected == r.primary && r.standby != nil {
+			r.observePrimary(err)
+		}
+		return out, trace, err
 	}
 	// Without a standby, attempt Gemini on every request, including after 503.
 	// Skipping it would result in a false success or a nil-provider panic.

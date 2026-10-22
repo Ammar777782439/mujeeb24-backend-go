@@ -151,3 +151,37 @@ func TestOptionalStandbyDoesNotRelaxProviderValidation(t *testing.T) {
 		t.Fatal("same provider incorrectly configured as standby")
 	}
 }
+
+// A pinned continuation cannot switch models even if the primary recovers or
+// the pinned model fails. Unknown provider names must not reach the network.
+func TestRouterPinnedToolSequenceDoesNotCrossProviders(t *testing.T) {
+	primary := &fakeProvider{name: "gemini", err: &StatusError{Provider: "gemini", Code: 503}}
+	standby := &fakeProvider{name: "deepseek"}
+	router := mkRouter(t, primary, standby, 3)
+	req := validRequest()
+	req.PinnedProvider = "deepseek"
+	if _, trace, err := router.Generate(context.Background(), req); err != nil ||
+		len(trace.Attempts) != 1 || trace.Attempts[0].Provider != "deepseek" || trace.FallbackUsed {
+		t.Fatalf("pinned standby was rerouted: trace=%+v err=%v", trace, err)
+	}
+	if primary.count() != 0 || standby.count() != 1 {
+		t.Fatal("pinned standby unexpectedly contacted primary")
+	}
+
+	req.PinnedProvider = "gemini"
+	if _, trace, err := router.Generate(context.Background(), req); !IsUnavailable(err) ||
+		len(trace.Attempts) != 1 || trace.Attempts[0].Provider != "gemini" || trace.FallbackUsed {
+		t.Fatalf("pinned primary failure silently fell back: trace=%+v err=%v", trace, err)
+	}
+	if standby.count() != 1 {
+		t.Fatal("pinned primary failure reached standby")
+	}
+
+	req.PinnedProvider = "unknown"
+	if _, _, err := router.Generate(context.Background(), req); err == nil {
+		t.Fatal("unknown pinned provider accepted")
+	}
+	if primary.count() != 1 || standby.count() != 1 {
+		t.Fatal("unknown pinned provider reached the network")
+	}
+}

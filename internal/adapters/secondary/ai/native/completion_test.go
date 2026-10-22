@@ -48,3 +48,31 @@ func TestNativeCompletionRejectsInvalidRequestWithoutAttempt(t *testing.T) {
 		t.Fatalf("cancel not propagated: %v", err)
 	}
 }
+
+// A new request can return to Gemini, but a DeepSeek-owned tool continuation
+// must not carry its history to Gemini after a transient primary failure.
+func TestNativeCompletionPinsProviderOnlyForActiveSequence(t *testing.T) {
+	primary := &fakeProvider{name: "gemini", err: &StatusError{Provider: "gemini", Code: 503}}
+	standby := &fakeProvider{name: "deepseek"}
+	client, err := NewCompletionClient(mkRouter(t, primary, standby, 3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := map[string]any{"messages": []any{map[string]any{"role": "user", "content": "hello"}}}
+	if _, info, err := client.Complete(context.Background(), payload); err != nil ||
+		info.Provider != "deepseek" || !info.Trace.FallbackUsed {
+		t.Fatalf("initial fallback failed: %+v %v", info, err)
+	}
+	primary.err = nil // Gemini has recovered, but cannot own this tool history.
+	if _, info, err := client.CompletePinned(context.Background(), payload, "deepseek"); err != nil ||
+		info.Provider != "deepseek" || info.Trace.FallbackUsed || len(info.Trace.Attempts) != 1 {
+		t.Fatalf("tool continuation switched provider: %+v %v", info, err)
+	}
+	if primary.count() != 1 || standby.count() != 2 {
+		t.Fatal("tool continuation unexpectedly retried Gemini")
+	}
+	if _, info, err := client.Complete(context.Background(), payload); err != nil ||
+		info.Provider != "gemini" || info.Trace.FallbackUsed {
+		t.Fatalf("independent request did not reconsider primary: %+v %v", info, err)
+	}
+}
