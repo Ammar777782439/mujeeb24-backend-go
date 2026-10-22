@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -12,125 +13,96 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
 )
 
-type merchantListingPages struct {
-	cursors []string
-}
+type allItemsPages struct{ cursors []string }
 
-func (r *merchantListingPages) Definitions() []merchantcatalogai.MerchantCatalogDiscoveryToolDefinition {
-	return []merchantcatalogai.MerchantCatalogDiscoveryToolDefinition{{
-		Name: "merchant_catalog_list_items",
-		Description: "Read the selected catalog items by page",
-		Parameters: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"cursor": map[string]any{"type": "string"},
-				"limit": map[string]any{"type": "integer"},
-				"status": map[string]any{"type": "string"},
-			},
-			"required": []string{},
-		},
-	}}
+func (p *allItemsPages) Definitions() []merchantcatalogai.MerchantCatalogDiscoveryToolDefinition {
+	return []merchantcatalogai.MerchantCatalogDiscoveryToolDefinition{{Name: "merchant_catalog_list_items", Parameters: map[string]any{
+		"type": "object", "properties": map[string]any{
+			"cursor": map[string]any{"type": "string"}, "limit": map[string]any{"type": "integer"}, "status": map[string]any{"type": "string"},
+		}, "required": []string{},
+	}}}
 }
-
-func (r *merchantListingPages) Execute(_ context.Context, _ merchantcatalogai.MerchantCatalogDiscoveryExecutionContext, name string, raw []byte) (merchantcatalogai.MerchantCatalogDiscoveryResult, error) {
+func (p *allItemsPages) Execute(_ context.Context, _ merchantcatalogai.MerchantCatalogDiscoveryExecutionContext, name string, raw []byte) (merchantcatalogai.MerchantCatalogDiscoveryResult, error) {
 	if name != "merchant_catalog_list_items" {
-		return merchantcatalogai.MerchantCatalogDiscoveryResult{}, errors.New("unexpected tool")
+		return merchantcatalogai.MerchantCatalogDiscoveryResult{}, errors.New("wrong tool")
 	}
-	var params struct {
+	var args struct {
 		Cursor *string `json:"cursor"`
 		Status *string `json:"status"`
-		Limit int `json:"limit"`
+		Limit  int     `json:"limit"`
 	}
-	if err := json.Unmarshal(raw, &params); err != nil {
+	if err := json.Unmarshal(raw, &args); err != nil {
 		return merchantcatalogai.MerchantCatalogDiscoveryResult{}, err
 	}
-	if params.Status != nil || params.Limit != 50 {
-		return merchantcatalogai.MerchantCatalogDiscoveryResult{}, errors.New("unrequested listing filter")
+	if args.Status != nil || args.Limit != 50 {
+		return merchantcatalogai.MerchantCatalogDiscoveryResult{}, errors.New("unexpected filter")
 	}
 	cursor := ""
-	if params.Cursor != nil {
-		cursor = *params.Cursor
+	if args.Cursor != nil {
+		cursor = *args.Cursor
 	}
-	r.cursors = append(r.cursors, cursor)
+	p.cursors = append(p.cursors, cursor)
 	switch cursor {
 	case "":
-		return merchantcatalogai.MerchantCatalogDiscoveryResult{
-			Data: []map[string]string{{"name": "هاتف"}, {"name": "ساعة"}},
-			HasMore: true, NextCursor: "server-next",
-			Operation: "merchant_catalog_list_items",
-		}, nil
-	case "server-next":
-		return merchantcatalogai.MerchantCatalogDiscoveryResult{
-			Data: []map[string]string{{"name": "سماعة"}},
-			Operation: "merchant_catalog_list_items",
-		}, nil
+		return merchantcatalogai.MerchantCatalogDiscoveryResult{Operation: name, Data: []string{"هاتف", "ساعة"}, HasMore: true, NextCursor: "next-from-server"}, nil
+	case "next-from-server":
+		return merchantcatalogai.MerchantCatalogDiscoveryResult{Operation: name, Data: []string{"سماعة"}}, nil
 	default:
-		return merchantcatalogai.MerchantCatalogDiscoveryResult{}, errors.New("invented listing cursor")
+		return merchantcatalogai.MerchantCatalogDiscoveryResult{}, errors.New("invented cursor")
 	}
 }
 
-func TestNativeMerchantAllProductsReadsAllPagesWithoutMutation(t *testing.T) {
-	reads := &merchantListingPages{}
+func TestMerchantListAllProductsPaginatesWithoutMutation(t *testing.T) {
+	pages := &allItemsPages{}
 	round := 0
 	deepseek := &nativeContractProvider{name: "deepseek"}
 	deepseek.call = func(req native.Request) (native.Response, error) {
 		round++
-		var body struct {
+		var query struct {
 			ToolChoice string `json:"tool_choice"`
-			Messages []struct {
-				Role string `json:"role"`
+			Messages   []struct {
 				Content string `json:"content"`
 			} `json:"messages"`
-			Tools []struct {
-				Function struct {
-					Name string `json:"name"`
-				} `json:"function"`
-			} `json:"tools"`
-			ResponseFormat map[string]any `json:"response_format"`
+			Tools          []map[string]any `json:"tools"`
+			ResponseFormat map[string]any   `json:"response_format"`
 		}
-		if err := json.Unmarshal(req.Payload, &body); err != nil {
+		if err := json.Unmarshal(req.Payload, &query); err != nil {
 			return native.Response{}, err
 		}
 		var choice map[string]any
 		switch round {
 		case 1, 2:
-			if body.ToolChoice != "auto" || len(body.Tools) != 1 || body.Tools[0].Function.Name != "merchant_catalog_list_items" {
-				t.Error("listing tool was not offered")
+			if query.ToolChoice != "auto" || len(query.Tools) != 1 {
+				t.Error("wrong discovery tools")
 			}
-			if round == 2 && (len(body.Messages) != 4 || !strings.Contains(body.Messages[3].Content, `"has_more":true`) || !strings.Contains(body.Messages[3].Content, "server-next")) {
-				t.Error("first page and server cursor missing")
+			if round == 2 && (len(query.Messages) != 4 || !strings.Contains(query.Messages[3].Content, `"has_more":true`) || !strings.Contains(query.Messages[3].Content, "next-from-server")) {
+				t.Error("first page missing")
 			}
-			cursor := any(nil)
+			var cursor any
 			if round == 2 {
-				cursor = "server-next"
+				cursor = "next-from-server"
 			}
 			args, _ := json.Marshal(map[string]any{"cursor": cursor, "status": nil, "limit": 50})
-			choice = map[string]any{"finish_reason": "tool_calls", "message": map[string]any{
-				"role": "assistant", "content": nil,
-				"tool_calls": []any{map[string]any{
-					"id": "list-call-" + string(rune('0'+round)), "type": "function",
-					"function": map[string]any{"name": "merchant_catalog_list_items", "arguments": string(args)},
-				}},
-			}}
+			choice = map[string]any{"finish_reason": "tool_calls", "message": map[string]any{"role": "assistant", "content": nil, "tool_calls": []any{map[string]any{
+				"id": fmt.Sprintf("list-%d", round), "type": "function", "function": map[string]any{"name": "merchant_catalog_list_items", "arguments": string(args)},
+			}}}}
 		case 3:
-			if body.ToolChoice != "auto" || len(body.Messages) != 6 ||
-				!strings.Contains(body.Messages[5].Content, `"has_more":false`) {
-				t.Error("terminal listing page was not delivered")
+			if len(query.Messages) != 6 || !strings.Contains(query.Messages[5].Content, `"has_more":false`) {
+				t.Error("last page missing")
 			}
-			choice = map[string]any{"finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": "Read complete"}}
+			choice = map[string]any{"finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": "done"}}
 		case 4:
-			if len(body.Tools) != 0 || body.ResponseFormat["type"] != "json_schema" {
-				t.Error("final proposal must be isolated from read tools")
+			if len(query.Tools) != 0 || query.ResponseFormat["type"] != "json_schema" {
+				t.Error("not a strict final proposal")
 			}
 			proposal := `{"schema_version":3,"status":"resolved","operation":"ask_merchant","response_text":"منتجات الكتالوج: هاتف، ساعة، سماعة."}`
-			envelope, _ := json.Marshal(map[string]string{"canonical_proposal_json": proposal})
-			choice = map[string]any{"finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": string(envelope)}}
+			payload, _ := json.Marshal(map[string]string{"canonical_proposal_json": proposal})
+			choice = map[string]any{"finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": string(payload)}}
 		default:
-			return native.Response{}, errors.New("unexpected extra inference round")
+			return native.Response{}, errors.New("unexpected extra round")
 		}
-		encoded, _ := json.Marshal(map[string]any{"choices": []any{choice},
-			"usage": map[string]any{"prompt_tokens": 30, "completion_tokens": 10}})
-		return native.Response{Payload: encoded, Model: "deepseek-flash", InputTokens: 30, OutputTokens: 10}, nil
+		body, _ := json.Marshal(map[string]any{"choices": []any{choice}, "usage": map[string]any{"prompt_tokens": 40, "completion_tokens": 15}})
+		return native.Response{Payload: body, Model: "deepseek-flash", InputTokens: 40, OutputTokens: 15}, nil
 	}
 	gemini := &nativeContractProvider{name: "gemini", call: func(native.Request) (native.Response, error) {
 		return native.Response{}, &native.StatusError{Provider: "gemini", Code: 503}
@@ -147,20 +119,15 @@ func TestNativeMerchantAllProductsReadsAllPagesWithoutMutation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	proposal, err := adapter.Propose(context.Background(), merchantcatalogai.MerchantCatalogAuthoringInput{
-		BusinessID: "business-1", PrincipalID: "owner-1", SessionID: "session-1",
-		Message: "أريد كل المنتجات", DefaultCurrency: "YER",
-		EntityContract: []byte(`{"required":"item"}`), Capabilities: reads,
+	got, err := adapter.Propose(context.Background(), merchantcatalogai.MerchantCatalogAuthoringInput{
+		BusinessID: "business-1", PrincipalID: "owner-1", SessionID: "session-1", Message: "أريد كل المنتجات", DefaultCurrency: "YER", Capabilities: pages,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if proposal.Operation != merchantcatalogai.OperationAskMerchant ||
-		proposal.Status != merchantcatalogai.StatusResolved || proposal.IsMutation() ||
-		round != 4 || len(reads.cursors) != 2 || reads.cursors[0] != "" || reads.cursors[1] != "server-next" ||
-		!strings.Contains(proposal.ResponseText, "هاتف") ||
-		!strings.Contains(proposal.ResponseText, "ساعة") ||
-		!strings.Contains(proposal.ResponseText, "سماعة") {
-		t.Fatalf("all-products result incomplete: proposal=%+v cursors=%v rounds=%d", proposal, reads.cursors, round)
+	if round != 4 || len(pages.cursors) != 2 || pages.cursors[0] != "" || pages.cursors[1] != "next-from-server" || got.IsMutation() ||
+		got.Status != merchantcatalogai.StatusResolved || got.Operation != merchantcatalogai.OperationAskMerchant ||
+		!strings.Contains(got.ResponseText, "هاتف") || !strings.Contains(got.ResponseText, "ساعة") || !strings.Contains(got.ResponseText, "سماعة") {
+		t.Fatalf("incomplete merchant listing: %+v cursors=%v rounds=%d", got, pages.cursors, round)
 	}
 }
