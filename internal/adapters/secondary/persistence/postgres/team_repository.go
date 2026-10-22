@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type TeamRepository struct{ adapter *Adapter }
@@ -338,6 +340,23 @@ func (r *TeamRepository) ResendInvitation(ctx context.Context, resend ports.Team
 		if previous.Status == "accepted" {
 			return &RepositoryError{Operation: "team.resend_invitation", Kind: RepositoryConflict, Err: errors.New("accepted invitation cannot be resent")}
 		}
+		// Re-submitting an older revoked/expired invitation must never
+		// manufacture competing pending invites for the same business/email.
+		var competingPending bool
+		if err := executor.QueryRow(txCtx, `SELECT EXISTS (
+			SELECT 1 FROM team_invitations
+			WHERE business_id = $1::uuid AND lower(email) = lower($2)
+			  AND status = 'pending' AND id <> $3::uuid
+		)`, resend.BusinessID, previous.Email, resend.InvitationID).Scan(&competingPending); err != nil {
+			return classifyRepositoryWriteError("team.resend_invitation.lookup_pending", err)
+		}
+		if competingPending {
+			return &RepositoryError{
+				Operation: "team.resend_invitation",
+				Kind:      RepositoryConflict,
+				Err:       errors.New("a newer pending invitation already exists"),
+			}
+		}
 		if previous.Status == "pending" {
 			status := "revoked"
 			if !previous.ExpiresAt.After(resend.CreatedAt) {
@@ -358,6 +377,25 @@ func (r *TeamRepository) ResendInvitation(ctx context.Context, resend ports.Team
 		return scanErr
 	})
 	if err != nil {
+		// Diagnostic fields are deliberately non-sensitive: no email, token,
+		// SQL query, bind parameters, password or raw database error.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			slog.ErrorContext(ctx, "team_invitation_resend_rejected",
+				"sqlstate", pgErr.Code,
+				"constraint", pgErr.ConstraintName)
+			if pgErr.Code == "23505" &&
+				pgErr.ConstraintName == "team_invitations_pending_email_uq" {
+				return ports.TeamInvitationRecord{}, &RepositoryError{
+					Operation: "team.resend_invitation",
+					Kind:      RepositoryConflict,
+					Err:       errors.New("a newer pending invitation already exists"),
+				}
+			}
+		} else {
+			slog.ErrorContext(ctx, "team_invitation_resend_rejected",
+				"kind", "non_postgres_error")
+		}
 		return ports.TeamInvitationRecord{}, teamRepositoryWriteError("team.resend_invitation", err)
 	}
 	return created, nil

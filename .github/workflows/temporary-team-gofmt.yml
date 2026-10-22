@@ -1,0 +1,35 @@
+name: Temporary format team changes
+on:
+  push:
+    branches:
+      - fix/team-invitation-rejection-diagnostics
+permissions:
+  contents: write
+jobs:
+  gofmt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/team-invitation-rejection-diagnostics
+      - name: Format only audited team files and commit if changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          gofmt -w internal/application/services/team_services.go \
+            internal/application/services/team_services_test.go \
+            internal/adapters/secondary/persistence/postgres/team_repository.go \
+            internal/adapters/secondary/persistence/postgres/team_repository_integration_test.go
+          git add internal/application/services/team_services.go \
+            internal/application/services/team_services_test.go \
+            internal/adapters/secondary/persistence/postgres/team_repository.go \
+            internal/adapters/secondary/persistence/postgres/team_repository_integration_test.go
+          if git diff --cached --quiet; then
+            echo 'Team Go sources already formatted'
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'style(team): gofmt changed application and repository tests'
+            git push origin HEAD:fix/team-invitation-rejection-diagnostics
+          fi
