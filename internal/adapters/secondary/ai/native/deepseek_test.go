@@ -296,11 +296,11 @@ func TestDeepSeekAutoAllowsValidatedToolWithCommentaryButDropsCommentary(t *test
 			var normalized struct {
 				Choices []struct {
 					FinishReason string `json:"finish_reason"`
-					Message struct {
-						Content json.RawMessage `json:"content"`
+					Message      struct {
+						Content   json.RawMessage `json:"content"`
 						ToolCalls []struct {
 							Function struct {
-								Name string `json:"name"`
+								Name      string `json:"name"`
 								Arguments string `json:"arguments"`
 							} `json:"function"`
 						} `json:"tool_calls"`
