@@ -279,9 +279,21 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 		return Response{}, errors.New("DeepSeek must return exactly one required capability")
 	}
 	if choice.FinishReason == "tool_calls" {
-		if len(choice.Message.ToolCalls) == 0 || (len(choice.Message.Content) != 0 &&
-			string(choice.Message.Content) != "null" && string(choice.Message.Content) != "\"\"") {
-			return Response{}, errors.New("DeepSeek mixed text with tool calls")
+		if len(choice.Message.ToolCalls) == 0 {
+			return Response{}, errors.New("DeepSeek tool finish without function calls")
+		}
+		// DeepSeek may supply commentary alongside a tool call in auto mode.
+		// Validate its JSON type, but never expose this unverified commentary
+		// as a merchant reply or executable evidence. Forced and structured
+		// tool calls retain their stricter text-free contract.
+		if len(choice.Message.Content) > 0 && string(choice.Message.Content) != "null" {
+			var commentary string
+			if err := json.Unmarshal(choice.Message.Content, &commentary); err != nil {
+				return Response{}, errors.New("DeepSeek tool content must be a string or null")
+			}
+			if commentary != "" && (structured || canonical.ToolChoice != "auto") {
+				return Response{}, errors.New("DeepSeek mixed text with tool calls")
+			}
 		}
 		allowed := make(map[string]struct{}, len(canonical.Tools))
 		if structured {
@@ -343,14 +355,15 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 		}
 		raw = encoded
 	} else if (choice.FinishReason != "stop" && choice.FinishReason != "tool_calls") ||
-		(choice.FinishReason == "tool_calls" && len(choice.Message.ToolCalls) == 0) {
+		(choice.FinishReason == "tool_calls" && len(choice.Message.ToolCalls) == 0) ||
+		(choice.FinishReason == "stop" && len(choice.Message.ToolCalls) != 0) {
 		return Response{}, errors.New("DeepSeek completion incomplete or inconsistent")
 	}
 	if !structured && len(choice.Message.ToolCalls) > 0 {
 		normalized, err := json.Marshal(map[string]any{
 			"choices": []any{map[string]any{
 				"finish_reason": choice.FinishReason,
-				"message":       map[string]any{"role": "assistant", "content": choice.Message.Content, "tool_calls": choice.Message.ToolCalls},
+				"message":       map[string]any{"role": "assistant", "content": nil, "tool_calls": choice.Message.ToolCalls},
 			}},
 			"usage": map[string]any{
 				"prompt_tokens": envelope.Usage.PromptTokens, "completion_tokens": envelope.Usage.CompletionTokens,

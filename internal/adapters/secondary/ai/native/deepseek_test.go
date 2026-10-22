@@ -261,3 +261,90 @@ func TestDeepSeekDropsOnlyGeminiTransportThoughtSignatures(t *testing.T) {
 		t.Fatal("malformed provider-neutral tool history accepted")
 	}
 }
+
+func TestDeepSeekAutoAllowsValidatedToolWithCommentaryButDropsCommentary(t *testing.T) {
+	tools := `[{"type":"function","function":{"name":"merchant_catalog_list_items","strict":true,"parameters":{"type":"object","properties":{"cursor":{"type":["string","null"]},"limit":{"type":"integer"},"status":{"type":["string","null"]}},"required":["cursor","limit","status"],"additionalProperties":false}}}]`
+	cases := []struct {
+		name    string
+		content string
+		wantErr bool
+	}{
+		{name: "text", content: `"I'll read the products."`},
+		{name: "null", content: "null"},
+		{name: "empty", content: `""`},
+		{name: "bad_object_content", content: `{"approved":true}`, wantErr: true},
+		{name: "bad_numeric_content", content: "123", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			api, done := newFakeDeepSeek(t, func(w http.ResponseWriter, r *http.Request) {
+				_, _ = fmt.Fprintf(w, `{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","content":%s,"tool_calls":[{"id":"read-1","type":"function","function":{"name":"merchant_catalog_list_items","arguments":"{\"cursor\":null,\"limit\":50,\"status\":null}"}}]}}],"usage":{"prompt_tokens":10,"completion_tokens":8}}`, tc.content)
+			})
+			defer done()
+			req := deepSeekReq(tools, "")
+			req.Payload = json.RawMessage(strings.Replace(string(req.Payload), `"tool_choice":"required"`, `"tool_choice":"auto"`, 1))
+			out, err := api.Generate(context.Background(), req)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("invalid tool commentary accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			var normalized struct {
+				Choices []struct {
+					FinishReason string `json:"finish_reason"`
+					Message struct {
+						Content json.RawMessage `json:"content"`
+						ToolCalls []struct {
+							Function struct {
+								Name string `json:"name"`
+								Arguments string `json:"arguments"`
+							} `json:"function"`
+						} `json:"tool_calls"`
+					} `json:"message"`
+				} `json:"choices"`
+			}
+			if err := json.Unmarshal(out.Payload, &normalized); err != nil {
+				t.Fatal(err)
+			}
+			if len(normalized.Choices) != 1 || normalized.Choices[0].FinishReason != "tool_calls" {
+				t.Fatal("tool call lost after normalizing")
+			}
+			msg := normalized.Choices[0].Message
+			if string(msg.Content) != "null" || len(msg.ToolCalls) != 1 ||
+				msg.ToolCalls[0].Function.Name != "merchant_catalog_list_items" ||
+				!strings.Contains(msg.ToolCalls[0].Function.Arguments, `"limit":50`) {
+				t.Fatalf("tool data changed or commentary leaked: %s", out.Payload)
+			}
+		})
+	}
+}
+
+func TestDeepSeekAutoStillRejectsInvalidToolCalls(t *testing.T) {
+	tool := `[{"type":"function","function":{"name":"merchant_catalog_list_items","strict":true,"parameters":{"type":"object","properties":{"cursor":{"type":"string"},"limit":{"type":"integer"},"status":{"type":"string"}},"required":[],"additionalProperties":false}}}]`
+	cases := []struct {
+		name  string
+		reply string
+	}{
+		{"unauthorized_tool", `{"finish_reason":"tool_calls","message":{"role":"assistant","content":"Reading","tool_calls":[{"id":"a","type":"function","function":{"name":"delete_everything","arguments":"{}"}}]}}`},
+		{"bad_arguments", `{"finish_reason":"tool_calls","message":{"role":"assistant","content":"Reading","tool_calls":[{"id":"a","type":"function","function":{"name":"merchant_catalog_list_items","arguments":"{\"limit\":\"wrong\"}"}}]}}`},
+		{"multiple_calls", `{"finish_reason":"tool_calls","message":{"role":"assistant","content":"Reading","tool_calls":[{"id":"a","type":"function","function":{"name":"merchant_catalog_list_items","arguments":"{}"}},{"id":"b","type":"function","function":{"name":"merchant_catalog_list_items","arguments":"{}"}}]}}`},
+		{"wrong_finish", `{"finish_reason":"stop","message":{"role":"assistant","content":"Reading","tool_calls":[{"id":"a","type":"function","function":{"name":"merchant_catalog_list_items","arguments":"{}"}}]}}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			api, done := newFakeDeepSeek(t, func(w http.ResponseWriter, r *http.Request) {
+				_, _ = fmt.Fprintf(w, `{"choices":[%s],"usage":{"prompt_tokens":10,"completion_tokens":8}}`, tc.reply)
+			})
+			defer done()
+			req := deepSeekReq(tool, "")
+			req.Payload = json.RawMessage(strings.Replace(string(req.Payload), `"tool_choice":"required"`, `"tool_choice":"auto"`, 1))
+			if _, err := api.Generate(context.Background(), req); err == nil {
+				t.Fatal("unsafe auto tool response accepted")
+			}
+		})
+	}
+}
