@@ -3,12 +3,14 @@ package services
 import (
 	"context"
 	"errors"
+	"log"
 	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/salesdiag"
 )
 
 const (
@@ -151,7 +153,9 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 	// A checkpointed summary covers the conversation only up to its message
 	// ID. Provide EVERY newer message so the model sees no gap during the
 	// four-turn refresh cadence, regardless of provider or customer cadence.
+	historyMode := "bounded_window"
 	if input.ConversationState != nil && input.ConversationState.SummaryLastMessageID != "" {
+		historyMode = "since_summary_checkpoint"
 		uncovered, err := listMessagesAfterCheckpoint(ctx, b.Messages, input.BusinessID, input.ConversationID, input.ConversationState.SummaryLastMessageID)
 		if err != nil {
 			return ports.CustomerSalesContext{}, err
@@ -168,6 +172,30 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 		// before attaching evidence so timestamp ties retain insertion order.
 		slices.Reverse(page.Items)
 		context.RecentMessages = buildRecentMessageEvidence(page.Items, input.SourceMessageReference, now)
+	}
+
+	// The repository pages newest-first (occurred_at, created_at, id DESC).
+	// After reversing pages, recent_messages is oldest-first for model context.
+	// Opt-in diagnostics record ordering and timestamps, never message content.
+	if salesdiag.Enabled() {
+		inbound := 0
+		chronological := true
+		for i, message := range context.RecentMessages {
+			if message.Direction == "inbound" && message.Origin == "customer" {
+				inbound++
+			}
+			if i > 0 && message.OccurredAt.Before(context.RecentMessages[i-1].OccurredAt) {
+				chronological = false
+			}
+		}
+		oldest, newest := "none", "none"
+		if len(context.RecentMessages) > 0 {
+			oldest = context.RecentMessages[0].OccurredAt.UTC().Format(time.RFC3339Nano)
+			newest = context.RecentMessages[len(context.RecentMessages)-1].OccurredAt.UTC().Format(time.RFC3339Nano)
+		}
+		log.Printf("[SalesDiag] MESSAGE_HISTORY business=%s conversation=%s mode=%s count=%d inbound_customer=%d chronological=%t oldest=%s newest=%s current_source_separate=true",
+			input.BusinessID, input.ConversationID, historyMode,
+			len(context.RecentMessages), inbound, chronological, oldest, newest)
 	}
 
 	// Universal Catalog AI v3: every turn gets a bounded map of the whole
