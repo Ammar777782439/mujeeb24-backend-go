@@ -2,6 +2,8 @@
 
 Source branch: `feat/gemini-deepseek`; implementation branch: `refactor/provider-agnostic-ai-runtime`.
 
+> **دليل الإضافة الرسمي المفصل (Customer + Catalog + Merchant):** [إضافة نموذج أو مزود AI جديد — خطوات التنفيذ والاختبارات](adding-ai-provider-runbook-ar.md). هذا المستند مرجع الحدود المعمارية السريع؛ يُرجع إلى الدليل المفصل عند إدخال مزود جديد.
+
 ## Responsibility boundaries
 
 - The language model chooses among the **capabilities offered by Mujeeb**. No Go intent engine or keyword classifier decides `evaluate_full_catalog`.
