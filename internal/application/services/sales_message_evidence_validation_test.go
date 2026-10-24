@@ -30,7 +30,7 @@ func TestSalesReferenceValidationAllowsOnlyCurrentOrExposedInboundCustomer(t *te
 	} {
 		decision := ports.CapabilityDecision{
 			Capability: ports.CustomerSalesCapabilityRecordLead,
-			Sales: &ports.SalesWorkflowProposal{EvidenceMessageIDs: []string{tc.ref}},
+			Sales:      &ports.SalesWorkflowProposal{EvidenceMessageIDs: []string{tc.ref}},
 		}
 		failure := p.validateReferences(context.Background(), ValidationInput{
 			SourceMessageReference: "provider-current", BusinessID: "business-1",
