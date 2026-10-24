@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -19,21 +18,6 @@ import (
 )
 
 const nativeResponseLimit = 4 << 20
-
-// Log the provider response before parsing so rejected tool calls remain debuggable.
-func logDeepSeekRawResponse(status int, raw []byte) {
-	const chunkSize = 1024
-	log.Printf("[DeepSeek] RAW_RESPONSE_BEGIN status=%d encoding=go-quoted chunk_bytes=%d", status, chunkSize)
-	for start, part := 0, 1; start < len(raw); start, part = start+chunkSize, part+1 {
-		end := start + chunkSize
-		if end > len(raw) {
-			end = len(raw)
-		}
-		log.Printf("[DeepSeek] RAW_RESPONSE_CHUNK part=%d raw=%q", part, raw[start:end])
-	}
-	parts := (len(raw) + chunkSize - 1) / chunkSize
-	log.Printf("[DeepSeek] RAW_RESPONSE_END status=%d parts=%d bytes=%d complete=true", status, parts, len(raw))
-}
 
 // DeepSeekConfig never accepts business-policy configuration or tool executors.
 type DeepSeekConfig struct {
@@ -141,9 +125,8 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	if canonical.ParallelToolCalls != nil && *canonical.ParallelToolCalls {
 		return Response{}, errors.New("DeepSeek native only accepts non-parallel customer capability calls")
 	}
-	// Remove Gemini-only opaque reasoning metadata when an in-progress
-	// read-only tool conversation switches to DeepSeek after HTTP 503.
-	// Canonical tool IDs, names, arguments and results remain unchanged.
+	// Strip unsupported foreign-provider metadata from tool history while
+	// preserving the model-selected tool names, arguments, results and IDs.
 	messages, err := deepSeekMessagesWithoutGeminiSignatures(canonical.Messages)
 	if err != nil {
 		return Response{}, err
@@ -241,7 +224,6 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	catalogdump.Record(ctx, "deepseek_http_status", httpRes.StatusCode)
 	if httpRes.StatusCode < 200 || httpRes.StatusCode >= 300 {
 		body, readErr := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
-		logDeepSeekRawResponse(httpRes.StatusCode, body)
 		if catalogdump.Enabled(ctx) {
 			catalogdump.Record(ctx, "deepseek_raw_error_response", catalogdump.Raw(body))
 		}
@@ -252,7 +234,6 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	}
 	raw, err := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
 	catalogdump.Record(ctx, "deepseek_raw_response", catalogdump.Raw(raw))
-	logDeepSeekRawResponse(httpRes.StatusCode, raw)
 	if err != nil || len(raw) > nativeResponseLimit {
 		return Response{}, errors.New("DeepSeek response read/size failure")
 	}

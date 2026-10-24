@@ -17,19 +17,11 @@ import (
 func (s *Server) platformGatewayListAIProvidersConfig(_ context.Context) (any, bool) {
 	cfg := s.platformDeps.NativeAISettings
 	views := []dto.AICredentialView{}
-	if cfg != nil {
-		if cfg.GeminiConfigured {
-			views = append(views, dto.AICredentialView{
-				ID: "gemini-environment", Provider: "google_gemini",
-				DisplayName: "Gemini (deployment-managed)", Status: "CONFIGURED",
-			})
-		}
-		if cfg.DeepSeekConfigured {
-			views = append(views, dto.AICredentialView{
-				ID: "deepseek-environment", Provider: "deepseek",
-				DisplayName: "DeepSeek standby (deployment-managed)", Status: "CONFIGURED",
-			})
-		}
+	if cfg != nil && cfg.Configured {
+		views = append(views, dto.AICredentialView{
+			ID: cfg.Provider + "-environment", Provider: cfg.Provider,
+			DisplayName: "Active inference provider (deployment-managed)", Status: "CONFIGURED",
+		})
 	}
 	out := &contract.List[dto.AICredentialView]{}
 	out.Body.Data = views
@@ -47,8 +39,8 @@ func (s *Server) platformGatewayTestAIConnection(ctx context.Context, in *dto.Te
 		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "native AI is not configured")), true
 	}
 	provider := strings.TrimSpace(in.Provider)
-	if provider != "google_gemini" && provider != "deepseek" {
-		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "provider must be google_gemini or deepseek")), true
+	if provider != cfg.Provider {
+		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "provider must match the configured runtime provider")), true
 	}
 	// An unconfigured health probe must never report false success.
 	s.appendPlatformAudit(ctx, "ai.connection.tested", "ai_runtime", nil, nil, "FAILURE", "PROBE_NOT_CONFIGURED", map[string]any{"provider": provider})
@@ -61,24 +53,16 @@ func (s *Server) platformGatewayDiscoverAIModels(ctx context.Context, in *dto.Di
 	if cfg == nil {
 		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "native AI is not configured")), true
 	}
-	if in.Provider != "" && in.Provider != "google_gemini" && in.Provider != "deepseek" {
+	if in.Provider != "" && in.Provider != cfg.Provider {
 		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "unsupported provider")), true
 	}
 	description := "Configured deployment identifier only; not a live provider model discovery"
-	result := make([]dto.AIModelView, 0, 2)
-	for _, entry := range []struct {
-		provider, model string
-		configured      bool
-	}{
-		{"google_gemini", cfg.GeminiModel, cfg.GeminiConfigured},
-		{"deepseek", cfg.DeepSeekModel, cfg.DeepSeekConfigured},
-	} {
-		if entry.configured && entry.model != "" && (in.Provider == "" || in.Provider == entry.provider) {
-			result = append(result, aiModelProjection(ports.AIProviderModel{
-				ID: entry.model, Provider: entry.provider, ModelName: entry.model,
-				Description: &description, DiscoveredAt: time.Time{},
-			}))
-		}
+	result := make([]dto.AIModelView, 0, 1)
+	if cfg.Configured && cfg.Model != "" && (in.Provider == "" || in.Provider == cfg.Provider) {
+		result = append(result, aiModelProjection(ports.AIProviderModel{
+			ID: cfg.Model, Provider: cfg.Provider, ModelName: cfg.Model,
+			Description: &description, DiscoveredAt: time.Time{},
+		}))
 	}
 	s.appendPlatformAudit(ctx, "ai.models.discovered", "ai_runtime", nil, nil, "SUCCESS", "",
 		map[string]any{"source": "deployment_configuration", "model_count": len(result)})
@@ -93,12 +77,12 @@ func (s *Server) platformGatewayGetAIConfiguration(_ context.Context) (any, bool
 		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "native AI settings are unavailable")), true
 	}
 	status := "INACTIVE"
-	if cfg.GeminiConfigured {
+	if cfg.Configured {
 		status = "ACTIVE"
 	}
 	out := &contract.Single[dto.AIConfigurationView]{}
 	out.Body.Data = dto.AIConfigurationView{
-		Provider: "native", Model: cfg.GeminiModel,
+		Provider: "native", Model: cfg.Model,
 		CustomerModel: cfg.CustomerModel, CatalogModel: cfg.CatalogModel, MerchantModel: cfg.MerchantModel,
 		ConfigurationSource: "environment", CredentialID: "", CredentialStatus: status,
 		MujeebMaxOutputTokens: cfg.MaxOutputTokens, EffectiveMaxOutput: cfg.MaxOutputTokens,
@@ -109,5 +93,5 @@ func (s *Server) platformGatewayGetAIConfiguration(_ context.Context) (any, bool
 
 func (s *Server) platformGatewayUpdateAIConfiguration(_ context.Context, _ *dto.UpdateConfigurationInput) (any, bool) {
 	return mapApplicationError(appErrors.New(appErrors.CodeConflict,
-		"Native Gemini and DeepSeek model selection is deployment-managed; database-only model switching is disabled")), true
+		"Inference provider model selection is deployment-owned; database model switching is disabled")), true
 }

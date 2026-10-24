@@ -57,7 +57,6 @@ func TestLoadFromEnvDisablesAutoReplyByDefaultAndReadsOverride(t *testing.T) {
 	t.Setenv("SOCIALAPI_WEBHOOK_SECRET", "test-webhook-secret")
 	t.Setenv("SOCIALAPI_API_KEY", "test-socialapi-key")
 	t.Setenv("NATIVE_AI_ENABLED", "true")
-	t.Setenv("GEMINI_API_KEY", "test-gemini-key")
 	t.Setenv("DEEPSEEK_API_KEY", "test-deepseek-key")
 	cfg, err = LoadFromEnv()
 	if err != nil || !cfg.AutoReplyEnabled {
@@ -73,27 +72,27 @@ func TestLoadFromEnvRejectsIncompleteExternalFeatureEnablement(t *testing.T) {
 	}
 }
 
-func TestLoadFromEnvAcceptsGeminiWithoutOptionalDeepSeek(t *testing.T) {
+func TestLoadFromEnvAcceptsDeepSeekWithoutGemini(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
 	t.Setenv("AUTOREPLY_ENABLED", "true")
 	t.Setenv("SOCIALAPI_WEBHOOK_SECRET", "test-webhook-secret")
 	t.Setenv("SOCIALAPI_API_KEY", "test-socialapi-key")
 	t.Setenv("NATIVE_AI_ENABLED", "true")
-	t.Setenv("GEMINI_API_KEY", "test-primary-only-key")
-	t.Setenv("DEEPSEEK_API_KEY", "")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("DEEPSEEK_API_KEY", "test-deepseek-key")
 	cfg, err := LoadFromEnv()
-	if err != nil || !cfg.NativeAIEnabled || cfg.GeminiAPIKey == "" || cfg.DeepSeekAPIKey != "" {
-		t.Fatalf("Gemini-only native AI should start: cfg=%+v err=%v", cfg, err)
+	if err != nil || !cfg.NativeAIEnabled || cfg.DeepSeekAPIKey == "" {
+		t.Fatalf("DeepSeek-only runtime must start: cfg=%+v err=%v", cfg, err)
 	}
 }
 
-func TestLoadFromEnvStillRequiresGeminiPrimary(t *testing.T) {
+func TestLoadFromEnvRejectsMissingSelectedProviderKey(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
 	t.Setenv("NATIVE_AI_ENABLED", "true")
-	t.Setenv("GEMINI_API_KEY", "")
-	t.Setenv("DEEPSEEK_API_KEY", "test-deepseek-key")
+	t.Setenv("GEMINI_API_KEY", "legacy-key-must-not-be-used")
+	t.Setenv("DEEPSEEK_API_KEY", "")
 	if _, err := LoadFromEnv(); err == nil {
-		t.Fatal("DeepSeek alone must not replace required Gemini primary")
+		t.Fatal("native inference must reject a missing DeepSeek credential")
 	}
 }
 

@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"errors"
-	"time"
 
 	gatewayai "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gateway"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/native"
@@ -75,11 +74,10 @@ func (a ExternalAdapters) ReadinessChecks() map[string]string {
 func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 	adapters := ExternalAdapters{}
 	adapters.NativeAISettings = &ports.NativeAIPlatformConfig{
-		GeminiModel: cfg.GeminiModel, DeepSeekModel: cfg.DeepSeekModel,
+		Provider: "deepseek", Model: cfg.DeepSeekModel,
 		CustomerModel: "mujeeb-sales", CatalogModel: "mujeeb-catalog", MerchantModel: "mujeeb-merchant",
 		MaxOutputTokens: cfg.NativeMaxOutputTokens, MaxInputCharacters: cfg.NativeMaxInputCharacters,
-		GeminiConfigured:   cfg.NativeAIEnabled && cfg.GeminiAPIKey != "",
-		DeepSeekConfigured: cfg.NativeAIEnabled && cfg.DeepSeekAPIKey != "",
+		Configured: cfg.NativeAIEnabled && cfg.DeepSeekAPIKey != "",
 	}
 	if cfg.SocialAPIAPIKey != "" || cfg.SocialAPIWebhookSecret != "" {
 		client := socialapi.NewClient(socialapi.Config{BaseURL: cfg.SocialAPIBaseURL, APIKey: cfg.SocialAPIAPIKey, WebhookSecret: cfg.SocialAPIWebhookSecret, HTTPTimeout: cfg.SocialAPIHTTPTimeout})
@@ -97,51 +95,40 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 		}
 	}
 	if !cfg.NativeAIEnabled && (cfg.AutoReplyEnabled || cfg.CustomerSalesEnabled) {
-		adapters.LLMConfigError = errors.New("customer AI requires a configured native Gemini runtime")
+		adapters.LLMConfigError = errors.New("customer AI requires a configured native inference runtime")
 	}
 	if cfg.NativeAIEnabled {
-		primary, err := native.NewGemini(native.GeminiConfig{Model: cfg.GeminiModel, APIKey: cfg.GeminiAPIKey, Timeout: cfg.NativeHTTPTimeout})
+		provider, err := native.NewDeepSeek(native.DeepSeekConfig{
+			Model: cfg.DeepSeekModel, APIKey: cfg.DeepSeekAPIKey, Timeout: cfg.NativeHTTPTimeout,
+		})
 		if err != nil {
 			adapters.LLMConfigError = err
 		} else {
-			// DeepSeek is optional. No standby client, key or outgoing request
-			// is constructed when the merchant deployment uses Gemini only.
-			var standby native.Provider
-			if cfg.DeepSeekAPIKey != "" {
-				backup, backupErr := native.NewDeepSeek(native.DeepSeekConfig{
-					Model: cfg.DeepSeekModel, APIKey: cfg.DeepSeekAPIKey, Timeout: cfg.NativeHTTPTimeout,
-				})
-				if backupErr != nil {
-					adapters.LLMConfigError = backupErr
-				} else {
-					standby = backup
-				}
-			}
-			if adapters.LLMConfigError == nil {
-				router, err := native.NewRouter(primary, standby, native.Policy{ConsecutiveFailures: 3, Cooldown: time.Minute})
+			// The composition root selects the deployment provider. Business
+			// services see only canonical inference and capability contracts.
+			router, err := native.NewRouter(provider, nil, native.Policy{})
+			if err != nil {
+				adapters.LLMConfigError = err
+			} else {
+				client, err := native.NewCompletionClient(router)
 				if err != nil {
 					adapters.LLMConfigError = err
 				} else {
-					client, err := native.NewCompletionClient(router)
+					customer, err := gatewayai.NewNativeCustomerSalesAdapter(client, "mujeeb-sales", cfg.NativeMaxOutputTokens, cfg.NativeMaxInputCharacters)
 					if err != nil {
 						adapters.LLMConfigError = err
 					} else {
-						customer, err := gatewayai.NewNativeCustomerSalesAdapter(client, "mujeeb-sales", cfg.NativeMaxOutputTokens, cfg.NativeMaxInputCharacters)
+						catalog, err := gatewayai.NewNativeCatalogAdapter(client, "mujeeb-catalog", cfg.NativeMaxOutputTokens, cfg.NativeMaxContextTokens)
 						if err != nil {
 							adapters.LLMConfigError = err
 						} else {
-							catalog, err := gatewayai.NewNativeCatalogAdapter(client, "mujeeb-catalog", cfg.NativeMaxOutputTokens, cfg.NativeMaxContextTokens)
+							merchant, err := gatewayai.NewNativeMerchantCatalogAuthoringAdapter(client, "mujeeb-merchant", cfg.NativeMaxOutputTokens, cfg.NativeMerchantMaxRequestBytes)
 							if err != nil {
 								adapters.LLMConfigError = err
 							} else {
-								merchant, err := gatewayai.NewNativeMerchantCatalogAuthoringAdapter(client, "mujeeb-merchant", cfg.NativeMaxOutputTokens, cfg.NativeMerchantMaxRequestBytes)
-								if err != nil {
-									adapters.LLMConfigError = err
-								} else {
-									adapters.NativeCustomerDecision = customer
-									adapters.NativeCatalogClient = catalog
-									adapters.NativeMerchantAuthoring = merchant
-								}
+								adapters.NativeCustomerDecision = customer
+								adapters.NativeCatalogClient = catalog
+								adapters.NativeMerchantAuthoring = merchant
 							}
 						}
 					}

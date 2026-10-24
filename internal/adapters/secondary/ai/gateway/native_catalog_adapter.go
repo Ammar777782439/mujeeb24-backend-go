@@ -54,9 +54,8 @@ func (c *NativeCatalogAdapter) finalRequest(input services.FinalEvaluationInput,
 	return batchChatRequest(c.builder().buildFinalEvaluateRequest(input, userPrompt, rc), c.model)
 }
 
-// Native providers do not share a tokenizer. Serialized UTF-8 byte count
-// plus a fixed protocol overhead is a conservative admission estimate, not
-// a claim of exact provider token usage. Never truncate catalog evidence.
+// A conservative UTF-8 admission estimate is used when the selected provider
+// cannot provide an exact input-token count. Never truncate catalog evidence.
 func (c *NativeCatalogAdapter) count(ctx context.Context, req chatCompletionRequest) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
@@ -70,13 +69,13 @@ func (c *NativeCatalogAdapter) count(ctx context.Context, req chatCompletionRequ
 		return 0, errors.New("native catalog request size overflow")
 	}
 	conservative := len(encoded) + protocolReserve
-	measured, exact, standby, err := c.client.CountTokens(ctx, req)
+	measured, exact, _, err := c.client.CountTokens(ctx, req)
 	if err != nil {
 		if ctx.Err() != nil {
 			return 0, ctx.Err()
 		}
-		// When Google's countTokens endpoint is unavailable, retain the
-		// original conservative estimate rather than risk lost evidence.
+		// A token-count failure must never relax the conservative admission
+		// estimate or silently truncate the merchant's catalog evidence.
 		log.Printf("[CatalogTokens] countTokens unavailable; conservative estimate used: %v", err)
 		return conservative, nil
 	}
@@ -88,19 +87,13 @@ func (c *NativeCatalogAdapter) count(ctx context.Context, req chatCompletionRequ
 		return conservative, nil
 	}
 	estimate := int(measured)
-	if standby && conservative > estimate {
-		// DeepSeek uses another tokenizer; Gemini's result cannot prove its
-		// model context is safe. Keep the conservative shared route bound.
-		log.Printf("[CatalogTokens] gemini_measured=%d shared_conservative=%d standby=true", estimate, conservative)
-		return conservative, nil
-	}
-	log.Printf("[CatalogTokens] gemini_measured=%d shared_conservative=%d standby=%t", estimate, conservative, standby)
+	log.Printf("[CatalogTokens] provider_measured=%d conservative=%d", estimate, conservative)
 	return estimate, nil
 }
 
 // BatchTokenBudget reserves output and a safety margin inside the smallest
-// actual context window across every deployment and fallback in this route.
-// The operator MUST configure maxInputTokens against that minimum capacity.
+// verified context window of the selected deployment model.
+// The operator MUST configure maxInputTokens against that capacity.
 func (c *NativeCatalogAdapter) BatchTokenBudget() (int, error) {
 	if c == nil {
 		return 0, errors.New("native catalog adapter is nil")

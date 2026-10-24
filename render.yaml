@@ -1,4 +1,4 @@
-# Mujeeb 24 API only. Direct Gemini primary; optional DeepSeek standby.
+# Mujeeb 24 API only. Direct DeepSeek inference with no provider fallback.
 # No external AI proxy or gateway is deployed by this blueprint.
 # Secrets remain environment-managed; auto-deploy is disabled.
 services:
@@ -6,7 +6,7 @@ services:
     name: mujeeb24-api
     runtime: docker
     plan: free
-    branch: feat/gemini-deepseek
+    branch: refactor/provider-agnostic-ai-runtime
     dockerfilePath: ./Dockerfile
     autoDeployTrigger: off
     healthCheckPath: /
@@ -47,7 +47,7 @@ services:
       - key: FRONTEND_URL
         value: https://mujeeb24.com/landing
       # Current Mujeeb production feature-flag values supplied by the owner.
-      # AutoReply requires the Gemini key; DeepSeek is optional. Qualify models and accounting before production.
+      # AutoReply requires a configured DeepSeek credential. Qualify current model and accounting before production.
       - key: AUTOREPLY_ENABLED
         value: "true"
       - key: CUSTOMER_SALES_ENABLED
@@ -75,15 +75,10 @@ services:
         value: 10s
       - key: NATIVE_AI_ENABLED
         value: "true"
-      - key: GEMINI_API_KEY
+      - key: DEEPSEEK_API_KEY
         sync: false
-      - key: GEMINI_MODEL
-        value: gemini-2.5-flash
-      # DEEPSEEK_API_KEY is OPTIONAL. Add it manually as a secret in
-      # Render Environment when standby access becomes available.
-      # Gemini remains the only provider when the key is absent.
       - key: DEEPSEEK_MODEL
-        value: deepseek-chat
+        value: deepseek-flash
       - key: NATIVE_AI_HTTP_TIMEOUT
         value: 20s
       - key: NATIVE_AI_MAX_CONTEXT_TOKENS

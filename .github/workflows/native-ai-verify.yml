@@ -2,7 +2,7 @@ name: Native AI Contracts
 on:
   push:
     branches:
-      - feat/gemini-deepseek
+      - refactor/provider-agnostic-ai-runtime
     paths:
       - 'internal/**'
       - 'cmd/**'
@@ -31,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: feat/gemini-deepseek
+          ref: refactor/provider-agnostic-ai-runtime
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.2'

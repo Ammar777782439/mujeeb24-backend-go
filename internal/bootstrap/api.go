@@ -161,7 +161,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		external.SocialAPI != nil,
 	)
 	if external.NativeAISettings != nil {
-		platformOperations.SetAIModel(external.NativeAISettings.GeminiModel)
+		platformOperations.SetAIModel(external.NativeAISettings.Model)
 	}
 	if external.SocialAPIHealthProbe != nil {
 		platformOperations.RegisterProbe("socialapi", external.SocialAPIHealthProbe)
