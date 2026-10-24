@@ -10,6 +10,7 @@ on:
       - 'api/openapi/**'
       - 'migrations/**'
       - '.env.example'
+      - 'deploy/local/.env.example'
       - 'render.yaml'
       - 'docs/architecture/provider-agnostic-ai-runtime.md'
       - '.github/workflows/native-ai-verify.yml'

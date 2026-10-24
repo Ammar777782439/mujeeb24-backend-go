@@ -14,6 +14,7 @@ on:
     branches:
       - main
       - refactor/merchant-catalog-ai-v2-structure
+      - refactor/provider-agnostic-ai-runtime
     paths:
       - "Dockerfile"
       - "cmd/**"
