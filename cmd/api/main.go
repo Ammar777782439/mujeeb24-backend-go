@@ -35,7 +35,7 @@ func run() error {
 		log.Printf("[SECURITY] AUTH_ENABLED=false — authentication DISABLED. This must NEVER happen in production.")
 	}
 	log.Printf("[API] starting mujeeb24 API on %s", cfg.HTTPAddr)
-	log.Printf("[API] auto_reply=%v native_ai=%v gemini_configured=%v deepseek_configured=%v", cfg.AutoReplyEnabled, cfg.NativeAIEnabled, cfg.GeminiAPIKey != "", cfg.DeepSeekAPIKey != "")
+	log.Printf("[API] auto_reply=%v native_ai=%v provider=deepseek configured=%v", cfg.AutoReplyEnabled, cfg.NativeAIEnabled, cfg.DeepSeekAPIKey != "")
 	log.Printf("[API] socialapi_key=%v webhook_secret=%v", cfg.SocialAPIAPIKey != "", cfg.SocialAPIWebhookSecret != "")
 	startupContext, cancelStartup := context.WithTimeout(context.Background(), cfg.DBConnectTimeout)
 	defer cancelStartup()
