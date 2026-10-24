@@ -34,6 +34,15 @@ func wireMerchantCatalogAuthoringAI(
 			reporter.SetUsageReporter(recorder.Record)
 		}
 	}
+
+	// Merchant API calls and individual model rounds share the same DB-backed
+	// opt-out policy. The transport provider never reads merchant policies.
+	businessAIGuard := &services.BusinessAIGuard{Policies: postgres.NewBusinessRepository(database)}
+	if guarded, ok := authoring.(interface {
+		SetAIExecutionGuard(ports.BusinessAIExecutionGuard)
+	}); ok {
+		guarded.SetAIExecutionGuard(businessAIGuard)
+	}
 	catalogRepo := postgres.NewCatalogRepository(database)
 	merchantCatalogAuthoringAgent := &merchantcatalogai.Agent{
 		Sessions:       postgres.NewMerchantCatalogAISessionStore(database),
@@ -41,13 +50,14 @@ func wireMerchantCatalogAuthoringAI(
 		Business:       postgres.NewBusinessRepository(database),
 		EntityContract: merchantcatalogai.CanonicalEntityContractProvider{},
 		Authoring:      authoring,
+		AIGuard:        businessAIGuard,
 		CapabilitiesFactory: func(selectedCatalogID string) merchantcatalogai.MerchantCatalogDiscoveryPort {
 			return merchantcatalogai.NewReadOnlyCapabilityRegistry(catalogRepo, selectedCatalogID)
 		},
 	}
 
 	handler := handlers.NewMerchantCatalogAIV2Handler(merchantCatalogAuthoringAgent)
-	handler.Execution = &merchantcatalogai.ExecutionService{Catalogs: catalogRepo, Transactions: database, Entitlements: postgres.NewSubscriptionRepository(database), Store: postgres.MerchantAIExecutionStore{Adapter: database}, Sessions: merchantCatalogAuthoringAgent.Sessions}
+	handler.Execution = &merchantcatalogai.ExecutionService{Catalogs: catalogRepo, Transactions: database, Entitlements: postgres.NewSubscriptionRepository(database), Store: postgres.MerchantAIExecutionStore{Adapter: database}, Sessions: merchantCatalogAuthoringAgent.Sessions, AIGuard: businessAIGuard}
 	return dashboardServer.WithMerchantCatalogAIV2(
 		handlers.MerchantCatalogAIV2Deps{
 			Handler: handler,

@@ -143,6 +143,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	salesAdminWorkflow := buildSalesWorkflowService(database, outboxStore)
 	dependencies.SalesAdmin = services.SalesWorkflowAdminService{Repository: postgres.NewSalesWorkflowRepository(database), Workflow: salesAdminWorkflow}
 	var autoReply commands.AutoReplyHandler
+	// PostgreSQL is the authority for each merchant's AI opt-out.
+	businessAIGuard := &services.BusinessAIGuard{Policies: postgres.NewBusinessRepository(database)}
 	// Per Item 1 + 2: hoist platformOperations to the top of the
 	// function scope so it's available to ALL branches that need
 	// the shared kill switch state (AutoReply webhook branch +
@@ -188,6 +190,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			outboxStore,
 			database,
 		)
+		service.AIGuard = businessAIGuard
 		// Both AI routes use the same canonical run trace lifecycle.
 		service.RunRepository = postgres.NewAIRunTraceRepository(database)
 		// Per AIUsageTokenTelemetry.md §6: wire the telemetry pipeline so
@@ -238,6 +241,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// three enforcement points (webhook AutoReply + Merchant
 		// AI + Summary).
 		service.SummaryService.CostProtection = &services.AICostProtectionService{
+			BusinessAIGuard: businessAIGuard,
 			Subscriptions:      postgres.NewSubscriptionRepository(database),
 			AIUsage:            postgres.NewAIUsageRepository(database),
 			PlatformOperations: platformOperations,
@@ -292,6 +296,12 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		catalogBudget, err := external.NativeCatalogClient.BatchTokenBudget()
 		if err != nil {
 			return nil, fmt.Errorf("configure native catalog token budget: %w", err)
+		}
+		// Guard individual catalog model calls, including each batch and final.
+		if guarded, ok := any(external.NativeCatalogClient).(interface {
+			SetAIExecutionGuard(ports.BusinessAIExecutionGuard)
+		}); ok {
+			guarded.SetAIExecutionGuard(businessAIGuard)
 		}
 		service.CatalogBatch = &services.CatalogBatchController{
 			CatalogAI:   postgres.NewCatalogAIReadRepository(database),
@@ -374,6 +384,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// path. It also enforces the merchant AI Reply entitlement
 		// (Contract §33) before the gateway model is called.
 		webhookService.AICostProtectionChecker = &services.AICostProtectionService{
+			BusinessAIGuard: businessAIGuard,
 			Subscriptions:      postgres.NewSubscriptionRepository(database),
 			AIUsage:            postgres.NewAIUsageRepository(database),
 			PlatformOperations: platformOperations,

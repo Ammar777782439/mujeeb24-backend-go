@@ -22,6 +22,7 @@ type NativeMerchantCatalogAuthoringAdapter struct {
 	maxRequestBytes int
 
 	usageReporter func(context.Context, string, string, ports.CustomerSalesUsageTelemetry) error
+	AIGuard       ports.BusinessAIExecutionGuard
 }
 
 const (
@@ -34,6 +35,13 @@ func NewNativeMerchantCatalogAuthoringAdapter(client *native.CompletionClient, m
 		return nil, errors.New("native merchant catalog requires client, model, and positive limits")
 	}
 	return &NativeMerchantCatalogAuthoringAdapter{client: client, model: model, maxOutputTokens: maxOutputTokens, maxRequestBytes: maxRequestBytes}, nil
+}
+
+// SetAIExecutionGuard blocks every merchant model round for disabled businesses.
+func (a *NativeMerchantCatalogAuthoringAdapter) SetAIExecutionGuard(guard ports.BusinessAIExecutionGuard) {
+	if a != nil {
+		a.AIGuard = guard
+	}
 }
 
 // SetUsageReporter persists one native gateway charge for every successful
@@ -181,6 +189,11 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 		}
 		if len(body) > a.maxRequestBytes {
 			return merchantcatalogai.Proposal{}, fmt.Errorf("merchant catalog request exceeds context byte limit: %d > %d", len(body), a.maxRequestBytes)
+		}
+		if a.AIGuard != nil {
+			if err := a.AIGuard.Check(ctx, input.BusinessID); err != nil {
+				return merchantcatalogai.Proposal{}, err
+			}
 		}
 		raw, info, err := a.client.CompletePinned(ctx, req, provider)
 		if err != nil {

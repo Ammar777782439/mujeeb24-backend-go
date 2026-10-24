@@ -25,6 +25,7 @@ type NativeCatalogAdapter struct {
 	model           string
 	maxOutputTokens int
 	maxInputTokens  int
+	AIGuard         ports.BusinessAIExecutionGuard
 }
 
 func NewNativeCatalogAdapter(client *native.CompletionClient, model string, maxOutputTokens, maxInputTokens int) (*NativeCatalogAdapter, error) {
@@ -32,6 +33,20 @@ func NewNativeCatalogAdapter(client *native.CompletionClient, model string, maxO
 		return nil, errors.New("native catalog adapter needs client, model and input context larger than reserved output")
 	}
 	return &NativeCatalogAdapter{client: client, model: model, maxOutputTokens: maxOutputTokens, maxInputTokens: maxInputTokens}, nil
+}
+
+// SetAIExecutionGuard shares the business policy gate across catalog rounds.
+func (c *NativeCatalogAdapter) SetAIExecutionGuard(guard ports.BusinessAIExecutionGuard) {
+	if c != nil {
+		c.AIGuard = guard
+	}
+}
+
+func (c *NativeCatalogAdapter) checkBusinessAI(ctx context.Context, businessID string) error {
+	if c.AIGuard == nil {
+		return nil
+	}
+	return c.AIGuard.Check(ctx, businessID)
 }
 
 // Reuse the existing catalog payload builders rather than maintain an
@@ -111,6 +126,9 @@ func (c *NativeCatalogAdapter) ensureModelCapacity(count int) error {
 }
 
 func (c *NativeCatalogAdapter) CountBatchTokens(ctx context.Context, input services.BatchEvaluationInput) (int, error) {
+	if err := c.checkBusinessAI(ctx, input.BusinessID); err != nil {
+		return 0, err
+	}
 	request, err := c.batchRequest(input)
 	if err != nil {
 		return 0, err
@@ -119,6 +137,9 @@ func (c *NativeCatalogAdapter) CountBatchTokens(ctx context.Context, input servi
 }
 
 func (c *NativeCatalogAdapter) CountFinalTokens(ctx context.Context, input services.FinalEvaluationInput, userPrompt string) (int, error) {
+	if err := c.checkBusinessAI(ctx, input.BusinessID); err != nil {
+		return 0, err
+	}
 	req, err := c.finalRequest(input, userPrompt)
 	if err != nil {
 		return 0, err
@@ -127,6 +148,9 @@ func (c *NativeCatalogAdapter) CountFinalTokens(ctx context.Context, input servi
 }
 
 func (c *NativeCatalogAdapter) EvaluateBatch(ctx context.Context, input services.BatchEvaluationInput) (ports.CatalogBatchResult, error) {
+	if err := c.checkBusinessAI(ctx, input.BusinessID); err != nil {
+		return ports.CatalogBatchResult{}, err
+	}
 	ctx = catalogdump.WithRun(ctx, input.AIRunID)
 	catalogdump.Record(ctx, "batch_catalog_input", input.Batch)
 	if len(input.Batch.Items) == 0 {
@@ -145,6 +169,9 @@ func (c *NativeCatalogAdapter) EvaluateBatch(ctx context.Context, input services
 	}
 	catalogdump.Record(ctx, "catalog_canonical_request", req)
 	started := time.Now()
+	if err := c.checkBusinessAI(ctx, input.BusinessID); err != nil {
+		return ports.CatalogBatchResult{}, err
+	}
 	raw, info, err := c.client.Complete(ctx, req)
 	if err != nil {
 		catalogdump.Record(ctx, "batch_model_call_failed", err.Error())
@@ -187,6 +214,9 @@ func (c *NativeCatalogAdapter) EvaluateBatch(ctx context.Context, input services
 }
 
 func (c *NativeCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, input services.FinalEvaluationInput, userPrompt string) (ports.CapabilityDecision, ports.CustomerSalesUsageTelemetry, error) {
+	if err := c.checkBusinessAI(ctx, input.BusinessID); err != nil {
+		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
+	}
 	ctx = catalogdump.WithRun(ctx, input.AIRunID)
 	catalogdump.Record(ctx, "final_catalog_input", input)
 	req, err := c.finalRequest(input, userPrompt)
@@ -202,6 +232,9 @@ func (c *NativeCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, inp
 	}
 	catalogdump.Record(ctx, "catalog_canonical_request", req)
 	started := time.Now()
+	if err := c.checkBusinessAI(ctx, input.BusinessID); err != nil {
+		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
+	}
 	raw, info, err := c.client.Complete(ctx, req)
 	if err != nil {
 		catalogdump.Record(ctx, "final_model_call_failed", err.Error())

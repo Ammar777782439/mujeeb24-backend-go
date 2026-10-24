@@ -38,9 +38,15 @@ type ExecutionService struct {
 	Entitlements ports.CatalogActivationEntitlement
 	Store        ExecutionStore
 	Sessions     SessionStore
+	AIGuard      ports.BusinessAIExecutionGuard
 }
 
 func (s ExecutionService) Prepare(ctx context.Context, in ExecutionInput) (string, error) {
+	if s.AIGuard != nil {
+		if err := s.AIGuard.Check(ctx, in.BusinessID); err != nil {
+			return "", err
+		}
+	}
 	if err := in.Proposal.Validate(); err != nil {
 		return "", err
 	}
@@ -172,8 +178,18 @@ func (s ExecutionService) snapshot(ctx context.Context, p *StoredProposal) error
 }
 
 func (s ExecutionService) ExecuteApproved(ctx context.Context, businessID, principalID, proposalID string) (ExecutionResult, error) {
+	if s.AIGuard != nil {
+		if err := s.AIGuard.Check(ctx, businessID); err != nil {
+			return ExecutionResult{}, err
+		}
+	}
 	var result ExecutionResult
 	err := s.Transactions.Within(ctx, func(tx context.Context) error {
+		if s.AIGuard != nil {
+			if err := s.AIGuard.Check(tx, businessID); err != nil {
+				return err
+			}
+		}
 		p, e := s.Store.Lock(tx, businessID, principalID, proposalID)
 		if e != nil {
 			return e

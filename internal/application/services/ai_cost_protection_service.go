@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -38,6 +39,7 @@ type AICostProtectionService struct {
 	Subscriptions      ports.SubscriptionRepository
 	AIUsage            ports.AIUsageRepository
 	PlatformOperations ports.PlatformOperationsPort
+	BusinessAIGuard    ports.BusinessAIExecutionGuard
 }
 
 // IsAIExecutionAllowed returns true if all of:
@@ -72,6 +74,18 @@ func (s *AICostProtectionService) IsAIExecutionAllowed(ctx context.Context, busi
 	}
 	if state.AdminState == ports.ProviderAdminDisabled {
 		return false, "ai_runtime_disabled"
+	}
+
+
+	// Per-merchant switch. The platform master switch above remains first.
+	// Never schedule model calls for a business that disabled AI.
+	if s.BusinessAIGuard != nil {
+		if err := s.BusinessAIGuard.Check(ctx, businessID); err != nil {
+			if errors.Is(err, ports.ErrBusinessAIDisabled) {
+				return false, "business_ai_disabled"
+			}
+			return false, "business_ai_policy_unavailable"
+		}
 	}
 
 	if s.Subscriptions == nil || s.AIUsage == nil {

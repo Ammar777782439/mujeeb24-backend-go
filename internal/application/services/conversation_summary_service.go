@@ -389,6 +389,15 @@ Preserve uncertainty, corrections, and contradictions when relevant. Do not hall
 Refresh the earlier summary only with new information, retaining material still relevant. Avoid greetings and empty headings.
 Output only the updated Arabic memory, at most 220 words.`
 	userPrompt := fmt.Sprintf("Existing conversational memory (unverified):\n%s\n\nNew historical messages in chronological order:\n%s", previousSummary, transcript)
+
+	// Recheck immediately before this model call, not just at the start of
+	// MaybeSummarize: policy can change during history retrieval.
+	if s.CostProtection != nil {
+		allowed, reason := s.CostProtection.IsAIExecutionAllowed(ctx, businessID)
+		if !allowed {
+			return "", fmt.Errorf("summary AI execution blocked: %s", reason)
+		}
+	}
 	startedAt := s.now()
 	summary, usageTelemetry, err := s.SummaryPort.Summarize(ctx, systemPrompt, userPrompt)
 	if err != nil {

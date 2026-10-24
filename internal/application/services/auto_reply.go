@@ -60,6 +60,7 @@ const (
 type AutoReplyService struct {
 	Sales                       *CustomerSalesWorkflowService
 	DisableInformationalReplies bool
+	AIGuard                     ports.BusinessAIExecutionGuard
 	// CustomerSalesDecision is the contract ④ §8 customer-sales application port.
 	// Its current implementation is Native Gemini/DeepSeekCustomerSalesAdapter.
 	// Per contract ④ §8, this is the only port for customer AI decisions.
@@ -183,6 +184,19 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		return commands.AutoReplyResult{}, appErrors.NotImplemented()
 	}
 
+
+	// This is a business-level generation gate, distinct from the existing
+	// post-model PolicyEvaluator. Run it before creating a run or calling AI.
+	if s.AIGuard != nil {
+		if guardErr := s.AIGuard.Check(ctx, businessID); guardErr != nil {
+			if errors.Is(guardErr, ports.ErrBusinessAIDisabled) {
+				log.Printf("[AutoReply] SKIPPED business=%s reason=business_ai_disabled", businessID)
+				return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, nil
+			}
+			return commands.AutoReplyResult{}, guardErr
+		}
+	}
+
 	sourceMessageRef := command.SourceMessageReference
 	policyVersion := s.policyVersionOr()
 
@@ -243,6 +257,24 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, nil
 		}
 		builtContext = &bc
+	}
+
+
+	// A merchant may disable AI after webhook acceptance / context building.
+	// Cancel before any provider request, preserving the run lifecycle.
+	if s.AIGuard != nil {
+		if guardErr := s.AIGuard.Check(ctx, businessID); guardErr != nil {
+			if s.RunRepository != nil && run.ID != "" {
+				if _, cancelErr := NewAIRunLifecycle(s.RunRepository).CancelBeforeModel(ctx, run.BusinessID, run.ID); cancelErr != nil {
+					return commands.AutoReplyResult{}, cancelErr
+				}
+			}
+			if errors.Is(guardErr, ports.ErrBusinessAIDisabled) {
+				log.Printf("[AutoReply] SKIPPED business=%s reason=business_ai_disabled_before_model", businessID)
+				return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, nil
+			}
+			return commands.AutoReplyResult{}, guardErr
+		}
 	}
 
 	// Per contract ⑨ §3, mark CONTEXT_BUILT → RUNNING.
@@ -459,6 +491,13 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 
 	result := commands.AutoReplyResult{Action: legacyCustomerSalesAction(proposal.Capability), Capability: string(proposal.Capability)}
 	err = s.Transactions.Within(ctx, func(txCtx context.Context) error {
+		// Recheck just before any AI-generated sales/outbound side effects.
+		// The existing policy evaluator is still the authority per capability.
+		if s.AIGuard != nil {
+			if guardErr := s.AIGuard.Check(txCtx, businessID); guardErr != nil {
+				return guardErr
+			}
+		}
 		decision, createErr := s.DecisionRepository.CreateProposed(txCtx, decisionDraft)
 		if createErr != nil {
 			return mapAIRepositoryError(createErr)
@@ -630,7 +669,13 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		result.Enqueued = true
 		return nil
 	})
+
 	if err != nil {
+		if errors.Is(err, ports.ErrBusinessAIDisabled) {
+			log.Printf("[AutoReply] SKIPPED business=%s reason=business_ai_disabled_before_execution", businessID)
+			s.markFailedSafe(ctx, run, ports.AIRunFailureStagePolicy, string(ports.AIRunFailureCategoryPolicyDenial), "business AI disabled during run")
+			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, nil
+		}
 		log.Printf("[AutoReply] EXECUTE_FAILED business=%s err=%v", businessID, err)
 		s.markFailedSafe(ctx, run, ports.AIRunFailureStageExecution, string(ports.AIRunFailureCategoryExecutionFailure), err.Error())
 		return commands.AutoReplyResult{}, err
