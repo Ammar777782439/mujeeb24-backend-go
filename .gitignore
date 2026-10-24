@@ -1,5 +1,6 @@
 .env
 .env.*
+*.env
 !.env.example
 deploy/cloudflare-tunnel/tunnel.env
 *.local
@@ -15,3 +16,13 @@ tmp/
 .DS_Store
 .idea/
 .vscode/
+
+# Local compiled AI debug probe; never commit executable build artifacts.
+/universal_ai_probe.exe
+
+# Local catalog diagnostic payloads
+/tmp/catalog-debug/
+/catalog-evaluation.jsonl
+
+# Full catalog diagnostic files written under the repository root.
+/catalog-debug/

@@ -10,6 +10,7 @@ type AutoReplyCommand struct {
 }
 
 type AutoReplyResult struct {
+	SalesWorkflow     *SalesWorkflowOutcome
 	Capability        string
 	Decision          AIDecisionView
 	Action            string
@@ -21,3 +22,10 @@ type AutoReplyResult struct {
 type AutoReplyHandler = CommandHandler[AutoReplyCommand, AutoReplyResult]
 
 var _ AutoReplyHandler = nil
+
+type SalesWorkflowOutcome struct {
+	WorkflowID      ID
+	TransactionID   *string
+	State           string
+	ResourceVersion int64
+}

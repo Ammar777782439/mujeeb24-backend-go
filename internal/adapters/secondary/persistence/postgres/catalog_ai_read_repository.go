@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"strings"
 
@@ -206,6 +207,9 @@ func (r *CatalogAIReadRepository) GetManifest(ctx context.Context, businessID st
 	return manifest, nil
 }
 
+// GetRevision fingerprints every active commercial fact, not merely row counts
+// and MAX(updated_at). The single PostgreSQL statement reads one consistent
+// MVCC snapshot, ordered before hashing, so same-count/same-max edits are seen.
 func (r *CatalogAIReadRepository) GetRevision(ctx context.Context, businessID string) (string, error) {
 	if strings.TrimSpace(businessID) == "" {
 		return "", invalidRepositoryInput("catalog_ai.revision", "business id is required")
@@ -214,98 +218,67 @@ func (r *CatalogAIReadRepository) GetRevision(ctx context.Context, businessID st
 	if err != nil {
 		return "", err
 	}
-
-	var revision string
-	err = executor.QueryRow(ctx, `
+	rows, err := executor.Query(ctx, `
 		WITH active_items AS (
 			SELECT i.*
 			FROM catalog_items i
-			JOIN catalogs c
-			  ON c.business_id = i.business_id
-			 AND c.id = i.catalog_id
-			 AND c.status = 'active'
-			WHERE i.business_id = $1::uuid
-			  AND i.status = 'active'
-		),
-		used_schemas AS (
+			JOIN catalogs c ON c.business_id = i.business_id AND c.id = i.catalog_id AND c.status = 'active'
+			WHERE i.business_id = $1::uuid AND i.status = 'active'
+		), used_schemas AS (
 			SELECT DISTINCT attribute_schema_id AS id
 			FROM active_items
 			WHERE attribute_schema_id IS NOT NULL
 		)
-		SELECT concat_ws('|',
-			(
-				SELECT COUNT(*)::text
-				FROM catalogs c
-				WHERE c.business_id = $1::uuid
-				  AND c.status = 'active'
-			),
-			COALESCE((
-				SELECT MAX(c.updated_at)::text
-				FROM catalogs c
-				WHERE c.business_id = $1::uuid
-				  AND c.status = 'active'
-			), ''),
-			(SELECT COUNT(*)::text FROM active_items),
-			COALESCE((SELECT MAX(updated_at)::text FROM active_items), ''),
-			(
-				SELECT COUNT(*)::text
-				FROM attribute_schemas s
-				JOIN used_schemas u ON u.id = s.id
-				WHERE s.business_id = $1::uuid
-			),
-			COALESCE((
-				SELECT MAX(s.updated_at)::text
-				FROM attribute_schemas s
-				JOIN used_schemas u ON u.id = s.id
-				WHERE s.business_id = $1::uuid
-			), ''),
-			(
-				SELECT COUNT(*)::text
-				FROM attribute_definitions d
-				JOIN attribute_schemas s ON s.id = d.schema_id
-				JOIN used_schemas u ON u.id = s.id
-				WHERE s.business_id = $1::uuid
-			),
-			COALESCE((
-				SELECT MAX(d.updated_at)::text
-				FROM attribute_definitions d
-				JOIN attribute_schemas s ON s.id = d.schema_id
-				JOIN used_schemas u ON u.id = s.id
-				WHERE s.business_id = $1::uuid
-			), ''),
-			(
-				SELECT COUNT(*)::text
-				FROM variants v
-				JOIN active_items i ON i.id = v.catalog_item_id AND i.business_id = v.business_id
-				WHERE v.business_id = $1::uuid
-				  AND v.status = 'active'
-			),
-			COALESCE((
-				SELECT MAX(v.updated_at)::text
-				FROM variants v
-				JOIN active_items i ON i.id = v.catalog_item_id AND i.business_id = v.business_id
-				WHERE v.business_id = $1::uuid
-				  AND v.status = 'active'
-			), ''),
-			(
-				SELECT COUNT(*)::text
-				FROM offers o
-				JOIN active_items i ON i.id = o.catalog_item_id AND i.business_id = o.business_id
-				WHERE o.business_id = $1::uuid
-				  AND o.status = 'active'
-			),
-			COALESCE((
-				SELECT MAX(o.updated_at)::text
-				FROM offers o
-				JOIN active_items i ON i.id = o.catalog_item_id AND i.business_id = o.business_id
-				WHERE o.business_id = $1::uuid
-				  AND o.status = 'active'
-			), '')
-		)`, businessID).Scan(&revision)
+		SELECT kind, record_id, payload
+		FROM (
+			SELECT 'catalog'::text AS kind, c.id::text AS record_id, to_jsonb(c)::text AS payload
+			FROM catalogs c WHERE c.business_id = $1::uuid AND c.status = 'active'
+			UNION ALL
+			SELECT 'item', i.id::text, to_jsonb(i)::text FROM active_items i
+			UNION ALL
+			SELECT 'schema', s.id::text, to_jsonb(s)::text
+			FROM attribute_schemas s
+			JOIN used_schemas u ON u.id = s.id
+			WHERE s.business_id = $1::uuid
+			UNION ALL
+			SELECT 'definition', d.id::text, to_jsonb(d)::text
+			FROM attribute_definitions d
+			JOIN attribute_schemas s ON s.id = d.schema_id
+			JOIN used_schemas u ON u.id = s.id
+			WHERE s.business_id = $1::uuid
+			UNION ALL
+			SELECT 'variant', v.id::text, to_jsonb(v)::text
+			FROM variants v
+			JOIN active_items i ON i.id = v.catalog_item_id AND i.business_id = v.business_id
+			WHERE v.business_id = $1::uuid AND v.status = 'active'
+			UNION ALL
+			SELECT 'offer', o.id::text, to_jsonb(o)::text
+			FROM offers o
+			JOIN active_items i ON i.id = o.catalog_item_id AND i.business_id = o.business_id
+			WHERE o.business_id = $1::uuid AND o.status = 'active'
+		) snapshot
+		ORDER BY kind, record_id`, businessID)
 	if err != nil {
 		return "", catalogRepositoryError("catalog_ai.revision", err)
 	}
-	return revision, nil
+	defer rows.Close()
+	hash := sha256.New()
+	for rows.Next() {
+		var kind, id, payload string
+		if err := rows.Scan(&kind, &id, &payload); err != nil {
+			return "", catalogRepositoryError("catalog_ai.revision", err)
+		}
+		_, _ = hash.Write([]byte(kind))
+		_, _ = hash.Write([]byte{0})
+		_, _ = hash.Write([]byte(id))
+		_, _ = hash.Write([]byte{0})
+		_, _ = hash.Write([]byte(payload))
+		_, _ = hash.Write([]byte{0})
+	}
+	if err := rows.Err(); err != nil {
+		return "", catalogRepositoryError("catalog_ai.revision", err)
+	}
+	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
 
 func (r *CatalogAIReadRepository) ListProjectionPage(ctx context.Context, request ports.CatalogAIProjectionRequest) (ports.CatalogAIProjectionPage, error) {

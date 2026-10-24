@@ -236,7 +236,7 @@ func TestSalesRepositoriesAgainstPostgres(t *testing.T) {
 
 	rollbackErr := errors.New("sales transaction rollback")
 	if err := adapter.Within(ctx, func(txCtx context.Context) error {
-		_, err := transactionRepo.CreateDraft(txCtx, ports.TransactionDraft{ID: rollbackTransaction, BusinessID: businessA, CustomerID: customerA, TransactionType: "quote", Currency: stringPointerForSales("YER"), SchemaVersion: 1, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(), Lines: []ports.TransactionLineDraft{{ID: "00000000-0000-0000-0000-000000000260", CatalogItemID: itemA, OfferID: stringPointerForSales(offerA), Quantity: "1", SelectedAttributes: []byte(`{}`)}}})
+		_, err := transactionRepo.CreateDraft(txCtx, ports.TransactionDraft{ID: rollbackTransaction, BusinessID: businessA, CustomerID: customerA, TransactionType: "quote", Currency: stringPointerForSales("YER"), SchemaVersion: 1, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(), Lines: []ports.TransactionLineDraft{{ID: "00000000-0000-0000-0000-000000000260", CatalogItemID: itemA, OfferID: stringPointerForSales(offerA), VariantID: stringPointerForSales(variantA), Quantity: "1", SelectedAttributes: []byte(`{}`)}}})
 		if err != nil {
 			return err
 		}

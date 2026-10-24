@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"sync"
-	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 )
@@ -40,11 +39,10 @@ type AutoReplyWorkerPool struct {
 }
 
 type autoReplyTask struct {
-	cmd              commands.AutoReplyCommand
-	businessID       string
-	conversationID   string
-	handler          commands.AutoReplyHandler
-	executionTimeout time.Duration
+	cmd            commands.AutoReplyCommand
+	businessID     string
+	conversationID string
+	handler        commands.AutoReplyHandler
 }
 
 func NewAutoReplyWorkerPool(concurrency, queueDepth int) *AutoReplyWorkerPool {
@@ -77,13 +75,10 @@ func (p *AutoReplyWorkerPool) runTask(task autoReplyTask) {
 			log.Printf("[WorkerPool] AUTO_REPLY_PANIC business=%s conversation=%s recovered=%v", task.businessID, task.conversationID, r)
 		}
 	}()
-	timeout := task.executionTimeout
-	if timeout <= 0 {
-		timeout = 300 * time.Second
-	}
-	autoReplyCtx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	if _, autoReplyErr := task.handler.Handle(autoReplyCtx, task.cmd); autoReplyErr != nil {
+	// The webhook's HTTP context is already finished by the time this task
+	// executes. Each Native Gemini/DeepSeek request owns its timeout through
+	// NATIVE_AI_HTTP_TIMEOUT; a second deadline here must not truncate it.
+	if _, autoReplyErr := task.handler.Handle(context.Background(), task.cmd); autoReplyErr != nil {
 		log.Printf("[WorkerPool] AUTO_REPLY_ERROR business=%s conversation=%s err=%v", task.businessID, task.conversationID, autoReplyErr)
 	}
 }

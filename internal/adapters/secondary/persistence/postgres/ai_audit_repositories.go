@@ -299,7 +299,16 @@ func validAIDecisionDraft(draft ports.AIDecisionDraft) bool {
 		return false
 	}
 	if strings.TrimSpace(draft.RequestedAction) == "" && !rejectedCapability {
-		return false
+		// Migration 000074 permits an empty legacy action for a known sales
+		// capability. The capability (not the legacy action) selects the
+		// executor. Keep empty actions invalid for ordinary reply decisions.
+		if !hasCapability {
+			return false
+		}
+		definition, known := ports.CustomerSalesCapabilityDefinitionFor(ports.CustomerSalesCapability(*draft.RequestedCapability))
+		if !known || definition.Executor != "sales" {
+			return false
+		}
 	}
 	return draft.ID != "" && draft.BusinessID != "" && draft.ConfidenceBand != "" && draft.PolicyVersion != "" && draft.SchemaVersion > 0 && (draft.Lifecycle == "proposed" || rejectedCapability) && !draft.CreatedAt.IsZero() && !draft.UpdatedAt.IsZero()
 }

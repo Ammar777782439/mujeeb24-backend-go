@@ -70,6 +70,8 @@ const (
 )
 
 type InboundEvent struct {
+	ActionPayload          string
+	ActionTitle            string
 	ID                     string
 	BusinessID             string
 	ConnectionID           string

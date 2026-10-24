@@ -3,11 +3,14 @@ package services
 import (
 	"context"
 	"errors"
+	"log"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/salesdiag"
 )
 
 const (
@@ -23,6 +26,7 @@ const (
 // AutoReplyContextBuilder builds a bounded, tenant-scoped context from Mujeeb
 // records. It never calls a provider and never treats model output as evidence.
 type AutoReplyContextBuilder struct {
+	Sales         ports.SalesWorkflowRepository
 	Businesses    ports.BusinessRepository
 	Conversations ports.ConversationRepository
 	Customers     ports.CustomerRepository
@@ -55,7 +59,7 @@ func NewAutoReplyContextBuilder(businesses ports.BusinessRepository, conversatio
 		MaxItems:      5,
 		MaxOffers:     5,
 		MaxVariants:   5,
-		MaxMessages:   4, // Per ADR-038: reduced from 8 to 6 per IrisAgent/Microsoft Learn best-practice research (sliding window threshold).
+		MaxMessages:   4, // Exact recent context retained until the per-provider live comparisons pass.
 		MaxKnowledge:  10,
 		MaxPolicies:   10,
 	}
@@ -117,7 +121,6 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 			// interaction ID so AutoReply can pass it as
 			// PreviousInteractionID to the next DecideContract
 			// call (Gemini Interactions API chaining per §9).
-			LastGeminiInteractionID: conversation.LastGeminiInteractionID,
 		},
 		Customer: ports.CustomerSalesContextCustomer{
 			Reference:        customer.ID,
@@ -147,11 +150,53 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 		context.ConversationSummary = input.ConversationState.Summary
 	}
 
-	messagePage, err := b.Messages.ListByConversation(ctx, input.BusinessID, input.ConversationID, b.maxMessages(), "")
-	if err != nil {
-		return ports.CustomerSalesContext{}, err
+	// A checkpointed summary covers the conversation only up to its message
+	// ID. Provide EVERY newer message so the model sees no gap during the
+	// four-turn refresh cadence, regardless of provider or customer cadence.
+	historyMode := "bounded_window"
+	if input.ConversationState != nil && input.ConversationState.SummaryLastMessageID != "" {
+		historyMode = "since_summary_checkpoint"
+		uncovered, err := listMessagesAfterCheckpoint(ctx, b.Messages, input.BusinessID, input.ConversationID, input.ConversationState.SummaryLastMessageID)
+		if err != nil {
+			return ports.CustomerSalesContext{}, err
+		}
+		context.RecentMessages = buildRecentMessageEvidence(uncovered, input.SourceMessageReference, now)
+	} else {
+		// Legacy summaries have no trusted coverage boundary. Preserve the
+		// previous bounded window until the summarizer rebuilds a checkpoint.
+		page, err := b.Messages.ListByConversation(ctx, input.BusinessID, input.ConversationID, b.maxMessages(), "")
+		if err != nil {
+			return ports.CustomerSalesContext{}, err
+		}
+		// The repository is newest-first. Normalize to chronological order
+		// before attaching evidence so timestamp ties retain insertion order.
+		slices.Reverse(page.Items)
+		context.RecentMessages = buildRecentMessageEvidence(page.Items, input.SourceMessageReference, now)
 	}
-	context.RecentMessages = buildRecentMessageEvidence(messagePage.Items, input.SourceMessageReference, now)
+
+	// The repository pages newest-first (occurred_at, created_at, id DESC).
+	// After reversing pages, recent_messages is oldest-first for model context.
+	// Opt-in diagnostics record ordering and timestamps, never message content.
+	if salesdiag.Enabled() {
+		inbound := 0
+		chronological := true
+		for i, message := range context.RecentMessages {
+			if message.Direction == "inbound" && message.Origin == "customer" {
+				inbound++
+			}
+			if i > 0 && message.OccurredAt.Before(context.RecentMessages[i-1].OccurredAt) {
+				chronological = false
+			}
+		}
+		oldest, newest := "none", "none"
+		if len(context.RecentMessages) > 0 {
+			oldest = context.RecentMessages[0].OccurredAt.UTC().Format(time.RFC3339Nano)
+			newest = context.RecentMessages[len(context.RecentMessages)-1].OccurredAt.UTC().Format(time.RFC3339Nano)
+		}
+		log.Printf("[SalesDiag] MESSAGE_HISTORY business=%s conversation=%s mode=%s count=%d inbound_customer=%d chronological=%t oldest=%s newest=%s current_source_separate=true",
+			input.BusinessID, input.ConversationID, historyMode,
+			len(context.RecentMessages), inbound, chronological, oldest, newest)
+	}
 
 	// Universal Catalog AI v3: every turn gets a bounded map of the whole
 	// active catalog. This is discovery metadata, not executable evidence.
@@ -198,6 +243,44 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 	return b.finalizeContext(ctx, context, input, now)
 }
 
+// listMessagesAfterCheckpoint collects a chronological, complete delta since
+// the summary's last persisted message. The repository pages DESC. Never
+// silently truncate uncovered history or assume a missing cursor is valid.
+func listMessagesAfterCheckpoint(ctx context.Context, repo ports.MessageRepository, businessID, conversationID, checkpointID string) ([]ports.CommunicationMessageRecord, error) {
+	const pageSize = 64
+	const maxUncovered = 256
+	cursor := ""
+	collected := make([]ports.CommunicationMessageRecord, 0, pageSize)
+	for {
+		page, err := repo.ListByConversation(ctx, businessID, conversationID, pageSize, cursor)
+		if err != nil {
+			return nil, err
+		}
+		found := false
+		for _, m := range page.Items {
+			if m.ID == checkpointID {
+				found = true
+				break
+			}
+			collected = append(collected, m)
+			if len(collected) > maxUncovered {
+				return nil, errors.New("conversation has too many messages not covered by committed summary")
+			}
+		}
+		if found {
+			slices.Reverse(collected)
+			return collected, nil
+		}
+		if !page.HasMore {
+			return nil, errors.New("conversation summary checkpoint cannot be found in current history")
+		}
+		if page.NextCursor == "" || page.NextCursor == cursor {
+			return nil, errors.New("conversation checkpoint paging cursor did not advance")
+		}
+		cursor = page.NextCursor
+	}
+}
+
 func buildRecentMessageEvidence(records []ports.CommunicationMessageRecord, sourceReference string, now time.Time) []ports.CustomerSalesRecentMessageEvidence {
 	items := make([]ports.CustomerSalesRecentMessageEvidence, 0, len(records))
 	for _, record := range records {
@@ -225,8 +308,8 @@ func buildRecentMessageEvidence(records []ports.CommunicationMessageRecord, sour
 		if !items[i].OccurredAt.Equal(items[j].OccurredAt) {
 			return items[i].OccurredAt.Before(items[j].OccurredAt)
 		}
-		// Per ADR-051: tiebreaker — Reference (message ID), to fix time inversion
-		return items[i].Reference < items[j].Reference
+		// Preserve the repository's (occurred_at, created_at, id) order on ties.
+		return false
 	})
 	return items
 }

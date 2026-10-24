@@ -26,22 +26,22 @@ import (
 // handler with Platform Audit logging.
 type PlatformDeps struct {
 	// Lifecycle repositories
-	Plans             ports.PlanRepository
-	PlatformBusiness  ports.PlatformBusinessLifecyclePort
-	PlatformAudit     ports.PlatformAuditRepository
-	Subscriptions     ports.SubscriptionRepository
-	Payments          ports.PaymentRepository
-	Support           ports.SupportRepository
-	AIUsage           ports.AIUsageRepository
-	AIProviderPricing ports.AIProviderPricingRepository
+	Plans            ports.PlanRepository
+	PlatformBusiness ports.PlatformBusinessLifecyclePort
+	PlatformAudit    ports.PlatformAuditRepository
+	Subscriptions    ports.SubscriptionRepository
+	Payments         ports.PaymentRepository
+	Addons           ports.SubscriptionAddonRepository
+	Support          ports.SupportRepository
+	AIUsage          ports.AIUsageRepository
+	Transactions     ports.TransactionManager
 	// Platform Operations (AI kill switch + provider/channel health) — in-memory
 	Operations ports.PlatformOperationsPort
 	// Channel Reader — platform-scoped read of channel_connections (no secrets)
 	ChannelReader ports.PlatformChannelReadPort
-	// Per §1-12: AI Provider Configuration management
-	AIConfigRepo        ports.AIProviderConfigService
-	AIConfigCache       *services.AIConfigurationCache
+	// Gateway-owned model discovery and deployment configuration only.
 	ModelDiscovery      ports.ModelDiscoveryClient
+	NativeAISettings    *ports.NativeAIPlatformConfig
 	AssignBusinessOwner *services.AssignBusinessOwnerService
 }
 
@@ -130,6 +130,14 @@ func extractIdempotencyKey(operationID string, input any) string {
 		}
 	case "platformRecordPayment":
 		if in, ok := input.(*dto.RecordPaymentInput); ok {
+			return in.IdempotencyKey
+		}
+	case "platformCreateSubscriptionAddon":
+		if in, ok := input.(*dto.CreateSubscriptionAddonInput); ok {
+			return in.IdempotencyKey
+		}
+	case "platformRecordSubscriptionAddonPayment":
+		if in, ok := input.(*dto.RecordSubscriptionAddonPaymentInput); ok {
 			return in.IdempotencyKey
 		}
 	case "platformCreateSupportMessage":
@@ -249,6 +257,16 @@ func (s *Server) dispatchPlatformCommandInner(ctx context.Context, operationID s
 	// ---- Manual Payment Recording (Contract §25-28) ----
 	case "platformRecordPayment":
 		return s.platformRecordPayment(ctx, input.(*dto.RecordPaymentInput))
+	case "platformCreateSubscriptionAddon":
+		return s.platformCreateSubscriptionAddon(ctx, input.(*dto.CreateSubscriptionAddonInput))
+	case "platformListSubscriptionAddons":
+		return s.platformListSubscriptionAddons(ctx, input.(*dto.SubscriptionAddonListInput))
+	case "platformRecordSubscriptionAddonPayment":
+		return s.platformRecordSubscriptionAddonPayment(ctx, input.(*dto.RecordSubscriptionAddonPaymentInput))
+	case "platformCancelSubscriptionAddon":
+		return s.platformCancelSubscriptionAddon(ctx, input.(*dto.CancelSubscriptionAddonInput))
+	case "platformApproveChannelPassCapacity":
+		return s.platformApproveChannelPassCapacity(ctx, input.(*dto.ApproveChannelPassCapacityInput))
 	case "platformListPayments":
 		return s.platformListPayments(ctx, input.(*dto.PaymentListInput))
 
@@ -319,6 +337,8 @@ func planProjection(p ports.PlanRecord) dto.PlanView {
 		AIReplyLimit:            p.AIReplyLimit,
 		AICatalogLimit:          p.AICatalogLimit,
 		ChannelLimit:            p.ChannelLimit,
+		ChannelCeiling:          p.ChannelCeiling,
+		SeatLimit:               p.SeatLimit,
 		InternalAICostBudgetYER: p.InternalAICostBudgetYER,
 		Status:                  p.Status,
 		CreatedAt:               p.CreatedAt.UTC().Format(time.RFC3339),
@@ -382,6 +402,8 @@ func (s *Server) platformCreatePlan(ctx context.Context, in *dto.CreatePlanInput
 		AIReplyLimit:            in.Body.AIReplyLimit,
 		AICatalogLimit:          in.Body.AICatalogLimit,
 		ChannelLimit:            in.Body.ChannelLimit,
+		ChannelCeiling:          in.Body.ChannelCeiling,
+		SeatLimit:               in.Body.SeatLimit,
 		InternalAICostBudgetYER: in.Body.InternalAICostBudgetYER,
 		Now:                     time.Now().UTC(),
 	})
@@ -521,6 +543,8 @@ func (s *Server) platformCreatePlanVersion(ctx context.Context, in *dto.CreatePl
 		AIReplyLimit:            in.Body.AIReplyLimit,
 		AICatalogLimit:          in.Body.AICatalogLimit,
 		ChannelLimit:            in.Body.ChannelLimit,
+		ChannelCeiling:          in.Body.ChannelCeiling,
+		SeatLimit:               in.Body.SeatLimit,
 		InternalAICostBudgetYER: in.Body.InternalAICostBudgetYER,
 		ChangedBy:               string(adminID),
 		Reason:                  in.Body.Reason,
@@ -835,12 +859,16 @@ func subscriptionProjection(s ports.SubscriptionRecord) dto.SubscriptionView {
 		PlanID:                   s.PlanID,
 		PlanCode:                 s.PlanCode,
 		PlanVersion:              s.PlanVersion,
+		PriceYERSnapshot:         s.PriceYERSnapshot,
+		AmountDueYER:             s.AmountDueYER,
 		PeriodStart:              s.PeriodStart.UTC().Format(time.RFC3339),
 		PeriodEnd:                s.PeriodEnd.UTC().Format(time.RFC3339),
 		Status:                   s.Status,
 		AIReplyLimit:             s.AIReplyLimit,
 		AICatalogLimit:           s.AICatalogLimit,
 		ChannelLimit:             s.ChannelLimit,
+		ChannelCeiling:           s.ChannelCeiling,
+		SeatLimit:                s.SeatLimit,
 		InternalAICostBudgetYER:  s.InternalAICostBudgetYER,
 		CostBudgetOverrideYER:    s.CostBudgetOverrideYER,
 		CostBudgetOverrideReason: s.CostBudgetOverrideReason,
@@ -867,6 +895,139 @@ func paymentProjection(p ports.PaymentRecord) dto.PaymentView {
 		RecordedBy:     p.RecordedBy,
 		CreatedAt:      p.CreatedAt.UTC().Format(time.RFC3339),
 	}
+}
+
+func subscriptionAddonProjection(a ports.SubscriptionAddonRecord) dto.SubscriptionAddonView {
+	v := dto.SubscriptionAddonView{ID: a.ID, SubscriptionID: a.SubscriptionID, BusinessID: a.BusinessID, Kind: a.Kind, Status: a.Status, PriceYERSnapshot: a.PriceYERSnapshot, AIReplyDelta: a.AIReplyDelta, CatalogDelta: a.CatalogDelta, SeatDelta: a.SeatDelta, ChannelDelta: a.ChannelDelta, CreatedAt: a.CreatedAt.UTC().Format(time.RFC3339)}
+	if a.ActivatedAt != nil {
+		x := a.ActivatedAt.UTC().Format(time.RFC3339)
+		v.ActivatedAt = &x
+	}
+	if a.CancelledAt != nil {
+		x := a.CancelledAt.UTC().Format(time.RFC3339)
+		v.CancelledAt = &x
+	}
+	v.CancelledReason = a.CancelledReason
+	return v
+}
+
+func channelPassCapacityApprovalProjection(a ports.ChannelPassCapacityApprovalRecord) dto.ChannelPassCapacityApprovalView {
+	return dto.ChannelPassCapacityApprovalView{
+		SubscriptionID:   a.SubscriptionID,
+		BusinessID:       a.BusinessID,
+		MaxChannelPasses: a.MaxChannelPasses,
+		Reason:           a.Reason,
+		ApprovedBy:       a.ApprovedBy,
+		ApprovedAt:       a.ApprovedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:        a.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func (s *Server) platformCreateSubscriptionAddon(ctx context.Context, in *dto.CreateSubscriptionAddonInput) (any, bool) {
+	if s.platformDeps.Addons == nil || s.platformDeps.Subscriptions == nil {
+		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "subscription add-ons are not wired")), true
+	}
+	if strings.TrimSpace(in.IdempotencyKey) == "" || strings.TrimSpace(in.Body.Kind) == "" {
+		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "Idempotency-Key and addon kind are required")), true
+	}
+	sub, err := s.platformDeps.Subscriptions.GetByID(ctx, string(in.SubscriptionID))
+	if err != nil {
+		return mapApplicationError(err), true
+	}
+	admin, _ := middleware.PlatformAdminID(ctx)
+	record, err := s.platformDeps.Addons.CreatePending(ctx, ports.SubscriptionAddonCreate{SubscriptionID: sub.ID, BusinessID: sub.BusinessID, Kind: in.Body.Kind, CreatedBy: string(admin), IdempotencyKey: in.IdempotencyKey, Now: time.Now().UTC()})
+	if err != nil {
+		s.appendPlatformAudit(ctx, "subscription_addon.created", "subscription_addon", nil, &sub.BusinessID, "FAILURE", classifyPlatformRepoErrorKind(err), map[string]any{"subscription_id": sub.ID, "kind": in.Body.Kind})
+		return mapApplicationError(err), true
+	}
+	s.appendPlatformAudit(ctx, "subscription_addon.created", "subscription_addon", &record.ID, &record.BusinessID, "SUCCESS", "", map[string]any{"subscription_id": record.SubscriptionID, "kind": record.Kind, "price_yer": record.PriceYERSnapshot})
+	out := &contract.Single[dto.SubscriptionAddonView]{}
+	out.Body.Data = subscriptionAddonProjection(record)
+	return out, true
+}
+
+func (s *Server) platformRecordSubscriptionAddonPayment(ctx context.Context, in *dto.RecordSubscriptionAddonPaymentInput) (any, bool) {
+	if s.platformDeps.Addons == nil {
+		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "subscription add-ons are not wired")), true
+	}
+	if strings.TrimSpace(in.IdempotencyKey) == "" || in.Body.AmountYER <= 0 || strings.TrimSpace(in.Body.Reference) == "" {
+		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "Idempotency-Key, positive amount_yer, and reference are required")), true
+	}
+	paidAt, err := parseOptionalRFC3339(in.Body.PaidAt)
+	if err != nil || paidAt == nil {
+		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "paid_at must be a valid RFC 3339 timestamp")), true
+	}
+	admin, _ := middleware.PlatformAdminID(ctx)
+	record, err := s.platformDeps.Addons.RecordPaymentAndActivate(ctx, ports.SubscriptionAddonPayment{AddonID: string(in.AddonID), RecordedBy: string(admin), IdempotencyKey: in.IdempotencyKey, AmountYER: in.Body.AmountYER, Method: in.Body.Method, Reference: in.Body.Reference, PaidAt: *paidAt, Now: time.Now().UTC()})
+	if err != nil {
+		addonID := string(in.AddonID)
+		s.appendPlatformAudit(ctx, "subscription_addon.activated", "subscription_addon", &addonID, nil, "FAILURE", classifyPlatformRepoErrorKind(err), nil)
+		return mapApplicationError(err), true
+	}
+	s.appendPlatformAudit(ctx, "subscription_addon.activated", "subscription_addon", &record.ID, &record.BusinessID, "SUCCESS", "", map[string]any{"kind": record.Kind, "price_yer": record.PriceYERSnapshot})
+	out := &contract.Single[dto.SubscriptionAddonView]{}
+	out.Body.Data = subscriptionAddonProjection(record)
+	return out, true
+}
+
+func (s *Server) platformListSubscriptionAddons(ctx context.Context, in *dto.SubscriptionAddonListInput) (any, bool) {
+	if s.platformDeps.Addons == nil {
+		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "subscription add-ons are not wired")), true
+	}
+	page, err := s.platformDeps.Addons.List(ctx, ports.SubscriptionAddonListFilter{SubscriptionID: string(in.SubscriptionID), Status: in.Status, Limit: in.Limit, Cursor: in.Cursor})
+	if err != nil {
+		return mapApplicationError(err), true
+	}
+	out := &contract.List[dto.SubscriptionAddonView]{}
+	out.Body.Data = make([]dto.SubscriptionAddonView, 0, len(page.Items))
+	for _, record := range page.Items {
+		out.Body.Data = append(out.Body.Data, subscriptionAddonProjection(record))
+	}
+	out.Body.Pagination = contract.Page{HasMore: page.HasMore, NextCursor: platformCursorPtr(page.NextCursor)}
+	return out, true
+}
+
+func (s *Server) platformCancelSubscriptionAddon(ctx context.Context, in *dto.CancelSubscriptionAddonInput) (any, bool) {
+	if s.platformDeps.Addons == nil {
+		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "subscription add-ons are not wired")), true
+	}
+	if strings.TrimSpace(in.Body.Reason) == "" {
+		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "cancellation reason is required")), true
+	}
+	admin, _ := middleware.PlatformAdminID(ctx)
+	record, err := s.platformDeps.Addons.Cancel(ctx, ports.SubscriptionAddonCancel{AddonID: string(in.AddonID), CancelledBy: string(admin), Reason: in.Body.Reason, Now: time.Now().UTC()})
+	if err != nil {
+		addonID := string(in.AddonID)
+		s.appendPlatformAudit(ctx, "subscription_addon.cancelled", "subscription_addon", &addonID, nil, "FAILURE", classifyPlatformRepoErrorKind(err), map[string]any{"reason": in.Body.Reason})
+		return mapApplicationError(err), true
+	}
+	s.appendPlatformAudit(ctx, "subscription_addon.cancelled", "subscription_addon", &record.ID, &record.BusinessID, "SUCCESS", "", map[string]any{"reason": in.Body.Reason})
+	out := &contract.Single[dto.SubscriptionAddonView]{}
+	out.Body.Data = subscriptionAddonProjection(record)
+	return out, true
+}
+
+func (s *Server) platformApproveChannelPassCapacity(ctx context.Context, in *dto.ApproveChannelPassCapacityInput) (any, bool) {
+	if s.platformDeps.Addons == nil || s.platformDeps.Subscriptions == nil {
+		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "subscription add-ons are not wired")), true
+	}
+	if in.Body.MaxChannelPasses <= 0 || strings.TrimSpace(in.Body.Reason) == "" {
+		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "positive max_channel_passes and approval reason are required")), true
+	}
+	sub, err := s.platformDeps.Subscriptions.GetByID(ctx, string(in.SubscriptionID))
+	if err != nil {
+		return mapApplicationError(err), true
+	}
+	admin, _ := middleware.PlatformAdminID(ctx)
+	record, err := s.platformDeps.Addons.ApproveChannelPassCapacity(ctx, ports.ChannelPassCapacityApproval{SubscriptionID: sub.ID, BusinessID: sub.BusinessID, MaxChannelPasses: in.Body.MaxChannelPasses, Reason: in.Body.Reason, ApprovedBy: string(admin), Now: time.Now().UTC()})
+	if err != nil {
+		s.appendPlatformAudit(ctx, "subscription_addon.channel_capacity_approved", "subscription", &sub.ID, &sub.BusinessID, "FAILURE", classifyPlatformRepoErrorKind(err), nil)
+		return mapApplicationError(err), true
+	}
+	s.appendPlatformAudit(ctx, "subscription_addon.channel_capacity_approved", "subscription", &sub.ID, &sub.BusinessID, "SUCCESS", "", map[string]any{"max_channel_passes": record.MaxChannelPasses, "reason": record.Reason})
+	out := &contract.Single[dto.ChannelPassCapacityApprovalView]{}
+	out.Body.Data = channelPassCapacityApprovalProjection(record)
+	return out, true
 }
 
 // ----------------------------------------------------------------------------
@@ -916,11 +1077,9 @@ func (s *Server) platformGetSubscription(ctx context.Context, in *dto.PlatformSu
 //   - Plan limits snapshot at creation (§17) — never mutated by plan edits.
 //   - New subscription is in PENDING status. Activation requires payment (§28).
 //
-// Per Contract §34 + §35: catalog/channel overrun detection is TODO for V1+
-// — the contract requires "no silent data deletion" but the current merchant
-// side has no AI-active catalog count query; the check is deferred until the
-// subscription activation flow is wired to merchant entitlements. For now
-// we just snapshot the plan's limits.
+// Per Contract §34 + §35, activation checks active catalog items, channels,
+// and seats against this immutable snapshot. It blocks the new period on an
+// overrun and never deletes merchant data to make a downgrade fit.
 func (s *Server) platformCreateSubscription(ctx context.Context, in *dto.CreateSubscriptionInput) (any, bool) {
 	if s.platformDeps.Subscriptions == nil {
 		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "subscription repository is not wired")), true
@@ -949,11 +1108,15 @@ func (s *Server) platformCreateSubscription(ctx context.Context, in *dto.CreateS
 		ID:                      uuid.NewString(),
 		BusinessID:              string(in.BusinessID),
 		PlanID:                  plan.ID,
+		PriceYERSnapshot:        plan.PriceYER,
+		AmountDueYER:            plan.PriceYER,
 		PeriodStart:             periodStart,
 		PeriodEnd:               periodEnd,
 		AIReplyLimit:            plan.AIReplyLimit,
 		AICatalogLimit:          plan.AICatalogLimit,
 		ChannelLimit:            plan.ChannelLimit,
+		ChannelCeiling:          plan.ChannelCeiling,
+		SeatLimit:               plan.SeatLimit,
 		InternalAICostBudgetYER: plan.InternalAICostBudgetYER,
 		Now:                     now,
 	})
@@ -1002,16 +1165,12 @@ func (s *Server) platformCancelSubscription(ctx context.Context, in *dto.CancelS
 //  3. If the subscription is PENDING → Activate it atomically.
 //  4. Audit both payment.recorded + subscription.activated.
 //
-// Steps 1-3 must be atomic — a payment without an activation is a half-state.
-// The current implementation runs them as separate SQL statements on the
-// same adapter; a future refactor should wrap them in a single Within()
-// transaction. For now, the Append + Activate pair is the closest thing
-// to atomic since both go through the same pool — a partial failure
-// (payment appended but Activate fails) leaves a payment record + a PENDING
-// subscription, which is recoverable via admin retry of Activate.
+// Steps 1-3 run inside one local PostgreSQL transaction. A failed entitlement
+// or activation check rolls the append back, so no paid-PENDING half-state is
+// left behind.
 func (s *Server) platformRecordPayment(ctx context.Context, in *dto.RecordPaymentInput) (any, bool) {
-	if s.platformDeps.Subscriptions == nil || s.platformDeps.Payments == nil {
-		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "subscription/payment repositories are not wired")), true
+	if s.platformDeps.Subscriptions == nil || s.platformDeps.Payments == nil || s.platformDeps.Transactions == nil {
+		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "atomic subscription billing is not wired")), true
 	}
 	subID := strings.TrimSpace(string(in.SubscriptionID))
 	if subID == "" {
@@ -1026,32 +1185,69 @@ func (s *Server) platformRecordPayment(ctx context.Context, in *dto.RecordPaymen
 	if strings.TrimSpace(in.Body.Reference) == "" {
 		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "reference is required")), true
 	}
+	idempotencyKey := strings.TrimSpace(in.IdempotencyKey)
+	if idempotencyKey == "" {
+		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "Idempotency-Key header is required")), true
+	}
 	paidAt, err := parseOptionalRFC3339(in.Body.PaidAt)
 	if err != nil || paidAt == nil {
 		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "paid_at must be a valid RFC 3339 timestamp")), true
 	}
 	// 1. Fetch subscription — needed for business_id cross-check (tenant isolation).
-	sub, err := s.platformDeps.Subscriptions.GetByID(ctx, subID)
-	if err != nil {
-		failureCode := classifyPlatformRepoErrorKind(err)
-		s.appendPlatformAudit(ctx, "payment.recorded", "subscription", &subID, nil, "FAILURE", failureCode, map[string]any{"reason": "subscription lookup failed"})
-		return mapApplicationError(err), true
-	}
 	adminID, _ := middleware.PlatformAdminID(ctx)
 	// 2. Append payment (Contract §27: append-only).
-	payment, err := s.platformDeps.Payments.Append(ctx, ports.PaymentCreate{
-		SubscriptionID: sub.ID,
-		BusinessID:     sub.BusinessID,
-		AmountYER:      in.Body.AmountYER,
-		Method:         in.Body.Method,
-		Reference:      in.Body.Reference,
-		PaidAt:         *paidAt,
-		RecordedBy:     string(adminID),
-		Now:            time.Now().UTC(),
+	var payment ports.PaymentRecord
+	var sub ports.SubscriptionRecord
+	didActivate := false
+	now := time.Now().UTC()
+	err = s.platformDeps.Transactions.Within(ctx, func(txCtx context.Context) error {
+		var operationErr error
+		sub, operationErr = s.platformDeps.Subscriptions.GetByID(txCtx, subID)
+		if operationErr != nil {
+			return operationErr
+		}
+		if in.Body.AmountYER != sub.AmountDueYER {
+			return appErrors.New(appErrors.CodeConflict, fmt.Sprintf("amount_yer must equal the immutable amount due: %d YER", sub.AmountDueYER))
+		}
+		if sub.Status == "PENDING" {
+			if now.Before(sub.PeriodStart) || !now.Before(sub.PeriodEnd) {
+				return appErrors.New(appErrors.CodeConflict, "subscription period is not currently eligible for activation")
+			}
+			if operationErr = s.platformDeps.Subscriptions.CheckEntitlements(txCtx, sub.BusinessID, sub.AICatalogLimit, sub.ChannelLimit, sub.SeatLimit); operationErr != nil {
+				return operationErr
+			}
+		}
+		payment, operationErr = s.platformDeps.Payments.Append(txCtx, ports.PaymentCreate{
+			SubscriptionID: sub.ID,
+			BusinessID:     sub.BusinessID,
+			AmountYER:      in.Body.AmountYER,
+			Method:         in.Body.Method,
+			Reference:      in.Body.Reference,
+			PaidAt:         *paidAt,
+			RecordedBy:     string(adminID),
+			IdempotencyKey: idempotencyKey,
+			Now:            now,
+		})
+		if operationErr != nil {
+			return operationErr
+		}
+		current, operationErr := s.platformDeps.Subscriptions.GetByID(txCtx, sub.ID)
+		if operationErr != nil {
+			return operationErr
+		}
+		if current.Status == "ACTIVE" {
+			return nil
+		}
+		if current.Status != "PENDING" {
+			return appErrors.New(appErrors.CodeConflict, "only a PENDING subscription can be activated by payment")
+		}
+		_, operationErr = s.platformDeps.Subscriptions.Activate(txCtx, sub.ID, now)
+		didActivate = operationErr == nil
+		return operationErr
 	})
 	if err != nil {
 		failureCode := classifyPlatformRepoErrorKind(err)
-		s.appendPlatformAudit(ctx, "payment.recorded", "subscription", &subID, &sub.BusinessID, "FAILURE", failureCode, map[string]any{
+		s.appendPlatformAudit(ctx, "payment.recorded", "subscription", &subID, nullableStringPtr(sub.BusinessID), "FAILURE", failureCode, map[string]any{
 			"amount_yer": in.Body.AmountYER, "method": in.Body.Method, "reference": in.Body.Reference,
 		})
 		return mapApplicationError(err), true
@@ -1059,39 +1255,8 @@ func (s *Server) platformRecordPayment(ctx context.Context, in *dto.RecordPaymen
 	s.appendPlatformAudit(ctx, "payment.recorded", "payment", &payment.ID, &sub.BusinessID, "SUCCESS", "", map[string]any{
 		"subscription_id": sub.ID, "amount_yer": payment.AmountYER, "method": payment.Method, "reference": payment.Reference,
 	})
-	// 3. Activate subscription if it was PENDING (Contract §28).
-	// If the subscription was already ACTIVE (renewal mid-period?) or terminal,
-	// Activate returns Conflict — we log it as a soft note but DON'T fail the
-	// payment record. The payment is append-only and stays even if activation
-	// is rejected (e.g., subscription is CANCELLED — payment is still a
-	// historical record).
-	if sub.Status == "PENDING" {
-		// Per Contract §34-35: check entitlements BEFORE activating.
-		// If catalog or channel count exceeds the plan's limits, block
-		// activation. The payment is still recorded (append-only), but
-		// the subscription stays PENDING until the merchant resolves
-		// the overrun. No silent data deletion.
-		entitlementErr := s.platformDeps.Subscriptions.CheckEntitlements(ctx, sub.BusinessID, sub.AICatalogLimit, sub.ChannelLimit)
-		if entitlementErr != nil {
-			failureCode := classifyPlatformRepoErrorKind(entitlementErr)
-			s.appendPlatformAudit(ctx, "subscription.activated", "subscription", &sub.ID, &sub.BusinessID, "FAILURE", failureCode, map[string]any{
-				"payment_id": payment.ID, "reason": "entitlement_overrun",
-			})
-			// Return the payment view — the payment IS recorded, but
-			// activation is blocked. The caller sees the payment + a
-			// 409 Conflict in the audit log explaining why activation
-			// was blocked.
-			out := &contract.Single[dto.PaymentView]{}
-			out.Body.Data = paymentProjection(payment)
-			return out, true
-		}
-		activated, activateErr := s.platformDeps.Subscriptions.Activate(ctx, sub.ID, time.Now().UTC())
-		if activateErr != nil {
-			failureCode := classifyPlatformRepoErrorKind(activateErr)
-			s.appendPlatformAudit(ctx, "subscription.activated", "subscription", &sub.ID, &sub.BusinessID, "FAILURE", failureCode, map[string]any{"payment_id": payment.ID})
-		} else {
-			s.appendPlatformAudit(ctx, "subscription.activated", "subscription", &activated.ID, &activated.BusinessID, "SUCCESS", "", map[string]any{"payment_id": payment.ID})
-		}
+	if didActivate {
+		s.appendPlatformAudit(ctx, "subscription.activated", "subscription", &sub.ID, &sub.BusinessID, "SUCCESS", "", map[string]any{"payment_id": payment.ID})
 	}
 	out := &contract.Single[dto.PaymentView]{}
 	out.Body.Data = paymentProjection(payment)
@@ -1260,7 +1425,7 @@ func (s *Server) platformGetAIOverview(ctx context.Context) (any, bool) {
 	overview := dto.PlatformAIOverviewView{}
 	overview.Runtime.Status = string(runtime.AdminState)
 	overview.Runtime.Health = string(runtime.HealthState)
-	// Find the AI provider — per Contract §76: google_gemini + gemini-3.1-flash-lite
+	// Find the active AI gateway provider (model name is the configured customer alias).
 	for _, p := range providers {
 		if p.ProviderType == ports.ProviderTypeAI {
 			overview.Provider.Provider = p.ProviderID
@@ -1332,7 +1497,7 @@ func (s *Server) platformAIEnable(ctx context.Context, _ *dto.PlatformAIRuntimeE
 	return out, true
 }
 
-// platformAIHealthCheck invokes the registered probe for Google Gemini.
+// platformAIHealthCheck probes Native AI's active customer route.
 // Per Contract §84: the probe uses a standalone prompt — no merchant_id,
 // business_id, customer data, or merchant catalog.
 //
@@ -1342,11 +1507,11 @@ func (s *Server) platformAIHealthCheck(ctx context.Context, _ *dto.PlatformAIHea
 		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "platform operations registry is not wired")), true
 	}
 	now := time.Now().UTC()
-	// Hard-coded to google_gemini per Contract §76 — the only AI provider.
-	provider, err := s.platformDeps.Operations.RunHealthCheck(ctx, "google_gemini", now)
+	// The gateway is the sole AI provider exposed by the platform registry.
+	provider, err := s.platformDeps.Operations.RunHealthCheck(ctx, "gemini", now)
 	if err != nil {
 		failureCode := classifyPlatformRepoErrorKind(err)
-		s.appendPlatformAudit(ctx, "provider.health_checked", "ai_provider", nil, nil, "FAILURE", failureCode, map[string]any{"provider": "google_gemini"})
+		s.appendPlatformAudit(ctx, "provider.health_checked", "ai_provider", nil, nil, "FAILURE", failureCode, map[string]any{"provider": "gemini"})
 		return mapApplicationError(err), true
 	}
 	s.appendPlatformAudit(ctx, "provider.health_checked", "ai_provider", &provider.ProviderID, nil, "SUCCESS", "", map[string]any{
@@ -1988,19 +2153,10 @@ func (s *Server) platformCreateBusiness(ctx context.Context, in *dto.CreateBusin
 // AI Provider Configuration façades (§13)
 // ----------------------------------------------------------------------------
 
-func aiCredentialProjection(c ports.AICredentialRecord) dto.AICredentialView {
-	v := dto.AICredentialView{
-		ID: c.ID, Provider: c.Provider, DisplayName: c.DisplayName,
-		KeyHint: c.KeyHint, Status: c.Status, CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339),
-		ValidationError: c.ValidationError,
-	}
-	if c.ValidatedAt != nil {
-		s := c.ValidatedAt.UTC().Format(time.RFC3339)
-		v.ValidatedAt = &s
-	}
-	return v
-}
-
+// Existing Platform Admin API operations remain stable; Native AI is the
+// authoritative source of route status, credentials and model discovery.
+// Disabled credential writes and model activation cannot silently change
+// historical Gemini rows that are not used by the runtime.
 func aiModelProjection(m ports.AIProviderModel) dto.AIModelView {
 	return dto.AIModelView{
 		ID: m.ID, Provider: m.Provider, ModelName: m.ModelName,
@@ -2014,459 +2170,25 @@ func aiModelProjection(m ports.AIProviderModel) dto.AIModelView {
 }
 
 func (s *Server) platformListAIProvidersConfig(ctx context.Context) (any, bool) {
-	if s.platformDeps.AIConfigRepo == nil {
-		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config repo not wired")), true
-	}
-	creds, err := s.platformDeps.AIConfigRepo.ListCredentials(ctx, "google_gemini")
-	if err != nil {
-		return mapApplicationError(err), true
-	}
-	items := make([]dto.AICredentialView, 0, len(creds))
-	for _, c := range creds {
-		items = append(items, aiCredentialProjection(c))
-	}
-	out := &contract.List[dto.AICredentialView]{}
-	out.Body.Data = items
-	return out, true
+	return s.platformGatewayListAIProvidersConfig(ctx)
 }
 
 func (s *Server) platformAddAICredential(ctx context.Context, in *dto.AddCredentialInput) (any, bool) {
-	if s.platformDeps.AIConfigRepo == nil {
-		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config repo not wired")), true
-	}
-	if strings.TrimSpace(in.Body.APIKey) == "" {
-		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "api_key is required")), true
-	}
-	if strings.TrimSpace(in.Body.Provider) == "" {
-		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "provider is required")), true
-	}
-	provider := in.Body.Provider
-	adminID, _ := middleware.PlatformAdminID(ctx)
-	apiKey := in.Body.APIKey
-	hint := ""
-	if len(apiKey) > 4 {
-		hint = "..." + apiKey[len(apiKey)-4:]
-	} else {
-		hint = "..." + apiKey
-	}
-	now := time.Now().UTC()
-
-	// Step 1: Store the NEW credential with status=CONFIGURED. Per §11:
-	// failure safety — if the probe fails below, the NEW credential is
-	// marked INVALID and the OLD active credential remains ACTIVE. The
-	// system never runs without a working credential.
-	record, err := s.platformDeps.AIConfigRepo.StoreCredential(ctx, ports.AICredentialCreate{
-		ID: uuid.NewString(), Provider: provider,
-		DisplayName: in.Body.DisplayName, EncryptedKey: apiKey, KeyHint: hint,
-		CreatedBy: string(adminID), Now: now,
-	})
-	if err != nil {
-		failureCode := classifyPlatformRepoErrorKind(err)
-		s.appendPlatformAudit(ctx, "ai.credential.added", "ai_credential", nil, nil, "FAILURE", failureCode, map[string]any{"provider": provider})
-		return mapApplicationError(err), true
-	}
-
-	// Step 2: Atomic rotation — probe the NEW credential before marking
-	// it VALID. Per §6: must be a REAL HTTP probe to Gemini, not a
-	// config-only validity check. Per §11: if the probe fails, NEW is
-	// marked INVALID and OLD remains ACTIVE — the runtime never breaks.
-	//
-	// We need a model name to probe. The active config's model is the
-	// safest choice — it's the model currently in use, so a probe
-	// against it proves the key works for the production workload.
-	probeModel := ""
-	probeBaseURL := "https://generativelanguage.googleapis.com"
-	if s.platformDeps.AIConfigCache != nil {
-		if activeCfg, cfgErr := s.platformDeps.AIConfigCache.GetActiveConfig(ctx); cfgErr == nil {
-			probeModel = activeCfg.Model
-			if activeCfg.BaseURL != "" {
-				probeBaseURL = activeCfg.BaseURL
-			}
-		}
-	}
-	probeSuccess := false
-	probeErrorCode := "MODEL_DISCOVERY_NOT_WIRED"
-	probeLatency := int64(0)
-	if s.platformDeps.ModelDiscovery != nil && probeModel != "" {
-		probeSuccess, probeLatency, probeErrorCode = s.platformDeps.ModelDiscovery.TestConnection(ctx, apiKey, probeModel, probeBaseURL)
-	} else if s.platformDeps.ModelDiscovery == nil {
-		probeErrorCode = "MODEL_DISCOVERY_NOT_WIRED"
-	} else if probeModel == "" {
-		probeErrorCode = "NO_ACTIVE_MODEL"
-	}
-
-	if !probeSuccess {
-		// Mark the NEW credential INVALID. Per §11: the OLD active
-		// credential remains ACTIVE — GetActiveCredential orders by
-		// created_at DESC + status IN (CONFIGURED, VALID), so an
-		// INVALID NEW credential is filtered out.
-		errMsg := probeErrorCode
-		updated, _ := s.platformDeps.AIConfigRepo.UpdateCredentialStatus(ctx, record.ID, "INVALID", &errMsg, now)
-		if updated.ID != "" {
-			record = updated
-		}
-		s.appendPlatformAudit(ctx, "ai.credential.added", "ai_credential", &record.ID, nil, "FAILURE", "PROBE_FAILED", map[string]any{
-			"provider": provider, "key_hint": record.KeyHint,
-			"error_code": probeErrorCode, "latency_ms": probeLatency,
-		})
-		out := &contract.Single[dto.AICredentialView]{}
-		out.Body.Data = aiCredentialProjection(record)
-		return out, true
-	}
-
-	// Step 3: Probe succeeded — mark NEW as VALID. GetActiveCredential
-	// orders by created_at DESC, so NEW (now VALID, just-created) becomes
-	// the active credential on the next lookup. The OLD credential stays
-	// in its current status (CONFIGURED/VALID) — it's simply shadowed by
-	// the newer one. This is atomic rotation: at no point does the system
-	// lack an active credential.
-	validated, err := s.platformDeps.AIConfigRepo.UpdateCredentialStatus(ctx, record.ID, "VALID", nil, now)
-	if err != nil {
-		// Extremely rare — the Store succeeded but Update failed. Log
-		// the failure and return the record with its current CONFIGURED
-		// status so the admin can retry. Per §11: failure safety.
-		failureCode := classifyPlatformRepoErrorKind(err)
-		s.appendPlatformAudit(ctx, "ai.credential.added", "ai_credential", &record.ID, nil, "FAILURE", failureCode, map[string]any{"provider": provider, "key_hint": record.KeyHint})
-		return mapApplicationError(err), true
-	}
-	record = validated
-
-	// Step 4: Invalidate the cache so the next Gemini call picks up
-	// the NEW credential. Per §9: runtime switch without restart.
-	if s.platformDeps.AIConfigCache != nil {
-		s.platformDeps.AIConfigCache.Invalidate()
-	}
-
-	s.appendPlatformAudit(ctx, "ai.credential.added", "ai_credential", &record.ID, nil, "SUCCESS", "", map[string]any{
-		"provider": record.Provider, "key_hint": record.KeyHint,
-		"latency_ms": probeLatency,
-	})
-	out := &contract.Single[dto.AICredentialView]{}
-	out.Body.Data = aiCredentialProjection(record)
-	return out, true
+	return s.platformGatewayAddAICredential(ctx, in)
 }
 
 func (s *Server) platformTestAIConnection(ctx context.Context, in *dto.TestConnectionInput) (any, bool) {
-	if s.platformDeps.AIConfigCache == nil {
-		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config cache not wired")), true
-	}
-	if s.platformDeps.ModelDiscovery == nil {
-		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "Model discovery client not wired")), true
-	}
-	// Per §6: real HTTP probe to Gemini — NOT a config-only validity check.
-	// We resolve the active credential's decrypted API key + active model
-	// and call ModelDiscovery.TestConnection which makes a real
-	// generateContent request to the Gemini API.
-	cfg, err := s.platformDeps.AIConfigCache.GetActiveConfig(ctx)
-	if err != nil {
-		s.appendPlatformAudit(ctx, "ai.connection.tested", "ai_runtime", nil, nil, "FAILURE", "CONFIG_NOT_FOUND", nil)
-		out := &contract.Single[dto.TestConnectionResult]{}
-		out.Body.Data = dto.TestConnectionResult{Success: false, ErrorCode: "CONFIG_NOT_FOUND"}
-		return out, true
-	}
-	if cfg.APIKey == "" {
-		s.appendPlatformAudit(ctx, "ai.connection.tested", "ai_runtime", nil, nil, "FAILURE", "NO_API_KEY", nil)
-		out := &contract.Single[dto.TestConnectionResult]{}
-		out.Body.Data = dto.TestConnectionResult{Success: false, Provider: cfg.Provider, Model: cfg.Model, ErrorCode: "NO_API_KEY"}
-		return out, true
-	}
-	provider := in.Provider
-	if provider == "" {
-		provider = cfg.Provider
-	}
-	// Per §6: actual HTTP probe to the Gemini API. The probe sends "Hello"
-	// as input — no customer data, no merchant catalog (per §84).
-	success, latency, errorCode := s.platformDeps.ModelDiscovery.TestConnection(ctx, cfg.APIKey, cfg.Model, cfg.BaseURL)
-	if !success {
-		s.appendPlatformAudit(ctx, "ai.connection.tested", "ai_runtime", nil, nil, "FAILURE", errorCode, map[string]any{
-			"provider": provider, "model": cfg.Model, "latency_ms": latency,
-		})
-		out := &contract.Single[dto.TestConnectionResult]{}
-		out.Body.Data = dto.TestConnectionResult{
-			Success: false, Provider: provider, Model: cfg.Model,
-			LatencyMS: latency, ErrorCode: errorCode,
-		}
-		return out, true
-	}
-	s.appendPlatformAudit(ctx, "ai.connection.tested", "ai_runtime", nil, nil, "SUCCESS", "", map[string]any{
-		"provider": provider, "model": cfg.Model, "latency_ms": latency,
-	})
-	out := &contract.Single[dto.TestConnectionResult]{}
-	out.Body.Data = dto.TestConnectionResult{
-		Success: true, Provider: provider, Model: cfg.Model, LatencyMS: latency,
-	}
-	return out, true
+	return s.platformGatewayTestAIConnection(ctx, in)
 }
 
-// platformDiscoverAIModels calls the real Gemini Models API (GET /v1beta/models)
-// using the active credential's decrypted API key. Per §3: NO hardcoded list,
-// NO config-only check — the discovery MUST hit the actual provider endpoint.
-//
-// Per §10: discovered models are upserted into ai_provider_models so the
-// Platform Admin can later activate one via platformUpdateAIConfiguration.
 func (s *Server) platformDiscoverAIModels(ctx context.Context, in *dto.DiscoverModelsInput) (any, bool) {
-	if s.platformDeps.AIConfigCache == nil {
-		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config cache not wired")), true
-	}
-	if s.platformDeps.ModelDiscovery == nil {
-		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "Model discovery client not wired")), true
-	}
-	if s.platformDeps.AIConfigRepo == nil {
-		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config repo not wired")), true
-	}
-	// Resolve the active credential's decrypted API key.
-	cfg, err := s.platformDeps.AIConfigCache.GetActiveConfig(ctx)
-	if err != nil {
-		s.appendPlatformAudit(ctx, "ai.models.discovered", "ai_runtime", nil, nil, "FAILURE", "CONFIG_NOT_FOUND", nil)
-		out := &contract.List[dto.AIModelView]{}
-		out.Body.Data = []dto.AIModelView{}
-		return out, true
-	}
-	if cfg.APIKey == "" {
-		s.appendPlatformAudit(ctx, "ai.models.discovered", "ai_runtime", nil, nil, "FAILURE", "NO_API_KEY", nil)
-		out := &contract.List[dto.AIModelView]{}
-		out.Body.Data = []dto.AIModelView{}
-		return out, true
-	}
-	provider := in.Provider
-	if provider == "" {
-		provider = cfg.Provider
-	}
-	// Per §3: call the real Gemini Models API. No stub, no cached list.
-	models, err := s.platformDeps.ModelDiscovery.DiscoverModels(ctx, cfg.APIKey, cfg.BaseURL)
-	if err != nil {
-		s.appendPlatformAudit(ctx, "ai.models.discovered", "ai_runtime", nil, nil, "FAILURE", "DISCOVERY_FAILED", map[string]any{
-			"provider": provider, "error": err.Error(),
-		})
-		// Return an empty list (NOT a 500) so the frontend can render
-		// a graceful "discovery failed" state.
-		out := &contract.List[dto.AIModelView]{}
-		out.Body.Data = []dto.AIModelView{}
-		return out, true
-	}
-	// Per §10: upsert discovered models so the Platform Admin can later
-	// activate one. This is a write to ai_provider_models.
-	if err := s.platformDeps.AIConfigRepo.UpsertDiscoveredModels(ctx, models); err != nil {
-		s.appendPlatformAudit(ctx, "ai.models.discovered", "ai_runtime", nil, nil, "FAILURE", "UPSERT_FAILED", map[string]any{
-			"provider": provider, "error": err.Error(),
-		})
-		// Still return the discovered list — the upsert failure is logged
-		// but the admin can see the discovery result.
-	} else {
-		s.appendPlatformAudit(ctx, "ai.models.discovered", "ai_runtime", nil, nil, "SUCCESS", "", map[string]any{
-			"provider": provider, "model_count": len(models),
-		})
-	}
-	views := make([]dto.AIModelView, 0, len(models))
-	for _, m := range models {
-		views = append(views, aiModelProjection(m))
-	}
-	out := &contract.List[dto.AIModelView]{}
-	out.Body.Data = views
-	return out, true
+	return s.platformGatewayDiscoverAIModels(ctx, in)
 }
 
 func (s *Server) platformGetAIConfiguration(ctx context.Context) (any, bool) {
-	if s.platformDeps.AIConfigCache == nil {
-		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config cache not wired")), true
-	}
-	cfg, err := s.platformDeps.AIConfigCache.GetActiveConfig(ctx)
-	if err != nil {
-		return mapApplicationError(err), true
-	}
-	out := &contract.Single[dto.AIConfigurationView]{}
-	out.Body.Data = dto.AIConfigurationView{
-		Provider: cfg.Provider, Model: cfg.Model, CredentialID: cfg.CredentialID,
-		CredentialStatus:    cfg.CredentialStatus,
-		MujeebMaxInputChars: cfg.MaxInputCharacters, MujeebMaxOutputTokens: cfg.MaxOutputTokens,
-		EffectiveMaxOutput: cfg.MaxOutputTokens,
-		Version:            cfg.ConfigurationVersion, Status: "ACTIVE",
-	}
-	if cfg.PricingVersion != "" {
-		pv := cfg.PricingVersion
-		out.Body.Data.PricingVersion = &pv
-	}
-	return out, true
+	return s.platformGatewayGetAIConfiguration(ctx)
 }
 
-// platformUpdateAIConfiguration activates a new AI configuration version.
-//
-// Per §4: validate before activation. Per §5: effective_max_output_tokens =
-// min(Mujeeb, Provider). Per §7: if validation fails, OLD config remains
-// active. Per §8: invalidate cache after activation. Per §11: failure
-// safety — OLD config remains active on failure.
-//
-// Six checks MUST pass before activation:
-//  1. Model exists in discovered models (must have been discovered first)
-//  2. Model supports generateContent (the generation method Mujeeb uses)
-//  3. Provider output limit is known (model.OutputTokenLimit > 0)
-//  4. Provider input limit is known (model.InputTokenLimit > 0)
-//  5. Pricing version exists for this provider+model (GetCurrentForProvider)
-//  6. Credential is not INVALID/REVOKED (GetCredentialByID + status check)
-//
-// Plus a real model probe: TestConnection(decryptedKey, model, baseURL) MUST
-// succeed. Per §6: this is a REAL HTTP probe, not a config-only check.
-//
-// If any check fails, return 409 Conflict with a code identifying the
-// failure. The OLD active configuration remains ACTIVE — the runtime is
-// unaffected.
 func (s *Server) platformUpdateAIConfiguration(ctx context.Context, in *dto.UpdateConfigurationInput) (any, bool) {
-	if s.platformDeps.AIConfigRepo == nil || s.platformDeps.AIConfigCache == nil {
-		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI config not wired")), true
-	}
-	if s.platformDeps.ModelDiscovery == nil {
-		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "Model discovery client not wired")), true
-	}
-	adminID, _ := middleware.PlatformAdminID(ctx)
-	provider := "google_gemini"
-	now := time.Now().UTC()
-
-	// -- Check 1: Model exists in discovered models ----------------------
-	model, err := s.platformDeps.AIConfigRepo.GetModel(ctx, provider, in.Body.Model)
-	if err != nil {
-		s.appendPlatformAudit(ctx, "ai.configuration.updated", "ai_config", nil, nil, "FAILURE", "MODEL_NOT_FOUND", map[string]any{"model": in.Body.Model})
-		return mapApplicationError(appErrors.New(appErrors.CodeConflict, "model "+in.Body.Model+" not found in discovered models — run platformDiscoverAIModels first")), true
-	}
-
-	// -- Check 2: Model supports generateContent -------------------------
-	supportsGenerate := false
-	for _, m := range model.SupportedMethods {
-		if m == "generateContent" {
-			supportsGenerate = true
-			break
-		}
-	}
-	if !supportsGenerate {
-		s.appendPlatformAudit(ctx, "ai.configuration.updated", "ai_config", nil, nil, "FAILURE", "UNSUPPORTED_GENERATION_METHOD", map[string]any{
-			"model": in.Body.Model, "supported_methods": model.SupportedMethods,
-		})
-		return mapApplicationError(appErrors.New(appErrors.CodeConflict, "model "+in.Body.Model+" does not support generateContent")), true
-	}
-
-	// -- Check 3: Provider output limit is known -------------------------
-	if model.OutputTokenLimit == nil || *model.OutputTokenLimit <= 0 {
-		s.appendPlatformAudit(ctx, "ai.configuration.updated", "ai_config", nil, nil, "FAILURE", "PROVIDER_OUTPUT_LIMIT_UNKNOWN", map[string]any{"model": in.Body.Model})
-		return mapApplicationError(appErrors.New(appErrors.CodeConflict, "provider output token limit is unknown for model "+in.Body.Model)), true
-	}
-
-	// -- Check 4: Provider input limit is known --------------------------
-	if model.InputTokenLimit == nil || *model.InputTokenLimit <= 0 {
-		s.appendPlatformAudit(ctx, "ai.configuration.updated", "ai_config", nil, nil, "FAILURE", "PROVIDER_INPUT_LIMIT_UNKNOWN", map[string]any{"model": in.Body.Model})
-		return mapApplicationError(appErrors.New(appErrors.CodeConflict, "provider input token limit is unknown for model "+in.Body.Model)), true
-	}
-
-	// -- Check 5: Pricing version exists --------------------------------
-	if s.platformDeps.AIProviderPricing == nil {
-		s.appendPlatformAudit(ctx, "ai.configuration.updated", "ai_config", nil, nil, "FAILURE", "PRICING_REPO_NOT_WIRED", map[string]any{"model": in.Body.Model})
-		return mapApplicationError(appErrors.New(appErrors.CodeNotImplemented, "AI provider pricing repository not wired")), true
-	}
-	pricing, pricingErr := s.platformDeps.AIProviderPricing.GetCurrentForProvider(ctx, provider, in.Body.Model)
-	if pricingErr != nil {
-		s.appendPlatformAudit(ctx, "ai.configuration.updated", "ai_config", nil, nil, "FAILURE", "PRICING_NOT_FOUND", map[string]any{"model": in.Body.Model})
-		return mapApplicationError(appErrors.New(appErrors.CodeConflict, "no pricing version found for model "+in.Body.Model+" — activation blocked per §10")), true
-	}
-
-	// -- Check 6: Credential is not INVALID/REVOKED ---------------------
-	cred, err := s.platformDeps.AIConfigRepo.GetCredentialByID(ctx, in.Body.CredentialID)
-	if err != nil {
-		s.appendPlatformAudit(ctx, "ai.configuration.updated", "ai_config", nil, nil, "FAILURE", "CREDENTIAL_NOT_FOUND", map[string]any{"credential_id": in.Body.CredentialID})
-		return mapApplicationError(appErrors.New(appErrors.CodeConflict, "credential "+in.Body.CredentialID+" not found")), true
-	}
-	if cred.Status == "INVALID" || cred.Status == "REVOKED" {
-		s.appendPlatformAudit(ctx, "ai.configuration.updated", "ai_config", nil, nil, "FAILURE", "CREDENTIAL_NOT_VALID", map[string]any{
-			"credential_id": in.Body.CredentialID, "status": cred.Status,
-		})
-		return mapApplicationError(appErrors.New(appErrors.CodeConflict, "credential "+in.Body.CredentialID+" has status "+cred.Status+" — cannot activate")), true
-	}
-
-	// -- Real model probe: TestConnection(decryptedKey, model, baseURL) --
-	// Per §6: actual HTTP probe to Gemini — verifies that this specific
-	// credential+model pair works together. This catches cases where the
-	// credential is VALID for one model but not another (e.g., a model
-	// not enabled for the API key's project).
-	decryptedKey, err := s.platformDeps.AIConfigRepo.GetDecryptedKeyByID(ctx, in.Body.CredentialID)
-	if err != nil {
-		s.appendPlatformAudit(ctx, "ai.configuration.updated", "ai_config", nil, nil, "FAILURE", "CREDENTIAL_KEY_DECRYPT_FAILED", map[string]any{"credential_id": in.Body.CredentialID})
-		return mapApplicationError(appErrors.New(appErrors.CodeConflict, "failed to decrypt credential key")), true
-	}
-	probeBaseURL := "https://generativelanguage.googleapis.com"
-	if s.platformDeps.AIConfigCache != nil {
-		if activeCfg, cfgErr := s.platformDeps.AIConfigCache.GetActiveConfig(ctx); cfgErr == nil && activeCfg.BaseURL != "" {
-			probeBaseURL = activeCfg.BaseURL
-		}
-	}
-	probeSuccess, probeLatency, probeErrorCode := s.platformDeps.ModelDiscovery.TestConnection(ctx, decryptedKey, in.Body.Model, probeBaseURL)
-	if !probeSuccess {
-		s.appendPlatformAudit(ctx, "ai.configuration.updated", "ai_config", nil, nil, "FAILURE", "MODEL_PROBE_FAILED", map[string]any{
-			"model": in.Body.Model, "error_code": probeErrorCode, "latency_ms": probeLatency,
-		})
-		return mapApplicationError(appErrors.New(appErrors.CodeConflict, "model probe failed for "+in.Body.Model+" — error: "+probeErrorCode)), true
-	}
-
-	// -- Compute effective limits per §5 + §6 ---------------------------
-	// effective_max_output = min(Mujeeb, Provider)
-	providerOutputLimit := *model.OutputTokenLimit
-	effMax := in.Body.MujeebMaxOutputTokens
-	if effMax > providerOutputLimit {
-		effMax = providerOutputLimit
-	}
-	// Note: the input capability is enforced separately — Mujeeb's
-	// max_input_chars is the operational guard (see ContractClient line
-	// 144), and the provider's input_token_limit is enforced by Gemini
-	// itself when the request is sent. The backend here just records
-	// the limits so the runtime can clamp.
-
-	// -- Create version + activate (atomic per repo) ------------------
-	pricingVersion := pricing.PricingVersion
-	record, err := s.platformDeps.AIConfigRepo.CreateVersion(ctx, ports.AIConfigurationCreate{
-		ID: uuid.NewString(), Provider: provider, Model: in.Body.Model,
-		CredentialID: in.Body.CredentialID, MujeebMaxInputChars: in.Body.MujeebMaxInputChars,
-		MujeebMaxOutputTokens:    in.Body.MujeebMaxOutputTokens,
-		EffectiveMaxOutputTokens: effMax,
-		PricingVersion:           &pricingVersion, CreatedBy: string(adminID),
-		Now: now,
-	})
-	if err != nil {
-		failureCode := classifyPlatformRepoErrorKind(err)
-		s.appendPlatformAudit(ctx, "ai.configuration.updated", "ai_config", nil, nil, "FAILURE", failureCode, map[string]any{"model": in.Body.Model})
-		return mapApplicationError(err), true
-	}
-	// Activate the new version (deactivates the old one atomically).
-	activated, err := s.platformDeps.AIConfigRepo.ActivateVersion(ctx, record.ID, now)
-	if err != nil {
-		s.appendPlatformAudit(ctx, "ai.configuration.updated", "ai_config", &record.ID, nil, "FAILURE", classifyPlatformRepoErrorKind(err), nil)
-		return mapApplicationError(err), true
-	}
-
-	// -- Per §8: invalidate cache so the next Gemini call uses the new --
-	// config without restart. The next GetActiveConfig call triggers a
-	// ReloadFromDB which reads the just-activated version + the
-	// credential's decrypted key. Per §9: runtime switch without restart.
-	s.platformDeps.AIConfigCache.Invalidate()
-
-	s.appendPlatformAudit(ctx, "ai.configuration.updated", "ai_config", &activated.ID, nil, "SUCCESS", "", map[string]any{
-		"provider": activated.Provider, "model": activated.Model, "version": activated.Version,
-		"effective_max_output": activated.EffectiveMaxOutputTokens,
-		"pricing_version":      pricingVersion,
-		"probe_latency_ms":     probeLatency,
-	})
-	out := &contract.Single[dto.AIConfigurationView]{}
-	out.Body.Data = dto.AIConfigurationView{
-		Provider: activated.Provider, Model: activated.Model,
-		CredentialID: activated.CredentialID, CredentialStatus: "VALID",
-		MujeebMaxInputChars:   activated.MujeebMaxInputChars,
-		MujeebMaxOutputTokens: activated.MujeebMaxOutputTokens,
-		EffectiveMaxOutput:    activated.EffectiveMaxOutputTokens,
-		Version:               activated.Version, Status: activated.Status,
-	}
-	if activated.PricingVersion != nil {
-		out.Body.Data.PricingVersion = activated.PricingVersion
-	}
-	if activated.ActivatedAt != nil {
-		activatedAtStr := activated.ActivatedAt.UTC().Format(time.RFC3339)
-		out.Body.Data.ActivatedAt = &activatedAtStr
-	}
-	return out, true
+	return s.platformGatewayUpdateAIConfiguration(ctx, in)
 }
-
-// (aiModelProjection is defined above near the AI Provider Configuration DTOs.)

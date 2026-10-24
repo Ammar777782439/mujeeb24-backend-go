@@ -1,45 +1,63 @@
 package bootstrap
 
 import (
-	"fmt"
-
+	"context"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/handlers"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gemini"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 )
 
 func wireMerchantCatalogAuthoringAI(
 	dashboardServer *handlers.Server,
 	database *postgres.Adapter,
-	geminiHTTPClient *gemini.GeminiHTTPClient,
-	configProvider ports.AIConfigurationProvider,
+	authoring merchantcatalogai.MerchantCatalogAuthoringPort,
+	gatewaySettings ...*ports.NativeAIPlatformConfig,
 ) (*handlers.Server, error) {
-	if geminiHTTPClient == nil {
+	if authoring == nil {
 		return dashboardServer, nil
 	}
 
-	merchantCatalogAuthoring, err := gemini.NewGeminiMerchantCatalogAuthoringAdapter(geminiHTTPClient)
-	if err != nil {
-		return nil, fmt.Errorf("build Gemini merchant catalog authoring adapter: %w", err)
+	// The native adapter records each model round; unknown provider prices are not fabricated.
+	// A legacy/fake authoring implementation is not required to implement this.
+	if len(gatewaySettings) != 0 && gatewaySettings[0] != nil {
+		if reporter, ok := authoring.(interface {
+			SetUsageReporter(func(context.Context, string, string, ports.CustomerSalesUsageTelemetry) error)
+		}); ok {
+			recorder := services.NativeMerchantUsageRecorder{
+				Usage:         postgres.NewAIUsageRepository(database),
+				Subscriptions: postgres.NewSubscriptionRepository(database),
+				AIPricing:     postgres.NewAIProviderPricingRepository(database),
+				FXRateYER:     "",
+			}
+			reporter.SetUsageReporter(recorder.Record)
+		}
 	}
-	merchantCatalogAuthoring.SetConfigurationProvider(configProvider)
 
+	// Merchant API calls and individual model rounds share the same DB-backed
+	// opt-out policy. The transport provider never reads merchant policies.
+	businessAIGuard := &services.BusinessAIGuard{Policies: postgres.NewBusinessRepository(database)}
+	if guarded, ok := authoring.(interface {
+		SetAIExecutionGuard(ports.BusinessAIExecutionGuard)
+	}); ok {
+		guarded.SetAIExecutionGuard(businessAIGuard)
+	}
 	catalogRepo := postgres.NewCatalogRepository(database)
 	merchantCatalogAuthoringAgent := &merchantcatalogai.Agent{
 		Sessions:       postgres.NewMerchantCatalogAISessionStore(database),
 		Selector:       merchantcatalogai.DeterministicCatalogSelector{Repository: catalogRepo},
 		Business:       postgres.NewBusinessRepository(database),
 		EntityContract: merchantcatalogai.CanonicalEntityContractProvider{},
-		Authoring:      merchantCatalogAuthoring,
+		Authoring:      authoring,
+		AIGuard:        businessAIGuard,
 		CapabilitiesFactory: func(selectedCatalogID string) merchantcatalogai.MerchantCatalogDiscoveryPort {
 			return merchantcatalogai.NewReadOnlyCapabilityRegistry(catalogRepo, selectedCatalogID)
 		},
 	}
 
 	handler := handlers.NewMerchantCatalogAIV2Handler(merchantCatalogAuthoringAgent)
-	handler.Execution = &merchantcatalogai.ExecutionService{Catalogs: catalogRepo, Transactions: database, Store: postgres.MerchantAIExecutionStore{Adapter: database}, Sessions: merchantCatalogAuthoringAgent.Sessions}
+	handler.Execution = &merchantcatalogai.ExecutionService{Catalogs: catalogRepo, Transactions: database, Entitlements: postgres.NewSubscriptionRepository(database), Store: postgres.MerchantAIExecutionStore{Adapter: database}, Sessions: merchantCatalogAuthoringAgent.Sessions, AIGuard: businessAIGuard}
 	return dashboardServer.WithMerchantCatalogAIV2(
 		handlers.MerchantCatalogAIV2Deps{
 			Handler: handler,

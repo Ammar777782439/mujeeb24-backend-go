@@ -2,6 +2,7 @@ package merchantcatalogai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"strings"
@@ -15,6 +16,7 @@ type ReadOnlyCapabilityRegistry struct {
 	selectedCatalogID         string
 	evidenceReferences        map[string]struct{}
 	attributeSchemaReferences map[string]struct{}
+	issuedCursors             map[string]string // Latest trusted continuation per read scope.
 }
 
 func NewReadOnlyCapabilityRegistry(repository ports.CatalogRepository, selectedCatalogID string) *ReadOnlyCapabilityRegistry {
@@ -23,6 +25,7 @@ func NewReadOnlyCapabilityRegistry(repository ports.CatalogRepository, selectedC
 		selectedCatalogID:         strings.TrimSpace(selectedCatalogID),
 		evidenceReferences:        make(map[string]struct{}),
 		attributeSchemaReferences: make(map[string]struct{}),
+		issuedCursors:             make(map[string]string),
 	}
 	if repository == nil {
 		return r
@@ -52,6 +55,18 @@ func (r *ReadOnlyCapabilityRegistry) Execute(ctx context.Context, execCtx Mercha
 	if !ok {
 		return MerchantCatalogDiscoveryResult{}, errors.New("merchant catalog capability is not available: " + name)
 	}
+	var cursorScope string
+	if strings.HasPrefix(name, "merchant_catalog_list_") {
+		var cursor string
+		var err error
+		cursorScope, cursor, err = merchantReadCursorScope(r.selectedCatalogID, name, execCtx, rawParams)
+		if err != nil {
+			return MerchantCatalogDiscoveryResult{}, err
+		}
+		if cursor != "" && r.issuedCursors[cursorScope] != cursor {
+			return MerchantCatalogDiscoveryResult{}, errors.New("merchant catalog pagination cursor was not issued for this read scope")
+		}
+	}
 	started := time.Now()
 	log.Printf("[MerchantCatalogAI][DISCOVERY] START business=%s session=%s tool=%s params_bytes=%d",
 		execCtx.BusinessID, execCtx.ConversationID, name, len(rawParams))
@@ -63,6 +78,19 @@ func (r *ReadOnlyCapabilityRegistry) Execute(ctx context.Context, execCtx Mercha
 		return MerchantCatalogDiscoveryResult{}, err
 	}
 
+	if cursorScope != "" {
+		if result.HasMore && result.NextCursor == "" {
+			return MerchantCatalogDiscoveryResult{}, errors.New("merchant catalog continuation cursor is missing")
+		}
+		if !result.HasMore && result.NextCursor != "" {
+			return MerchantCatalogDiscoveryResult{}, errors.New("merchant catalog returned a cursor after the final page")
+		}
+		if result.HasMore {
+			r.issuedCursors[cursorScope] = result.NextCursor
+		} else {
+			delete(r.issuedCursors, cursorScope)
+		}
+	}
 	r.recordEvidence(result)
 
 	if name == "merchant_catalog_list_attribute_schemas" {
@@ -96,4 +124,28 @@ func (r *ReadOnlyCapabilityRegistry) recordEvidence(result MerchantCatalogDiscov
 func (r *ReadOnlyCapabilityRegistry) Get(name string) (MerchantCatalogDiscoveryTool, bool) {
 	capability, ok := r.capabilities[name]
 	return capability, ok
+}
+
+// merchantReadCursorScope binds an opaque, server-issued continuation to the
+// exact tool, catalog, merchant and read parameters for this agent turn.
+func merchantReadCursorScope(catalogID, tool string, execCtx MerchantCatalogDiscoveryExecutionContext, rawParams []byte) (string, string, error) {
+	params, err := jsonParams(rawParams)
+	if err != nil {
+		return "", "", err
+	}
+	var cursor string
+	if value, present := params["cursor"]; present && value != nil {
+		var ok bool
+		cursor, ok = value.(string)
+		if !ok {
+			return "", "", errors.New("merchant catalog pagination cursor must be a string or null")
+		}
+	}
+	delete(params, "cursor")
+	query, err := json.Marshal(params)
+	if err != nil {
+		return "", "", errors.New("invalid merchant catalog pagination scope")
+	}
+	scope := strings.Join([]string{tool, catalogID, execCtx.BusinessID, execCtx.PrincipalID, execCtx.ConversationID, string(query)}, "\x00")
+	return scope, cursor, nil
 }

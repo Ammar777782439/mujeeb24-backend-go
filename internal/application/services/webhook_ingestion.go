@@ -208,6 +208,7 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 				return commands.WebhookAcceptedResult{}, appErrors.NotImplemented()
 			}
 			materialized, materializeErr := s.Inbound.Materialize(ctx, ports.ProviderInboundDraft{
+				ActionPayload:          event.ActionPayload,
 				InboundEventID:         record.ID,
 				BusinessID:             connection.BusinessID,
 				ConnectionID:           connection.ID,
@@ -235,6 +236,10 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 			}
 			if materialized.Ignored {
 				result.Ignored = true
+				continue
+			}
+			// Postbacks were durably queued during materialization; never send them to Gemini or automation.
+			if event.ActionPayload != "" {
 				continue
 			}
 			// Per the SocialAPI docs (verified against docs.social-api.ai/guides/webhooks):
@@ -306,21 +311,9 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 					continue
 				}
 				log.Printf("[Webhook] AUTO_REPLY_TRIGGER business=%s conversation=%s text=%q", connection.BusinessID, materialized.ConversationID, truncate(event.Text, 60))
-				// Run AutoReply in a detached context with a generous timeout.
-				// The HTTP request context (ctx) gets cancelled when SocialAPI
-				// disconnects or when the HTTP server's WriteTimeout fires.
-				// If we pass ctx to AutoReply.Handle, the Gemini API call
-				// fails with "context canceled" mid-flight.
-				//
-				// Per contract ⑨ §11: every external operation (Gemini call)
-				// must have a Timeout — but that timeout should be generous
-				// enough for the full AutoReply flow (context build + Gemini
-				// call + validation + outbound message creation).
-				//
-				// Per ADR-014 (At-Least-Once + Idempotency): the webhook
-				// handler returns 202 Accepted immediately; AutoReply runs
-				// asynchronously. The outbox pattern ensures the reply is
-				// delivered even if the webhook handler has already returned.
+				// The worker is detached from the webhook HTTP request. The
+				// Native Gemini/DeepSeek transport enforces NATIVE_AI_HTTP_TIMEOUT per model call.
+				// The worker must not impose a second, shorter AI deadline.
 				autoReplyCmd := commands.AutoReplyCommand{
 					Meta:                   commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(connection.BusinessID)}},
 					ConversationID:         commands.ConversationID(materialized.ConversationID),
@@ -333,7 +326,7 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 					log.Printf("[Webhook] AUTO_REPLY_BLOCKED business=%s conversation=%s reason=worker_pool_unavailable", connection.BusinessID, materialized.ConversationID)
 					continue
 				}
-				task := autoReplyTask{cmd: autoReplyCmd, businessID: connection.BusinessID, conversationID: materialized.ConversationID, handler: s.AutoReply, executionTimeout: 120 * time.Second}
+				task := autoReplyTask{cmd: autoReplyCmd, businessID: connection.BusinessID, conversationID: materialized.ConversationID, handler: s.AutoReply}
 				if !s.AutoReplyWorkerPool.Submit(task) {
 					log.Printf("[Webhook] AUTO_REPLY_QUEUE_FULL business=%s conversation=%s", connection.BusinessID, materialized.ConversationID)
 				}

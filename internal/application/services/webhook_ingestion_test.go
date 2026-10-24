@@ -288,3 +288,30 @@ func TestWebhookWithoutWorkerPoolAcceptsInboundWithoutStartingAI(t *testing.T) {
 	case <-time.After(20 * time.Millisecond):
 	}
 }
+
+func TestSocialAPIWebhookServiceRoutesInstagramConfirmationPostbackWithoutAutoReply(t *testing.T) {
+	// Regression: SocialAPI buttons arrive as dm.postback, not dm.received.
+	// A genuine button press must be durably materialized for the sales action
+	// worker; it must not be sent through the customer AI reply pipeline.
+	body := []byte(`{"event":"dm.postback","data":{"id":"button-event-1","platform":"instagram","account_id":"account-1","conversation_id":"conversation-1","author":{"id":"customer-1"},"metadata":{"payload":"m24.sales:request-1:accept","title":"نعم، أؤكد"}}}`)
+	inbound := &providerInboundStore{result: ports.ProviderInboundResult{
+		BusinessID: "business-1", CustomerID: "customer-1",
+		ConversationID: "conversation-1", CommunicationMessageID: "message-1",
+	}}
+	autoReply := newAutoReplyHandler()
+	service := resolvedSocialWebhookService(inbound)
+	service.AutoReply = autoReply
+	result, err := service.Handle(context.Background(), signedSocialCommand(t, body))
+	if err != nil || !result.Accepted || !result.Resolved || result.Ignored {
+		t.Fatalf("Instagram postback not accepted: %+v %v", result, err)
+	}
+	if inbound.draft.ActionPayload != "m24.sales:request-1:accept" ||
+		inbound.draft.EventType != "interaction_received" ||
+		inbound.draft.ProviderMessageID == "" ||
+		inbound.draft.ProviderConversationID != "conversation-1" {
+		t.Fatalf("postback lost button payload/identity before sales queue: %+v", inbound.draft)
+	}
+	if autoReply.getCalls() != 0 {
+		t.Fatalf("button press must not trigger AI: calls=%d", autoReply.getCalls())
+	}
+}

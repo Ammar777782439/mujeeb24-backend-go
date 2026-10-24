@@ -56,7 +56,7 @@ func TestCustomerSalesSchemaEvidencePreservesDefinitionsAndRules(t *testing.T) {
 	if def.SchemaID != schema.ID || def.AttributeKey != "custom_metric" || def.DataType != "number" || !def.IsRequired {
 		t.Fatalf("definition mapping mismatch: %+v", def)
 	}
-	if def.ValidationRules["min"] != float64(1) || def.ValidationRules["max"] != float64(100) {
+	if def.ValidationRules["min"] != json.Number("1") || def.ValidationRules["max"] != json.Number("100") {
 		t.Fatalf("validation rules not preserved: %+v", def.ValidationRules)
 	}
 }

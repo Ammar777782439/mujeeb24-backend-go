@@ -9,7 +9,8 @@
 	handle @socialapi_oauth_callback {
 		reverse_proxy host.docker.internal:3001
 	}
-
+	# Any other route is rejected. This public tunnel exposes
+	# only the two explicitly allowlisted SocialAPI callbacks.
 	handle {
 		respond "not found" 404
 	}

@@ -42,6 +42,7 @@ type PaymentRecord struct {
 	Reference      string
 	PaidAt         time.Time
 	RecordedBy     string
+	IdempotencyKey string
 	CreatedAt      time.Time
 }
 
@@ -54,6 +55,7 @@ type PaymentCreate struct {
 	Reference      string
 	PaidAt         time.Time
 	RecordedBy     string
+	IdempotencyKey string
 	Now            time.Time
 }
 

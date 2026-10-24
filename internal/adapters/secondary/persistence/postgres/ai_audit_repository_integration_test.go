@@ -337,7 +337,10 @@ func TestAutoReplyVerticalSliceAgainstPostgres(t *testing.T) {
 		t.Fatalf("unexpected auto reply result: %#v", result)
 	}
 	stored, getErr := decisionRepo.Get(ctx, businessID, string(result.Decision.ID))
-	if getErr != nil || stored.RequestedCapability == nil || *stored.RequestedCapability != "respond_without_action" || stored.EffectiveCapability == nil || *stored.EffectiveCapability != "respond_without_action" || stored.IntentBase != "" {
+	if getErr != nil || stored.RequestedCapability == nil || *stored.RequestedCapability != "respond_without_action" ||
+		stored.EffectiveCapability == nil || *stored.EffectiveCapability != "respond_without_action" ||
+		stored.IntentBase != "" || stored.Lifecycle != "executed" || stored.ExecutedAt == nil ||
+		stored.ExecutionReference == nil || *stored.ExecutionReference != string(result.OutboundMessageID) {
 		t.Fatalf("capability audit round trip: %+v err=%v", stored, getErr)
 	}
 	page, listErr := decisionRepo.List(ctx, ports.AIDecisionFilter{BusinessID: businessID, Limit: 20})
@@ -345,7 +348,7 @@ func TestAutoReplyVerticalSliceAgainstPostgres(t *testing.T) {
 		t.Fatalf("capability audit list round trip: %+v err=%v", page, listErr)
 	}
 	var decisionCount, outboundCount, outboxCount int
-	if err := adapter.Pool().QueryRow(ctx, `SELECT count(*) FROM ai_decisions WHERE business_id = $1::uuid AND source_message_reference = 'inbound-success' AND requested_action = 'answer' AND lifecycle = 'proposed'`, businessID).Scan(&decisionCount); err != nil {
+	if err := adapter.Pool().QueryRow(ctx, `SELECT count(*) FROM ai_decisions WHERE business_id = $1::uuid AND source_message_reference = 'inbound-success' AND requested_action = 'answer' AND lifecycle = 'executed' AND executed_at IS NOT NULL AND execution_reference = $2`, businessID, string(result.OutboundMessageID)).Scan(&decisionCount); err != nil {
 		t.Fatal(err)
 	}
 	if err := adapter.Pool().QueryRow(ctx, `SELECT count(*) FROM outbound_messages WHERE business_id = $1::uuid AND id = $2::uuid AND status = 'pending' AND origin = 'ai' AND transport = 'provider'`, businessID, string(result.OutboundMessageID)).Scan(&outboundCount); err != nil {
@@ -456,7 +459,7 @@ func (activeSubscriptionStub) ApplyCostBudgetOverride(context.Context, string, i
 	return ports.SubscriptionRecord{}, errors.New("not used")
 }
 
-func (activeSubscriptionStub) CheckEntitlements(context.Context, string, int, int) error {
+func (activeSubscriptionStub) CheckEntitlements(context.Context, string, int, int, int) error {
 	return nil
 }
 

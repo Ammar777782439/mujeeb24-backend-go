@@ -2,7 +2,9 @@ package services
 
 import (
 	"context"
+	"errors"
 	"strings"
+	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
@@ -37,6 +39,7 @@ type AICostProtectionService struct {
 	Subscriptions      ports.SubscriptionRepository
 	AIUsage            ports.AIUsageRepository
 	PlatformOperations ports.PlatformOperationsPort
+	BusinessAIGuard    ports.BusinessAIExecutionGuard
 }
 
 // IsAIExecutionAllowed returns true if all of:
@@ -73,6 +76,17 @@ func (s *AICostProtectionService) IsAIExecutionAllowed(ctx context.Context, busi
 		return false, "ai_runtime_disabled"
 	}
 
+	// Per-merchant switch. The platform master switch above remains first.
+	// Never schedule model calls for a business that disabled AI.
+	if s.BusinessAIGuard != nil {
+		if err := s.BusinessAIGuard.Check(ctx, businessID); err != nil {
+			if errors.Is(err, ports.ErrBusinessAIDisabled) {
+				return false, "business_ai_disabled"
+			}
+			return false, "business_ai_policy_unavailable"
+		}
+	}
+
 	if s.Subscriptions == nil || s.AIUsage == nil {
 		return false, "ai_cost_protection_unavailable"
 	}
@@ -91,6 +105,10 @@ func (s *AICostProtectionService) IsAIExecutionAllowed(ctx context.Context, busi
 		return false, "active_subscription_required"
 	}
 	sub := page.Items[0]
+	now := time.Now().UTC()
+	if now.Before(sub.PeriodStart) || !now.Before(sub.PeriodEnd) {
+		return false, "active_subscription_period_invalid"
+	}
 	agg, err := s.AIUsage.GetSubscriptionAIUsage(ctx, sub.ID)
 	if err != nil {
 		return false, "ai_usage_check_unavailable"

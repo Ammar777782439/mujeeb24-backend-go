@@ -44,18 +44,6 @@ func TestLoadFromEnvRejectsInvalidDuration(t *testing.T) {
 	}
 }
 
-func TestLoadFromEnvDisablesLLMByDefault(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
-	t.Setenv("LLM_ENABLED", "false")
-	cfg, err := LoadFromEnv()
-	if err != nil {
-		t.Fatalf("LoadFromEnv: %v", err)
-	}
-	if cfg.LLMEnabled || cfg.LLMModel != "" {
-		t.Fatalf("unexpected default LLM config: %#v", cfg)
-	}
-}
-
 func TestLoadFromEnvDisablesAutoReplyByDefaultAndReadsOverride(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
 	cfg, err := LoadFromEnv()
@@ -68,10 +56,8 @@ func TestLoadFromEnvDisablesAutoReplyByDefaultAndReadsOverride(t *testing.T) {
 	t.Setenv("AUTOREPLY_ENABLED", "true")
 	t.Setenv("SOCIALAPI_WEBHOOK_SECRET", "test-webhook-secret")
 	t.Setenv("SOCIALAPI_API_KEY", "test-socialapi-key")
-	t.Setenv("LLM_ENABLED", "true")
-	t.Setenv("LLM_BASE_URL", "https://llm.example/v1")
-	t.Setenv("LLM_API_KEY", "test-only-key")
-	t.Setenv("LLM_MODEL", "test-model")
+	t.Setenv("NATIVE_AI_ENABLED", "true")
+	t.Setenv("DEEPSEEK_API_KEY", "test-deepseek-key")
 	cfg, err = LoadFromEnv()
 	if err != nil || !cfg.AutoReplyEnabled {
 		t.Fatalf("AutoReply override: cfg=%#v err=%v", cfg, err)
@@ -86,33 +72,27 @@ func TestLoadFromEnvRejectsIncompleteExternalFeatureEnablement(t *testing.T) {
 	}
 }
 
-func TestLoadFromEnvRequiresCompleteLLMConfigurationWhenEnabled(t *testing.T) {
+func TestLoadFromEnvAcceptsDeepSeekWithoutGemini(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
-	t.Setenv("LLM_ENABLED", "true")
-	t.Setenv("LLM_BASE_URL", "")
-	t.Setenv("LLM_API_KEY", "test-only-key")
-	t.Setenv("LLM_MODEL", "test-model")
-	if _, err := LoadFromEnv(); err == nil {
-		t.Fatal("LoadFromEnv accepted enabled LLM without base URL")
+	t.Setenv("AUTOREPLY_ENABLED", "true")
+	t.Setenv("SOCIALAPI_WEBHOOK_SECRET", "test-webhook-secret")
+	t.Setenv("SOCIALAPI_API_KEY", "test-socialapi-key")
+	t.Setenv("NATIVE_AI_ENABLED", "true")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("DEEPSEEK_API_KEY", "test-deepseek-key")
+	cfg, err := LoadFromEnv()
+	if err != nil || !cfg.NativeAIEnabled || cfg.DeepSeekAPIKey == "" {
+		t.Fatalf("DeepSeek-only runtime must start: cfg=%+v err=%v", cfg, err)
 	}
 }
 
-func TestLoadFromEnvReadsLLMRuntimeConfiguration(t *testing.T) {
+func TestLoadFromEnvRejectsMissingSelectedProviderKey(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
-	t.Setenv("LLM_ENABLED", "true")
-	t.Setenv("LLM_BASE_URL", "https://llm.example/v1/")
-	t.Setenv("LLM_API_KEY", "test-only-key")
-	t.Setenv("LLM_MODEL", "test-model")
-	t.Setenv("LLM_HTTP_TIMEOUT", "7s")
-	t.Setenv("LLM_MAX_OUTPUT_TOKENS", "321")
-	t.Setenv("LLM_MAX_INPUT_CHARACTERS", "9000")
-	t.Setenv("LLM_OUTPUT_TOKENS_FIELD", "max_tokens")
-	cfg, err := LoadFromEnv()
-	if err != nil {
-		t.Fatalf("LoadFromEnv: %v", err)
-	}
-	if !cfg.LLMEnabled || cfg.LLMBaseURL != "https://llm.example/v1" || cfg.LLMModel != "test-model" || cfg.LLMHTTPTimeout.String() != "7s" || cfg.LLMMaxOutputTokens != 321 || cfg.LLMMaxInputCharacters != 9000 || cfg.LLMOutputTokensField != "max_tokens" {
-		t.Fatalf("unexpected LLM config: %#v", cfg)
+	t.Setenv("NATIVE_AI_ENABLED", "true")
+	t.Setenv("GEMINI_API_KEY", "legacy-key-must-not-be-used")
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	if _, err := LoadFromEnv(); err == nil {
+		t.Fatal("native inference must reject a missing DeepSeek credential")
 	}
 }
 

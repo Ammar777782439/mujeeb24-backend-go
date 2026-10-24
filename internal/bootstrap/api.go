@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -16,7 +15,6 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/handlers"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/middleware"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gemini"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/auth/ed25519jwt"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
 	realtimePostgres "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/realtime/postgres"
@@ -142,7 +140,11 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	}
 	eventStore := postgres.NewInboundEventStore(database)
 	outboxStore := postgres.NewPostgresOutboxStore(database)
+	salesAdminWorkflow := buildSalesWorkflowService(database, outboxStore)
+	dependencies.SalesAdmin = services.SalesWorkflowAdminService{Repository: postgres.NewSalesWorkflowRepository(database), Workflow: salesAdminWorkflow}
 	var autoReply commands.AutoReplyHandler
+	// PostgreSQL is the authority for each merchant's AI opt-out.
+	businessAIGuard := &services.BusinessAIGuard{Policies: postgres.NewBusinessRepository(database)}
 	// Per Item 1 + 2: hoist platformOperations to the top of the
 	// function scope so it's available to ALL branches that need
 	// the shared kill switch state (AutoReply webhook branch +
@@ -157,11 +159,11 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	// is stateless except for its runtime flag, so creating it early
 	// is safe.
 	platformOperations := services.NewInMemoryPlatformOperationsRepository(
-		external.GeminiHTTPClient != nil && external.LLMConfigError == nil,
+		external.NativeCustomerDecision != nil && external.LLMConfigError == nil,
 		external.SocialAPI != nil,
 	)
-	if external.GeminiHTTPClient != nil && external.LLMConfigError == nil {
-		platformOperations.RegisterProbe("google_gemini", gemini.NewHealthCheckProbe(external.GeminiHTTPClient))
+	if external.NativeAISettings != nil {
+		platformOperations.SetAIModel(external.NativeAISettings.Model)
 	}
 	if external.SocialAPIHealthProbe != nil {
 		platformOperations.RegisterProbe("socialapi", external.SocialAPIHealthProbe)
@@ -169,81 +171,15 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 
 	// Customer Sales deliberately has no catalog tool registry. The catalog has
 	// one authoritative AI path: bounded manifest on the initial turn, then
-	// complete catalog paging/batching when Gemini returns needs_more_data.
+	// complete catalog paging/batching only when the model requests it.
 	// This prevents competing catalog-read paths and keeps evidence deterministic.
-	// Per §1-2: create the AIConfigurationCache + AIProviderConfigRepository
-	// unconditionally — the Platform Admin can manage credentials and models
-	// even when AutoReply is disabled. The cache seeds from env on first
-	// start, then switches to DB-backed dynamic config after the admin
-	// stores a configuration via the Platform Admin API.
-	//
-	// Per P1-9: AI_CONFIG_ENCRYPTION_KEY is MANDATORY when AI Provider
-	// Configuration is in use (i.e., when AIConfigRepo will be wired into
-	// PlatformDeps below). Without it, the repository refuses to encrypt
-	// or decrypt API keys — see ErrEncryptionKeyNotConfigured. We fail
-	// fast at startup rather than silently falling back to base64.
-	//
-	// The check is enforced here (not in the repository constructor) so
-	// the error message is actionable: the operator knows exactly which
-	// env var to set. The repository remains a pure data layer.
-	encryptionKey := []byte(os.Getenv("AI_CONFIG_ENCRYPTION_KEY"))
-	if len(encryptionKey) == 0 {
-		return nil, errors.New("AI_CONFIG_ENCRYPTION_KEY is not set — encrypted credential storage is mandatory. Set AI_CONFIG_ENCRYPTION_KEY to a 32-byte (or longer) random value before starting the API. Example: openssl rand -base64 32 | tr -d '\\n'")
-	}
-	// Per Item 11: do NOT pad short keys. The previous implementation
-	// padded keys shorter than 32 bytes with zeros — that's a security
-	// anti-pattern (reduces effective key entropy). The key MUST be
-	// 32 bytes (AES-256) or longer. If the operator provides a short
-	// key, fail fast with a clear message.
-	if len(encryptionKey) < 32 {
-		return nil, fmt.Errorf("AI_CONFIG_ENCRYPTION_KEY must be at least 32 bytes (AES-256), got %d bytes. Generate a proper key: openssl rand -base64 32 | tr -d '\\n'", len(encryptionKey))
-	}
-	// If the key is longer than 32 bytes, truncate to 32 (AES-256 block size).
-	// This is safe — the key is still full-entropy.
-	if len(encryptionKey) > 32 {
-		encryptionKey = encryptionKey[:32]
-	}
-	aiConfigRepo := postgres.NewAIProviderConfigRepository(database, encryptionKey)
-	aiConfigCache := services.NewAIConfigurationCache(aiConfigRepo, aiConfigRepo)
-	aiConfigCache.LoadFromEnv(
-		os.Getenv("GEMINI_API_KEY"),
-		func() string {
-			m := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
-			if m == "" {
-				m = "gemini-3.8-flash"
-			}
-			return m
-		}(),
-		"https://generativelanguage.googleapis.com",
-		4096,  // LLMMaxOutputTokens default
-		48000, // LLMMaxInputCharacters default; bounded app guard below Gemini 3.8 context capacity
-		"",
-	)
 
-	if external.AutoReplyEnabled {
-		if external.GeminiHTTPClient == nil {
-			return nil, errors.New("AutoReply requires the Gemini customer-sales AI to be configured")
-		}
-		// Per contract ④ §8, adapt the Gemini provider client to the
-		// CustomerSalesDecisionPort used by AutoReply and conversation summaries.
-		var customerSalesDecision ports.CustomerSalesDecisionPort
-		var geminiClient *gemini.GeminiHTTPClient
-		var runRepo ports.AIRunRepository
-		if external.GeminiHTTPClient != nil {
-			geminiClient = external.GeminiHTTPClient
-			customerSalesAdapter, err := gemini.NewGeminiCustomerSalesAdapter(geminiClient)
-			if err != nil {
-				return nil, fmt.Errorf("build customer sales AI adapter: %w", err)
-			}
-			// Per §1: wire the dynamic config provider so every customer-sales Decide
-			// call reads the ACTIVE config from cache/DB.
-			customerSalesAdapter.SetConfigurationProvider(aiConfigCache)
-			runRepo = postgres.NewAIRunTraceRepository(database)
-			customerSalesDecision = customerSalesAdapter
-		} else {
-			// OpenAI-compatible providers do not implement the Customer Sales decision port yet.
-			// There is no generic AI fallback path; AutoReply requires the Gemini customer-sales adapter.
-			return nil, errors.New("AutoReply requires a gemini.Client (contract-aligned); OpenAI-compatible provider not yet supported")
+	if external.AutoReplyEnabled || external.CustomerSalesEnabled {
+		// One customer-sales decision interface owns B2C and summary requests.
+		// Native provider selection is isolated from Customer Sales business decisions.
+		customerSalesDecision := external.NativeCustomerDecision
+		if customerSalesDecision == nil {
+			return nil, errors.New("AutoReply requires a configured native customer-sales decision provider")
 		}
 		referenceRepository := postgres.NewConversationReferenceRepository(database)
 		service := services.NewAutoReplyService(
@@ -254,18 +190,15 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			outboxStore,
 			database,
 		)
-		// Per contract ⑧ §5, wire the AI Run trace repository
-		// (reuse the one created above for the GeminiCustomerSalesAdapter).
-		if runRepo != nil {
-			service.RunRepository = runRepo
-		} else {
-			service.RunRepository = postgres.NewAIRunTraceRepository(database)
-		}
+		service.AIGuard = businessAIGuard
+		// Both AI routes use the same canonical run trace lifecycle.
+		service.RunRepository = postgres.NewAIRunTraceRepository(database)
 		// Per AIUsageTokenTelemetry.md §6: wire the telemetry pipeline so
-		// every Gemini call's tokens + cost are recorded to ai_usage_records
+		// every model request's tokens + cost are recorded to ai_usage_records
 		// and flow through to the Platform Admin AI Usage view.
 		service.AIUsage = postgres.NewAIUsageRepository(database)
 		service.AIPricing = postgres.NewAIProviderPricingRepository(database)
+
 		service.Subscriptions = postgres.NewSubscriptionRepository(database)
 		// Per contract ⑤ §7, build the Catalog Entity Contract payload
 		// once and reuse for every call.
@@ -288,17 +221,17 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		contextBuilder.Knowledge = postgres.NewKnowledgeDocumentRepository(database)
 		contextBuilder.Policies = postgres.NewBusinessPolicyRepository(database)
 		service.CustomerSalesContextBuilder = contextBuilder
-		// Per ADR-039 + P1-5: summaries use the SAME GeminiCustomerSalesAdapter
-		// instance as AutoReply. No generic AI fallback is used.
-		// The GeminiCustomerSalesAdapter reads the active AI configuration through
-		// the AIConfigurationCache and provides usage telemetry.
+		// Summaries use the same configured provider router as AutoReply,
+		// but a generation-only port, never a customer-sales tool decision.
+		// Fallback belongs to native transport, not this application.
 		service.SummaryService = services.NewConversationSummaryService(
 			postgres.NewConversationStateRepository(database),
 			postgres.NewMessageRepository(database),
 			customerSalesDecision,
 		)
 		service.SummaryService.AIUsage = postgres.NewAIUsageRepository(database)
-		service.SummaryService.AIPricing = postgres.NewAIProviderPricingRepository(database)
+		service.SummaryService.AIPricing = service.AIPricing
+		service.SummaryService.GatewayFXRateYER = service.GatewayFXRateYER
 		service.SummaryService.Subscriptions = postgres.NewSubscriptionRepository(database)
 		service.SummaryService.NewID = uuid.NewString
 		// Per Item 2 (Kill Switch applies to Summary): wire the
@@ -308,6 +241,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// three enforcement points (webhook AutoReply + Merchant
 		// AI + Summary).
 		service.SummaryService.CostProtection = &services.AICostProtectionService{
+			BusinessAIGuard:    businessAIGuard,
 			Subscriptions:      postgres.NewSubscriptionRepository(database),
 			AIUsage:            postgres.NewAIUsageRepository(database),
 			PlatformOperations: platformOperations,
@@ -315,7 +249,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// Per contract ⑥ §2, wire the validation pipeline with the
 		// concrete Postgres validators. Per contract ⑥ §6-7 the
 		// ReferenceValidator checks that every selected ID (item/variant/
-		// offer) was actually sent to Gemini as evidence AND exists as
+		// offer) was actually sent to the model as evidence AND exists as
 		// a real row in catalog_items/variants/offers. Per contract ⑥ §8-9
 		// the TenantValidator checks that every selected reference
 		// belongs to the current authenticated business (cross-tenant
@@ -323,7 +257,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		//
 		// Per contract ⑥ §12-13, the PolicyEvaluator is the
 		// Postgres-backed evaluator that reads business_policies per
-		// migration 000002 and decides requires_approval — NOT Gemini.
+		// migration 000002 and decides requires_approval — NOT the model.
 		// Per contract ④ §5, requires_approval is decided by Mujeeb only.
 		//
 		// The AuthorizationService is left nil; per the pipeline logic,
@@ -336,6 +270,13 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			postgres.NewPostgresCustomerSalesPolicyEvaluator(postgres.NewBusinessRepository(database)),
 			nil, // AuthorizationService: nil means PolicyDecision is final
 		)
+		sales := buildSalesWorkflowService(database, outboxStore)
+		if external.CustomerSalesEnabled {
+			service.Sales = &sales
+			contextBuilder.Sales = sales.Repository
+		}
+		service.DisableInformationalReplies = !external.AutoReplyEnabled
+		service.CustomerSalesContextBuilder = contextBuilder
 		service.StateRepository = postgres.NewConversationStateRepository(database)
 		service.MessageRepository = postgres.NewMessageRepository(database)
 		service.Conversations = postgres.NewConversationRepository(database)
@@ -347,52 +288,35 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// complete coverage, or selects references outside current evidence:
 		// page catalog → exact-token batches → evaluate → aggregate → final.
 		//
-		// Per contract ② §2, TokenBudget is token-based (no hardcoded
-		// item count). 8000 is a sensible default per runtime config.
-		if geminiClient := external.GeminiHTTPClient; geminiClient != nil {
-			batchTokenCounter, err := gemini.NewTokenCounter(gemini.TokenCounterConfig{
-				BaseURL: geminiClient.BaseURL(),
-				APIKey:  geminiClient.APIKey(),
-				Model:   geminiClient.Model(),
-			})
-			if err != nil {
-				return nil, fmt.Errorf("build Gemini token counter: %w", err)
-			}
-			batchClient, err := gemini.NewBatchClient(gemini.BatchClientConfig{
-				BaseURL: geminiClient.BaseURL(),
-				APIKey:  geminiClient.APIKey(),
-				Model:   geminiClient.Model(),
-			})
-			if err != nil {
-				return nil, fmt.Errorf("build Gemini catalog batch client: %w", err)
-			}
-			service.CatalogBatch = &services.CatalogBatchController{
-				CatalogAI:     postgres.NewCatalogAIReadRepository(database),
-				TokenCounter:  batchTokenCounter,
-				Gemini:        batchClient,
-				RunRepo:       postgres.NewAIRunTraceRepository(database),
-				TokenBudget:   8000,
-				Now:           func() time.Time { return time.Now().UTC() },
-				NewID:         uuid.NewString,
-				AIUsage:       postgres.NewAIUsageRepository(database),
-				AIPricing:     postgres.NewAIProviderPricingRepository(database),
-				Subscriptions: postgres.NewSubscriptionRepository(database),
-			}
-			// Per §1: wire the dynamic config provider into BatchClient.
-			batchClient.SetConfigurationProvider(aiConfigCache)
-			// Per P1-4: wire the SAME dynamic config provider into
-			// TokenCounter so the countTokens call uses the same
-			// active model/apiKey/baseURL as the actual generateContent
-			// call. Without this, a model switch via the Platform
-			// Admin API would update BatchClient but leave
-			// TokenCounter pinned to the old static model — causing
-			// token counts to be computed against the wrong tokenizer
-			// (different models have different tokenizers).
-			if batchTokenCounter != nil {
-				batchTokenCounter.SetConfigurationProvider(aiConfigCache)
-			}
+		// Per contract ② §2, batching retains full commercial evidence.
+		// Native transport uses a conservative minimum context to budget catalog batches.
+		if external.NativeCatalogClient == nil {
+			return nil, errors.New("AutoReply requires a configured native catalog model")
+		}
+		catalogBudget, err := external.NativeCatalogClient.BatchTokenBudget()
+		if err != nil {
+			return nil, fmt.Errorf("configure native catalog token budget: %w", err)
+		}
+		// Guard individual catalog model calls, including each batch and final.
+		if guarded, ok := any(external.NativeCatalogClient).(interface {
+			SetAIExecutionGuard(ports.BusinessAIExecutionGuard)
+		}); ok {
+			guarded.SetAIExecutionGuard(businessAIGuard)
+		}
+		service.CatalogBatch = &services.CatalogBatchController{
+			CatalogAI:   postgres.NewCatalogAIReadRepository(database),
+			Evaluator:   external.NativeCatalogClient,
+			RunRepo:     postgres.NewAIRunTraceRepository(database),
+			TokenBudget: catalogBudget,
+			Now:         func() time.Time { return time.Now().UTC() },
+			NewID:       uuid.NewString,
+			AIUsage:     postgres.NewAIUsageRepository(database),
+			AIPricing:   service.AIPricing,
+
+			Subscriptions: postgres.NewSubscriptionRepository(database),
 		}
 
+		service.CatalogBatch.GatewayFXRateYER = service.GatewayFXRateYER
 		autoReply = service
 	}
 	inboundAutomation := services.InboundAutomationService{
@@ -410,7 +334,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	// PlatformDeps wire-up). The previous local declaration here has
 	// been removed. The flags below remain here for the
 	// aiConfigured/channelConfigured dashboard view.
-	aiConfigured := external.GeminiHTTPClient != nil && external.LLMConfigError == nil
+	aiConfigured := external.NativeCustomerDecision != nil && external.LLMConfigError == nil
 	channelConfigured := external.SocialAPI != nil
 	_ = aiConfigured
 	_ = channelConfigured
@@ -458,17 +382,18 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// registry. This connects the platformAIDisable/platformAIEnable
 		// kill switch (Contract §81) to the actual AutoReply execution
 		// path. It also enforces the merchant AI Reply entitlement
-		// (Contract §33) before Gemini is called.
+		// (Contract §33) before the gateway model is called.
 		webhookService.AICostProtectionChecker = &services.AICostProtectionService{
+			BusinessAIGuard:    businessAIGuard,
 			Subscriptions:      postgres.NewSubscriptionRepository(database),
 			AIUsage:            postgres.NewAIUsageRepository(database),
 			PlatformOperations: platformOperations,
 		}
 		// Per P1-10: wire the bounded AutoReplyWorkerPool so a viral
 		// DM burst doesn't spawn unbounded goroutines (each consuming
-		// Gemini quota + DB conns). 4 concurrent workers + 64-deep
+		// gateway quota + DB conns). 4 concurrent workers + 64-deep
 		// queue absorbs a burst; larger values can be tuned via env
-		// when the Gemini rate limit allows.
+		// when gateway capacity allows.
 		webhookService.AutoReplyWorkerPool = services.NewAutoReplyWorkerPool(4, 64)
 		autoReplyPool = webhookService.AutoReplyWorkerPool
 		dependencies.IngestSocialAPIWebhook = webhookService
@@ -483,24 +408,24 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	}
 	dashboardServer := handlers.NewServer(dependencies)
 	dashboardServer = dashboardServer.WithPlatformDeps(handlers.PlatformDeps{
-		Plans:               postgres.NewPlanRepository(database),
-		PlatformBusiness:    postgres.NewPlatformBusinessRepository(database),
-		PlatformAudit:       postgres.NewPlatformAuditRepository(database),
-		Subscriptions:       postgres.NewSubscriptionRepository(database),
-		Payments:            postgres.NewPaymentRepository(database),
-		Support:             postgres.NewSupportRepository(database),
-		AIUsage:             postgres.NewAIUsageRepository(database),
-		AIProviderPricing:   postgres.NewAIProviderPricingRepository(database),
-		Operations:          platformOperations,
-		ChannelReader:       postgres.NewPlatformChannelReadRepository(database),
-		AIConfigRepo:        aiConfigRepo,
-		AIConfigCache:       aiConfigCache,
-		ModelDiscovery:      gemini.NewModelsClient(),
+		Plans:            postgres.NewPlanRepository(database),
+		PlatformBusiness: postgres.NewPlatformBusinessRepository(database),
+		PlatformAudit:    postgres.NewPlatformAuditRepository(database),
+		Subscriptions:    postgres.NewSubscriptionRepository(database),
+		Payments:         postgres.NewPaymentRepository(database),
+		Addons:           postgres.NewSubscriptionAddonRepository(database),
+		Support:          postgres.NewSupportRepository(database),
+		AIUsage:          postgres.NewAIUsageRepository(database),
+		Transactions:     database,
+		Operations:       platformOperations,
+		ChannelReader:    postgres.NewPlatformChannelReadRepository(database),
+
+		NativeAISettings:    external.NativeAISettings,
 		AssignBusinessOwner: assignBusinessOwner,
 	})
 
 	var merchantCatalogErr error
-	dashboardServer, merchantCatalogErr = wireMerchantCatalogAuthoringAI(dashboardServer, database, external.GeminiHTTPClient, aiConfigCache)
+	dashboardServer, merchantCatalogErr = wireMerchantCatalogAuthoringAI(dashboardServer, database, external.NativeMerchantAuthoring, external.NativeAISettings)
 	if merchantCatalogErr != nil {
 		return nil, merchantCatalogErr
 	}
@@ -569,8 +494,12 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			}
 			writer.Header().Set("Content-Type", "application/json")
 			if err != nil {
+				// The callback is a public browser endpoint. Never expose a raw
+				// database/provider error here: it can include implementation
+				// details such as SQL constraints and is not actionable for a
+				// merchant. The full cause remains in the server log.
 				writer.WriteHeader(http.StatusBadRequest)
-				_, _ = fmt.Fprintf(writer, `{"status":"failed","error":%q}`, err.Error())
+				_, _ = writer.Write([]byte(`{"status":"failed","error":{"code":"channel_connection_failed","message":"Unable to complete the channel connection. Return to the dashboard and try again."}}`))
 				return
 			}
 			_, _ = fmt.Fprintf(writer, `{"status":%q,"provisioning_id":%q,"provider":%q,"channel":%q}`, session.Status, session.ID, session.ProviderRef, session.Channel)
@@ -670,7 +599,7 @@ func (r *APIRuntime) Shutdown(ctx context.Context) error {
 		// the HTTP server + database. The pool's Stop() closes the
 		// tasks channel + waits for all workers to finish their
 		// in-flight + queued tasks. Without this, in-flight AutoReply
-		// work (which calls Gemini + writes to Postgres) would be
+		// work (which invokes Native AI + writes to Postgres) would be
 		// dropped silently when the database closes.
 		if r.AutoReplyWorkerPool != nil {
 			r.AutoReplyWorkerPool.Stop()

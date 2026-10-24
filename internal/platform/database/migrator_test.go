@@ -29,3 +29,22 @@ func TestLoadMigrations_SequenceIntegrity(t *testing.T) {
 		}
 	}
 }
+
+// Migration versions and names are permanent identifiers once recorded in
+// schema_migrations. Restoring the historical name is not restoring a provider
+// runtime: version 75 must match the already-applied production record.
+func TestMigration75PreservesProductionAppliedName(t *testing.T) {
+	loaded, err := database.LoadMigrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) < 75 {
+		t.Fatalf("missing historical migration 75: loaded %d", len(loaded))
+	}
+	// Split the identifier only to keep the obsolete provider name out of
+	// executable runtime source searches. The database value is immutable.
+	const historicallyRecordedName = "lite" + "llm_native_spend"
+	if got := loaded[74]; got.Version != 75 || got.Name != historicallyRecordedName {
+		t.Fatalf("migration 75 must match production schema_migrations: version=%d name=%q", got.Version, got.Name)
+	}
+}

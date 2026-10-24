@@ -13,11 +13,13 @@ import (
 )
 
 type WorkerRuntime struct {
+	SalesActions *services.SalesActionProcessor
 	Database     *postgres.Adapter
 	EventStore   ports.EventStore
 	Outbox       ports.OutboxStore
 	SocialAPI    ports.ChannelProvider
 	Processor    *services.OutboxProcessor
+	Expiry       ports.SubscriptionExpiryRepository
 	PollInterval time.Duration
 	CycleTimeout time.Duration
 	BatchSize    int
@@ -31,7 +33,7 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 	}
 	external := BuildExternalAdapters(cfg)
 	outbox := postgres.NewPostgresOutboxStore(database)
-	runtime := &WorkerRuntime{Database: database, EventStore: postgres.NewInboundEventStore(database), Outbox: outbox, SocialAPI: external.SocialAPI, PollInterval: cfg.WorkerPollInterval, CycleTimeout: cfg.ShutdownTimeout, BatchSize: cfg.WorkerBatchSize, WorkerOwner: cfg.WorkerOwner}
+	runtime := &WorkerRuntime{Database: database, EventStore: postgres.NewInboundEventStore(database), Outbox: outbox, SocialAPI: external.SocialAPI, Expiry: postgres.NewSubscriptionRepository(database), PollInterval: cfg.WorkerPollInterval, CycleTimeout: cfg.ShutdownTimeout, BatchSize: cfg.WorkerBatchSize, WorkerOwner: cfg.WorkerOwner}
 	if external.SocialAPI != nil {
 		runtime.Processor = &services.OutboxProcessor{
 			Outbox: outbox,
@@ -44,6 +46,10 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 			Messages: postgres.NewOutboundMessageRepository(database),
 			Owner:    runtime.WorkerOwner,
 		}
+	}
+	if cfg.CustomerSalesEnabled {
+		sales := buildSalesWorkflowService(database, outbox)
+		runtime.SalesActions = &services.SalesActionProcessor{Jobs: postgres.NewSalesActionJobs(database), Sales: sales}
 	}
 	return runtime, nil
 }
@@ -89,6 +95,20 @@ func (r *WorkerRuntime) RunOnce(ctx context.Context) (int, error) {
 		limit = 20
 	}
 	processed := 0
+	if r.Expiry != nil {
+		count, err := r.Expiry.ExpireDue(ctx, time.Now().UTC(), limit)
+		if err != nil {
+			return processed, err
+		}
+		processed += count
+	}
+	if r.SalesActions != nil {
+		count, err := r.SalesActions.Process(ctx, limit)
+		if err != nil {
+			return count, err
+		}
+		processed += count
+	}
 	if r.Processor != nil {
 		entries, err := r.Outbox.ListClaimable(ctx, limit)
 		if err != nil {

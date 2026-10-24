@@ -30,9 +30,12 @@ type ConversationStateRecord struct {
 	// (default N=4) and increments SummaryTurnCount accordingly.
 	Summary          string
 	SummaryTurnCount int
-	Version          int64
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	// SummaryLastMessageID is the database message ID at the end of the
+	// committed summary. Empty means an old, uncheckpointed summary.
+	SummaryLastMessageID string
+	Version              int64
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 type ConversationComparison struct {
@@ -55,6 +58,16 @@ type StateConstraint struct {
 type StatePending struct {
 	Field string `json:"field"`
 	Kind  string `json:"kind"`
+}
+
+// ConversationSummaryCheckpointRepository atomically commits a summary only if
+// the conversation state has not changed in the meantime. It avoids stale
+// background summarizers overwriting newer conversational memory.
+type ConversationSummaryCheckpointRepository interface {
+	// EnsureSummaryState is an idempotent insert-only creation for conversations
+	// that have no catalog focus yet; it cannot overwrite another writer.
+	EnsureSummaryState(ctx context.Context, businessID, conversationID string) (ConversationStateRecord, error)
+	SaveSummaryIfVersion(ctx context.Context, businessID, conversationID string, expectedVersion int64, summary, lastMessageID string, coveredInbound int) (bool, error)
 }
 
 type ConversationStateRepository interface {

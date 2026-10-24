@@ -84,11 +84,12 @@ func (r *capabilityCatalogRepo) ListProjectionPage(_ context.Context, request po
 	if request.Cursor == "page2" {
 		start = 3
 	}
+	schemaVersion := 1
 	page := ports.CatalogAIProjectionPage{Catalogs: []ports.CatalogRecord{{ID: "catalog", BusinessID: "business-1", Name: "Main", Status: "active"}}, HasMore: start == 1, NextCursor: "page2"}
 	for i := start; i < start+2; i++ {
 		id := fmt.Sprintf("item-%d", i)
 		page.Items = append(page.Items, ports.CatalogAIProjectionBundle{
-			Item:            ports.CatalogItemRecord{ID: id, BusinessID: "business-1", CatalogID: "catalog", Name: id, Status: "active", ItemType: "service", AttributeSchemaID: stringPtr("schema")},
+			Item:            ports.CatalogItemRecord{ID: id, BusinessID: "business-1", CatalogID: "catalog", Name: id, Status: "active", ItemType: "service", AttributeSchemaID: stringPtr("schema"), AttributeSchemaVersion: &schemaVersion},
 			AttributeSchema: &ports.AttributeSchemaRecord{ID: "schema", BusinessID: "business-1", Name: "Schema", Version: 1},
 			Variants:        []ports.VariantRecord{{ID: "variant-" + id, BusinessID: "business-1", CatalogItemID: id, Status: "active"}},
 			Offers:          []ports.OfferRecord{{ID: "offer-" + id, BusinessID: "business-1", CatalogItemID: id, VariantID: stringPtr("variant-" + id), Status: "active", PricingMode: "fixed"}},
@@ -162,7 +163,7 @@ func TestAutoReplyCapabilityFullCatalogCoversAllPagesBeforeFinal(t *testing.T) {
 	runtime.Decision = ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityFullCatalog}
 	catalog := &capabilityCatalogRepo{}
 	model := &capabilityBatchModel{}
-	service.CatalogBatch = &CatalogBatchController{CatalogAI: catalog, Gemini: model, RunRepo: runRepo, TokenBudget: 250, Now: service.now, NewID: service.NewID}
+	service.CatalogBatch = &CatalogBatchController{CatalogAI: catalog, Evaluator: model, RunRepo: runRepo, TokenBudget: 250, Now: service.now, NewID: service.NewID}
 	service.EntityContractPayload = mustMarshal(BuildCatalogEntityContractPayload())
 	result, err := service.Handle(context.Background(), capabilityCommand())
 	if err != nil {
@@ -187,7 +188,7 @@ func TestAutoReplyCatalogFailuresNeverFinalizeOrSend(t *testing.T) {
 			if mode == "batch failure" {
 				model.failBatch = 3
 			}
-			service.CatalogBatch = &CatalogBatchController{CatalogAI: catalog, Gemini: model, RunRepo: runRepo, TokenBudget: 250, Now: service.now, NewID: service.NewID}
+			service.CatalogBatch = &CatalogBatchController{CatalogAI: catalog, Evaluator: model, RunRepo: runRepo, TokenBudget: 250, Now: service.now, NewID: service.NewID}
 			service.EntityContractPayload = mustMarshal(BuildCatalogEntityContractPayload())
 			result, err := service.Handle(context.Background(), capabilityCommand())
 			if err == nil || result.Enqueued || outbox.calls != 0 || model.finalCalls != 0 {
@@ -200,7 +201,7 @@ func TestAutoReplyCatalogFailuresNeverFinalizeOrSend(t *testing.T) {
 func TestAutoReplyGreetingDoesNotLoadCatalog(t *testing.T) {
 	service, _, outbox, runRepo := capabilityService()
 	catalog := &capabilityCatalogRepo{}
-	service.CatalogBatch = &CatalogBatchController{CatalogAI: catalog, Gemini: &capabilityBatchModel{}, RunRepo: runRepo, TokenBudget: 250, Now: service.now, NewID: service.NewID}
+	service.CatalogBatch = &CatalogBatchController{CatalogAI: catalog, Evaluator: &capabilityBatchModel{}, RunRepo: runRepo, TokenBudget: 250, Now: service.now, NewID: service.NewID}
 	command := capabilityCommand()
 	command.Text = "السلام عليكم"
 	result, err := service.Handle(context.Background(), command)
@@ -250,7 +251,7 @@ func TestInvalidSelectionDoesNotTriggerCatalogOrExpandEvidence(t *testing.T) {
 	runtime.Decision.Selected = []ports.SelectedReference{{ItemID: "invented"}}
 	service.Validation.ReferenceValidator = capabilityReferenceValidator{}
 	catalog := &capabilityCatalogRepo{}
-	service.CatalogBatch = &CatalogBatchController{CatalogAI: catalog, Gemini: &capabilityBatchModel{}, RunRepo: runRepo, TokenBudget: 250, Now: service.now, NewID: service.NewID}
+	service.CatalogBatch = &CatalogBatchController{CatalogAI: catalog, Evaluator: &capabilityBatchModel{}, RunRepo: runRepo, TokenBudget: 250, Now: service.now, NewID: service.NewID}
 	result, err := service.Handle(context.Background(), capabilityCommand())
 	if err != nil || result.Enqueued || outbox.calls != 0 || catalog.reads != 0 {
 		t.Fatalf("invalid references expanded trust boundary: %+v err=%v", result, err)
@@ -295,7 +296,7 @@ func TestFullCatalogPreservesCapabilityThroughPolicyExecutionAndAudit(t *testing
 			service, runtime, outbox, runRepo := capabilityService()
 			runtime.Decision = ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityFullCatalog}
 			model := &capabilityBatchModel{finalCapability: capability}
-			service.CatalogBatch = &CatalogBatchController{CatalogAI: &capabilityCatalogRepo{}, Gemini: model, RunRepo: runRepo, TokenBudget: 250, Now: service.now, NewID: service.NewID}
+			service.CatalogBatch = &CatalogBatchController{CatalogAI: &capabilityCatalogRepo{}, Evaluator: model, RunRepo: runRepo, TokenBudget: 250, Now: service.now, NewID: service.NewID}
 			service.EntityContractPayload = mustMarshal(BuildCatalogEntityContractPayload())
 			policy := &recordingCapabilityPolicy{outcome: "allowed"}
 			service.Validation.CustomerSalesPolicy = policy
@@ -330,7 +331,7 @@ func TestCatalogCapabilityRequiresCompleteLocalWiring(t *testing.T) {
 	}{
 		{"controller", func(s *AutoReplyService) { s.CatalogBatch = nil }},
 		{"catalog repo", func(s *AutoReplyService) { s.CatalogBatch.CatalogAI = nil }},
-		{"batch model", func(s *AutoReplyService) { s.CatalogBatch.Gemini = nil }},
+		{"batch model", func(s *AutoReplyService) { s.CatalogBatch.Evaluator = nil }},
 		{"batch trace", func(s *AutoReplyService) { s.CatalogBatch.RunRepo = nil }},
 		{"runtime trace", func(s *AutoReplyService) { s.RunRepository = nil }},
 		{"clock", func(s *AutoReplyService) { s.CatalogBatch.Now = nil }},
@@ -342,7 +343,7 @@ func TestCatalogCapabilityRequiresCompleteLocalWiring(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			service, runtime, _, runRepo := capabilityService()
 			catalog := &capabilityCatalogRepo{}
-			service.CatalogBatch = &CatalogBatchController{CatalogAI: catalog, Gemini: &capabilityBatchModel{}, RunRepo: runRepo, Now: service.now, NewID: service.NewID}
+			service.CatalogBatch = &CatalogBatchController{CatalogAI: catalog, Evaluator: &capabilityBatchModel{}, RunRepo: runRepo, Now: service.now, NewID: service.NewID}
 			service.EntityContractPayload = mustMarshal(BuildCatalogEntityContractPayload())
 			tc.remove(&service)
 			if _, err := service.Handle(context.Background(), capabilityCommand()); err != nil {
@@ -358,27 +359,24 @@ func TestCatalogCapabilityRequiresCompleteLocalWiring(t *testing.T) {
 			}
 		})
 	}
-	controller := &CatalogBatchController{CatalogAI: &capabilityCatalogRepo{}, Gemini: &plainTokenBatchModel{}, RunRepo: &capabilityRunRepo{}, Now: func() time.Time { return time.Now() }, NewID: func() string { return "id" }}
+	controller := &CatalogBatchController{CatalogAI: &capabilityCatalogRepo{}, Evaluator: &plainTokenBatchModel{}, RunRepo: &capabilityRunRepo{}, Now: func() time.Time { return time.Now() }, NewID: func() string { return "id" }}
 	if controller.Ready() {
 		t.Fatal("missing token counter considered ready")
 	}
-	controller.TokenCounter = constantTokenCounter{}
+	controller.Evaluator = &capabilityBatchModel{}
 	if !controller.Ready() {
-		t.Fatal("compatibility token counter not accepted")
+		t.Fatal("complete provider request token estimator was not accepted")
 	}
 }
 
-type plainTokenBatchModel struct{ BatchGeminiClient }
-type constantTokenCounter struct{}
-
-func (constantTokenCounter) CountTokens(context.Context, any) (int, error) { return 100, nil }
+type plainTokenBatchModel struct{ CatalogEvaluationClient }
 
 func TestFullCatalogCapabilityPolicyGatePreventsExecution(t *testing.T) {
 	for _, outcome := range []string{"denied", "requires_approval"} {
 		t.Run(outcome, func(t *testing.T) {
 			service, runtime, outbox, runRepo := capabilityService()
 			runtime.Decision = ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityFullCatalog}
-			service.CatalogBatch = &CatalogBatchController{CatalogAI: &capabilityCatalogRepo{}, Gemini: &capabilityBatchModel{finalCapability: ports.CustomerSalesCapabilityHandoff}, RunRepo: runRepo, TokenBudget: 250, Now: service.now, NewID: service.NewID}
+			service.CatalogBatch = &CatalogBatchController{CatalogAI: &capabilityCatalogRepo{}, Evaluator: &capabilityBatchModel{finalCapability: ports.CustomerSalesCapabilityHandoff}, RunRepo: runRepo, TokenBudget: 250, Now: service.now, NewID: service.NewID}
 			service.EntityContractPayload = mustMarshal(BuildCatalogEntityContractPayload())
 			policy := &recordingCapabilityPolicy{outcome: outcome}
 			service.Validation.CustomerSalesPolicy = policy
@@ -396,5 +394,57 @@ func TestFullCatalogCapabilityPolicyGatePreventsExecution(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestInformationalCapabilitiesDoNotExecuteHandoffBasedOnReplyWording(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		capability ports.CustomerSalesCapability
+		text       string
+	}{
+		{"informational capability contains a handoff promise", ports.CustomerSalesCapabilityRespondWithoutAction, "سيتم تحويلك إلى أحد ممثلي خدمة العملاء."},
+		{"clarification capability contains a team promise", ports.CustomerSalesCapabilityAsk, "سأقوم برفع طلبك للفريق. هل معك رقم الطلب؟"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			service, runtime, outbox, runRepo := capabilityService()
+			conversations := &fakeConversationRuntimeRepository{}
+			service.Conversations = conversations
+			runtime.Decision = ports.CapabilityDecision{Capability: tc.capability, ResponseText: tc.text}
+
+			result, err := service.Handle(context.Background(), capabilityCommand())
+			if err != nil || !result.Enqueued || outbox.calls != 1 {
+				t.Fatalf("model-selected informational capability was not executed unchanged: result=%+v err=%v", result, err)
+			}
+			if result.Capability != string(tc.capability) {
+				t.Fatalf("Go replaced model-selected capability: %+v", result)
+			}
+			if len(conversations.transitions) != 1 || conversations.transitions[0].State == nil ||
+				*conversations.transitions[0].State != "waiting_customer" {
+				t.Fatalf("Go inferred human handoff from text: %+v", conversations.transitions)
+			}
+			audit := service.DecisionRepository.(*fakeDecisionRepository).record
+			if audit.RequestedCapability == nil || *audit.RequestedCapability != string(tc.capability) ||
+				audit.EffectiveCapability == nil || *audit.EffectiveCapability != string(tc.capability) ||
+				audit.RequiresHuman {
+				t.Fatalf("Go silently upgraded non-handoff decision: %+v", audit)
+			}
+			if runRepo.run.Status != ports.AIRunStatusCompleted {
+				t.Fatalf("informational capability was not completed: %s", runRepo.run.Status)
+			}
+		})
+	}
+}
+
+func TestHumanHandoffRequiresConversationLifecycleBeforeOutbound(t *testing.T) {
+	service, runtime, outbox, _ := capabilityService()
+	service.Conversations = nil
+	runtime.Decision = ports.CapabilityDecision{
+		Capability:   ports.CustomerSalesCapabilityHandoff,
+		ResponseText: "سأحوّلك إلى الفريق المختص.",
+	}
+	result, err := service.Handle(context.Background(), capabilityCommand())
+	if err == nil || result.Enqueued || outbox.calls != 0 {
+		t.Fatalf("handoff without state transition must fail closed: %+v err=%v", result, err)
 	}
 }

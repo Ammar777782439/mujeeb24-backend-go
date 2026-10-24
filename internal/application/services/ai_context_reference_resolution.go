@@ -3,92 +3,81 @@ package services
 import (
 	"context"
 	"errors"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"strings"
+
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
 // Resolve exact references already present in validated conversation state.
-// These functions do not select products from customer message text.
+// Never scan first-N catalog/offer pages hoping to find a reference, and never
+// derive a reference from keywords in the customer's message.
 func (b AutoReplyContextBuilder) findItemByIDWithinBusiness(ctx context.Context, businessID, itemID string, catalogID *string) (ports.CatalogItemRecord, error) {
-	if catalogID != nil && strings.TrimSpace(*catalogID) != "" {
-		item, err := b.Catalogs.GetCatalogItem(ctx, businessID, *catalogID, itemID)
-		if err != nil {
-			return ports.CatalogItemRecord{}, err
-		}
-		if item.BusinessID != businessID {
-			return ports.CatalogItemRecord{}, errors.New("AI context catalog item scope mismatch")
-		}
-		return item, nil
+	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(itemID) == "" {
+		return ports.CatalogItemRecord{}, errors.New("business and catalog item ID are required")
 	}
-	catalogs, err := b.Catalogs.ListCatalogs(ctx, businessID, "active", b.maxCatalogs(), "")
+	var item ports.CatalogItemRecord
+	var err error
+	if catalogID != nil && strings.TrimSpace(*catalogID) != "" {
+		item, err = b.Catalogs.GetCatalogItem(ctx, businessID, *catalogID, itemID)
+	} else {
+		item, err = b.Catalogs.GetCatalogItemByID(ctx, businessID, itemID)
+	}
 	if err != nil {
 		return ports.CatalogItemRecord{}, err
 	}
-	for _, catalog := range catalogs.Items {
-		if catalog.BusinessID != businessID {
-			continue
-		}
-		item, err := b.Catalogs.GetCatalogItem(ctx, businessID, catalog.ID, itemID)
-		if err == nil {
-			return item, nil
-		}
-		if !isScopedNotFound(err) {
-			// GetCatalogItem returns not_found for wrong catalog; continue scanning.
-			continue
-		}
+	if item.BusinessID != businessID || item.ID != itemID {
+		return ports.CatalogItemRecord{}, errors.New("AI context catalog item scope mismatch")
 	}
-	return ports.CatalogItemRecord{}, &scopedNotFoundError{msg: "item not found within business"}
+	if catalogID != nil && strings.TrimSpace(*catalogID) != "" && item.CatalogID != *catalogID {
+		return ports.CatalogItemRecord{}, errors.New("AI context item catalog mismatch")
+	}
+	if item.Status != "active" {
+		return ports.CatalogItemRecord{}, &scopedNotFoundError{msg: "focused catalog item is inactive"}
+	}
+	catalog, err := b.Catalogs.GetCatalog(ctx, businessID, item.CatalogID)
+	if err != nil {
+		return ports.CatalogItemRecord{}, err
+	}
+	if catalog.BusinessID != businessID || catalog.ID != item.CatalogID {
+		return ports.CatalogItemRecord{}, errors.New("AI context catalog scope mismatch")
+	}
+	if catalog.Status != "active" {
+		return ports.CatalogItemRecord{}, &scopedNotFoundError{msg: "focused catalog is inactive"}
+	}
+	return item, nil
 }
 
 func (b AutoReplyContextBuilder) findOfferByIDWithinBusiness(ctx context.Context, businessID, offerID string, itemID *string) (ports.CatalogRecord, ports.CatalogItemRecord, ports.OfferRecord, error) {
-	if itemID != nil && strings.TrimSpace(*itemID) != "" {
-		offers, err := b.Catalogs.ListOffers(ctx, businessID, *itemID, "active", b.maxOffers(), "")
-		if err != nil {
-			return ports.CatalogRecord{}, ports.CatalogItemRecord{}, ports.OfferRecord{}, err
-		}
-		for _, offer := range offers.Items {
-			if offer.ID == offerID {
-				if offer.BusinessID != businessID {
-					return ports.CatalogRecord{}, ports.CatalogItemRecord{}, ports.OfferRecord{}, errors.New("AI context offer scope mismatch")
-				}
-				item, err := b.findItemByIDWithinBusiness(ctx, businessID, *itemID, nil)
-				if err != nil {
-					return ports.CatalogRecord{}, ports.CatalogItemRecord{}, ports.OfferRecord{}, err
-				}
-				catalog, err := b.Catalogs.GetCatalog(ctx, businessID, item.CatalogID)
-				if err != nil {
-					return ports.CatalogRecord{}, ports.CatalogItemRecord{}, ports.OfferRecord{}, err
-				}
-				return catalog, item, offer, nil
-			}
-		}
-		return ports.CatalogRecord{}, ports.CatalogItemRecord{}, ports.OfferRecord{}, &scopedNotFoundError{msg: "offer not found for item"}
+	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(offerID) == "" {
+		return ports.CatalogRecord{}, ports.CatalogItemRecord{}, ports.OfferRecord{}, errors.New("business and offer ID are required")
 	}
-	catalogs, err := b.Catalogs.ListCatalogs(ctx, businessID, "active", b.maxCatalogs(), "")
+	// The existing tenant-scoped GetOffer is an exact read. A focused offer
+	// beyond the first page is not a reason to broaden AI evidence.
+	offer, err := b.Catalogs.GetOffer(ctx, businessID, offerID)
 	if err != nil {
 		return ports.CatalogRecord{}, ports.CatalogItemRecord{}, ports.OfferRecord{}, err
 	}
-	for _, catalog := range catalogs.Items {
-		if catalog.BusinessID != businessID {
-			continue
-		}
-		items, err := b.Catalogs.ListCatalogItems(ctx, businessID, catalog.ID, "", "active", b.maxItems()*3, "")
-		if err != nil {
-			return ports.CatalogRecord{}, ports.CatalogItemRecord{}, ports.OfferRecord{}, err
-		}
-		for _, item := range items.Items {
-			offers, err := b.Catalogs.ListOffers(ctx, businessID, item.ID, "active", b.maxOffers(), "")
-			if err != nil {
-				return ports.CatalogRecord{}, ports.CatalogItemRecord{}, ports.OfferRecord{}, err
-			}
-			for _, offer := range offers.Items {
-				if offer.ID == offerID {
-					return catalog, item, offer, nil
-				}
-			}
-		}
+	if offer.ID != offerID || offer.BusinessID != businessID {
+		return ports.CatalogRecord{}, ports.CatalogItemRecord{}, ports.OfferRecord{}, errors.New("AI context offer scope mismatch")
 	}
-	return ports.CatalogRecord{}, ports.CatalogItemRecord{}, ports.OfferRecord{}, &scopedNotFoundError{msg: "offer not found within business"}
+	if offer.Status != "active" {
+		return ports.CatalogRecord{}, ports.CatalogItemRecord{}, ports.OfferRecord{}, &scopedNotFoundError{msg: "focused offer is inactive"}
+	}
+	if itemID != nil && strings.TrimSpace(*itemID) != "" && offer.CatalogItemID != *itemID {
+		return ports.CatalogRecord{}, ports.CatalogItemRecord{}, ports.OfferRecord{}, errors.New("focused offer does not belong to referenced item")
+	}
+	item, err := b.findItemByIDWithinBusiness(ctx, businessID, offer.CatalogItemID, nil)
+	if err != nil {
+		return ports.CatalogRecord{}, ports.CatalogItemRecord{}, ports.OfferRecord{}, err
+	}
+	catalog, err := b.Catalogs.GetCatalog(ctx, businessID, item.CatalogID)
+	if err != nil {
+		return ports.CatalogRecord{}, ports.CatalogItemRecord{}, ports.OfferRecord{}, err
+	}
+	if catalog.BusinessID != businessID || catalog.ID != item.CatalogID || catalog.Status != "active" {
+		return ports.CatalogRecord{}, ports.CatalogItemRecord{}, ports.OfferRecord{}, errors.New("AI context offer catalog scope mismatch")
+	}
+	return catalog, item, offer, nil
 }
 
 type scopedNotFoundError struct{ msg string }

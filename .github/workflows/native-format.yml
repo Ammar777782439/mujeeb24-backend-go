@@ -1,0 +1,118 @@
+name: Format native AI cutover
+
+on:
+  push:
+    branches:
+      - feat/gemini-deepseek
+    paths:
+      - '.github/workflows/native-format.yml'
+      - 'internal/adapters/secondary/ai/native/router.go'
+      - 'internal/adapters/secondary/ai/native/deepseek_test.go'
+      - 'internal/adapters/secondary/ai/native/deepseek.go'
+      - 'internal/adapters/secondary/ai/native/gemini_test.go'
+      - 'internal/adapters/secondary/ai/native/gemini.go'
+      - 'internal/platform/config/config.go'
+      - 'internal/platform/config/config_test.go'
+      - 'internal/platform/database/migrator_test.go'
+      - 'internal/bootstrap/integrations.go'
+      - 'internal/bootstrap/integrations_test.go'
+      - 'internal/adapters/primary/http/handlers/platform_native_ai_config.go'
+      - 'internal/adapters/primary/http/handlers/platform_native_ai_config_test.go'
+      - 'internal/adapters/secondary/ai/gateway/native_merchant_catalog_adapter.go'
+      - 'internal/adapters/secondary/ai/gateway/native_provider_context_live_test.go'
+      - 'internal/application/ports/customer_sales_contract.go'
+      - 'internal/adapters/secondary/ai/gateway/native_customer_live_test.go'
+      - 'internal/adapters/secondary/ai/gateway/capability_contract_test.go'
+      - 'internal/adapters/secondary/ai/gateway/customer_sales_prompt.go'
+      - 'internal/adapters/secondary/ai/gateway/customer_sales_capabilities.go'
+      - 'internal/adapters/secondary/ai/gateway/sales_workflow_tools.go'
+      - 'internal/application/services/conversation_state_test.go'
+      - 'internal/application/ports/conversation_state.go'
+      - 'internal/adapters/secondary/persistence/postgres/conversation_state_repository.go'
+      - 'internal/application/services/conversation_history_checkpoint_test.go'
+      - 'internal/application/services/ai_context_builder.go'
+      - 'internal/adapters/secondary/persistence/postgres/conversation_state_integration_test.go'
+      - 'internal/application/services/conversation_summary_service.go'
+      - 'internal/domain/ai/prompts/prompts.go'
+      - 'internal/adapters/secondary/ai/gateway/native_adapters_contract_test.go'
+      - 'internal/application/services/ai_validation_pipeline.go'
+      - 'internal/application/services/ai_validation_pipeline_fail_closed_test.go'
+      - 'internal/application/services/auto_reply.go'
+      - 'internal/application/services/auto_reply_capabilities_test.go'
+      - 'internal/application/services/conversation_blueprint_test.go'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  native-gofmt:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/gemini-deepseek
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.2'
+          cache: true
+      - name: Format migration-owned Go packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          gofmt -w \
+            internal/adapters/primary/http/handlers/platform_native_ai_config.go \
+            internal/adapters/primary/http/handlers/platform_native_ai_config_test.go \
+            internal/adapters/secondary/ai/gateway/native_provider_context_live_test.go \
+            internal/application/ports/customer_sales_contract.go \
+            internal/adapters/secondary/ai/gateway/native_customer_live_test.go \
+            internal/domain/ai/prompts/prompts.go \
+            internal/adapters/secondary/ai/gateway/capability_contract_test.go \
+            internal/adapters/secondary/ai/gateway/customer_sales_prompt.go \
+            internal/adapters/secondary/ai/gateway/customer_sales_capabilities.go \
+            internal/adapters/secondary/ai/gateway/sales_workflow_tools.go \
+            internal/application/services/conversation_state_test.go \
+            internal/application/ports/conversation_state.go \
+            internal/adapters/secondary/persistence/postgres/conversation_state_repository.go \
+            internal/application/services/conversation_history_checkpoint_test.go \
+            internal/application/services/ai_context_builder.go \
+            internal/adapters/secondary/persistence/postgres/conversation_state_integration_test.go \
+            internal/application/services/conversation_summary_service.go \
+            internal/adapters/secondary/ai/gateway/native_customer_adapter.go \
+            internal/adapters/secondary/ai/gateway/native_adapters_contract_test.go \
+            internal/adapters/secondary/ai/gateway/native_merchant_catalog_adapter.go \
+            internal/adapters/secondary/ai/native/router.go \
+            internal/adapters/secondary/ai/native/deepseek_test.go \
+            internal/adapters/secondary/ai/native/deepseek.go \
+            internal/adapters/secondary/ai/native/gemini_test.go \
+            internal/adapters/secondary/ai/native/gemini.go \
+            internal/application/ports/ai_provider_config.go \
+            internal/application/services/ai_provider_failure_test.go \
+            internal/application/services/ai_validation_pipeline.go \
+            internal/application/services/ai_validation_pipeline_fail_closed_test.go \
+            internal/application/services/auto_reply.go \
+            internal/application/services/auto_reply_capabilities_test.go \
+            internal/application/services/conversation_blueprint_test.go \
+            internal/application/services/native_merchant_usage.go \
+            internal/application/services/platform_operations_service.go \
+            internal/bootstrap/api.go \
+            internal/bootstrap/integrations.go \
+            internal/bootstrap/integrations_test.go \
+            internal/platform/config/config.go \
+            internal/platform/config/config_test.go \
+            internal/platform/database/migrator_test.go
+          git diff --check
+          if git diff --quiet; then
+            echo "All migration files already formatted"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add internal/
+          git commit -m 'style(ai): apply canonical gofmt to native provider cutover'
+          git fetch origin feat/gemini-deepseek
+          git rebase origin/feat/gemini-deepseek
+          git push origin HEAD:feat/gemini-deepseek

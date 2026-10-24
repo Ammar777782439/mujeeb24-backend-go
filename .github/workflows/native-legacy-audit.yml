@@ -1,0 +1,39 @@
+name: Native AI Legacy Reference Audit
+on:
+  push:
+    branches: [feat/gemini-deepseek]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  references:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject obsolete provider gateway paths and references
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Compose obsolete identifier to avoid matching this audit source.
+          identifier="$(printf '%s%s' lite llm)"
+          # Migration names already recorded in schema_migrations are
+          # immutable. Require exactly the two original SQL history files;
+          # they are NOT runtime gateway code.
+          historic="migrations/000075_${identifier}_native_spend"
+          expected="$(printf '%s\n%s' "${historic}.down.sql" "${historic}.up.sql")"
+          actual="$(git ls-files | grep -i "${identifier}" || true)"
+          if [ "$actual" != "$expected" ]; then
+            printf 'Unexpected obsolete filenames or missing history:\n%s\n' "$actual"
+            echo "::error::Only the two historical version-75 migration filenames are permitted"
+            exit 1
+          fi
+          if git grep -i -n "${identifier}" -- \
+            ":!${historic}.up.sql" ":!${historic}.down.sql" \
+            ':!.github/workflows/native-legacy-audit.yml'; then
+            echo "::error::Obsolete gateway references outside immutable migration SQL remain"
+            exit 1
+          fi
+          echo 'Historical migration 000075 preserved; no obsolete gateway runtime references.'

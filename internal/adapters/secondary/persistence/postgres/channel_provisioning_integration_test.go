@@ -10,6 +10,7 @@ import (
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/database"
+	"github.com/google/uuid"
 )
 
 func TestChannelProvisioningRepositoriesAgainstPostgres(t *testing.T) {
@@ -33,6 +34,7 @@ func TestChannelProvisioningRepositoriesAgainstPostgres(t *testing.T) {
 	cleanup := func() {
 		_, _ = adapter.Pool().Exec(context.Background(), `DELETE FROM channel_provisioning_sessions WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
 		_, _ = adapter.Pool().Exec(context.Background(), `DELETE FROM channel_connections WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
+		_, _ = adapter.Pool().Exec(context.Background(), `DELETE FROM subscriptions WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
 		_, _ = adapter.Pool().Exec(context.Background(), `DELETE FROM businesses WHERE id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
 	}
 	cleanup()
@@ -82,6 +84,12 @@ func TestChannelProvisioningRepositoriesAgainstPostgres(t *testing.T) {
 	if err != nil || connection.Status != "pending" || connection.BusinessID != businessID {
 		t.Fatalf("pending connection=%#v err=%v", connection, err)
 	}
+	// Pending OAuth provisioning must not turn into an active channel without
+	// the merchant's paid entitlement.
+	if _, err := connections.Activate(ctx, businessID, connection.ID, "account-37", "connection-37"); !IsRepositoryKind(err, RepositoryConflict) {
+		t.Fatalf("activating without an active subscription should fail closed: %v", err)
+	}
+	activateChannelFixtureSubscription(ctx, t, adapter, businessID)
 	active, err := connections.Activate(ctx, businessID, connection.ID, "account-37", "connection-37")
 	if err != nil || active.Status != "active" || active.ProviderAccountReference == nil || *active.ProviderAccountReference != "account-37" {
 		t.Fatalf("active connection=%#v err=%v", active, err)
@@ -120,3 +128,26 @@ func TestChannelProvisioningRepositoriesAgainstPostgres(t *testing.T) {
 }
 
 func stringPtrIntegration(value string) *string { return &value }
+
+// activateChannelFixtureSubscription uses the same public repository API as
+// production. A Pricing V2 Basic snapshot grants exactly one included channel.
+func activateChannelFixtureSubscription(ctx context.Context, t *testing.T, adapter *Adapter, businessID string) {
+	t.Helper()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	subscriptionID := uuid.NewString()
+	repo := NewSubscriptionRepository(adapter)
+	if _, err := repo.Create(ctx, ports.SubscriptionCreate{
+		ID: subscriptionID, BusinessID: businessID,
+		PlanID:           "00000000-0000-0000-0000-00000000a102",
+		PriceYERSnapshot: 6500, AmountDueYER: 6500,
+		PeriodStart: now.Add(-time.Minute), PeriodEnd: now.Add(24 * time.Hour),
+		AIReplyLimit: 200, AICatalogLimit: 60,
+		ChannelLimit: 1, ChannelCeiling: 1, SeatLimit: 2,
+		InternalAICostBudgetYER: 1000, Now: now,
+	}); err != nil {
+		t.Fatalf("create channel test subscription: %v", err)
+	}
+	if _, err := repo.Activate(ctx, subscriptionID, now); err != nil {
+		t.Fatalf("activate channel test subscription: %v", err)
+	}
+}

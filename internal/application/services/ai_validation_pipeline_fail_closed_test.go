@@ -85,3 +85,40 @@ func TestAuthorizationCannotReplaceCapabilityOrBypassPolicy(t *testing.T) {
 		})
 	}
 }
+
+func TestStructuralValidationChecksCapabilitiesNotNaturalLanguageIntent(t *testing.T) {
+	pipeline := &ValidationPipeline{}
+	for _, tc := range []struct {
+		name       string
+		capability ports.CustomerSalesCapability
+		text       string
+	}{
+		{"model chose informational reply", ports.CustomerSalesCapabilityRespondWithoutAction, "سيتم تحويلك إلى موظف خدمة العملاء"},
+		{"model chose clarification", ports.CustomerSalesCapabilityAsk, "فريقنا سيتواصل معك. ما رقم الطلب؟"},
+		{"model chose actual human handoff", ports.CustomerSalesCapabilityHandoff, "سأحوّلك إلى الموظف المختص"},
+		{"ordinary informational reply", ports.CustomerSalesCapabilityRespondWithoutAction, "نقدم خدمات متنوعة"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			decision := ports.CapabilityDecision{Capability: tc.capability, ResponseText: tc.text}
+			if failure := pipeline.validateStructural(decision); failure != nil {
+				t.Fatalf("Go must validate the capability structure without classifying reply wording: %v", failure)
+			}
+			if decision.Capability != tc.capability {
+				t.Fatal("Go may not infer or silently replace the model-selected capability")
+			}
+		})
+	}
+}
+
+func TestStructuralValidationStillRejectsMissingResponseText(t *testing.T) {
+	pipeline := &ValidationPipeline{}
+	for _, capability := range []ports.CustomerSalesCapability{
+		ports.CustomerSalesCapabilityRespondWithoutAction,
+		ports.CustomerSalesCapabilityAsk,
+		ports.CustomerSalesCapabilityHandoff,
+	} {
+		if failure := pipeline.validateStructural(ports.CapabilityDecision{Capability: capability}); failure == nil {
+			t.Fatalf("missing customer text accepted for %q", capability)
+		}
+	}
+}

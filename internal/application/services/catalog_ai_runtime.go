@@ -38,10 +38,14 @@ func ProjectionFromBundles(bundles []ports.CatalogAIProjectionBundle) CatalogAIP
 				Status: offer.Status,
 			})
 		}
-		projection.Items = append(projection.Items, item)
 		if bundle.AttributeSchema != nil {
-			schemas[bundle.AttributeSchema.ID] = mapAttributeSchemaRecordToProjection(*bundle.AttributeSchema)
+			schema := mapAttributeSchemaRecordToProjection(*bundle.AttributeSchema)
+			schemas[bundle.AttributeSchema.ID] = schema
+			attachItemSchemaMeaning(&item, &schema)
+		} else {
+			attachItemSchemaMeaning(&item, nil)
 		}
+		projection.Items = append(projection.Items, item)
 	}
 	ids := make([]string, 0, len(schemas))
 	for id := range schemas {
@@ -136,4 +140,5 @@ func appendCatalogRecordsToProjection(projection *CatalogAIProjection, catalogs 
 		})
 		seen[catalog.ID] = struct{}{}
 	}
+	attachItemCatalogMeaning(projection)
 }

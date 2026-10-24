@@ -9,6 +9,8 @@ type UpdateBusinessProfileCommand struct {
 	Locale          *string
 }
 type UpdateBusinessPolicyCommand struct {
+	SalesWorkflowEnabled      *bool
+	AllowSalesInteractions    *bool
 	Meta                      CommandMeta
 	AIMode                    *string
 	DefaultHumanReview        *bool

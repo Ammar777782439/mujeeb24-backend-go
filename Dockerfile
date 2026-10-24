@@ -6,6 +6,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+RUN mkdir -p /out/catalog-debug && touch /out/catalog-debug/.keep
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/mujeeb-api ./cmd/api \
     && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/mujeeb-worker ./cmd/worker \
     && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/mujeeb-migrate ./cmd/migrate \
@@ -17,6 +18,7 @@ COPY --from=build /out/mujeeb-api /usr/local/bin/mujeeb-api
 COPY --from=build /out/mujeeb-worker /usr/local/bin/mujeeb-worker
 COPY --from=build /out/mujeeb-migrate /usr/local/bin/mujeeb-migrate
 COPY --from=build /out/mujeeb-runtime /usr/local/bin/mujeeb-runtime
+COPY --from=build --chown=65532:65532 /out/catalog-debug/ /var/lib/mujeeb/catalog-debug/
 
 USER nonroot:nonroot
 EXPOSE 3001

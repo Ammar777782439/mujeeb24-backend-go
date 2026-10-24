@@ -1,53 +1,91 @@
+# Mujeeb 24 API only. Direct DeepSeek inference with no provider fallback.
+# No external AI proxy or gateway is deployed by this blueprint.
+# Secrets remain environment-managed; auto-deploy is disabled.
 services:
   - type: web
     name: mujeeb24-api
     runtime: docker
     plan: free
-    branch: refactor/merchant-catalog-ai-v2-structure
+    branch: refactor/provider-agnostic-ai-runtime
     dockerfilePath: ./Dockerfile
-    autoDeployTrigger: checksPass
+    autoDeployTrigger: off
     healthCheckPath: /
     maxShutdownDelaySeconds: 60
-
     envVars:
       - key: APP_ENV
         value: production
-
+      # Keep the ORIGINAL Mujeeb merchant/business database.
       - key: DATABASE_URL
         sync: false
-
       - key: AUTH_ENABLED
         value: "true"
-
       - key: JWT_ISSUER
         value: mujeeb24
-
+      - key: JWT_ACCESS_TTL
+        value: 15m
+      - key: REFRESH_SESSION_TTL
+        value: 720h
       - key: JWT_ED25519_PRIVATE_KEY
         sync: false
-
       - key: JWT_ED25519_PUBLIC_KEY
         sync: false
-
+      # Do not auto-rotate the existing encryption key: existing records use it.
       - key: AI_CONFIG_ENCRYPTION_KEY
         sync: false
-
       - key: SOCIALAPI_BASE_URL
         value: https://api.social-api.ai
-
       - key: SOCIALAPI_API_KEY
         sync: false
-
       - key: SOCIALAPI_WEBHOOK_SECRET
         sync: false
-
-      - key: FRONTEND_URL
-        value: https://mujeeb24-frontend.ai.studio/landing
-
+      - key: SOCIALAPI_HTTP_TIMEOUT
+        value: 10s
       - key: CHANNEL_PROVISIONING_ENABLED
-        value: "false"
-
+        value: "true"
+      - key: CHANNEL_PROVISIONING_REDIRECT_URI
+        value: https://mujeeb24-api.onrender.com/oauth/socialapi/callback
+      - key: FRONTEND_URL
+        value: https://mujeeb24.com/landing
+      # Current Mujeeb production feature-flag values supplied by the owner.
+      # AutoReply requires a configured DeepSeek credential. Qualify current model and accounting before production.
       - key: AUTOREPLY_ENABLED
+        value: "true"
+      - key: CUSTOMER_SALES_ENABLED
         value: "false"
-
-      - key: LLM_ENABLED
-        value: "false"
+      # Keep existing process/database tuning explicit in this ONE Blueprint.
+      - key: DB_CONNECT_TIMEOUT
+        value: 5s
+      - key: DB_HEALTH_CHECK_PERIOD
+        value: 1m
+      - key: DB_MAX_CONNS
+        value: "5"
+      - key: DB_MAX_CONN_IDLE_TIME
+        value: 10m
+      - key: DB_MAX_CONN_LIFETIME
+        value: 1h
+      - key: DB_MIN_CONNS
+        value: "0"
+      - key: WORKER_BATCH_SIZE
+        value: "20"
+      - key: WORKER_OWNER
+        value: mujeeb-render-worker
+      - key: WORKER_POLL_INTERVAL
+        value: 2s
+      - key: SHUTDOWN_TIMEOUT
+        value: 10s
+      - key: NATIVE_AI_ENABLED
+        value: "true"
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_MODEL
+        value: deepseek-flash
+      - key: NATIVE_AI_HTTP_TIMEOUT
+        value: 20s
+      - key: NATIVE_AI_MAX_CONTEXT_TOKENS
+        value: "32768"
+      - key: NATIVE_AI_MAX_OUTPUT_TOKENS
+        value: "4096"
+      - key: NATIVE_AI_MAX_INPUT_CHARACTERS
+        value: "48000"
+      - key: NATIVE_AI_MERCHANT_MAX_REQUEST_BYTES
+        value: "524288"

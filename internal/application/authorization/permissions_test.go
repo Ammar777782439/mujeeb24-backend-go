@@ -12,7 +12,7 @@ func TestEveryMerchantBusinessOperationHasPermission(t *testing.T) {
 		"cancelTransaction", "confirmTransaction", "createAttributeSchemaVersion", "createAutomationRule",
 		"createCannedReply", "createCatalog", "createCatalogItem", "createCustomer", "createLead", "createOffer",
 		"createOutboundMessage", "createTeamInvitation", "createTransactionDraft", "createVariant", "disconnectChannel",
-		"getAIDecision", "getAttributeSchema", "getAuditEvent", "getBusiness", "getBusinessPolicy", "getCatalog",
+		"getAIDecision", "getAttributeSchema", "getAuditEvent", "getBusiness", "getBusinessPolicy", "getBusinessSubscription", "getCatalog",
 		"getCatalogEntityContract", "getCatalogItem", "getChannelConnection", "getConnectionCapabilities",
 		"getConversation", "getCustomer", "getDashboardOverview", "getLead", "getTransaction", "getTransactionReview",
 		"listAIDecisions", "listAttributeSchemas", "listAuditEvents", "listAutomationRules", "listCannedReplies",

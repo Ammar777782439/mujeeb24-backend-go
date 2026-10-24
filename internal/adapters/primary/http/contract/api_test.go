@@ -67,8 +67,18 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
 	// Business owner assignment adds 1 platform business lifecycle endpoint. Total = 141.
 	// Later contract work brought the baseline to 144; token-based team invitations add 7. Total = 151.
 	operationIDs := regexp.MustCompile(`(?m)^\s+operationId: ([A-Za-z0-9_]+)$`).FindAllSubmatch(document, -1)
-	if len(operationIDs) != 151 {
-		t.Fatalf("generated %d operations, want 151", len(operationIDs))
+	for _, op := range []string{"listSalesWorkflows", "getSalesWorkflow", "reviewSalesWorkflow", "listSalesRequirements", "createSalesRequirement"} {
+		if !bytes.Contains(document, []byte("operationId: "+op)) {
+			t.Fatalf("sales operation missing: %s", op)
+		}
+	}
+	if len(operationIDs) != 162 {
+		t.Fatalf("generated %d operations, want 162", len(operationIDs))
+	}
+	for _, op := range []string{"platformCreateSubscriptionAddon", "platformListSubscriptionAddons", "platformRecordSubscriptionAddonPayment", "platformCancelSubscriptionAddon", "platformApproveChannelPassCapacity"} {
+		if !bytes.Contains(document, []byte("operationId: "+op)) {
+			t.Fatalf("missing subscription addon operation: %s", op)
+		}
 	}
 	for _, op := range []string{"previewChannelHistoryPurge", "purgeChannelHistory"} {
 		if !bytes.Contains(document, []byte("operationId: "+op)) {

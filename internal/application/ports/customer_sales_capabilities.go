@@ -9,14 +9,17 @@ const (
 	CustomerSalesCapabilityAsk                  CustomerSalesCapability = "ask_customer"
 	CustomerSalesCapabilityHandoff              CustomerSalesCapability = "handoff_to_human"
 	CustomerSalesCapabilityFullCatalog          CustomerSalesCapability = "evaluate_full_catalog"
+	CustomerSalesCapabilityRecordLead           CustomerSalesCapability = "record_lead"
+	CustomerSalesCapabilityCreateDraft          CustomerSalesCapability = "create_transaction_draft"
+	CustomerSalesCapabilityUpdateDraft          CustomerSalesCapability = "update_transaction_draft"
 )
 
 // CustomerSalesCapabilities exposes implemented operations, independent of sector.
 // Draft creation is absent until an actual B2C executor is registered.
-func CustomerSalesCapabilities(fullCatalogAvailable bool) []CustomerSalesCapability {
+func CustomerSalesCapabilities(fullCatalogAvailable bool, salesAvailable ...bool) []CustomerSalesCapability {
 	capabilities := make([]CustomerSalesCapability, 0, len(customerSalesCapabilityRegistry))
 	for _, entry := range customerSalesCapabilityRegistry {
-		if entry.Definition.Terminal || (entry.Definition.RequiresFullCatalogRuntime && fullCatalogAvailable) {
+		if (entry.Definition.Terminal && (!entry.Definition.RequiresSalesRuntime || (len(salesAvailable) > 0 && salesAvailable[0]))) || (entry.Definition.RequiresFullCatalogRuntime && fullCatalogAvailable) {
 			capabilities = append(capabilities, entry.Name)
 		}
 	}
@@ -29,11 +32,14 @@ type CapabilityDecision struct {
 	Capability   CustomerSalesCapability `json:"capability"`
 	ResponseText string                  `json:"response_text,omitempty"`
 	Selected     []SelectedReference     `json:"selected,omitempty"`
+	Sales        *SalesWorkflowProposal  `json:"sales,omitempty"`
 }
 
 // CustomerSalesCapabilityDefinition describes an executable operation, not intent.
 // All currently supported terminal operations use the customer-message executor.
 type CustomerSalesCapabilityDefinition struct {
+	Executor                   string
+	RequiresSalesRuntime       bool
 	Terminal                   bool
 	SendsCustomerMessage       bool
 	RequiresHuman              bool
@@ -53,6 +59,9 @@ var customerSalesCapabilityRegistry = [...]struct {
 	{CustomerSalesCapabilityAsk, CustomerSalesCapabilityDefinition{Terminal: true, SendsCustomerMessage: true, ConversationState: "waiting_customer", ConversationOwnership: "ai"}},
 	{CustomerSalesCapabilityHandoff, CustomerSalesCapabilityDefinition{Terminal: true, SendsCustomerMessage: true, RequiresHuman: true, ConversationState: "waiting_human"}},
 	{CustomerSalesCapabilityFullCatalog, CustomerSalesCapabilityDefinition{RequiresFullCatalogRuntime: true}},
+	{CustomerSalesCapabilityRecordLead, CustomerSalesCapabilityDefinition{Terminal: true, Executor: "sales", RequiresSalesRuntime: true}},
+	{CustomerSalesCapabilityCreateDraft, CustomerSalesCapabilityDefinition{Terminal: true, Executor: "sales", RequiresSalesRuntime: true}},
+	{CustomerSalesCapabilityUpdateDraft, CustomerSalesCapabilityDefinition{Terminal: true, Executor: "sales", RequiresSalesRuntime: true}},
 }
 
 func CustomerSalesCapabilityDefinitionFor(capability CustomerSalesCapability) (CustomerSalesCapabilityDefinition, bool) {

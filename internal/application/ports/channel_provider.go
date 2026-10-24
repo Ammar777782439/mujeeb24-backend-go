@@ -59,6 +59,8 @@ type ConversationEnricher interface {
 }
 
 type SendMessageCommand struct {
+	Channel                string
+	Buttons                []InteractiveButton
 	ConnectionID           string
 	ProviderAccountID      string
 	ProviderConversationID string

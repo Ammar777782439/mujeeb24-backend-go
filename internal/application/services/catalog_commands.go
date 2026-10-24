@@ -21,6 +21,7 @@ import (
 type CatalogCommandServices struct {
 	Repository   ports.CatalogRepository
 	Transactions ports.TransactionManager
+	Entitlements ports.CatalogActivationEntitlement
 	Now          func() time.Time
 	NewID        func() string
 }
@@ -265,6 +266,11 @@ func (s UpdateCatalogItemCommandService) Handle(ctx context.Context, command com
 	var record ports.CatalogItemRecord
 	err = s.within(ctx, func(txCtx context.Context) error {
 		var err error
+		if command.Status != nil && strings.EqualFold(strings.TrimSpace(*command.Status), "active") && s.Entitlements != nil {
+			if err = s.Entitlements.EnsureCatalogItemActivation(txCtx, string(command.Meta.Actor.BusinessID), string(command.CatalogItemID), s.now()); err != nil {
+				return mapCatalogRepositoryError(err)
+			}
+		}
 		record, err = s.Repository.UpdateCatalogItem(txCtx, ports.CatalogItemPatch{
 			ID:                      string(command.CatalogItemID),
 			BusinessID:              string(command.Meta.Actor.BusinessID),

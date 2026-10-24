@@ -206,6 +206,8 @@ func TestAutoReplyHandoffPreservesModelResponse(t *testing.T) {
 	service.AIPricing = &stubPricingRepoAlwaysFail{}
 	service.NewID = func() string { return "test-id" }
 	service.Validation = allowAllValidationPipeline()
+	conversations := &fakeConversationRuntimeRepository{}
+	service.Conversations = conversations
 	result, err := service.Handle(context.Background(), commands.AutoReplyCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}}, ConversationID: "conversation-1", SourceMessageReference: "inbound-1", Text: "أريد الاشتراك", Channel: "whatsapp", ProviderRef: "socialapi"})
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
@@ -215,6 +217,10 @@ func TestAutoReplyHandoffPreservesModelResponse(t *testing.T) {
 	}
 	if !result.Decision.RequiresHuman {
 		t.Fatal("handoff must require human follow-up")
+	}
+	if len(conversations.transitions) != 1 || conversations.transitions[0].State == nil ||
+		*conversations.transitions[0].State != "waiting_human" {
+		t.Fatalf("handoff response cannot be enqueued without waiting_human: %+v", conversations.transitions)
 	}
 	text, err := DecodeInlineTextContentReference(outbound.record.ContentReference)
 	if err != nil || text != "model suggests subscribe" {

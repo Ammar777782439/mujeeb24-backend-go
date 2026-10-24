@@ -396,3 +396,47 @@ func TestClientManagesSocialAPIBrands(t *testing.T) {
 		t.Fatalf("delete err=%v path=%q", err, deletedPath)
 	}
 }
+
+func TestClientOnlyNormalizesButtonsFromPostbackEvents(t *testing.T) {
+	for _, kind := range []string{"dm.received", "dm.postback"} {
+		t.Run(kind, func(t *testing.T) {
+			body := []byte(`{"event":"` + kind + `","data":{"id":"event-1","platform":"instagram","account_id":"account-1","conversation_id":"conversation-1","author":{"id":"user-1"},"content":{"text":"hello"},"metadata":{"payload":"m24.sales:request:accept","title":"نعم"}}}`)
+			stamp := strconv.FormatInt(time.Now().Unix(), 10)
+			mac := hmac.New(sha256.New, []byte("secret"))
+			_, _ = mac.Write([]byte(stamp + "." + string(body)))
+			headers := map[string]string{"X-SocialAPI-Signature-V2": "sha256=" + hex.EncodeToString(mac.Sum(nil)), "X-SocialAPI-Timestamp": stamp}
+			events, err := NewClient(Config{WebhookSecret: "secret"}).NormalizeWebhook(httptest.NewRequest(http.MethodPost, "/", nil).Context(), headers, body)
+			if err != nil || len(events) != 1 {
+				t.Fatalf("normalize: %+v %v", events, err)
+			}
+			if kind == "dm.postback" {
+				if events[0].ActionPayload != "m24.sales:request:accept" || events[0].Text != "نعم" {
+					t.Fatalf("postback lost: %+v", events[0])
+				}
+			} else if events[0].ActionPayload != "" {
+				t.Fatal("ordinary message metadata became a button action")
+			}
+		})
+	}
+}
+
+func TestClientSendsInteractiveButtonsOnSupportedChannels(t *testing.T) {
+	for _, kind := range []channel.Channel{channel.ChannelInstagram, channel.ChannelFacebook, channel.ChannelWhatsApp} {
+		t.Run(string(kind), func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				data, _ := io.ReadAll(r.Body)
+				if !strings.Contains(string(data), `"type":"postback"`) || !strings.Contains(string(data), `"payload":"m24.sales:request:accept"`) {
+					t.Errorf("interactive payload lost: %s", data)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"message_id":"message-1","success":true}`))
+			}))
+			defer server.Close()
+			client := NewClient(Config{BaseURL: server.URL, APIKey: "sapi_key_test", HTTPClient: server.Client()})
+			_, err := client.SendMessage(httptest.NewRequest(http.MethodPost, "/", nil).Context(), ports.SendMessageCommand{ProviderAccountID: "account-1", ProviderConversationID: "conversation-1", Channel: string(kind), IdempotencyKey: "interactive-1", Text: "هل تؤكد؟", Buttons: []ports.InteractiveButton{{Title: "نعم", Payload: "m24.sales:request:accept"}, {Title: "لا", Payload: "m24.sales:request:decline"}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}

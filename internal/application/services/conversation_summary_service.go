@@ -1,29 +1,8 @@
-// Package services — ConversationSummaryService implements the Summary +
-// Sliding Window hybrid context strategy (ADR-039).
-//
-// Per research findings (Microsoft Learn, getmaxim.ai, IrisAgent, mem0.ai,
-// Oracle blogs), the gold-standard pattern for managing LLM conversation
-// context is:
-//
-//	[Running Summary of older turns] + [Last N turns verbatim]
-//
-// The summary is regenerated every N turns (default 4) and captures:
-//   - Customer's stated intent and what they asked about
-//   - Products mentioned (item names, IDs)
-//   - Pricing / availability facts already disclosed
-//   - Open questions (pending)
-//   - Whether the customer asked for human handoff
-//
-// This dramatically reduces token consumption for long conversations while
-// preserving long-term context that would otherwise fall out of the
-// sliding window. The summary is stored in conversation_state.summary +
-// summary_turn_count.
-//
-// Trigger logic: After each successful AutoReply completion, the
-// ConversationSummaryService.MaybeSummarize() method is called. It counts
-// the conversation turns since the last summary; if >= SummaryInterval,
-// it calls Gemini to summarize the older turns (everything before the
-// sliding window) and persists the result.
+// Package services provides a checkpointed, provider-neutral conversation
+// memory strategy. PostgreSQL retains complete history; an Arabic rolling
+// summary records covered older messages, and recent uncheckpointed messages
+// are attached verbatim. Summary generation is distinct from sales capabilities
+// and never serves as evidence of operational execution.
 package services
 
 import (
@@ -31,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 	"time"
 
@@ -65,17 +45,14 @@ func isRepositoryNotFound(err error) bool {
 	return strings.Contains(err.Error(), "not found")
 }
 
-// SummaryInterval is the number of conversation turns between summary
-// regenerations. Per Microsoft Learn guidance: "update the summary after
-// every 3-5 turns". We use 4 as the midpoint.
+// SummaryInterval is the minimum number of new inbound messages covered
+// before refreshing an existing checkpoint. Initial summaries are rebuilt
+// from actual history when no trusted checkpoint is present.
 const SummaryInterval = 4
 
-// SlidingWindowSize is the number of recent messages kept verbatim
-// alongside the summary. The summary covers everything older than this
-// window. Per IrisAgent: "switch to summarization if average turns >10";
-// our 4-turn summary + 4-turn sliding window = 8 turns covered, which
-// keeps us under the 10-turn threshold where summarization alone becomes
-// preferable.
+// SlidingWindowSize is the number of latest raw messages reserved outside
+// each summary checkpoint. The request builder additionally includes any
+// messages after the checkpoint, without assuming reply/customer alternation.
 const SlidingWindowSize = 4
 
 // ConversationSummaryService generates and maintains the running summary
@@ -89,6 +66,7 @@ type ConversationSummaryService struct {
 	// into the GeminiCustomerSalesAdapter, so summaries use the same customer-sales decision port
 	// as AutoReply.
 	CustomerSalesDecisionPort ports.CustomerSalesDecisionPort
+	SummaryPort               ports.ConversationSummaryPort
 	// AIUsageRepository records per-execution telemetry for the summary
 	// call. Per P1-5: summary Gemini calls MUST be metered — they are
 	// not free. If nil, telemetry is logged but not persisted.
@@ -97,6 +75,10 @@ type ConversationSummaryService struct {
 	// computing provider_cost_yer on the summary call. If nil, the
 	// record is marked status="pricing_failed" per P1-6.
 	AIPricing ports.AIProviderPricingRepository
+
+	// Currency conversion for gateway native spend; not a token cost estimator.
+	GatewayFXRateYER string
+
 	// Subscriptions looks up the business's active subscription ID so
 	// the summary usage record is associated with the correct
 	// subscription (same as AutoReply.recordAIUsage).
@@ -120,12 +102,16 @@ func NewConversationSummaryService(
 	messages ports.MessageRepository,
 	customerSalesDecision ports.CustomerSalesDecisionPort,
 ) *ConversationSummaryService {
-	return &ConversationSummaryService{
+	service := &ConversationSummaryService{
 		StateRepository:           stateRepo,
 		Messages:                  messages,
 		CustomerSalesDecisionPort: customerSalesDecision,
 		Now:                       func() time.Time { return time.Now().UTC() },
 	}
+	if port, ok := customerSalesDecision.(ports.ConversationSummaryPort); ok {
+		service.SummaryPort = port
+	}
+	return service
 }
 
 // SummaryTriggerResult describes what happened during a MaybeSummarize call.
@@ -170,8 +156,8 @@ func (s *ConversationSummaryService) MaybeSummarize(
 		result.SkippedReason = "service_not_configured"
 		return result, nil
 	}
-	if s.CustomerSalesDecisionPort == nil {
-		result.SkippedReason = "customer_sales_decision_not_configured"
+	if s.SummaryPort == nil {
+		result.SkippedReason = "provider_summary_port_not_configured"
 		return result, nil
 	}
 
@@ -179,91 +165,207 @@ func (s *ConversationSummaryService) MaybeSummarize(
 	state, err := s.StateRepository.Get(ctx, businessID, conversationID)
 	if err != nil {
 		if isRepositoryNotFound(err) {
-			// State doesn't exist yet — no conversation to summarize.
-			result.SkippedReason = "state_not_found"
-			return result, nil
+			// An informational-only conversation must have memory too. Insert once,
+			// then continue this run with the actual persisted state.
+			bootstrap, ok := s.StateRepository.(ports.ConversationSummaryCheckpointRepository)
+			if !ok {
+				result.SkippedReason = "summary_checkpoint_repository_not_configured"
+				return result, nil
+			}
+			state, err = bootstrap.EnsureSummaryState(ctx, businessID, conversationID)
+			if err != nil {
+				result.SkippedReason = "state_initialize_failed"
+				return result, err
+			}
+		} else {
+			result.SkippedReason = fmt.Sprintf("state_load_failed: %v", err)
+			return result, err
 		}
-		result.SkippedReason = fmt.Sprintf("state_load_failed: %v", err)
-		return result, err
 	}
 
 	result.OldSummary = state.Summary
 	result.PreviousTurnCount = state.SummaryTurnCount
 
-	// Count inbound messages (turns) since the last summary
-	page, err := s.Messages.ListByConversation(ctx, businessID, conversationID, 1000, "")
+	// Fetch in pages because the default repository page is newest-first.
+	// Stop rather than claim context coverage when the history exceeds the
+	// configured safety bound. No change is persisted on an incomplete read.
+	allMessages, err := listConversationHistory(ctx, s.Messages, businessID, conversationID)
 	if err != nil {
-		result.SkippedReason = fmt.Sprintf("message_list_failed: %v", err)
+		result.SkippedReason = "history_incomplete"
 		return result, err
 	}
 	totalInbound := 0
-	for _, m := range page.Items {
+	for _, m := range allMessages {
 		if strings.EqualFold(m.Direction, "inbound") {
 			totalInbound++
 		}
 	}
 	result.NewTurnCount = totalInbound
-
-	// Decide if we need to regenerate
-	turnsSinceLastSummary := totalInbound - state.SummaryTurnCount
-	if turnsSinceLastSummary < SummaryInterval {
-		result.SkippedReason = fmt.Sprintf("below_threshold: %d < %d", turnsSinceLastSummary, SummaryInterval)
+	// Keep the latest four *messages* verbatim. Counting inbound messages as
+	// two-message pairs is unsafe when customers send consecutive messages.
+	if len(allMessages) <= SlidingWindowSize {
+		result.SkippedReason = "within_live_window"
 		return result, nil
 	}
-
-	// We need to summarize. We already have all messages in page.Items
-	// (fetched above with limit=1000). Slice off the older turns.
-	allMessages := page.Items
-	cutoffIdx := len(allMessages) - (SlidingWindowSize * 2)
-	if cutoffIdx < 0 {
-		cutoffIdx = 0
+	covered := allMessages[:len(allMessages)-SlidingWindowSize]
+	firstNew := 0
+	seedSummary := state.Summary
+	if state.SummaryLastMessageID != "" {
+		checkpointFound := false
+		for i, m := range covered {
+			if m.ID == state.SummaryLastMessageID {
+				firstNew = i + 1
+				checkpointFound = true
+				break
+			}
+		}
+		if !checkpointFound {
+			// A checkpoint may be in the last four messages until enough messages
+			// arrive to advance the summary. Never summarize that overlap twice.
+			for _, m := range allMessages[len(covered):] {
+				if m.ID == state.SummaryLastMessageID {
+					result.SkippedReason = "checkpoint_in_live_window"
+					return result, nil
+				}
+			}
+			result.SkippedReason = "checkpoint_not_found"
+			return result, errors.New("summary checkpoint missing from complete conversation history")
+		}
+	} else {
+		// Legacy summaries were built using the wrong DESC-order slice. Rebuild
+		// them from original messages rather than trusting an unmarked summary.
+		seedSummary = ""
 	}
-	olderMessages := allMessages[:cutoffIdx]
-	if len(olderMessages) == 0 {
-		result.SkippedReason = "no_older_messages"
+	newCovered := covered[firstNew:]
+	newInbound := 0
+	for _, m := range newCovered {
+		if strings.EqualFold(m.Direction, "inbound") {
+			newInbound++
+		}
+	}
+	if newInbound < SummaryInterval && state.SummaryLastMessageID != "" {
+		result.SkippedReason = "below_summary_interval"
 		return result, nil
 	}
-
-	// Build the transcript text
-	transcript := buildTranscript(olderMessages)
-	// Per ADR-051: cap transcript to 4000 chars to avoid exceeding
-	// the 12000 char limit in Gemini client. Also ensure chronological
-	// order (oldest first) — ListByConversation returns ASC after
-	// reversal, but olderMessages[:cutoffIdx] takes the first (oldest)
-	// entries which is correct. The cap prevents overflow.
-	if len(transcript) > 4000 {
-		transcript = transcript[:4000]
+	if len(newCovered) == 0 {
+		result.SkippedReason = "no_new_covered_messages"
+		return result, nil
 	}
-
-	// Generate summary via Gemini (per P1-5: use CustomerSalesDecisionPort when
-	// wired so the dynamic AI config applies).
-	summaryText, err := s.generateSummary(ctx, businessID, conversationID, transcript, state.Summary)
+	chunks, err := transcriptChunks(newCovered, 3900, 8)
 	if err != nil {
-		result.SkippedReason = fmt.Sprintf("summary_generation_failed: %v", err)
-		log.Printf("[SummaryService] GENERATION_FAILED business=%s conversation=%s err=%v", businessID, conversationID, err)
+		result.SkippedReason = "history_exceeds_summary_budget"
 		return result, err
 	}
-	if strings.TrimSpace(summaryText) == "" {
-		result.SkippedReason = "empty_summary_returned"
+	summaryText := seedSummary
+	for _, transcript := range chunks {
+		summaryText, err = s.generateSummary(ctx, businessID, conversationID, transcript, summaryText)
+		if err != nil {
+			result.SkippedReason = fmt.Sprintf("summary_generation_failed: %v", err)
+			return result, err
+		}
+	}
+	checkpointRepo, ok := s.StateRepository.(ports.ConversationSummaryCheckpointRepository)
+	if !ok {
+		return result, errors.New("summary repository lacks optimistic checkpoint update")
+	}
+	coveredInbound := 0
+	for _, m := range covered {
+		if strings.EqualFold(m.Direction, "inbound") {
+			coveredInbound++
+		}
+	}
+	committed, err := checkpointRepo.SaveSummaryIfVersion(ctx, businessID, conversationID, state.Version, summaryText, covered[len(covered)-1].ID, coveredInbound)
+	if err != nil {
+		return result, err
+	}
+	if !committed {
+		result.SkippedReason = "concurrent_summary_update"
 		return result, nil
 	}
-
-	// Persist the new summary + turn count
-	state.Summary = summaryText
-	state.SummaryTurnCount = totalInbound - SlidingWindowSize
-	if _, err := s.StateRepository.UpsertValidated(ctx, state); err != nil {
-		result.SkippedReason = fmt.Sprintf("state_persist_failed: %v", err)
-		return result, err
-	}
-
 	result.Summarized = true
+	result.NewTurnCount = totalInbound
 	result.NewSummary = summaryText
-	log.Printf("[SummaryService] SUMMARY_UPDATED business=%s conversation=%s turns=%d summary_len=%d",
-		businessID, conversationID, totalInbound, len(summaryText))
+	log.Printf("[SummaryService] SUMMARY_UPDATED business=%s conversation=%s turns=%d summary_len=%d", businessID, conversationID, totalInbound, len(summaryText))
 	return result, nil
 }
 
-// generateSummary calls Gemini with the older-turn transcript + the
+// listConversationHistory reads each page exactly once and normalizes the
+// repository's DESC order to chronological order for every provider.
+func listConversationHistory(ctx context.Context, repo ports.MessageRepository, businessID, conversationID string) ([]ports.CommunicationMessageRecord, error) {
+	const pageSize = 1000
+	const maxMessages = 10000
+	var history []ports.CommunicationMessageRecord
+	cursor := ""
+	for {
+		page, err := repo.ListByConversation(ctx, businessID, conversationID, pageSize, cursor)
+		if err != nil {
+			return nil, err
+		}
+		if len(page.Items) == 0 && page.HasMore {
+			return nil, errors.New("empty conversation page with continuation")
+		}
+		history = append(history, page.Items...)
+		if len(history) > maxMessages {
+			return nil, errors.New("conversation exceeds safe summary history bound")
+		}
+		if !page.HasMore {
+			break
+		}
+		if page.NextCursor == "" || page.NextCursor == cursor {
+			return nil, errors.New("conversation history cursor did not advance")
+		}
+		cursor = page.NextCursor
+	}
+	slices.Reverse(history)
+	return history, nil
+}
+
+// transcriptChunks preserves complete messages and never truncates Unicode
+// or erases an older message to fit the AI provider's context budget.
+func transcriptChunks(records []ports.CommunicationMessageRecord, maxBytes, maxChunks int) ([]string, error) {
+	if maxBytes < 1 || maxChunks < 1 {
+		return nil, errors.New("invalid summarization budget")
+	}
+	var chunks []string
+	var current strings.Builder
+	for _, r := range records {
+		text := ""
+		if r.TextContent != nil {
+			text = strings.TrimSpace(*r.TextContent)
+		}
+		if text == "" {
+			continue
+		}
+		role := "العميل"
+		if strings.EqualFold(r.Direction, "outbound") {
+			role = "المساعد"
+		}
+		line := fmt.Sprintf("[%s] %s: %s\n", r.OccurredAt.Format("15:04:05"), role, text)
+		if len(line) > maxBytes {
+			return nil, errors.New("one conversation message exceeds the summary chunk budget")
+		}
+		if current.Len()+len(line) > maxBytes {
+			chunks = append(chunks, current.String())
+			current.Reset()
+		}
+		current.WriteString(line)
+		if len(chunks) >= maxChunks {
+			return nil, errors.New("summary chunk budget exceeded")
+		}
+	}
+	if current.Len() > 0 {
+		chunks = append(chunks, current.String())
+	}
+	if len(chunks) > maxChunks {
+		return nil, errors.New("summary chunk budget exceeded")
+	}
+	if len(chunks) == 0 {
+		return nil, errors.New("no summarizable conversation messages")
+	}
+	return chunks, nil
+}
+
+// generateSummary calls the active Gemini/DeepSeek inference route with the older-turn transcript + the
 // previous running summary, and returns a fresh compressed summary.
 //
 // The prompt is intentionally minimal: we ask Gemini to compress the
@@ -274,65 +376,41 @@ func (s *ConversationSummaryService) generateSummary(
 	ctx context.Context,
 	businessID, conversationID, transcript, previousSummary string,
 ) (string, error) {
-	systemPrompt := `You are a conversation summarizer for the Mujeeb 24 customer service AI.
+	if s == nil || s.SummaryPort == nil {
+		return "", errors.New("conversation summary provider is not configured")
+	}
 
-Your job: read the conversation transcript and produce a CONCISE running summary in Arabic that captures the key facts needed for future AI responses.
+	systemPrompt := `You are a context-memory summarizer for a multilingual, multi-sector merchant assistant.
+Summarize only the dialogue supplied. Produce concise, natural Arabic prose, not a fixed scenario or template.
+Preserve evolving customer intent, relevant product/service context, preferences, constraints, unresolved questions and references necessary to interpret future short replies.
+Distinguish customer statements from assistant suggestions and promises. Prior dialogue and prior summaries are NOT evidence that any payment, transaction, transfer, booking, delivery, or follow-up occurred.
+No database execution events are supplied here. Do not confirm or deny past execution based on words alone. Execution state is read separately by Mujeeb from trusted repositories.
+Preserve uncertainty, corrections, and contradictions when relevant. Do not hallucinate prices, availability, business policies or identifiers.
+Refresh the earlier summary only with new information, retaining material still relevant. Avoid greetings and empty headings.
+Output only the updated Arabic memory, at most 220 words.`
+	userPrompt := fmt.Sprintf("Existing conversational memory (unverified):\n%s\n\nNew historical messages in chronological order:\n%s", previousSummary, transcript)
 
-Capture these elements (skip any that don't apply):
-1. نية العميل (what the customer wants)
-2. المنتجات المذكورة (product names + IDs if available)
-3. الأسعار والتوفر المُعلنة (any prices/availability disclosed)
-4. الأسئلة المعلقة (open questions not yet answered)
-5. السياسات المذكورة (any business policies referenced)
-6. حالة التسليم البشري (whether customer requested human handoff)
-
-Rules:
-- Maximum 200 words.
-- Use plain Arabic prose, not bullet points.
-- Do NOT include greetings or pleasantries — only facts.
-- Do NOT include prices or availability that the AI couldn't confirm (only confirmed facts from the transcript).
-- If the previous summary is provided, integrate it — don't repeat what's there, add new info.
-- Output ONLY the summary text — no JSON, no markdown, no explanation.`
-
-	userPrompt := fmt.Sprintf("Previous summary:\n%s\n\nConversation transcript to summarize:\n%s", previousSummary, transcript)
-
-	// CustomerSalesDecisionPort is the only AI execution path.
-	fullPrompt := systemPrompt + "\n\n" + userPrompt
+	// Recheck immediately before this model call, not just at the start of
+	// MaybeSummarize: policy can change during history retrieval.
+	if s.CostProtection != nil {
+		allowed, reason := s.CostProtection.IsAIExecutionAllowed(ctx, businessID)
+		if !allowed {
+			return "", fmt.Errorf("summary AI execution blocked: %s", reason)
+		}
+	}
 	startedAt := s.now()
-	out, err := s.CustomerSalesDecisionPort.Decide(ctx, ports.CustomerSalesDecisionInput{
-		Request: ports.CustomerSalesDecisionRequest{
-			BusinessID:     businessID,
-			ConversationID: conversationID,
-			Channel:        "internal",
-			Text:           fullPrompt,
-			PolicyVersion:  "summary-v1",
-		},
-	})
+	summary, usageTelemetry, err := s.SummaryPort.Summarize(ctx, systemPrompt, userPrompt)
 	if err != nil {
-		return "", fmt.Errorf("customer sales decision: %w", err)
+		return "", fmt.Errorf("summary provider: %w", err)
 	}
-	summary := strings.TrimSpace(out.Decision.ResponseText)
-	usageTelemetry := out.Usage
-	latencyMs := out.LatencyMs
-
-	// Per P1-5: record usage telemetry for the summary call. This is
-	// a real Gemini invocation that consumes tokens — it MUST be
-	// metered like any other AI execution. The same P1-6 logic
-	// applies: if pricing lookup fails, the record is marked
-	// status="pricing_failed" and does NOT count as a successful
-	// AI Reply (final_ai_replies=0).
-	s.recordSummaryUsage(ctx, businessID, usageTelemetry, latencyMs, startedAt)
-
-	// The summary is the response text — strip any metadata
+	s.recordSummaryUsage(ctx, businessID, usageTelemetry, usageTelemetry.LatencyMs, startedAt)
+	summary = strings.TrimSpace(summary)
 	if summary == "" {
-		return "", errors.New("empty summary from LLM")
+		return "", errors.New("empty summary")
 	}
-
-	// Sanity check: limit to 5000 chars to prevent runaway summaries
 	if len(summary) > 5000 {
-		summary = summary[:5000]
+		return "", errors.New("summary exceeds stored length budget")
 	}
-
 	return summary, nil
 }
 
@@ -369,29 +447,19 @@ func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, bus
 	// Compute provider_cost from the pricing table (per P1-6: never
 	// silently store cost=0 as "success").
 	providerCostYER := 0
-	pricingVersion := "unknown"
-	pricingFailed := false
+	pricingVersion, gatewayCostUSD, gatewayFXRate, pricingFailed := nativeProviderSpend(usage, s.GatewayFXRateYER)
+	if pricingFailed {
+		if ratedCostYER, version, unknown := nativeTokenPricedSpend(ctx, s.AIPricing, usage); !unknown {
+			providerCostYER = ratedCostYER
+			pricingVersion = version
+			pricingFailed = false
+		}
+	}
 	totalInput := usage.InputTokens
 	cachedInput := usage.CachedTokens
 	nonCachedInput := totalInput - cachedInput
 	if nonCachedInput < 0 {
 		nonCachedInput = 0
-	}
-	if s.AIPricing != nil {
-		pricing, err := s.AIPricing.GetCurrentForProvider(ctx, "google_gemini", usage.Model)
-		if err == nil {
-			pricingVersion = pricing.PricingVersion
-			inputCost := int64(nonCachedInput) * int64(pricing.InputPerMillionYER) / 1_000_000
-			cachedCost := int64(cachedInput) * int64(pricing.CachedInputPerMillionYER) / 1_000_000
-			outputCost := int64(usage.OutputTokens) * int64(pricing.OutputPerMillionYER) / 1_000_000
-			providerCostYER = int(inputCost + cachedCost + outputCost)
-		} else {
-			log.Printf("[SummaryService] AI_USAGE_PRICING_LOOKUP_FAILED business=%s model=%s err=%v", businessID, usage.Model, err)
-			pricingFailed = true
-		}
-	} else {
-		log.Printf("[SummaryService] AI_USAGE_PRICING_REPO_NOT_WIRED business=%s model=%s", businessID, usage.Model)
-		pricingFailed = true
 	}
 	// Per §3: summary calls do NOT count as final AI Replies —
 	// they're internal background work, not customer-facing responses.
@@ -406,26 +474,30 @@ func (s *ConversationSummaryService) recordSummaryUsage(ctx context.Context, bus
 		recordStatus = "pricing_failed"
 	}
 	recordID := s.newID()
-	_, err := s.AIUsage.AppendRecord(ctx, ports.AIUsageAppend{
+	usageRecord := ports.AIUsageAppend{
 		ID:                recordID,
 		BusinessID:        businessID,
 		SubscriptionID:    subscriptionID,
-		Provider:          "google_gemini",
+		Provider:          usageProvider(usage.Provider),
 		Model:             usage.Model,
 		InputTokens:       int64(nonCachedInput),
 		CachedInputTokens: int64(cachedInput),
 		OutputTokens:      int64(usage.OutputTokens),
-		ModelRequests:     1,
+		ModelRequests:     maxNativeRequests(usage.ModelRequests),
 		ToolCalls:         0,
 		FinalAIReplies:    finalAIReplies,
 		ProviderCostYER:   providerCostYER,
-		PricingVersion:    pricingVersion,
-		Status:            recordStatus,
-		CorrelationID:     summaryStrPtr("summary-" + businessID),
-		StartedAt:         startedAt,
-		CompletedAt:       now,
-		Now:               now,
-	})
+
+		PricingVersion: pricingVersion,
+		Status:         recordStatus,
+		CorrelationID:  summaryStrPtr("summary-" + businessID),
+		StartedAt:      startedAt,
+		CompletedAt:    now,
+		Now:            now,
+	}
+	usageRecord.GatewayCostUSD, usageRecord.GatewayFXRateYER = gatewayCostUSD, gatewayFXRate
+	usageRecord.GatewayCallID, usageRecord.GatewayDeploymentID = usage.GatewayCallID, usage.GatewayDeploymentID
+	_, err := s.AIUsage.AppendRecord(ctx, usageRecord)
 	if err != nil {
 		log.Printf("[SummaryService] AI_USAGE_RECORD_FAILED business=%s subscription=%s err=%v", businessID, subscriptionID, err)
 		return

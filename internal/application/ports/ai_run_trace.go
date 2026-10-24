@@ -46,13 +46,17 @@ const (
 
 // AIRunFailureStage per contract ⑨ §30 — pinpoints where the run failed.
 const (
-	AIRunFailureStageContextBuild  = "context_build"
-	AIRunFailureStageGeminiRequest = "gemini_request"
-	AIRunFailureStageToolCall      = "tool_call"
-	AIRunFailureStageValidation    = "validation"
-	AIRunFailureStagePolicy        = "policy"
-	AIRunFailureStageAuthorization = "authorization"
-	AIRunFailureStageExecution     = "execution"
+	AIRunFailureStageContextBuild = "context_build"
+	// Keep the historical DB value to preserve existing trace and check constraints.
+	// New gateway code should use the provider-neutral alias.
+	AIRunFailureStageGeminiRequest   = "gemini_request"
+	AIRunFailureStageProviderRequest = AIRunFailureStageGeminiRequest
+	AIRunFailureStageToolCall        = "tool_call"
+	AIRunFailureStageValidation      = "validation"
+	AIRunFailureStagePolicy          = "policy"
+	AIRunFailureStageAuthorization   = "authorization"
+	AIRunFailureStageExecution       = "execution"
+	AIRunFailureStageUnclassified    = "unclassified"
 )
 
 // AIRunFailureCategory per contract ⑨ §6-7 and ⑧ §10 — Retryable vs Non-Retryable.
@@ -82,6 +86,12 @@ const (
 	AIRunFailureCategoryExecutionFailure     = "execution_failure"
 	AIRunFailureCategoryInfrastructure       = "infrastructure"
 )
+
+const AIRunFailureCategoryApplicationInternal = "application_internal"
+const AIRunFailureCategoryCatalogBudget = "catalog_budget_exceeded"
+const AIRunFailureCategoryCatalogData = "catalog_data_error"
+const AIRunFailureCategoryUnclassified = "unclassified"
+const AIRunFailureCategoryCancelled = "cancelled"
 
 // IsRetryable returns true when the failure category represents a transient
 // error that may succeed on a fresh attempt, per contract ⑨ §6.

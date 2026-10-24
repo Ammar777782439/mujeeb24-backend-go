@@ -69,7 +69,18 @@ func (s BusinessManagementService) UpdatePolicy(ctx context.Context, command com
 	}
 	var result commands.UpdateBusinessPolicyResult
 	err = s.Transactions.Within(ctx, func(txCtx context.Context) error {
-		record, updateErr := s.Repository.UpdateRuntimePolicy(txCtx, ports.BusinessRuntimePolicyUpdate{BusinessID: string(command.Meta.Actor.BusinessID), ExpectedVersion: expected, AIMode: command.AIMode, DefaultHumanReview: command.DefaultHumanReview, AllowAutoReply: command.AllowAutoReply, AllowAutoLeadCreation: command.AllowAutoLeadCreation, AllowAutoTransactionDraft: command.AllowAutoTransactionDraft, AllowAutoConfirmation: command.AllowAutoConfirmation})
+		record, updateErr := s.Repository.UpdateRuntimePolicy(txCtx, ports.BusinessRuntimePolicyUpdate{
+			BusinessID:                string(command.Meta.Actor.BusinessID),
+			ExpectedVersion:           expected,
+			AIMode:                    command.AIMode,
+			DefaultHumanReview:        command.DefaultHumanReview,
+			AllowAutoReply:            command.AllowAutoReply,
+			AllowAutoLeadCreation:     command.AllowAutoLeadCreation,
+			AllowAutoTransactionDraft: command.AllowAutoTransactionDraft,
+			AllowAutoConfirmation:     command.AllowAutoConfirmation,
+			SalesWorkflowEnabled:      command.SalesWorkflowEnabled,
+			AllowSalesInteractions:    command.AllowSalesInteractions,
+		})
 		if updateErr != nil {
 			return updateErr
 		}
@@ -96,7 +107,7 @@ func parseBusinessExpectedVersion(value *commands.ResourceVersion) (int64, error
 }
 
 func businessPolicyView(record ports.BusinessRuntimePolicyRecord) commands.BusinessPolicyView {
-	return commands.BusinessPolicyView{BusinessID: commands.BusinessID(record.BusinessID), AIMode: record.AIMode, DefaultHumanReview: record.DefaultHumanReview, AllowAutoReply: record.AllowAutoReply, AllowAutoLeadCreation: record.AllowAutoLeadCreation, AllowAutoTransactionDraft: record.AllowAutoTransactionDraft, AllowAutoConfirmation: record.AllowAutoConfirmation, ResourceVersion: commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10))}
+	return commands.BusinessPolicyView{BusinessID: commands.BusinessID(record.BusinessID), AIMode: record.AIMode, DefaultHumanReview: record.DefaultHumanReview, AllowAutoReply: record.AllowAutoReply, AllowAutoLeadCreation: record.AllowAutoLeadCreation, AllowAutoTransactionDraft: record.AllowAutoTransactionDraft, AllowAutoConfirmation: record.AllowAutoConfirmation, SalesWorkflowEnabled: record.SalesWorkflowEnabled, AllowSalesInteractions: record.AllowSalesInteractions, ResourceVersion: commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10))}
 }
 
 var _ queries.GetBusinessPolicyHandler = BusinessPolicyQueryService{}

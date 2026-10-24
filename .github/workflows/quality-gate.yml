@@ -7,6 +7,9 @@ on:
       - main
       - refactor/merchant-catalog-ai-v2-structure
       - feat/universal-catalog-ai-v3
+      - feat/customer-sales-workflow-interactive
+      - feat/catalog-complete-commercial-entity-atomic
+      - feat/gemini-deepseek
   workflow_dispatch:
 
 permissions:
@@ -45,3 +48,4 @@ jobs:
           cache: true
       - name: Verify repository contract
         run: bash scripts/verify-repository.sh
+

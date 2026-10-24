@@ -1,6 +1,8 @@
 package merchantcatalogai
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 )
 
@@ -191,5 +193,84 @@ func TestValidateProposalReferencesRejectsInventedOfferVariant(t *testing.T) {
 
 	if err := registry.ValidateProposalReferences(proposal); err == nil {
 		t.Fatal("invented non-empty variant reference must remain fail-closed")
+	}
+}
+
+type cursorDiscoveryStub struct {
+	name  string
+	calls int
+}
+
+func (s *cursorDiscoveryStub) Definition() MerchantCatalogDiscoveryToolDefinition {
+	return MerchantCatalogDiscoveryToolDefinition{Name: s.name}
+}
+
+func (s *cursorDiscoveryStub) Execute(_ context.Context, _ MerchantCatalogDiscoveryExecutionContext, raw []byte) (MerchantCatalogDiscoveryResult, error) {
+	s.calls++
+	var params struct {
+		Cursor *string `json:"cursor"`
+	}
+	if err := json.Unmarshal(raw, &params); err != nil {
+		return MerchantCatalogDiscoveryResult{}, err
+	}
+	data := any([]string{"first-item"})
+	if s.name == "merchant_catalog_list_attribute_schemas" {
+		data = map[string]any{"attribute_schemas": []map[string]any{{"id": "schema-one"}}}
+	}
+	if params.Cursor != nil && *params.Cursor != "" {
+		return MerchantCatalogDiscoveryResult{Data: data, Operation: s.name}, nil
+	}
+	return MerchantCatalogDiscoveryResult{Data: data, HasMore: true, NextCursor: "server-issued-page-2", Operation: s.name}, nil
+}
+
+func TestMerchantDiscoveryCursorIsIssuedForMatchingReadScope(t *testing.T) {
+	for _, toolName := range []string{
+		"merchant_catalog_list_items",
+		"merchant_catalog_list_variants",
+		"merchant_catalog_list_offers",
+		"merchant_catalog_list_attribute_schemas",
+	} {
+		t.Run(toolName, func(t *testing.T) {
+			r := NewReadOnlyCapabilityRegistry(nil, "catalog-one")
+			stub := &cursorDiscoveryStub{name: toolName}
+			r.capabilities[toolName] = stub
+			scope := MerchantCatalogDiscoveryExecutionContext{BusinessID: "business-one", PrincipalID: "owner", ConversationID: "session"}
+			first := []byte(`{"status":"active","limit":50,"item_id":"item-one","cursor":null}`)
+			second := []byte(`{"status":"active","limit":50,"item_id":"item-one","cursor":"server-issued-page-2"}`)
+			invented := []byte(`{"status":"active","limit":50,"item_id":"item-one","cursor":"invented"}`)
+			if _, err := r.Execute(context.Background(), scope, toolName, invented); err == nil || stub.calls != 0 {
+				t.Fatal("invented cursor reached repository tool")
+			}
+			result, err := r.Execute(context.Background(), scope, toolName, first)
+			if err != nil || !result.HasMore || result.NextCursor != "server-issued-page-2" {
+				t.Fatalf("first page not recorded: %+v %v", result, err)
+			}
+			for _, bad := range []struct {
+				scope MerchantCatalogDiscoveryExecutionContext
+				raw   []byte
+			}{
+				{scope, invented},
+				{scope, []byte(`{"status":"inactive","limit":50,"item_id":"item-one","cursor":"server-issued-page-2"}`)},
+				{scope, []byte(`{"status":"active","limit":25,"item_id":"item-one","cursor":"server-issued-page-2"}`)},
+				{scope, []byte(`{"status":"active","limit":50,"item_id":"item-two","cursor":"server-issued-page-2"}`)},
+				{MerchantCatalogDiscoveryExecutionContext{BusinessID: "business-two", PrincipalID: "owner", ConversationID: "session"}, second},
+				{MerchantCatalogDiscoveryExecutionContext{BusinessID: "business-one", PrincipalID: "other", ConversationID: "session"}, second},
+				{MerchantCatalogDiscoveryExecutionContext{BusinessID: "business-one", PrincipalID: "owner", ConversationID: "other"}, second},
+			} {
+				if _, err := r.Execute(context.Background(), bad.scope, toolName, bad.raw); err == nil {
+					t.Fatal("unissued or cross-scope cursor accepted")
+				}
+			}
+			if stub.calls != 1 {
+				t.Fatal("invalid cursor invoked the tool")
+			}
+			result, err = r.Execute(context.Background(), scope, toolName, second)
+			if err != nil || result.HasMore || result.NextCursor != "" || stub.calls != 2 {
+				t.Fatalf("valid continuation failed: %+v %v", result, err)
+			}
+			if _, err := r.Execute(context.Background(), scope, toolName, second); err == nil || stub.calls != 2 {
+				t.Fatal("cursor reused after has_more=false")
+			}
+		})
 	}
 }

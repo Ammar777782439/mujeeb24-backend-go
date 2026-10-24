@@ -1,3 +1,5 @@
+> **قرار تقني ملزم لهذا الفرع (2026-10-17):** الفرع `feat/gemini-deepseek` مشتق من Atomic. يعمل مجيب مباشرة مع Gemini كمزوّد أساسي وDeepSeek احتياطيًا لخطأ HTTP 503 من دون بوابة خارجية. التبديل للنموذج في طبقة النقل فقط، ولا يُنفَّذ أي Capability أو صفقة في عميل النموذج. كل العقود التجارية وسجلات الاستخدام والبيانات محفوظة. يُمنع الدمج إلى `main` أو تعديل `main`، ولا تستخدم تجهيزات أو تعليمات الفرع السابق. مرجع التصميم: [Native AI](docs/architecture/native-ai-fallback.md).
+
 > تعديل Customer Sales المعتمد في 2026-10-11: راجع [عقد القدرات v12](docs/architecture/customer-sales-capabilities-v12-ar.md). Gemini يختار القدرة عبر Function Calling؛ CapabilityDecision يبقى مصدر الحقيقة حتى التنفيذ والتدقيق؛ Action القديم محصور بحد التوافق للحفظ وAPI. لا استبدال لنص handoff ولا تصنيف نوايا داخل مجيب.
 
 # تعليمات وكيل البرمجة (Agent Guidelines) — Mujeeb 24 Backend
@@ -14,7 +16,7 @@
 1. **اقرأ هذا الملف (`AGENTS.md`) بالكامل.**
 2. **اقرأ الوثيقة المرجعية الشاملة:** [docs/architecture/chatwoot-free-ai-handoff-prompt-ar.md](docs/architecture/chatwoot-free-ai-handoff-prompt-ar.md).
 3. **اقرأ وثائق البدء وحالة العمل إن وجدت:** `docs/engineering/START_HERE.md` و`docs/engineering/WORK_IN_PROGRESS.md` ومستند [todo.md](todo.md).
-4. **افحص حالة Git الحالية:** تأكد من أنك على الفرع المعتمد `feat/universal-catalog-ai-v3` وأن شجرة العمل نظيفة (`git status --short`).
+4. **افحص حالة Git الحالية:** تأكد من أنك على الفرع المعتمد `feat/gemini-deepseek` وأن شجرة العمل نظيفة (`git status --short`).
 5. **حدد نطاق المهمة (Task Scope):** تأكد من أن المطلوب يخص الـBackend فقط، ولا تلمس الـFrontend أو أنظمة الدفع أو الشحن.
 6. **حدد العقود المتأثرة:** راجع العقود المغلقة في هذا الملف وتأكد من عدم كسر أي قيد ثابت.
 7. **استخدم الأدوات المخصصة فعلياً:**
@@ -153,7 +155,7 @@ Secondary Adapters (Postgres Persistence / SocialAPI / AI / Ed25519 JWT)
 
 ## 10. سياسة Git والتسليم (Git Policy)
 
-- **الفرع المعتمد:** العمل يجري حصراً على الفرع `feat/universal-catalog-ai-v3`.
+- **الفرع المعتمد:** العمل يجري حصراً على الفرع `feat/gemini-deepseek`.
 - **الحظر الصريح:** يُمنع منعاً باتاً إنشاء `commit`، أو `push`، أو `merge` إلى `main` دون إذن صريح ومباشر من المستخدم.
 - **نظافة شجرة العمل:** قبل طلب الموافقة، راجع `git status --short` و`git diff --check` وتأكد من خلو العمل من أي أسرار أو تغييرات خارج نطاق المهمة.
 

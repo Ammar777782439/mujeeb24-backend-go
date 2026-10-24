@@ -29,6 +29,7 @@ type Agent struct {
 	EntityContract      EntityContractProvider
 	Authoring           MerchantCatalogAuthoringPort
 	CapabilitiesFactory func(selectedCatalogID string) MerchantCatalogDiscoveryPort
+	AIGuard             ports.BusinessAIExecutionGuard
 }
 
 func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error) {
@@ -42,6 +43,12 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 		return TurnResult{}, errors.New("merchant message is required")
 	}
 
+	// Do not create AI sessions or contact the provider after merchant opt-out.
+	if a.AIGuard != nil {
+		if err := a.AIGuard.Check(ctx, in.BusinessID); err != nil {
+			return TurnResult{}, err
+		}
+	}
 	sessionID := strings.TrimSpace(in.SessionID)
 	if sessionID == "" {
 		var err error
@@ -137,6 +144,12 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 		return TurnResult{}, err
 	}
 
+	// The merchant can disable AI while the model is generating a proposal.
+	if a.AIGuard != nil {
+		if err := a.AIGuard.Check(ctx, in.BusinessID); err != nil {
+			return TurnResult{}, err
+		}
+	}
 	if _, err := a.Sessions.AppendMessage(ctx, in.BusinessID, sessionID, "assistant", proposal.ResponseText); err != nil {
 		return TurnResult{}, err
 	}

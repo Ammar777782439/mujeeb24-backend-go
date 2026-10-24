@@ -6,13 +6,13 @@
 // Per contract ② §3, every item enters evaluation AT LEAST ONCE; the
 // Controller guarantees coverage (Sent == Completed == Total).
 // Per contract ② §4, each batch carries the AttributeSchemas its items use.
-// Per contract ② §5, Gemini returns ONLY candidates (item_id, variant_ids,
+// Per contract ② §5, AI model returns ONLY candidates (item_id, variant_ids,
 // offer_ids, reason) — not the full items back.
-// Per contract ② §6, after all batches complete, a Final Gemini Evaluation
+// Per contract ② §6, after all batches complete, a Final AI model Evaluation
 // runs over the candidate set + customer message + context.
 // Per contract ② §7, candidates are split by token budget, not by count.
 // Per contract ② §8, batches are NOT chained via previous_interaction_id;
-// they are independent stateless Gemini requests over the same verified Conversation Context.
+// they are independent stateless AI model requests over the same verified Conversation Context.
 //
 // Per contract ⑨ §22, each batch has state PENDING/RUNNING/COMPLETED/FAILED
 // so the Controller can resume from where it left off after partial failure.
@@ -29,29 +29,31 @@ import (
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/aierrors"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/catalogdump"
 )
 
 // CatalogBatchController drives a contract ② §9 evaluation.
 //
-// It is invoked when Gemini's first Interaction indicates that catalog data
+// It is invoked when AI model's first Interaction indicates that catalog data
 // is needed. The Controller:
 //  1. Builds the Catalog AI Projection (per contract ①) for the business scope.
 //  2. Token-counts the serialized Projection.
 //  3. Splits into batches by token budget.
-//  4. Sends each batch as an independent stateless Gemini request.
+//  4. Sends each batch as an independent stateless AI model request.
 //  5. Collects candidates per batch.
 //  6. Enforces coverage (Total == Sent == Completed).
-//  7. Hands the candidate set to the Final Gemini Evaluation.
+//  7. Hands the candidate set to the Final AI model Evaluation.
 //
 // Per contract ② §1, Mujeeb:
 //   - Determines the Catalog scope allowed for the merchant
 //   - Builds the Projection
 //   - Splits into Batches by TOKENS
-//   - Guarantees every Item in scope was sent to Gemini
+//   - Guarantees every Item in scope was sent to AI model
 //   - Tracks which Batches completed
 //   - Aggregates evaluation results
 //
-// Gemini:
+// Evaluator:
 //   - Understands the customer message
 //   - Understands each Batch's data
 //   - Infers and compares
@@ -59,48 +61,50 @@ import (
 //   - Explains why each candidate is in the candidate set
 type CatalogBatchController struct {
 	// CatalogAI supplies complete tenant-scoped projection pages.
-	CatalogAI    ports.CatalogAIReadRepository
-	TokenCounter TokenCounter
-	Gemini       BatchGeminiClient
-	RunRepo      ports.AIRunRepository
-	Now          func() time.Time
-	NewID        func() string
+	CatalogAI ports.CatalogAIReadRepository
+	Evaluator CatalogEvaluationClient
+	RunRepo   ports.AIRunRepository
+	Now       func() time.Time
+	NewID     func() string
 
 	// TokenBudget is the per-batch token cap. Per contract ② §2, this is
 	// token-based not item-count-based. Set via runtime config.
 	TokenBudget int
 
 	// AIUsageRepository records per-batch telemetry to ai_usage_records.
-	// Per AIUsageTokenTelemetry.md §6: every Gemini call's tokens + cost
+	// Per AIUsageTokenTelemetry.md §6: every AI model call's tokens + cost
 	// must be persisted. Batch calls record final_ai_replies=0.
-	AIUsage       ports.AIUsageRepository
-	AIPricing     ports.AIProviderPricingRepository
+	AIUsage   ports.AIUsageRepository
+	AIPricing ports.AIProviderPricingRepository
+
+	GatewayFXRateYER string
+
 	Subscriptions ports.SubscriptionRepository
 }
 
-// BatchGeminiClient is the per-batch Gemini interaction contract.
-// Each batch is one independent stateless Gemini request per contract ② §8 — no
+// CatalogEvaluationClient is the per-batch AI model interaction contract.
+// Each batch is one independent stateless AI model request per contract ② §8 — no
 // previous_interaction_id chaining between batches.
-type BatchGeminiClient interface {
-	// EvaluateBatch sends one batch to Gemini and returns the candidate set.
+type CatalogEvaluationClient interface {
+	// EvaluateBatch sends one batch to AI model and returns the candidate set.
 	EvaluateBatch(ctx context.Context, input BatchEvaluationInput) (ports.CatalogBatchResult, error)
 
 	// FinalEvaluate runs the contract ② §6 final evaluation with a custom
 	// user prompt that includes BOTH candidate IDs AND full product details.
-	// This allows Gemini to compose a response with names, prices, descriptions.
+	// This allows AI model to compose a response with names, prices, descriptions.
 	// Returns the proposal + usage telemetry for cost recording.
 	FinalEvaluateWithDetails(ctx context.Context, input FinalEvaluationInput, userPrompt string) (ports.CapabilityDecision, ports.CustomerSalesUsageTelemetry, error)
 }
 
-type ExactBatchTokenCounter interface {
+type BatchRequestTokenEstimator interface {
 	CountBatchTokens(ctx context.Context, input BatchEvaluationInput) (int, error)
 }
 
-type ExactFinalTokenCounter interface {
+type FinalRequestTokenEstimator interface {
 	CountFinalTokens(ctx context.Context, input FinalEvaluationInput, userPrompt string) (int, error)
 }
 
-// BatchEvaluationInput is one batch's input to Gemini.
+// BatchEvaluationInput is one batch's input to AI model.
 type BatchEvaluationInput struct {
 	AIRunID             string
 	AttemptID           string
@@ -116,16 +120,17 @@ type BatchEvaluationInput struct {
 	Reduction bool
 }
 
-// FinalEvaluationInput is the post-batch final Gemini call.
+// FinalEvaluationInput is the post-batch final AI model call.
 type FinalEvaluationInput struct {
-	AIRunID             string
-	AttemptID           string
-	BusinessID          string
-	ConversationID      string
-	CustomerMessage     string
-	ConversationContext ports.CustomerSalesContext
-	EntityContract      CatalogEntityContractPayload
-	CandidateResults    []ports.CatalogBatchCandidate
+	SourceMessageReference string
+	AIRunID                string
+	AttemptID              string
+	BusinessID             string
+	ConversationID         string
+	CustomerMessage        string
+	ConversationContext    ports.CustomerSalesContext
+	EntityContract         CatalogEntityContractPayload
+	CandidateResults       []ports.CatalogBatchCandidate
 }
 
 type CatalogEvaluationResult struct {
@@ -142,15 +147,6 @@ type CatalogAIBatchPayload struct {
 	Catalogs         []CatalogAICatalog         `json:"catalogs,omitempty"`
 	AttributeSchemas []CatalogAIAttributeSchema `json:"attribute_schemas,omitempty"`
 	Items            []CatalogAIItem            `json:"items,omitempty"`
-}
-
-// TokenCounter returns the token count of a serialized payload.
-//
-// Per contract ② §2, Google provides count_tokens for exactly this purpose.
-// Implementations wrap that API. The Contract is token-based, not character
-// or byte based, so the model's own tokenizer is authoritative.
-type TokenCounter interface {
-	CountTokens(ctx context.Context, payload any) (int, error)
 }
 
 // RunCatalogEvaluation drives the full contract ② §9 evaluation pipeline.
@@ -179,7 +175,6 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 	candidateSet := make([]ports.CatalogBatchCandidate, 0)
 	candidateProjection := CatalogAIProjection{}
 	candidateItemsSeen := make(map[string]struct{})
-
 	for {
 		page, err := c.CatalogAI.ListProjectionPage(ctx, ports.CatalogAIProjectionRequest{
 			BusinessID: input.BusinessID,
@@ -192,11 +187,13 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 		}
 
 		if len(page.Items) > 0 {
+			catalogdump.Record(catalogdump.WithRun(ctx, input.AIRunID), "database_catalog_page", page)
 			pageProjection := ProjectionFromBundles(page.Items)
 			appendCatalogRecordsToProjection(&pageProjection, page.Catalogs)
+			catalogdump.Record(catalogdump.WithRun(ctx, input.AIRunID), "catalog_projection_page", pageProjection)
 			batches, err := c.splitIntoBatches(ctx, pageProjection, input, nextBatchNumber)
 			if err != nil {
-				return CatalogEvaluationResult{}, fmt.Errorf("split catalog page into exact-token batches: %w", err)
+				return CatalogEvaluationResult{}, fmt.Errorf("split catalog page into budgeted batches: %w", err)
 			}
 			pageCandidates := make([]ports.CatalogBatchCandidate, 0)
 
@@ -211,7 +208,7 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 				if err := c.markBatchRunning(ctx, rec.ID); err != nil {
 					return CatalogEvaluationResult{}, err
 				}
-				result, err := c.Gemini.EvaluateBatch(ctx, BatchEvaluationInput{
+				result, err := c.Evaluator.EvaluateBatch(ctx, BatchEvaluationInput{
 					AIRunID:             input.AIRunID,
 					AttemptID:           input.AttemptID,
 					BatchNumber:         batch.BatchNumber,
@@ -226,15 +223,17 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 					_ = c.markBatchFailed(ctx, rec.ID, err.Error())
 					return CatalogEvaluationResult{}, fmt.Errorf("batch %d evaluation: %w", batch.BatchNumber, err)
 				}
+				// Successful model calls incur usage even if their output is
+				// rejected by the evidence validator.
+				c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, result.Usage, fmt.Sprintf("batch_%d", batch.BatchNumber))
 				if err := validateBatchCandidates(batch, result.Candidates); err != nil {
 					_ = c.markBatchFailed(ctx, rec.ID, err.Error())
-					return CatalogEvaluationResult{}, fmt.Errorf("batch %d returned invalid candidate evidence: %w", batch.BatchNumber, err)
+					return CatalogEvaluationResult{}, aierrors.Wrap(aierrors.ModelOutput, fmt.Errorf("batch %d returned invalid candidate evidence: %w", batch.BatchNumber, err))
 				}
 				if err := c.markBatchCompleted(ctx, rec.ID, len(result.Candidates)); err != nil {
 					return CatalogEvaluationResult{}, err
 				}
 				batchRecords[recordIndex].Status = "completed"
-				c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, result.Usage, fmt.Sprintf("batch_%d", batch.BatchNumber))
 				candidateSet = append(candidateSet, result.Candidates...)
 				pageCandidates = append(pageCandidates, result.Candidates...)
 				log.Printf("[CatalogBatch] BATCH_DONE batch=%d items=%d candidates=%d", batch.BatchNumber, len(batch.Items), len(result.Candidates))
@@ -280,6 +279,17 @@ func (c *CatalogBatchController) runPagedCatalogEvaluation(ctx context.Context, 
 	if err != nil {
 		return CatalogEvaluationResult{}, err
 	}
+	// The final LLM call (including any candidate-reduction rounds) may run
+	// after the first revision check. A merchant can change an offer or price
+	// during that time. Never publish a decision from a stale catalog.
+	revisionAfterFinal, err := c.CatalogAI.GetRevision(ctx, input.BusinessID)
+	if err != nil {
+		return CatalogEvaluationResult{}, fmt.Errorf("read catalog revision after final evaluation: %w", err)
+	}
+	if revisionAfterFinal != revisionStart {
+		return CatalogEvaluationResult{}, errors.New("catalog changed during final evaluation; refusing stale commercial AI result")
+	}
+	catalogdump.Record(catalogdump.WithRun(ctx, input.AIRunID), "final_validation_evidence", EvidenceFromProjection(finalProjection))
 	return CatalogEvaluationResult{
 		Decision: proposal,
 		// Validation trusts exactly the projection exposed to the final model
@@ -342,64 +352,13 @@ func appendCandidateProjection(target *CatalogAIProjection, batch CatalogAIBatch
 	}
 
 	for _, item := range batch.Items {
-		candidate, ok := candidateByItem[item.ID]
-		if !ok {
+		if _, selected := candidateByItem[item.ID]; !selected {
 			continue
 		}
-		// If Gemini narrowed a candidate to specific variants/offers, expose
-		// only those nested records to the next stage. Empty child lists mean
-		// the whole item remains the candidate and its nested facts stay visible.
-		filtered := item
-		if len(candidate.VariantIDs) > 0 || len(candidate.OfferIDs) > 0 {
-			variantIDs := make(map[string]struct{}, len(candidate.VariantIDs))
-			for _, id := range candidate.VariantIDs {
-				variantIDs[id] = struct{}{}
-			}
-			offerIDs := make(map[string]struct{}, len(candidate.OfferIDs))
-			for _, id := range candidate.OfferIDs {
-				offerIDs[id] = struct{}{}
-			}
-
-			filtered.Offers = nil
-			for _, offer := range item.Offers {
-				include := false
-				if len(offerIDs) > 0 {
-					_, include = offerIDs[offer.ID]
-				} else if len(variantIDs) > 0 {
-					include = offer.VariantID == nil
-					if offer.VariantID != nil {
-						_, include = variantIDs[*offer.VariantID]
-					}
-				}
-				if !include {
-					continue
-				}
-				filtered.Offers = append(filtered.Offers, offer)
-				if offer.VariantID != nil && *offer.VariantID != "" {
-					variantIDs[*offer.VariantID] = struct{}{}
-				}
-			}
-
-			filtered.Variants = nil
-			for _, variant := range item.Variants {
-				if _, include := variantIDs[variant.ID]; include {
-					filtered.Variants = append(filtered.Variants, variant)
-				}
-			}
+		if _, exists := seen[item.ID]; exists {
+			continue // already included as an indivisible complete item
 		}
-
-		merged := false
-		for i := range target.Items {
-			if target.Items[i].ID != filtered.ID {
-				continue
-			}
-			mergeCatalogAIItemChildren(&target.Items[i], filtered)
-			merged = true
-			break
-		}
-		if !merged {
-			target.Items = append(target.Items, filtered)
-		}
+		target.Items = append(target.Items, item)
 		seen[item.ID] = struct{}{}
 	}
 
@@ -435,35 +394,6 @@ func appendCandidateProjection(target *CatalogAIProjection, batch CatalogAIBatch
 				break
 			}
 		}
-	}
-}
-
-func mergeCatalogAIItemChildren(target *CatalogAIItem, incoming CatalogAIItem) {
-	if target == nil {
-		return
-	}
-	variantSeen := make(map[string]struct{}, len(target.Variants))
-	for _, variant := range target.Variants {
-		variantSeen[variant.ID] = struct{}{}
-	}
-	for _, variant := range incoming.Variants {
-		if _, ok := variantSeen[variant.ID]; ok {
-			continue
-		}
-		target.Variants = append(target.Variants, variant)
-		variantSeen[variant.ID] = struct{}{}
-	}
-
-	offerSeen := make(map[string]struct{}, len(target.Offers))
-	for _, offer := range target.Offers {
-		offerSeen[offer.ID] = struct{}{}
-	}
-	for _, offer := range incoming.Offers {
-		if _, ok := offerSeen[offer.ID]; ok {
-			continue
-		}
-		target.Offers = append(target.Offers, offer)
-		offerSeen[offer.ID] = struct{}{}
 	}
 }
 
@@ -559,7 +489,9 @@ func parseJSONAttributes(raw []byte) map[string]any {
 		return nil
 	}
 	var out map[string]any
-	if err := json.Unmarshal(raw, &out); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber() // Preserve decimal/integer attribute values without float64 coercion.
+	if err := decoder.Decode(&out); err != nil {
 		return nil
 	}
 	if len(out) == 0 {
@@ -605,9 +537,9 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 		budget = 8000
 	}
 
-	exactCounter, hasExactCounter := c.Gemini.(ExactBatchTokenCounter)
-	if !hasExactCounter && c.TokenCounter == nil {
-		return nil, errors.New("batch token counter is not configured")
+	estimator, hasEstimator := c.Evaluator.(BatchRequestTokenEstimator)
+	if !hasEstimator {
+		return nil, errors.New("full provider request token estimator is required; no legacy payload-only counter")
 	}
 
 	buildBatch := func(items []CatalogAIItem, batchNumber int) CatalogAIBatchPayload {
@@ -637,110 +569,18 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 	}
 	batches := make([]CatalogAIBatchPayload, 0)
 	countBatch := func(batch CatalogAIBatchPayload) (int, error) {
-		if hasExactCounter {
-			return exactCounter.CountBatchTokens(ctx, BatchEvaluationInput{
-				AIRunID:             input.AIRunID,
-				AttemptID:           input.AttemptID,
-				BatchNumber:         batch.BatchNumber,
-				BusinessID:          input.BusinessID,
-				ConversationID:      input.ConversationID,
-				CustomerMessage:     input.CustomerMessage,
-				ConversationContext: input.ConversationContext,
-				EntityContract:      input.EntityContract,
-				Batch:               batch,
-				Reduction:           reduction,
-			})
-		}
-		// Compatibility fallback for unit tests. Production BatchClient
-		// implements ExactBatchTokenCounter.
-		return c.TokenCounter.CountTokens(ctx, batch)
-	}
-
-	type itemFragmentUnit struct {
-		variant *CatalogAIVariant
-		offer   *CatalogAIOffer
-	}
-
-	buildFragmentItem := func(item CatalogAIItem, units []itemFragmentUnit) CatalogAIItem {
-		fragment := item
-		fragment.Variants = nil
-		fragment.Offers = nil
-		variantSeen := make(map[string]struct{})
-		offerSeen := make(map[string]struct{})
-		for _, unit := range units {
-			if unit.variant != nil {
-				if _, ok := variantSeen[unit.variant.ID]; !ok {
-					fragment.Variants = append(fragment.Variants, *unit.variant)
-					variantSeen[unit.variant.ID] = struct{}{}
-				}
-			}
-			if unit.offer != nil {
-				if _, ok := offerSeen[unit.offer.ID]; !ok {
-					fragment.Offers = append(fragment.Offers, *unit.offer)
-					offerSeen[unit.offer.ID] = struct{}{}
-				}
-			}
-		}
-		return fragment
-	}
-
-	var splitOversizedItem func(CatalogAIItem) error
-	splitOversizedItem = func(item CatalogAIItem) error {
-		variantByID := make(map[string]CatalogAIVariant, len(item.Variants))
-		for _, variant := range item.Variants {
-			variantByID[variant.ID] = variant
-		}
-		variantUsedByOffer := make(map[string]struct{})
-		units := make([]itemFragmentUnit, 0, len(item.Offers)+len(item.Variants))
-		for i := range item.Offers {
-			offer := item.Offers[i]
-			unit := itemFragmentUnit{offer: &offer}
-			if offer.VariantID != nil && *offer.VariantID != "" {
-				if variant, ok := variantByID[*offer.VariantID]; ok {
-					variantCopy := variant
-					unit.variant = &variantCopy
-					variantUsedByOffer[variant.ID] = struct{}{}
-				}
-			}
-			offerCopy := offer
-			unit.offer = &offerCopy
-			units = append(units, unit)
-		}
-		for i := range item.Variants {
-			variant := item.Variants[i]
-			if _, used := variantUsedByOffer[variant.ID]; used {
-				continue
-			}
-			variantCopy := variant
-			units = append(units, itemFragmentUnit{variant: &variantCopy})
-		}
-		if len(units) == 0 {
-			return fmt.Errorf("catalog item %s exceeds token budget %d and has no splittable variants/offers", item.ID, budget)
-		}
-
-		var splitUnits func([]itemFragmentUnit) error
-		splitUnits = func(part []itemFragmentUnit) error {
-			fragment := buildFragmentItem(item, part)
-			batch := buildBatch([]CatalogAIItem{fragment}, nextBatchNumber)
-			tokens, err := countBatch(batch)
-			if err != nil {
-				return fmt.Errorf("count tokens for item %s fragment batch %d: %w", item.ID, nextBatchNumber, err)
-			}
-			if tokens <= budget {
-				batches = append(batches, batch)
-				nextBatchNumber++
-				return nil
-			}
-			if len(part) == 1 {
-				return fmt.Errorf("catalog item %s contains a single commercial fragment exceeding token budget %d with exact request size %d", item.ID, budget, tokens)
-			}
-			mid := len(part) / 2
-			if err := splitUnits(part[:mid]); err != nil {
-				return err
-			}
-			return splitUnits(part[mid:])
-		}
-		return splitUnits(units)
+		return estimator.CountBatchTokens(ctx, BatchEvaluationInput{
+			AIRunID:             input.AIRunID,
+			AttemptID:           input.AttemptID,
+			BatchNumber:         batch.BatchNumber,
+			BusinessID:          input.BusinessID,
+			ConversationID:      input.ConversationID,
+			CustomerMessage:     input.CustomerMessage,
+			ConversationContext: input.ConversationContext,
+			EntityContract:      input.EntityContract,
+			Batch:               batch,
+			Reduction:           reduction,
+		})
 	}
 
 	var split func([]CatalogAIItem) error
@@ -759,7 +599,7 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 			return nil
 		}
 		if len(items) == 1 {
-			return splitOversizedItem(items[0])
+			return fmt.Errorf("catalog item %s exceeds token budget %d with complete request estimate %d: indivisible commercial entity; configure a verified larger-context route", items[0].ID, budget, tokens)
 		}
 		mid := len(items) / 2
 		if err := split(items[:mid]); err != nil {
@@ -770,6 +610,11 @@ func (c *CatalogBatchController) splitIntoBatchesMode(ctx context.Context, proje
 
 	if err := split(projection.Items); err != nil {
 		return nil, err
+	}
+	// Verify each source item appears once, unchanged, with all its child
+	// relationships and schema before any batch is sent to the provider.
+	if err := validateCatalogBatchCoverage(projection, batches); err != nil {
+		return nil, fmt.Errorf("catalog batch coverage: %w", err)
 	}
 	return batches, nil
 }
@@ -857,14 +702,14 @@ func (c *CatalogBatchController) coverageComplete(records []ports.AICatalogBatch
 	return true
 }
 
-// runFinalEvaluation calls the contract ② §6 final Gemini evaluation.
-// Per contract ② §6, the Final Gemini sees:
+// runFinalEvaluation calls the contract ② §6 final AI model evaluation.
+// Per contract ② §6, the Final AI model sees:
 //   - Customer Message
 //   - Conversation Context
 //   - Candidate Results (IDs + reason)
 //   - الدليل التجاري المرتبط بالمرشحين (full product details for each candidate)
 //
-// Without the full product details, Gemini only sees IDs and cannot
+// Without the full product details, AI model only sees IDs and cannot
 // compose a response with names, prices, descriptions.
 func (c *CatalogBatchController) runFinalEvaluation(
 	ctx context.Context,
@@ -895,6 +740,8 @@ func (c *CatalogBatchController) runFinalEvaluation(
 		budget = 8000
 	}
 	lastOversizeTokens := 0
+	reductionRounds := 0
+	const maxReductionRounds = 3
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -902,26 +749,31 @@ func (c *CatalogBatchController) runFinalEvaluation(
 		}
 
 		finalInput, userPrompt := buildFinalEvaluationPayload(input, candidates, candidateProjection)
+		catalogdump.Record(catalogdump.WithRun(ctx, input.AIRunID), "final_candidate_projection", candidateProjection)
 
-		if exact, ok := c.Gemini.(ExactFinalTokenCounter); ok {
-			tokens, err := exact.CountFinalTokens(ctx, finalInput, userPrompt)
+		if estimator, ok := c.Evaluator.(FinalRequestTokenEstimator); ok {
+			tokens, err := estimator.CountFinalTokens(ctx, finalInput, userPrompt)
 			if err != nil {
 				return ports.CapabilityDecision{}, CatalogAIProjection{}, fmt.Errorf("count final evaluation tokens: %w", err)
 			}
 			if tokens > budget {
 				if len(candidateProjection.Items) == 0 {
 					return ports.CapabilityDecision{}, CatalogAIProjection{}, fmt.Errorf(
-						"final evaluation base context exceeds token budget %d with exact request size %d",
+						"final evaluation base context exceeds token budget %d with estimated request size %d",
 						budget, tokens,
 					)
 				}
 				if lastOversizeTokens > 0 && tokens >= lastOversizeTokens {
-					return ports.CapabilityDecision{}, CatalogAIProjection{}, fmt.Errorf(
+					return ports.CapabilityDecision{}, CatalogAIProjection{}, aierrors.Wrap(aierrors.CatalogBudget, fmt.Errorf(
 						"candidate reduction made no token progress: previous=%d current=%d budget=%d",
 						lastOversizeTokens, tokens, budget,
-					)
+					))
 				}
 				lastOversizeTokens = tokens
+				if reductionRounds >= maxReductionRounds {
+					return ports.CapabilityDecision{}, CatalogAIProjection{}, aierrors.Wrap(aierrors.CatalogBudget, fmt.Errorf("candidate reduction exceeded %d bounded rounds with %d estimated tokens; use a validated larger-context route for complete comparison", maxReductionRounds, tokens))
+				}
+				reductionRounds++
 
 				reducedCandidates, reducedProjection, nextNumber, err := c.reduceCandidateRound(
 					ctx,
@@ -939,7 +791,7 @@ func (c *CatalogBatchController) runFinalEvaluation(
 			}
 		}
 
-		proposal, usage, err := c.Gemini.FinalEvaluateWithDetails(ctx, finalInput, userPrompt)
+		proposal, usage, err := c.Evaluator.FinalEvaluateWithDetails(ctx, finalInput, userPrompt)
 		if err != nil {
 			return ports.CapabilityDecision{}, CatalogAIProjection{}, err
 		}
@@ -957,23 +809,37 @@ func buildFinalEvaluationPayload(
 	candidateProjection CatalogAIProjection,
 ) (FinalEvaluationInput, string) {
 	contextPayload := struct {
+		Sales                  *ports.SalesWorkflowContext                 `json:"sales,omitempty"`
+		SchemaVersion          int                                         `json:"schema_version"`
+		Freshness              string                                      `json:"freshness"`
 		Business               ports.CustomerSalesContextBusiness          `json:"business"`
 		Conversation           ports.CustomerSalesContextConversation      `json:"conversation"`
-		Customer               ports.CustomerSalesContextCustomer          `json:"customer"`
+		Customer               finalEvaluationCustomer                     `json:"customer"`
 		KnowledgeEvidence      []ports.CustomerSalesKnowledgeEvidence      `json:"knowledge_evidence,omitempty"`
 		BusinessPolicyEvidence []ports.CustomerSalesBusinessPolicyEvidence `json:"business_policy_evidence,omitempty"`
 		RecentMessages         []ports.CustomerSalesRecentMessageEvidence  `json:"recent_messages,omitempty"`
+		PolicyEvidence         ports.CustomerSalesPolicyEvidence           `json:"policy_evidence"`
+		KnowledgeState         string                                      `json:"knowledge_state"`
 		ConversationState      *ports.ConversationStateRecord              `json:"conversation_state,omitempty"`
 		ConversationSummary    string                                      `json:"conversation_summary,omitempty"`
 		GeneratedAt            time.Time                                   `json:"generated_at"`
 		ExpiresAt              time.Time                                   `json:"expires_at"`
 	}{
-		Business:               input.ConversationContext.Business,
-		Conversation:           input.ConversationContext.Conversation,
-		Customer:               input.ConversationContext.Customer,
+		Sales:         input.ConversationContext.Sales,
+		SchemaVersion: input.ConversationContext.SchemaVersion,
+		Freshness:     input.ConversationContext.Freshness,
+		Business:      input.ConversationContext.Business,
+		Conversation:  input.ConversationContext.Conversation,
+		Customer: finalEvaluationCustomer{
+			Reference:        input.ConversationContext.Customer.Reference,
+			LocalePreference: input.ConversationContext.Customer.LocalePreference,
+			Status:           input.ConversationContext.Customer.Status,
+		},
 		KnowledgeEvidence:      input.ConversationContext.KnowledgeEvidence,
 		BusinessPolicyEvidence: input.ConversationContext.BusinessPolicyEvidence,
 		RecentMessages:         input.ConversationContext.RecentMessages,
+		PolicyEvidence:         input.ConversationContext.PolicyEvidence,
+		KnowledgeState:         input.ConversationContext.KnowledgeState,
 		ConversationState:      input.ConversationContext.ConversationState,
 		ConversationSummary:    input.ConversationContext.ConversationSummary,
 		GeneratedAt:            input.ConversationContext.GeneratedAt,
@@ -989,15 +855,26 @@ func buildFinalEvaluationPayload(
 	)
 
 	return FinalEvaluationInput{
-		AIRunID:             input.AIRunID,
-		AttemptID:           input.AttemptID,
-		BusinessID:          input.BusinessID,
-		ConversationID:      input.ConversationID,
-		CustomerMessage:     input.CustomerMessage,
-		ConversationContext: input.ConversationContext,
-		EntityContract:      input.EntityContract,
-		CandidateResults:    candidates,
+		SourceMessageReference: input.SourceMessageReference,
+		AIRunID:                input.AIRunID,
+		AttemptID:              input.AttemptID,
+		BusinessID:             input.BusinessID,
+		ConversationID:         input.ConversationID,
+		CustomerMessage:        input.CustomerMessage,
+		ConversationContext:    input.ConversationContext,
+		EntityContract:         input.EntityContract,
+		CandidateResults:       candidates,
 	}, userPrompt
+}
+
+// finalEvaluationCustomer deliberately excludes profile and contact payloads.
+// Those fields are not catalog evidence and can be both large and sensitive;
+// the final model only needs the same bounded customer identity fields used by
+// the normal customer-sales prompt.
+type finalEvaluationCustomer struct {
+	Reference        string `json:"reference"`
+	LocalePreference string `json:"locale_preference"`
+	Status           string `json:"status"`
 }
 
 func (c *CatalogBatchController) reduceCandidateRound(
@@ -1024,7 +901,7 @@ func (c *CatalogBatchController) reduceCandidateRound(
 			return nil, CatalogAIProjection{}, startBatchNumber, err
 		}
 
-		result, err := c.Gemini.EvaluateBatch(ctx, BatchEvaluationInput{
+		result, err := c.Evaluator.EvaluateBatch(ctx, BatchEvaluationInput{
 			AIRunID:             input.AIRunID,
 			AttemptID:           input.AttemptID,
 			BatchNumber:         batch.BatchNumber,
@@ -1040,6 +917,9 @@ func (c *CatalogBatchController) reduceCandidateRound(
 			_ = c.markBatchFailed(ctx, rec.ID, err.Error())
 			return nil, CatalogAIProjection{}, startBatchNumber, fmt.Errorf("candidate reduction batch %d: %w", batch.BatchNumber, err)
 		}
+		// Meter successful provider calls before checking their references.
+		// In particular, rejected candidate IDs must not hide spent tokens.
+		c.recordBatchUsage(ctx, input.BusinessID, input.AIRunID, result.Usage, fmt.Sprintf("candidate_reduction_batch_%d", batch.BatchNumber))
 		if err := validateBatchCandidates(batch, result.Candidates); err != nil {
 			_ = c.markBatchFailed(ctx, rec.ID, err.Error())
 			return nil, CatalogAIProjection{}, startBatchNumber, fmt.Errorf("candidate reduction batch %d returned invalid evidence: %w", batch.BatchNumber, err)
@@ -1050,13 +930,6 @@ func (c *CatalogBatchController) reduceCandidateRound(
 
 		reducedCandidates = append(reducedCandidates, result.Candidates...)
 		appendCandidateProjection(&reducedProjection, batch, result.Candidates, seenItems)
-		c.recordBatchUsage(
-			ctx,
-			input.BusinessID,
-			input.AIRunID,
-			result.Usage,
-			fmt.Sprintf("candidate_reduction_batch_%d", batch.BatchNumber),
-		)
 		log.Printf(
 			"[CatalogBatch] REDUCTION_DONE batch=%d items=%d candidates=%d",
 			batch.BatchNumber,
@@ -1079,14 +952,15 @@ func mustMarshal(v any) []byte {
 
 // CatalogEvaluationInput is the controller's input.
 type CatalogEvaluationInput struct {
-	AIRunID             string
-	AttemptID           string
-	BusinessID          string
-	ConversationID      string
-	CatalogScope        string // the catalog scope to evaluate (e.g., a specific catalog_id)
-	CustomerMessage     string
-	ConversationContext ports.CustomerSalesContext
-	EntityContract      CatalogEntityContractPayload
+	SourceMessageReference string
+	AIRunID                string
+	AttemptID              string
+	BusinessID             string
+	ConversationID         string
+	CatalogScope           string // the catalog scope to evaluate (e.g., a specific catalog_id)
+	CustomerMessage        string
+	ConversationContext    ports.CustomerSalesContext
+	EntityContract         CatalogEntityContractPayload
 }
 
 // countCompleted returns the number of batches with status="completed".
@@ -1100,13 +974,13 @@ func countCompleted(records []ports.AICatalogBatchRecord) int {
 	return count
 }
 
-// recordBatchUsage persists per-batch Gemini call telemetry to ai_usage_records.
+// recordBatchUsage persists per-batch AI model call telemetry to ai_usage_records.
 //
-// Per AIUsageTokenTelemetry.md §6: every Gemini call's tokens + cost must be
+// Per AIUsageTokenTelemetry.md §6: every AI model call's tokens + cost must be
 // recorded. Batch calls and the final evaluation call record:
 //   - model_requests = 1
 //   - final_ai_replies = 0 (the final reply is counted by AutoReply.recordAIUsage)
-//   - tokens (input/cached/output) from Gemini's usageMetadata
+//   - tokens (input/cached/output) from AI model's usageMetadata
 //   - provider_cost_yer computed from the pricing table
 //   - correlation_id = runID + "|" + phase (for dedup)
 //
@@ -1141,28 +1015,13 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 		nonCachedInput = 0
 	}
 	providerCostYER := 0
-	pricingVersion := "unknown"
-	// Per P1-6: when pricing lookup fails, mark the record with
-	// status="pricing_failed" so the aggregate does NOT silently
-	// understate provider cost. Same fail-safe applied to AutoReply
-	// + ConversationSummary — the catalog batch path was the last
-	// holdout still writing cost=0 as "success".
-	pricingFailed := false
-	if c.AIPricing != nil {
-		pricing, err := c.AIPricing.GetCurrentForProvider(ctx, "google_gemini", usage.Model)
-		if err == nil {
-			pricingVersion = pricing.PricingVersion
-			inputCost := int64(nonCachedInput) * int64(pricing.InputPerMillionYER) / 1_000_000
-			cachedCost := int64(cachedInput) * int64(pricing.CachedInputPerMillionYER) / 1_000_000
-			outputCost := int64(usage.OutputTokens) * int64(pricing.OutputPerMillionYER) / 1_000_000
-			providerCostYER = int(inputCost + cachedCost + outputCost)
-		} else {
-			log.Printf("[CatalogBatch] AI_USAGE_PRICING_LOOKUP_FAILED business=%s model=%s phase=%s err=%v", businessID, usage.Model, phase, err)
-			pricingFailed = true
+	pricingVersion, gatewayCostUSD, gatewayFXRate, pricingFailed := nativeProviderSpend(usage, c.GatewayFXRateYER)
+	if pricingFailed {
+		if calculatedYER, version, unpriced := nativeTokenPricedSpend(ctx, c.AIPricing, usage); !unpriced {
+			providerCostYER = calculatedYER
+			pricingVersion = version
+			pricingFailed = false
 		}
-	} else {
-		log.Printf("[CatalogBatch] AI_USAGE_PRICING_REPO_NOT_WIRED business=%s model=%s phase=%s", businessID, usage.Model, phase)
-		pricingFailed = true
 	}
 	recordStatus := "success"
 	if pricingFailed {
@@ -1176,31 +1035,35 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 	correlationID := runID + "|" + phase
 	recordID := c.NewID()
 	now := c.Now()
-	// Per P2-13: use the REAL latency from the Gemini call
+	// Per P2-13: use the REAL latency from the AI model call
 	// (usage.LatencyMs) to compute StartedAt — NOT EstimatedCostMicros
 	// (which was always 0, resulting in StartedAt == CompletedAt +
 	// latency=0 for every batch record).
 	startedAt := now.Add(-time.Duration(usage.LatencyMs) * time.Millisecond)
-	_, err := c.AIUsage.AppendRecord(ctx, ports.AIUsageAppend{
+	usageRecord := ports.AIUsageAppend{
 		ID:                recordID,
 		BusinessID:        businessID,
 		SubscriptionID:    subscriptionID,
-		Provider:          "google_gemini",
+		Provider:          usageProvider(usage.Provider),
 		Model:             usage.Model,
 		InputTokens:       int64(nonCachedInput),
 		CachedInputTokens: int64(cachedInput),
 		OutputTokens:      int64(usage.OutputTokens),
-		ModelRequests:     1,
+		ModelRequests:     maxNativeRequests(usage.ModelRequests),
 		ToolCalls:         0,
 		FinalAIReplies:    0, // batch calls never count as final replies
 		ProviderCostYER:   providerCostYER,
-		PricingVersion:    pricingVersion,
-		Status:            recordStatus,
-		CorrelationID:     &correlationID,
-		StartedAt:         startedAt,
-		CompletedAt:       now,
-		Now:               now,
-	})
+
+		PricingVersion: pricingVersion,
+		Status:         recordStatus,
+		CorrelationID:  &correlationID,
+		StartedAt:      startedAt,
+		CompletedAt:    now,
+		Now:            now,
+	}
+	usageRecord.GatewayCostUSD, usageRecord.GatewayFXRateYER = gatewayCostUSD, gatewayFXRate
+	usageRecord.GatewayCallID, usageRecord.GatewayDeploymentID = usage.GatewayCallID, usage.GatewayDeploymentID
+	_, err := c.AIUsage.AppendRecord(ctx, usageRecord)
 	if err != nil {
 		log.Printf("[CatalogBatch] AI_USAGE_RECORD_FAILED business=%s phase=%s err=%v", businessID, phase, err)
 		return
@@ -1211,9 +1074,9 @@ func (c *CatalogBatchController) recordBatchUsage(ctx context.Context, businessI
 
 // Ready is the same local dependency check used when offering the capability.
 func (c *CatalogBatchController) Ready() bool {
-	if c == nil || c.Gemini == nil || c.RunRepo == nil || c.CatalogAI == nil || c.Now == nil || c.NewID == nil {
+	if c == nil || c.Evaluator == nil || c.RunRepo == nil || c.CatalogAI == nil || c.Now == nil || c.NewID == nil {
 		return false
 	}
-	_, exact := c.Gemini.(ExactBatchTokenCounter)
-	return exact || c.TokenCounter != nil
+	_, estimated := c.Evaluator.(BatchRequestTokenEstimator)
+	return estimated
 }

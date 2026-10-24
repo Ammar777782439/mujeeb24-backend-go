@@ -124,6 +124,8 @@ type LeadRepository interface {
 }
 
 type TransactionRecord struct {
+	Lines                         []TransactionLineRecord
+	AgreementVersion              int64
 	ID                            string
 	BusinessID                    string
 	CustomerID                    string
@@ -148,21 +150,21 @@ type TransactionPage struct {
 }
 
 type TransactionLineRecord struct {
-	ID                         string
-	BusinessID                 string
-	TransactionID              string
-	CatalogItemID              string
-	OfferID                    *string
-	VariantID                  *string
-	ItemNameSnapshot           string
+	ID                         string  `json:"id"`
+	BusinessID                 string  `json:"business_id"`
+	TransactionID              string  `json:"transaction_id"`
+	CatalogItemID              string  `json:"catalog_item_id"`
+	OfferID                    *string `json:"offer_id"`
+	VariantID                  *string `json:"variant_id"`
+	ItemNameSnapshot           string  `json:"item_name_snapshot"`
 	SelectedAttributesSnapshot []byte
 	PricingSnapshot            []byte
 	AvailabilitySnapshot       []byte
 	FulfillmentSnapshot        []byte
-	Quantity                   string
-	UnitPriceSnapshot          *string
-	LineTotalSnapshot          *string
-	Currency                   *string
+	Quantity                   string  `json:"quantity"`
+	UnitPriceSnapshot          *string `json:"unit_price_snapshot"`
+	LineTotalSnapshot          *string `json:"line_total_snapshot"`
+	Currency                   *string `json:"currency"`
 }
 
 type TransactionReviewRecord struct {
@@ -225,6 +227,7 @@ type TransactionPatch struct {
 }
 
 type TransactionConfirmPatch struct {
+	ConfirmedBy       string
 	ID                string
 	BusinessID        string
 	EvidenceReference string

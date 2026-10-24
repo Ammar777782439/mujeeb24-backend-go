@@ -13,6 +13,7 @@ type ProviderInboundStore interface {
 }
 
 type ProviderInboundDraft struct {
+	ActionPayload          string
 	InboundEventID         string
 	BusinessID             string
 	ConnectionID           string

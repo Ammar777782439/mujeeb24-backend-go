@@ -46,7 +46,30 @@ func (s *Server) dispatchAdditionalQuery(ctx context.Context, operationID string
 			return mapApplicationError(err), true
 		}
 		out := &contract.Single[contract.DashboardOverview]{}
-		out.Body.Data = contract.DashboardOverview{OpenConversations: view.OpenConversations, WaitingHuman: view.WaitingHuman, NewCustomers: view.NewCustomers, NewLeads: view.NewLeads, TransactionsNeedingReview: view.TransactionsNeedingReview}
+		out.Body.Data = contract.DashboardOverview{
+			OpenConversations:         view.OpenConversations,
+			WaitingHuman:              view.WaitingHuman,
+			NewCustomers:              view.NewCustomers,
+			NewLeads:                  view.NewLeads,
+			TransactionsNeedingReview: view.TransactionsNeedingReview,
+			Subscription:              merchantSubscriptionProjection(view.Subscription),
+		}
+		return out, true
+	case "getBusinessSubscription":
+		in := input.(*contract.BusinessPath)
+		if s.deps.GetBusinessSubscription == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.GetBusinessSubscription.Handle(ctx, queries.GetBusinessSubscriptionQuery{Meta: queryMeta(actor, "", "")})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		out := &contract.Single[contract.MerchantSubscriptionView]{}
+		out.Body.Data = merchantSubscriptionDirectProjection(view)
 		return out, true
 	case "listChannelConnections":
 		in := input.(*contract.ConnectionListInput)
@@ -503,9 +526,8 @@ func (s *Server) dispatchAdditionalQuery(ctx context.Context, operationID string
 		return nil, false
 	}
 }
-
 func businessPolicyProjection(v commands.BusinessPolicyView) contract.BusinessPolicy {
-	return contract.BusinessPolicy{BusinessID: contract.UUID(v.BusinessID), AIMode: v.AIMode, DefaultHumanReview: v.DefaultHumanReview, AllowAutoReply: v.AllowAutoReply, AllowAutoLeadCreation: v.AllowAutoLeadCreation, AllowAutoTransactionDraft: v.AllowAutoTransactionDraft, AllowAutoConfirmation: v.AllowAutoConfirmation, ResourceVersion: string(v.ResourceVersion)}
+	return contract.BusinessPolicy{BusinessID: contract.UUID(v.BusinessID), AIMode: v.AIMode, DefaultHumanReview: v.DefaultHumanReview, AllowAutoReply: v.AllowAutoReply, AllowAutoLeadCreation: v.AllowAutoLeadCreation, AllowAutoTransactionDraft: v.AllowAutoTransactionDraft, AllowAutoConfirmation: v.AllowAutoConfirmation, SalesWorkflowEnabled: v.SalesWorkflowEnabled, AllowSalesInteractions: v.AllowSalesInteractions, ResourceVersion: string(v.ResourceVersion)}
 }
 func listPage[T any](items []T, cursor string, more bool) *contract.List[T] {
 	out := &contract.List[T]{}
@@ -722,8 +744,30 @@ func leadScoreList(v commands.ListResult[queries.LeadScoreView]) *contract.List[
 	return listPage(items, v.NextCursor, v.HasMore)
 }
 func transactionProjection(v commands.TransactionView) contract.CommercialTransaction {
-	return contract.CommercialTransaction{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), CustomerID: contract.UUID(v.CustomerID), TransactionType: v.TransactionType, State: v.State, ResourceVersion: string(v.ResourceVersion)}
+	result := contract.CommercialTransaction{ID: contract.UUID(v.ID), BusinessID: contract.UUID(v.BusinessID), CustomerID: contract.UUID(v.CustomerID), TransactionType: v.TransactionType, State: v.State, ResourceVersion: string(v.ResourceVersion), Currency: v.Currency, TotalAmount: decimalFloat(v.TotalAmount), SchemaVersion: v.SchemaVersion, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt, Lines: []contract.OrderLineSnapshot{}}
+	if v.LeadID != nil {
+		id := contract.UUID(*v.LeadID)
+		result.LeadID = &id
+	}
+	for _, line := range v.Lines {
+		quantity := decimalFloat(&line.Quantity)
+		if quantity == nil {
+			continue
+		}
+		var offerID, variantID *contract.UUID
+		if line.OfferID != nil {
+			id := contract.UUID(*line.OfferID)
+			offerID = &id
+		}
+		if line.VariantID != nil {
+			id := contract.UUID(*line.VariantID)
+			variantID = &id
+		}
+		result.Lines = append(result.Lines, contract.OrderLineSnapshot{ID: contract.UUID(line.ID), CatalogItemID: contract.UUID(line.CatalogItemID), OfferID: offerID, VariantID: variantID, ItemNameSnapshot: line.ItemNameSnapshot, Quantity: *quantity, UnitPriceSnapshot: decimalFloat(line.UnitPriceSnapshot), Currency: line.Currency})
+	}
+	return result
 }
+
 func aiDecisionProjection(v commands.AIDecisionView) contract.AIDecision {
 	var conversationID *contract.UUID
 	if v.ConversationID != nil {
@@ -765,4 +809,41 @@ func jsonStrings(value []byte) []string {
 		return nil
 	}
 	return values
+}
+
+func merchantSubscriptionProjection(sub *queries.MerchantSubscriptionView) *contract.MerchantSubscriptionView {
+	if sub == nil {
+		return nil
+	}
+	dtoSub := merchantSubscriptionDirectProjection(*sub)
+	return &dtoSub
+}
+
+func merchantSubscriptionDirectProjection(sub queries.MerchantSubscriptionView) contract.MerchantSubscriptionView {
+	return contract.MerchantSubscriptionView{
+		HasSubscription:    sub.HasSubscription,
+		ID:                 sub.ID,
+		BusinessID:         sub.BusinessID,
+		PlanID:             sub.PlanID,
+		PlanCode:           sub.PlanCode,
+		PlanName:           sub.PlanName,
+		PlanVersion:        sub.PlanVersion,
+		Status:             sub.Status,
+		PeriodStart:        sub.PeriodStart,
+		PeriodEnd:          sub.PeriodEnd,
+		PriceYERSnapshot:   sub.PriceYERSnapshot,
+		AmountDueYER:       sub.AmountDueYER,
+		AIReplyLimit:       sub.AIReplyLimit,
+		AIRepliesUsed:      sub.AIRepliesUsed,
+		AIRepliesRemaining: sub.AIRepliesRemaining,
+		AICatalogLimit:     sub.AICatalogLimit,
+		ChannelLimit:       sub.ChannelLimit,
+		ChannelCeiling:     sub.ChannelCeiling,
+		SeatLimit:          sub.SeatLimit,
+		ActiveChannels:     sub.ActiveChannels,
+		ActiveSeats:        sub.ActiveSeats,
+		DaysRemaining:      sub.DaysRemaining,
+		ActivatedAt:        sub.ActivatedAt,
+		CreatedAt:          sub.CreatedAt,
+	}
 }

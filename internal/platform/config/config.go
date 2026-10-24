@@ -11,6 +11,14 @@ import (
 )
 
 type ProcessConfig struct {
+	NativeAIEnabled                bool
+	DeepSeekAPIKey                 string
+	DeepSeekModel                  string
+	NativeHTTPTimeout              time.Duration
+	NativeMaxContextTokens         int
+	NativeMaxOutputTokens          int
+	NativeMaxInputCharacters       int
+	NativeMerchantMaxRequestBytes  int
 	Environment                    string
 	DatabaseURL                    string
 	HTTPAddr                       string
@@ -36,19 +44,8 @@ type ProcessConfig struct {
 	SocialAPIHTTPTimeout           time.Duration
 	ChannelProvisioningEnabled     bool
 	ChannelProvisioningRedirectURI string
+	CustomerSalesEnabled           bool
 	AutoReplyEnabled               bool
-	LLMEnabled                     bool
-	LLMBaseURL                     string
-	LLMAPIKey                      string
-	LLMModel                       string
-	LLMHTTPTimeout                 time.Duration
-	LLMMaxOutputTokens             int
-	LLMMaxInputCharacters          int
-	LLMOutputTokensField           string
-	GeminiAPIKey                   string
-	GeminiBaseURL                  string
-	GeminiModel                    string
-	GeminiHTTPTimeout              time.Duration
 	FrontendURL                    string
 }
 
@@ -60,6 +57,14 @@ func LoadFromEnv() (ProcessConfig, error) {
 	}
 
 	cfg := ProcessConfig{
+		NativeAIEnabled:                false,
+		DeepSeekAPIKey:                 strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")),
+		DeepSeekModel:                  envOr("DEEPSEEK_MODEL", "deepseek-flash"),
+		NativeHTTPTimeout:              20 * time.Second,
+		NativeMaxContextTokens:         32768,
+		NativeMaxOutputTokens:          4096,
+		NativeMaxInputCharacters:       48000,
+		NativeMerchantMaxRequestBytes:  524288,
 		Environment:                    envOr("APP_ENV", "development"),
 		DatabaseURL:                    strings.TrimSpace(os.Getenv("DATABASE_URL")),
 		HTTPAddr:                       httpAddr,
@@ -86,18 +91,6 @@ func LoadFromEnv() (ProcessConfig, error) {
 		ChannelProvisioningEnabled:     false,
 		ChannelProvisioningRedirectURI: strings.TrimSpace(os.Getenv("CHANNEL_PROVISIONING_REDIRECT_URI")),
 		AutoReplyEnabled:               false,
-		LLMEnabled:                     false,
-		LLMBaseURL:                     strings.TrimRight(strings.TrimSpace(os.Getenv("LLM_BASE_URL")), "/"),
-		LLMAPIKey:                      strings.TrimSpace(os.Getenv("LLM_API_KEY")),
-		LLMModel:                       strings.TrimSpace(os.Getenv("LLM_MODEL")),
-		LLMHTTPTimeout:                 30 * time.Second,
-		LLMMaxOutputTokens:             4096,
-		LLMMaxInputCharacters:          12000,
-		LLMOutputTokensField:           envOr("LLM_OUTPUT_TOKENS_FIELD", "max_completion_tokens"),
-		GeminiAPIKey:                   strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
-		GeminiBaseURL:                  strings.TrimRight(strings.TrimSpace(os.Getenv("GEMINI_BASE_URL")), "/"),
-		GeminiModel:                    strings.TrimSpace(os.Getenv("GEMINI_MODEL")),
-		GeminiHTTPTimeout:              30 * time.Second,
 		FrontendURL:                    strings.TrimRight(strings.TrimSpace(os.Getenv("FRONTEND_URL")), "/"),
 	}
 	if cfg.DatabaseURL == "" {
@@ -146,31 +139,32 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.ChannelProvisioningEnabled, err = boolEnv("CHANNEL_PROVISIONING_ENABLED", cfg.ChannelProvisioningEnabled); err != nil {
 		return ProcessConfig{}, err
 	}
+	if cfg.CustomerSalesEnabled, err = boolEnv("CUSTOMER_SALES_ENABLED", false); err != nil {
+		return ProcessConfig{}, err
+	}
 	if cfg.AutoReplyEnabled, err = boolEnv("AUTOREPLY_ENABLED", cfg.AutoReplyEnabled); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.LLMEnabled, err = boolEnv("LLM_ENABLED", cfg.LLMEnabled); err != nil {
+	if cfg.NativeAIEnabled, err = boolEnv("NATIVE_AI_ENABLED", false); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.LLMHTTPTimeout, err = durationEnv("LLM_HTTP_TIMEOUT", cfg.LLMHTTPTimeout); err != nil {
+	if cfg.NativeHTTPTimeout, err = durationEnv("NATIVE_AI_HTTP_TIMEOUT", cfg.NativeHTTPTimeout); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.LLMMaxOutputTokens, err = intEnv("LLM_MAX_OUTPUT_TOKENS", cfg.LLMMaxOutputTokens); err != nil {
+	if cfg.NativeMaxContextTokens, err = intEnv("NATIVE_AI_MAX_CONTEXT_TOKENS", cfg.NativeMaxContextTokens); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.LLMMaxInputCharacters, err = intEnv("LLM_MAX_INPUT_CHARACTERS", cfg.LLMMaxInputCharacters); err != nil {
+	if cfg.NativeMaxOutputTokens, err = intEnv("NATIVE_AI_MAX_OUTPUT_TOKENS", cfg.NativeMaxOutputTokens); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.GeminiHTTPTimeout, err = durationEnv("GEMINI_HTTP_TIMEOUT", cfg.GeminiHTTPTimeout); err != nil {
+	if cfg.NativeMaxInputCharacters, err = intEnv("NATIVE_AI_MAX_INPUT_CHARACTERS", cfg.NativeMaxInputCharacters); err != nil {
 		return ProcessConfig{}, err
 	}
-	if cfg.LLMEnabled {
-		if cfg.LLMBaseURL == "" || cfg.LLMAPIKey == "" || cfg.LLMModel == "" {
-			return ProcessConfig{}, errors.New("LLM_ENABLED requires LLM_BASE_URL, LLM_API_KEY, and LLM_MODEL")
-		}
-		if cfg.LLMMaxOutputTokens <= 0 || cfg.LLMMaxInputCharacters <= 0 {
-			return ProcessConfig{}, errors.New("LLM token and input limits must be positive")
-		}
+	if cfg.NativeMerchantMaxRequestBytes, err = intEnv("NATIVE_AI_MERCHANT_MAX_REQUEST_BYTES", cfg.NativeMerchantMaxRequestBytes); err != nil {
+		return ProcessConfig{}, err
+	}
+	if cfg.NativeAIEnabled && (cfg.DeepSeekAPIKey == "" || cfg.DeepSeekModel == "" || cfg.NativeHTTPTimeout <= 0 || cfg.NativeMaxOutputTokens <= 0 || cfg.NativeMaxContextTokens <= cfg.NativeMaxOutputTokens || cfg.NativeMaxInputCharacters <= 0 || cfg.NativeMerchantMaxRequestBytes <= 0) {
+		return ProcessConfig{}, errors.New("NATIVE_AI_ENABLED requires a DeepSeek credential, model, and positive limits")
 	}
 	if cfg.AuthEnabled && (cfg.JWTEd25519PrivateKey == "" || cfg.JWTEd25519PublicKey == "" || strings.TrimSpace(cfg.JWTIssuer) == "" || cfg.JWTAccessTTL <= 0 || cfg.RefreshSessionTTL <= 0) {
 		return ProcessConfig{}, errors.New("AUTH_ENABLED requires JWT_ED25519_PRIVATE_KEY, JWT_ED25519_PUBLIC_KEY, JWT_ISSUER, and positive token lifetimes")
@@ -181,9 +175,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if strings.TrimSpace(cfg.HTTPAddr) == "" {
 		return ProcessConfig{}, errors.New("HTTP_ADDR cannot be empty")
 	}
-	hasAI := cfg.LLMEnabled || strings.TrimSpace(cfg.GeminiAPIKey) != ""
-	if cfg.AutoReplyEnabled && (cfg.SocialAPIWebhookSecret == "" || cfg.SocialAPIAPIKey == "" || !hasAI) {
-		return ProcessConfig{}, errors.New("AUTOREPLY_ENABLED requires SOCIALAPI_WEBHOOK_SECRET, SOCIALAPI_API_KEY, and LLM_ENABLED or GEMINI_API_KEY")
+	hasAI := cfg.NativeAIEnabled
+	if (cfg.AutoReplyEnabled || cfg.CustomerSalesEnabled) && (cfg.SocialAPIWebhookSecret == "" || cfg.SocialAPIAPIKey == "" || !hasAI) {
+		return ProcessConfig{}, errors.New("AUTOREPLY_ENABLED and CUSTOMER_SALES_ENABLED require SOCIALAPI_WEBHOOK_SECRET, SOCIALAPI_API_KEY and an enabled configured AI runtime")
 	}
 	return cfg, nil
 }

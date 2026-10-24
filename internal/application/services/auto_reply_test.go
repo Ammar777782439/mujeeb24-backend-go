@@ -44,6 +44,7 @@ func (f *fakeDecisionRepository) Get(context.Context, string, string) (ports.AID
 func (f *fakeDecisionRepository) RequestHumanReview(context.Context, ports.HumanReviewPatch) (ports.AIDecisionRecord, error) {
 	return ports.AIDecisionRecord{}, nil
 }
+
 func (f *fakeDecisionRepository) MarkExecuted(_ context.Context, patch ports.AIDecisionExecutionPatch) (ports.AIDecisionRecord, error) {
 	if f.err != nil {
 		return ports.AIDecisionRecord{}, f.err
@@ -195,11 +196,9 @@ func TestAutoReplyServicePersistsDecisionAndEnqueuesAnswerAtomically(t *testing.
 	if !result.Enqueued || result.Action != "answer" || result.Decision.ID != "decision-1" || result.OutboundMessageID != "outbound-1" || result.OutboxEntryID != "outbox-1" {
 		t.Fatalf("unexpected result: %#v", result)
 	}
-	if result.Decision.Lifecycle != "executed" {
-		t.Fatalf("expected result.Decision.Lifecycle=executed, got %q", result.Decision.Lifecycle)
-	}
-	if decisions.record.Lifecycle != "executed" || decisions.record.ExecutedAt == nil || decisions.record.ExecutionReference == nil || *decisions.record.ExecutionReference != "outbound-1" {
-		t.Fatalf("unexpected decision record lifecycle: %#v", decisions.record)
+	if result.Decision.Lifecycle != "executed" || decisions.record.Lifecycle != "executed" || decisions.record.ExecutedAt == nil ||
+		decisions.record.ExecutionReference == nil || *decisions.record.ExecutionReference != "outbound-1" {
+		t.Fatalf("executed decision lifecycle was not persisted after enqueue: %+v", decisions.record)
 	}
 	text, err := DecodeInlineTextContentReference(outbound.record.ContentReference)
 	if err != nil || text != "تم استلام رسالتك" {

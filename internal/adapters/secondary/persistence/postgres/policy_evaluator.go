@@ -112,10 +112,19 @@ func (e *PostgresCustomerSalesPolicyEvaluator) Evaluate(ctx context.Context, pro
 			Reason:        "customer sales business context is missing; requiring human approval per contract ⑥ §13",
 		}
 	}
+	if contextValue.Conversation.AIModeOverride == "disabled" {
+		return ports.CustomerSalesPolicyDecision{Decision: "denied", Reason: "conversation AI is disabled"}
+	}
+	if contextValue.Conversation.AIModeOverride == "draft_only" {
+		return ports.CustomerSalesPolicyDecision{Decision: "requires_approval", RequiresHuman: true, Reason: "conversation requires human approval"}
+	}
 
 	// Evaluate per the migration 000002 columns. NO INVENTION — every
 	// rule below maps directly to a column in business_policies.
 	decision := evaluatePolicyAgainstCapability(policy, proposal.Capability)
+	if proposal.Capability == ports.CustomerSalesCapabilityAsk && contextValue.Sales != nil && len(contextValue.Sales.Active) > 0 && policy.AIMode == "restricted_auto" && !policy.DefaultHumanReview && policy.SalesWorkflowEnabled && policy.AllowSalesInteractions {
+		decision = "allowed"
+	}
 	return ports.CustomerSalesPolicyDecision{
 		Decision:      decision,
 		RequiresHuman: decision == "requires_approval",
@@ -130,6 +139,26 @@ func (e *PostgresCustomerSalesPolicyEvaluator) Evaluate(ctx context.Context, pro
 //
 //	ai_mode IN ('disabled', 'assist', 'approval', 'restricted_auto')
 func evaluatePolicyAgainstCapability(policy ports.BusinessRuntimePolicyRecord, capability ports.CustomerSalesCapability) string {
+	definition, known := ports.CustomerSalesCapabilityDefinitionFor(capability)
+	if !known {
+		return "denied"
+	}
+	if definition.Executor == "sales" {
+		if !policy.SalesWorkflowEnabled || !policy.AllowSalesInteractions || policy.AIMode == "disabled" {
+			return "denied"
+		}
+		if policy.AIMode != "restricted_auto" || policy.DefaultHumanReview {
+			return "requires_approval"
+		}
+		if capability == ports.CustomerSalesCapabilityRecordLead {
+			if policy.AllowAutoLeadCreation {
+				return "allowed"
+			}
+		} else if policy.AllowAutoTransactionDraft {
+			return "allowed"
+		}
+		return "requires_approval"
+	}
 	switch policy.AIMode {
 	case "disabled":
 		// Per migration 000002: ai_mode='disabled' means AI is fully off.

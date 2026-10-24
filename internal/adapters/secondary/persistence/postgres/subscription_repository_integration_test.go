@@ -30,7 +30,9 @@ func TestSubscriptionRepositoryUsesPlanMetadata(t *testing.T) {
 
 	const businessID = "00000000-0000-0000-0000-000000000551"
 	const subscriptionID = "00000000-0000-0000-0000-000000000552"
-	const planID = "00000000-0000-0000-0000-00000000a001"
+	// Pricing V2's public Basic version. The legacy a001 version is retired by
+	// migration 000076 and must never be used to create a new subscription.
+	const planID = "00000000-0000-0000-0000-00000000a102"
 
 	_, _ = adapter.Pool().Exec(ctx, "DELETE FROM subscriptions WHERE id = $1::uuid", subscriptionID)
 	_, _ = adapter.Pool().Exec(ctx, "DELETE FROM businesses WHERE id = $1::uuid", businessID)
@@ -51,23 +53,27 @@ func TestSubscriptionRepositoryUsesPlanMetadata(t *testing.T) {
 		ID:                      subscriptionID,
 		BusinessID:              businessID,
 		PlanID:                  planID,
+		PriceYERSnapshot:        5000,
+		AmountDueYER:            5000,
 		PeriodStart:             now,
 		PeriodEnd:               now.Add(30 * 24 * time.Hour),
 		AIReplyLimit:            500,
 		AICatalogLimit:          200,
 		ChannelLimit:            1,
+		ChannelCeiling:          1,
+		SeatLimit:               1,
 		InternalAICostBudgetYER: 1000,
 		Now:                     now,
 	})
 	if err != nil {
 		t.Fatalf("create subscription: %v", err)
 	}
-	if record.PlanCode != "basic" || record.PlanVersion != 1 {
+	if record.PlanCode != "basic" || record.PlanVersion != 2 {
 		t.Fatalf("plan metadata mismatch: code=%q version=%d", record.PlanCode, record.PlanVersion)
 	}
 
 	got, err := repo.GetByID(ctx, subscriptionID)
-	if err != nil || got.PlanCode != "basic" || got.PlanVersion != 1 {
+	if err != nil || got.PlanCode != "basic" || got.PlanVersion != 2 {
 		t.Fatalf("get plan metadata mismatch: record=%#v err=%v", got, err)
 	}
 
@@ -75,7 +81,7 @@ func TestSubscriptionRepositoryUsesPlanMetadata(t *testing.T) {
 	if err != nil || len(page.Items) != 1 {
 		t.Fatalf("list subscriptions: page=%#v err=%v", page, err)
 	}
-	if page.Items[0].PlanCode != "basic" || page.Items[0].PlanVersion != 1 {
+	if page.Items[0].PlanCode != "basic" || page.Items[0].PlanVersion != 2 {
 		t.Fatalf("list plan metadata mismatch: %#v", page.Items[0])
 	}
 }

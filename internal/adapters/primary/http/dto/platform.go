@@ -56,6 +56,9 @@ type PlatformPlanPath struct {
 type PlatformSubscriptionPath struct {
 	SubscriptionID UUID `path:"subscription_id" format:"uuid"`
 }
+type PlatformSubscriptionAddonPath struct {
+	AddonID UUID `path:"addon_id" format:"uuid"`
+}
 
 type PlatformSupportTicketPath struct {
 	TicketID UUID `path:"ticket_id" format:"uuid"`
@@ -72,10 +75,10 @@ type PlatformChannelPath struct {
 // CommandHeaders carry Idempotency-Key, If-Match, X-Request-ID, X-Correlation-ID.
 // Reused from the existing merchant-side DTO shape.
 type PlatformCommandHeaders struct {
-	IdempotencyKey string `header:"Idempotency-Key,omitempty"`
-	IfMatch        string `header:"If-Match,omitempty"`
-	XRequestID     string `header:"X-Request-ID,omitempty"`
-	XCorrelationID string `header:"X-Correlation-ID,omitempty"`
+	IdempotencyKey string `header:"Idempotency-Key"`
+	IfMatch        string `header:"If-Match"`
+	XRequestID     string `header:"X-Request-ID"`
+	XCorrelationID string `header:"X-Correlation-ID"`
 }
 
 // ----------------------------------------------------------------------------
@@ -90,6 +93,8 @@ type CreatePlanRequest struct {
 	AIReplyLimit            int    `json:"ai_reply_limit" minimum:"1"`
 	AICatalogLimit          int    `json:"ai_catalog_limit" minimum:"0"`
 	ChannelLimit            int    `json:"channel_limit" minimum:"1"`
+	ChannelCeiling          int    `json:"channel_ceiling" minimum:"1"`
+	SeatLimit               int    `json:"seat_limit" minimum:"1"`
 	InternalAICostBudgetYER int    `json:"internal_ai_cost_budget_yer" minimum:"1"`
 }
 
@@ -108,6 +113,8 @@ type PlanView struct {
 	AIReplyLimit            int     `json:"ai_reply_limit"`
 	AICatalogLimit          int     `json:"ai_catalog_limit"`
 	ChannelLimit            int     `json:"channel_limit"`
+	ChannelCeiling          int     `json:"channel_ceiling"`
+	SeatLimit               int     `json:"seat_limit"`
 	InternalAICostBudgetYER int     `json:"internal_ai_cost_budget_yer"`
 	Status                  string  `json:"status"`
 	CreatedAt               string  `json:"created_at"`
@@ -142,6 +149,8 @@ type CreatePlanVersionRequest struct {
 	AIReplyLimit            int    `json:"ai_reply_limit" minimum:"1"`
 	AICatalogLimit          int    `json:"ai_catalog_limit" minimum:"0"`
 	ChannelLimit            int    `json:"channel_limit" minimum:"1"`
+	ChannelCeiling          int    `json:"channel_ceiling" minimum:"1"`
+	SeatLimit               int    `json:"seat_limit" minimum:"1"`
 	InternalAICostBudgetYER int    `json:"internal_ai_cost_budget_yer" minimum:"1"`
 	Reason                  string `json:"reason" minLength:"1" maxLength:"500"`
 }
@@ -311,12 +320,16 @@ type SubscriptionView struct {
 	PlanID                   string  `json:"plan_id"`
 	PlanCode                 string  `json:"plan_code"`
 	PlanVersion              int     `json:"plan_version"`
+	PriceYERSnapshot         int     `json:"price_yer_snapshot"`
+	AmountDueYER             int     `json:"amount_due_yer"`
 	PeriodStart              string  `json:"period_start"`
 	PeriodEnd                string  `json:"period_end"`
 	Status                   string  `json:"status"`
 	AIReplyLimit             int     `json:"ai_reply_limit"`
 	AICatalogLimit           int     `json:"ai_catalog_limit"`
 	ChannelLimit             int     `json:"channel_limit"`
+	ChannelCeiling           int     `json:"channel_ceiling"`
+	SeatLimit                int     `json:"seat_limit"`
 	InternalAICostBudgetYER  int     `json:"internal_ai_cost_budget_yer"`
 	CostBudgetOverrideYER    *int    `json:"cost_budget_override_yer,omitempty"`
 	CostBudgetOverrideReason *string `json:"cost_budget_override_reason,omitempty"`
@@ -380,6 +393,65 @@ type RecordPaymentInput struct {
 	PlatformSubscriptionPath
 	PlatformCommandHeaders
 	Body RecordPaymentRequest
+}
+
+type SubscriptionAddonView struct {
+	ID               string  `json:"id"`
+	SubscriptionID   string  `json:"subscription_id"`
+	BusinessID       string  `json:"business_id"`
+	Kind             string  `json:"kind"`
+	Status           string  `json:"status"`
+	PriceYERSnapshot int     `json:"price_yer_snapshot"`
+	AIReplyDelta     int     `json:"ai_reply_delta"`
+	CatalogDelta     int     `json:"catalog_delta"`
+	SeatDelta        int     `json:"seat_delta"`
+	ChannelDelta     int     `json:"channel_delta"`
+	ActivatedAt      *string `json:"activated_at,omitempty"`
+	CancelledAt      *string `json:"cancelled_at,omitempty"`
+	CancelledReason  *string `json:"cancelled_reason,omitempty"`
+	CreatedAt        string  `json:"created_at"`
+}
+type CreateSubscriptionAddonRequest struct {
+	Kind string `json:"kind" enum:"AI_REPLIES_100,AI_REPLIES_500,CATALOG_PRODUCTS_100,EXTRA_SEAT,CHANNEL_PASS"`
+}
+type CreateSubscriptionAddonInput struct {
+	PlatformSubscriptionPath
+	PlatformCommandHeaders
+	Body CreateSubscriptionAddonRequest
+}
+type RecordSubscriptionAddonPaymentInput struct {
+	PlatformSubscriptionAddonPath
+	PlatformCommandHeaders
+	Body RecordPaymentRequest
+}
+type SubscriptionAddonListInput struct {
+	PlatformSubscriptionPath
+	Status string `query:"status,omitempty" enum:"PENDING,ACTIVE,CANCELLED"`
+	Limit  int    `query:"limit,omitempty" minimum:"1" maximum:"1000"`
+	Cursor string `query:"cursor,omitempty"`
+}
+type CancelSubscriptionAddonInput struct {
+	PlatformSubscriptionAddonPath
+	PlatformCommandHeaders
+	Body CancelSubscriptionRequest
+}
+type ChannelPassCapacityApprovalRequest struct {
+	MaxChannelPasses int    `json:"max_channel_passes" minimum:"1"`
+	Reason           string `json:"reason" minLength:"1" maxLength:"500"`
+}
+type ApproveChannelPassCapacityInput struct {
+	PlatformSubscriptionPath
+	PlatformCommandHeaders
+	Body ChannelPassCapacityApprovalRequest
+}
+type ChannelPassCapacityApprovalView struct {
+	SubscriptionID   string `json:"subscription_id"`
+	BusinessID       string `json:"business_id"`
+	MaxChannelPasses int    `json:"max_channel_passes"`
+	Reason           string `json:"reason"`
+	ApprovedBy       string `json:"approved_by"`
+	ApprovedAt       string `json:"approved_at"`
+	UpdatedAt        string `json:"updated_at"`
 }
 
 type PaymentListInput struct {
@@ -683,6 +755,10 @@ type DiscoverModelsInput struct {
 type AIConfigurationView struct {
 	Provider              string  `json:"provider"`
 	Model                 string  `json:"model"`
+	CustomerModel         string  `json:"customer_model,omitempty"`
+	CatalogModel          string  `json:"catalog_model,omitempty"`
+	MerchantModel         string  `json:"merchant_model,omitempty"`
+	ConfigurationSource   string  `json:"configuration_source,omitempty"`
 	CredentialID          string  `json:"credential_id"`
 	CredentialStatus      string  `json:"credential_status"`
 	MujeebMaxInputChars   int     `json:"mujeeb_max_input_chars"`

@@ -45,3 +45,60 @@ func TestCapabilityDecisionDoesNotRequireInventedIntent(t *testing.T) {
 		t.Fatal("rejected capability audit was lost")
 	}
 }
+
+func TestSalesCapabilityDecisionAcceptsEmptyLegacyAction(t *testing.T) {
+	now := time.Now()
+	for _, capability := range []ports.CustomerSalesCapability{
+		ports.CustomerSalesCapabilityRecordLead,
+		ports.CustomerSalesCapabilityCreateDraft,
+		ports.CustomerSalesCapabilityUpdateDraft,
+	} {
+		t.Run(string(capability), func(t *testing.T) {
+			name := string(capability)
+			allowed := "allowed"
+			draft := ports.AIDecisionDraft{
+				ID:                  "decision",
+				BusinessID:          "business",
+				RequestedCapability: &name,
+				EffectiveCapability: &name,
+				RequestedAction:     "",
+				IntentBase:          "",
+				ConfidenceBand:      "medium",
+				PolicyVersion:       "v1",
+				SchemaVersion:       1,
+				Lifecycle:           "proposed",
+				PolicyDecision:      &allowed,
+				CreatedAt:           now,
+				UpdatedAt:           now,
+			}
+			if !validAIDecisionDraft(draft) {
+				t.Fatal("known sales capability rejected despite migration 000074")
+			}
+			draft.RequestedCapability = nil
+			draft.EffectiveCapability = nil
+			if validAIDecisionDraft(draft) {
+				t.Fatal("empty legacy action accepted without a capability")
+			}
+		})
+	}
+}
+
+func TestUnknownCapabilityCannotBypassLegacyActionValidation(t *testing.T) {
+	now := time.Now()
+	unknown := "invented_external_action"
+	draft := ports.AIDecisionDraft{
+		ID:                  "decision",
+		BusinessID:          "business",
+		RequestedCapability: &unknown,
+		RequestedAction:     "",
+		ConfidenceBand:      "medium",
+		PolicyVersion:       "v1",
+		SchemaVersion:       1,
+		Lifecycle:           "proposed",
+		CreatedAt:           now,
+		UpdatedAt:           now,
+	}
+	if validAIDecisionDraft(draft) {
+		t.Fatal("unknown capability bypassed persistence validation")
+	}
+}

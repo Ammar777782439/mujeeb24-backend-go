@@ -34,11 +34,9 @@ mapfile -t unformatted < <("$gofmt_bin" -l "${go_files[@]}")
 git diff --check
 
 printf '%s\n' '[4/6] validating generated OpenAPI contract'
-before="$(mktemp)"
-trap 'rm -f "$before"' EXIT
-cp api/openapi/mujeeb24-dashboard-v1.generated.yaml "$before"
-"$go_bin" run ./cmd/openapi-gen
-cmp -s "$before" api/openapi/mujeeb24-dashboard-v1.generated.yaml || fail 'generated OpenAPI drift; regenerate and commit the contract intentionally'
+# Use the canonical read-only verifier. It prints the precise difference on
+# failure and never rewrites the checked-in artifact inside the CI worktree.
+bash scripts/check-openapi-generated.sh
 
 printf '%s\n' '[5/6] running unit and package checks'
 "$go_bin" test ./...

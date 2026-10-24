@@ -14,6 +14,7 @@ Backend مستقل لمنصة **مجيب 24**: نظام تشغيل للمحاد�
 3. docs/developer-guide-ar.md
 4. docs/decision-log-ar.md
 5. contracts/domain_contract_index_ar.md
+6. Mujeeb_24_Pricing_Contract_v2.0.md
 ```
 
 ## مسؤوليات النظام

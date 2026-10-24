@@ -556,6 +556,10 @@ type socialWebhookEnvelope struct {
 }
 
 type socialWebhookData struct {
+	Metadata struct {
+		Payload string `json:"payload"`
+		Title   string `json:"title"`
+	} `json:"metadata"`
 	ID             string `json:"id"`
 	Type           string `json:"type"`
 	Platform       string `json:"platform"`
@@ -616,8 +620,12 @@ func (c *Client) NormalizeWebhook(ctx context.Context, headers map[string]string
 	if providerMessageID == "" && len(envelope.Data.MIDs) > 0 {
 		providerMessageID = envelope.Data.MIDs[0]
 	}
-	if providerMessageID == "" && (envelope.Data.Type == "dm" || envelope.Data.Type == "dm.received") {
-		providerMessageID = envelope.Data.ID
+	if providerMessageID == "" && (envelope.Data.Type == "dm" || envelope.Data.Type == "dm.received" || envelope.Event == "dm.postback") {
+		// SocialAPI postbacks may carry an event id but no platform message
+		// id or mids. A missing message ID would cause materialization to
+		// discard an otherwise valid button press before sales processing.
+		// Only use the event/delivery id for inbound DMs and postbacks.
+		providerMessageID = providerEventID
 	}
 	interaction := interactionKind(envelope.Event)
 	providerChannel, err := platformChannel(envelope.Data.Platform)
@@ -632,10 +640,17 @@ func (c *Client) NormalizeWebhook(ctx context.Context, headers map[string]string
 		externalUserID = envelope.Data.From.ID
 	}
 	text := envelope.Data.Content.Text
+	if envelope.Event == "dm.postback" {
+		text = envelope.Data.Metadata.Title
+	}
 	if text == "" {
 		text = envelope.Data.Text
 	}
 	event := channel.InboundEvent{ID: uuid.NewString(), Provider: channel.ProviderSocialAPI, Channel: providerChannel, ProviderConnectionID: envelope.Data.AccountID, ProviderEventID: providerEventID, DeliveryID: deliveryID, DedupeStrategy: dedupeStrategy, EventType: normalizedEventType, InteractionKind: interaction, ProviderMessageID: providerMessageID, ProviderConversationID: providerConversationID, ExternalUserID: externalUserID, Text: text, Direction: direction, Origin: origin, DeliveryStatus: strings.ToLower(strings.TrimSpace(envelope.Data.Status)), ReceivedAt: receivedAt}
+	if envelope.Event == "dm.postback" {
+		event.ActionPayload = envelope.Data.Metadata.Payload
+		event.ActionTitle = envelope.Data.Metadata.Title
+	}
 	if envelope.Data.ReceivedAt != "" || envelope.Data.CreatedAt != "" {
 		timestamp := receivedAt
 		event.ExternalCreatedAt = &timestamp
@@ -710,10 +725,32 @@ func (c *Client) SendMessage(ctx context.Context, command ports.SendMessageComma
 	if command.ProviderAccountID == "" || command.ProviderConversationID == "" || command.Text == "" || command.IdempotencyKey == "" {
 		return ports.ProviderSendResult{}, fmt.Errorf("%w: account, conversation, text, and idempotency key are required", ErrInvalidRequest)
 	}
+	type button struct {
+		Type    string `json:"type"`
+		Title   string `json:"title"`
+		Payload string `json:"payload"`
+	}
 	request := struct {
-		AccountID string `json:"account_id"`
-		Text      string `json:"text"`
+		AccountID string   `json:"account_id"`
+		Text      string   `json:"text"`
+		Buttons   []button `json:"buttons,omitempty"`
 	}{AccountID: command.ProviderAccountID, Text: command.Text}
+	if len(command.Buttons) > 0 {
+		if command.Channel != "instagram" && command.Channel != "facebook" && command.Channel != "whatsapp" {
+			return ports.ProviderSendResult{}, fmt.Errorf("%w: interactive buttons unsupported on this channel", ErrInvalidRequest)
+		}
+		if len(command.Buttons) > 3 {
+			return ports.ProviderSendResult{}, fmt.Errorf("%w: at most three buttons", ErrInvalidRequest)
+		}
+		seen := map[string]bool{}
+		for _, b := range command.Buttons {
+			if len([]rune(b.Title)) == 0 || len([]rune(b.Title)) > 20 || b.Payload == "" || seen[b.Payload] {
+				return ports.ProviderSendResult{}, ErrInvalidRequest
+			}
+			seen[b.Payload] = true
+			request.Buttons = append(request.Buttons, button{Type: "postback", Title: b.Title, Payload: b.Payload})
+		}
+	}
 	var response struct {
 		MessageID  string   `json:"message_id"`
 		MessageIDs []string `json:"message_ids"`

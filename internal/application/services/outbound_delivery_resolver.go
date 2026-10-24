@@ -45,11 +45,11 @@ func (r MujeebOutboundDeliveryResolver) Resolve(ctx context.Context, businessID,
 	if !reference.IsCurrent || reference.System != "provider" || reference.ProviderRef != outbound.ProviderRef || reference.ConnectionID == nil || *reference.ConnectionID != connection.ID || strings.TrimSpace(reference.ResourceID) == "" {
 		return ports.OutboundDelivery{}, appErrors.New(appErrors.CodeInvalidState, "provider conversation reference is not current or does not match connection")
 	}
-	text, err := DecodeInlineTextContentReference(outbound.ContentReference)
+	message, err := DecodeInteractiveContentReference(outbound.ContentReference)
 	if err != nil {
 		return ports.OutboundDelivery{}, appErrors.New(appErrors.CodeInvalidState, "outbound content is not a supported inline text reference")
 	}
-	return ports.OutboundDelivery{ConnectionID: connection.ID, ProviderAccountID: providerAccountReferenceValue(connection), ProviderConversationID: reference.ResourceID, Text: text, IdempotencyKey: outbound.ProviderIdempotencyKey}, nil
+	return ports.OutboundDelivery{ConnectionID: connection.ID, ProviderAccountID: providerAccountReferenceValue(connection), ProviderConversationID: reference.ResourceID, Text: message.Text, Buttons: message.Buttons, Channel: connection.Channel, IdempotencyKey: outbound.ProviderIdempotencyKey}, nil
 }
 
 func providerAccountReferenceValue(connection ports.ChannelConnectionRecord) string {

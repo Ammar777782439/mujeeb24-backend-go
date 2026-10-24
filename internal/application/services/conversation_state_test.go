@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -69,6 +70,7 @@ func (stubDecisionRepo) Get(_ context.Context, _, _ string) (ports.AIDecisionRec
 func (stubDecisionRepo) RequestHumanReview(_ context.Context, _ ports.HumanReviewPatch) (ports.AIDecisionRecord, error) {
 	return ports.AIDecisionRecord{}, nil
 }
+
 func (stubDecisionRepo) MarkExecuted(_ context.Context, patch ports.AIDecisionExecutionPatch) (ports.AIDecisionRecord, error) {
 	return ports.AIDecisionRecord{ID: patch.DecisionID, Lifecycle: "executed"}, nil
 }
@@ -150,3 +152,57 @@ type errNotFoundStub struct{}
 
 func (errNotFoundStub) Error() string     { return "not found" }
 func (errNotFoundStub) ErrorKind() string { return "not_found" }
+
+// Summarization is generation-only. It never receives a sales capability and
+// preserves the trust boundary even when a model returns an unsupported claim.
+type summaryGenerationStub struct {
+	system string
+	user   string
+	output string
+	err    error
+	calls  int
+}
+
+func (s *summaryGenerationStub) Summarize(_ context.Context, system, user string) (string, ports.CustomerSalesUsageTelemetry, error) {
+	s.calls++
+	s.system = system
+	s.user = user
+	return s.output, ports.CustomerSalesUsageTelemetry{}, s.err
+}
+func TestSummaryKeepsCustomerGoalsSeparateFromOperationalClaims(t *testing.T) {
+	stub := &summaryGenerationStub{output: "العميل يريد الاشتراك مع توضيح الأسعار وشروط الدفع. المساعد سبق أن وعد بالتواصل مع الفريق لكن لم يقدم النص إثباتًا لتنفيذ التحويل."}
+	service := &ConversationSummaryService{SummaryPort: stub}
+	summary, err := service.generateSummary(context.Background(), "business", "conversation", "العميل: أريد الاشتراك\nالمساعد: تم تحويلك إلى الموظف", "معلومات قديمة غير مؤكدة")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stub.calls != 1 {
+		t.Fatalf("expected one independent summary call, got %d", stub.calls)
+	}
+	if !strings.Contains(stub.system, "NOT evidence") || !strings.Contains(stub.system, "No database execution events") {
+		t.Fatalf("summary instructions lost trust boundary: %q", stub.system)
+	}
+	if !strings.Contains(stub.user, "معلومات قديمة غير مؤكدة") || !strings.Contains(stub.user, "أريد الاشتراك") {
+		t.Fatalf("missing rolling summary context: %q", stub.user)
+	}
+	if summary != stub.output {
+		t.Fatalf("summary was modified unexpectedly: %q", summary)
+	}
+}
+func TestSummaryRejectsEmptyAndOversizedProviderOutput(t *testing.T) {
+	cases := []string{"", strings.Repeat("ن", 4000)}
+	for _, out := range cases {
+		stub := &summaryGenerationStub{output: out}
+		service := &ConversationSummaryService{SummaryPort: stub}
+		if _, err := service.generateSummary(context.Background(), "b", "c", "رسالة", ""); err == nil {
+			t.Fatal("invalid summary accepted")
+		}
+	}
+}
+
+func TestSummaryMissingProviderFailsClosed(t *testing.T) {
+	service := &ConversationSummaryService{}
+	if _, err := service.generateSummary(context.Background(), "biz", "conv", "customer", ""); err == nil {
+		t.Fatal("missing summarization port must return a safe error")
+	}
+}

@@ -84,33 +84,26 @@ func (b AutoReplyContextBuilder) retrieveScoped(ctx context.Context, businessID 
 	}
 }
 
+// retrieveScopedOffer always attaches the complete parent entity. An individual
+// offer is a selection, never permission to omit sibling commercial facts.
 func (b AutoReplyContextBuilder) retrieveScopedOffer(ctx context.Context, businessID string, focus *ports.ConversationFocus, now time.Time) ([]ports.CustomerSalesCatalogEvidence, []ports.CustomerSalesOfferEvidence, []ports.CustomerSalesVariantEvidence, error) {
 	catalog, item, offer, err := b.findOfferByIDWithinBusiness(ctx, businessID, focus.ID, focus.ItemID)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if offer.BusinessID != businessID || item.BusinessID != businessID || catalog.BusinessID != businessID {
+	if catalog.BusinessID != businessID || item.BusinessID != businessID || offer.BusinessID != businessID {
 		return nil, nil, nil, errors.New("AI context offer scope mismatch")
 	}
-	catalogEvidence := []ports.CustomerSalesCatalogEvidence{catalogItemEvidence(item, now)}
-	offerEvidence := []ports.CustomerSalesOfferEvidence{toOfferEvidence(offer, now)}
-	var variantEvidence []ports.CustomerSalesVariantEvidence
-	if offer.VariantID != nil && strings.TrimSpace(*offer.VariantID) != "" {
-		variants, listErr := b.Catalogs.ListVariants(ctx, businessID, item.ID, "active", b.maxVariants(), "")
-		if listErr != nil {
-			return nil, nil, nil, listErr
-		}
-		for _, v := range variants.Items {
-			if v.ID == *offer.VariantID {
-				variantEvidence = append(variantEvidence, ports.CustomerSalesVariantEvidence{
-					Reference: v.ID, CatalogItemReference: v.CatalogItemID, Name: v.Name, Status: v.Status,
-					Attributes: safeJSONObject(v.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
-				})
-				break
-			}
+	items, offers, variants, err := b.retrieveCompleteItemEvidence(ctx, businessID, item, now)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	for _, evidence := range offers {
+		if evidence.Reference == offer.ID {
+			return items, offers, variants, nil
 		}
 	}
-	return catalogEvidence, offerEvidence, variantEvidence, nil
+	return nil, nil, nil, errors.New("focused offer is not part of the complete active commercial entity")
 }
 
 func (b AutoReplyContextBuilder) retrieveScopedItem(ctx context.Context, businessID string, focus *ports.ConversationFocus, now time.Time) ([]ports.CustomerSalesCatalogEvidence, []ports.CustomerSalesOfferEvidence, []ports.CustomerSalesVariantEvidence, error) {
@@ -118,35 +111,12 @@ func (b AutoReplyContextBuilder) retrieveScopedItem(ctx context.Context, busines
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	catalogEvidence := []ports.CustomerSalesCatalogEvidence{catalogItemEvidence(item, now)}
-	offers, err := b.Catalogs.ListOffers(ctx, businessID, item.ID, "active", b.maxOffers(), "")
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	var offerEvidence []ports.CustomerSalesOfferEvidence
-	for _, offer := range offers.Items {
-		if offer.BusinessID != businessID || offer.CatalogItemID != item.ID {
-			return nil, nil, nil, errors.New("AI context offer scope mismatch")
-		}
-		offerEvidence = append(offerEvidence, toOfferEvidence(offer, now))
-	}
-	variants, err := b.Catalogs.ListVariants(ctx, businessID, item.ID, "active", b.maxVariants(), "")
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	var variantEvidence []ports.CustomerSalesVariantEvidence
-	for _, v := range variants.Items {
-		if v.BusinessID != businessID || v.CatalogItemID != item.ID {
-			return nil, nil, nil, errors.New("AI context variant scope mismatch")
-		}
-		variantEvidence = append(variantEvidence, ports.CustomerSalesVariantEvidence{
-			Reference: v.ID, CatalogItemReference: v.CatalogItemID, Name: v.Name, Status: v.Status,
-			Attributes: safeJSONObject(v.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
-		})
-	}
-	return catalogEvidence, offerEvidence, variantEvidence, nil
+	return b.retrieveCompleteItemEvidence(ctx, businessID, item, now)
 }
 
+// A catalog focus is not an item. Never expose a bounded prefix as if it
+// represented a complete commercial catalog: the model must request
+// evaluate_full_catalog using the manifest if item-level truth is required.
 func (b AutoReplyContextBuilder) retrieveScopedCatalog(ctx context.Context, businessID string, focus *ports.ConversationFocus, now time.Time) ([]ports.CustomerSalesCatalogEvidence, []ports.CustomerSalesOfferEvidence, []ports.CustomerSalesVariantEvidence, error) {
 	catalog, err := b.Catalogs.GetCatalog(ctx, businessID, focus.ID)
 	if err != nil {
@@ -155,79 +125,27 @@ func (b AutoReplyContextBuilder) retrieveScopedCatalog(ctx context.Context, busi
 	if catalog.BusinessID != businessID {
 		return nil, nil, nil, errors.New("AI context catalog scope mismatch")
 	}
-	items, err := b.Catalogs.ListCatalogItems(ctx, businessID, catalog.ID, "", "active", b.maxItems()*3, "")
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	var catalogEvidence []ports.CustomerSalesCatalogEvidence
-	// For an explicit catalog focus, include a bounded prefix in storage order.
-	count := 0
-	for _, item := range items.Items {
-		if item.BusinessID != businessID || item.CatalogID != catalog.ID {
-			return nil, nil, nil, errors.New("AI context catalog item scope mismatch")
-		}
-		catalogEvidence = append(catalogEvidence, catalogItemEvidence(item, now))
-		count++
-		if count >= b.maxItems() {
-			break
-		}
-	}
-	if len(catalogEvidence) == 0 {
-		return nil, nil, nil, &scopedNotFoundError{msg: "no active items in catalog"}
-	}
-	var offerEvidence []ports.CustomerSalesOfferEvidence
-	var variantEvidence []ports.CustomerSalesVariantEvidence
-	for _, item := range catalogEvidence {
-		offers, err := b.Catalogs.ListOffers(ctx, businessID, item.Reference, "active", b.maxOffers(), "")
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		for _, offer := range offers.Items {
-			offerEvidence = append(offerEvidence, toOfferEvidence(offer, now))
-		}
-	}
-	_ = variantEvidence
-	return catalogEvidence, offerEvidence, nil, nil
+	return nil, nil, nil, &scopedNotFoundError{msg: "catalog focus requires evaluate_full_catalog; a prefix is not complete evidence"}
 }
 
 func (b AutoReplyContextBuilder) retrieveScopedVariant(ctx context.Context, businessID string, focus *ports.ConversationFocus, now time.Time) ([]ports.CustomerSalesCatalogEvidence, []ports.CustomerSalesOfferEvidence, []ports.CustomerSalesVariantEvidence, error) {
 	if focus.ItemID == nil || strings.TrimSpace(*focus.ItemID) == "" {
 		return nil, nil, nil, &scopedNotFoundError{msg: "variant focus missing item"}
 	}
-	variants, err := b.Catalogs.ListVariants(ctx, businessID, *focus.ItemID, "active", b.maxVariants(), "")
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	var matched *ports.VariantRecord
-	for i := range variants.Items {
-		if variants.Items[i].ID == focus.ID {
-			matched = &variants.Items[i]
-			break
-		}
-	}
-	if matched == nil {
-		return nil, nil, nil, &scopedNotFoundError{msg: "variant not found"}
-	}
 	item, err := b.findItemByIDWithinBusiness(ctx, businessID, *focus.ItemID, focus.CatalogID)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	catalogEvidence := []ports.CustomerSalesCatalogEvidence{catalogItemEvidence(item, now)}
-	variantEvidence := []ports.CustomerSalesVariantEvidence{{
-		Reference: matched.ID, CatalogItemReference: matched.CatalogItemID, Name: matched.Name, Status: matched.Status,
-		Attributes: safeJSONObject(matched.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
-	}}
-	offers, err := b.Catalogs.ListOffers(ctx, businessID, item.ID, "active", b.maxOffers(), "")
+	items, offers, variants, err := b.retrieveCompleteItemEvidence(ctx, businessID, item, now)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	var offerEvidence []ports.CustomerSalesOfferEvidence
-	for _, offer := range offers.Items {
-		if offer.VariantID != nil && *offer.VariantID == matched.ID {
-			offerEvidence = append(offerEvidence, toOfferEvidence(offer, now))
+	for _, variant := range variants {
+		if variant.Reference == focus.ID {
+			return items, offers, variants, nil
 		}
 	}
-	return catalogEvidence, offerEvidence, variantEvidence, nil
+	return nil, nil, nil, &scopedNotFoundError{msg: "focused variant not in active entity"}
 }
 
 func (b AutoReplyContextBuilder) retrieveComparison(ctx context.Context, businessID string, comparison *ports.ConversationComparison, now time.Time) ([]ports.CustomerSalesCatalogEvidence, []ports.CustomerSalesOfferEvidence, []ports.CustomerSalesVariantEvidence, error) {
@@ -236,48 +154,104 @@ func (b AutoReplyContextBuilder) retrieveComparison(ctx context.Context, busines
 	}
 	var catalogEvidence []ports.CustomerSalesCatalogEvidence
 	var offerEvidence []ports.CustomerSalesOfferEvidence
+	var variantEvidence []ports.CustomerSalesVariantEvidence
 	seenItems := map[string]bool{}
 	for _, id := range comparison.IDs {
 		if strings.TrimSpace(id) == "" {
 			continue
 		}
-		catalog, item, offer, err := b.findOfferByIDWithinBusiness(ctx, businessID, id, nil)
+		_, item, _, err := b.findOfferByIDWithinBusiness(ctx, businessID, id, nil)
 		if err != nil {
-			// Try as item: include its offers too, otherwise the AI context
-			// would hold items without prices during a comparison.
-			it, itemErr := b.findItemByIDWithinBusiness(ctx, businessID, id, nil)
-			if itemErr != nil {
+			// An exact reference can identify an item or an offer. Only a
+			// verified not-found may try the other type; database errors
+			// and cross-tenant mismatches must never be masked.
+			if !isScopedNotFound(err) {
 				return nil, nil, nil, err
 			}
-			if !seenItems[it.ID] {
-				catalogEvidence = append(catalogEvidence, catalogItemEvidence(it, now))
-				seenItems[it.ID] = true
+			item, err = b.findItemByIDWithinBusiness(ctx, businessID, id, nil)
+			if err != nil {
+				return nil, nil, nil, err
 			}
-			itemOffers, offerErr := b.Catalogs.ListOffers(ctx, businessID, it.ID, "active", b.maxOffers(), "")
-			if offerErr != nil {
-				return nil, nil, nil, offerErr
-			}
-			for _, itemOffer := range itemOffers.Items {
-				if itemOffer.BusinessID != businessID || itemOffer.CatalogItemID != it.ID {
-					return nil, nil, nil, errors.New("AI context comparison scope mismatch")
-				}
-				offerEvidence = append(offerEvidence, toOfferEvidence(itemOffer, now))
-			}
+		}
+		if seenItems[item.ID] {
 			continue
 		}
-		if catalog.BusinessID != businessID || item.BusinessID != businessID || offer.BusinessID != businessID {
-			return nil, nil, nil, errors.New("AI context comparison scope mismatch")
+		seenItems[item.ID] = true
+		items, offers, variants, err := b.retrieveCompleteItemEvidence(ctx, businessID, item, now)
+		if err != nil {
+			return nil, nil, nil, err
 		}
-		if !seenItems[item.ID] {
-			catalogEvidence = append(catalogEvidence, catalogItemEvidence(item, now))
-			seenItems[item.ID] = true
-		}
-		offerEvidence = append(offerEvidence, toOfferEvidence(offer, now))
+		catalogEvidence = append(catalogEvidence, items...)
+		offerEvidence = append(offerEvidence, offers...)
+		variantEvidence = append(variantEvidence, variants...)
 	}
 	if len(catalogEvidence) == 0 {
-		return nil, nil, nil, &scopedNotFoundError{msg: "comparison yielded no evidence"}
+		return nil, nil, nil, &scopedNotFoundError{msg: "comparison yielded no complete evidence"}
 	}
-	return catalogEvidence, offerEvidence, nil, nil
+	return catalogEvidence, offerEvidence, variantEvidence, nil
+}
+
+// retrieveCompleteItemEvidence reads ALL active variants and offers by cursor,
+// never the first maxVariants/maxOffers rows. A broken cursor, missing nested
+// relationship or cross-tenant record aborts the entire entity.
+func (b AutoReplyContextBuilder) retrieveCompleteItemEvidence(ctx context.Context, businessID string, item ports.CatalogItemRecord, now time.Time) ([]ports.CustomerSalesCatalogEvidence, []ports.CustomerSalesOfferEvidence, []ports.CustomerSalesVariantEvidence, error) {
+	if item.BusinessID != businessID {
+		return nil, nil, nil, errors.New("AI context item scope mismatch")
+	}
+	const pageLimit = 200
+	var variantEvidence []ports.CustomerSalesVariantEvidence
+	var offerEvidence []ports.CustomerSalesOfferEvidence
+	variantIDs := make(map[string]bool)
+	offerIDs := make(map[string]bool)
+	cursor := ""
+	for {
+		page, err := b.Catalogs.ListVariants(ctx, businessID, item.ID, "active", pageLimit, cursor)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		for _, variant := range page.Items {
+			if variant.BusinessID != businessID || variant.CatalogItemID != item.ID || variantIDs[variant.ID] {
+				return nil, nil, nil, errors.New("incomplete or duplicate commercial variant evidence")
+			}
+			variantIDs[variant.ID] = true
+			variantEvidence = append(variantEvidence, ports.CustomerSalesVariantEvidence{
+				Reference: variant.ID, CatalogItemReference: variant.CatalogItemID, Name: variant.Name, Status: variant.Status,
+				Attributes: safeJSONObject(variant.Attributes), EvidenceState: CustomerSalesContextFresh, RetrievedAt: now, SchemaVersion: AIEvidenceSchemaVersion,
+			})
+		}
+		if !page.HasMore {
+			break
+		}
+		if page.NextCursor == "" || page.NextCursor == cursor {
+			return nil, nil, nil, errors.New("commercial variant cursor did not advance")
+		}
+		cursor = page.NextCursor
+	}
+	cursor = ""
+	for {
+		page, err := b.Catalogs.ListOffers(ctx, businessID, item.ID, "active", pageLimit, cursor)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		for _, offer := range page.Items {
+			if offer.BusinessID != businessID || offer.CatalogItemID != item.ID || offerIDs[offer.ID] {
+				return nil, nil, nil, errors.New("incomplete or duplicate commercial offer evidence")
+			}
+			if offer.VariantID != nil && *offer.VariantID != "" && !variantIDs[*offer.VariantID] {
+				return nil, nil, nil, errors.New("active offer references missing or inactive commercial variant")
+			}
+			offerIDs[offer.ID] = true
+			offerEvidence = append(offerEvidence, toOfferEvidence(offer, now))
+		}
+		if !page.HasMore {
+			break
+		}
+		if page.NextCursor == "" || page.NextCursor == cursor {
+			return nil, nil, nil, errors.New("commercial offer cursor did not advance")
+		}
+		cursor = page.NextCursor
+	}
+	return []ports.CustomerSalesCatalogEvidence{catalogItemEvidence(item, now)}, offerEvidence, variantEvidence, nil
 }
 
 // toOfferEvidence projects a repository offer into AI evidence with a
@@ -353,6 +327,13 @@ func customerSalesSchemaEvidence(schema ports.AttributeSchemaRecord) ports.Custo
 	return out
 }
 func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports.CustomerSalesContext, input ports.CustomerSalesContextInput, now time.Time) (ports.CustomerSalesContext, error) {
+	if b.Sales != nil {
+		sales, err := b.Sales.GetContext(ctx, input.BusinessID, input.ConversationID, base.Customer.Reference)
+		if err != nil {
+			return ports.CustomerSalesContext{}, err
+		}
+		base.Sales = &sales
+	}
 	// The manifest describes catalog shape only. Item-level evaluation is
 	// delegated to the complete catalog paging/batching path when required.
 	if b.CatalogAI != nil && base.CatalogManifest == nil {

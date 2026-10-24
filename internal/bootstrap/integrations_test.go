@@ -38,18 +38,12 @@ func TestBuildExternalAdaptersKeepsAutoReplyDisabledByDefault(t *testing.T) {
 	}
 }
 
-func TestBuildExternalAdaptersRejectsUnwiredNonGeminiProvider(t *testing.T) {
+func TestBuildExternalAdaptersRejectsDisabledNativeAIWhenCustomerSalesEnabled(t *testing.T) {
 	adapters := BuildExternalAdapters(config.ProcessConfig{
-		LLMEnabled: true,
-		LLMBaseURL: "https://example.invalid/v1",
-		LLMAPIKey:  "test-only-key",
-		LLMModel:   "test-model",
+		CustomerSalesEnabled: true,
 	})
-	if adapters.LLMConfigError == nil {
-		t.Fatal("expected unsupported non-Gemini AI provider error")
-	}
-	if adapters.GeminiHTTPClient != nil {
-		t.Fatal("non-Gemini provider must not construct the Gemini client")
+	if adapters.LLMConfigError == nil || adapters.NativeCustomerDecision != nil {
+		t.Fatal("customer AI must not start when native runtime is disabled")
 	}
 }
 
@@ -66,5 +60,40 @@ func TestBuildExternalAdaptersMarksIncompleteProvisioningWithoutBlockingOtherRun
 	}
 	if adapters.ReadinessChecks()["channel_provisioning"] != "misconfigured" {
 		t.Fatalf("readiness=%#v", adapters.ReadinessChecks())
+	}
+}
+
+func TestBuildExternalAdaptersDeepSeekOnly(t *testing.T) {
+	base := config.ProcessConfig{
+		NativeAIEnabled:               true,
+		DeepSeekAPIKey:                "test-deepseek-key",
+		DeepSeekModel:                 "deepseek-flash",
+		NativeHTTPTimeout:             10 * time.Second,
+		NativeMaxContextTokens:        32768,
+		NativeMaxOutputTokens:         4096,
+		NativeMaxInputCharacters:      48000,
+		NativeMerchantMaxRequestBytes: 524288,
+	}
+	adapters := BuildExternalAdapters(base)
+	if adapters.LLMConfigError != nil || adapters.NativeCustomerDecision == nil ||
+		adapters.NativeCatalogClient == nil || adapters.NativeMerchantAuthoring == nil {
+		t.Fatalf("DeepSeek-only native runtime was not constructed: %+v", adapters)
+	}
+	if adapters.NativeAISettings == nil || !adapters.NativeAISettings.Configured ||
+		adapters.NativeAISettings.Provider != "deepseek" ||
+		adapters.NativeAISettings.Model != "deepseek-flash" ||
+		adapters.ReadinessChecks()["llm_runtime"] != "configured" {
+		t.Fatalf("DeepSeek-only readiness mismatch: %+v", adapters)
+	}
+	base.DeepSeekModel = ""
+	invalid := BuildExternalAdapters(base)
+	if invalid.LLMConfigError == nil || invalid.NativeCustomerDecision != nil {
+		t.Fatal("DeepSeek with missing model must fail closed")
+	}
+	base.DeepSeekAPIKey = ""
+	base.DeepSeekModel = "deepseek-flash"
+	missingKey := BuildExternalAdapters(base)
+	if missingKey.LLMConfigError == nil || missingKey.NativeCustomerDecision != nil {
+		t.Fatal("DeepSeek with missing key must fail closed")
 	}
 }
