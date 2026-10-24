@@ -122,6 +122,7 @@ type BatchEvaluationInput struct {
 
 // FinalEvaluationInput is the post-batch final AI model call.
 type FinalEvaluationInput struct {
+	SourceMessageReference string
 	AIRunID             string
 	AttemptID           string
 	BusinessID          string
@@ -854,6 +855,7 @@ func buildFinalEvaluationPayload(
 	)
 
 	return FinalEvaluationInput{
+		SourceMessageReference: input.SourceMessageReference,
 		AIRunID:             input.AIRunID,
 		AttemptID:           input.AttemptID,
 		BusinessID:          input.BusinessID,
@@ -950,6 +952,7 @@ func mustMarshal(v any) []byte {
 
 // CatalogEvaluationInput is the controller's input.
 type CatalogEvaluationInput struct {
+	SourceMessageReference string
 	AIRunID             string
 	AttemptID           string
 	BusinessID          string

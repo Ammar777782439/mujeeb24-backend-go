@@ -48,7 +48,7 @@ func (c *NativeCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cus
 	if capabilities == nil {
 		capabilities = ports.CustomerSalesCapabilities(false)
 	}
-	tools := customerSalesTools(capabilities)
+	tools := customerSalesToolsForEvidence(capabilities, input.Request.SourceMessageReference, input.Request.Context)
 	if len(tools) == 0 {
 		return ports.CustomerSalesDecisionOutput{}, errors.New("no customer sales capabilities available")
 	}

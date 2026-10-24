@@ -338,6 +338,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			AttemptID:           "", // no separate attempt tracking in this path
 			BusinessID:          businessID,
 			ConversationID:      conversationID,
+			SourceMessageReference: sourceMessageRef,
 			CatalogScope:        "", // evaluate all active catalogs for the business
 			CustomerMessage:     command.Text,
 			ConversationContext: derefCustomerSalesContext(builtContext),

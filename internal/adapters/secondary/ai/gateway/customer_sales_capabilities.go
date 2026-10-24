@@ -221,3 +221,40 @@ func customerSalesResponseTextDescription(capability ports.CustomerSalesCapabili
 		return "Grounded customer-facing text."
 	}
 }
+
+// customerSalesToolsForEvidence constrains the tool's evidence identifiers to
+// references the model actually received for THIS turn. This is a provider-
+// neutral JSON Schema enum, not a Go intent classifier or a fallback ID.
+// The backend reference validator still independently enforces the boundary.
+func customerSalesToolsForEvidence(capabilities []ports.CustomerSalesCapability, sourceReference string, context *ports.CustomerSalesContext) []customerSalesTool {
+	tools := customerSalesTools(capabilities)
+	var recent []ports.CustomerSalesRecentMessageEvidence
+	if context != nil {
+		recent = context.RecentMessages
+	}
+	allowed := ports.SalesMessageEvidenceReferences(sourceReference, recent)
+	if len(allowed) == 0 {
+		return tools
+	}
+	for i := range tools {
+		if !salesCapabilityWithEvidence(tools[i].Name) {
+			continue
+		}
+		outer := tools[i].Parameters["properties"].(map[string]any)
+		sales := outer["sales"].(map[string]any)
+		properties := sales["properties"].(map[string]any)
+		field := properties["evidence_message_ids"].(map[string]any)
+		items := field["items"].(map[string]any)
+		items["enum"] = allowed
+		field["description"] = "Select only real customer evidence IDs from the allowed enum. The current incoming message has a provider source ID; historical messages use recent_messages.reference. Do not use an assistant reply, summary, workflow ID or any other reference."
+	}
+	return tools
+}
+
+func salesCapabilityWithEvidence(name string) bool {
+	switch ports.CustomerSalesCapability(name) {
+	case ports.CustomerSalesCapabilityRecordLead, ports.CustomerSalesCapabilityCreateDraft, ports.CustomerSalesCapabilityUpdateDraft:
+		return true
+	}
+	return false
+}

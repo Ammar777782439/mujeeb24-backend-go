@@ -30,11 +30,13 @@ package services
 
 import (
 	"context"
+	"log"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/salesdiag"
 )
 
 // ValidationPipeline executes the contract ⑥ post-Gemini validation chain.
@@ -143,14 +145,28 @@ func (p *ValidationPipeline) validateReferences(ctx context.Context, input Valid
 		if input.Context == nil || input.Context.Sales == nil || !input.Context.Sales.Enabled || !input.Context.Sales.AllowInteractions {
 			return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidAIOutput, Reason: "sales executor is unavailable"}
 		}
-		known := map[string]bool{input.SourceMessageReference: true}
-		for _, m := range input.Context.RecentMessages {
-			if m.Direction == "inbound" && m.Origin == "customer" {
-				known[m.Reference] = true
-			}
+		allowed := ports.SalesMessageEvidenceReferences(input.SourceMessageReference, input.Context.RecentMessages)
+		known := make(map[string]bool, len(allowed))
+		for _, ref := range allowed {
+			known[ref] = true
 		}
-		for _, ref := range input.Decision.Sales.EvidenceMessageIDs {
-			if ref == "" || !known[ref] {
+		for index, ref := range input.Decision.Sales.EvidenceMessageIDs {
+			valid := ref != "" && known[ref]
+			if salesdiag.Enabled() {
+				origin := "not_exposed_customer_message"
+				switch {
+				case ref == "":
+					origin = "empty"
+				case ref == input.SourceMessageReference && ref != "":
+					origin = "current_source"
+				case valid:
+					origin = "recent_inbound_customer"
+				}
+				log.Printf("[SalesDiag] EVIDENCE_CHECK business=%s conversation=%s capability=%s index=%d valid=%t origin=%s current_source_available=%t recent_messages=%d allowed_customer_refs=%d",
+					input.BusinessID, input.ConversationID, input.Decision.Capability, index,
+					valid, origin, input.SourceMessageReference != "", len(input.Context.RecentMessages), len(allowed))
+			}
+			if !valid {
 				return &StageFailure{Stage: ports.AIRunFailureStageValidation, Category: ports.AIRunFailureCategoryInvalidReference, Reason: "sales evidence was not exposed as a customer message"}
 			}
 		}

@@ -246,7 +246,7 @@ func (c *NativeCatalogAdapter) FinalEvaluateWithDetails(ctx context.Context, inp
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, err
 	}
 
-	tools := customerSalesTools(ports.CustomerSalesCapabilities(false, input.ConversationContext.Sales != nil && input.ConversationContext.Sales.Enabled && input.ConversationContext.Sales.AllowInteractions))
+	tools := customerSalesToolsForEvidence(ports.CustomerSalesCapabilities(false, input.ConversationContext.Sales != nil && input.ConversationContext.Sales.Enabled && input.ConversationContext.Sales.AllowInteractions), input.SourceMessageReference, &input.ConversationContext)
 	if normalized.Text != "" {
 		return ports.CapabilityDecision{}, ports.CustomerSalesUsageTelemetry{}, errors.New("final catalog returned plain text alongside capability")
 	}
