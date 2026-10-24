@@ -9,7 +9,7 @@ import (
 
 func TestSalesReferenceValidationAllowsOnlyCurrentOrExposedInboundCustomer(t *testing.T) {
 	p := &ValidationPipeline{ReferenceValidator: allowAllReferenceValidator{}}
-	context := &ports.CustomerSalesContext{
+	salesContext := &ports.CustomerSalesContext{
 		Sales: &ports.SalesWorkflowContext{Enabled: true, AllowInteractions: true},
 		RecentMessages: []ports.CustomerSalesRecentMessageEvidence{
 			{Reference: "prior-inbound", Direction: "inbound", Origin: "customer", Text: "اشتراك"},
@@ -34,7 +34,7 @@ func TestSalesReferenceValidationAllowsOnlyCurrentOrExposedInboundCustomer(t *te
 		}
 		failure := p.validateReferences(context.Background(), ValidationInput{
 			SourceMessageReference: "provider-current", BusinessID: "business-1",
-			ConversationID: "conversation-1", Context: context, Decision: decision,
+			ConversationID: "conversation-1", Context: salesContext, Decision: decision,
 		})
 		if (failure == nil) != tc.allow {
 			t.Fatalf("ref=%q allowed=%t failure=%v", tc.ref, tc.allow, failure)
