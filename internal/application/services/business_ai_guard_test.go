@@ -71,9 +71,9 @@ func TestAutoReplyDisabledBeforeDecisionOrOutbound(t *testing.T) {
 	)
 	service.AIGuard = &BusinessAIGuard{Policies: repo}
 	got, err := service.Handle(context.Background(), commands.AutoReplyCommand{
-		Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}},
+		Meta:           commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}},
 		ConversationID: "conversation-1", SourceMessageReference: "incoming-1",
-		Text: "كم سعر المنتج؟", Channel: "whatsapp", ProviderRef: "socialapi",
+		Text:           "كم سعر المنتج؟", Channel: "whatsapp", ProviderRef: "socialapi",
 	})
 	if err != nil || got.Enqueued || got.Action != "no_action" || outbox.calls != 0 || decisions.record.ID != "" {
 		t.Fatalf("disabled AI triggered execution: result=%+v err=%v", got, err)
