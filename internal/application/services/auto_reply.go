@@ -184,7 +184,6 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		return commands.AutoReplyResult{}, appErrors.NotImplemented()
 	}
 
-
 	// This is a business-level generation gate, distinct from the existing
 	// post-model PolicyEvaluator. Run it before creating a run or calling AI.
 	if s.AIGuard != nil {
@@ -258,7 +257,6 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		}
 		builtContext = &bc
 	}
-
 
 	// A merchant may disable AI after webhook acceptance / context building.
 	// Cancel before any provider request, preserving the run lifecycle.

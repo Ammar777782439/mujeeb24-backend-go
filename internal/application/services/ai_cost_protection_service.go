@@ -76,7 +76,6 @@ func (s *AICostProtectionService) IsAIExecutionAllowed(ctx context.Context, busi
 		return false, "ai_runtime_disabled"
 	}
 
-
 	// Per-merchant switch. The platform master switch above remains first.
 	// Never schedule model calls for a business that disabled AI.
 	if s.BusinessAIGuard != nil {

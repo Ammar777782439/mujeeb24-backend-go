@@ -241,7 +241,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// three enforcement points (webhook AutoReply + Merchant
 		// AI + Summary).
 		service.SummaryService.CostProtection = &services.AICostProtectionService{
-			BusinessAIGuard: businessAIGuard,
+			BusinessAIGuard:    businessAIGuard,
 			Subscriptions:      postgres.NewSubscriptionRepository(database),
 			AIUsage:            postgres.NewAIUsageRepository(database),
 			PlatformOperations: platformOperations,
@@ -384,7 +384,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// path. It also enforces the merchant AI Reply entitlement
 		// (Contract §33) before the gateway model is called.
 		webhookService.AICostProtectionChecker = &services.AICostProtectionService{
-			BusinessAIGuard: businessAIGuard,
+			BusinessAIGuard:    businessAIGuard,
 			Subscriptions:      postgres.NewSubscriptionRepository(database),
 			AIUsage:            postgres.NewAIUsageRepository(database),
 			PlatformOperations: platformOperations,

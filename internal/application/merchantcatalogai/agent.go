@@ -43,7 +43,6 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 		return TurnResult{}, errors.New("merchant message is required")
 	}
 
-
 	// Do not create AI sessions or contact the provider after merchant opt-out.
 	if a.AIGuard != nil {
 		if err := a.AIGuard.Check(ctx, in.BusinessID); err != nil {
@@ -144,7 +143,6 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 	if err := proposal.Validate(); err != nil {
 		return TurnResult{}, err
 	}
-
 
 	// The merchant can disable AI while the model is generating a proposal.
 	if a.AIGuard != nil {

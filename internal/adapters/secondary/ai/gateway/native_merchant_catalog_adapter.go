@@ -102,6 +102,11 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 		strings.TrimSpace(input.BusinessID) == "" || strings.TrimSpace(input.PrincipalID) == "" {
 		return merchantcatalogai.Proposal{}, errors.New("merchant catalog gateway input is incomplete")
 	}
+	if a.AIGuard != nil {
+		if err := a.AIGuard.Check(ctx, input.BusinessID); err != nil {
+			return merchantcatalogai.Proposal{}, err
+		}
+	}
 	system, contextualInput, err := buildMerchantCatalogAuthoringPrompt(input)
 	if err != nil {
 		return merchantcatalogai.Proposal{}, err
