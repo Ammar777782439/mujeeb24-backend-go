@@ -496,4 +496,10 @@ func TestSalesWorkflowLeadToPartialSubscriptionToConfirmedReadyAgainstPostgres(t
 	if _, err := apply("duplicate-create", ports.CustomerSalesCapabilityCreateDraft, create); err == nil {
 		t.Fatal("create_transaction_draft overwrote an existing commercial draft")
 	}
+	// An actual customer confirmation of a subscription must enter HUMAN review:
+	// specialized subscriptions are not auto-activated by a button.
+	accepted, err := f.button(t, ready, "accept")
+	if err != nil || accepted.Workflow.State != "awaiting_review" || accepted.Workflow.PendingAction != "confirm_transaction" {
+		t.Fatalf("customer confirmation bypassed subscription review: %+v %v", accepted, err)
+	}
 }

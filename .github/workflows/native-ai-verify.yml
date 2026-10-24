@@ -86,4 +86,4 @@ jobs:
           go-version: '1.22.2'
           cache: true
       - name: Lead to subscription draft, update, price, and confirmation
-        run: go test -tags=integration -count=1 -run '^TestSalesWorkflowLeadToPartialSubscriptionToConfirmedReadyAgainstPostgres$' ./internal/adapters/secondary/persistence/postgres
+        run: go test -tags=integration -count=1 -run '^TestSalesWorkflow' ./internal/adapters/secondary/persistence/postgres
