@@ -108,7 +108,7 @@ func TestNativeProviderSpendFailsClosedForMissingEvidence(t *testing.T) {
 
 func TestNativeTokenPricedSpendUsesAnyConfiguredProviderModel(t *testing.T) {
 	pricing := &verifiedPricingStub{version: ports.AIProviderPricingVersion{
-		PricingVersion: "approved-future-v1",
+		PricingVersion:     "approved-future-v1",
 		InputPerMillionYER: 1000000, CachedInputPerMillionYER: 500000, OutputPerMillionYER: 2000000,
 	}}
 	cost, version, failed := nativeTokenPricedSpend(context.Background(), pricing, ports.CustomerSalesUsageTelemetry{
