@@ -620,8 +620,12 @@ func (c *Client) NormalizeWebhook(ctx context.Context, headers map[string]string
 	if providerMessageID == "" && len(envelope.Data.MIDs) > 0 {
 		providerMessageID = envelope.Data.MIDs[0]
 	}
-	if providerMessageID == "" && (envelope.Data.Type == "dm" || envelope.Data.Type == "dm.received") {
-		providerMessageID = envelope.Data.ID
+	if providerMessageID == "" && (envelope.Data.Type == "dm" || envelope.Data.Type == "dm.received" || envelope.Event == "dm.postback") {
+		// SocialAPI postbacks may carry an event id but no platform message
+		// id or mids. A missing message ID would cause materialization to
+		// discard an otherwise valid button press before sales processing.
+		// Only use the event/delivery id for inbound DMs and postbacks.
+		providerMessageID = providerEventID
 	}
 	interaction := interactionKind(envelope.Event)
 	providerChannel, err := platformChannel(envelope.Data.Platform)
