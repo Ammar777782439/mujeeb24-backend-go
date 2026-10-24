@@ -426,3 +426,74 @@ func TestSalesWorkflowReadPreservesOriginalAgreementSnapshotAgainstPostgres(t *t
 		t.Fatal("another tenant read the agreement")
 	}
 }
+
+func TestSalesWorkflowLeadToPartialSubscriptionToConfirmedReadyAgainstPostgres(t *testing.T) {
+	f := newSalesWorkflowFixture(t)
+	repo := NewSalesWorkflowRepository(f.a)
+	if err := repo.PutRequirement(context.Background(), f.business, ports.SalesRequirement{
+		TransactionType: "subscription", SchemaVersion: 1,
+		Definitions: []ports.SalesRequirementDefinition{
+			{Key: "field_business", Label: "اسم النشاط", DataType: "text", Required: true},
+			{Key: "field_phone", Label: "رقم التلفون", DataType: "text", Required: true},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	apply := func(key string, capability ports.CustomerSalesCapability, proposal ports.SalesWorkflowProposal) (ports.SalesWorkflowResult, error) {
+		t.Helper()
+		var result ports.SalesWorkflowResult
+		err := f.a.Within(context.Background(), func(tx context.Context) error {
+			var applyErr error
+			result, applyErr = repo.Apply(tx, ports.SalesWorkflowInput{
+				BusinessID: f.business, CustomerID: f.customer, ConversationID: f.conversation,
+				SourceMessageID: f.message, IdempotencyKey: key, Capability: capability, Proposal: proposal, Now: f.now,
+			})
+			return applyErr
+		})
+		return result, err
+	}
+	lead, err := apply("record-lead", ports.CustomerSalesCapabilityRecordLead, ports.SalesWorkflowProposal{EvidenceMessageIDs: []string{f.message}})
+	if err != nil || lead.Workflow.TransactionID != nil || lead.Workflow.ResourceVersion != 1 {
+		t.Fatalf("lead did not create a standalone opportunity: %+v %v", lead, err)
+	}
+	create := ports.SalesWorkflowProposal{
+		WorkflowID: lead.Workflow.ID, ExpectedVersion: lead.Workflow.ResourceVersion,
+		TransactionType: "subscription", EvidenceMessageIDs: []string{f.message},
+		Lines: []ports.SalesWorkflowLine{{ItemID: f.item, OfferID: &f.offer, Quantity: "1"}},
+		TransactionData: map[string]any{"field_business": "متجر"},
+	}
+	draft, err := apply("create-draft", ports.CustomerSalesCapabilityCreateDraft, create)
+	if err != nil || draft.Workflow.ID != lead.Workflow.ID || draft.Workflow.State != "draft" ||
+		draft.Workflow.ResourceVersion != 2 || draft.ConfirmationID != "" {
+		t.Fatalf("lead was not promoted to incomplete draft: %+v %v", draft, err)
+	}
+	update := ports.SalesWorkflowProposal{
+		WorkflowID: draft.Workflow.ID, ExpectedVersion: draft.Workflow.ResourceVersion,
+		TransactionType: "subscription", EvidenceMessageIDs: []string{f.message},
+		Lines: []ports.SalesWorkflowLine{{ItemID: f.item, OfferID: &f.offer, Quantity: "1"}},
+		TransactionData: map[string]any{"field_phone": "776900067"},
+	}
+	ready, err := apply("add-phone", ports.CustomerSalesCapabilityUpdateDraft, update)
+	if err != nil || ready.Workflow.State != "awaiting_confirmation" || ready.ConfirmationID == "" ||
+		ready.Workflow.ResourceVersion != 3 || ready.Workflow.Proposal.TransactionData["field_business"] != "متجر" ||
+		ready.Workflow.Proposal.TransactionData["field_phone"] != "776900067" {
+		t.Fatalf("partial answer was not merged into confirmable subscription: %+v %v", ready, err)
+	}
+	if ready.Workflow.TransactionID == nil {
+		t.Fatal("confirmed-ready subscription missing transaction")
+	}
+	var data map[string]any
+	if err := f.a.Pool().QueryRow(context.Background(),
+		`SELECT transaction_data FROM commercial_transactions WHERE business_id=$1::uuid AND id=$2::uuid`,
+		f.business, *ready.Workflow.TransactionID).Scan(&data); err != nil ||
+		data["field_business"] != "متجر" || data["field_phone"] != "776900067" {
+		t.Fatalf("persisted commercial transaction lost customer data: %v %v", data, err)
+	}
+	if _, err := apply("stale-update", ports.CustomerSalesCapabilityUpdateDraft, update); !IsRepositoryKind(err, RepositoryStale) {
+		t.Fatalf("stale workflow version was accepted: %v", err)
+	}
+	create.ExpectedVersion = ready.Workflow.ResourceVersion
+	if _, err := apply("duplicate-create", ports.CustomerSalesCapabilityCreateDraft, create); err == nil {
+		t.Fatal("create_transaction_draft overwrote an existing commercial draft")
+	}
+}

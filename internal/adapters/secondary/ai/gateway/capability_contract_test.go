@@ -127,3 +127,49 @@ func TestToolDescriptionsAreSemanticAuthorityAndSummaryIsNotExecution(t *testing
 		t.Fatalf("expected 7 tool definitions, got %d", len(seen))
 	}
 }
+
+func TestSalesCapabilitiesHaveSeparateStrictContracts(t *testing.T) {
+	tools := customerSalesTools([]ports.CustomerSalesCapability{
+		ports.CustomerSalesCapabilityRecordLead,
+		ports.CustomerSalesCapabilityCreateDraft,
+		ports.CustomerSalesCapabilityUpdateDraft,
+	})
+	for _, tool := range tools {
+		if err := validateStrictSchema(tool.Parameters); err != nil {
+			t.Fatalf("invalid strict schema for %s: %v", tool.Name, err)
+		}
+	}
+	parse := func(tool string, args string) (ports.CapabilityDecision, error) {
+		return parseCustomerSalesCapability(capabilityResponse{Calls: []capabilityCall{{
+			ID: "call-1", Name: tool, Arguments: json.RawMessage(args),
+		}}}, tools)
+	}
+	lead := `{"sales":{"evidence_message_ids":["message-1"]}}`
+	choice, err := parse("record_lead", lead)
+	if err != nil || choice.Sales == nil || len(choice.Sales.Lines) != 0 ||
+		choice.Sales.TransactionType != "" || choice.Sales.TransactionData != nil {
+		t.Fatalf("lead contract damaged: %+v %v", choice, err)
+	}
+	if _, err := parse("record_lead", `{"sales":{"evidence_message_ids":["message-1"],"lines":[]}}`); err == nil {
+		t.Fatal("record_lead schema allowed lines")
+	}
+	if _, err := parse("record_lead", `{"sales":{"evidence_message_ids":["message-1"],"transaction_data_json":"{}"}}`); err == nil {
+		t.Fatal("record_lead schema allowed transaction data")
+	}
+	create := `{"sales":{"workflow_id":null,"expected_version":null,"transaction_type":"subscription","lines":[{"item_id":"item-1","offer_id":null,"variant_id":null,"quantity":"1","selected_attributes_json":"{}"}],"transaction_data_json":"{}","evidence_message_ids":["message-1"]}}`
+	if got, err := parse("create_transaction_draft", create); err != nil || got.Sales == nil || got.Sales.TransactionType != "subscription" {
+		t.Fatalf("create draft contract failed: %+v %v", got, err)
+	}
+	update := strings.Replace(create, `"workflow_id":null,"expected_version":null`, `"workflow_id":"workflow-1","expected_version":2`, 1)
+	if got, err := parse("update_transaction_draft", update); err != nil || got.Sales == nil || got.Sales.WorkflowID != "workflow-1" || got.Sales.ExpectedVersion != 2 {
+		t.Fatalf("update contract failed: %+v %v", got, err)
+	}
+	if _, err := parse("update_transaction_draft", create); err == nil {
+		t.Fatal("update permitted null workflow_id or version")
+	}
+	// A lead workflow may be promoted to a draft with trusted ID and version.
+	promote := strings.Replace(create, `"workflow_id":null,"expected_version":null`, `"workflow_id":"lead-workflow","expected_version":1`, 1)
+	if got, err := parse("create_transaction_draft", promote); err != nil || got.Sales == nil || got.Sales.WorkflowID != "lead-workflow" {
+		t.Fatalf("lead-to-draft transition rejected: %+v %v", got, err)
+	}
+}

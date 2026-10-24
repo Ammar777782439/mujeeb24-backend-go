@@ -22,6 +22,13 @@ type customerSalesMessageArguments struct {
 	Selected     []ports.SelectedReference `json:"selected"`
 }
 
+// record_lead has its own strict contract; it cannot carry transaction lines.
+type customerSalesLeadArguments struct {
+	Sales struct {
+		EvidenceMessageIDs []string `json:"evidence_message_ids"`
+	} `json:"sales"`
+}
+
 type customerSalesWorkflowArguments struct {
 	Sales struct {
 		WorkflowID      *string `json:"workflow_id"`
@@ -116,6 +123,18 @@ func parseCustomerSalesCapability(resp capabilityResponse, tools []customerSales
 		return ports.CapabilityDecision{}, errors.New("capability definition missing")
 	}
 	if definition.Executor == "sales" {
+		if capability == ports.CustomerSalesCapabilityRecordLead {
+			var args customerSalesLeadArguments
+			if err := decodeStrictStructuredJSON(call.Arguments, &args); err != nil {
+				return ports.CapabilityDecision{}, fmt.Errorf("decode lead capability arguments: %w", err)
+			}
+			return ports.CapabilityDecision{
+				Capability: capability,
+				Sales: &ports.SalesWorkflowProposal{
+					EvidenceMessageIDs: args.Sales.EvidenceMessageIDs,
+				},
+			}, nil
+		}
 		var args customerSalesWorkflowArguments
 		if err := decodeStrictStructuredJSON(call.Arguments, &args); err != nil {
 			return ports.CapabilityDecision{}, fmt.Errorf("decode sales capability arguments: %w", err)

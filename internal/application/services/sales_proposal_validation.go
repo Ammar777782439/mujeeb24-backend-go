@@ -18,8 +18,10 @@ func validateSalesProposal(d ports.CapabilityDecision) error {
 		return fmt.Errorf("update requires workflow id")
 	}
 	if d.Capability == ports.CustomerSalesCapabilityRecordLead {
-		if len(d.Sales.Lines) > 0 {
-			return fmt.Errorf("record_lead cannot create transaction lines")
+		if len(d.Sales.Lines) > 0 || d.Sales.WorkflowID != "" ||
+			d.Sales.ExpectedVersion != 0 || d.Sales.TransactionType != "" ||
+			len(d.Sales.TransactionData) > 0 {
+			return fmt.Errorf("record_lead cannot modify a commercial transaction or existing workflow")
 		}
 		return nil
 	}

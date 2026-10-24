@@ -93,6 +93,11 @@ func (r *SalesWorkflowRepository) Apply(ctx context.Context, in ports.SalesWorkf
 	if in.Capability != ports.CustomerSalesCapabilityRecordLead && in.Capability != ports.CustomerSalesCapabilityCreateDraft && in.Capability != ports.CustomerSalesCapabilityUpdateDraft {
 		return result, invalidRepositoryInput("sales.capability", "unsupported sales executor capability")
 	}
+	if in.Capability == ports.CustomerSalesCapabilityRecordLead &&
+		(in.Proposal.WorkflowID != "" || len(in.Proposal.Lines) != 0 || in.Proposal.TransactionType != "" ||
+			len(in.Proposal.TransactionData) != 0) {
+		return result, invalidRepositoryInput("sales.lead", "lead cannot modify an existing workflow or commercial transaction")
+	}
 	// Serialize this conversation across workers and bind it to the verified customer.
 	var conv string
 	var mode string
@@ -157,6 +162,18 @@ func (r *SalesWorkflowRepository) Apply(ctx context.Context, in ports.SalesWorkf
 		}
 		if w.State == "confirmed" || w.State == "cancelled" {
 			return result, invalidRepositoryInput("sales.workflow", "workflow is closed")
+		}
+		if in.Capability == ports.CustomerSalesCapabilityCreateDraft && w.TransactionID != nil {
+			return result, invalidRepositoryInput("sales.workflow", "commercial draft already exists; use update_transaction_draft")
+		}
+		if in.Capability == ports.CustomerSalesCapabilityUpdateDraft && w.TransactionID == nil {
+			return result, invalidRepositoryInput("sales.workflow", "cannot update a commercial draft before a transaction exists")
+		}
+		if in.Capability != ports.CustomerSalesCapabilityRecordLead {
+			// Fill in partial customer answers without erasing previously
+			// provided fields. Only nonempty, explicitly supplied new values
+			// override an existing key. The persisted workflow is authoritative.
+			in.Proposal.TransactionData = mergeSalesTransactionData(w.Proposal.TransactionData, in.Proposal.TransactionData)
 		}
 		if salesdiag.Enabled() && in.Capability != ports.CustomerSalesCapabilityRecordLead {
 			log.Printf("[SalesDiag] DB_REPLACE business=%s workflow=%s old_version=%d prior=%s incoming=%s",

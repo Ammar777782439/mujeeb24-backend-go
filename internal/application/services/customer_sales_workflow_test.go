@@ -52,3 +52,25 @@ func TestIncompleteSalesReceiptExplainsNextStepWithoutConfirmation(t *testing.T)
 		t.Fatal("proposal review claimed a customer confirmation")
 	}
 }
+
+func TestLeadCannotCarryCommercialDraftFields(t *testing.T) {
+	base := ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityRecordLead, Sales: &ports.SalesWorkflowProposal{EvidenceMessageIDs: []string{"message-1"}}}
+	if err := validateSalesProposal(base); err != nil {
+		t.Fatalf("valid lead rejected: %v", err)
+	}
+	withLines := base
+	withLines.Sales = &ports.SalesWorkflowProposal{EvidenceMessageIDs: []string{"message-1"}, Lines: []ports.SalesWorkflowLine{{ItemID: "item-1", Quantity: "1"}}}
+	if err := validateSalesProposal(withLines); err == nil {
+		t.Fatal("lead carrying transaction lines accepted")
+	}
+	withData := base
+	withData.Sales = &ports.SalesWorkflowProposal{EvidenceMessageIDs: []string{"message-1"}, TransactionData: map[string]any{"field_business": "store"}}
+	if err := validateSalesProposal(withData); err == nil {
+		t.Fatal("lead carrying transaction requirements accepted")
+	}
+	withID := base
+	withID.Sales = &ports.SalesWorkflowProposal{EvidenceMessageIDs: []string{"message-1"}, WorkflowID: "existing", ExpectedVersion: 1}
+	if err := validateSalesProposal(withID); err == nil {
+		t.Fatal("lead allowed to overwrite an existing workflow")
+	}
+}
