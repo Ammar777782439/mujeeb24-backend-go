@@ -26,7 +26,7 @@ func TestDescribeArgumentsDistinguishesEmptyAndPopulatedObjectWithoutLeakingValu
 	if !strings.Contains(got, "data_json_empty_object=true") || !strings.Contains(got, "count=0") {
 		t.Fatalf("cannot diagnose empty model result: %s", got)
 	}
-	present := `{"sales":{"workflow_id":"workflow-1","expected_version":2,"transaction_type":"subscription","lines":[],"transaction_data_json":"{\\"field_abc\\":\\"A secret name\\",\\"field_xyz\\":\\"776900067\\"}","evidence_message_ids":[]}}`
+	present := `{"sales":{"workflow_id":"workflow-1","expected_version":2,"transaction_type":"subscription","lines":[],"transaction_data_json":"{\"field_abc\":\"A secret name\",\"field_xyz\":\"776900067\"}","evidence_message_ids":[]}}`
 	got = DescribeArguments(present)
 	if !strings.Contains(got, "data_json_empty_object=false") || !strings.Contains(got, "field_abc") || !strings.Contains(got, "field_xyz") || !strings.Contains(got, "count=2") {
 		t.Fatalf("missing required evidence from model result: %s", got)

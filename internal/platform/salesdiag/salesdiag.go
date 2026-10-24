@@ -32,12 +32,12 @@ func IsSalesTool(name string) bool {
 func DescribeArguments(raw string) string {
 	var args struct {
 		Sales struct {
-			WorkflowID         *string           `json:"workflow_id"`
-			ExpectedVersion    *int64            `json:"expected_version"`
-			TransactionType    *string           `json:"transaction_type"`
-			Lines              []json.RawMessage `json:"lines"`
-			TransactionDataJSON *string          `json:"transaction_data_json"`
-			EvidenceMessageIDs []string          `json:"evidence_message_ids"`
+			WorkflowID          *string           `json:"workflow_id"`
+			ExpectedVersion     *int64            `json:"expected_version"`
+			TransactionType     *string           `json:"transaction_type"`
+			Lines               []json.RawMessage `json:"lines"`
+			TransactionDataJSON *string           `json:"transaction_data_json"`
+			EvidenceMessageIDs  []string          `json:"evidence_message_ids"`
 		} `json:"sales"`
 	}
 	if err := json.Unmarshal([]byte(raw), &args); err != nil {
