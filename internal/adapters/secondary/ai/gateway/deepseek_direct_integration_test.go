@@ -25,16 +25,16 @@ func TestDeepSeekOnlyCustomerModelChoosesCatalogCapability(t *testing.T) {
 			t.Error("missing DeepSeek transport credential")
 		}
 		var body struct {
-			Model string `json:"model"`
-			ToolChoice string `json:"tool_choice"`
-			ParallelToolCalls *bool `json:"parallel_tool_calls"`
-			Thinking struct {
+			Model             string `json:"model"`
+			ToolChoice        string `json:"tool_choice"`
+			ParallelToolCalls *bool  `json:"parallel_tool_calls"`
+			Thinking          struct {
 				Type string `json:"type"`
 			} `json:"thinking"`
 			Tools []struct {
 				Function struct {
-					Name string `json:"name"`
-					Strict bool `json:"strict"`
+					Name   string `json:"name"`
+					Strict bool   `json:"strict"`
 				} `json:"function"`
 			} `json:"tools"`
 		}
@@ -80,7 +80,7 @@ func TestDeepSeekOnlyCustomerModelChoosesCatalogCapability(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := adapter.Decide(context.Background(), ports.CustomerSalesDecisionInput{
-		Request: ports.CustomerSalesDecisionRequest{Text: "كم سعر سامسونج 256 جيجا؟"},
+		Request:      ports.CustomerSalesDecisionRequest{Text: "كم سعر سامسونج 256 جيجا؟"},
 		Capabilities: ports.CustomerSalesCapabilities(true, false),
 	})
 	if err != nil {
