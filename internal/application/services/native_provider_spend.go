@@ -9,10 +9,11 @@ import (
 )
 
 // nativeProviderSpend never multiplies token quantities by homemade model prices.
-// Provider-verified USD spend, when present, is converted to YER
-// using an explicitly configured exchange rate. Missing is NOT equivalent to $0.
+// Provider-verified USD spend, when present, is passed to the usage ledger
+// with an explicitly configured exchange rate for YER aggregation.
+// Pricing is independent of the provider name; missing is NOT equivalent to $0.
 func nativeProviderSpend(usage ports.CustomerSalesUsageTelemetry, fxRate string) (string, string, string, bool) {
-	if (usage.Provider != "gemini" && usage.Provider != "deepseek") || !usage.GatewayCostKnown ||
+	if strings.TrimSpace(usage.Provider) == "" || !usage.GatewayCostKnown ||
 		strings.TrimSpace(usage.GatewayCostUSD) == "" || strings.TrimSpace(fxRate) == "" {
 		return "unknown", "", "", true
 	}

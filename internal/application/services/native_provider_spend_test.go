@@ -69,3 +69,66 @@ func TestNativeTokenPricedSpendFailsWithoutPricingAndRejectsInvalidUsage(t *test
 		t.Fatalf("small positive native charge rounded down: cost=%d failed=%t", cost, failed)
 	}
 }
+
+func TestNativeProviderSpendAcceptsVerifiedCostForAnyNamedProvider(t *testing.T) {
+	for _, provider := range []string{"deepseek", "future-provider", "another-model-host"} {
+		t.Run(provider, func(t *testing.T) {
+			version, usd, rate, failed := nativeProviderSpend(ports.CustomerSalesUsageTelemetry{
+				Provider: provider, Model: "model-v1", GatewayCostKnown: true, GatewayCostUSD: "0.0125",
+			}, "245.50")
+			if failed || version != "native_provider_usd" || usd != "0.0125" || rate != "245.50" {
+				t.Fatalf("valid verified spend rejected for provider=%s: version=%s usd=%s rate=%s failed=%t", provider, version, usd, rate, failed)
+			}
+		})
+	}
+}
+
+func TestNativeProviderSpendFailsClosedForMissingEvidence(t *testing.T) {
+	cases := []struct {
+		name, provider, usd, rate string
+		known                     bool
+	}{
+		{"missing provider", "", "0.0125", "245", true},
+		{"blank provider", "  ", "0.0125", "245", true},
+		{"unverified cost", "future-provider", "0.0125", "245", false},
+		{"missing cost", "future-provider", "", "245", true},
+		{"missing conversion", "future-provider", "0.0125", "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			version, usd, rate, failed := nativeProviderSpend(ports.CustomerSalesUsageTelemetry{
+				Provider: tc.provider, Model: "model-v1", GatewayCostKnown: tc.known, GatewayCostUSD: tc.usd,
+			}, tc.rate)
+			if !failed || version != "unknown" || usd != "" || rate != "" {
+				t.Fatalf("missing or unverified spend was accepted: version=%s usd=%s rate=%s failed=%t", version, usd, rate, failed)
+			}
+		})
+	}
+}
+
+func TestNativeTokenPricedSpendUsesAnyConfiguredProviderModel(t *testing.T) {
+	pricing := &verifiedPricingStub{version: ports.AIProviderPricingVersion{
+		PricingVersion: "approved-future-v1",
+		InputPerMillionYER: 1000000, CachedInputPerMillionYER: 500000, OutputPerMillionYER: 2000000,
+	}}
+	cost, version, failed := nativeTokenPricedSpend(context.Background(), pricing, ports.CustomerSalesUsageTelemetry{
+		Provider: "future-provider", Model: "model-v1",
+		InputTokens: 5000, CachedTokens: 1000, OutputTokens: 1000,
+	})
+	if failed || cost != 6500 || version != "approved-future-v1" {
+		t.Fatalf("approved provider-neutral pricing failed: cost=%d version=%s failed=%t", cost, version, failed)
+	}
+	if pricing.provider != "future-provider" || pricing.model != "model-v1" {
+		t.Fatalf("pricing lookup changed adapter identity: provider=%s model=%s", pricing.provider, pricing.model)
+	}
+}
+
+func TestUsageProviderPreservesIdentityWithoutVendorFallback(t *testing.T) {
+	for _, tc := range []struct{ incoming, want string }{
+		{"", ""}, {"  ", ""}, {"future-provider", "future-provider"}, {" future-provider ", "future-provider"},
+	} {
+		if got := usageProvider(tc.incoming); got != tc.want {
+			t.Fatalf("provider identity altered: incoming=%q got=%q want=%q", tc.incoming, got, tc.want)
+		}
+	}
+}
