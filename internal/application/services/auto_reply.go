@@ -666,6 +666,19 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		result.OutboundMessageID = commands.MessageID(outbound.ID)
 		result.OutboxEntryID = commands.ID(outboxEntry.ID)
 		result.Enqueued = true
+		// Preserve main's execution audit lifecycle, within the same transaction
+		// as durable outbound enqueue. Delivery confirmation remains separate.
+		executedRecord, execErr := s.DecisionRepository.MarkExecuted(txCtx, ports.AIDecisionExecutionPatch{
+			BusinessID:         businessID,
+			DecisionID:         decision.ID,
+			ExecutionReference: outbound.ID,
+			Outcome:            "enqueued",
+			ExecutedAt:         now,
+		})
+		if execErr != nil {
+			return mapAIRepositoryError(execErr)
+		}
+		result.Decision = aiDecisionView(executedRecord)
 		return nil
 	})
 

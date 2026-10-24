@@ -556,6 +556,8 @@ type AIDecision struct {
 	PolicyVersion       string         `json:"policy_version"`
 	Lifecycle           string         `json:"lifecycle"`
 	CreatedAt           time.Time      `json:"created_at"`
+	ExecutedAt          *time.Time     `json:"executed_at,omitempty"`
+	ExecutionReference  *string        `json:"execution_reference,omitempty"`
 }
 type AuditEvent struct {
 	ID             UUID           `json:"id"`

@@ -95,6 +95,11 @@ components:
             type: string
           nullable: true
           type: array
+        executed_at:
+          format: date-time
+          type: string
+        execution_reference:
+          type: string
         id:
           type: string
         intent_base:

@@ -223,6 +223,8 @@ type AIDecisionView struct {
 	HumanReviewReason   string
 	ResourceVersion     ResourceVersion
 	CreatedAt           time.Time
+	ExecutedAt          *time.Time
+	ExecutionReference  *string
 }
 type AuditEventView struct {
 	ID                AuditEventID
