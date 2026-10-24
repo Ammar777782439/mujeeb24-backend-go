@@ -459,7 +459,7 @@ func TestSalesWorkflowLeadToPartialSubscriptionToConfirmedReadyAgainstPostgres(t
 	create := ports.SalesWorkflowProposal{
 		WorkflowID: lead.Workflow.ID, ExpectedVersion: lead.Workflow.ResourceVersion,
 		TransactionType: "subscription", EvidenceMessageIDs: []string{f.message},
-		Lines: []ports.SalesWorkflowLine{{ItemID: f.item, OfferID: &f.offer, Quantity: "1"}},
+		Lines:           []ports.SalesWorkflowLine{{ItemID: f.item, OfferID: &f.offer, Quantity: "1"}},
 		TransactionData: map[string]any{"field_business": "متجر"},
 	}
 	draft, err := apply("create-draft", ports.CustomerSalesCapabilityCreateDraft, create)
@@ -470,7 +470,7 @@ func TestSalesWorkflowLeadToPartialSubscriptionToConfirmedReadyAgainstPostgres(t
 	update := ports.SalesWorkflowProposal{
 		WorkflowID: draft.Workflow.ID, ExpectedVersion: draft.Workflow.ResourceVersion,
 		TransactionType: "subscription", EvidenceMessageIDs: []string{f.message},
-		Lines: []ports.SalesWorkflowLine{{ItemID: f.item, OfferID: &f.offer, Quantity: "1"}},
+		Lines:           []ports.SalesWorkflowLine{{ItemID: f.item, OfferID: &f.offer, Quantity: "1"}},
 		TransactionData: map[string]any{"field_phone": "776900067"},
 	}
 	ready, err := apply("add-phone", ports.CustomerSalesCapabilityUpdateDraft, update)
