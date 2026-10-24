@@ -13,8 +13,8 @@ import (
 type businessAIPolicyStub struct {
 	ports.BusinessManagementRepository
 	policies map[string]string
-	err error
-	calls int
+	err      error
+	calls    int
 }
 
 func (s *businessAIPolicyStub) GetRuntimePolicy(_ context.Context, businessID string) (ports.BusinessRuntimePolicyRecord, error) {
@@ -87,7 +87,7 @@ func TestWebhookExecutionGateBlocksDisabledBusinessBeforeAIQueue(t *testing.T) {
 	repo := &businessAIPolicyStub{policies: map[string]string{"business-1": "disabled"}}
 	svc := &AICostProtectionService{
 		PlatformOperations: &stubPlatformOperationsRepo{state: ports.AIRuntimeState{AdminState: ports.ProviderAdminEnabled}},
-		BusinessAIGuard: &BusinessAIGuard{Policies: repo},
+		BusinessAIGuard:    &BusinessAIGuard{Policies: repo},
 	}
 	allowed, reason := svc.IsAIExecutionAllowed(context.Background(), "business-1")
 	if allowed || reason != "business_ai_disabled" {
@@ -105,7 +105,7 @@ func TestSummaryGateBlocksDisabledBusinessBeforeGenerating(t *testing.T) {
 	svc := &ConversationSummaryService{
 		CostProtection: &AICostProtectionService{
 			PlatformOperations: &stubPlatformOperationsRepo{state: ports.AIRuntimeState{AdminState: ports.ProviderAdminEnabled}},
-			BusinessAIGuard: &BusinessAIGuard{Policies: repo},
+			BusinessAIGuard:    &BusinessAIGuard{Policies: repo},
 		},
 	}
 	got, err := svc.MaybeSummarize(context.Background(), "business-1", "conversation-1")

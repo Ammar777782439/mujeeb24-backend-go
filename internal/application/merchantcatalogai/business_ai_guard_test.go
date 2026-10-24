@@ -16,12 +16,12 @@ func (denyMerchantBusinessAI) Check(context.Context, string) error {
 
 func TestMerchantAgentRefusesDisabledBusinessBeforeSessionWrite(t *testing.T) {
 	agent := &Agent{
-		Sessions: &struct{ SessionStore }{},
-		Selector: &struct{ CatalogSelector }{},
-		Business: &struct{ ports.BusinessRepository }{},
+		Sessions:       &struct{ SessionStore }{},
+		Selector:       &struct{ CatalogSelector }{},
+		Business:       &struct{ ports.BusinessRepository }{},
 		EntityContract: &struct{ EntityContractProvider }{},
-		Authoring: &struct{ MerchantCatalogAuthoringPort }{},
-		AIGuard: denyMerchantBusinessAI{},
+		Authoring:      &struct{ MerchantCatalogAuthoringPort }{},
+		AIGuard:        denyMerchantBusinessAI{},
 	}
 	_, err := agent.HandleTurn(context.Background(), TurnInput{
 		BusinessID: "business-1", PrincipalID: "owner-1", Message: "أضف منتجاً",

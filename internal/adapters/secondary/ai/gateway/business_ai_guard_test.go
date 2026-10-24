@@ -13,7 +13,7 @@ import (
 )
 
 type gatewayAIGuard struct {
-	calls int
+	calls    int
 	disabled bool
 }
 
@@ -67,7 +67,9 @@ func TestMerchantModelRechecksPolicyBeforeEachToolRound(t *testing.T) {
 		if requests != 1 {
 			t.Fatal("model called after merchant disabled AI")
 		}
-		var sent struct { Tools []map[string]any `json:"tools"` }
+		var sent struct {
+			Tools []map[string]any `json:"tools"`
+		}
 		if err := json.Unmarshal(req.Payload, &sent); err != nil || len(sent.Tools) == 0 {
 			t.Fatalf("merchant discovery tools missing: %v", err)
 		}
