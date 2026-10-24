@@ -121,16 +121,16 @@ type BatchEvaluationInput struct {
 }
 
 // FinalEvaluationInput is the post-batch final AI model call.
-type FinalEvaluationInput struct {
+type                   FinalEvaluationInput struct {
 	SourceMessageReference string
-	AIRunID             string
-	AttemptID           string
-	BusinessID          string
-	ConversationID      string
-	CustomerMessage     string
-	ConversationContext ports.CustomerSalesContext
-	EntityContract      CatalogEntityContractPayload
-	CandidateResults    []ports.CatalogBatchCandidate
+	AIRunID                string
+	AttemptID              string
+	BusinessID             string
+	ConversationID         string
+	CustomerMessage        string
+	ConversationContext    ports.CustomerSalesContext
+	EntityContract         CatalogEntityContractPayload
+	CandidateResults       []ports.CatalogBatchCandidate
 }
 
 type CatalogEvaluationResult struct {
@@ -856,14 +856,14 @@ func buildFinalEvaluationPayload(
 
 	return FinalEvaluationInput{
 		SourceMessageReference: input.SourceMessageReference,
-		AIRunID:             input.AIRunID,
-		AttemptID:           input.AttemptID,
-		BusinessID:          input.BusinessID,
-		ConversationID:      input.ConversationID,
-		CustomerMessage:     input.CustomerMessage,
-		ConversationContext: input.ConversationContext,
-		EntityContract:      input.EntityContract,
-		CandidateResults:    candidates,
+		AIRunID:                input.AIRunID,
+		AttemptID:              input.AttemptID,
+		BusinessID:             input.BusinessID,
+		ConversationID:         input.ConversationID,
+		CustomerMessage:        input.CustomerMessage,
+		ConversationContext:    input.ConversationContext,
+		EntityContract:         input.EntityContract,
+		CandidateResults:       candidates,
 	}, userPrompt
 }
 
@@ -951,16 +951,16 @@ func mustMarshal(v any) []byte {
 }
 
 // CatalogEvaluationInput is the controller's input.
-type CatalogEvaluationInput struct {
+type                   CatalogEvaluationInput struct {
 	SourceMessageReference string
-	AIRunID             string
-	AttemptID           string
-	BusinessID          string
-	ConversationID      string
-	CatalogScope        string // the catalog scope to evaluate (e.g., a specific catalog_id)
-	CustomerMessage     string
-	ConversationContext ports.CustomerSalesContext
-	EntityContract      CatalogEntityContractPayload
+	AIRunID                string
+	AttemptID              string
+	BusinessID             string
+	ConversationID         string
+	CatalogScope           string // the catalog scope to evaluate (e.g., a specific catalog_id)
+	CustomerMessage        string
+	ConversationContext    ports.CustomerSalesContext
+	EntityContract         CatalogEntityContractPayload
 }
 
 // countCompleted returns the number of batches with status="completed".

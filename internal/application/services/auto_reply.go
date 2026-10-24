@@ -334,15 +334,15 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, fmt.Errorf("decode catalog entity contract: %w", err)
 		}
 		catalogResult, err := s.CatalogBatch.RunCatalogEvaluation(ctx, CatalogEvaluationInput{
-			AIRunID:             run.ID,
-			AttemptID:           "", // no separate attempt tracking in this path
-			BusinessID:          businessID,
-			ConversationID:      conversationID,
+			AIRunID:                run.ID,
+			AttemptID:              "", // no separate attempt tracking in this path
+			BusinessID:             businessID,
+			ConversationID:         conversationID,
 			SourceMessageReference: sourceMessageRef,
-			CatalogScope:        "", // evaluate all active catalogs for the business
-			CustomerMessage:     command.Text,
-			ConversationContext: derefCustomerSalesContext(builtContext),
-			EntityContract:      entityContract,
+			CatalogScope:           "", // evaluate all active catalogs for the business
+			CustomerMessage:        command.Text,
+			ConversationContext:    derefCustomerSalesContext(builtContext),
+			EntityContract:         entityContract,
 		})
 		if err != nil {
 			catalogdump.Record(catalogdump.WithRun(ctx, run.ID), "catalog_evaluation_failed", err.Error())

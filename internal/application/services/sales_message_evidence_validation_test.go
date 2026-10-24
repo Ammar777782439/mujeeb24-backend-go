@@ -18,7 +18,7 @@ func TestSalesReferenceValidationAllowsOnlyCurrentOrExposedInboundCustomer(t *te
 		},
 	}
 	for _, tc := range []struct {
-		ref string
+		ref   string
 		allow bool
 	}{
 		{"provider-current", true},
