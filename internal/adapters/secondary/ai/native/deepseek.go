@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/catalogdump"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/salesdiag"
 )
 
 const nativeResponseLimit = 4 << 20
@@ -252,6 +254,17 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	choice := envelope.Choices[0]
 	if choice.Message.Role != "assistant" {
 		return Response{}, errors.New("DeepSeek unexpected response role")
+	}
+	// Opt-in diagnostic inspects ORIGINAL DeepSeek tool arguments BEFORE
+	// restoreDeepSeekNulls and canonical response translation. Values of
+	// merchant/customer attributes are never printed.
+	if salesdiag.Enabled() {
+		for _, call := range choice.Message.ToolCalls {
+			if salesdiag.IsSalesTool(call.Function.Name) {
+				log.Printf("[SalesDiag] DEEPSEEK_WIRE model=%s tool=%s call_id=%s %s",
+					c.model, call.Function.Name, call.ID, salesdiag.DescribeArguments(call.Function.Arguments))
+			}
+		}
 	}
 	// A forced customer decision is always one capability. Do not trust a
 	// provider to honor parallel_tool_calls or its strict function contract.

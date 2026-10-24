@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/native"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/prompts"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/salesdiag"
 )
 
 // NativeCustomerSalesAdapter reuses the EXACT B2C tools, prompt and strict
@@ -80,9 +82,24 @@ func (c *NativeCustomerSalesAdapter) Decide(ctx context.Context, input ports.Cus
 	if normalized.Text != "" {
 		return ports.CustomerSalesDecisionOutput{}, errors.New("customer decision returned plain text instead of one capability")
 	}
+	if salesdiag.Enabled() {
+		for _, call := range normalized.FunctionCalls {
+			if salesdiag.IsSalesTool(call.Name) {
+				log.Printf("[SalesDiag] GATEWAY_WIRE business=%s conversation=%s source=%s tool=%s %s",
+					input.Request.BusinessID, input.Request.ConversationID, input.Request.SourceMessageReference,
+					call.Name, salesdiag.DescribeArguments(string(call.Arguments)))
+			}
+		}
+	}
 	decision, err := parseCustomerSalesCapability(capabilityResponse{Calls: normalized.FunctionCalls}, tools)
 	if err != nil {
 		return ports.CustomerSalesDecisionOutput{}, fmt.Errorf("%w; native response shape: %s", err, summarizeDecisionResponseShape(normalized))
+	}
+	if salesdiag.Enabled() && decision.Sales != nil && salesdiag.IsSalesTool(string(decision.Capability)) {
+		log.Printf("[SalesDiag] GATEWAY_PARSED business=%s conversation=%s source=%s tool=%s workflow=%s expected_version=%d data=%s",
+			input.Request.BusinessID, input.Request.ConversationID, input.Request.SourceMessageReference,
+			decision.Capability, decision.Sales.WorkflowID, decision.Sales.ExpectedVersion,
+			salesdiag.DescribeMap(decision.Sales.TransactionData))
 	}
 
 	// The native boundary cannot invent usage or count provider attempts as

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log"
 
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/catalogvalidation"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/salesdiag"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -138,6 +140,12 @@ func (r *SalesWorkflowRepository) Apply(ctx context.Context, in ports.SalesWorkf
 			return result, invalidRepositoryInput("sales.policy", "automatic drafts are disabled")
 		}
 	}
+	if salesdiag.Enabled() && in.Capability != ports.CustomerSalesCapabilityRecordLead {
+		log.Printf("[SalesDiag] DB_INPUT business=%s conversation=%s source=%s capability=%s workflow=%s expected_version=%d transaction_type=%s incoming=%s",
+			in.BusinessID, in.ConversationID, source, in.Capability,
+			in.Proposal.WorkflowID, in.Proposal.ExpectedVersion, in.Proposal.TransactionType,
+			salesdiag.DescribeMap(in.Proposal.TransactionData))
+	}
 	w := ports.SalesWorkflowRecord{ID: uuid.NewString(), CustomerID: in.CustomerID, ConversationID: in.ConversationID, State: "gathering", Proposal: in.Proposal, PolicyVersion: policy.ResourceVersion, ResourceVersion: 1, SourceMessageID: &source}
 	if in.Proposal.WorkflowID != "" {
 		w, err = scanSalesWorkflow(e.QueryRow(ctx, `SELECT id::text,customer_id::text,conversation_id::text,lead_id::text,transaction_id::text,COALESCE(pending_action,''),source_message_id::text,state,proposal,policy_version,resource_version FROM sales_workflows WHERE business_id=$1::uuid AND id=$2::uuid AND customer_id=$3::uuid AND conversation_id=$4::uuid FOR UPDATE`, in.BusinessID, in.Proposal.WorkflowID, in.CustomerID, in.ConversationID))
@@ -149,6 +157,12 @@ func (r *SalesWorkflowRepository) Apply(ctx context.Context, in ports.SalesWorkf
 		}
 		if w.State == "confirmed" || w.State == "cancelled" {
 			return result, invalidRepositoryInput("sales.workflow", "workflow is closed")
+		}
+		if salesdiag.Enabled() && in.Capability != ports.CustomerSalesCapabilityRecordLead {
+			log.Printf("[SalesDiag] DB_REPLACE business=%s workflow=%s old_version=%d prior=%s incoming=%s",
+				in.BusinessID, w.ID, w.ResourceVersion,
+				salesdiag.DescribeMap(w.Proposal.TransactionData),
+				salesdiag.DescribeMap(in.Proposal.TransactionData))
 		}
 		w.ResourceVersion++
 		w.Proposal = in.Proposal
