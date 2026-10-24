@@ -1,5 +1,5 @@
-// Package native routes model-generation attempts to a directly connected
-// Gemini primary and a DeepSeek standby. It never executes business actions.
+// Package native isolates provider-specific inference protocols from
+// business execution. Its optional routing never executes tools.
 package native
 
 import (
@@ -18,7 +18,7 @@ import (
 type Request struct {
 	Payload        json.RawMessage
 	Operation      string
-	PinnedProvider string // Provider owning this round; only a pinned primary may fail over on HTTP 503.
+	PinnedProvider string // Provider owning this model round; preserve across tool continuations.
 }
 
 // Response is validated again by Mujeeb application adapters before any
@@ -33,8 +33,7 @@ type Response struct {
 	CostKnown       bool
 }
 
-// Provider is one direct inference endpoint. It must not retry or mutate
-// commercial state; the router owns operational fallback.
+// Provider is a model transport that never mutates business state.
 type Provider interface {
 	Name() string
 	Generate(context.Context, Request) (Response, error)
@@ -93,8 +92,8 @@ type Router struct {
 	now       func() time.Time
 }
 
-// NewRouter requires Gemini as primary. A nil standby deliberately runs in
-// Gemini-only mode: no fallback and no circuit breaker that could skip Gemini.
+// NewRouter accepts any named provider. A nil standby makes all requests
+// use that provider and propagate errors without fallback.
 func NewRouter(primary, standby Provider, policy Policy) (*Router, error) {
 	if primary == nil || strings.TrimSpace(primary.Name()) == "" {
 		return nil, errors.New("a named primary inference provider is required")
@@ -111,9 +110,8 @@ func NewRouter(primary, standby Provider, policy Policy) (*Router, error) {
 	return &Router{primary: primary, standby: standby, policy: policy, now: time.Now}, nil
 }
 
-// Generate retries only the model-generation call, never a tool or business
-// execution. Only Gemini HTTP 503 is an automatic DeepSeek fallback trigger.
-// Invalid JSON/schema, unauthorized operations, and other HTTP errors fail closed.
+// Generate routes model generation, never business execution. An optional
+// standby is used after primary HTTP 503 only; all other errors fail closed.
 func (r *Router) Generate(ctx context.Context, req Request) (Response, Trace, error) {
 	var trace Trace
 	if r == nil {
@@ -125,8 +123,8 @@ func (r *Router) Generate(ctx context.Context, req Request) (Response, Trace, er
 	if len(req.Payload) == 0 || !json.Valid(req.Payload) {
 		return Response{}, trace, errors.New("canonical model request must be valid JSON")
 	}
-	// A pinned DeepSeek continuation never returns to Gemini. Pinned Gemini
-	// may fail over on HTTP 503: DeepSeek can remove Gemini-only signatures.
+	// Continuations stay pinned to the owning provider, except an eligible
+	// primary HTTP 503 may fall back when an alternative is configured.
 	if req.PinnedProvider != "" {
 		var selected Provider
 		switch {
@@ -147,7 +145,7 @@ func (r *Router) Generate(ctx context.Context, req Request) (Response, Trace, er
 		}
 		return out, trace, err
 	}
-	// Without a standby, attempt Gemini on every request, including after 503.
+	// Without a standby, attempt the selected provider on every request.
 	// Skipping it would result in a false success or a nil-provider panic.
 	if r.standby == nil {
 		out, err := r.primary.Generate(ctx, req)
@@ -180,7 +178,7 @@ func (r *Router) generateStandby(ctx context.Context, req Request, trace Trace) 
 	out, err := r.standby.Generate(ctx, req)
 	trace.Attempts = append(trace.Attempts, makeAttempt(r.standby.Name(), err))
 	if err != nil {
-		return Response{}, trace, fmt.Errorf("DeepSeek standby inference failed: %w", err)
+		return Response{}, trace, fmt.Errorf("standby inference failed: %w", err)
 	}
 	return out, trace, nil
 }
@@ -223,8 +221,8 @@ func (r *Router) observePrimary(err error) {
 	}
 }
 
-// CountTokens returns Gemini's actual input count when available. A standby
-// provider has a distinct tokenizer and still requires conservative admission.
+// CountTokens returns an exact provider count when supported. Distinct
+// tokenizers across optional routes require conservative admission.
 func (r *Router) CountTokens(ctx context.Context, req Request) (count int64, exact bool, standby bool, err error) {
 	if r == nil {
 		return 0, false, false, errors.New("native model router is not configured")
@@ -232,7 +230,7 @@ func (r *Router) CountTokens(ctx context.Context, req Request) (count int64, exa
 	if err := ctx.Err(); err != nil {
 		return 0, false, r.standby != nil, err
 	}
-	// The fallback model uses a different tokenizer. Gemini's exact count
+	// The fallback model uses a different tokenizer. the primary count
 	// cannot relax a conservative shared-model context limit, so avoid an
 	// extra network call for every proposed catalog partition.
 	if r.standby != nil {

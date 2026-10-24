@@ -5,7 +5,6 @@ package gateway
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -23,14 +22,15 @@ func TestNativeProviderContextLive(t *testing.T) {
 	if os.Getenv("MUJEEB_PROVIDER_CONTEXT_LIVE") != "1" {
 		t.Skip("explicit opt-in required")
 	}
+	model := strings.TrimSpace(os.Getenv("DEEPSEEK_MODEL"))
+	if model == "" {
+		model = "deepseek-flash"
+	}
 	providers := []struct {
 		name, model, key string
 		factory          func(string, string) (native.Provider, error)
 	}{
-		{"gemini", "gemini-3.1-flash-lite", os.Getenv("GEMINI_API_KEY"), func(model, key string) (native.Provider, error) {
-			return native.NewGemini(native.GeminiConfig{Model: model, APIKey: key, Timeout: 80 * time.Second})
-		}},
-		{"deepseek", "deepseek-chat", os.Getenv("DEEPSEEK_API_KEY"), func(model, key string) (native.Provider, error) {
+		{"deepseek", model, os.Getenv("DEEPSEEK_API_KEY"), func(model, key string) (native.Provider, error) {
 			return native.NewDeepSeek(native.DeepSeekConfig{Model: model, APIKey: key, Timeout: 80 * time.Second})
 		}},
 	}
@@ -74,14 +74,11 @@ func TestNativeProviderContextLive(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Use the SAME production capability schema for both providers.
+			// Use the production capability schema for the selected provider.
 			offered := ports.CustomerSalesCapabilities(true, false)
 			for i, tc := range cases {
 				if i > 0 {
 					pause := 3 * time.Second
-					if provider.name == "gemini" {
-						pause = 90 * time.Second
-					}
 					t.Logf("pacing before next %s real request: %v", provider.name, pause)
 					time.Sleep(pause)
 				}
@@ -114,9 +111,6 @@ func TestNativeProviderContextLive(t *testing.T) {
 				}
 			}
 			// Verify the provider-neutral memory port has no tools and can generate text.
-			if provider.name == "gemini" {
-				time.Sleep(90 * time.Second)
-			}
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 			memory, usage, err := adapter.Summarize(ctx,
 				"Summarize an ongoing merchant/customer conversation in concise Arabic. Preserve customer goals and open questions. Distinguish assistant promises from verified operations; no operational execution data is supplied.",
@@ -131,6 +125,4 @@ func TestNativeProviderContextLive(t *testing.T) {
 			t.Logf("REAL_SUMMARY_OK provider=%s model=%s input_tokens=%d output_tokens=%d characters=%d", usage.Provider, usage.Model, usage.InputTokens, usage.OutputTokens, len([]rune(memory)))
 		})
 	}
-	// Keep unused-independent-API contracts from altering production.
-	_ = fmt.Sprintf
 }

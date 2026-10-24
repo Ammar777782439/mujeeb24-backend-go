@@ -127,7 +127,7 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	}
 	// Strip unsupported foreign-provider metadata from tool history while
 	// preserving the model-selected tool names, arguments, results and IDs.
-	messages, err := deepSeekMessagesWithoutGeminiSignatures(canonical.Messages)
+	messages, err := sanitizeDeepSeekToolHistory(canonical.Messages)
 	if err != nil {
 		return Response{}, err
 	}
@@ -365,10 +365,9 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 		OutputTokens: envelope.Usage.CompletionTokens, CachedTokens: envelope.Usage.PromptCacheHitTokens}, nil
 }
 
-// deepSeekMessagesWithoutGeminiSignatures removes only provider-private
-// transport metadata. It never removes or changes application tool arguments,
-// results, ordering or IDs. DeepSeek cannot accept Google's opaque signatures.
-func deepSeekMessagesWithoutGeminiSignatures(messages []json.RawMessage) ([]json.RawMessage, error) {
+// sanitizeDeepSeekToolHistory removes unsupported vendor-private metadata
+// while preserving business tool names, arguments, results, ordering and IDs.
+func sanitizeDeepSeekToolHistory(messages []json.RawMessage) ([]json.RawMessage, error) {
 	sanitized := make([]json.RawMessage, len(messages))
 	for i, raw := range messages {
 		sanitized[i] = raw

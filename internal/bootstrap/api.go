@@ -245,7 +245,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// Per contract ⑥ §2, wire the validation pipeline with the
 		// concrete Postgres validators. Per contract ⑥ §6-7 the
 		// ReferenceValidator checks that every selected ID (item/variant/
-		// offer) was actually sent to Gemini as evidence AND exists as
+		// offer) was actually sent to the model as evidence AND exists as
 		// a real row in catalog_items/variants/offers. Per contract ⑥ §8-9
 		// the TenantValidator checks that every selected reference
 		// belongs to the current authenticated business (cross-tenant
@@ -253,7 +253,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		//
 		// Per contract ⑥ §12-13, the PolicyEvaluator is the
 		// Postgres-backed evaluator that reads business_policies per
-		// migration 000002 and decides requires_approval — NOT Gemini.
+		// migration 000002 and decides requires_approval — NOT the model.
 		// Per contract ④ §5, requires_approval is decided by Mujeeb only.
 		//
 		// The AuthorizationService is left nil; per the pipeline logic,

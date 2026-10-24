@@ -9,7 +9,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
-// buildUserPrompt encodes the customer-facing context and message for Gemini.
+// buildUserPrompt encodes the customer-facing context and message for the selected model.
 // Prompt construction belongs to the customer-sales capability, not the provider client.
 func buildUserPrompt(input ports.CustomerSalesDecisionRequest) string {
 	prompt := fmt.Sprintf("Business ID: %s\nConversation ID: %s\nChannel: %s\nPolicy version: %s\nSource message reference: %s\nCustomer message:\n%s",

@@ -259,7 +259,7 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 					return merchantcatalogai.Proposal{}, fmt.Errorf("merchant catalog read tool %s: %w", call.Function.Name, err)
 				}
 				// The model must receive the server's pagination contract, not
-				// only the page rows. This is shared by Gemini and DeepSeek.
+				// only the page rows. Provider adapters share this canonical contract.
 				encoded, err := json.Marshal(struct {
 					Data       any    `json:"data"`
 					HasMore    bool   `json:"has_more"`
