@@ -2,6 +2,7 @@ name: Native AI Contracts
 on:
   push:
     branches:
+      - main
       - refactor/provider-agnostic-ai-runtime
     paths:
       - 'internal/**'
@@ -13,6 +14,16 @@ on:
       - 'deploy/local/.env.example'
       - 'render.yaml'
       - 'docs/architecture/provider-agnostic-ai-runtime.md'
+      - '.github/workflows/native-ai-verify.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'internal/**'
+      - 'cmd/**'
+      - 'scripts/**'
+      - 'api/openapi/**'
+      - 'migrations/**'
       - '.github/workflows/native-ai-verify.yml'
   workflow_dispatch:
 
@@ -31,8 +42,6 @@ jobs:
       GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: refactor/provider-agnostic-ai-runtime
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.2'
@@ -79,8 +88,6 @@ jobs:
       POSTGRES_TEST_DSN: postgresql://mujeeb_test:local-ci-only-password@localhost:5432/mujeeb24_test?sslmode=disable
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: refactor/provider-agnostic-ai-runtime
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.2'

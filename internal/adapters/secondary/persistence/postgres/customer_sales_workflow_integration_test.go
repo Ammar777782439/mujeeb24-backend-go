@@ -502,4 +502,35 @@ func TestSalesWorkflowLeadToPartialSubscriptionToConfirmedReadyAgainstPostgres(t
 	if err != nil || accepted.Workflow.State != "awaiting_review" || accepted.Workflow.PendingAction != "confirm_transaction" {
 		t.Fatalf("customer confirmation bypassed subscription review: %+v %v", accepted, err)
 	}
+	// Several button deliveries, including multiple Instagram clicks, must
+	// not confirm the subscription twice or create another commercial draft.
+	for i := 0; i < 3; i++ {
+		repeated, err := f.button(t, ready, "accept")
+		if err != nil || !repeated.Duplicate {
+			t.Fatalf("repeated customer postback %d produced another effect: %+v %v", i, repeated, err)
+		}
+	}
+	var reviewed ports.SalesWorkflowResult
+	err = f.a.Within(context.Background(), func(tx context.Context) error {
+		var reviewErr error
+		reviewed, reviewErr = repo.ReviewWorkflow(tx, ports.SalesWorkflowReview{
+			BusinessID: f.business, WorkflowID: accepted.Workflow.ID,
+			ActorReference: uuid.NewString(), ExpectedVersion: accepted.Workflow.ResourceVersion,
+			Approved: true, Now: f.now.Add(3 * time.Minute),
+		})
+		return reviewErr
+	})
+	if err != nil || reviewed.Workflow.State != "confirmed" {
+		t.Fatalf("employee approval failed to confirm subscription: %+v %v", reviewed, err)
+	}
+	opportunity, err := NewLeadRepository(f.a).Get(context.Background(), f.business, *ready.Workflow.LeadID)
+	if err != nil || opportunity.Status != "won" || opportunity.QualificationState != "converted" {
+		t.Fatalf("employee approval did not convert lead to won: %+v %v", opportunity, err)
+	}
+	var transactionCount int
+	if err := f.a.Pool().QueryRow(context.Background(),
+		`SELECT count(*) FROM commercial_transactions WHERE business_id=$1::uuid AND customer_id=$2::uuid`,
+		f.business, f.customer).Scan(&transactionCount); err != nil || transactionCount != 1 {
+		t.Fatalf("repeated postbacks duplicated subscription transaction: %d %v", transactionCount, err)
+	}
 }
