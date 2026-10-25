@@ -44,22 +44,22 @@ type ConversationHistoryRequest struct {
 }
 
 type MessageEvidence struct {
-	Evidence contracts.EvidenceEnvelopeV1    `json:"evidence"`
+	Evidence contracts.EvidenceEnvelopeV1        `json:"evidence"`
 	Value    contracts.PublicTextMessageAssistV1 `json:"value"`
 }
 
 type SummaryEvidence struct {
-	Evidence contracts.EvidenceEnvelopeV1     `json:"evidence"`
+	Evidence contracts.EvidenceEnvelopeV1          `json:"evidence"`
 	Value    contracts.ConversationSummaryAssistV1 `json:"value"`
 }
 
 // The coverage field is explicit: no incomplete or uncheckpointed transcript
 // is silently labelled a complete post-summary history.
 type ConversationHistoryResult struct {
-	ConversationRef string             `json:"conversation_ref"`
-	Coverage        string             `json:"coverage"`
-	Summary         *SummaryEvidence   `json:"summary,omitempty"`
-	Messages        []MessageEvidence  `json:"messages"`
+	ConversationRef string            `json:"conversation_ref"`
+	Coverage        string            `json:"coverage"`
+	Summary         *SummaryEvidence  `json:"summary,omitempty"`
+	Messages        []MessageEvidence `json:"messages"`
 }
 
 type ConversationStateGetter interface {
@@ -110,7 +110,7 @@ func (r *ConversationHistoryReader) Read(ctx context.Context, req ConversationHi
 	if err != nil {
 		return empty, fmt.Errorf("%w: %w", ErrReadUnavailable, err)
 	}
-	if err := validateScopedRecord(RecordReadRequest{Business:req.Business, RecordID:req.ConversationID},
+	if err := validateScopedRecord(RecordReadRequest{Business: req.Business, RecordID: req.ConversationID},
 		conversation.ID, conversation.BusinessID, conversation.ResourceVersion); err != nil {
 		return empty, err
 	}
@@ -173,7 +173,7 @@ func (r *ConversationHistoryReader) Read(ctx context.Context, req ConversationHi
 	if state.SummaryLastMessageID != "" && !foundCheckpoint {
 		return empty, ErrInvalidSourceEvidence
 	}
-	result := ConversationHistoryResult{ConversationRef:req.ConversationID, Messages:[]MessageEvidence{}}
+	result := ConversationHistoryResult{ConversationRef: req.ConversationID, Messages: []MessageEvidence{}}
 	if foundCheckpoint {
 		result.Coverage = "complete_after_checkpoint"
 	} else {
@@ -194,11 +194,11 @@ func (r *ConversationHistoryReader) Read(ctx context.Context, req ConversationHi
 		version := strconv.FormatInt(state.Version, 10)
 		evidence := historyEvidence(now, contracts.SourceConversation,
 			"conversation:"+req.ConversationID, contracts.AuthorityDerived, &version)
-		result.Summary = &SummaryEvidence{Evidence:evidence, Value:value}
+		result.Summary = &SummaryEvidence{Evidence: evidence, Value: value}
 	}
 	// Reverse DESC pages to chronological order, preserving exact ID order
 	// for equal timestamps as established by the repository.
-	for i:=len(newer)-1; i>=0; i-- {
+	for i := len(newer) - 1; i >= 0; i-- {
 		m := newer[i]
 		if m.Visibility != "public" || m.ContentType != "text" || m.TextContent == nil ||
 			strings.TrimSpace(*m.TextContent) == "" {
@@ -209,20 +209,20 @@ func (r *ConversationHistoryReader) Read(ctx context.Context, req ConversationHi
 			return empty, err
 		}
 		value := contracts.PublicTextMessageAssistV1{
-			MessageRef:m.ID, Direction:m.Direction, Origin:m.Origin,
-			Visibility:m.Visibility, ContentType:m.ContentType,
-			Text:safe, OccurredAt:m.OccurredAt,
+			MessageRef: m.ID, Direction: m.Direction, Origin: m.Origin,
+			Visibility: m.Visibility, ContentType: m.ContentType,
+			Text: safe, OccurredAt: m.OccurredAt,
 		}
 		if err := value.Validate(); err != nil {
 			return empty, fmt.Errorf("%w: %w", ErrInvalidSourceEvidence, err)
 		}
 		authority := contracts.AuthoritySystemRecord
-		if m.Direction=="inbound" && m.Origin=="customer" {
+		if m.Direction == "inbound" && m.Origin == "customer" {
 			authority = contracts.AuthorityCustomerStatement
 		}
 		evidence := historyEvidence(now, contracts.SourceMessage,
 			"message:"+m.ID, authority, nil)
-		result.Messages = append(result.Messages, MessageEvidence{Evidence:evidence, Value:value})
+		result.Messages = append(result.Messages, MessageEvidence{Evidence: evidence, Value: value})
 	}
 	if result.Summary != nil {
 		if err := accountSize(result.Summary, new(int)); err != nil {
@@ -247,25 +247,25 @@ func (r *ConversationHistoryReader) Read(ctx context.Context, req ConversationHi
 
 func historyEvidence(now time.Time, source contracts.EvidenceSourceType, ref string,
 	authority contracts.EvidenceAuthority, version *string) contracts.EvidenceEnvelopeV1 {
-	until := now.Add(2*time.Minute)
+	until := now.Add(2 * time.Minute)
 	return contracts.EvidenceEnvelopeV1{
-		SchemaVersion:contracts.EvidenceSchemaVersion,
-		ResourceRef:ref, SourceType:source, ResourceVersion:version,
-		Authority:authority, Completeness:contracts.EvidencePartial,
-		RetrievedAt:now, ValidUntil:&until,
+		SchemaVersion: contracts.EvidenceSchemaVersion,
+		ResourceRef:   ref, SourceType: source, ResourceVersion: version,
+		Authority: authority, Completeness: contracts.EvidencePartial,
+		RetrievedAt: now, ValidUntil: &until,
 	}
 }
 
-func sanitizeText(ctx context.Context, sanitizer ContentSanitizer, kind ContentKind, input string) (string,error) {
+func sanitizeText(ctx context.Context, sanitizer ContentSanitizer, kind ContentKind, input string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	safe,err := sanitizer.Sanitize(ctx, kind, input)
+	safe, err := sanitizer.Sanitize(ctx, kind, input)
 	if err != nil {
 		return "", fmt.Errorf("%w: content sanitization was rejected", ErrInvalidSourceEvidence)
 	}
-	if strings.TrimSpace(safe)=="" || len(safe)>historyMaxTextBytes || !utf8.ValidString(safe) {
+	if strings.TrimSpace(safe) == "" || len(safe) > historyMaxTextBytes || !utf8.ValidString(safe) {
 		return "", ErrInvalidSourceEvidence
 	}
-	return safe,nil
+	return safe, nil
 }
