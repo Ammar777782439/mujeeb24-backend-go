@@ -15,11 +15,15 @@ import (
 type summaryStateStub struct {
 	calls  int
 	result ports.ConversationStateRecord
+	next   *ports.ConversationStateRecord
 	err    error
 }
 
 func (s *summaryStateStub) Get(_ context.Context, business, conversation string) (ports.ConversationStateRecord, error) {
 	s.calls++
+	if s.calls > 1 && s.next != nil {
+		return *s.next, s.err
+	}
 	return s.result, s.err
 }
 
@@ -128,7 +132,7 @@ func TestHistoryReaderCheckpointBoundariesAndRedaction(t *testing.T) {
 			t.Fatalf("sensitive or private text leaked: %s", secret)
 		}
 	}
-	if redactor.calls != 3 || g.calls != 1 || c.calls != 1 || s.calls != 1 || pages.calls != 2 {
+	if redactor.calls != 3 || g.calls != 1 || c.calls != 1 || s.calls != 2 || pages.calls != 2 {
 		t.Fatalf("unexpected calls: sanitizer=%d guard=%d conversation=%d state=%d pages=%d",
 			redactor.calls, g.calls, c.calls, s.calls, pages.calls)
 	}
@@ -226,5 +230,20 @@ func TestHistoryReaderUncheckpointedCompleteHistory(t *testing.T) {
 	}
 	if out.Coverage != "complete_history" || out.Summary != nil || len(out.Messages) != 1 {
 		t.Fatalf("incorrect full history coverage: %+v", out)
+	}
+}
+
+func TestHistoryReaderRejectsConcurrentSummaryChange(t *testing.T) {
+	r, _, _, state, _, _ := makeHistoryReader()
+	next := state.result
+	next.Version++
+	next.SummaryLastMessageID = "new2"
+	state.next = &next
+	out, err := r.Read(context.Background(), historyRequest())
+	if !errors.Is(err, ErrInvalidSourceEvidence) || len(out.Messages) != 0 || out.Summary != nil {
+		t.Fatalf("concurrent summary update accepted: %v", err)
+	}
+	if state.calls != 2 {
+		t.Fatalf("summary version must be checked twice: %d", state.calls)
 	}
 }
