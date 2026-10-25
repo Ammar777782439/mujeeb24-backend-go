@@ -1,0 +1,31 @@
+name: Temporary Merchant AI Record Reader Format
+on:
+  push:
+    branches: [feat/merchant-ai-assist]
+    paths:
+      - '.github/workflows/merchant-assist-record-reader-format-temp.yml'
+      - 'internal/application/merchantassist/record_reader*.go'
+permissions:
+  contents: write
+jobs:
+  gofmt:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/merchant-ai-assist
+          persist-credentials: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.2'
+      - name: Canonical format for owned P3-B files only
+        run: |
+          set -euo pipefail
+          gofmt -w internal/application/merchantassist/record_reader.go internal/application/merchantassist/record_reader_test.go
+          if git diff --quiet -- internal/application/merchantassist/record_reader.go internal/application/merchantassist/record_reader_test.go; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add internal/application/merchantassist/record_reader.go internal/application/merchantassist/record_reader_test.go
+          git commit -m 'style(ai-assist): gofmt merchant record facade and tests'
+          git push origin HEAD:feat/merchant-ai-assist
