@@ -2,6 +2,7 @@ package merchantassist
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -224,23 +225,12 @@ func (r *ConversationHistoryReader) Read(ctx context.Context, req ConversationHi
 			"message:"+m.ID, authority, nil)
 		result.Messages = append(result.Messages, MessageEvidence{Evidence: evidence, Value: value})
 	}
-	if result.Summary != nil {
-		if err := accountSize(result.Summary, new(int)); err != nil {
-			return empty, err
-		}
+	payload, err := json.Marshal(result)
+	if err != nil {
+		return empty, fmt.Errorf("%w: result encoding failed", ErrInvalidSourceEvidence)
 	}
-	size := 0
-	for _, item := range result.Messages {
-		if err := accountSize(item, &size); err != nil {
-			return empty, err
-		}
-	}
-	if result.Summary != nil {
-		// Cross-check total including the summary.
-		size = 0
-		if err := accountSize(result, &size); err != nil {
-			return empty, err
-		}
+	if len(payload) > historyMaxTotalBytes {
+		return empty, ErrInvalidSourceEvidence
 	}
 	return result, nil
 }
