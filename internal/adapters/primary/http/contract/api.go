@@ -45,6 +45,7 @@ func BuildAPIWithHandlersAndMiddleware(handlers DashboardOperationHandler, middl
 	registerSystemOperations(api, handlers)
 	registerRemainingDashboardOperations(api, handlers)
 	registerPlatformOperations(api, handlers)
+	registerMerchantAssistOperations(api, handlers)
 	replaceFrameworkErrorResponses(api)
 	return api, mux
 }
