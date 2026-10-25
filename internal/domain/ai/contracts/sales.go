@@ -2,6 +2,7 @@ package contracts
 
 import (
     "fmt"
+    "math/big"
     "time"
 )
 
@@ -24,8 +25,12 @@ func (l LeadAssistV1) Validate() error {
     if err:=requireEnum("lead status",l.Status,"new","interested","qualified","won","lost");err!=nil{return err}
     if err:=requireEnum("qualification_state",l.QualificationState,"new","qualified","working","converted","lost","disqualified");err!=nil{return err}
     if l.CurrentScoreBand!=nil {if err:=requireEnum("score_band",*l.CurrentScoreBand,"unknown","low","medium","high");err!=nil{return err}}
-    if l.CurrentScoreValue!=nil && !fixedDecimal2.MatchString(*l.CurrentScoreValue) {
-        return fmt.Errorf("%w: invalid score decimal",ErrInvalidReviewedProjection)
+    if l.CurrentScoreValue!=nil {
+        value:=*l.CurrentScoreValue
+        score,ok:=new(big.Rat).SetString(value)
+        if !fixedDecimal2.MatchString(value)||!ok||score.Cmp(big.NewRat(100,1))>0 {
+            return fmt.Errorf("%w: invalid score decimal",ErrInvalidReviewedProjection)
+        }
     }
     if l.NextActionAt!=nil && l.NextActionAt.IsZero() {return fmt.Errorf("%w: invalid next action timestamp",ErrInvalidReviewedProjection)}
     return nil
