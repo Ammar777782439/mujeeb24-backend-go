@@ -2,6 +2,7 @@ package merchantassist
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -109,8 +110,12 @@ func TestPublishedReaderPolicyProvenanceAndNoRawRules(t *testing.T) {
 		t.Fatal("wrong repository/guard scope")
 	}
 	// No sensitive SQL JSONB is in the serialized public projection.
-	if strings.Contains(strings.TrimSpace(item.Value.Summary), "confidential_token") {
-		t.Fatal("raw policy rules appeared in public contract")
+	serialized, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(serialized), "confidential_token") {
+		t.Fatal("raw policy rules appeared in serialized AI contract")
 	}
 }
 
