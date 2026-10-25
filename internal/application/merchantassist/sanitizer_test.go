@@ -20,6 +20,8 @@ func TestConservativeSanitizerBlocksSecretsAndRedactsContacts(t *testing.T) {
 		{"كلمة المرور: confidential123", true, ""},
 		{"رقم الهوية 1234567890", true, ""},
 		{"المعرف 123456789012345", false, "123456789012345"},
+		{"أرسل على ٧٧٧٨٨٨٩٩٩", false, "٧٧٧٨٨٨٩٩٩"},
+		{"رقم ۰۹۱۲۳۴۵۶۷۸۹", false, "۰۹۱۲۳۴۵۶۷۸۹"},
 	}
 	for _, tc := range cases {
 		got, err := s.Sanitize(context.Background(), ContentMessage, tc.raw)
