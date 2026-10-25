@@ -3100,6 +3100,55 @@ components:
         - status
         - result
       type: object
+    MerchantAssistRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/MerchantAssistRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        projection_id:
+          maxLength: 80
+          minLength: 1
+          type: string
+        question:
+          maxLength: 1600
+          minLength: 1
+          type: string
+        record_id:
+          maxLength: 128
+          type: string
+        search:
+          maxLength: 160
+          type: string
+        task:
+          enum:
+            - explain
+            - summarize
+          type: string
+      required:
+        - question
+        - task
+        - projection_id
+      type: object
+    MerchantAssistResponse:
+      additionalProperties: false
+      properties:
+        answer:
+          type: string
+        evidence: {}
+        projection_id:
+          type: string
+        review_required:
+          type: boolean
+      required:
+        - answer
+        - projection_id
+        - evidence
+        - review_required
+      type: object
     MerchantCatalogAIResponse:
       additionalProperties: false
       properties:
@@ -4492,6 +4541,23 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/MerchantAIExecutionResponse"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleMerchantAssistResponseBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleMerchantAssistResponseBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/MerchantAssistResponse"
         request_id:
           type: string
       required:
@@ -6359,6 +6425,76 @@ paths:
       summary: Update editable business profile fields
       tags:
         - Business
+  /businesses/{business_id}/ai-assist:
+    post:
+      operationId: merchantAIAssist
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MerchantAssistRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleMerchantAssistResponseBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Generate a review-only merchant assistant answer from approved business evidence
+      tags:
+        - MerchantAssist
   /businesses/{business_id}/ai-decisions:
     get:
       operationId: listAIDecisions
