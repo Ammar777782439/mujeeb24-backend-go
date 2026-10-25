@@ -16,6 +16,7 @@ type ExternalAdapters struct {
 	NativeCustomerDecision         ports.CustomerSalesDecisionPort
 	NativeCatalogClient            *gatewayai.NativeCatalogAdapter
 	NativeMerchantAuthoring        merchantcatalogai.MerchantCatalogAuthoringPort
+	NativeAssistCompletion         *native.CompletionClient
 	SocialAPI                      ports.ChannelProvider
 	SocialWebhook                  ports.WebhookReceiver
 	SocialAPIHealthProbe           ports.HealthCheckProbe
@@ -114,6 +115,7 @@ func BuildExternalAdapters(cfg config.ProcessConfig) ExternalAdapters {
 				if err != nil {
 					adapters.LLMConfigError = err
 				} else {
+					adapters.NativeAssistCompletion = client
 					customer, err := gatewayai.NewNativeCustomerSalesAdapter(client, "mujeeb-sales", cfg.NativeMaxOutputTokens, cfg.NativeMaxInputCharacters)
 					if err != nil {
 						adapters.LLMConfigError = err
