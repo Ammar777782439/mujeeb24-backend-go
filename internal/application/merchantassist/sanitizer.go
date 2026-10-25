@@ -18,11 +18,11 @@ type ConservativeSanitizer struct{}
 
 var (
 	errSensitiveContent = errors.New("content requires private human review")
-	emailPattern        = regexp.MustCompile(`(?i)[\p{L}0-9._%+\-]+@[\p{L}0-9.\-]+\.[a-z]{2,}`)
+	emailPattern        = regexp.MustCompile(`(?i)[\p{L}0-9._%+\-]+@[\p{L}0-9.\-]+\.[\p{L}]{2,}`)
 	urlPattern          = regexp.MustCompile(`(?i)(?:https?://|www\.)[^\s<>"']+`)
-	phonePattern        = regexp.MustCompile(`(?:\+?\d[\d\s().\-]{7,}\d)`)
+	phonePattern        = regexp.MustCompile(`(?:\+?[0-9٠-٩۰-۹][0-9٠-٩۰-۹\s().\-]{7,}[0-9٠-٩۰-۹])`)
 	apiKeyPattern       = regexp.MustCompile(`(?i)(?:sk-[a-z0-9_\-]{12,}|(?:api[_ -]?key|password|secret|token|كلمة السر|كلمة المرور|رمز التحقق|الرمز السري)\s*[:=]\s*\S+)`)
-	longDigitPattern    = regexp.MustCompile(`\d{9,}`)
+	longDigitPattern    = regexp.MustCompile(`[0-9٠-٩۰-۹]{9,}`)
 	riskMarkerPattern   = regexp.MustCompile(`(?i)(?:بطاقة الهوية|رقم الهوية|رقم جواز|رقم البطاقة|passport|national id|credit card|cvv|otp|private key|authorization\s*:\s*bearer)`)
 )
 
