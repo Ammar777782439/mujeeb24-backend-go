@@ -159,3 +159,29 @@ func TestLeadEvidencePaginationIsExplicit(t *testing.T) {
 		t.Fatal("partial evidence coverage hidden")
 	}
 }
+
+func TestLeadEvidenceQualificationReferencesAreUnverifiedAndRedacted(t *testing.T) {
+	r, stub, _ := leadEvidenceFixture()
+	stub.rec.QualificationEvidence = []byte(`["private-source-1","private-source-2"]`)
+	out, err := r.Read(context.Background(), leadEvidenceRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Qualification == nil || out.Qualification.ReferenceCount != 2 ||
+		out.Qualification.VerificationState != "unverified_references" {
+		t.Fatalf("qualification cannot be treated as verified facts: %+v", out.Qualification)
+	}
+	jsonBody, err := json.Marshal(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"private-source-1", "private-source-2"} {
+		if strings.Contains(string(jsonBody), secret) {
+			t.Fatal("opaque qualification source leaked to AI evidence")
+		}
+	}
+	stub.rec.QualificationEvidence = []byte(`{"unsafe":"note"}`)
+	if _, err := r.Read(context.Background(), leadEvidenceRequest()); !errors.Is(err, ErrInvalidSourceEvidence) {
+		t.Fatalf("unknown qualification evidence JSONB must fail closed: %v", err)
+	}
+}
