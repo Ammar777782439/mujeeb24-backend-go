@@ -1,0 +1,32 @@
+name: Temporary merchant AI schema-audit gofmt
+on:
+  push:
+    branches: [feat/merchant-ai-assist]
+    paths:
+      - '.github/workflows/merchant-assist-format-once.yml'
+      - 'internal/domain/ai/contracts/source_inventory.go'
+      - 'internal/domain/ai/contracts/source_inventory_test.go'
+permissions:
+  contents: write
+jobs:
+  gofmt:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/merchant-ai-assist
+          persist-credentials: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.2'
+      - name: Format source-audit files
+        run: |
+          set -euo pipefail
+          gofmt -w internal/domain/ai/contracts/source_inventory*.go
+          if git diff --quiet -- internal/domain/ai/contracts; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add internal/domain/ai/contracts/source_inventory*.go
+          git commit -m 'style(ai-assist): format source inventory and tests'
+          git push origin HEAD:feat/merchant-ai-assist
