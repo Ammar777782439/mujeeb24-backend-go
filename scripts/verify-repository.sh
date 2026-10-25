@@ -46,12 +46,7 @@ printf '%s\n' '[6/6] optional PostgreSQL 16 integration checks'
 if [[ "${RUN_INTEGRATION:-0}" == "1" ]]; then
   [[ -n "${POSTGRES_TEST_DSN:-}" ]] || fail 'RUN_INTEGRATION=1 requires POSTGRES_TEST_DSN'
   "$go_bin" test -tags=integration ./internal/adapters/secondary/persistence/postgres
-  "$go_bin" test -tags=integration -count=1 -run '^TestMerchantAssistSchemaAfterAllMigrationselse
-  printf '%s\n' 'integration checks skipped; set RUN_INTEGRATION=1 with POSTGRES_TEST_DSN to run them'
-fi
-
-printf '%s\n' 'VERIFY PASSED'
- ./internal/platform/database
+  "$go_bin" test -tags=integration -count=1 ./internal/platform/database
 else
   printf '%s\n' 'integration checks skipped; set RUN_INTEGRATION=1 with POSTGRES_TEST_DSN to run them'
 fi
