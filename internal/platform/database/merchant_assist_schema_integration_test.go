@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"reflect"
-	"sort"
 	"strings"
 	"testing"
 	"time"
