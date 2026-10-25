@@ -72,3 +72,12 @@ func TestEvidenceRejectsInvalidMetadata(t *testing.T) {
 		})
 	}
 }
+
+func TestEvidenceRejectsUnregisteredSource(t *testing.T) {
+	now := time.Date(2026, 10, 25, 10, 5, 0, 0, time.UTC)
+	evidence := validEvidence()
+	evidence.SourceType = EvidenceSourceType("unexpected_source")
+	if err := evidence.Validate(now); !errors.Is(err, ErrInvalidEvidence) {
+		t.Fatalf("unexpected source must fail closed: %v", err)
+	}
+}
