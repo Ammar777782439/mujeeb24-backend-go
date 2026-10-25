@@ -15,6 +15,8 @@ type ErrorEnvelope = dto.ErrorEnvelope
 
 type Principal = dto.Principal
 type Business = dto.Business
+type MerchantAssistInput = dto.MerchantAssistInput
+type MerchantAssistResponse = dto.MerchantAssistResponse
 type BusinessMembership = dto.BusinessMembership
 type TeamMember = dto.TeamMember
 type TeamInvitation = dto.TeamInvitation
