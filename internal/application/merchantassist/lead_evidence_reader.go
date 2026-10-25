@@ -37,6 +37,7 @@ type LeadScoreEvidence struct {
 	Value    contracts.LeadScoreSnapshotAssistV1 `json:"value"`
 }
 type LeadEvidenceResult struct {
+	Qualification       *contracts.QualificationReferenceSetV1 `json:"qualification,omitempty"`
 	Lead                contracts.LeadAssistV1       `json:"lead"`
 	LeadEvidence        contracts.EvidenceEnvelopeV1 `json:"lead_evidence"`
 	Attributions        []LeadAttributionEvidence    `json:"attributions"`
@@ -92,6 +93,18 @@ func (r *LeadEvidenceReader) Read(ctx context.Context, req LeadEvidenceRequest) 
 	if err := lead.Validate(); err != nil {
 		return empty, fmt.Errorf("%w: %w", ErrInvalidSourceEvidence, err)
 	}
+	// The qualification JSONB is an array of opaque reference strings in
+	// the current command contract. Only expose its count and an explicit
+	// unverified state. Never reveal raw references or let the model assert
+	// their contents without a separate authorized source lookup.
+	var qualification *contracts.QualificationReferenceSetV1
+	if len(record.QualificationEvidence) != 0 {
+		verified, parseErr := contracts.ParseQualificationReferences(record.QualificationEvidence)
+		if parseErr != nil {
+			return empty, fmt.Errorf("%w: qualification references do not match their stored contract", ErrInvalidSourceEvidence)
+		}
+		qualification = &verified
+	}
 	attrPage, err := r.Leads.ListAttributions(ctx, req.Business, req.LeadID, leadEvidencePageLimit, "")
 	if err != nil {
 		return empty, fmt.Errorf("%w: %w", ErrReadUnavailable, err)
@@ -105,6 +118,7 @@ func (r *LeadEvidenceReader) Read(ctx context.Context, req LeadEvidenceRequest) 
 		return empty, ErrInvalidSourceEvidence
 	}
 	out := LeadEvidenceResult{
+		Qualification: qualification,
 		Lead:         lead,
 		LeadEvidence: historyEvidence(now, contracts.SourceLead, "lead:"+record.ID, contracts.AuthoritySystemRecord, versionPointer(record.ResourceVersion)),
 		Attributions: []LeadAttributionEvidence{}, Scores: []LeadScoreEvidence{},
