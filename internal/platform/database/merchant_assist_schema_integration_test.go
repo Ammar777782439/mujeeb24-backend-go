@@ -39,10 +39,17 @@ type merchantAssistConstraint struct {
 	Definition string `json:"definition"`
 }
 
+type merchantAssistUniqueIndex struct {
+	Table      string `json:"table"`
+	Name       string `json:"name"`
+	Definition string `json:"definition"`
+}
+
 type merchantAssistSchemaSnapshot struct {
 	MigrationCount int                        `json:"migration_count"`
 	Columns        []merchantAssistColumn     `json:"columns"`
 	Constraints    []merchantAssistConstraint `json:"constraints"`
+	UniqueIndexes  []merchantAssistUniqueIndex `json:"unique_indexes"`
 }
 
 func TestMerchantAssistSchemaAfterAllMigrations(t *testing.T) {
@@ -79,7 +86,7 @@ func TestMerchantAssistSchemaAfterAllMigrations(t *testing.T) {
 		t.Fatalf("migration state incomplete: count %d, last %d", count, maxVersion)
 	}
 
-	snapshot := merchantAssistSchemaSnapshot{MigrationCount: count, Columns: []merchantAssistColumn{}, Constraints: []merchantAssistConstraint{}}
+	snapshot := merchantAssistSchemaSnapshot{MigrationCount: count, Columns: []merchantAssistColumn{}, Constraints: []merchantAssistConstraint{}, UniqueIndexes: []merchantAssistUniqueIndex{}}
 	columnRows, err := db.Query(ctx, `
 SELECT c.relname::text, a.attname::text,
        pg_catalog.format_type(a.atttypid, a.atttypmod)::text,
@@ -133,6 +140,35 @@ ORDER BY c.relname, k.conname`)
 		t.Fatal(err)
 	}
 	constraintRows.Close()
+
+	// Unique indexes without pg_constraint entries (including partial unique
+	// indexes) enforce commercial invariants that a constraint-only audit misses.
+	uniqueRows, err := db.Query(ctx, `
+SELECT c.relname::text, idx.relname::text,
+       pg_catalog.pg_get_indexdef(i.indexrelid)::text
+FROM pg_catalog.pg_index i
+JOIN pg_catalog.pg_class c ON c.oid=i.indrelid
+JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+JOIN pg_catalog.pg_class idx ON idx.oid=i.indexrelid
+LEFT JOIN pg_catalog.pg_constraint k ON k.conindid=i.indexrelid
+WHERE n.nspname='public' AND c.relkind IN ('r','p')
+  AND i.indisunique AND k.oid IS NULL
+ORDER BY c.relname, idx.relname`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for uniqueRows.Next() {
+		var idx merchantAssistUniqueIndex
+		if err := uniqueRows.Scan(&idx.Table, &idx.Name, &idx.Definition); err != nil {
+			uniqueRows.Close()
+			t.Fatal(err)
+		}
+		snapshot.UniqueIndexes = append(snapshot.UniqueIndexes, idx)
+	}
+	if err := uniqueRows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	uniqueRows.Close()
 
 	active := make(map[string]contracts.TableSourceRecord)
 	for _, src := range contracts.SourceInventory() {
@@ -197,7 +233,7 @@ ORDER BY c.relname, k.conname`)
 	}
 	if !reflect.DeepEqual(baseline, snapshot) {
 		// Do not log sensitive DB rows: metadata diffs only.
-		t.Fatalf("migrated PostgreSQL column/type/default/constraint snapshot drift (baseline: %d cols, %d constraints; live: %d cols, %d constraints); update only after source review", len(baseline.Columns), len(baseline.Constraints), len(snapshot.Columns), len(snapshot.Constraints))
+		t.Fatalf("migrated PostgreSQL column/type/default/constraint snapshot drift (baseline: %d cols, %d constraints, %d unique indexes; live: %d cols, %d constraints, %d unique indexes); update only after source review", len(baseline.Columns), len(baseline.Constraints), len(baseline.UniqueIndexes), len(snapshot.Columns), len(snapshot.Constraints), len(snapshot.UniqueIndexes))
 	}
-	t.Logf("schema verified: %d active tables + migration ledger, %d columns, %d constraints; candidate projections remain denied", len(active), len(snapshot.Columns), len(snapshot.Constraints))
+	t.Logf("schema verified: %d active tables + migration ledger, %d columns, %d constraints, %d standalone unique indexes; candidate projections remain denied", len(active), len(snapshot.Columns), len(snapshot.Constraints), len(snapshot.UniqueIndexes))
 }
