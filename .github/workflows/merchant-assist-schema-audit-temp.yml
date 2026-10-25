@@ -1,0 +1,54 @@
+name: Temporary AI Assist PostgreSQL Schema Audit
+on:
+  push:
+    branches: [feat/merchant-ai-assist]
+    paths:
+      - '.github/workflows/merchant-assist-schema-audit-temp.yml'
+      - 'internal/platform/database/merchant_assist_schema_integration_test.go'
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: mujeeb24_assist_audit
+          POSTGRES_USER: mujeeb_test
+          POSTGRES_PASSWORD: local-ci-only-password
+        options: >-
+          --health-cmd "pg_isready -U mujeeb_test -d mujeeb24_assist_audit"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+    env:
+      POSTGRES_TEST_DSN: postgresql://mujeeb_test:local-ci-only-password@localhost:5432/mujeeb24_assist_audit?sslmode=disable
+      MERCHANT_ASSIST_SCHEMA_RECORD: "1"
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/merchant-ai-assist
+          persist-credentials: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.2'
+          cache: true
+      - name: Canonical gofmt for schema test
+        shell: bash
+        run: |
+          set -euo pipefail
+          gofmt -w internal/platform/database/merchant_assist_schema_integration_test.go
+          if ! git diff --quiet -- internal/platform/database/merchant_assist_schema_integration_test.go; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add internal/platform/database/merchant_assist_schema_integration_test.go
+            git commit -m 'style(ai-assist): gofmt PostgreSQL schema verification'
+            git push origin HEAD:feat/merchant-ai-assist
+          fi
+      - name: Apply all migrations and output metadata baseline
+        run: go test -v -tags=integration -count=1 -run '^TestMerchantAssistSchemaAfterAllMigrations$' ./internal/platform/database
