@@ -14,6 +14,38 @@ import (
 
 const EvidenceSchemaVersion = 1
 
+// EvidenceSourceType is a closed semantic category, not a database table.
+// Adding a source requires a reviewed projection contract and tests.
+type EvidenceSourceType string
+
+const (
+	SourceBusiness EvidenceSourceType = "business"
+	SourceCatalogItem EvidenceSourceType = "catalog_item"
+	SourceCatalogOffer EvidenceSourceType = "catalog_offer"
+	SourceCustomer EvidenceSourceType = "customer"
+	SourceConversation EvidenceSourceType = "conversation"
+	SourceMessage EvidenceSourceType = "message"
+	SourceLead EvidenceSourceType = "lead"
+	SourceTransaction EvidenceSourceType = "transaction"
+	SourceSalesWorkflow EvidenceSourceType = "sales_workflow"
+	SourceBusinessPolicy EvidenceSourceType = "business_policy"
+	SourceKnowledge EvidenceSourceType = "knowledge"
+	SourceChannel EvidenceSourceType = "channel"
+	SourceSubscription EvidenceSourceType = "subscription"
+)
+
+func validEvidenceSource(source EvidenceSourceType) bool {
+	switch source {
+	case SourceBusiness, SourceCatalogItem, SourceCatalogOffer, SourceCustomer,
+		SourceConversation, SourceMessage, SourceLead, SourceTransaction,
+		SourceSalesWorkflow, SourceBusinessPolicy, SourceKnowledge,
+		SourceChannel, SourceSubscription:
+		return true
+	default:
+		return false
+	}
+}
+
 type EvidenceAuthority string
 
 const (
@@ -40,7 +72,7 @@ const (
 type EvidenceEnvelopeV1 struct {
 	SchemaVersion	int			`json:"schema_version"`
 	ResourceRef	string			`json:"resource_ref"`
-	SourceType	string			`json:"source_type"`
+	SourceType EvidenceSourceType			`json:"source_type"`
 	ResourceVersion	*string			`json:"resource_version,omitempty"`
 	Authority	EvidenceAuthority	`json:"authority"`
 	Completeness	EvidenceCompleteness	`json:"completeness"`
@@ -60,7 +92,7 @@ func (e EvidenceEnvelopeV1) Validate(now time.Time) error {
 	if e.SchemaVersion != EvidenceSchemaVersion {
 		return fmt.Errorf("%w: unsupported schema version", ErrInvalidEvidence)
 	}
-	if strings.TrimSpace(e.ResourceRef) == "" || strings.TrimSpace(e.SourceType) == "" {
+	if strings.TrimSpace(e.ResourceRef) == "" || !validEvidenceSource(e.SourceType) {
 		return fmt.Errorf("%w: missing resource reference or source type", ErrInvalidEvidence)
 	}
 	if e.ResourceVersion != nil && strings.TrimSpace(*e.ResourceVersion) == "" {
