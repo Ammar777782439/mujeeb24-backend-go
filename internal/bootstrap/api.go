@@ -15,15 +15,15 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/handlers"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/middleware"
+	merchantgateway "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gateway"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/auth/ed25519jwt"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
 	realtimePostgres "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/realtime/postgres"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantassist"
-	merchantgateway "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gateway"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/contracts"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/contracts"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
@@ -425,25 +425,25 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		assistant := &merchantassist.Assistant{
 			Registry: registry, Generator: model, Sanitizer: sanitizer,
 			Published: &merchantassist.PublishedReader{
-				Policies: postgres.NewBusinessPolicyRepository(database),
+				Policies:  postgres.NewBusinessPolicyRepository(database),
 				Knowledge: postgres.NewKnowledgeDocumentRepository(database),
-				AIGuard: businessAIGuard, Now: time.Now,
+				AIGuard:   businessAIGuard, Now: time.Now,
 			},
 			Records: &merchantassist.RecordReader{
-				Customers: postgres.NewCustomerRepository(database),
+				Customers:     postgres.NewCustomerRepository(database),
 				Conversations: postgres.NewConversationRepository(database),
-				Leads: postgres.NewLeadRepository(database),
-				Transactions: postgres.NewTransactionRepository(database),
-				AIGuard: businessAIGuard, Now: time.Now,
+				Leads:         postgres.NewLeadRepository(database),
+				Transactions:  postgres.NewTransactionRepository(database),
+				AIGuard:       businessAIGuard, Now: time.Now,
 			},
 			History: &merchantassist.ConversationHistoryReader{
 				Conversations: postgres.NewConversationRepository(database),
-				State: postgres.NewConversationStateRepository(database),
-				Messages: postgres.NewMessageRepository(database),
-				AIGuard: businessAIGuard, Sanitizer: sanitizer, Now: time.Now,
+				State:         postgres.NewConversationStateRepository(database),
+				Messages:      postgres.NewMessageRepository(database),
+				AIGuard:       businessAIGuard, Sanitizer: sanitizer, Now: time.Now,
 			},
 			Leads: &merchantassist.LeadEvidenceReader{
-				Leads: postgres.NewLeadRepository(database),
+				Leads:   postgres.NewLeadRepository(database),
 				AIGuard: businessAIGuard, Now: time.Now,
 			},
 		}

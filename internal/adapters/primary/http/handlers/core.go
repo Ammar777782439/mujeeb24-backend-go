@@ -8,11 +8,11 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/authorization"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantassist"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/contracts"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantassist"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/queries"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/contracts"
 )
 
 type ScopeProvider interface {
@@ -136,7 +136,7 @@ type MerchantCatalogAIV2Deps struct {
 type Server struct {
 	deps                Dependencies
 	merchantCatalogAIV2 MerchantCatalogAIV2Deps
-	merchantAssist     *merchantassist.Assistant
+	merchantAssist      *merchantassist.Assistant
 	platformDeps        PlatformDeps
 	idempotency         *IdempotencyStore
 }
@@ -385,8 +385,12 @@ func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (a
 	case "merchantAIAssist":
 		in := input.(*contract.MerchantAssistInput)
 		actor, err := s.requireScope(ctx, in.BusinessID)
-		if err != nil { return nil, mapApplicationError(err) }
-		if s.merchantAssist == nil { return nil, mapApplicationError(appErrors.NotImplemented()) }
+		if err != nil {
+			return nil, mapApplicationError(err)
+		}
+		if s.merchantAssist == nil {
+			return nil, mapApplicationError(appErrors.NotImplemented())
+		}
 		result, err := s.merchantAssist.Assist(ctx, merchantassist.AssistRequest{
 			Actor: actor, Business: string(actor.BusinessID),
 			Question: in.Body.Question, Task: contracts.AssistTask(in.Body.Task),
@@ -394,8 +398,11 @@ func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (a
 		})
 		if err != nil {
 			code := appErrors.CodeExternalDependency
-			if errors.Is(err, merchantassist.ErrReadDenied) || errors.Is(err, contracts.ErrDeniedProjection) { code = appErrors.CodeForbidden
-			} else if errors.Is(err, merchantassist.ErrInvalidReadRequest) || errors.Is(err, contracts.ErrUnknownProjection) { code = appErrors.CodeValidation }
+			if errors.Is(err, merchantassist.ErrReadDenied) || errors.Is(err, contracts.ErrDeniedProjection) {
+				code = appErrors.CodeForbidden
+			} else if errors.Is(err, merchantassist.ErrInvalidReadRequest) || errors.Is(err, contracts.ErrUnknownProjection) {
+				code = appErrors.CodeValidation
+			}
 			return nil, mapApplicationError(appErrors.New(code, "تعذر تجهيز المساعدة بهذه البيانات. تحقق من الصلاحيات والمعلومات والمحاولة لاحقاً."))
 		}
 		out := &contract.Single[contract.MerchantAssistResponse]{}
