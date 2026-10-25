@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -168,10 +169,17 @@ func TestBusinessProjectionFieldsExistInMigratedSchema(t *testing.T) {
 		if definition == "" {
 			t.Fatalf("missing SQL CHECK %s", constraint)
 		}
-		for _, v := range values {
-			if !strings.Contains(definition, "'"+v+"'") {
-				t.Fatalf("SQL constraint %s no longer contains enum %q", constraint, v)
-			}
+		quoted := regexp.MustCompile(`'([^']+)'::text`)
+		found := quoted.FindAllStringSubmatch(definition, -1)
+		got := make([]string, 0, len(found))
+		for _, item := range found {
+			got = append(got, item[1])
+		}
+		sort.Strings(got)
+		want := append([]string(nil), values...)
+		sort.Strings(want)
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("SQL constraint %s changed from expected enum: have %v, want %v", constraint, got, want)
 		}
 	}
 }
