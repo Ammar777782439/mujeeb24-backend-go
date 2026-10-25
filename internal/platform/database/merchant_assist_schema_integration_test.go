@@ -46,9 +46,9 @@ type merchantAssistUniqueIndex struct {
 }
 
 type merchantAssistSchemaSnapshot struct {
-	MigrationCount int                        `json:"migration_count"`
-	Columns        []merchantAssistColumn     `json:"columns"`
-	Constraints    []merchantAssistConstraint `json:"constraints"`
+	MigrationCount int                         `json:"migration_count"`
+	Columns        []merchantAssistColumn      `json:"columns"`
+	Constraints    []merchantAssistConstraint  `json:"constraints"`
 	UniqueIndexes  []merchantAssistUniqueIndex `json:"unique_indexes"`
 }
 
