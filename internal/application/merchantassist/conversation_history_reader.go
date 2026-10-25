@@ -225,6 +225,17 @@ func (r *ConversationHistoryReader) Read(ctx context.Context, req ConversationHi
 			"message:"+m.ID, authority, nil)
 		result.Messages = append(result.Messages, MessageEvidence{Evidence: evidence, Value: value})
 	}
+	// A concurrent summary writer may advance the checkpoint while pages
+	// are being scanned. Never combine mismatched versions of history.
+	latest, err := r.State.Get(ctx, req.Business, req.ConversationID)
+	if err != nil {
+		return empty, fmt.Errorf("%w: state revalidation failed", ErrReadUnavailable)
+	}
+	if latest.BusinessID != req.Business || latest.ConversationID != req.ConversationID ||
+		latest.Version != state.Version || latest.SummaryLastMessageID != state.SummaryLastMessageID ||
+		latest.Summary != state.Summary || latest.SummaryTurnCount != state.SummaryTurnCount {
+		return empty, ErrInvalidSourceEvidence
+	}
 	payload, err := json.Marshal(result)
 	if err != nil {
 		return empty, fmt.Errorf("%w: result encoding failed", ErrInvalidSourceEvidence)
