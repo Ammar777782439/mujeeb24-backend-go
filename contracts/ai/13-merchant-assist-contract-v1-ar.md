@@ -12,14 +12,15 @@
 
 ## Phases (this file is the authoritative progress ledger)
 - [x] **P1A — Foundation (initial code):** versioned `EvidenceEnvelopeV1` with source/authority/completeness/freshness validation; typed task IDs; fail-closed `Registry` for allowlisted projection metadata and tests. Pure Go, no database or HTTP dependencies.
-- [ ] **P1B — Source-by-source schema audit:** reconcile live/test migration-derived schema with `schema.sql` and migrations through current main, all fields/types/constraints, classify permitted/prohibited PII for *every* source. Record exclusions and open audit decisions. No table is automatically approved.
+- [x] **P1B-A — Table-source audit (current changes):** inventory 80 migration-created tables from `000001..000081`, including 3 removed in `000053`; categorize 33 projection candidates, 33 internal-only, 11 prohibited, 3 retired. New migrations with unknown `CREATE TABLE` entries fail the source-inventory test. See `14-merchant-assist-source-inventory-ar.md`.
+- [ ] **P1B-B — Column/final-schema audit (NOT DONE):** apply all migrations on PostgreSQL test DB and reconcile `schema.sql`, all fields/types/constraints/ALTER/DROP, permissions, tenant isolation, PII and field-level allowlists. Candidates cannot be exported to AI before this gate passes.
 - [ ] **P2 — Canonical domain projections:** domain source contracts for business, conversation, customer, leads, sales workflow, transaction, policies, channels, automation, subscriptions. Reuse existing catalog projection; no new enums inferred from UI. Add validators/allowlists and cross-reference integrity tests one domain at a time.
 - [ ] **P3 — Authorized read facades and evidence:** tenant-scoped reads, domain permissions, freshness rules, version/change checks, deterministic safe output. No model calls during a PostgreSQL transaction.
 - [ ] **P4 — Merchant AI Assist application:** context budget/assembly, limited read-tool registry, typed task/output contracts, result and provenance validation, cost and timeout checks, prompt version.
 - [ ] **P5 — HTTP/API/provider transport:** Huma DTO/OpenAPI generated, model-adapter tests against actual configured DeepSeek/API gateway model, syntax and schema checks, 401/403/429/503/timeout fail-safe behavior. No new hardcoded provider/model.
 - [ ] **P6 — Frontend integrations and acceptance:** user-controlled proposals within product, inbox, leads, workflows etc, accessibility/mobile/RTL, typed generated API, no automatic mutations, Postgres integration, security, cross-business, regression and production gate.
 
-Phases P1B onwards have NOT been implemented or verified merely because listed here.
+P1B-A is source-inventory work only. P1B-B and phases P2-P6 are NOT implemented or verified merely because listed here.
 
 ## P1A contract: `internal/domain/ai/contracts`
 `EvidenceEnvelopeV1` fields:
