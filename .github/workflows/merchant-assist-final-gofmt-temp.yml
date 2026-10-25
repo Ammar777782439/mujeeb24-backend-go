@@ -1,0 +1,29 @@
+name: Temporary Merchant AI final formatting
+on:
+  push:
+    branches: [feat/merchant-ai-assist]
+    paths: ['.github/workflows/merchant-assist-final-gofmt-temp.yml']
+permissions:
+  contents: write
+jobs:
+  gofmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/merchant-ai-assist
+          persist-credentials: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Format reviewed files
+        run: |
+          set -euo pipefail
+          gofmt -w internal/application/merchantassist/lead_evidence_reader.go internal/application/merchantassist/lead_evidence_reader_test.go internal/application/merchantassist/sanitizer.go internal/application/merchantassist/sanitizer_test.go internal/domain/ai/contracts/merchant_registry.go
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add internal/application/merchantassist/lead_evidence_reader.go internal/application/merchantassist/lead_evidence_reader_test.go internal/application/merchantassist/sanitizer.go internal/application/merchantassist/sanitizer_test.go internal/domain/ai/contracts/merchant_registry.go
+          if ! git diff --cached --quiet; then
+            git commit -m 'style(ai-assist): gofmt reviewed qualification and redaction contracts'
+            git push origin HEAD:feat/merchant-ai-assist
+          fi
