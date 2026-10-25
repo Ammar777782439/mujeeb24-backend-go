@@ -8,18 +8,18 @@ import (
 
 func validDescriptor() ProjectionDescriptor {
 	return ProjectionDescriptor{
-		ID: "catalog.item.v1",
-		Version: 1,
-		SourceEntities: []string{"catalog_items", "attribute_definitions"},
-		AllowedFields: []string{"id", "name", "attributes"},
-		RequiredPermission: "catalog:read",
-		AllowedTasks: []AssistTask{TaskImproveText, TaskExplain},
-		ReadFacade: "catalog_items_read",
-		MaxRows: 1,
-		MaxBytes: 8192,
-		MaxAge: time.Minute,
-		RedactionPolicy: "catalog_items_v1",
-		Owner: "catalog",
+		ID:			"catalog.item.v1",
+		Version:		1,
+		SourceEntities:		[]string{"catalog_items", "attribute_definitions"},
+		AllowedFields:		[]string{"id", "name", "attributes"},
+		RequiredPermission:	"catalog:read",
+		AllowedTasks:		[]AssistTask{TaskImproveText, TaskExplain},
+		ReadFacade:		"catalog_items_read",
+		MaxRows:		1,
+		MaxBytes:		8192,
+		MaxAge:			time.Minute,
+		RedactionPolicy:	"catalog_items_v1",
+		Owner:			"catalog",
 	}
 }
 
@@ -86,7 +86,9 @@ func TestRegistryRejectsInvalidAndDuplicateContracts(t *testing.T) {
 func TestRegistryDefensiveCopy(t *testing.T) {
 	d := validDescriptor()
 	r, err := NewRegistry(d)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	d.AllowedFields[0] = "password_hash"
 	first, ok := r.Lookup("catalog.item.v1")
 	if !ok || first.AllowedFields[0] == "password_hash" {
