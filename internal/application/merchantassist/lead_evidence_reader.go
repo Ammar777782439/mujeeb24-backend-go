@@ -38,12 +38,12 @@ type LeadScoreEvidence struct {
 }
 type LeadEvidenceResult struct {
 	Qualification       *contracts.QualificationReferenceSetV1 `json:"qualification,omitempty"`
-	Lead                contracts.LeadAssistV1       `json:"lead"`
-	LeadEvidence        contracts.EvidenceEnvelopeV1 `json:"lead_evidence"`
-	Attributions        []LeadAttributionEvidence    `json:"attributions"`
-	HasMoreAttributions bool                         `json:"has_more_attributions"`
-	Scores              []LeadScoreEvidence          `json:"scores"`
-	HasMoreScores       bool                         `json:"has_more_scores"`
+	Lead                contracts.LeadAssistV1                 `json:"lead"`
+	LeadEvidence        contracts.EvidenceEnvelopeV1           `json:"lead_evidence"`
+	Attributions        []LeadAttributionEvidence              `json:"attributions"`
+	HasMoreAttributions bool                                   `json:"has_more_attributions"`
+	Scores              []LeadScoreEvidence                    `json:"scores"`
+	HasMoreScores       bool                                   `json:"has_more_scores"`
 }
 
 type LeadEvidenceReader struct {
@@ -119,9 +119,9 @@ func (r *LeadEvidenceReader) Read(ctx context.Context, req LeadEvidenceRequest) 
 	}
 	out := LeadEvidenceResult{
 		Qualification: qualification,
-		Lead:         lead,
-		LeadEvidence: historyEvidence(now, contracts.SourceLead, "lead:"+record.ID, contracts.AuthoritySystemRecord, versionPointer(record.ResourceVersion)),
-		Attributions: []LeadAttributionEvidence{}, Scores: []LeadScoreEvidence{},
+		Lead:          lead,
+		LeadEvidence:  historyEvidence(now, contracts.SourceLead, "lead:"+record.ID, contracts.AuthoritySystemRecord, versionPointer(record.ResourceVersion)),
+		Attributions:  []LeadAttributionEvidence{}, Scores: []LeadScoreEvidence{},
 		HasMoreAttributions: attrPage.HasMore, HasMoreScores: scorePage.HasMore,
 	}
 	seen := map[string]bool{}
