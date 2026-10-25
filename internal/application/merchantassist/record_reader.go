@@ -48,11 +48,11 @@ type TransactionGetter interface {
 }
 
 type RecordReadResult struct {
-	Evidence     contracts.EvidenceEnvelopeV1 `json:"evidence"`
-	Customer     *contracts.CustomerAssistV1 `json:"customer,omitempty"`
+	Evidence     contracts.EvidenceEnvelopeV1    `json:"evidence"`
+	Customer     *contracts.CustomerAssistV1     `json:"customer,omitempty"`
 	Conversation *contracts.ConversationAssistV1 `json:"conversation,omitempty"`
-	Lead         *contracts.LeadAssistV1 `json:"lead,omitempty"`
-	Transaction  *contracts.TransactionAssistV1 `json:"transaction,omitempty"`
+	Lead         *contracts.LeadAssistV1         `json:"lead,omitempty"`
+	Transaction  *contracts.TransactionAssistV1  `json:"transaction,omitempty"`
 }
 
 // RecordReader is an application facade only. It does not assemble a model
@@ -181,7 +181,7 @@ func (r *RecordReader) Read(ctx context.Context, req RecordReadRequest) (RecordR
 		value := contracts.LeadAssistV1{
 			LeadRef: record.ID, CustomerRef: record.CustomerID,
 			Status: record.Status, QualificationState: record.QualificationState,
-			CurrentScoreBand: record.CurrentScoreBand,
+			CurrentScoreBand:  record.CurrentScoreBand,
 			CurrentScoreValue: record.CurrentScoreValue, NextActionAt: record.NextActionAt,
 		}
 		if err := value.Validate(); err != nil {
@@ -203,7 +203,7 @@ func (r *RecordReader) Read(ctx context.Context, req RecordReadRequest) (RecordR
 			TransactionRef: record.ID, CustomerRef: record.CustomerID,
 			TransactionType: record.TransactionType, State: record.State,
 			RequiresHumanReview: record.RequiresHumanReview,
-			Currency: record.Currency, TotalAmount: record.TotalAmount,
+			Currency:            record.Currency, TotalAmount: record.TotalAmount,
 		}
 		if err := value.Validate(); err != nil {
 			return empty, fmt.Errorf("%w: %w", ErrInvalidSourceEvidence, err)
