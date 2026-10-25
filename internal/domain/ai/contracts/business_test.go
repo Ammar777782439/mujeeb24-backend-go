@@ -13,12 +13,12 @@ import (
 
 func validBusinessContext() BusinessContextV1 {
 	return BusinessContextV1{
-		Name: "Example merchant",
-		Status: "active",
-		VerticalType: "retail",
-		Timezone: "Asia/Aden",
+		Name:            "Example merchant",
+		Status:          "active",
+		VerticalType:    "retail",
+		Timezone:        "Asia/Aden",
 		DefaultCurrency: "YER",
-		Locale: "ar",
+		Locale:          "ar",
 	}
 }
 
@@ -30,12 +30,16 @@ func TestBusinessContextSQLAlignedEnums(t *testing.T) {
 	for _, status := range []string{"pending_setup", "active", "suspended", "archived"} {
 		test := b
 		test.Status = status
-		if err := test.Validate(); err != nil { t.Errorf("valid SQL status %q was rejected: %v", status, err) }
+		if err := test.Validate(); err != nil {
+			t.Errorf("valid SQL status %q was rejected: %v", status, err)
+		}
 	}
 	for _, vertical := range []string{"retail", "travel", "services", "restaurant", "clinic", "hospitality", "education", "real_estate", "other"} {
 		test := b
 		test.VerticalType = vertical
-		if err := test.Validate(); err != nil { t.Errorf("valid SQL vertical %q was rejected: %v", vertical, err) }
+		if err := test.Validate(); err != nil {
+			t.Errorf("valid SQL vertical %q was rejected: %v", vertical, err)
+		}
 	}
 	for _, modify := range []func(*BusinessContextV1){
 		func(b *BusinessContextV1) { b.Name = "" },
@@ -65,11 +69,17 @@ func TestBusinessContextSQLAlignedEnums(t *testing.T) {
 func jsonFieldNames(t *testing.T, value any) []string {
 	t.Helper()
 	data, err := json.Marshal(value)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	var fields map[string]any
-	if err := json.Unmarshal(data, &fields); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(data, &fields); err != nil {
+		t.Fatal(err)
+	}
 	result := make([]string, 0, len(fields))
-	for key := range fields { result = append(result, key) }
+	for key := range fields {
+		result = append(result, key)
+	}
 	sort.Strings(result)
 	return result
 }
@@ -103,7 +113,9 @@ func TestBusinessProjectionsExactAllowlistedJSONFields(t *testing.T) {
 func TestBusinessProjectionFieldsExistInMigratedSchema(t *testing.T) {
 	path := filepath.Join("..", "..", "..", "platform", "database", "testdata", "merchant_assist_schema_pg16.json")
 	raw, err := os.ReadFile(path)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	var baseline struct {
 		Columns []struct {
 			Table string `json:"table"`
@@ -111,12 +123,14 @@ func TestBusinessProjectionFieldsExistInMigratedSchema(t *testing.T) {
 			Type  string `json:"type"`
 		} `json:"columns"`
 		Constraints []struct {
-			Table string `json:"table"`
-			Name string `json:"name"`
+			Table      string `json:"table"`
+			Name       string `json:"name"`
 			Definition string `json:"definition"`
 		} `json:"constraints"`
 	}
-	if err := json.Unmarshal(raw, &baseline); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(raw, &baseline); err != nil {
+		t.Fatal(err)
+	}
 	columnTypes := map[string]string{}
 	for _, c := range baseline.Columns {
 		if c.Table == "businesses" || c.Table == "business_policies" {
@@ -130,23 +144,30 @@ func TestBusinessProjectionFieldsExistInMigratedSchema(t *testing.T) {
 	}
 	for _, field := range jsonFieldNames(t, BusinessRuntimePolicyContextV1{}) {
 		expected := "boolean"
-		if field == "ai_mode" { expected = "text" }
+		if field == "ai_mode" {
+			expected = "text"
+		}
 		if columnTypes["business_policies."+field] != expected {
 			t.Fatalf("review runtime policy column type business_policies.%s: got %s, wanted %s", field, columnTypes["business_policies."+field], expected)
 		}
 	}
 	// SQL enums must not silently drift away from Go validators.
 	required := map[string][]string{
-		"businesses_status_chk": {"pending_setup","active","suspended","archived"},
-		"businesses_vertical_type_chk": {"retail","travel","services","restaurant","clinic","hospitality","education","real_estate","other"},
-		"business_policies_ai_mode_chk": {"disabled","assist","approval","restricted_auto"},
+		"businesses_status_chk":         {"pending_setup", "active", "suspended", "archived"},
+		"businesses_vertical_type_chk":  {"retail", "travel", "services", "restaurant", "clinic", "hospitality", "education", "real_estate", "other"},
+		"business_policies_ai_mode_chk": {"disabled", "assist", "approval", "restricted_auto"},
 	}
 	for constraint, values := range required {
 		var definition string
 		for _, c := range baseline.Constraints {
-			if c.Name == constraint { definition = c.Definition; break }
+			if c.Name == constraint {
+				definition = c.Definition
+				break
+			}
 		}
-		if definition == "" { t.Fatalf("missing SQL CHECK %s", constraint) }
+		if definition == "" {
+			t.Fatalf("missing SQL CHECK %s", constraint)
+		}
 		for _, v := range values {
 			if !strings.Contains(definition, "'"+v+"'") {
 				t.Fatalf("SQL constraint %s no longer contains enum %q", constraint, v)
