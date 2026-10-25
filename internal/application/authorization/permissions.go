@@ -72,7 +72,7 @@ func buildOperationPermissions() map[string]string {
 	register(PermissionAutomationRead, "listAutomationRules")
 	register(PermissionAutomationManage, "createAutomationRule", "updateAutomationRule")
 	register(PermissionAuditRead, "listAuditEvents", "getAuditEvent", "listAIDecisions", "getAIDecision")
-	register(PermissionMerchantAIUse, "merchantAIChat", "merchantAIExecute", "requestHumanReview")
+	register(PermissionMerchantAIUse, "merchantAIChat", "merchantAIExecute", "merchantAIAssist", "requestHumanReview")
 	return permissions
 }
 
