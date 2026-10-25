@@ -10037,5 +10037,132 @@
       "kind": "c",
       "definition": "CHECK (status = ANY (ARRAY['active'::text, 'inactive'::text, 'archived'::text]))"
     }
+  ],
+  "unique_indexes": [
+    {
+      "table": "ai_catalog_batches",
+      "name": "uq_ai_catalog_batches_run_number",
+      "definition": "CREATE UNIQUE INDEX uq_ai_catalog_batches_run_number ON public.ai_catalog_batches USING btree (ai_run_id, batch_number)"
+    },
+    {
+      "table": "ai_configuration_versions",
+      "name": "idx_ai_config_active_singleton",
+      "definition": "CREATE UNIQUE INDEX idx_ai_config_active_singleton ON public.ai_configuration_versions USING btree (provider) WHERE (status = 'ACTIVE'::text)"
+    },
+    {
+      "table": "ai_gemini_interactions",
+      "name": "uq_ai_gemini_interactions_id",
+      "definition": "CREATE UNIQUE INDEX uq_ai_gemini_interactions_id ON public.ai_gemini_interactions USING btree (gemini_interaction_id)"
+    },
+    {
+      "table": "ai_run_attempts",
+      "name": "uq_ai_run_attempts_run_number",
+      "definition": "CREATE UNIQUE INDEX uq_ai_run_attempts_run_number ON public.ai_run_attempts USING btree (ai_run_id, attempt_number)"
+    },
+    {
+      "table": "ai_runs",
+      "name": "uq_ai_runs_idempotency",
+      "definition": "CREATE UNIQUE INDEX uq_ai_runs_idempotency ON public.ai_runs USING btree (business_id, idempotency_key) WHERE (status <> ALL (ARRAY['completed'::text, 'failed'::text, 'cancelled'::text]))"
+    },
+    {
+      "table": "ai_usage_records",
+      "name": "ai_usage_gateway_call_id_uq",
+      "definition": "CREATE UNIQUE INDEX ai_usage_gateway_call_id_uq ON public.ai_usage_records USING btree (gateway_call_id) WHERE (gateway_call_id IS NOT NULL)"
+    },
+    {
+      "table": "business_policy_versions",
+      "name": "uq_business_policy_versions_published_key",
+      "definition": "CREATE UNIQUE INDEX uq_business_policy_versions_published_key ON public.business_policy_versions USING btree (business_id, policy_key) WHERE (status = 'published'::text)"
+    },
+    {
+      "table": "canned_replies",
+      "name": "canned_replies_business_shortcut_uq",
+      "definition": "CREATE UNIQUE INDEX canned_replies_business_shortcut_uq ON public.canned_replies USING btree (business_id, shortcut)"
+    },
+    {
+      "table": "channel_connections",
+      "name": "uq_channel_connections_provider_account",
+      "definition": "CREATE UNIQUE INDEX uq_channel_connections_provider_account ON public.channel_connections USING btree (provider_ref, provider_account_ref) WHERE ((provider_account_ref IS NOT NULL) AND (length(btrim(provider_account_ref)) > 0))"
+    },
+    {
+      "table": "channel_provisioning_sessions",
+      "name": "uq_channel_provisioning_active_channel",
+      "definition": "CREATE UNIQUE INDEX uq_channel_provisioning_active_channel ON public.channel_provisioning_sessions USING btree (business_id, channel) WHERE (status = ANY (ARRAY['pending_authorization'::text, 'provisioning'::text, 'connected'::text]))"
+    },
+    {
+      "table": "channel_provisioning_sessions",
+      "name": "uq_channel_provisioning_oauth_state",
+      "definition": "CREATE UNIQUE INDEX uq_channel_provisioning_oauth_state ON public.channel_provisioning_sessions USING btree (oauth_state) WHERE ((oauth_state IS NOT NULL) AND (length(btrim(oauth_state)) > 0))"
+    },
+    {
+      "table": "communication_messages",
+      "name": "uq_communication_messages_provider_message",
+      "definition": "CREATE UNIQUE INDEX uq_communication_messages_provider_message ON public.communication_messages USING btree (business_id, transport, provider_message_id) WHERE (provider_message_id IS NOT NULL)"
+    },
+    {
+      "table": "conversation_references",
+      "name": "uq_conversation_references_current_system",
+      "definition": "CREATE UNIQUE INDEX uq_conversation_references_current_system ON public.conversation_references USING btree (business_id, conversation_id, system) WHERE is_current"
+    },
+    {
+      "table": "conversation_references",
+      "name": "uq_conversation_references_external_resource",
+      "definition": "CREATE UNIQUE INDEX uq_conversation_references_external_resource ON public.conversation_references USING btree (business_id, system, provider_ref, resource_type, resource_id)"
+    },
+    {
+      "table": "identity_matches",
+      "name": "uq_identity_matches_pair",
+      "definition": "CREATE UNIQUE INDEX uq_identity_matches_pair ON public.identity_matches USING btree (business_id, left_identity_id, right_identity_id)"
+    },
+    {
+      "table": "knowledge_documents",
+      "name": "uq_knowledge_documents_published_key",
+      "definition": "CREATE UNIQUE INDEX uq_knowledge_documents_published_key ON public.knowledge_documents USING btree (business_id, knowledge_key) WHERE (status = 'published'::text)"
+    },
+    {
+      "table": "plans",
+      "name": "plans_one_active_version_per_code_uq",
+      "definition": "CREATE UNIQUE INDEX plans_one_active_version_per_code_uq ON public.plans USING btree (code) WHERE (status = 'ACTIVE'::text)"
+    },
+    {
+      "table": "principals",
+      "name": "principals_email_ci_uq",
+      "definition": "CREATE UNIQUE INDEX principals_email_ci_uq ON public.principals USING btree (lower(email))"
+    },
+    {
+      "table": "sales_confirmation_requests",
+      "name": "sales_confirmation_pending_idx",
+      "definition": "CREATE UNIQUE INDEX sales_confirmation_pending_idx ON public.sales_confirmation_requests USING btree (business_id, workflow_id) WHERE (status = 'pending'::text)"
+    },
+    {
+      "table": "subscription_addons",
+      "name": "subscription_addons_creation_idempotency_idx",
+      "definition": "CREATE UNIQUE INDEX subscription_addons_creation_idempotency_idx ON public.subscription_addons USING btree (subscription_id, created_by, creation_idempotency_key) WHERE (creation_idempotency_key IS NOT NULL)"
+    },
+    {
+      "table": "subscription_payments",
+      "name": "subscription_payments_actor_idempotency_uq",
+      "definition": "CREATE UNIQUE INDEX subscription_payments_actor_idempotency_uq ON public.subscription_payments USING btree (recorded_by, idempotency_key) WHERE (idempotency_key IS NOT NULL)"
+    },
+    {
+      "table": "subscription_payments",
+      "name": "subscription_payments_one_payment_per_subscription_uq",
+      "definition": "CREATE UNIQUE INDEX subscription_payments_one_payment_per_subscription_uq ON public.subscription_payments USING btree (subscription_id)"
+    },
+    {
+      "table": "subscriptions",
+      "name": "subscriptions_one_active_per_business_uq",
+      "definition": "CREATE UNIQUE INDEX subscriptions_one_active_per_business_uq ON public.subscriptions USING btree (business_id) WHERE (status = 'ACTIVE'::text)"
+    },
+    {
+      "table": "subscriptions",
+      "name": "subscriptions_one_pending_per_business_uq",
+      "definition": "CREATE UNIQUE INDEX subscriptions_one_pending_per_business_uq ON public.subscriptions USING btree (business_id) WHERE (status = 'PENDING'::text)"
+    },
+    {
+      "table": "team_invitations",
+      "name": "team_invitations_pending_email_uq",
+      "definition": "CREATE UNIQUE INDEX team_invitations_pending_email_uq ON public.team_invitations USING btree (business_id, lower(email)) WHERE (status = 'pending'::text)"
+    }
   ]
 }
