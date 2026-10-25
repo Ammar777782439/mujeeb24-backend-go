@@ -22,19 +22,19 @@ func TestLeadEvidenceExactJSONFieldsAndMigratedSQLTypes(t *testing.T) {
 		expected map[string]field
 	}{
 		{"lead_attributions", LeadAttributionAssistV1{}, map[string]field{
-			"attribution_ref": {"id", "uuid"},
-			"lead_ref": {"lead_id", "uuid"},
-			"channel": {"source_channel", "text"},
+			"attribution_ref":  {"id", "uuid"},
+			"lead_ref":         {"lead_id", "uuid"},
+			"channel":          {"source_channel", "text"},
 			"conversation_ref": {"source_conversation_id", "uuid"},
 			"catalog_item_ref": {"catalog_item_id", "uuid"},
-			"offer_ref": {"offer_id", "uuid"},
-			"captured_at": {"captured_at", "timestamp with time zone"},
+			"offer_ref":        {"offer_id", "uuid"},
+			"captured_at":      {"captured_at", "timestamp with time zone"},
 		}},
 		{"lead_scores", LeadScoreSnapshotAssistV1{}, map[string]field{
-			"score_ref": {"id", "uuid"},
-			"lead_ref": {"lead_id", "uuid"},
-			"value": {"value", "numeric(5,2)"},
-			"band": {"band", "text"},
+			"score_ref":     {"id", "uuid"},
+			"lead_ref":      {"lead_id", "uuid"},
+			"value":         {"value", "numeric(5,2)"},
+			"band":          {"band", "text"},
 			"calculated_at": {"calculated_at", "timestamp with time zone"},
 		}},
 	}
