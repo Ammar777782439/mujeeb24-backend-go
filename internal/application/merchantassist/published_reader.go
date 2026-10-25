@@ -25,10 +25,10 @@ const (
 )
 
 var (
-	ErrReadDenied             = errors.New("merchant assist read denied")
-	ErrReadUnavailable        = errors.New("merchant assist read unavailable")
-	ErrInvalidReadRequest     = errors.New("merchant assist invalid read request")
-	ErrInvalidSourceEvidence  = errors.New("merchant assist invalid source evidence")
+	ErrReadDenied            = errors.New("merchant assist read denied")
+	ErrReadUnavailable       = errors.New("merchant assist read unavailable")
+	ErrInvalidReadRequest    = errors.New("merchant assist invalid read request")
+	ErrInvalidSourceEvidence = errors.New("merchant assist invalid source evidence")
 )
 
 type PublishedKind string
@@ -50,17 +50,17 @@ type PublishedReadRequest struct {
 }
 
 type PublishedPolicyEvidence struct {
-	Evidence contracts.EvidenceEnvelopeV1   `json:"evidence"`
+	Evidence contracts.EvidenceEnvelopeV1      `json:"evidence"`
 	Value    contracts.PublishedPolicyAssistV1 `json:"value"`
 }
 
 type PublishedKnowledgeEvidence struct {
-	Evidence contracts.EvidenceEnvelopeV1   `json:"evidence"`
+	Evidence contracts.EvidenceEnvelopeV1         `json:"evidence"`
 	Value    contracts.PublishedKnowledgeAssistV1 `json:"value"`
 }
 
 type PublishedReadResult struct {
-	Policies  []PublishedPolicyEvidence  `json:"policies,omitempty"`
+	Policies  []PublishedPolicyEvidence    `json:"policies,omitempty"`
 	Knowledge []PublishedKnowledgeEvidence `json:"knowledge,omitempty"`
 }
 
@@ -135,14 +135,14 @@ func (r *PublishedReader) Read(ctx context.Context, req PublishedReadRequest) (P
 			}
 			version := strconv.Itoa(record.Version)
 			evidence := contracts.EvidenceEnvelopeV1{
-				SchemaVersion: contracts.EvidenceSchemaVersion,
-				ResourceRef: "policy:" + record.ID,
-				SourceType: contracts.SourceBusinessPolicy,
+				SchemaVersion:   contracts.EvidenceSchemaVersion,
+				ResourceRef:     "policy:" + record.ID,
+				SourceType:      contracts.SourceBusinessPolicy,
 				ResourceVersion: &version,
-				Authority: contracts.AuthorityPublishedPolicy,
-				Completeness: contracts.EvidenceComplete,
-				RetrievedAt: now,
-				ValidUntil: record.ValidUntil,
+				Authority:       contracts.AuthorityPublishedPolicy,
+				Completeness:    contracts.EvidenceComplete,
+				RetrievedAt:     now,
+				ValidUntil:      record.ValidUntil,
 			}
 			if err := evidence.Validate(now); err != nil {
 				return empty, fmt.Errorf("%w: %w", ErrInvalidSourceEvidence, err)
@@ -188,14 +188,14 @@ func (r *PublishedReader) Read(ctx context.Context, req PublishedReadRequest) (P
 				authority = contracts.AuthoritySystemRecord
 			}
 			evidence := contracts.EvidenceEnvelopeV1{
-				SchemaVersion: contracts.EvidenceSchemaVersion,
-				ResourceRef: "knowledge:" + record.ID,
-				SourceType: contracts.SourceKnowledge,
+				SchemaVersion:   contracts.EvidenceSchemaVersion,
+				ResourceRef:     "knowledge:" + record.ID,
+				SourceType:      contracts.SourceKnowledge,
 				ResourceVersion: &version,
-				Authority: authority,
-				Completeness: contracts.EvidenceComplete,
-				RetrievedAt: now,
-				ValidUntil: record.ValidUntil,
+				Authority:       authority,
+				Completeness:    contracts.EvidenceComplete,
+				RetrievedAt:     now,
+				ValidUntil:      record.ValidUntil,
 			}
 			if err := evidence.Validate(now); err != nil {
 				return empty, fmt.Errorf("%w: %w", ErrInvalidSourceEvidence, err)
