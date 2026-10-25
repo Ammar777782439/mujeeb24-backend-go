@@ -8,12 +8,12 @@ import (
 
 func validEvidence() EvidenceEnvelopeV1 {
 	return EvidenceEnvelopeV1{
-		SchemaVersion:	EvidenceSchemaVersion,
-		ResourceRef:	"item:abc",
-		SourceType:	"catalog_item",
-		Authority:	AuthorityMerchantRecord,
-		Completeness:	EvidenceComplete,
-		RetrievedAt:	time.Date(2026, 10, 25, 10, 0, 0, 0, time.UTC),
+		SchemaVersion: EvidenceSchemaVersion,
+		ResourceRef:   "item:abc",
+		SourceType:    "catalog_item",
+		Authority:     AuthorityMerchantRecord,
+		Completeness:  EvidenceComplete,
+		RetrievedAt:   time.Date(2026, 10, 25, 10, 0, 0, 0, time.UTC),
 	}
 }
 
@@ -46,14 +46,14 @@ func TestEvidenceValidationAndFreshness(t *testing.T) {
 func TestEvidenceRejectsInvalidMetadata(t *testing.T) {
 	now := time.Date(2026, 10, 25, 10, 5, 0, 0, time.UTC)
 	cases := map[string]func(*EvidenceEnvelopeV1){
-		"unknown version":		func(e *EvidenceEnvelopeV1) { e.SchemaVersion++ },
-		"no reference":			func(e *EvidenceEnvelopeV1) { e.ResourceRef = " " },
-		"no source":			func(e *EvidenceEnvelopeV1) { e.SourceType = "" },
-		"unknown authority":		func(e *EvidenceEnvelopeV1) { e.Authority = "ai_generated" },
-		"unknown completeness":		func(e *EvidenceEnvelopeV1) { e.Completeness = "verified" },
-		"future retrieval":		func(e *EvidenceEnvelopeV1) { e.RetrievedAt = now.Add(time.Minute) },
-		"zero retrieval":		func(e *EvidenceEnvelopeV1) { e.RetrievedAt = time.Time{} },
-		"expiration before retrieval":	func(e *EvidenceEnvelopeV1) {
+		"unknown version":      func(e *EvidenceEnvelopeV1) { e.SchemaVersion++ },
+		"no reference":         func(e *EvidenceEnvelopeV1) { e.ResourceRef = " " },
+		"no source":            func(e *EvidenceEnvelopeV1) { e.SourceType = "" },
+		"unknown authority":    func(e *EvidenceEnvelopeV1) { e.Authority = "ai_generated" },
+		"unknown completeness": func(e *EvidenceEnvelopeV1) { e.Completeness = "verified" },
+		"future retrieval":     func(e *EvidenceEnvelopeV1) { e.RetrievedAt = now.Add(time.Minute) },
+		"zero retrieval":       func(e *EvidenceEnvelopeV1) { e.RetrievedAt = time.Time{} },
+		"expiration before retrieval": func(e *EvidenceEnvelopeV1) {
 			d := e.RetrievedAt.Add(-time.Second)
 			e.ValidUntil = &d
 		},

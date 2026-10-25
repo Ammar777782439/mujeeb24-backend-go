@@ -8,18 +8,18 @@ import (
 
 func validDescriptor() ProjectionDescriptor {
 	return ProjectionDescriptor{
-		ID:			"catalog.item.v1",
-		Version:		1,
-		SourceEntities:		[]string{"catalog_items", "attribute_definitions"},
-		AllowedFields:		[]string{"id", "name", "attributes"},
-		RequiredPermission:	"catalog:read",
-		AllowedTasks:		[]AssistTask{TaskImproveText, TaskExplain},
-		ReadFacade:		"catalog_items_read",
-		MaxRows:		1,
-		MaxBytes:		8192,
-		MaxAge:			time.Minute,
-		RedactionPolicy:	"catalog_items_v1",
-		Owner:			"catalog",
+		ID:                 "catalog.item.v1",
+		Version:            1,
+		SourceEntities:     []string{"catalog_items", "attribute_definitions"},
+		AllowedFields:      []string{"id", "name", "attributes"},
+		RequiredPermission: "catalog:read",
+		AllowedTasks:       []AssistTask{TaskImproveText, TaskExplain},
+		ReadFacade:         "catalog_items_read",
+		MaxRows:            1,
+		MaxBytes:           8192,
+		MaxAge:             time.Minute,
+		RedactionPolicy:    "catalog_items_v1",
+		Owner:              "catalog",
 	}
 }
 
@@ -39,8 +39,8 @@ func TestRegistryDenyByDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := []struct {
-		task AssistTask
-		field string
+		task       AssistTask
+		field      string
 		permission string
 	}{
 		{TaskExplain, "password_hash", "catalog:read"},

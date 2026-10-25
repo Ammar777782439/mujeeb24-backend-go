@@ -19,19 +19,19 @@ const EvidenceSchemaVersion = 1
 type EvidenceSourceType string
 
 const (
-	SourceBusiness EvidenceSourceType = "business"
-	SourceCatalogItem EvidenceSourceType = "catalog_item"
-	SourceCatalogOffer EvidenceSourceType = "catalog_offer"
-	SourceCustomer EvidenceSourceType = "customer"
-	SourceConversation EvidenceSourceType = "conversation"
-	SourceMessage EvidenceSourceType = "message"
-	SourceLead EvidenceSourceType = "lead"
-	SourceTransaction EvidenceSourceType = "transaction"
-	SourceSalesWorkflow EvidenceSourceType = "sales_workflow"
+	SourceBusiness       EvidenceSourceType = "business"
+	SourceCatalogItem    EvidenceSourceType = "catalog_item"
+	SourceCatalogOffer   EvidenceSourceType = "catalog_offer"
+	SourceCustomer       EvidenceSourceType = "customer"
+	SourceConversation   EvidenceSourceType = "conversation"
+	SourceMessage        EvidenceSourceType = "message"
+	SourceLead           EvidenceSourceType = "lead"
+	SourceTransaction    EvidenceSourceType = "transaction"
+	SourceSalesWorkflow  EvidenceSourceType = "sales_workflow"
 	SourceBusinessPolicy EvidenceSourceType = "business_policy"
-	SourceKnowledge EvidenceSourceType = "knowledge"
-	SourceChannel EvidenceSourceType = "channel"
-	SourceSubscription EvidenceSourceType = "subscription"
+	SourceKnowledge      EvidenceSourceType = "knowledge"
+	SourceChannel        EvidenceSourceType = "channel"
+	SourceSubscription   EvidenceSourceType = "subscription"
 )
 
 func validEvidenceSource(source EvidenceSourceType) bool {
@@ -49,40 +49,40 @@ func validEvidenceSource(source EvidenceSourceType) bool {
 type EvidenceAuthority string
 
 const (
-	AuthorityMerchantRecord		EvidenceAuthority	= "merchant_record"
-	AuthorityMerchantVerified	EvidenceAuthority	= "merchant_verified"
-	AuthoritySystemRecord		EvidenceAuthority	= "system_record"
-	AuthorityCustomerStatement	EvidenceAuthority	= "customer_statement"
-	AuthorityPublishedPolicy	EvidenceAuthority	= "published_policy"
-	AuthorityDerived		EvidenceAuthority	= "derived"
+	AuthorityMerchantRecord    EvidenceAuthority = "merchant_record"
+	AuthorityMerchantVerified  EvidenceAuthority = "merchant_verified"
+	AuthoritySystemRecord      EvidenceAuthority = "system_record"
+	AuthorityCustomerStatement EvidenceAuthority = "customer_statement"
+	AuthorityPublishedPolicy   EvidenceAuthority = "published_policy"
+	AuthorityDerived           EvidenceAuthority = "derived"
 )
 
 type EvidenceCompleteness string
 
 const (
-	EvidenceComplete	EvidenceCompleteness	= "complete"
-	EvidencePartial		EvidenceCompleteness	= "partial"
-	EvidenceMissing		EvidenceCompleteness	= "missing"
-	EvidenceStale		EvidenceCompleteness	= "stale"
+	EvidenceComplete EvidenceCompleteness = "complete"
+	EvidencePartial  EvidenceCompleteness = "partial"
+	EvidenceMissing  EvidenceCompleteness = "missing"
+	EvidenceStale    EvidenceCompleteness = "stale"
 )
 
 // EvidenceEnvelopeV1 identifies the origin and limits of one model-bound
 // piece of evidence. Business record contents belong to separately approved
 // projections, not to this metadata envelope.
 type EvidenceEnvelopeV1 struct {
-	SchemaVersion	int			`json:"schema_version"`
-	ResourceRef	string			`json:"resource_ref"`
-	SourceType EvidenceSourceType			`json:"source_type"`
-	ResourceVersion	*string			`json:"resource_version,omitempty"`
-	Authority	EvidenceAuthority	`json:"authority"`
-	Completeness	EvidenceCompleteness	`json:"completeness"`
-	RetrievedAt	time.Time		`json:"retrieved_at"`
-	ValidUntil	*time.Time		`json:"valid_until,omitempty"`
+	SchemaVersion   int                  `json:"schema_version"`
+	ResourceRef     string               `json:"resource_ref"`
+	SourceType      EvidenceSourceType   `json:"source_type"`
+	ResourceVersion *string              `json:"resource_version,omitempty"`
+	Authority       EvidenceAuthority    `json:"authority"`
+	Completeness    EvidenceCompleteness `json:"completeness"`
+	RetrievedAt     time.Time            `json:"retrieved_at"`
+	ValidUntil      *time.Time           `json:"valid_until,omitempty"`
 }
 
 var (
-	ErrInvalidEvidence	= errors.New("invalid AI evidence")
-	ErrExpiredEvidence	= errors.New("AI evidence is expired")
+	ErrInvalidEvidence = errors.New("invalid AI evidence")
+	ErrExpiredEvidence = errors.New("AI evidence is expired")
 )
 
 func (e EvidenceEnvelopeV1) Validate(now time.Time) error {

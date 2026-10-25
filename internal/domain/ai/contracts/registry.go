@@ -10,12 +10,12 @@ import (
 type AssistTask string
 
 const (
-	TaskDraftText		AssistTask	= "draft_text"
-	TaskContinueText	AssistTask	= "continue_text"
-	TaskImproveText		AssistTask	= "improve_text"
-	TaskSummarize		AssistTask	= "summarize"
-	TaskExplain		AssistTask	= "explain"
-	TaskPrepareFields	AssistTask	= "prepare_fields"
+	TaskDraftText     AssistTask = "draft_text"
+	TaskContinueText  AssistTask = "continue_text"
+	TaskImproveText   AssistTask = "improve_text"
+	TaskSummarize     AssistTask = "summarize"
+	TaskExplain       AssistTask = "explain"
+	TaskPrepareFields AssistTask = "prepare_fields"
 )
 
 func validTask(t AssistTask) bool {
@@ -31,24 +31,24 @@ func validTask(t AssistTask) bool {
 // ProjectionDescriptor is the server-owned allowlist contract for one
 // AI-facing read model. It is metadata only: it grants no access by itself.
 type ProjectionDescriptor struct {
-	ID			string
-	Version			int
-	SourceEntities		[]string
-	AllowedFields		[]string
-	RequiredPermission	string
-	AllowedTasks		[]AssistTask
-	ReadFacade		string
-	MaxRows			int
-	MaxBytes		int
-	MaxAge			time.Duration
-	RedactionPolicy		string
-	Owner			string
+	ID                 string
+	Version            int
+	SourceEntities     []string
+	AllowedFields      []string
+	RequiredPermission string
+	AllowedTasks       []AssistTask
+	ReadFacade         string
+	MaxRows            int
+	MaxBytes           int
+	MaxAge             time.Duration
+	RedactionPolicy    string
+	Owner              string
 }
 
 var (
-	ErrInvalidProjection	= errors.New("invalid AI projection descriptor")
-	ErrUnknownProjection	= errors.New("AI projection is not registered")
-	ErrDeniedProjection	= errors.New("AI projection use is not allowed")
+	ErrInvalidProjection = errors.New("invalid AI projection descriptor")
+	ErrUnknownProjection = errors.New("AI projection is not registered")
+	ErrDeniedProjection  = errors.New("AI projection use is not allowed")
 )
 
 func validateDescriptor(d ProjectionDescriptor) error {
