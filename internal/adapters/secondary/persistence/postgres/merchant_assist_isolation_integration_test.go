@@ -74,7 +74,7 @@ func TestMerchantAssistSourcesTenantIsolationPostgres(t *testing.T) {
 		_, err = messages.Record(ctx, ports.CommunicationMessageDraft{
 			ID: uuid.NewString(), BusinessID: businessA, ConversationReferenceID: referenceID,
 			Direction: "outbound", Origin: "human", Transport: "mujeeb", ContentType: "text",
-			TextContent: &m.text, Visibility: m.visibility, OccurredAt: time.Now().UTC(), CreatedAt: time.Now().UTC(),
+			TextContent: &m.text, ContentReference: "assist-fixture:" + uuid.NewString(), Visibility: m.visibility, OccurredAt: time.Now().UTC(), CreatedAt: time.Now().UTC(),
 		})
 		if err != nil {
 			t.Fatalf("record message: %v", err)
