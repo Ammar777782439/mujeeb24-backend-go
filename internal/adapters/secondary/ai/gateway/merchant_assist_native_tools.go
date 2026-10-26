@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
+	"time"
 	"strings"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/native"
@@ -93,15 +95,27 @@ func (m *MerchantAssistNativeTools) CompleteTools(ctx context.Context, history [
 	if err != nil || len(body) > 90000 {
 		return zero, errors.New("merchant assist request exceeds context limit")
 	}
+	names := make([]string, 0, len(defs))
+	for _, def := range defs { names = append(names, def.Name) }
+	log.Printf("[MerchantAssistNative] stage=request model_alias=%s tools=%d names=%s history_messages=%d request_bytes=%d pinned=%t",
+		m.Model, len(defs), strings.Join(names, ","), len(messages), len(body), pinned != "")
+	started := time.Now()
 	raw, info, err := m.Client.CompletePinned(ctx, request, pinned)
 	if err != nil {
+		// The provider HTTP status and sanitized provider error message are
+		// logged by the DeepSeek transport. No raw business evidence here.
+		log.Printf("[MerchantAssistNative] stage=completion_failed elapsed_ms=%d error_type=%T", time.Since(started).Milliseconds(), err)
 		return zero, err
 	}
+	log.Printf("[MerchantAssistNative] stage=completion_received elapsed_ms=%d provider=%s tokens_in=%d tokens_out=%d response_bytes=%d",
+		time.Since(started).Milliseconds(), info.Provider, info.InputTokens, info.OutputTokens, len(raw))
 	var answer merchantAssistNativeResponse
 	if err := json.Unmarshal(raw, &answer); err != nil || len(answer.Choices) != 1 {
+		log.Printf("[MerchantAssistNative] stage=invalid_response_envelope json_error=%t choices=%d", err != nil, len(answer.Choices))
 		return zero, errors.New("invalid merchant assistant native response")
 	}
 	choice := answer.Choices[0]
+	log.Printf("[MerchantAssistNative] stage=response_contract finish=%s role=%s tool_calls=%d", choice.FinishReason, choice.Message.Role, len(choice.Message.ToolCalls))
 	if choice.Message.Role != "assistant" || choice.Message.Refusal != nil {
 		return zero, errors.New("merchant assistant returned refusal or invalid role")
 	}
