@@ -17,6 +17,7 @@ jobs:
         run: |
           gofmt -w internal/application/merchantassist/discovery_reader.go
           gofmt -w internal/application/merchantassist/assistant_chat.go
+          gofmt -w internal/application/merchantassist/assistant_chat_test.go
           gofmt -w internal/application/merchantassist/assistant.go
           gofmt -w internal/domain/ai/contracts/merchant_registry.go
           gofmt -w internal/adapters/primary/http/handlers/merchant_assist_errors.go
