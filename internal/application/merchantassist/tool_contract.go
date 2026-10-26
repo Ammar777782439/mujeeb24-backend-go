@@ -40,6 +40,12 @@ type ToolModel interface {
 }
 
 func schemaObject(properties map[string]any, required ...string) map[string]any {
+	// Required must encode as [] for parameterless native tool functions.
+	// A nil variadic []string encodes as JSON null, which is rejected by
+	// both our strict schema compiler and DeepSeek strict tool calling.
+	if required == nil {
+		required = []string{}
+	}
 	return map[string]any{
 		"type": "object", "additionalProperties": false,
 		"properties": properties, "required": required,
