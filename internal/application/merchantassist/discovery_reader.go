@@ -50,7 +50,7 @@ type DiscoveryResult struct {
 // Supported read tools expose business-scoped identifiers so the assistant can
 // connect customers, conversations and orders, while remaining permission-scoped.
 var discoveryPermissions = map[string]string{
-	"platform_guide": authorization.PermissionMerchantAIUse,
+	"platform_guide":     authorization.PermissionMerchantAIUse,
 	"dashboard_overview": authorization.PermissionDashboardRead,
 	"find_customers":     authorization.PermissionCustomersRead,
 	"customer_activity":  authorization.PermissionCustomersRead,
@@ -133,7 +133,9 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 	case "platform_guide":
 		areas := make([]map[string]any, 0, 7)
 		addArea := func(permission, name, url, detail string) {
-			if !authorization.Has(actor, permission) { return }
+			if !authorization.Has(actor, permission) {
+				return
+			}
 			areas = append(areas, map[string]any{"name": name, "url": url, "description": detail})
 			out.Links = append(out.Links, DiscoveryLink{Title: name, URL: url})
 		}
