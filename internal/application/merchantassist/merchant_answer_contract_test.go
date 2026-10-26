@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/queries"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/contracts"
 )
 
@@ -46,10 +47,6 @@ func TestMerchantToolEvidencePreservesOriginalAndDoesNotInventStatuses(t *testin
 	if _, exists := original["status_meanings_ar"]; exists {
 		t.Fatal("annotation mutated raw source evidence")
 	}
-	if extended["rows"] != original["rows"] {
-		// Do not duplicate/alter underlying evidence. Comparing interface maps
-		// with == is invalid; check the totals and statuses below instead.
-	}
 	data := extended["rows"].(map[string]any)
 	counts := data["status_counts"].(map[string]int)
 	if counts["won"] != 4 || counts["new"] != 1 || counts["lost"] != 1 ||
@@ -65,6 +62,15 @@ func TestMerchantToolEvidencePreservesOriginalAndDoesNotInventStatuses(t *testin
 	}
 }
 
+type answerLeadList struct{}
+func (answerLeadList) Handle(_ context.Context, _ queries.ListLeadsQuery) (commands.ListResult[commands.LeadView], error) {
+	return commands.ListResult[commands.LeadView]{Items: []commands.LeadView{
+		{ID: "lead-1", BusinessID: "business-1", Status: "new"},
+		{ID: "lead-2", BusinessID: "business-1", Status: "won"},
+		{ID: "lead-3", BusinessID: "business-1", Status: "lost"},
+	}}, nil
+}
+
 func TestDeepSeekReceivesArabicStatusContractAndConciseAnswerRules(t *testing.T) {
 	registry, err := contracts.NewMerchantAssistRegistry()
 	if err != nil { t.Fatal(err) }
@@ -75,7 +81,7 @@ func TestDeepSeekReceivesArabicStatusContractAndConciseAnswerRules(t *testing.T)
 	actor := commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1",
 		Permissions: []string{"merchant_ai:use", "sales:read"}}
 	assistant := &Assistant{Registry: registry, Native: model, Sanitizer: ConservativeSanitizer{},
-		Discovery: &DiscoveryReader{Guard: &guardFixture{}, Leads: linkedLeadList{}}}
+		Discovery: &DiscoveryReader{Guard: &guardFixture{}, Leads: answerLeadList{}}}
 	_, err = assistant.Assist(context.Background(), AssistRequest{
 		Actor: actor, Business: "business-1", ProjectionID: "auto.v1", Task: contracts.TaskExplain,
 		Question: "كيف وضع فرص البيع؟",
