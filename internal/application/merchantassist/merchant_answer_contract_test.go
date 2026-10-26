@@ -63,6 +63,7 @@ func TestMerchantToolEvidencePreservesOriginalAndDoesNotInventStatuses(t *testin
 }
 
 type answerLeadList struct{}
+
 func (answerLeadList) Handle(_ context.Context, _ queries.ListLeadsQuery) (commands.ListResult[commands.LeadView], error) {
 	return commands.ListResult[commands.LeadView]{Items: []commands.LeadView{
 		{ID: "lead-1", BusinessID: "business-1", Status: "new"},
@@ -73,7 +74,9 @@ func (answerLeadList) Handle(_ context.Context, _ queries.ListLeadsQuery) (comma
 
 func TestDeepSeekReceivesArabicStatusContractAndConciseAnswerRules(t *testing.T) {
 	registry, err := contracts.NewMerchantAssistRegistry()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	model := &nativeModelStub{replies: []ToolCompletion{
 		nativeCall("list-1", "list_leads", "{}"),
 		nativeAnswer("عندك 6 فرص بيع: 4 مكسوبة، وفرصة جديدة، وواحدة خاسرة. ابدأ بمراجعة الفرصة الجديدة."),
@@ -86,8 +89,12 @@ func TestDeepSeekReceivesArabicStatusContractAndConciseAnswerRules(t *testing.T)
 		Actor: actor, Business: "business-1", ProjectionID: "auto.v1", Task: contracts.TaskExplain,
 		Question: "كيف وضع فرص البيع؟",
 	})
-	if err != nil { t.Fatal(err) }
-	if len(model.seen) != 2 || len(model.seen[1]) < 3 { t.Fatal("expected native tool round") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(model.seen) != 2 || len(model.seen[1]) < 3 {
+		t.Fatal("expected native tool round")
+	}
 	if !strings.Contains(model.seen[0][0].Content, "الرد الافتراضي قصير") ||
 		!strings.Contains(model.seen[0][0].Content, "إذا طلب التاجر شرحًا") {
 		t.Fatalf("merchant answer contract was not delivered: %+v", model.seen[0])
@@ -104,5 +111,7 @@ func TestDeepSeekReceivesArabicStatusContractAndConciseAnswerRules(t *testing.T)
 			found = strings.Contains(def.Description, "status_meanings_ar")
 		}
 	}
-	if !found { t.Fatal("DeepSeek tool description omitted status semantics contract") }
+	if !found {
+		t.Fatal("DeepSeek tool description omitted status semantics contract")
+	}
 }
