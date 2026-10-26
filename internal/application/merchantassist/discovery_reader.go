@@ -162,47 +162,39 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 		}
 		related := map[string]any{"id": string(customer.ID), "name": customer.DisplayName, "status": customer.Status}
 		if authorization.Has(actor, authorization.PermissionConversationsRead) && r.CustomerConversations != nil {
-			page, err := r.CustomerConversations.Handle(ctx, queries.ListCustomerConversationsQuery{Meta: meta, CustomerID: customer.ID, Limit: 5})
-			if err != nil {
-				return out, errors.Join(ErrReadUnavailable, err)
-			}
-			conversations := make([]map[string]any, 0, len(page.Items))
-			for _, item := range page.Items {
+			scan, err := scanAllPages(ctx, func(cursor string) (commands.ListResult[commands.ConversationView], error) {
+				return r.CustomerConversations.Handle(ctx, queries.ListCustomerConversationsQuery{Meta: meta, CustomerID: customer.ID, Limit: assistScanPageSize, Cursor: cursor})
+			}, func(item commands.ConversationView) (map[string]any, string, string, *DiscoveryLink, error) {
 				if string(item.BusinessID) != business || item.CustomerID != customer.ID {
-					return out, ErrInvalidSourceEvidence
+					return nil, "", "", nil, ErrInvalidSourceEvidence
 				}
-				conversations = append(conversations, map[string]any{
+				return map[string]any{
 					"id": string(item.ID), "state": item.State, "ownership": item.Ownership,
 					"priority": item.Priority, "last_activity": item.LastActivityAt,
-				})
-				out.Links = append(out.Links, DiscoveryLink{Title: "فتح محادثة", URL: "/chat?conversation_id=" + string(item.ID)})
-			}
-			related["conversations"] = conversations
-			related["conversations_has_more"] = page.HasMore
-			out.HasMore = out.HasMore || page.HasMore
+				}, string(item.ID), item.State, &DiscoveryLink{Title: "فتح محادثة", URL: "/chat?conversation_id=" + string(item.ID)}, nil
+			})
+			if err != nil { return out, err }
+			related["conversations"] = scan.Evidence()
+			out.Links = append(out.Links, scan.Links...)
 		}
 		if authorization.Has(actor, authorization.PermissionSalesRead) && r.CustomerTransactions != nil {
-			page, err := r.CustomerTransactions.Handle(ctx, queries.ListCustomerTransactionsQuery{Meta: meta, CustomerID: customer.ID, Limit: 5})
-			if err != nil {
-				return out, errors.Join(ErrReadUnavailable, err)
-			}
-			transactions := make([]map[string]any, 0, len(page.Items))
-			for _, item := range page.Items {
+			scan, err := scanAllPages(ctx, func(cursor string) (commands.ListResult[commands.TransactionView], error) {
+				return r.CustomerTransactions.Handle(ctx, queries.ListCustomerTransactionsQuery{Meta: meta, CustomerID: customer.ID, Limit: assistScanPageSize, Cursor: cursor})
+			}, func(item commands.TransactionView) (map[string]any, string, string, *DiscoveryLink, error) {
 				if string(item.BusinessID) != business || item.CustomerID != customer.ID {
-					return out, ErrInvalidSourceEvidence
+					return nil, "", "", nil, ErrInvalidSourceEvidence
 				}
-				transactions = append(transactions, map[string]any{
+				return map[string]any{
 					"id": string(item.ID), "state": item.State, "type": item.TransactionType,
 					"created_at": item.CreatedAt, "amount": item.TotalAmount, "currency": item.Currency,
-				})
-				out.Links = append(out.Links, DiscoveryLink{Title: "فتح طلب", URL: "/transactions?transaction_id=" + string(item.ID)})
-			}
-			related["transactions"] = transactions
-			related["transactions_has_more"] = page.HasMore
-			out.HasMore = out.HasMore || page.HasMore
+				}, string(item.ID), item.State, &DiscoveryLink{Title: "فتح طلب", URL: "/transactions?transaction_id=" + string(item.ID)}, nil
+			})
+			if err != nil { return out, err }
+			related["transactions"] = scan.Evidence()
+			out.Links = append(out.Links, scan.Links...)
 		}
 		out.Rows = related
-		out.Coverage = "customer_and_authorized_related_records"
+		out.Coverage = "all_authorized_related_pages_scanned_non_snapshot"
 		out.Links = append(out.Links, DiscoveryLink{Title: "العملاء", URL: "/customers"})
 	case "list_conversations":
 		scan, err := scanAllPages(ctx, func(cursor string) (commands.ListResult[commands.ConversationView], error) {
