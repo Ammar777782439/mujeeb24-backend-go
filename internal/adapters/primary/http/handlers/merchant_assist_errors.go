@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"fmt"
 
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantassist"
@@ -54,8 +55,22 @@ func merchantAssistPublicError(err error) *appErrors.Error {
 	case errors.Is(err, merchantassist.ErrReadDenied):
 		stage = "permission"
 	}
-	// The original error may embed a query, policy text, model payload or
-	// customer data. Log only the constant classified code.
-	log.Printf("[MerchantAssist] request_failed class=%s stage=%s", result.Code, stage)
+	// Categorize the wrapped error without logging customer messages, SQL,
+	// provider payloads or credentials. HTTP code is carried by StatusError.
+	httpStatus := 0
+	var providerStatus interface{ ProviderHTTPStatus() int }
+	if errors.As(err, &providerStatus) { httpStatus = providerStatus.ProviderHTTPStatus() }
+	cause := "unclassified"
+	switch {
+	case httpStatus > 0: cause = fmt.Sprintf("provider_http_%d", httpStatus)
+	case errors.Is(err, context.DeadlineExceeded): cause = "deadline_exceeded"
+	case errors.Is(err, context.Canceled): cause = "context_canceled"
+	case errors.Is(err, merchantassist.ErrInvalidModelPlan): cause = "tool_contract_validation"
+	case errors.Is(err, merchantassist.ErrInvalidSourceEvidence): cause = "invalid_source_evidence"
+	case errors.Is(err, merchantassist.ErrAssistantUnavailable): cause = "model_unconfigured"
+	case errors.Is(err, merchantassist.ErrReadUnavailable): cause = "source_unavailable"
+	}
+	log.Printf("[MerchantAssist] request_failed class=%s stage=%s cause=%s provider_http_status=%d",
+		result.Code, stage, cause, httpStatus)
 	return result
 }
