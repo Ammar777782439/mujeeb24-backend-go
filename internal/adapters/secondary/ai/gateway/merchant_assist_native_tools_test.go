@@ -106,7 +106,7 @@ func TestMerchantAssistNativeToolsUsesCanonicalToolCallsAndReplaysSignature(t *t
 }
 
 func TestMerchantAssistNativeToolsKeepsElevenValidCalls(t *testing.T) {
-	provider := &nativeContractProvider{name: "deepseek"}
+	provider := &nativeContractProvider{name: "gemini"}
 	provider.call = func(req native.Request) (native.Response, error) {
 		calls := make([]map[string]any, 0, 11)
 		for i := 0; i < 11; i++ {
