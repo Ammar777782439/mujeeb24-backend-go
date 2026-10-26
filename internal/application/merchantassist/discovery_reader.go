@@ -14,23 +14,23 @@ import (
 // DiscoveryReader exposes only existing authenticated, tenant-scoped query
 // handlers. The model NEVER gets SQL, unfiltered repository access or writes.
 type DiscoveryReader struct {
-	Guard         ports.BusinessAIExecutionGuard
-	Overview      queries.GetDashboardOverviewHandler
-	Customers     queries.ListCustomersHandler
-	GetCustomer queries.GetCustomerHandler
+	Guard                 ports.BusinessAIExecutionGuard
+	Overview              queries.GetDashboardOverviewHandler
+	Customers             queries.ListCustomersHandler
+	GetCustomer           queries.GetCustomerHandler
 	CustomerConversations queries.ListCustomerConversationsHandler
-	CustomerTransactions queries.ListCustomerTransactionsHandler
-	Conversations queries.ListConversationsHandler
-	Leads         queries.ListLeadsHandler
-	Transactions  queries.ListTransactionsHandler
-	Catalogs      queries.ListCatalogsHandler
-	Channels      queries.ListChannelConnectionsHandler
-	Subscription  queries.GetBusinessSubscriptionHandler
+	CustomerTransactions  queries.ListCustomerTransactionsHandler
+	Conversations         queries.ListConversationsHandler
+	Leads                 queries.ListLeadsHandler
+	Transactions          queries.ListTransactionsHandler
+	Catalogs              queries.ListCatalogsHandler
+	Channels              queries.ListChannelConnectionsHandler
+	Subscription          queries.GetBusinessSubscriptionHandler
 }
 
 type DiscoveryCall struct {
-	Name   string `json:"name"`
-	Search string `json:"search,omitempty"`
+	Name     string `json:"name"`
+	Search   string `json:"search,omitempty"`
 	RecordID string `json:"record_id,omitempty"`
 }
 
@@ -52,7 +52,7 @@ type DiscoveryResult struct {
 var discoveryPermissions = map[string]string{
 	"dashboard_overview": authorization.PermissionDashboardRead,
 	"find_customers":     authorization.PermissionCustomersRead,
-	"customer_activity": authorization.PermissionCustomersRead,
+	"customer_activity":  authorization.PermissionCustomersRead,
 	"list_conversations": authorization.PermissionConversationsRead,
 	"list_leads":         authorization.PermissionSalesRead,
 	"list_transactions":  authorization.PermissionSalesRead,

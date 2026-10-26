@@ -21,7 +21,7 @@ var (
 
 type readPlan struct {
 	InspectCustomerActivity bool `json:"inspect_customer_activity,omitempty"`
-	Calls []struct {
+	Calls                   []struct {
 		Name   string `json:"name"`
 		Search string `json:"search,omitempty"`
 	} `json:"calls"`
@@ -196,7 +196,7 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 						}
 						results = append(results, map[string]any{
 							"capability": "customer_activity",
-							"result": map[string]any{"rows": activity.Rows, "has_more": activity.HasMore, "coverage": activity.Coverage},
+							"result":     map[string]any{"rows": activity.Rows, "has_more": activity.HasMore, "coverage": activity.Coverage},
 						})
 						coverages = append(coverages, activity.Coverage)
 						links = append(links, activity.Links...)
