@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -101,5 +102,56 @@ func TestMerchantAssistNativeToolsUsesCanonicalToolCallsAndReplaysSignature(t *t
 	}
 	if second.Content != "إجمالي العملاء 25 عميلًا." || second.FinishReason != "stop" || attempts != 2 {
 		t.Fatalf("unexpected completion: %+v attempts=%d", second, attempts)
+	}
+}
+
+func TestMerchantAssistNativeToolsKeepsElevenValidCalls(t *testing.T) {
+	provider := &nativeContractProvider{name: "deepseek"}
+	provider.call = func(req native.Request) (native.Response, error) {
+		calls := make([]map[string]any, 0, 11)
+		for i := 0; i < 11; i++ {
+			calls = append(calls, map[string]any{
+				"id": fmt.Sprintf("id-%d", i),
+				"type": "function",
+				"function": map[string]any{
+					"name": "find_customers",
+					"arguments": fmt.Sprintf(`{"search":"customer-%d"}`, i),
+				},
+			})
+		}
+		payload, err := json.Marshal(map[string]any{"choices": []any{
+			map[string]any{"finish_reason": "tool_calls", "message": map[string]any{
+				"role": "assistant", "content": nil, "tool_calls": calls,
+			}},
+		}})
+		if err != nil {
+			return native.Response{}, err
+		}
+		return native.Response{Payload: payload, Model: "deepseek", InputTokens: 20, OutputTokens: 55}, nil
+	}
+	model := &MerchantAssistNativeTools{Client: nativeContractClient(t, provider), Model: "mujeeb-merchant"}
+	definitions := []merchantassist.ToolDefinition{{
+		Name: "find_customers",
+		Description: "Read customers",
+		Parameters: map[string]any{
+			"type": "object",
+			"additionalProperties": false,
+			"properties": map[string]any{"search": map[string]any{"type": "string"}},
+			"required": []string{"search"},
+		},
+	}}
+	reply, err := model.CompleteTools(context.Background(), []merchantassist.ToolMessage{
+		{Role: "user", Content: "ابحث عن العملاء"},
+	}, definitions, "")
+	if err != nil {
+		t.Fatalf("provider's eleven valid calls were rejected: %v", err)
+	}
+	if len(reply.Calls) != 11 || reply.FinishReason != "tool_calls" {
+		t.Fatalf("native adapter dropped tool calls: got %d, finish=%s", len(reply.Calls), reply.FinishReason)
+	}
+	for i, call := range reply.Calls {
+		if call.ID != fmt.Sprintf("id-%d", i) || call.Name != "find_customers" {
+			t.Fatalf("call order or identity lost at index %d: %+v", i, call)
+		}
 	}
 }
