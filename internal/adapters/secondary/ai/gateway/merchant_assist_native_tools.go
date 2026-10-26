@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
-	"time"
 	"strings"
+	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/native"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantassist"
@@ -96,7 +96,9 @@ func (m *MerchantAssistNativeTools) CompleteTools(ctx context.Context, history [
 		return zero, errors.New("merchant assist request exceeds context limit")
 	}
 	names := make([]string, 0, len(defs))
-	for _, def := range defs { names = append(names, def.Name) }
+	for _, def := range defs {
+		names = append(names, def.Name)
+	}
 	log.Printf("[MerchantAssistNative] stage=request model_alias=%s tools=%d names=%s history_messages=%d request_bytes=%d pinned=%t",
 		m.Model, len(defs), strings.Join(names, ","), len(messages), len(body), pinned != "")
 	started := time.Now()

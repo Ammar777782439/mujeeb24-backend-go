@@ -221,7 +221,9 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	httpRes, err := c.client.Do(httpReq)
 	if err != nil {
 		reason := "transport_error"
-		if timeoutCtx.Err() != nil { reason = "timeout_or_deadline" }
+		if timeoutCtx.Err() != nil {
+			reason = "timeout_or_deadline"
+		}
 		log.Printf("[DeepSeekNative] stage=transport_failed reason=%s elapsed_ms=%d", reason, time.Since(started).Milliseconds())
 		if timeoutCtx.Err() != nil {
 			return Response{}, timeoutCtx.Err()

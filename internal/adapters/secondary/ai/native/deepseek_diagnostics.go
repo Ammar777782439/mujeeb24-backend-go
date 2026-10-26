@@ -31,21 +31,31 @@ func safeDeepSeekDiagnostic(value string, maximum int) string {
 func safeDeepSeekErrorFields(body []byte) (string, string, string) {
 	var envelope struct {
 		Error struct {
-			Code json.RawMessage `json:"code"`
-			Type string `json:"type"`
-			Message string `json:"message"`
+			Code    json.RawMessage `json:"code"`
+			Type    string          `json:"type"`
+			Message string          `json:"message"`
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
 		return "unparseable", "unparseable", "invalid JSON error envelope"
 	}
-	code := strings.Trim(string(envelope.Error.Code), "\"" )
-	if code == "" { code = "unspecified" }
-	if !deepSeekSafeCodePattern.MatchString(code) { code = "nonstandard" }
+	code := strings.Trim(string(envelope.Error.Code), "\"")
+	if code == "" {
+		code = "unspecified"
+	}
+	if !deepSeekSafeCodePattern.MatchString(code) {
+		code = "nonstandard"
+	}
 	kind := envelope.Error.Type
-	if kind == "" { kind = "unspecified" }
-	if !deepSeekSafeCodePattern.MatchString(kind) { kind = "nonstandard" }
+	if kind == "" {
+		kind = "unspecified"
+	}
+	if !deepSeekSafeCodePattern.MatchString(kind) {
+		kind = "nonstandard"
+	}
 	message := safeDeepSeekDiagnostic(envelope.Error.Message, 460)
-	if message == "" { message = "no provider error message" }
+	if message == "" {
+		message = "no provider error message"
+	}
 	return code, kind, message
 }
