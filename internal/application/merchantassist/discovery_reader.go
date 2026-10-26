@@ -18,6 +18,7 @@ type DiscoveryReader struct {
 	Overview              queries.GetDashboardOverviewHandler
 	Customers             queries.ListCustomersHandler
 	GetCustomer           queries.GetCustomerHandler
+	GetTransaction        queries.GetTransactionHandler
 	CustomerConversations queries.ListCustomerConversationsHandler
 	CustomerTransactions  queries.ListCustomerTransactionsHandler
 	Conversations         queries.ListConversationsHandler
@@ -57,6 +58,7 @@ var discoveryPermissions = map[string]string{
 	"list_conversations": authorization.PermissionConversationsRead,
 	"list_leads":         authorization.PermissionSalesRead,
 	"list_transactions":  authorization.PermissionSalesRead,
+	"transaction_customer_details": authorization.PermissionSalesRead,
 	"list_catalogs":      authorization.PermissionCatalogRead,
 	"list_channels":      authorization.PermissionChannelsRead,
 	"subscription":       authorization.PermissionBusinessRead,
@@ -64,7 +66,7 @@ var discoveryPermissions = map[string]string{
 
 var discoveryNames = []string{
 	"platform_guide", "dashboard_overview", "find_customers", "list_conversations",
-	"list_leads", "list_transactions", "list_catalogs",
+	"list_leads", "list_transactions", "transaction_customer_details", "list_catalogs",
 	"list_channels", "subscription",
 }
 
@@ -74,7 +76,8 @@ func (r *DiscoveryReader) Available(actor commands.ActorContext) []string {
 	}
 	out := make([]string, 0, len(discoveryNames))
 	for _, name := range discoveryNames {
-		if authorization.Has(actor, discoveryPermissions[name]) && r.hasHandler(name) {
+		if authorization.Has(actor, discoveryPermissions[name]) && r.hasHandler(name) &&
+			(name != "transaction_customer_details" || authorization.Has(actor, authorization.PermissionCustomersRead)) {
 			out = append(out, name)
 		}
 	}
@@ -97,6 +100,8 @@ func (r *DiscoveryReader) hasHandler(name string) bool {
 		return r.Leads != nil
 	case "list_transactions":
 		return r.Transactions != nil
+	case "transaction_customer_details":
+		return r.GetTransaction != nil && r.GetCustomer != nil
 	case "list_catalogs":
 		return r.Catalogs != nil
 	case "list_channels":
@@ -119,7 +124,8 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 	if !known || !authorization.Has(actor, permission) {
 		return out, ErrReadDenied
 	}
-	if !r.hasHandler(call.Name) || len(call.Search) > 80 || len(call.RecordID) > 128 || strings.ContainsAny(call.Search, "\n\r") {
+	if !r.hasHandler(call.Name) || len(call.Search) > 80 || len(call.RecordID) > 128 || strings.ContainsAny(call.Search, "\n\r") ||
+		(call.Name == "transaction_customer_details" && (!authorization.Has(actor, authorization.PermissionCustomersRead) || call.RecordID == "")) {
 		return out, ErrInvalidReadRequest
 	}
 	if err := r.Guard.Check(ctx, business); err != nil {
@@ -288,6 +294,47 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 		}
 		out.Rows, out.Links = scan.Evidence(), scan.Links
 		out.Coverage = "all_pages_scanned_non_snapshot"
+	case "transaction_customer_details":
+		transaction, err := r.GetTransaction.Handle(ctx, queries.GetTransactionQuery{
+			Meta: meta, TransactionID: commands.TransactionID(call.RecordID),
+		})
+		if err != nil { return out, errors.Join(ErrReadUnavailable, err) }
+		if string(transaction.BusinessID) != business || string(transaction.ID) != call.RecordID ||
+			string(transaction.CustomerID) == "" { return out, ErrInvalidSourceEvidence }
+		customer, err := r.GetCustomer.Handle(ctx, queries.GetCustomerQuery{
+			Meta: meta, CustomerID: transaction.CustomerID,
+		})
+		if err != nil { return out, errors.Join(ErrReadUnavailable, err) }
+		if string(customer.BusinessID) != business || customer.ID != transaction.CustomerID {
+			return out, ErrInvalidSourceEvidence
+		}
+		// Transaction line names/prices are stored snapshots. They describe
+		// what was ordered, not present-day catalog offers.
+		const maxOrderLines = 40
+		lines := make([]map[string]any, 0, min(len(transaction.Lines), maxOrderLines))
+		for i, line := range transaction.Lines {
+			if i >= maxOrderLines { break }
+			lines = append(lines, map[string]any{
+				"item": line.ItemNameSnapshot, "quantity": line.Quantity,
+				"unit_price": line.UnitPriceSnapshot, "currency": line.Currency,
+			})
+		}
+		out.Rows = map[string]any{
+			"transaction": map[string]any{
+				"id": string(transaction.ID), "state": transaction.State,
+				"type": transaction.TransactionType, "created_at": transaction.CreatedAt,
+				"total_amount": transaction.TotalAmount, "currency": transaction.Currency,
+				"line_items": lines, "line_items_complete": len(transaction.Lines) <= maxOrderLines,
+			},
+			"customer": map[string]any{
+				"id": string(customer.ID), "name": customer.DisplayName, "status": customer.Status,
+			},
+			"coverage": "specific_verified_transaction_and_customer",
+		}
+		out.Coverage = "specific_verified_transaction_and_customer"
+		out.Links = append(out.Links, DiscoveryLink{
+			Title: "فتح الطلب", URL: "/transactions?transaction_id=" + string(transaction.ID),
+		})
 	case "list_catalogs":
 		scan, err := scanAllPages(ctx, func(cursor string) (commands.ListResult[commands.CatalogView], error) {
 			return r.Catalogs.Handle(ctx, queries.ListCatalogsQuery{Meta: meta, Limit: assistScanPageSize, Cursor: cursor})
