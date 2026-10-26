@@ -25,7 +25,9 @@ func (l *recoveryConversationList) Handle(_ context.Context, _ queries.ListConve
 
 func TestAssistantResolvesUnverifiedConversationThroughDiscovery(t *testing.T) {
 	registry, err := contracts.NewMerchantAssistRegistry()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	list := &recoveryConversationList{}
 	model := &nativeModelStub{replies: []ToolCompletion{
 		nativeCall("guessed", "conversation_history", `{"record_id":"made-up-record"}`),
@@ -35,7 +37,7 @@ func TestAssistantResolvesUnverifiedConversationThroughDiscovery(t *testing.T) {
 	actor := commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1",
 		Permissions: []string{"merchant_ai:use", "conversations:read"}}
 	a := &Assistant{Registry: registry, Native: model, Sanitizer: ConservativeSanitizer{},
-		History: &ConversationHistoryReader{},
+		History:   &ConversationHistoryReader{},
 		Discovery: &DiscoveryReader{Guard: &guardFixture{}, Conversations: list}}
 	answer, err := a.Assist(context.Background(), AssistRequest{
 		Actor: actor, Business: "business-1", ProjectionID: "auto.v1",
@@ -59,7 +61,7 @@ func TestAssistantPassesSelectedScreenRecordWithoutRequiringMerchantUUID(t *test
 	model := &nativeModelStub{replies: []ToolCompletion{
 		nativeAnswer("أقدر أراجع الطلب الموجود في الصفحة باستخدام بياناته المصرح بها."),
 	}}
-	actor := commands.ActorContext{BusinessID:"business-1", PrincipalID:"principal-1",
+	actor := commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1",
 		Permissions: []string{"merchant_ai:use", "dashboard:read"}}
 	a := &Assistant{Registry: registry, Native: model, Sanitizer: ConservativeSanitizer{},
 		Discovery: &DiscoveryReader{Guard: &guardFixture{}, Overview: overviewStub{}}}
@@ -68,7 +70,9 @@ func TestAssistantPassesSelectedScreenRecordWithoutRequiringMerchantUUID(t *test
 		Task: contracts.TaskExplain, Question: "هذا الطلب إيش وضعه؟",
 		RecordID: "transaction-1", Search: "screen:transactions",
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	contextText := model.seen[0][0].Content
 	if !strings.Contains(contextText, "transaction-1") ||
 		!strings.Contains(contextText, `"kind":"transaction"`) ||
@@ -83,7 +87,7 @@ func TestAssistantReturnsInvalidArgumentsAsToolResult(t *testing.T) {
 		nativeCall("wrong", "find_customers", `{"search":9}`),
 		nativeAnswer("ما قدرت أتحقق من سجل محدد بهذا السؤال. ممكن توضح اسم العميل؟"),
 	}}
-	actor := commands.ActorContext{BusinessID:"business-1", PrincipalID:"principal-1",
+	actor := commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1",
 		Permissions: []string{"merchant_ai:use", "customers:read"}}
 	reader := &multiToolCustomerReader{}
 	a := &Assistant{Registry: registry, Native: model, Sanitizer: ConservativeSanitizer{},
@@ -95,9 +99,11 @@ func TestAssistantReturnsInvalidArgumentsAsToolResult(t *testing.T) {
 	if err != nil || reader.calls != 0 || answer.Answer == "" {
 		t.Fatalf("malformed arguments should not query data or fail the merchant: %+v / %v", answer, err)
 	}
-	var report struct{
-		Ok bool `json:"ok"`
-		Error struct{ Code string `json:"code"` } `json:"error"`
+	var report struct {
+		Ok    bool `json:"ok"`
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
 	}
 	if err := json.Unmarshal([]byte(model.seen[1][2].Content), &report); err != nil {
 		t.Fatal(err)

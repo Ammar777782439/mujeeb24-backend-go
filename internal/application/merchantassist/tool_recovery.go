@@ -37,8 +37,8 @@ func readToolFailure(code, kind string, allowed map[string]ToolDefinition) strin
 	result, _ := json.Marshal(map[string]any{
 		"ok": false,
 		"error": map[string]any{
-			"code": code,
-			"guidance": explanation,
+			"code":                    code,
+			"guidance":                explanation,
 			"allowed_discovery_tools": available,
 		},
 	})

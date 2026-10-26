@@ -3,7 +3,7 @@ package merchantassist
 import (
 	"context"
 	"encoding/json"
-		"fmt"
+	"fmt"
 	"strings"
 	"testing"
 
