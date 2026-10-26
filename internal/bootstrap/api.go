@@ -424,6 +424,17 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		sanitizer := merchantassist.ConservativeSanitizer{}
 		assistant := &merchantassist.Assistant{
 			Registry: registry, Generator: model, Sanitizer: sanitizer,
+			Discovery: &merchantassist.DiscoveryReader{
+				Guard: businessAIGuard,
+				Overview: dependencies.GetDashboardOverview,
+				Customers: dependencies.ListCustomers,
+				Conversations: dependencies.ListConversations,
+				Leads: dependencies.ListLeads,
+				Transactions: dependencies.ListTransactions,
+				Catalogs: dependencies.ListCatalogs,
+				Channels: dependencies.ListChannelConnections,
+				Subscription: dependencies.GetBusinessSubscription,
+			},
 			Published: &merchantassist.PublishedReader{
 				Policies:  postgres.NewBusinessPolicyRepository(database),
 				Knowledge: postgres.NewKnowledgeDocumentRepository(database),
