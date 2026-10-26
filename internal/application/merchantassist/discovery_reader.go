@@ -100,8 +100,7 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 	if !known || !authorization.Has(actor, permission) {
 		return out, ErrReadDenied
 	}
-	if !r.hasHandler(call.Name) || len(call.Search) > 80 || strings.ContainsAny(call.Search, "
-") {
+	if !r.hasHandler(call.Name) || len(call.Search) > 80 || strings.ContainsAny(call.Search, "\n\r") {
 		return out, ErrInvalidReadRequest
 	}
 	if err := r.Guard.Check(ctx, business); err != nil {
@@ -128,7 +127,7 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 		rows := make([]map[string]string, 0, len(p.Items))
 		for _, x := range p.Items {
 			if string(x.BusinessID) != business { return out, ErrInvalidSourceEvidence }
-			rows = append(rows, map[string]string{"ref": string(x.ID), "name": x.DisplayName, "status": x.Status})
+			rows = append(rows, map[string]string{"index": len(rows) + 1, "status": x.Status})
 		}
 		out.Rows, out.HasMore = rows, p.HasMore
 		out.Links = append(out.Links, DiscoveryLink{Title: "العملاء", URL: "/customers"})
@@ -139,7 +138,7 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 		for _, x := range p.Items {
 			if string(x.BusinessID) != business { return out, ErrInvalidSourceEvidence }
 			rows = append(rows, map[string]any{
-				"ref": x.ID, "state": x.State, "ownership": x.Ownership,
+				"index": len(rows) + 1, "state": x.State, "ownership": x.Ownership,
 				"priority": x.Priority, "last_activity": x.LastActivityAt,
 			})
 			out.Links = append(out.Links, DiscoveryLink{Title: "فتح محادثة", URL: "/chat?conversation_id=" + string(x.ID)})
@@ -151,7 +150,7 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 		rows := make([]map[string]string, 0, len(p.Items))
 		for _, x := range p.Items {
 			if string(x.BusinessID) != business { return out, ErrInvalidSourceEvidence }
-			rows = append(rows, map[string]string{"ref": string(x.ID), "customer_ref": string(x.CustomerID), "status": x.Status})
+			rows = append(rows, map[string]string{"index": len(rows) + 1, "status": x.Status})
 		}
 		out.Rows, out.HasMore = rows, p.HasMore
 		out.Links = append(out.Links, DiscoveryLink{Title: "فرص البيع", URL: "/leads"})
@@ -162,7 +161,7 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 		for _, x := range p.Items {
 			if string(x.BusinessID) != business { return out, ErrInvalidSourceEvidence }
 			rows = append(rows, map[string]any{
-				"ref": x.ID, "customer_ref": x.CustomerID, "state": x.State,
+				"index": len(rows) + 1, "state": x.State,
 				"type": x.TransactionType, "created_at": x.CreatedAt,
 				"amount": x.TotalAmount, "currency": x.Currency,
 			})
@@ -175,7 +174,7 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 		rows := make([]map[string]any, 0, len(p.Items))
 		for _, x := range p.Items {
 			if string(x.BusinessID) != business { return out, ErrInvalidSourceEvidence }
-			rows = append(rows, map[string]any{"ref": x.ID, "name": x.Name, "status": x.Status})
+			rows = append(rows, map[string]any{"index": len(rows) + 1, "name": x.Name, "status": x.Status})
 		}
 		out.Rows, out.HasMore = rows, p.HasMore
 		out.Links = append(out.Links, DiscoveryLink{Title: "الكتالوج", URL: "/catalog"})
