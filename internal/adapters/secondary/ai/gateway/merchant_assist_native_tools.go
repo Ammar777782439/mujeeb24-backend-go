@@ -68,6 +68,7 @@ func (m *MerchantAssistNativeTools) CompleteTools(ctx context.Context, history [
 				call.ID, call.Type, call.Function.Name = t.ID, "function", t.Name
 				call.Function.Arguments = string(t.Arguments)
 				call.ThoughtSignature = t.ThoughtSignature
+				call.ThoughtSignature = t.ThoughtSignature
 				entry.ToolCalls = append(entry.ToolCalls, call)
 			}
 		} else {
@@ -109,7 +110,8 @@ func (m *MerchantAssistNativeTools) CompleteTools(ctx context.Context, history [
 				return zero, errors.New("invalid merchant assistant function call")
 			}
 			reply.Calls = append(reply.Calls, merchantassist.ToolCall{
-				ID: call.ID, Name: call.Function.Name, Arguments: json.RawMessage(call.Function.Arguments), ThoughtSignature: call.ThoughtSignature,
+				ID: call.ID, Name: call.Function.Name, Arguments: json.RawMessage(call.Function.Arguments),
+				ThoughtSignature: call.ThoughtSignature, ThoughtSignature: call.ThoughtSignature,
 			})
 		}
 		return reply, nil
