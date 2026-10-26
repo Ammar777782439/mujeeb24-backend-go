@@ -12,9 +12,9 @@ import (
 
 func TestMerchantAssistErrorsDistinguishFailuresWithoutLeakingCause(t *testing.T) {
 	tests := []struct {
-		name string
-		err error
-		code appErrors.Code
+		name        string
+		err         error
+		code        appErrors.Code
 		messagePart string
 	}{
 		{"permission", merchantassist.ErrReadDenied, appErrors.CodeForbidden, "صلاحية"},

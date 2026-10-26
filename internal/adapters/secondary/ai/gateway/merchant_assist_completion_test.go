@@ -19,8 +19,8 @@ func TestMerchantAssistCompletionUsesStrictNativeDeepSeekContract(t *testing.T) 
 			t.Errorf("unexpected DeepSeek route: %s %s", r.Method, r.URL.Path)
 		}
 		var wire struct {
-			Model    string           `json:"model"`
-			Messages []map[string]any `json:"messages"`
+			Model    string            `json:"model"`
+			Messages []map[string]any  `json:"messages"`
 			Thinking map[string]string `json:"thinking"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&wire); err != nil {
@@ -40,14 +40,22 @@ func TestMerchantAssistCompletionUsesStrictNativeDeepSeekContract(t *testing.T) 
 		Model: "deepseek-test", APIKey: "local-test-key",
 		BaseURL: server.URL + "/beta", Timeout: 2 * time.Second,
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	router, err := native.NewRouter(provider, nil, native.Policy{})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	client, err := native.NewCompletionClient(router)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	generator := &MerchantAssistCompletion{Client: client, Model: "mujeeb-merchant"}
 	answer, err := generator.Generate(context.Background(), "قواعد موثوقة", "سؤال تجريبي")
-	if err != nil { t.Fatalf("merchant assist failed before reaching native provider: %v", err) }
+	if err != nil {
+		t.Fatalf("merchant assist failed before reaching native provider: %v", err)
+	}
 	if calls != 1 || answer != "هذه إجابة تجريبية." {
 		t.Fatalf("unexpected invocation calls=%d answer=%q", calls, answer)
 	}

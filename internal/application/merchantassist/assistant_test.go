@@ -3,9 +3,9 @@ package merchantassist
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
-	"strings"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/contracts"
 )
@@ -40,13 +40,13 @@ func TestAssistantNoPublishedPolicyReturnsSourceExplanationWithoutProvider(t *te
 	}
 	model := &modelStub{}
 	assistant := &Assistant{
-		Registry: registry,
+		Registry:  registry,
 		Generator: model,
 		Sanitizer: ConservativeSanitizer{},
 		Published: &PublishedReader{
 			Policies: &policyFixture{},
-			AIGuard: &guardFixture{},
-			Now: func() time.Time { return readNow },
+			AIGuard:  &guardFixture{},
+			Now:      func() time.Time { return readNow },
 		},
 	}
 	response, err := assistant.Assist(context.Background(), AssistRequest{
