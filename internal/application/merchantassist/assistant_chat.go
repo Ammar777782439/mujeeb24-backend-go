@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"regexp"
 	"strings"
 
@@ -201,143 +202,162 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 			}
 			return AssistResponse{Answer: answer, ProjectionID: "auto.v1", Evidence: raw, ReviewRequired: true}, nil
 		}
-		if reply.FinishReason != "tool_calls" || len(reply.Calls) != 1 ||
+		if reply.FinishReason != "tool_calls" || len(reply.Calls) == 0 ||
+			len(reply.Calls) > MaxReadToolsPerBatch ||
 			toolCount+len(reply.Calls) > assistMaxToolCalls {
+			log.Printf("[MerchantAssist] stage=invalid_tool_batch count=%d previously_used=%d max=%d",
+				len(reply.Calls), toolCount, assistMaxToolCalls)
 			return empty, ErrInvalidModelPlan
 		}
-		call := reply.Calls[0]
-		def, present := allowed[call.Name]
-		if !present || call.ID == "" || seenIDs[call.ID] {
-			return empty, ErrInvalidModelPlan
-		}
-		args, err := decodeReadArgs(def, call.Arguments)
-		if err != nil {
-			return empty, err
-		}
-		signature := call.Name + "|" + args.Search + "|" + args.RecordID
-		if seenCalls[signature] {
-			return empty, ErrInvalidModelPlan
-		}
-		seenIDs[call.ID], seenCalls[signature] = true, true
-		kind := map[string]string{
-			"customer_activity": "customer", "customer_record": "customer",
-			"conversation_history": "conversation", "transaction_record": "transaction",
-			"lead_evidence": "lead",
-		}[call.Name]
-		if kind != "" && (args.RecordID == "" || !known[kind][args.RecordID]) {
-			return empty, ErrInvalidModelPlan
-		}
-		var data any
-		var coverage string
-		switch call.Name {
-		case "published_policies", "published_knowledge":
-			kind := PublishedPolicies
-			if call.Name == "published_knowledge" {
-				kind = PublishedKnowledge
+		// Validate the complete untrusted batch before executing any read.
+		// A follow-up record tool may only use IDs from earlier verified rounds.
+		decoded := make([]nativeReadArgs, len(reply.Calls))
+		for i, call := range reply.Calls {
+			def, present := allowed[call.Name]
+			if !present || call.ID == "" || seenIDs[call.ID] {
+				return empty, ErrInvalidModelPlan
 			}
-			read, err := a.Published.Read(ctx, PublishedReadRequest{
-				Actor: req.Actor, Business: req.Business, Kind: kind,
-				Task: contracts.TaskExplain, Search: args.Search, Limit: 3,
-			})
+			args, err := decodeReadArgs(def, call.Arguments)
 			if err != nil {
-				logAssistReadFailure(call.Name, err)
 				return empty, err
 			}
-			for i := range read.Knowledge {
-				safe, err := a.Sanitizer.Sanitize(ctx, ContentMessage, read.Knowledge[i].Value.Content)
-				if err != nil {
-					return empty, ErrInvalidSourceEvidence
+			signature := call.Name + "|" + args.Search + "|" + args.RecordID
+			if seenCalls[signature] {
+				return empty, ErrInvalidModelPlan
+			}
+			seenIDs[call.ID], seenCalls[signature] = true, true
+			kind := map[string]string{
+				"customer_activity": "customer", "customer_record": "customer",
+				"conversation_history": "conversation", "transaction_record": "transaction",
+				"lead_evidence": "lead",
+			}[call.Name]
+			if kind != "" && (args.RecordID == "" || !known[kind][args.RecordID]) {
+				return empty, ErrInvalidModelPlan
+			}
+			decoded[i] = args
+		}
+		log.Printf("[MerchantAssist] stage=tool_batch_validated count=%d already_executed=%d", len(reply.Calls), toolCount)
+		// DeepSeek Chat Completions expects one assistant turn containing all
+		// calls and one tool message per call, in its original ID order.
+		results := make([]ToolMessage, 0, len(reply.Calls))
+		for i, call := range reply.Calls {
+			args := decoded[i]
+			log.Printf("[MerchantAssist] stage=tool_read_start tool=%s batch_index=%d", call.Name, i+1)
+			var data any
+			var coverage string
+			switch call.Name {
+			case "published_policies", "published_knowledge":
+				kind := PublishedPolicies
+				if call.Name == "published_knowledge" {
+					kind = PublishedKnowledge
 				}
-				read.Knowledge[i].Value.Content = safe
-			}
-			for i := range read.Policies {
-				safe, err := a.Sanitizer.Sanitize(ctx, ContentMessage, read.Policies[i].Value.Summary)
+				read, err := a.Published.Read(ctx, PublishedReadRequest{
+					Actor: req.Actor, Business: req.Business, Kind: kind,
+					Task: contracts.TaskExplain, Search: args.Search, Limit: 3,
+				})
 				if err != nil {
-					return empty, ErrInvalidSourceEvidence
+					logAssistReadFailure(call.Name, err)
+					return empty, err
 				}
-				read.Policies[i].Value.Summary = safe
-			}
-			data, coverage = read, "published_matches_only"
-		case "conversation_history":
-			read, err := a.History.Read(ctx, ConversationHistoryRequest{
-				Actor: req.Actor, Business: req.Business, ConversationID: args.RecordID,
-				Task: contracts.TaskSummarize,
-			})
-			if err != nil {
-				logAssistReadFailure(call.Name, err)
-				return empty, err
-			}
-			data, coverage = read, read.Coverage
-			links = append(links, DiscoveryLink{Title: "فتح المحادثة", URL: "/chat?conversation_id=" + args.RecordID})
-		case "customer_record", "transaction_record":
-			recordKind := RecordCustomer
-			if call.Name == "transaction_record" {
-				recordKind = RecordTransaction
-			}
-			read, err := a.Records.Read(ctx, RecordReadRequest{
-				Actor: req.Actor, Business: req.Business, Kind: recordKind,
-				RecordID: args.RecordID, Task: contracts.TaskExplain,
-			})
-			if err != nil {
-				logAssistReadFailure(call.Name, err)
-				return empty, err
-			}
-			data, coverage = read, "single_record_verified"
-		case "lead_evidence":
-			read, err := a.Leads.Read(ctx, LeadEvidenceRequest{
-				Actor: req.Actor, Business: req.Business,
-				LeadID: args.RecordID, Task: contracts.TaskExplain,
-			})
-			if err != nil {
-				logAssistReadFailure(call.Name, err)
-				return empty, err
-			}
-			data, coverage = read, "single_lead_verified"
-		default:
-			read, err := a.Discovery.Read(ctx, req.Actor, req.Business, DiscoveryCall{
-				Name: call.Name, Search: args.Search, RecordID: args.RecordID,
-			})
-			if err != nil {
-				logAssistReadFailure(call.Name, err)
-				return empty, err
-			}
-			rememberIDs(known, call.Name, read.Rows)
-			if call.Name == "customer_activity" {
-				if related, ok := read.Rows.(map[string]any); ok {
-					for _, pair := range []struct {
-						key  string
-						kind string
-					}{
-						{"conversations", "conversation"}, {"transactions", "transaction"},
-					} {
-						if block, ok := related[pair.key].(map[string]any); ok {
-							if sample, ok := block["sample"].([]map[string]any); ok {
-								for _, row := range sample {
-									if id, ok := row["id"].(string); ok {
-										known[pair.kind][id] = true
+				for i := range read.Knowledge {
+					safe, err := a.Sanitizer.Sanitize(ctx, ContentMessage, read.Knowledge[i].Value.Content)
+					if err != nil {
+						return empty, ErrInvalidSourceEvidence
+					}
+					read.Knowledge[i].Value.Content = safe
+				}
+				for i := range read.Policies {
+					safe, err := a.Sanitizer.Sanitize(ctx, ContentMessage, read.Policies[i].Value.Summary)
+					if err != nil {
+						return empty, ErrInvalidSourceEvidence
+					}
+					read.Policies[i].Value.Summary = safe
+				}
+				data, coverage = read, "published_matches_only"
+			case "conversation_history":
+				read, err := a.History.Read(ctx, ConversationHistoryRequest{
+					Actor: req.Actor, Business: req.Business, ConversationID: args.RecordID,
+					Task: contracts.TaskSummarize,
+				})
+				if err != nil {
+					logAssistReadFailure(call.Name, err)
+					return empty, err
+				}
+				data, coverage = read, read.Coverage
+				links = append(links, DiscoveryLink{Title: "فتح المحادثة", URL: "/chat?conversation_id=" + args.RecordID})
+			case "customer_record", "transaction_record":
+				recordKind := RecordCustomer
+				if call.Name == "transaction_record" {
+					recordKind = RecordTransaction
+				}
+				read, err := a.Records.Read(ctx, RecordReadRequest{
+					Actor: req.Actor, Business: req.Business, Kind: recordKind,
+					RecordID: args.RecordID, Task: contracts.TaskExplain,
+				})
+				if err != nil {
+					logAssistReadFailure(call.Name, err)
+					return empty, err
+				}
+				data, coverage = read, "single_record_verified"
+			case "lead_evidence":
+				read, err := a.Leads.Read(ctx, LeadEvidenceRequest{
+					Actor: req.Actor, Business: req.Business,
+					LeadID: args.RecordID, Task: contracts.TaskExplain,
+				})
+				if err != nil {
+					logAssistReadFailure(call.Name, err)
+					return empty, err
+				}
+				data, coverage = read, "single_lead_verified"
+			default:
+				read, err := a.Discovery.Read(ctx, req.Actor, req.Business, DiscoveryCall{
+					Name: call.Name, Search: args.Search, RecordID: args.RecordID,
+				})
+				if err != nil {
+					logAssistReadFailure(call.Name, err)
+					return empty, err
+				}
+				rememberIDs(known, call.Name, read.Rows)
+				if call.Name == "customer_activity" {
+					if related, ok := read.Rows.(map[string]any); ok {
+						for _, pair := range []struct {
+							key  string
+							kind string
+						}{
+							{"conversations", "conversation"}, {"transactions", "transaction"},
+						} {
+							if block, ok := related[pair.key].(map[string]any); ok {
+								if sample, ok := block["sample"].([]map[string]any); ok {
+									for _, row := range sample {
+										if id, ok := row["id"].(string); ok {
+											known[pair.kind][id] = true
+										}
 									}
 								}
 							}
 						}
 					}
 				}
+				data = map[string]any{
+					"tool": read.Tool, "rows": read.Rows, "has_more": read.HasMore, "coverage": read.Coverage,
+				}
+				coverage = read.Coverage
+				links = append(links, read.Links...)
 			}
-			data = map[string]any{
-				"tool": read.Tool, "rows": read.Rows, "has_more": read.HasMore, "coverage": read.Coverage,
+			output, err := json.Marshal(data)
+			if err != nil || len(output) == 0 || len(output) > 28000 ||
+				evidenceBytes+len(output) > assistMaxToolEvidence {
+				return empty, ErrInvalidSourceEvidence
 			}
-			coverage = read.Coverage
-			links = append(links, read.Links...)
+			evidenceBytes += len(output)
+			coverages = append(coverages, coverage)
+			results = append(results, ToolMessage{Role: "tool", ToolCallID: call.ID, Content: string(output)})
+			toolCount++
+			log.Printf("[MerchantAssist] stage=tool_read_complete tool=%s batch_index=%d bytes=%d", call.Name, i+1, len(output))
 		}
-		output, err := json.Marshal(data)
-		if err != nil || len(output) == 0 || len(output) > 28000 ||
-			evidenceBytes+len(output) > assistMaxToolEvidence {
-			return empty, ErrInvalidSourceEvidence
-		}
-		evidenceBytes += len(output)
-		coverages = append(coverages, coverage)
-		messages = append(messages, ToolMessage{Role: "assistant", ToolCalls: []ToolCall{call}})
-		messages = append(messages, ToolMessage{Role: "tool", ToolCallID: call.ID, Content: string(output)})
-		toolCount++
+		messages = append(messages, ToolMessage{Role: "assistant", ToolCalls: reply.Calls})
+		messages = append(messages, results...)
+
 	}
 	return empty, fmt.Errorf("%w: tool round budget exhausted", ErrInvalidModelPlan)
 }
