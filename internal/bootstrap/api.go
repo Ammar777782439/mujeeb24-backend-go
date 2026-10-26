@@ -429,6 +429,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 				Overview:              dependencies.GetDashboardOverview,
 				Customers:             dependencies.ListCustomers,
 				GetCustomer:           dependencies.GetCustomer,
+				GetTransaction:        dependencies.GetTransaction,
 				CustomerConversations: dependencies.ListCustomerConversations,
 				CustomerTransactions:  dependencies.ListCustomerTransactions,
 				Conversations:         dependencies.ListConversations,
