@@ -48,6 +48,7 @@ func schemaObject(properties map[string]any, required ...string) map[string]any 
 
 func toolDefinitions(available []string) []ToolDefinition {
 	definitions := map[string]ToolDefinition{
+		"platform_guide": {"platform_guide", "Explain Mujeeb 24 sections and verified links; explain that Merchant Catalog AI is a separate approval-controlled product authoring workflow. This assistant never creates or edits products.", schemaObject(map[string]any{})},
 		"dashboard_overview":   {"dashboard_overview", "Read business dashboard aggregates: open conversations, human waiting, new customers, new leads, transactions needing review. New customers is not total customers.", schemaObject(map[string]any{})},
 		"find_customers":       {"find_customers", "Find a named customer or obtain a complete customer count and status breakdown. Use an empty search to include all customers. Results include exact total across fully scanned pages, sample and completeness.", schemaObject(map[string]any{"search": map[string]any{"type": "string"}}, "search")},
 		"customer_activity":    {"customer_activity", "Inspect a previously discovered customer's verified conversations and transactions. Use the exact customer record_id returned by find_customers; never guess an ID.", schemaObject(map[string]any{"record_id": map[string]any{"type": "string"}}, "record_id")},
