@@ -45,7 +45,7 @@ type DiscoveryResult struct {
 
 // Supported tools are purposely limited to read-only, finite views. Any
 // future tool must receive a permission and a reviewed projection here.
-var discoveryPermissions = map[string]string{
+var discoveryPermissions = map[string]any{
 	"dashboard_overview": authorization.PermissionDashboardRead,
 	"find_customers":     authorization.PermissionCustomersRead,
 	"list_conversations": authorization.PermissionConversationsRead,
@@ -137,12 +137,12 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 		if err != nil {
 			return out, errors.Join(ErrReadUnavailable, err)
 		}
-		rows := make([]map[string]string, 0, len(p.Items))
+		rows := make([]map[string]any, 0, len(p.Items))
 		for _, x := range p.Items {
 			if string(x.BusinessID) != business {
 				return out, ErrInvalidSourceEvidence
 			}
-			rows = append(rows, map[string]string{"index": len(rows) + 1, "status": x.Status})
+			rows = append(rows, map[string]any{"index": len(rows) + 1, "status": x.Status})
 		}
 		out.Rows, out.HasMore = rows, p.HasMore
 		out.Links = append(out.Links, DiscoveryLink{Title: "العملاء", URL: "/customers"})
@@ -168,12 +168,12 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 		if err != nil {
 			return out, errors.Join(ErrReadUnavailable, err)
 		}
-		rows := make([]map[string]string, 0, len(p.Items))
+		rows := make([]map[string]any, 0, len(p.Items))
 		for _, x := range p.Items {
 			if string(x.BusinessID) != business {
 				return out, ErrInvalidSourceEvidence
 			}
-			rows = append(rows, map[string]string{"index": len(rows) + 1, "status": x.Status})
+			rows = append(rows, map[string]any{"index": len(rows) + 1, "status": x.Status})
 		}
 		out.Rows, out.HasMore = rows, p.HasMore
 		out.Links = append(out.Links, DiscoveryLink{Title: "فرص البيع", URL: "/leads"})
