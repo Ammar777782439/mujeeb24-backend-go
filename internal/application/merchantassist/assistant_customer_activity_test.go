@@ -46,16 +46,17 @@ func TestConversationalAssistantCanFollowCustomerToRelatedRecords(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	model := &adviceModel{answers: []string{
-		`{"calls":[{"name":"find_customers","search":"أحمد"}],"inspect_customer_activity":true}`,
-		"أحمد عنده محادثة مفتوحة وطلب مسودة. راجع المحادثة أولًا.",
+	model := &nativeStub{replies: []ToolCompletion{
+		requestedTool("c1", "find_customers", `{"search":"أحمد"}`),
+		requestedTool("c2", "customer_activity", `{"record_id":"customer-1"}`),
+		finalText("أحمد عنده محادثة مفتوحة وطلب مسودة. راجع المحادثة أولًا."),
 	}}
 	actor := commands.ActorContext{
 		BusinessID: "business-1", PrincipalID: "principal-1", Role: "member",
 		Permissions: []string{"merchant_ai:use", "customers:read", "conversations:read", "sales:read"},
 	}
 	assistant := &Assistant{
-		Registry: registry, Generator: model, Sanitizer: ConservativeSanitizer{},
+		Registry: registry, Native: model, Sanitizer: ConservativeSanitizer{},
 		Discovery: &DiscoveryReader{
 			Guard: &guardFixture{}, Customers: linkedCustomerList{}, GetCustomer: linkedCustomerGet{},
 			CustomerConversations: linkedCustomerConversations{}, CustomerTransactions: linkedCustomerTransactions{},
@@ -68,9 +69,11 @@ func TestConversationalAssistantCanFollowCustomerToRelatedRecords(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(model.seen) != 2 || !strings.Contains(model.seen[1], "conversation-1") ||
-		!strings.Contains(model.seen[1], "transaction-1") || !strings.Contains(model.seen[1], "customer-1") {
-		t.Fatalf("model did not receive linked authorized identifiers, calls=%d", len(model.seen))
+	if len(model.seen) != 3 || len(model.seen[2]) != 5 ||
+		!strings.Contains(model.seen[2][2].Content, "customer-1") ||
+		!strings.Contains(model.seen[2][4].Content, "conversation-1") ||
+		!strings.Contains(model.seen[2][4].Content, "transaction-1") {
+		t.Fatalf("model did not receive authorized linked IDs, rounds=%d", len(model.seen))
 	}
 	if !strings.Contains(reply.Answer, "محادثة") || !strings.Contains(string(reply.Evidence), "conversation_id") {
 		t.Fatalf("missing merchant-facing navigation: %+v", reply)
