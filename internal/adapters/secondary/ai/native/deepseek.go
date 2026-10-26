@@ -180,6 +180,8 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 			}
 			providerSchema, err := deepSeekSchema(tool.Function.Parameters)
 			if err != nil {
+				log.Printf("[DeepSeekNative] stage=local_schema_rejected tool=%s cause=%q",
+					safeDeepSeekDiagnostic(tool.Function.Name, 128), safeDeepSeekDiagnostic(err.Error(), 320))
 				return Response{}, fmt.Errorf("DeepSeek unsupported function schema: %w", err)
 			}
 			var encodedTool map[string]any
