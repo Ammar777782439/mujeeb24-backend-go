@@ -330,12 +330,12 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 			var coverage string
 			switch call.Name {
 			case "published_policies", "published_knowledge":
-				kind := PublishedPolicies
+				publishedKind := PublishedPolicies
 				if call.Name == "published_knowledge" {
-					kind = PublishedKnowledge
+					publishedKind = PublishedKnowledge
 				}
 				read, err := a.Published.Read(ctx, PublishedReadRequest{
-					Actor: req.Actor, Business: req.Business, Kind: kind,
+					Actor: req.Actor, Business: req.Business, Kind: publishedKind,
 					Task: contracts.TaskExplain, Search: args.Search, Limit: 3,
 				})
 				if err != nil {
