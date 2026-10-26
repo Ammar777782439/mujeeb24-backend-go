@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -147,7 +148,7 @@ func TestHistoryReaderFailClosedForMissingCheckpoint(t *testing.T) {
 	}
 }
 func TestHistoryReaderRejectsPrivateAndCrossTenantResult(t *testing.T) {
-	for _, caseName := range []string{"wrong message tenant", "duplicate message", "future summary", "empty checkpoint", "too many newer messages", "bad pagination"} {
+	for _, caseName := range []string{"wrong message tenant", "duplicate message", "future summary", "empty checkpoint", "bad pagination"} {
 		t.Run(caseName, func(t *testing.T) {
 			r, _, _, state, pages, _ := makeHistoryReader()
 			switch caseName {
@@ -163,13 +164,6 @@ func TestHistoryReaderRejectsPrivateAndCrossTenantResult(t *testing.T) {
 				state.result.SummaryLastMessageID = "not-in-history"
 			case "empty checkpoint":
 				state.result.SummaryLastMessageID = ""
-			case "too many newer messages":
-				var items []ports.CommunicationMessageRecord
-				s := "text"
-				for i := 0; i < historyMaxPublicTexts+1; i++ {
-					items = append(items, msg(string(rune('a'+i)), time.Duration(-i)*time.Second, &s))
-				}
-				pages.pages[""] = ports.MessagePage{Items: items}
 			case "bad pagination":
 				p := pages.pages[""]
 				p.NextCursor = ""
@@ -245,5 +239,77 @@ func TestHistoryReaderRejectsConcurrentSummaryChange(t *testing.T) {
 	}
 	if state.calls != 2 {
 		t.Fatalf("summary version must be checked twice: %d", state.calls)
+	}
+}
+
+func TestHistoryReaderLongConversationReturnsVerifiedPartialWindow(t *testing.T) {
+	for _, hasOldSummary := range []bool{false, true} {
+		r, _, _, state, pages, _ := makeHistoryReader()
+		if !hasOldSummary {
+			state.result.Summary = ""
+			state.result.SummaryLastMessageID = ""
+		}
+		text := "Latest public customer message"
+		var items []ports.CommunicationMessageRecord
+		for i := 0; i < historyMaxPublicTexts+1; i++ {
+			items = append(items, msg(fmt.Sprintf("message-%d", i), -time.Duration(i)*time.Second, &text))
+		}
+		pages.pages = map[string]ports.MessagePage{"": {Items: items}}
+		out, err := r.Read(context.Background(), historyRequest())
+		if err != nil { t.Fatalf("long conversation failed hasSummary=%t: %v", hasOldSummary, err) }
+		if out.Coverage != "partial_recent_history" || out.Summary != nil ||
+			len(out.Messages) != historyMaxPublicTexts {
+			t.Fatalf("long history coverage claimed falsely: %+v", out)
+		}
+		if out.Messages[0].Value.MessageRef != "message-15" ||
+			out.Messages[len(out.Messages)-1].Value.MessageRef != "message-0" {
+			t.Fatalf("recent history order is wrong: %+v", out.Messages)
+		}
+	}
+}
+
+func TestHistoryReaderNonPublicMessagesDoNotConsumePublicLimit(t *testing.T) {
+	r, _, _, state, pages, _ := makeHistoryReader()
+	state.result.Summary = ""
+	state.result.SummaryLastMessageID = ""
+	publicText := "Latest customer message"
+	privateText := "must not be shown"
+	items := []ports.CommunicationMessageRecord{msg("newest", 0, &publicText)}
+	for i := 0; i < historyMaxPublicTexts+2; i++ {
+		item := msg(fmt.Sprintf("private-%d", i), -time.Duration(i+1)*time.Second, &privateText)
+		item.Visibility = "private"
+		items = append(items, item)
+	}
+	pages.pages = map[string]ports.MessagePage{"": {Items: items}}
+	out, err := r.Read(context.Background(), historyRequest())
+	if err != nil { t.Fatal(err) }
+	if out.Coverage != "complete_history" || len(out.Messages) != 1 {
+		t.Fatalf("private messages incorrectly exhausted bounded public history: %+v", out)
+	}
+	body, _ := json.Marshal(out)
+	if strings.Contains(string(body), privateText) {
+		t.Fatal("non-public content leaked")
+	}
+}
+
+func TestHistoryReaderShrinksOversizedPayloadWithHonestCoverage(t *testing.T) {
+	r, _, _, state, pages, _ := makeHistoryReader()
+	state.result.Summary = ""
+	state.result.SummaryLastMessageID = ""
+	text := strings.Repeat("a", historyMaxTextBytes-10)
+	var items []ports.CommunicationMessageRecord
+	for i := 0; i < historyMaxPublicTexts; i++ {
+		items = append(items, msg(fmt.Sprintf("message-%d", i), -time.Duration(i)*time.Second, &text))
+	}
+	pages.pages = map[string]ports.MessagePage{"": {Items: items}}
+	out, err := r.Read(context.Background(), historyRequest())
+	if err != nil { t.Fatal(err) }
+	if out.Coverage != "partial_recent_history" || len(out.Messages) == 0 ||
+		len(out.Messages) >= historyMaxPublicTexts {
+		t.Fatalf("oversized safe history should be bounded with explicit partial coverage: %+v", out)
+	}
+	data, _ := json.Marshal(out)
+	if len(data) > historyMaxTotalBytes {
+		t.Fatalf("oversized payload escaped budget: %d", len(data))
 	}
 }
