@@ -66,6 +66,7 @@ func toolDefinitions(available []string) []ToolDefinition {
 		"list_conversations":   {"list_conversations", "Read complete conversation state totals and a bounded sample. Only waiting_human proves need for human intervention; open alone does not.", schemaObject(map[string]any{})},
 		"list_leads":           {"list_leads", "Read total leads by status and a bounded sample with IDs for follow-up.", schemaObject(map[string]any{})},
 		"list_transactions":    {"list_transactions", "Read full transaction/order state totals with sample and record IDs.", schemaObject(map[string]any{})},
+		"transaction_customer_details": {"transaction_customer_details", "Read exact ordered items, quantity, snapshot prices and customer name for one verified transaction ID returned by list_transactions. Requires sales and customers permissions. Never infer order success from won lead status.", schemaObject(map[string]any{"record_id": map[string]any{"type": "string"}}, "record_id")},
 		"list_catalogs":        {"list_catalogs", "Read catalog status totals and a bounded sample. Merchant catalog authoring is a separate workflow; this tool cannot create or edit items.", schemaObject(map[string]any{})},
 		"list_channels":        {"list_channels", "Read business connection status by channel.", schemaObject(map[string]any{})},
 		"subscription":         {"subscription", "Read subscription and available AI reply quotas for the current business.", schemaObject(map[string]any{})},
