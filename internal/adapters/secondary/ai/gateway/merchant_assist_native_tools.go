@@ -123,8 +123,10 @@ func (m *MerchantAssistNativeTools) CompleteTools(ctx context.Context, history [
 	}
 	reply := merchantassist.ToolCompletion{FinishReason: choice.FinishReason, Provider: info.Provider}
 	if len(choice.Message.ToolCalls) > 0 {
-		if choice.FinishReason != "tool_calls" || len(choice.Message.ToolCalls) != 1 {
-			return zero, errors.New("invalid merchant assistant tool call batch")
+		if choice.FinishReason != "tool_calls" || len(choice.Message.ToolCalls) > merchantassist.MaxReadToolsPerBatch {
+			log.Printf("[MerchantAssistNative] stage=invalid_tool_batch finish=%s count=%d max=%d",
+				choice.FinishReason, len(choice.Message.ToolCalls), merchantassist.MaxReadToolsPerBatch)
+			return zero, errors.New("merchant assistant native tool call batch exceeds approved limit")
 		}
 		for _, call := range choice.Message.ToolCalls {
 			if call.ID == "" || call.Type != "function" || call.Function.Name == "" || call.Function.Arguments == "" {
