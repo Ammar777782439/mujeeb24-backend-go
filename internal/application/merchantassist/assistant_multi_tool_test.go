@@ -95,80 +95,86 @@ func TestNativeMerchantAssistantRejectsEntireUnauthorizedBatchBeforeAnyRead(t *t
 
 func TestNativeMerchantAssistantAcceptsMoreThanEightToolsInOneBatch(t *testing.T) {
 	registry, err := contracts.NewMerchantAssistRegistry()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	reader := &multiToolCustomerReader{}
 	calls := make([]ToolCall, 11)
 	for i := range calls {
-		calls[i] = ToolCall{ID:fmt.Sprint(i),Name:"find_customers",
-			Arguments:json.RawMessage(fmt.Sprintf(`{"search":"%d"}`,i))}
+		calls[i] = ToolCall{ID: fmt.Sprint(i), Name: "find_customers",
+			Arguments: json.RawMessage(fmt.Sprintf(`{"search":"%d"}`, i))}
 	}
-	model := &nativeModelStub{replies:[]ToolCompletion{{
-		Provider:"test-provider",FinishReason:"tool_calls",Calls:calls,
-	},nativeAnswer("راجعت نتائج الاستعلامات الإحدى عشرة.")}}
-	actor := commands.ActorContext{BusinessID:"business-1",PrincipalID:"principal-1",
-		Permissions:[]string{"merchant_ai:use","customers:read"}}
-	assistant := &Assistant{Registry:registry,Native:model,Sanitizer:ConservativeSanitizer{},
-		Discovery:&DiscoveryReader{Guard:&guardFixture{},Customers:reader}}
-	response,err := assistant.Assist(context.Background(),AssistRequest{
-		Actor:actor,Business:"business-1",ProjectionID:"auto.v1",
-		Task:contracts.TaskExplain,Question:"ابحث عن العملاء",
+	model := &nativeModelStub{replies: []ToolCompletion{{
+		Provider: "test-provider", FinishReason: "tool_calls", Calls: calls,
+	}, nativeAnswer("راجعت نتائج الاستعلامات الإحدى عشرة.")}}
+	actor := commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1",
+		Permissions: []string{"merchant_ai:use", "customers:read"}}
+	assistant := &Assistant{Registry: registry, Native: model, Sanitizer: ConservativeSanitizer{},
+		Discovery: &DiscoveryReader{Guard: &guardFixture{}, Customers: reader}}
+	response, err := assistant.Assist(context.Background(), AssistRequest{
+		Actor: actor, Business: "business-1", ProjectionID: "auto.v1",
+		Task: contracts.TaskExplain, Question: "ابحث عن العملاء",
 	})
 	if err != nil || reader.calls != 11 || len(model.seen) != 2 || response.Answer == "" {
-		t.Fatalf("model batch was prematurely capped: err=%v reads=%d rounds=%d",err,reader.calls,len(model.seen))
+		t.Fatalf("model batch was prematurely capped: err=%v reads=%d rounds=%d", err, reader.calls, len(model.seen))
 	}
 	if len(model.seen[1]) != 13 {
-		t.Fatalf("all tool results must be replayed: %d messages",len(model.seen[1]))
+		t.Fatalf("all tool results must be replayed: %d messages", len(model.seen[1]))
 	}
 }
 
 func TestMerchantAssistantContinuesAcrossMoreThanEightToolRounds(t *testing.T) {
-	registry,err:=contracts.NewMerchantAssistRegistry()
-	if err!=nil {t.Fatal(err)}
-	reader:=&multiToolCustomerReader{}
-	replies:=make([]ToolCompletion,0,14)
-	for i:=0;i<13;i++ {
-		replies=append(replies,nativeCall(fmt.Sprintf("step-%d",i),"find_customers",
-			fmt.Sprintf(`{"search":"merchant-%d"}`,i)))
+	registry, err := contracts.NewMerchantAssistRegistry()
+	if err != nil {
+		t.Fatal(err)
 	}
-	replies=append(replies,nativeAnswer("تم التحقق من السجلات المطلوبة بالقراءات المتاحة."))
-	model:=&nativeModelStub{replies:replies}
-	actor:=commands.ActorContext{BusinessID:"business-1",PrincipalID:"principal-1",
-		Permissions:[]string{"merchant_ai:use","customers:read"}}
-	assistant:=&Assistant{Registry:registry,Native:model,Sanitizer:ConservativeSanitizer{},
-		Discovery:&DiscoveryReader{Guard:&guardFixture{},Customers:reader}}
-	response,err:=assistant.Assist(context.Background(),AssistRequest{
-		Actor:actor,Business:"business-1",ProjectionID:"auto.v1",
-		Task:contracts.TaskExplain,Question:"راجع الأسماء واحدًا واحدًا",
+	reader := &multiToolCustomerReader{}
+	replies := make([]ToolCompletion, 0, 14)
+	for i := 0; i < 13; i++ {
+		replies = append(replies, nativeCall(fmt.Sprintf("step-%d", i), "find_customers",
+			fmt.Sprintf(`{"search":"merchant-%d"}`, i)))
+	}
+	replies = append(replies, nativeAnswer("تم التحقق من السجلات المطلوبة بالقراءات المتاحة."))
+	model := &nativeModelStub{replies: replies}
+	actor := commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1",
+		Permissions: []string{"merchant_ai:use", "customers:read"}}
+	assistant := &Assistant{Registry: registry, Native: model, Sanitizer: ConservativeSanitizer{},
+		Discovery: &DiscoveryReader{Guard: &guardFixture{}, Customers: reader}}
+	response, err := assistant.Assist(context.Background(), AssistRequest{
+		Actor: actor, Business: "business-1", ProjectionID: "auto.v1",
+		Task: contracts.TaskExplain, Question: "راجع الأسماء واحدًا واحدًا",
 	})
-	if err!=nil || reader.calls!=13 || len(model.seen)!=14 || response.Answer=="" {
-		t.Fatalf("follow-up round budget broke legitimate reads: err=%v reads=%d rounds=%d",err,reader.calls,len(model.seen))
+	if err != nil || reader.calls != 13 || len(model.seen) != 14 || response.Answer == "" {
+		t.Fatalf("follow-up round budget broke legitimate reads: err=%v reads=%d rounds=%d", err, reader.calls, len(model.seen))
 	}
 }
 
 func TestMerchantAssistantCachesRepeatedVerifiedReads(t *testing.T) {
-	registry,err:=contracts.NewMerchantAssistRegistry()
-	if err!=nil {t.Fatal(err)}
-	reader:=&multiToolCustomerReader{}
-	model:=&nativeModelStub{replies:[]ToolCompletion{
-		nativeCall("first","find_customers",`{"search":"أحمد"}`),
-		nativeCall("again","find_customers",`{"search":"أحمد"}`),
+	registry, err := contracts.NewMerchantAssistRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := &multiToolCustomerReader{}
+	model := &nativeModelStub{replies: []ToolCompletion{
+		nativeCall("first", "find_customers", `{"search":"أحمد"}`),
+		nativeCall("again", "find_customers", `{"search":"أحمد"}`),
 		nativeAnswer("راجعت البحث عن أحمد مرة واحدة ووجدت نتيجته المسجلة."),
 	}}
-	actor:=commands.ActorContext{BusinessID:"business-1",PrincipalID:"principal-1",
-		Permissions:[]string{"merchant_ai:use","customers:read"}}
-	assistant:=&Assistant{Registry:registry,Native:model,Sanitizer:ConservativeSanitizer{},
-		Discovery:&DiscoveryReader{Guard:&guardFixture{},Customers:reader}}
-	response,err:=assistant.Assist(context.Background(),AssistRequest{
-		Actor:actor,Business:"business-1",ProjectionID:"auto.v1",
-		Task:contracts.TaskExplain,Question:"ابحث عن أحمد وتحقق من النتيجة",
+	actor := commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1",
+		Permissions: []string{"merchant_ai:use", "customers:read"}}
+	assistant := &Assistant{Registry: registry, Native: model, Sanitizer: ConservativeSanitizer{},
+		Discovery: &DiscoveryReader{Guard: &guardFixture{}, Customers: reader}}
+	response, err := assistant.Assist(context.Background(), AssistRequest{
+		Actor: actor, Business: "business-1", ProjectionID: "auto.v1",
+		Task: contracts.TaskExplain, Question: "ابحث عن أحمد وتحقق من النتيجة",
 	})
-	if err!=nil || reader.calls!=1 || len(model.seen)!=3 || response.Answer=="" {
-		t.Fatalf("repeated tool was rejected or re-read: err=%v calls=%d",err,reader.calls)
+	if err != nil || reader.calls != 1 || len(model.seen) != 3 || response.Answer == "" {
+		t.Fatalf("repeated tool was rejected or re-read: err=%v calls=%d", err, reader.calls)
 	}
-	history:=model.seen[2]
-	last:=history[len(history)-1]
-	if last.Role!="tool" || last.ToolCallID!="again" || !strings.Contains(last.Content,`"cached":true`) ||
-		!strings.Contains(last.Content,`"previous_tool_call_id":"first"`) {
-		t.Fatalf("repeat tool result did not reference verified original: %+v",last)
+	history := model.seen[2]
+	last := history[len(history)-1]
+	if last.Role != "tool" || last.ToolCallID != "again" || !strings.Contains(last.Content, `"cached":true`) ||
+		!strings.Contains(last.Content, `"previous_tool_call_id":"first"`) {
+		t.Fatalf("repeat tool result did not reference verified original: %+v", last)
 	}
 }
