@@ -111,10 +111,10 @@ func TestMerchantAssistNativeToolsKeepsElevenValidCalls(t *testing.T) {
 		calls := make([]map[string]any, 0, 11)
 		for i := 0; i < 11; i++ {
 			calls = append(calls, map[string]any{
-				"id": fmt.Sprintf("id-%d", i),
+				"id":   fmt.Sprintf("id-%d", i),
 				"type": "function",
 				"function": map[string]any{
-					"name": "find_customers",
+					"name":      "find_customers",
 					"arguments": fmt.Sprintf(`{"search":"customer-%d"}`, i),
 				},
 			})
@@ -131,13 +131,13 @@ func TestMerchantAssistNativeToolsKeepsElevenValidCalls(t *testing.T) {
 	}
 	model := &MerchantAssistNativeTools{Client: nativeContractClient(t, provider), Model: "mujeeb-merchant"}
 	definitions := []merchantassist.ToolDefinition{{
-		Name: "find_customers",
+		Name:        "find_customers",
 		Description: "Read customers",
 		Parameters: map[string]any{
-			"type": "object",
+			"type":                 "object",
 			"additionalProperties": false,
-			"properties": map[string]any{"search": map[string]any{"type": "string"}},
-			"required": []string{"search"},
+			"properties":           map[string]any{"search": map[string]any{"type": "string"}},
+			"required":             []string{"search"},
 		},
 	}}
 	reply, err := model.CompleteTools(context.Background(), []merchantassist.ToolMessage{
