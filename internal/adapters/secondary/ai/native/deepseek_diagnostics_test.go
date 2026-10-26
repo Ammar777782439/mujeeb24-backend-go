@@ -30,7 +30,7 @@ func TestDeepSeekErrorDiagnosticsClassifyHTTPFailureWithoutSecrets(t *testing.T)
 		t.Fatalf("expected preserved HTTP 400 classification, got %v", err)
 	}
 	out := logs.String()
-	for _, required := range []string{"stage=send", "stage=provider_http", "status=400", "code=invalid_request_error", "strict function schema", "REDACTED_SECRET", "REDACTED_ID"} {
+	for _, required := range []string{"stage=request", "stage=provider_rejected", "status=400", "code=invalid_request_error", "strict function schema", "REDACTED_SECRET", "REDACTED_ID"} {
 		if !strings.Contains(out, required) {
 			t.Errorf("missing diagnostic %q from %s", required, out)
 		}
