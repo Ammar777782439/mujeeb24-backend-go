@@ -2,6 +2,7 @@ package merchantassist
 
 import (
 	"encoding/json"
+	"errors"
 )
 
 // A model's invalid read request is an unsuccessful tool result, not a
@@ -28,6 +29,15 @@ func readToolFailure(code, kind string, allowed map[string]ToolDefinition) strin
 		}
 	}
 	explanation := "The requested read was not executed. Choose an offered tool to discover a verified record, or ask the merchant a short clarifying question. Never guess a record ID or claim a failed read succeeded."
+	if code == "source_evidence_incomplete" {
+		explanation = "This specific source could not be safely verified in full. Never invent missing messages or claim the whole conversation was reviewed. Use only successful earlier tool evidence, look up a different authorized record if useful, or say which information was unavailable. Do not repeat the same failed read."
+	}
+	if code == "source_unavailable" {
+		explanation = "This source could not be read right now. Do not repeat the same failed read. Continue with previously verified evidence if relevant, otherwise explain the temporary limitation without inventing data."
+	}
+	if code == "permission_denied" {
+		explanation = "This source is not authorized for the current actor. Do not retry this denied read, disclose identifiers or claim access; explain the permission limit briefly."
+	}
 	if code == "invalid_arguments" {
 		explanation = "The requested read was not executed because its arguments did not match the Go tool schema. Retry with the advertised schema or ask the merchant for clarification."
 	}
@@ -43,4 +53,17 @@ func readToolFailure(code, kind string, allowed map[string]ToolDefinition) strin
 		},
 	})
 	return string(result)
+}
+
+func readToolErrorCode(err error) string {
+	switch {
+	case errors.Is(err, ErrReadDenied):
+		return "permission_denied"
+	case errors.Is(err, ErrInvalidSourceEvidence):
+		return "source_evidence_incomplete"
+	case errors.Is(err, ErrInvalidReadRequest):
+		return "invalid_arguments"
+	default:
+		return "source_unavailable"
+	}
 }
