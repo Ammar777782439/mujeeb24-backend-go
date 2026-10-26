@@ -1,0 +1,26 @@
+name: Format merchant assistant debug fix
+on:
+  push:
+    branches: [feat/merchant-ai-assist]
+permissions:
+  contents: write
+jobs:
+  gofmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Format modified diagnostics and strict provider adapter
+        run: |
+          gofmt -w internal/adapters/secondary/ai/native/deepseek.go
+          gofmt -w internal/adapters/secondary/ai/native/deepseek_diagnostics.go
+          gofmt -w internal/adapters/secondary/ai/native/deepseek_diagnostics_test.go
+          gofmt -w internal/adapters/secondary/ai/gateway/merchant_assist_native_tools.go
+          gofmt -w internal/adapters/primary/http/handlers/merchant_assist_errors.go
+          git diff --check
+          git add internal/adapters/secondary/ai/native/deepseek.go internal/adapters/secondary/ai/native/deepseek_diagnostics.go internal/adapters/secondary/ai/native/deepseek_diagnostics_test.go internal/adapters/secondary/ai/gateway/merchant_assist_native_tools.go internal/adapters/primary/http/handlers/merchant_assist_errors.go
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'style(merchant-assist): gofmt provider diagnostics'
+            git push origin HEAD:feat/merchant-ai-assist
+          fi
