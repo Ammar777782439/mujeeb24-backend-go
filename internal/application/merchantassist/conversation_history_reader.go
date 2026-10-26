@@ -131,6 +131,7 @@ func (r *ConversationHistoryReader) Read(ctx context.Context, req ConversationHi
 	seenIDs := map[string]bool{}
 	newer := make([]ports.CommunicationMessageRecord, 0, historyMaxPublicTexts)
 	foundCheckpoint := false
+	partialRecent := false
 	scanned := 0
 	for {
 		if err := ctx.Err(); err != nil {
@@ -155,14 +156,21 @@ func (r *ConversationHistoryReader) Read(ctx context.Context, req ConversationHi
 				foundCheckpoint = true
 				break
 			}
-			newer = append(newer, m)
-			if len(newer) > historyMaxPublicTexts {
-				// No truncation: caller must first refresh its summary or use
-				// an explicitly different, partial-coverage contract.
-				return empty, ErrInvalidSourceEvidence
+			// Non-public content and media are never sent to the model or
+			// counted against the bounded public-text history window.
+			if m.Visibility != "public" || m.ContentType != "text" ||
+				m.TextContent == nil || strings.TrimSpace(*m.TextContent) == "" {
+				continue
 			}
+			if len(newer) == historyMaxPublicTexts {
+				// A long chat is useful partial evidence, not an invalid chat.
+				// Do not claim complete coverage or reuse an unverified summary.
+				partialRecent = true
+				break
+			}
+			newer = append(newer, m)
 		}
-		if foundCheckpoint || !page.HasMore {
+		if partialRecent || foundCheckpoint || !page.HasMore {
 			break
 		}
 		if page.NextCursor == "" || page.NextCursor == cursor || seenCursor[page.NextCursor] {
@@ -171,16 +179,20 @@ func (r *ConversationHistoryReader) Read(ctx context.Context, req ConversationHi
 		seenCursor[page.NextCursor] = true
 		cursor = page.NextCursor
 	}
-	if state.SummaryLastMessageID != "" && !foundCheckpoint {
+	if state.SummaryLastMessageID != "" && !foundCheckpoint && !partialRecent {
 		return empty, ErrInvalidSourceEvidence
 	}
 	result := ConversationHistoryResult{ConversationRef: req.ConversationID, Messages: []MessageEvidence{}}
-	if foundCheckpoint {
+	if partialRecent {
+		result.Coverage = "partial_recent_history"
+	} else if foundCheckpoint {
 		result.Coverage = "complete_after_checkpoint"
 	} else {
 		result.Coverage = "complete_history"
 	}
-	if state.Summary != "" {
+	// A summary can only be combined with messages if its checkpoint was
+	// reached and the sequence is known complete after that checkpoint.
+	if state.Summary != "" && !partialRecent {
 		safe, err := sanitizeText(ctx, r.Sanitizer, ContentSummary, state.Summary)
 		if err != nil {
 			return empty, err
@@ -239,6 +251,17 @@ func (r *ConversationHistoryReader) Read(ctx context.Context, req ConversationHi
 	payload, err := json.Marshal(result)
 	if err != nil {
 		return empty, fmt.Errorf("%w: result encoding failed", ErrInvalidSourceEvidence)
+	}
+	// Evidence budgets reduce coverage, not availability. Keep the newest
+	// verified public messages and mark incomplete coverage explicitly.
+	for len(payload) > historyMaxTotalBytes && len(result.Messages) > 0 {
+		result.Messages = result.Messages[1:]
+		result.Summary = nil
+		result.Coverage = "partial_recent_history"
+		payload, err = json.Marshal(result)
+		if err != nil {
+			return empty, ErrInvalidSourceEvidence
+		}
 	}
 	if len(payload) > historyMaxTotalBytes {
 		return empty, ErrInvalidSourceEvidence
