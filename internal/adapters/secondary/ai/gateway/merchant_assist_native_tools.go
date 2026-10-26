@@ -70,7 +70,6 @@ func (m *MerchantAssistNativeTools) CompleteTools(ctx context.Context, history [
 				call.ID, call.Type, call.Function.Name = t.ID, "function", t.Name
 				call.Function.Arguments = string(t.Arguments)
 				call.ThoughtSignature = t.ThoughtSignature
-				call.ThoughtSignature = t.ThoughtSignature
 				entry.ToolCalls = append(entry.ToolCalls, call)
 			}
 		} else {
