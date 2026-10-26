@@ -143,10 +143,14 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 		scan, err := scanAllPages(ctx, func(cursor string) (commands.ListResult[commands.CustomerView], error) {
 			return r.Customers.Handle(ctx, queries.ListCustomersQuery{Meta: meta, Limit: assistScanPageSize, Cursor: cursor, Search: call.Search})
 		}, func(x commands.CustomerView) (map[string]any, string, string, *DiscoveryLink, error) {
-			if string(x.BusinessID) != business { return nil, "", "", nil, ErrInvalidSourceEvidence }
+			if string(x.BusinessID) != business {
+				return nil, "", "", nil, ErrInvalidSourceEvidence
+			}
 			return map[string]any{"id": string(x.ID), "name": x.DisplayName, "status": x.Status}, string(x.ID), x.Status, &DiscoveryLink{Title: "العملاء", URL: "/customers"}, nil
 		})
-		if err != nil { return out, err }
+		if err != nil {
+			return out, err
+		}
 		out.Rows, out.Links = scan.Evidence(), scan.Links
 		out.Coverage = "all_pages_scanned_non_snapshot"
 	case "customer_activity":
@@ -173,7 +177,9 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 					"priority": item.Priority, "last_activity": item.LastActivityAt,
 				}, string(item.ID), item.State, &DiscoveryLink{Title: "فتح محادثة", URL: "/chat?conversation_id=" + string(item.ID)}, nil
 			})
-			if err != nil { return out, err }
+			if err != nil {
+				return out, err
+			}
 			related["conversations"] = scan.Evidence()
 			out.Links = append(out.Links, scan.Links...)
 		}
@@ -189,7 +195,9 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 					"created_at": item.CreatedAt, "amount": item.TotalAmount, "currency": item.Currency,
 				}, string(item.ID), item.State, &DiscoveryLink{Title: "فتح طلب", URL: "/transactions?transaction_id=" + string(item.ID)}, nil
 			})
-			if err != nil { return out, err }
+			if err != nil {
+				return out, err
+			}
 			related["transactions"] = scan.Evidence()
 			out.Links = append(out.Links, scan.Links...)
 		}
@@ -200,50 +208,70 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 		scan, err := scanAllPages(ctx, func(cursor string) (commands.ListResult[commands.ConversationView], error) {
 			return r.Conversations.Handle(ctx, queries.ListConversationsQuery{Meta: meta, Limit: assistScanPageSize, Cursor: cursor})
 		}, func(x commands.ConversationView) (map[string]any, string, string, *DiscoveryLink, error) {
-			if string(x.BusinessID) != business { return nil, "", "", nil, ErrInvalidSourceEvidence }
+			if string(x.BusinessID) != business {
+				return nil, "", "", nil, ErrInvalidSourceEvidence
+			}
 			return map[string]any{"id": string(x.ID), "customer_id": string(x.CustomerID), "customer_name": x.CustomerDisplayName, "state": x.State, "ownership": x.Ownership, "priority": x.Priority, "last_activity": x.LastActivityAt}, string(x.ID), x.State, &DiscoveryLink{Title: "فتح محادثة", URL: "/chat?conversation_id=" + string(x.ID)}, nil
 		})
-		if err != nil { return out, err }
+		if err != nil {
+			return out, err
+		}
 		out.Rows, out.Links = scan.Evidence(), scan.Links
 		out.Coverage = "all_pages_scanned_non_snapshot"
 	case "list_leads":
 		scan, err := scanAllPages(ctx, func(cursor string) (commands.ListResult[commands.LeadView], error) {
 			return r.Leads.Handle(ctx, queries.ListLeadsQuery{Meta: meta, Limit: assistScanPageSize, Cursor: cursor})
 		}, func(x commands.LeadView) (map[string]any, string, string, *DiscoveryLink, error) {
-			if string(x.BusinessID) != business { return nil, "", "", nil, ErrInvalidSourceEvidence }
+			if string(x.BusinessID) != business {
+				return nil, "", "", nil, ErrInvalidSourceEvidence
+			}
 			return map[string]any{"id": string(x.ID), "customer_id": string(x.CustomerID), "status": x.Status}, string(x.ID), x.Status, &DiscoveryLink{Title: "فرص البيع", URL: "/leads"}, nil
 		})
-		if err != nil { return out, err }
+		if err != nil {
+			return out, err
+		}
 		out.Rows, out.Links = scan.Evidence(), scan.Links
 		out.Coverage = "all_pages_scanned_non_snapshot"
 	case "list_transactions":
 		scan, err := scanAllPages(ctx, func(cursor string) (commands.ListResult[commands.TransactionView], error) {
 			return r.Transactions.Handle(ctx, queries.ListTransactionsQuery{Meta: meta, Limit: assistScanPageSize, Cursor: cursor})
 		}, func(x commands.TransactionView) (map[string]any, string, string, *DiscoveryLink, error) {
-			if string(x.BusinessID) != business { return nil, "", "", nil, ErrInvalidSourceEvidence }
+			if string(x.BusinessID) != business {
+				return nil, "", "", nil, ErrInvalidSourceEvidence
+			}
 			return map[string]any{"id": string(x.ID), "customer_id": string(x.CustomerID), "state": x.State, "type": x.TransactionType, "created_at": x.CreatedAt, "amount": x.TotalAmount, "currency": x.Currency}, string(x.ID), x.State, &DiscoveryLink{Title: "فتح طلب", URL: "/transactions?transaction_id=" + string(x.ID)}, nil
 		})
-		if err != nil { return out, err }
+		if err != nil {
+			return out, err
+		}
 		out.Rows, out.Links = scan.Evidence(), scan.Links
 		out.Coverage = "all_pages_scanned_non_snapshot"
 	case "list_catalogs":
 		scan, err := scanAllPages(ctx, func(cursor string) (commands.ListResult[commands.CatalogView], error) {
 			return r.Catalogs.Handle(ctx, queries.ListCatalogsQuery{Meta: meta, Limit: assistScanPageSize, Cursor: cursor})
 		}, func(x commands.CatalogView) (map[string]any, string, string, *DiscoveryLink, error) {
-			if string(x.BusinessID) != business { return nil, "", "", nil, ErrInvalidSourceEvidence }
+			if string(x.BusinessID) != business {
+				return nil, "", "", nil, ErrInvalidSourceEvidence
+			}
 			return map[string]any{"id": string(x.ID), "name": x.Name, "status": x.Status}, string(x.ID), x.Status, &DiscoveryLink{Title: "الكتالوج", URL: "/catalog"}, nil
 		})
-		if err != nil { return out, err }
+		if err != nil {
+			return out, err
+		}
 		out.Rows, out.Links = scan.Evidence(), scan.Links
 		out.Coverage = "all_pages_scanned_non_snapshot"
 	case "list_channels":
 		scan, err := scanAllPages(ctx, func(cursor string) (commands.ListResult[commands.ChannelConnectionView], error) {
 			return r.Channels.Handle(ctx, queries.ListChannelConnectionsQuery{Meta: meta, Limit: assistScanPageSize, Cursor: cursor})
 		}, func(x commands.ChannelConnectionView) (map[string]any, string, string, *DiscoveryLink, error) {
-			if string(x.BusinessID) != business { return nil, "", "", nil, ErrInvalidSourceEvidence }
+			if string(x.BusinessID) != business {
+				return nil, "", "", nil, ErrInvalidSourceEvidence
+			}
 			return map[string]any{"id": string(x.ID), "channel": x.Channel, "status": x.Status}, string(x.ID), x.Status, &DiscoveryLink{Title: "القنوات", URL: "/channels"}, nil
 		})
-		if err != nil { return out, err }
+		if err != nil {
+			return out, err
+		}
 		out.Rows, out.Links = scan.Evidence(), scan.Links
 		out.Coverage = "all_pages_scanned_non_snapshot"
 	case "subscription":

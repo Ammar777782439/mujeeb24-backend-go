@@ -25,7 +25,9 @@ func TestFullCursorScanIncludesAllCustomerPages(t *testing.T) {
 	}, func(x int) (map[string]any, string, string, *DiscoveryLink, error) {
 		return map[string]any{"id": x, "status": "active"}, fmt.Sprint(x), "active", nil, nil
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	ev := scan.Evidence()
 	if len(calls) != 2 || calls[1] != "next" || scan.Total != 5 || scan.Statuses["active"] != 5 ||
 		ev["pagination_exhausted"] != true || ev["all_records_in_sample"] != true {
@@ -43,31 +45,43 @@ func TestFullCursorScanRejectsBogusHasMore(t *testing.T) {
 		calls := 0
 		_, err := scanAllPages(context.Background(), func(cursor string) (commands.ListResult[int], error) {
 			calls++
-			if calls == 1 { return first, nil }
+			if calls == 1 {
+				return first, nil
+			}
 			return commands.ListResult[int]{Items: []int{1}, HasMore: true, NextCursor: "a"}, nil
 		}, func(x int) (map[string]any, string, string, *DiscoveryLink, error) {
 			return map[string]any{"id": x}, fmt.Sprint(x), "active", nil, nil
 		})
-		if !errors.Is(err, ErrInvalidSourceEvidence) { t.Fatalf("unexpected error: %v", err) }
+		if !errors.Is(err, ErrInvalidSourceEvidence) {
+			t.Fatalf("unexpected error: %v", err)
+		}
 	}
 }
 
 func TestFullCursorScanRejectsRepeatedIDs(t *testing.T) {
 	_, err := scanAllPages(context.Background(), func(cursor string) (commands.ListResult[int], error) {
-		if cursor == "" { return commands.ListResult[int]{Items: []int{1}, HasMore: true, NextCursor: "next"}, nil }
+		if cursor == "" {
+			return commands.ListResult[int]{Items: []int{1}, HasMore: true, NextCursor: "next"}, nil
+		}
 		return commands.ListResult[int]{Items: []int{1}}, nil
 	}, func(x int) (map[string]any, string, string, *DiscoveryLink, error) {
 		return map[string]any{"id": x}, fmt.Sprint(x), "active", nil, nil
 	})
-	if !errors.Is(err, ErrInvalidSourceEvidence) { t.Fatalf("duplicate counted: %v", err) }
+	if !errors.Is(err, ErrInvalidSourceEvidence) {
+		t.Fatalf("duplicate counted: %v", err)
+	}
 }
 
 func TestFullCursorScanNeverReportsIncompleteCount(t *testing.T) {
 	_, err := scanAllPages(context.Background(), func(cursor string) (commands.ListResult[int], error) {
-		if cursor == "" { return commands.ListResult[int]{Items: []int{1}, HasMore: true, NextCursor: "next"}, nil }
+		if cursor == "" {
+			return commands.ListResult[int]{Items: []int{1}, HasMore: true, NextCursor: "next"}, nil
+		}
 		return commands.ListResult[int]{}, errors.New("db query failed")
 	}, func(x int) (map[string]any, string, string, *DiscoveryLink, error) {
 		return map[string]any{"id": x}, fmt.Sprint(x), "active", nil, nil
 	})
-	if !errors.Is(err, ErrReadUnavailable) { t.Fatalf("partial count returned as successful: %v", err) }
+	if !errors.Is(err, ErrReadUnavailable) {
+		t.Fatalf("partial count returned as successful: %v", err)
+	}
 }

@@ -189,7 +189,9 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 			if call.Name == "find_customers" && plan.InspectCustomerActivity && !read.HasMore {
 				if summary, ok := read.Rows.(map[string]any); ok && summary["total"] == 1 {
 					matches, _ := summary["sample"].([]map[string]any)
-					if len(matches) != 1 { return empty, ErrInvalidSourceEvidence }
+					if len(matches) != 1 {
+						return empty, ErrInvalidSourceEvidence
+					}
 					id, _ := matches[0]["id"].(string)
 					if id != "" {
 						activity, e := a.Discovery.Read(ctx, req.Actor, req.Business, DiscoveryCall{Name: "customer_activity", RecordID: id})

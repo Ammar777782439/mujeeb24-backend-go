@@ -11,19 +11,19 @@ import (
 // a UI page size with the full number of records. The small sample keeps model
 // prompts bounded; count and status totals include every successfully read page.
 const (
-	assistScanPageSize = 250
+	assistScanPageSize   = 250
 	assistScanMaxRecords = 20000
-	assistSampleSize = 40
-	assistLinkLimit = 12
+	assistSampleSize     = 40
+	assistLinkLimit      = 12
 )
 
 var ErrFullScanTooLarge = errors.New("merchant assist complete listing exceeds safe scan budget")
 
 type assistListScan struct {
-	Total int
+	Total    int
 	Statuses map[string]int
-	Sample []map[string]any
-	Links []DiscoveryLink
+	Sample   []map[string]any
+	Links    []DiscoveryLink
 }
 
 func (s assistListScan) Evidence() map[string]any {
@@ -46,25 +46,43 @@ func scanAllPages[T any](
 	seenCursors := map[string]bool{}
 	seenIDs := map[string]bool{}
 	for {
-		if err := ctx.Err(); err != nil { return assistListScan{}, err }
+		if err := ctx.Err(); err != nil {
+			return assistListScan{}, err
+		}
 		page, err := load(cursor)
-		if err != nil { return assistListScan{}, errors.Join(ErrReadUnavailable, err) }
+		if err != nil {
+			return assistListScan{}, errors.Join(ErrReadUnavailable, err)
+		}
 		if len(page.Items) > assistScanPageSize || (page.HasMore && (len(page.Items) == 0 ||
 			page.NextCursor == "" || page.NextCursor == cursor || seenCursors[page.NextCursor])) {
 			return assistListScan{}, ErrInvalidSourceEvidence
 		}
 		for _, record := range page.Items {
 			row, id, status, link, err := project(record)
-			if err != nil { return assistListScan{}, err }
-			if id == "" || seenIDs[id] || row == nil { return assistListScan{}, ErrInvalidSourceEvidence }
+			if err != nil {
+				return assistListScan{}, err
+			}
+			if id == "" || seenIDs[id] || row == nil {
+				return assistListScan{}, ErrInvalidSourceEvidence
+			}
 			seenIDs[id] = true
 			out.Total++
-			if out.Total > assistScanMaxRecords { return assistListScan{}, ErrFullScanTooLarge }
-			if status != "" { out.Statuses[status]++ }
-			if len(out.Sample) < assistSampleSize { out.Sample = append(out.Sample, row) }
-			if link != nil && len(out.Links) < assistLinkLimit { out.Links = append(out.Links, *link) }
+			if out.Total > assistScanMaxRecords {
+				return assistListScan{}, ErrFullScanTooLarge
+			}
+			if status != "" {
+				out.Statuses[status]++
+			}
+			if len(out.Sample) < assistSampleSize {
+				out.Sample = append(out.Sample, row)
+			}
+			if link != nil && len(out.Links) < assistLinkLimit {
+				out.Links = append(out.Links, *link)
+			}
 		}
-		if !page.HasMore { return out, nil }
+		if !page.HasMore {
+			return out, nil
+		}
 		seenCursors[page.NextCursor] = true
 		cursor = page.NextCursor
 	}
