@@ -17,6 +17,9 @@ type DiscoveryReader struct {
 	Guard         ports.BusinessAIExecutionGuard
 	Overview      queries.GetDashboardOverviewHandler
 	Customers     queries.ListCustomersHandler
+	GetCustomer queries.GetCustomerHandler
+	CustomerConversations queries.ListCustomerConversationsHandler
+	CustomerTransactions queries.ListCustomerTransactionsHandler
 	Conversations queries.ListConversationsHandler
 	Leads         queries.ListLeadsHandler
 	Transactions  queries.ListTransactionsHandler
@@ -28,6 +31,7 @@ type DiscoveryReader struct {
 type DiscoveryCall struct {
 	Name   string `json:"name"`
 	Search string `json:"search,omitempty"`
+	RecordID string `json:"record_id,omitempty"`
 }
 
 type DiscoveryLink struct {
@@ -48,6 +52,7 @@ type DiscoveryResult struct {
 var discoveryPermissions = map[string]string{
 	"dashboard_overview": authorization.PermissionDashboardRead,
 	"find_customers":     authorization.PermissionCustomersRead,
+	"customer_activity": authorization.PermissionCustomersRead,
 	"list_conversations": authorization.PermissionConversationsRead,
 	"list_leads":         authorization.PermissionSalesRead,
 	"list_transactions":  authorization.PermissionSalesRead,
@@ -57,7 +62,7 @@ var discoveryPermissions = map[string]string{
 }
 
 var discoveryNames = []string{
-	"dashboard_overview", "find_customers", "list_conversations",
+	"dashboard_overview", "find_customers", "customer_activity", "list_conversations",
 	"list_leads", "list_transactions", "list_catalogs",
 	"list_channels", "subscription",
 }
@@ -81,6 +86,8 @@ func (r *DiscoveryReader) hasHandler(name string) bool {
 		return r.Overview != nil
 	case "find_customers":
 		return r.Customers != nil
+	case "customer_activity":
+		return r.GetCustomer != nil
 	case "list_conversations":
 		return r.Conversations != nil
 	case "list_leads":
@@ -109,7 +116,7 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 	if !known || !authorization.Has(actor, permission) {
 		return out, ErrReadDenied
 	}
-	if !r.hasHandler(call.Name) || len(call.Search) > 80 || strings.ContainsAny(call.Search, "\n\r") {
+	if !r.hasHandler(call.Name) || len(call.Search) > 80 || len(call.RecordID) > 128 || strings.ContainsAny(call.Search, "\n\r") {
 		return out, ErrInvalidReadRequest
 	}
 	if err := r.Guard.Check(ctx, business); err != nil {
@@ -145,6 +152,61 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 			rows = append(rows, map[string]any{"id": string(x.ID), "name": x.DisplayName, "status": x.Status})
 		}
 		out.Rows, out.HasMore = rows, p.HasMore
+		out.Links = append(out.Links, DiscoveryLink{Title: "العملاء", URL: "/customers"})
+	case "customer_activity":
+		if call.RecordID == "" {
+			return out, ErrInvalidReadRequest
+		}
+		customer, err := r.GetCustomer.Handle(ctx, queries.GetCustomerQuery{Meta: meta, CustomerID: commands.CustomerID(call.RecordID)})
+		if err != nil {
+			return out, errors.Join(ErrReadUnavailable, err)
+		}
+		if string(customer.BusinessID) != business || string(customer.ID) != call.RecordID {
+			return out, ErrInvalidSourceEvidence
+		}
+		related := map[string]any{"id": string(customer.ID), "name": customer.DisplayName, "status": customer.Status}
+		if authorization.Has(actor, authorization.PermissionConversationsRead) && r.CustomerConversations != nil {
+			page, err := r.CustomerConversations.Handle(ctx, queries.ListCustomerConversationsQuery{Meta: meta, CustomerID: customer.ID, Limit: 5})
+			if err != nil {
+				return out, errors.Join(ErrReadUnavailable, err)
+			}
+			conversations := make([]map[string]any, 0, len(page.Items))
+			for _, item := range page.Items {
+				if string(item.BusinessID) != business || item.CustomerID != customer.ID {
+					return out, ErrInvalidSourceEvidence
+				}
+				conversations = append(conversations, map[string]any{
+					"id": string(item.ID), "state": item.State, "ownership": item.Ownership,
+					"priority": item.Priority, "last_activity": item.LastActivityAt,
+				})
+				out.Links = append(out.Links, DiscoveryLink{Title: "فتح محادثة", URL: "/chat?conversation_id=" + string(item.ID)})
+			}
+			related["conversations"] = conversations
+			related["conversations_has_more"] = page.HasMore
+			out.HasMore = out.HasMore || page.HasMore
+		}
+		if authorization.Has(actor, authorization.PermissionSalesRead) && r.CustomerTransactions != nil {
+			page, err := r.CustomerTransactions.Handle(ctx, queries.ListCustomerTransactionsQuery{Meta: meta, CustomerID: customer.ID, Limit: 5})
+			if err != nil {
+				return out, errors.Join(ErrReadUnavailable, err)
+			}
+			transactions := make([]map[string]any, 0, len(page.Items))
+			for _, item := range page.Items {
+				if string(item.BusinessID) != business || item.CustomerID != customer.ID {
+					return out, ErrInvalidSourceEvidence
+				}
+				transactions = append(transactions, map[string]any{
+					"id": string(item.ID), "state": item.State, "type": item.TransactionType,
+					"created_at": item.CreatedAt, "amount": item.TotalAmount, "currency": item.Currency,
+				})
+				out.Links = append(out.Links, DiscoveryLink{Title: "فتح طلب", URL: "/transactions?transaction_id=" + string(item.ID)})
+			}
+			related["transactions"] = transactions
+			related["transactions_has_more"] = page.HasMore
+			out.HasMore = out.HasMore || page.HasMore
+		}
+		out.Rows = related
+		out.Coverage = "customer_and_authorized_related_records"
 		out.Links = append(out.Links, DiscoveryLink{Title: "العملاء", URL: "/customers"})
 	case "list_conversations":
 		p, err := r.Conversations.Handle(ctx, queries.ListConversationsQuery{Meta: meta, Limit: 12})
