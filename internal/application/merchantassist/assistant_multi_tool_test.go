@@ -3,8 +3,7 @@ package merchantassist
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
+		"fmt"
 	"strings"
 	"testing"
 
@@ -79,17 +78,22 @@ func TestNativeMerchantAssistantRejectsEntireUnauthorizedBatchBeforeAnyRead(t *t
 			{ID: "allowed", Name: "find_customers", Arguments: json.RawMessage(`{"search":"Ali"}`)},
 			{ID: "denied", Name: "list_transactions", Arguments: json.RawMessage(`{}`)},
 		},
-	}}}
+	}, nativeAnswer("لا تتوفر لي صلاحية الوصول إلى الطلبات. أقدر أساعدك في العملاء.")}}
 	actor := commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1",
 		Permissions: []string{"merchant_ai:use", "customers:read"}}
 	assistant := &Assistant{Registry: registry, Native: model, Sanitizer: ConservativeSanitizer{},
 		Discovery: &DiscoveryReader{Guard: &guardFixture{}, Customers: reader}}
-	_, err = assistant.Assist(context.Background(), AssistRequest{
+	result, err := assistant.Assist(context.Background(), AssistRequest{
 		Actor: actor, Business: "business-1", ProjectionID: "auto.v1",
 		Task: contracts.TaskExplain, Question: "اعرض العملاء والطلبات",
 	})
-	if !errors.Is(err, ErrInvalidModelPlan) || reader.calls != 0 {
-		t.Fatalf("batch was partially executed despite unauthorized tool: %v calls=%d", err, reader.calls)
+	if err != nil || reader.calls != 0 || len(model.seen) != 2 || result.Answer == "" {
+		t.Fatalf("unauthorized batch was executed or merchant reply failed: %v calls=%d", err, reader.calls)
+	}
+	history := model.seen[1]
+	if len(history) != 4 || !strings.Contains(history[2].Content, "batch_rejected") ||
+		!strings.Contains(history[3].Content, "tool_unavailable") {
+		t.Fatalf("all invalid batch calls must be safely rejected: %+v", history)
 	}
 }
 
