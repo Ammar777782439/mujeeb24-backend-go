@@ -84,22 +84,26 @@ func TestGuidedAdviceRejectsUnauthorizedTool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	model := &nativeModelStub{replies: []ToolCompletion{nativeCall("call-1", "list_transactions", "{}")}}
+	model := &nativeModelStub{replies: []ToolCompletion{
+		nativeCall("call-1", "list_transactions", "{}"),
+		nativeAnswer("لا أملك صلاحية قراءة الطلبات؛ أقدر أساعدك في المعلومات المتاحة."),
+	}}
 	actor := commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1",
 		Permissions: []string{"merchant_ai:use", "dashboard:read"}}
 	assistant := &Assistant{
 		Registry: registry, Native: model, Sanitizer: ConservativeSanitizer{},
 		Discovery: &DiscoveryReader{Guard: &guardFixture{}, Overview: overviewStub{}},
 	}
-	_, err = assistant.Assist(context.Background(), AssistRequest{
+	reply, err := assistant.Assist(context.Background(), AssistRequest{
 		Actor: actor, Business: "business-1", ProjectionID: "auto.v1", Task: contracts.TaskExplain,
 		Question: "اطلع على الطلبات",
 	})
-	if !errors.Is(err, ErrInvalidModelPlan) {
-		t.Fatalf("expected denied native tool, got %v", err)
+	if err != nil || !strings.Contains(reply.Answer, "صلاحية") {
+		t.Fatalf("unauthorized read must be denied but answered safely: %+v / %v", reply, err)
 	}
-	if len(model.seen) != 1 {
-		t.Fatal("unauthorized tool call was executed")
+	if len(model.seen) != 2 || len(model.seen[1]) != 3 ||
+		!strings.Contains(model.seen[1][2].Content, "tool_unavailable") {
+		t.Fatal("unauthorized tool did not receive structured denial feedback")
 	}
 	for _, tool := range model.offered[0] {
 		if tool.Name == "list_transactions" {
