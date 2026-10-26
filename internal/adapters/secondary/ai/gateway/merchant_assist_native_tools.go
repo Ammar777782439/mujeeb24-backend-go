@@ -117,7 +117,7 @@ func (m *MerchantAssistNativeTools) CompleteTools(ctx context.Context, history [
 			}
 			reply.Calls = append(reply.Calls, merchantassist.ToolCall{
 				ID: call.ID, Name: call.Function.Name, Arguments: json.RawMessage(call.Function.Arguments),
-				ThoughtSignature: call.ThoughtSignature, ThoughtSignature: call.ThoughtSignature,
+				ThoughtSignature: call.ThoughtSignature,
 			})
 		}
 		return reply, nil
