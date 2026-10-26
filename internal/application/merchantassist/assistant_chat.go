@@ -117,6 +117,15 @@ func rememberIDs(known map[string]map[string]bool, tool string, rows any) {
 		if id != "" {
 			known[kind][id] = true
 		}
+		// Each sample row came from a tenant-checked Go read. Follow its
+		// customer reference rather than forcing the model to guess an ID.
+		// The destination getter still enforces actor and business scope.
+		if tool == "list_transactions" || tool == "list_leads" || tool == "list_conversations" {
+			customerID, _ := row["customer_id"].(string)
+			if customerID != "" {
+				known["customer"][customerID] = true
+			}
+		}
 	}
 }
 
@@ -229,6 +238,7 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 			kind := map[string]string{
 				"customer_activity": "customer", "customer_record": "customer",
 				"conversation_history": "conversation", "transaction_record": "transaction",
+				"transaction_customer_details": "transaction",
 				"lead_evidence": "lead",
 			}[call.Name]
 			if kind != "" && (args.RecordID == "" || !known[kind][args.RecordID]) {
