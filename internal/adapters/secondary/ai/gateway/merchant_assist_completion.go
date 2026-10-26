@@ -25,7 +25,6 @@ func (g *MerchantAssistCompletion) Generate(ctx context.Context, system, user st
 		"model":       g.Model,
 		"messages":    []map[string]string{{"role": "system", "content": system}, {"role": "user", "content": user}},
 		"max_tokens":  700,
-		"temperature": 0,
 		"stream":      false,
 	}
 	raw, _, err := g.Client.Complete(ctx, request)
