@@ -20,6 +20,8 @@ func merchantAssistPublicError(err error) *appErrors.Error {
 		result = appErrors.New(appErrors.CodeForbidden, "لا توجد صلاحية كافية لقراءة هذا المصدر، أو أن تشغيل المساعد معطّل لهذه المنشأة.")
 	case errors.Is(err, merchantassist.ErrInvalidReadRequest), errors.Is(err, contracts.ErrUnknownProjection), errors.Is(err, merchantassist.ErrInvalidModelPlan):
 		result = appErrors.New(appErrors.CodeValidation, "طلب المساعدة غير صالح؛ راجع مصدر البيانات ومعرّف السجل أو موضوع البحث.")
+	case errors.Is(err, merchantassist.ErrFullScanTooLarge):
+		result = appErrors.New(appErrors.CodeExternalDependency, "عدد السجلات كبير ولا يمكن إكمال التقرير الشامل ضمن حدود الطلب الواحد؛ لا يوجد إجمالي مؤكد من هذا المسار.")
 	case errors.Is(err, merchantassist.ErrInvalidSourceEvidence):
 		result = appErrors.New(appErrors.CodeExternalDependency, "بيانات المصدر غير مكتملة أو غير صالحة للاستخدام مع المساعد. تحقق من السجل أو مصدر المعرفة.")
 	case errors.Is(err, merchantassist.ErrReadUnavailable):
@@ -41,6 +43,8 @@ func merchantAssistPublicError(err error) *appErrors.Error {
 		stage = "invalid_model_plan"
 	case errors.Is(err, merchantassist.ErrInvalidSourceEvidence):
 		stage = "evidence_validation"
+	case errors.Is(err, merchantassist.ErrFullScanTooLarge):
+		stage = "full_scan_limit"
 	case errors.Is(err, merchantassist.ErrReadUnavailable):
 		stage = "source_read"
 	case errors.Is(err, merchantassist.ErrAssistantUnavailable):
