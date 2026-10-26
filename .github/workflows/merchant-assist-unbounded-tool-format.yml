@@ -1,0 +1,25 @@
+name: Format merchant assistant native loop
+on:
+  push:
+    branches: [feat/merchant-ai-assist]
+permissions:
+  contents: write
+jobs:
+  gofmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Canonical format of revised assistant and regression tests
+        run: |
+          gofmt -w internal/application/merchantassist/assistant_chat.go
+          gofmt -w internal/application/merchantassist/assistant_multi_tool_test.go
+          gofmt -w internal/application/merchantassist/tool_contract.go
+          gofmt -w internal/adapters/secondary/ai/gateway/merchant_assist_native_tools.go
+          git diff --check
+          git add internal/application/merchantassist/assistant_chat.go internal/application/merchantassist/assistant_multi_tool_test.go internal/application/merchantassist/tool_contract.go internal/adapters/secondary/ai/gateway/merchant_assist_native_tools.go
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "style(merchant-assist): gofmt model-driven read loop"
+            git push origin HEAD:feat/merchant-ai-assist
+          fi
