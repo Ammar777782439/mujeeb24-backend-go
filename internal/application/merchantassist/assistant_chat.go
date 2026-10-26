@@ -223,15 +223,22 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 		decoded := make([]nativeReadArgs, len(reply.Calls))
 		for i, call := range reply.Calls {
 			def, present := allowed[call.Name]
-			if !present || call.ID == "" || seenIDs[call.ID] {
+			if !present {
+				log.Printf("[MerchantAssist] stage=tool_contract_rejected reason=unknown_or_unauthorized_tool batch_index=%d", i+1)
+				return empty, ErrInvalidModelPlan
+			}
+			if call.ID == "" || seenIDs[call.ID] {
+				log.Printf("[MerchantAssist] stage=tool_contract_rejected reason=missing_or_duplicate_call_id tool=%s batch_index=%d", call.Name, i+1)
 				return empty, ErrInvalidModelPlan
 			}
 			args, err := decodeReadArgs(def, call.Arguments)
 			if err != nil {
+				log.Printf("[MerchantAssist] stage=tool_contract_rejected reason=invalid_arguments tool=%s batch_index=%d", call.Name, i+1)
 				return empty, err
 			}
 			signature := call.Name + "|" + args.Search + "|" + args.RecordID
 			if seenCalls[signature] {
+				log.Printf("[MerchantAssist] stage=tool_contract_rejected reason=duplicate_tool_request tool=%s batch_index=%d", call.Name, i+1)
 				return empty, ErrInvalidModelPlan
 			}
 			seenIDs[call.ID], seenCalls[signature] = true, true
@@ -242,6 +249,8 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 				"lead_evidence": "lead",
 			}[call.Name]
 			if kind != "" && (args.RecordID == "" || !known[kind][args.RecordID]) {
+				log.Printf("[MerchantAssist] stage=tool_contract_rejected reason=unverified_record_reference tool=%s record_kind=%s batch_index=%d",
+					call.Name, kind, i+1)
 				return empty, ErrInvalidModelPlan
 			}
 			decoded[i] = args
