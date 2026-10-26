@@ -115,7 +115,9 @@ func TestAssistantReturnsInvalidArgumentsAsToolResult(t *testing.T) {
 
 func TestMerchantAssistantKeepsSuccessfulReadsWhenConversationHistoryInvalid(t *testing.T) {
 	registry, err := contracts.NewMerchantAssistRegistry()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	history, _, _, state, _, _ := makeHistoryReader()
 	state.result.SummaryLastMessageID = "checkpoint-not-in-messages"
 	model := &nativeModelStub{replies: []ToolCompletion{
@@ -153,7 +155,9 @@ func TestMerchantAssistantKeepsSuccessfulReadsWhenConversationHistoryInvalid(t *
 
 func TestReadRecoveryClassifiesIncompleteEvidenceWithoutOriginalErrorText(t *testing.T) {
 	code := readToolErrorCode(ErrInvalidSourceEvidence)
-	if code != "source_evidence_incomplete" { t.Fatalf("wrong source failure classification: %s", code) }
+	if code != "source_evidence_incomplete" {
+		t.Fatalf("wrong source failure classification: %s", code)
+	}
 	content := readToolFailure(code, "conversation", map[string]ToolDefinition{
 		"list_conversations": {Name: "list_conversations"},
 	})

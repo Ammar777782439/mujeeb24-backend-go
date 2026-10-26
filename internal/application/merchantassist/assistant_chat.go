@@ -338,7 +338,7 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 						Content: readToolFailure(code, kind, allowed),
 					})
 					readCache[signature] = struct {
-						callID string
+						callID   string
 						coverage string
 					}{callID: call.ID, coverage: code}
 					log.Printf("[MerchantAssist] stage=tool_read_recoverable tool=%s batch_index=%d cause=%s",
@@ -376,7 +376,7 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 						Content: readToolFailure(code, kind, allowed),
 					})
 					readCache[signature] = struct {
-						callID string
+						callID   string
 						coverage string
 					}{callID: call.ID, coverage: code}
 					log.Printf("[MerchantAssist] stage=tool_read_recoverable tool=%s batch_index=%d cause=%s",
@@ -405,7 +405,7 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 						Content: readToolFailure(code, kind, allowed),
 					})
 					readCache[signature] = struct {
-						callID string
+						callID   string
 						coverage string
 					}{callID: call.ID, coverage: code}
 					log.Printf("[MerchantAssist] stage=tool_read_recoverable tool=%s batch_index=%d cause=%s",
@@ -429,7 +429,7 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 						Content: readToolFailure(code, kind, allowed),
 					})
 					readCache[signature] = struct {
-						callID string
+						callID   string
 						coverage string
 					}{callID: call.ID, coverage: code}
 					log.Printf("[MerchantAssist] stage=tool_read_recoverable tool=%s batch_index=%d cause=%s",
@@ -452,7 +452,7 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 						Content: readToolFailure(code, kind, allowed),
 					})
 					readCache[signature] = struct {
-						callID string
+						callID   string
 						coverage string
 					}{callID: call.ID, coverage: code}
 					log.Printf("[MerchantAssist] stage=tool_read_recoverable tool=%s batch_index=%d cause=%s",
@@ -499,7 +499,7 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 					Content: readToolFailure("source_evidence_incomplete", kind, allowed),
 				})
 				readCache[signature] = struct {
-					callID string
+					callID   string
 					coverage string
 				}{callID: call.ID, coverage: "source_evidence_incomplete"}
 				continue

@@ -256,7 +256,9 @@ func TestHistoryReaderLongConversationReturnsVerifiedPartialWindow(t *testing.T)
 		}
 		pages.pages = map[string]ports.MessagePage{"": {Items: items}}
 		out, err := r.Read(context.Background(), historyRequest())
-		if err != nil { t.Fatalf("long conversation failed hasSummary=%t: %v", hasOldSummary, err) }
+		if err != nil {
+			t.Fatalf("long conversation failed hasSummary=%t: %v", hasOldSummary, err)
+		}
 		if out.Coverage != "partial_recent_history" || out.Summary != nil ||
 			len(out.Messages) != historyMaxPublicTexts {
 			t.Fatalf("long history coverage claimed falsely: %+v", out)
@@ -282,7 +284,9 @@ func TestHistoryReaderNonPublicMessagesDoNotConsumePublicLimit(t *testing.T) {
 	}
 	pages.pages = map[string]ports.MessagePage{"": {Items: items}}
 	out, err := r.Read(context.Background(), historyRequest())
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if out.Coverage != "complete_history" || len(out.Messages) != 1 {
 		t.Fatalf("private messages incorrectly exhausted bounded public history: %+v", out)
 	}
@@ -303,7 +307,9 @@ func TestHistoryReaderShrinksOversizedPayloadWithHonestCoverage(t *testing.T) {
 	}
 	pages.pages = map[string]ports.MessagePage{"": {Items: items}}
 	out, err := r.Read(context.Background(), historyRequest())
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if out.Coverage != "partial_recent_history" || len(out.Messages) == 0 ||
 		len(out.Messages) >= historyMaxPublicTexts {
 		t.Fatalf("oversized safe history should be bounded with explicit partial coverage: %+v", out)
