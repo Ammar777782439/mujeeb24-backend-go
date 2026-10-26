@@ -62,7 +62,7 @@ var discoveryPermissions = map[string]string{
 }
 
 var discoveryNames = []string{
-	"dashboard_overview", "find_customers", "customer_activity", "list_conversations",
+	"dashboard_overview", "find_customers", "list_conversations",
 	"list_leads", "list_transactions", "list_catalogs",
 	"list_channels", "subscription",
 }
