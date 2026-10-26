@@ -174,7 +174,7 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 	}
 	messages := []ToolMessage{{Role: "user", Content: question}}
 	links := make([]DiscoveryLink, 0, 12)
-	coverages := make([]string, 0, assistMaxToolCalls)
+	coverages := make([]string, 0, 8)
 	// Repeated model reads are served from the verified result cache. Repeating
 	// a query must not burn database resources or invalidate a merchant request.
 	readCache := map[string]struct {
