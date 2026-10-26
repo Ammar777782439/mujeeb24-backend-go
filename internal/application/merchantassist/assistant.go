@@ -39,6 +39,7 @@ type Assistant struct {
 	History   *ConversationHistoryReader
 	Leads     *LeadEvidenceReader
 	Generator TextGenerator
+	Discovery *DiscoveryReader
 	Sanitizer ContentSanitizer
 }
 
@@ -67,6 +68,9 @@ func (a *Assistant) Assist(ctx context.Context, req AssistRequest) (AssistRespon
 	}
 	if len(safeQuestion) > 1600 {
 		return out, ErrInvalidReadRequest
+	}
+	if req.ProjectionID == "auto.v1" {
+		return a.assistConversational(ctx, req, safeQuestion)
 	}
 	var evidence any
 	switch req.ProjectionID {
