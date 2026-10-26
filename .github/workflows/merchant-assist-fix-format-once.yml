@@ -1,0 +1,29 @@
+name: Temporary format merchant assistant hotfix
+on:
+  push:
+    branches: [feat/merchant-ai-assist]
+    paths: ['.github/workflows/merchant-assist-fix-format-once.yml']
+permissions:
+  contents: write
+jobs:
+  gofmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/merchant-ai-assist
+          persist-credentials: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Format merchant assistant hotfix only
+        run: |
+          set -euo pipefail
+          gofmt -w internal/adapters/secondary/ai/gateway/merchant_assist_completion.go internal/adapters/secondary/ai/gateway/merchant_assist_completion_test.go internal/application/merchantassist/assistant.go internal/application/merchantassist/assistant_test.go internal/adapters/primary/http/handlers/core.go internal/adapters/primary/http/handlers/merchant_assist_errors.go internal/adapters/primary/http/handlers/merchant_assist_errors_test.go
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add internal/adapters/secondary/ai/gateway/merchant_assist_completion.go internal/adapters/secondary/ai/gateway/merchant_assist_completion_test.go internal/application/merchantassist/assistant.go internal/application/merchantassist/assistant_test.go internal/adapters/primary/http/handlers/core.go internal/adapters/primary/http/handlers/merchant_assist_errors.go internal/adapters/primary/http/handlers/merchant_assist_errors_test.go
+          if ! git diff --cached --quiet; then
+            git commit -m 'style(ai-assist): gofmt provider validation hotfix'
+            git push origin HEAD:feat/merchant-ai-assist
+          fi
