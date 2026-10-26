@@ -22,8 +22,6 @@ var (
 )
 
 const (
-	assistMaxToolRounds   = 8
-	assistMaxToolCalls    = 8
 	assistMaxToolEvidence = 65000
 )
 
@@ -177,12 +175,20 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 	messages := []ToolMessage{{Role: "user", Content: question}}
 	links := make([]DiscoveryLink, 0, 12)
 	coverages := make([]string, 0, assistMaxToolCalls)
-	seenCalls := map[string]bool{}
+	// Repeated model reads are served from the verified result cache. Repeating
+	// a query must not burn database resources or invalidate a merchant request.
+	readCache := map[string]struct {
+		callID   string
+		coverage string
+	}{}
 	seenIDs := map[string]bool{}
 	pinned := ""
 	toolCount := 0
 	evidenceBytes := 0
-	for round := 0; round < assistMaxToolRounds; round++ {
+	for {
+		// Read-only tools continue until the model naturally returns a final
+		// answer. Context cancellation and existing payload-size checks still
+		// protect the server; no arbitrary call or round count ends the task.
 		if err := ctx.Err(); err != nil {
 			return empty, err
 		}
@@ -211,15 +217,13 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 			}
 			return AssistResponse{Answer: answer, ProjectionID: "auto.v1", Evidence: raw, ReviewRequired: true}, nil
 		}
-		if reply.FinishReason != "tool_calls" || len(reply.Calls) == 0 ||
-			len(reply.Calls) > MaxReadToolsPerBatch ||
-			toolCount+len(reply.Calls) > assistMaxToolCalls {
-			log.Printf("[MerchantAssist] stage=invalid_tool_batch count=%d previously_used=%d max=%d",
-				len(reply.Calls), toolCount, assistMaxToolCalls)
+		if reply.FinishReason != "tool_calls" || len(reply.Calls) == 0 {
+			log.Printf("[MerchantAssist] stage=invalid_tool_batch finish=%s count=%d", reply.FinishReason, len(reply.Calls))
 			return empty, ErrInvalidModelPlan
 		}
 		// Validate the complete untrusted batch before executing any read.
-		// A follow-up record tool may only use IDs from earlier verified rounds.
+		// Record references must come from verified reads; sequential calls
+		// inside the same batch may discover them for later calls in that batch.
 		decoded := make([]nativeReadArgs, len(reply.Calls))
 		for i, call := range reply.Calls {
 			def, present := allowed[call.Name]
@@ -236,31 +240,38 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 				log.Printf("[MerchantAssist] stage=tool_contract_rejected reason=invalid_arguments tool=%s batch_index=%d", call.Name, i+1)
 				return empty, err
 			}
+			seenIDs[call.ID] = true
+			decoded[i] = args
+		}
+		log.Printf("[MerchantAssist] stage=tool_batch_validated count=%d previously_executed=%d", len(reply.Calls), toolCount)
+		// DeepSeek Chat Completions expects one assistant turn containing all
+		// calls and one tool message per call, in its original ID order.
+		results := make([]ToolMessage, 0, len(reply.Calls))
+		for i, call := range reply.Calls {
+			args := decoded[i]
 			signature := call.Name + "|" + args.Search + "|" + args.RecordID
-			if seenCalls[signature] {
-				log.Printf("[MerchantAssist] stage=tool_contract_rejected reason=duplicate_tool_request tool=%s batch_index=%d", call.Name, i+1)
-				return empty, ErrInvalidModelPlan
-			}
-			seenIDs[call.ID], seenCalls[signature] = true, true
 			kind := map[string]string{
 				"customer_activity": "customer", "customer_record": "customer",
 				"conversation_history": "conversation", "transaction_record": "transaction",
-				"transaction_customer_details": "transaction",
-				"lead_evidence":                "lead",
+				"transaction_customer_details": "transaction", "lead_evidence": "lead",
 			}[call.Name]
 			if kind != "" && (args.RecordID == "" || !known[kind][args.RecordID]) {
 				log.Printf("[MerchantAssist] stage=tool_contract_rejected reason=unverified_record_reference tool=%s record_kind=%s batch_index=%d",
 					call.Name, kind, i+1)
 				return empty, ErrInvalidModelPlan
 			}
-			decoded[i] = args
-		}
-		log.Printf("[MerchantAssist] stage=tool_batch_validated count=%d already_executed=%d", len(reply.Calls), toolCount)
-		// DeepSeek Chat Completions expects one assistant turn containing all
-		// calls and one tool message per call, in its original ID order.
-		results := make([]ToolMessage, 0, len(reply.Calls))
-		for i, call := range reply.Calls {
-			args := decoded[i]
+			if prior, ok := readCache[signature]; ok {
+				// The earlier tool message remains in the conversation history.
+				// Return a small reference rather than re-reading or duplicating
+				// evidence (which could exhaust the context window).
+				cached, _ := json.Marshal(map[string]any{
+					"cached": true, "previous_tool_call_id": prior.callID,
+					"coverage": prior.coverage,
+				})
+				results = append(results, ToolMessage{Role: "tool", ToolCallID: call.ID, Content: string(cached)})
+				log.Printf("[MerchantAssist] stage=tool_read_cache_hit tool=%s batch_index=%d", call.Name, i+1)
+				continue
+			}
 			log.Printf("[MerchantAssist] stage=tool_read_start tool=%s batch_index=%d", call.Name, i+1)
 			var data any
 			var coverage string
@@ -371,6 +382,10 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 			evidenceBytes += len(output)
 			coverages = append(coverages, coverage)
 			results = append(results, ToolMessage{Role: "tool", ToolCallID: call.ID, Content: string(output)})
+			readCache[signature] = struct {
+				callID   string
+				coverage string
+			}{callID: call.ID, coverage: coverage}
 			toolCount++
 			log.Printf("[MerchantAssist] stage=tool_read_complete tool=%s batch_index=%d bytes=%d", call.Name, i+1, len(output))
 		}
@@ -378,5 +393,4 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 		messages = append(messages, results...)
 
 	}
-	return empty, fmt.Errorf("%w: tool round budget exhausted", ErrInvalidModelPlan)
 }
