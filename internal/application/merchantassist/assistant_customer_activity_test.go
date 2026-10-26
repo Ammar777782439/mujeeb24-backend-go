@@ -2,6 +2,7 @@ package merchantassist
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -43,13 +44,11 @@ func (linkedCustomerTransactions) Handle(_ context.Context, _ queries.ListCustom
 
 func TestConversationalAssistantCanFollowCustomerToRelatedRecords(t *testing.T) {
 	registry, err := contracts.NewMerchantAssistRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	model := &nativeStub{replies: []ToolCompletion{
-		requestedTool("c1", "find_customers", `{"search":"أحمد"}`),
-		requestedTool("c2", "customer_activity", `{"record_id":"customer-1"}`),
-		finalText("أحمد عنده محادثة مفتوحة وطلب مسودة. راجع المحادثة أولًا."),
+	if err != nil { t.Fatal(err) }
+	model := &nativeModelStub{replies: []ToolCompletion{
+		nativeCall("read-customer", "find_customers", `{"search":"أحمد"}`),
+		nativeCall("read-activity", "customer_activity", `{"record_id":"customer-1"}`),
+		nativeAnswer("أحمد عنده محادثة مفتوحة وطلب مسودة. راجع المحادثة أولًا."),
 	}}
 	actor := commands.ActorContext{
 		BusinessID: "business-1", PrincipalID: "principal-1", Role: "member",
@@ -66,18 +65,38 @@ func TestConversationalAssistantCanFollowCustomerToRelatedRecords(t *testing.T) 
 		Actor: actor, Business: "business-1", ProjectionID: "auto.v1", Task: contracts.TaskExplain,
 		Question: "إيش وضع أحمد وليش ما كمل طلبه؟",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(model.seen) != 3 || len(model.seen[2]) != 5 ||
-		!strings.Contains(model.seen[2][2].Content, "customer-1") ||
-		!strings.Contains(model.seen[2][4].Content, "conversation-1") ||
-		!strings.Contains(model.seen[2][4].Content, "transaction-1") {
-		t.Fatalf("model did not receive authorized linked IDs, rounds=%d", len(model.seen))
+	if err != nil { t.Fatal(err) }
+	if len(model.seen) != 3 { t.Fatalf("expected two native tool rounds and final: %d",len(model.seen)) }
+	var historyText strings.Builder
+	for _, message := range model.seen[2] { historyText.WriteString(message.Content) }
+	if !strings.Contains(historyText.String(), "conversation-1") ||
+		!strings.Contains(historyText.String(), "transaction-1") ||
+		!strings.Contains(historyText.String(), "customer-1") {
+		t.Fatalf("authorized relationships were missing from native tool evidence")
 	}
 	if !strings.Contains(reply.Answer, "محادثة") || !strings.Contains(string(reply.Evidence), "conversation_id") {
-		t.Fatalf("missing merchant-facing navigation: %+v", reply)
+		t.Fatalf("merchant navigation missing: %+v",reply)
 	}
+}
+
+func TestNativeToolDoesNotAcceptFabricatedCustomerID(t *testing.T) {
+	registry, err := contracts.NewMerchantAssistRegistry()
+	if err != nil { t.Fatal(err) }
+	model := &nativeModelStub{replies: []ToolCompletion{
+		nativeCall("lookup", "find_customers", `{"search":"أحمد"}`),
+		nativeCall("fake", "customer_activity", `{"record_id":"another-customer"}`),
+	}}
+	actor := commands.ActorContext{BusinessID:"business-1", PrincipalID:"principal-1",
+		Permissions: []string{"merchant_ai:use","customers:read"}}
+	assistant := &Assistant{
+		Registry:registry, Native:model, Sanitizer:ConservativeSanitizer{},
+		Discovery:&DiscoveryReader{Guard:&guardFixture{}, Customers:linkedCustomerList{}, GetCustomer:linkedCustomerGet{}},
+	}
+	_, err = assistant.Assist(context.Background(), AssistRequest{
+		Actor:actor, Business:"business-1", ProjectionID:"auto.v1", Task:contracts.TaskExplain, Question:"أحمد",
+	})
+	if !errors.Is(err, ErrInvalidModelPlan) { t.Fatalf("fabricated ID was not rejected: %v",err) }
+	if len(model.seen)!=2 { t.Fatal("extra native inference after fake ID") }
 }
 
 func TestCustomerActivityRespectsRelatedPermissions(t *testing.T) {
