@@ -246,7 +246,7 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 				"customer_activity": "customer", "customer_record": "customer",
 				"conversation_history": "conversation", "transaction_record": "transaction",
 				"transaction_customer_details": "transaction",
-				"lead_evidence": "lead",
+				"lead_evidence":                "lead",
 			}[call.Name]
 			if kind != "" && (args.RecordID == "" || !known[kind][args.RecordID]) {
 				log.Printf("[MerchantAssist] stage=tool_contract_rejected reason=unverified_record_reference tool=%s record_kind=%s batch_index=%d",

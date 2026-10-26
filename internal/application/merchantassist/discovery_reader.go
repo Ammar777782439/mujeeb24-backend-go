@@ -51,17 +51,17 @@ type DiscoveryResult struct {
 // Supported read tools expose business-scoped identifiers so the assistant can
 // connect customers, conversations and orders, while remaining permission-scoped.
 var discoveryPermissions = map[string]string{
-	"platform_guide":     authorization.PermissionMerchantAIUse,
-	"dashboard_overview": authorization.PermissionDashboardRead,
-	"find_customers":     authorization.PermissionCustomersRead,
-	"customer_activity":  authorization.PermissionCustomersRead,
-	"list_conversations": authorization.PermissionConversationsRead,
-	"list_leads":         authorization.PermissionSalesRead,
-	"list_transactions":  authorization.PermissionSalesRead,
+	"platform_guide":               authorization.PermissionMerchantAIUse,
+	"dashboard_overview":           authorization.PermissionDashboardRead,
+	"find_customers":               authorization.PermissionCustomersRead,
+	"customer_activity":            authorization.PermissionCustomersRead,
+	"list_conversations":           authorization.PermissionConversationsRead,
+	"list_leads":                   authorization.PermissionSalesRead,
+	"list_transactions":            authorization.PermissionSalesRead,
 	"transaction_customer_details": authorization.PermissionSalesRead,
-	"list_catalogs":      authorization.PermissionCatalogRead,
-	"list_channels":      authorization.PermissionChannelsRead,
-	"subscription":       authorization.PermissionBusinessRead,
+	"list_catalogs":                authorization.PermissionCatalogRead,
+	"list_channels":                authorization.PermissionChannelsRead,
+	"subscription":                 authorization.PermissionBusinessRead,
 }
 
 var discoveryNames = []string{
@@ -298,13 +298,19 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 		transaction, err := r.GetTransaction.Handle(ctx, queries.GetTransactionQuery{
 			Meta: meta, TransactionID: commands.TransactionID(call.RecordID),
 		})
-		if err != nil { return out, errors.Join(ErrReadUnavailable, err) }
+		if err != nil {
+			return out, errors.Join(ErrReadUnavailable, err)
+		}
 		if string(transaction.BusinessID) != business || string(transaction.ID) != call.RecordID ||
-			string(transaction.CustomerID) == "" { return out, ErrInvalidSourceEvidence }
+			string(transaction.CustomerID) == "" {
+			return out, ErrInvalidSourceEvidence
+		}
 		customer, err := r.GetCustomer.Handle(ctx, queries.GetCustomerQuery{
 			Meta: meta, CustomerID: transaction.CustomerID,
 		})
-		if err != nil { return out, errors.Join(ErrReadUnavailable, err) }
+		if err != nil {
+			return out, errors.Join(ErrReadUnavailable, err)
+		}
 		if string(customer.BusinessID) != business || customer.ID != transaction.CustomerID {
 			return out, ErrInvalidSourceEvidence
 		}
@@ -313,7 +319,9 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 		const maxOrderLines = 40
 		lines := make([]map[string]any, 0, min(len(transaction.Lines), maxOrderLines))
 		for i, line := range transaction.Lines {
-			if i >= maxOrderLines { break }
+			if i >= maxOrderLines {
+				break
+			}
 			lines = append(lines, map[string]any{
 				"item": line.ItemNameSnapshot, "quantity": line.Quantity,
 				"unit_price": line.UnitPriceSnapshot, "currency": line.Currency,
