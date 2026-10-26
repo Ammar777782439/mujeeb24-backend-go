@@ -173,6 +173,22 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 		}
 	}
 	messages := []ToolMessage{{Role: "user", Content: question}}
+	// The current screen record is supplied by the application UI. Give the
+	// model this reference so it does not guess which item "this" refers to.
+	// Every actual read still checks business ownership and staff permissions.
+	if req.RecordID != "" && len(req.RecordID) <= 128 {
+		screenKind := map[string]string{
+			"screen:customers": "customer", "screen:chat": "conversation",
+			"screen:transactions": "transaction", "screen:leads": "lead",
+		}[req.Search]
+		if screenKind != "" && !strings.ContainsAny(req.RecordID, "\r\n") {
+			ref, _ := json.Marshal(map[string]string{
+				"kind": screenKind, "record_id": req.RecordID,
+				"note": "Current UI selection only; validate using a read tool before stating facts.",
+			})
+			messages[0].Content += "\nCurrent screen reference: " + string(ref)
+		}
+	}
 	links := make([]DiscoveryLink, 0, 12)
 	coverages := make([]string, 0, 8)
 	// Repeated model reads are served from the verified result cache. Repeating
@@ -225,23 +241,38 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 		// Record references must come from verified reads; sequential calls
 		// inside the same batch may discover them for later calls in that batch.
 		decoded := make([]nativeReadArgs, len(reply.Calls))
+		failures := make([]string, len(reply.Calls))
+		unsafeBatch := false
 		for i, call := range reply.Calls {
-			def, present := allowed[call.Name]
-			if !present {
-				log.Printf("[MerchantAssist] stage=tool_contract_rejected reason=unknown_or_unauthorized_tool batch_index=%d", i+1)
-				return empty, ErrInvalidModelPlan
-			}
 			if call.ID == "" || seenIDs[call.ID] {
 				log.Printf("[MerchantAssist] stage=tool_contract_rejected reason=missing_or_duplicate_call_id tool=%s batch_index=%d", call.Name, i+1)
 				return empty, ErrInvalidModelPlan
 			}
+			seenIDs[call.ID] = true
+			def, present := allowed[call.Name]
+			if !present {
+				failures[i] = "tool_unavailable"
+				unsafeBatch = true
+				log.Printf("[MerchantAssist] stage=tool_recovery reason=tool_unavailable batch_index=%d", i+1)
+				continue
+			}
 			args, err := decodeReadArgs(def, call.Arguments)
 			if err != nil {
-				log.Printf("[MerchantAssist] stage=tool_contract_rejected reason=invalid_arguments tool=%s batch_index=%d", call.Name, i+1)
-				return empty, err
+				failures[i] = "invalid_arguments"
+				unsafeBatch = true
+				log.Printf("[MerchantAssist] stage=tool_recovery reason=invalid_arguments tool=%s batch_index=%d", call.Name, i+1)
+				continue
 			}
-			seenIDs[call.ID] = true
 			decoded[i] = args
+		}
+		// A malformed or unauthorized request must not partially execute
+		// other reads in the same model-generated batch.
+		if unsafeBatch {
+			for i := range failures {
+				if failures[i] == "" {
+					failures[i] = "batch_rejected"
+				}
+			}
 		}
 		log.Printf("[MerchantAssist] stage=tool_batch_validated count=%d previously_executed=%d", len(reply.Calls), toolCount)
 		// DeepSeek Chat Completions expects one assistant turn containing all
@@ -249,6 +280,13 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 		results := make([]ToolMessage, 0, len(reply.Calls))
 		for i, call := range reply.Calls {
 			args := decoded[i]
+			if failures[i] != "" {
+				results = append(results, ToolMessage{
+					Role: "tool", ToolCallID: call.ID,
+					Content: readToolFailure(failures[i], "", allowed),
+				})
+				continue
+			}
 			signature := call.Name + "|" + args.Search + "|" + args.RecordID
 			kind := map[string]string{
 				"customer_activity": "customer", "customer_record": "customer",
@@ -256,9 +294,13 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 				"transaction_customer_details": "transaction", "lead_evidence": "lead",
 			}[call.Name]
 			if kind != "" && (args.RecordID == "" || !known[kind][args.RecordID]) {
-				log.Printf("[MerchantAssist] stage=tool_contract_rejected reason=unverified_record_reference tool=%s record_kind=%s batch_index=%d",
+				log.Printf("[MerchantAssist] stage=tool_recovery reason=unverified_record_reference tool=%s record_kind=%s batch_index=%d",
 					call.Name, kind, i+1)
-				return empty, ErrInvalidModelPlan
+				results = append(results, ToolMessage{
+					Role: "tool", ToolCallID: call.ID,
+					Content: readToolFailure("unverified_record_reference", kind, allowed),
+				})
+				continue
 			}
 			if prior, ok := readCache[signature]; ok {
 				// The earlier tool message remains in the conversation history.
