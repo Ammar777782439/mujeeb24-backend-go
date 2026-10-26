@@ -303,9 +303,20 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 				continue
 			}
 			if prior, ok := readCache[signature]; ok {
+				// Never represent a previously rejected source as a successful
+				// cached read: keep the original unavailable verdict explicit.
+				if prior.coverage == "source_evidence_incomplete" ||
+					prior.coverage == "source_unavailable" || prior.coverage == "permission_denied" ||
+					prior.coverage == "invalid_arguments" {
+					results = append(results, ToolMessage{Role: "tool", ToolCallID: call.ID,
+						Content: readToolFailure(prior.coverage, kind, allowed)})
+					log.Printf("[MerchantAssist] stage=tool_read_cached_failure tool=%s batch_index=%d cause=%s",
+						call.Name, i+1, prior.coverage)
+					continue
+				}
 				// The earlier tool message remains in the conversation history.
 				// Return a small reference rather than re-reading or duplicating
-				// evidence (which could exhaust the context window).
+				// verified evidence (which could exhaust the context window).
 				cached, _ := json.Marshal(map[string]any{
 					"cached": true, "previous_tool_call_id": prior.callID,
 					"coverage": prior.coverage,
