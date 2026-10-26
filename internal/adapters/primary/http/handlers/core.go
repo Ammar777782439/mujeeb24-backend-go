@@ -397,13 +397,7 @@ func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (a
 			ProjectionID: in.Body.ProjectionID, RecordID: in.Body.RecordID, Search: in.Body.Search,
 		})
 		if err != nil {
-			code := appErrors.CodeExternalDependency
-			if errors.Is(err, merchantassist.ErrReadDenied) || errors.Is(err, contracts.ErrDeniedProjection) {
-				code = appErrors.CodeForbidden
-			} else if errors.Is(err, merchantassist.ErrInvalidReadRequest) || errors.Is(err, contracts.ErrUnknownProjection) {
-				code = appErrors.CodeValidation
-			}
-			return nil, mapApplicationError(appErrors.New(code, "تعذر تجهيز المساعدة بهذه البيانات. تحقق من الصلاحيات والمعلومات والمحاولة لاحقاً."))
+			return nil, mapApplicationError(merchantAssistPublicError(err))
 		}
 		out := &contract.Single[contract.MerchantAssistResponse]{}
 		out.Body.Data = contract.MerchantAssistResponse{
