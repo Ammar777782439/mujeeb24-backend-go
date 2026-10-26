@@ -240,6 +240,7 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 				Task: contracts.TaskExplain, Search: args.Search, Limit: 3,
 			})
 			if err != nil {
+				logAssistReadFailure(call.Name, err)
 				return empty, err
 			}
 			for i := range read.Knowledge {
@@ -263,6 +264,7 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 				Task: contracts.TaskSummarize,
 			})
 			if err != nil {
+				logAssistReadFailure(call.Name, err)
 				return empty, err
 			}
 			data, coverage = read, read.Coverage
@@ -277,6 +279,7 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 				RecordID: args.RecordID, Task: contracts.TaskExplain,
 			})
 			if err != nil {
+				logAssistReadFailure(call.Name, err)
 				return empty, err
 			}
 			data, coverage = read, "single_record_verified"
@@ -286,6 +289,7 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 				LeadID: args.RecordID, Task: contracts.TaskExplain,
 			})
 			if err != nil {
+				logAssistReadFailure(call.Name, err)
 				return empty, err
 			}
 			data, coverage = read, "single_lead_verified"
@@ -294,6 +298,7 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 				Name: call.Name, Search: args.Search, RecordID: args.RecordID,
 			})
 			if err != nil {
+				logAssistReadFailure(call.Name, err)
 				return empty, err
 			}
 			rememberIDs(known, call.Name, read.Rows)
