@@ -50,6 +50,7 @@ type DiscoveryResult struct {
 // Supported read tools expose business-scoped identifiers so the assistant can
 // connect customers, conversations and orders, while remaining permission-scoped.
 var discoveryPermissions = map[string]string{
+	"platform_guide": authorization.PermissionMerchantAIUse,
 	"dashboard_overview": authorization.PermissionDashboardRead,
 	"find_customers":     authorization.PermissionCustomersRead,
 	"customer_activity":  authorization.PermissionCustomersRead,
@@ -62,7 +63,7 @@ var discoveryPermissions = map[string]string{
 }
 
 var discoveryNames = []string{
-	"dashboard_overview", "find_customers", "list_conversations",
+	"platform_guide", "dashboard_overview", "find_customers", "list_conversations",
 	"list_leads", "list_transactions", "list_catalogs",
 	"list_channels", "subscription",
 }
@@ -82,6 +83,8 @@ func (r *DiscoveryReader) Available(actor commands.ActorContext) []string {
 
 func (r *DiscoveryReader) hasHandler(name string) bool {
 	switch name {
+	case "platform_guide":
+		return true
 	case "dashboard_overview":
 		return r.Overview != nil
 	case "find_customers":
@@ -127,6 +130,22 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 	out.Coverage = "bounded_list_not_all_records"
 	out.Links = []DiscoveryLink{}
 	switch call.Name {
+	case "platform_guide":
+		areas := make([]map[string]any, 0, 7)
+		addArea := func(permission, name, url, detail string) {
+			if !authorization.Has(actor, permission) { return }
+			areas = append(areas, map[string]any{"name": name, "url": url, "description": detail})
+			out.Links = append(out.Links, DiscoveryLink{Title: name, URL: url})
+		}
+		addArea(authorization.PermissionDashboardRead, "لوحة التحكم", "/dashboard", "ملخص المتجر ومؤشرات المتابعة")
+		addArea(authorization.PermissionConversationsRead, "المحادثات", "/chat", "قراءة المحادثات وحالاتها وما ينتظر موظفًا")
+		addArea(authorization.PermissionCustomersRead, "العملاء", "/customers", "استعراض بيانات العملاء والبحث عنهم")
+		addArea(authorization.PermissionSalesRead, "فرص البيع", "/leads", "متابعة فرص البيع وحالاتها")
+		addArea(authorization.PermissionSalesRead, "الطلبات", "/transactions", "مراجعة الطلبات والمعاملات وحالاتها")
+		addArea(authorization.PermissionCatalogRead, "الكتالوج", "/catalog", "مساعد الكتالوج الذكي مسار مستقل يقترح إضافة وتعديل المنتجات؛ التنفيذ بعد التحقق والصلاحيات والتأكيد. اسأل مجيب هنا للقراءة والشرح فقط")
+		addArea(authorization.PermissionChannelsRead, "القنوات", "/channels", "متابعة حالة ربط قنوات التواصل")
+		out.Rows = map[string]any{"assistant_role": "read_only_business_assistance", "catalog_authoring_role": "separate_reviewed_proposal_workflow", "areas": areas}
+		out.Coverage = "verified_navigation_with_actor_permissions"
 	case "dashboard_overview":
 		v, err := r.Overview.Handle(ctx, queries.GetDashboardOverviewQuery{Meta: meta})
 		if err != nil {
