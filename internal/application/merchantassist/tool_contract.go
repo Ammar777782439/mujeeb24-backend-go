@@ -5,11 +5,6 @@ import (
 	"encoding/json"
 )
 
-// MaxReadToolsPerBatch is an application-level safety limit, not a claim that
-// DeepSeek will honor parallel_tool_calls=false. Independent reads are executed
-// sequentially in Go, and the complete batch is replayed to the model.
-const MaxReadToolsPerBatch = 8
-
 // ToolDefinition is a Go-owned capability contract. The provider receives
 // exactly these read-only functions, never database or mutation privileges.
 type ToolDefinition struct {
