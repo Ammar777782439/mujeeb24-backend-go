@@ -33,14 +33,22 @@ func merchantAssistPublicError(err error) *appErrors.Error {
 	}
 	stage := "provider_or_unknown"
 	switch {
-	case errors.Is(err, merchantassist.ErrModelRouting): stage = "model_planning"
-	case errors.Is(err, merchantassist.ErrModelAnswer): stage = "model_answer"
-	case errors.Is(err, merchantassist.ErrInvalidModelPlan): stage = "invalid_model_plan"
-	case errors.Is(err, merchantassist.ErrInvalidSourceEvidence): stage = "evidence_validation"
-	case errors.Is(err, merchantassist.ErrReadUnavailable): stage = "source_read"
-	case errors.Is(err, merchantassist.ErrAssistantUnavailable): stage = "not_configured"
-	case errors.Is(err, context.DeadlineExceeded): stage = "timeout"
-	case errors.Is(err, merchantassist.ErrReadDenied): stage = "permission"
+	case errors.Is(err, merchantassist.ErrModelRouting):
+		stage = "model_planning"
+	case errors.Is(err, merchantassist.ErrModelAnswer):
+		stage = "model_answer"
+	case errors.Is(err, merchantassist.ErrInvalidModelPlan):
+		stage = "invalid_model_plan"
+	case errors.Is(err, merchantassist.ErrInvalidSourceEvidence):
+		stage = "evidence_validation"
+	case errors.Is(err, merchantassist.ErrReadUnavailable):
+		stage = "source_read"
+	case errors.Is(err, merchantassist.ErrAssistantUnavailable):
+		stage = "not_configured"
+	case errors.Is(err, context.DeadlineExceeded):
+		stage = "timeout"
+	case errors.Is(err, merchantassist.ErrReadDenied):
+		stage = "permission"
 	}
 	// The original error may embed a query, policy text, model payload or
 	// customer data. Log only the constant classified code.
