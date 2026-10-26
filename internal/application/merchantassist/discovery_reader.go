@@ -43,9 +43,9 @@ type DiscoveryResult struct {
 	Links    []DiscoveryLink `json:"-"`
 }
 
-// Supported tools are purposely limited to read-only, finite views. Any
-// future tool must receive a permission and a reviewed projection here.
-var discoveryPermissions = map[string]any{
+// Supported read tools expose business-scoped identifiers so the assistant can
+// connect customers, conversations and orders, while remaining permission-scoped.
+var discoveryPermissions = map[string]string{
 	"dashboard_overview": authorization.PermissionDashboardRead,
 	"find_customers":     authorization.PermissionCustomersRead,
 	"list_conversations": authorization.PermissionConversationsRead,
@@ -142,7 +142,7 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 			if string(x.BusinessID) != business {
 				return out, ErrInvalidSourceEvidence
 			}
-			rows = append(rows, map[string]any{"index": len(rows) + 1, "status": x.Status})
+			rows = append(rows, map[string]any{"id": string(x.ID), "name": x.DisplayName, "status": x.Status})
 		}
 		out.Rows, out.HasMore = rows, p.HasMore
 		out.Links = append(out.Links, DiscoveryLink{Title: "العملاء", URL: "/customers"})
@@ -157,7 +157,7 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 				return out, ErrInvalidSourceEvidence
 			}
 			rows = append(rows, map[string]any{
-				"index": len(rows) + 1, "state": x.State, "ownership": x.Ownership,
+				"id": string(x.ID), "customer_id": string(x.CustomerID), "customer_name": x.CustomerDisplayName, "state": x.State, "ownership": x.Ownership,
 				"priority": x.Priority, "last_activity": x.LastActivityAt,
 			})
 			out.Links = append(out.Links, DiscoveryLink{Title: "فتح محادثة", URL: "/chat?conversation_id=" + string(x.ID)})
@@ -173,7 +173,7 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 			if string(x.BusinessID) != business {
 				return out, ErrInvalidSourceEvidence
 			}
-			rows = append(rows, map[string]any{"index": len(rows) + 1, "status": x.Status})
+			rows = append(rows, map[string]any{"id": string(x.ID), "customer_id": string(x.CustomerID), "status": x.Status})
 		}
 		out.Rows, out.HasMore = rows, p.HasMore
 		out.Links = append(out.Links, DiscoveryLink{Title: "فرص البيع", URL: "/leads"})
@@ -188,7 +188,7 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 				return out, ErrInvalidSourceEvidence
 			}
 			rows = append(rows, map[string]any{
-				"index": len(rows) + 1, "state": x.State,
+				"id": string(x.ID), "customer_id": string(x.CustomerID), "state": x.State,
 				"type": x.TransactionType, "created_at": x.CreatedAt,
 				"amount": x.TotalAmount, "currency": x.Currency,
 			})
@@ -205,7 +205,7 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 			if string(x.BusinessID) != business {
 				return out, ErrInvalidSourceEvidence
 			}
-			rows = append(rows, map[string]any{"index": len(rows) + 1, "name": x.Name, "status": x.Status})
+			rows = append(rows, map[string]any{"id": string(x.ID), "name": x.Name, "status": x.Status})
 		}
 		out.Rows, out.HasMore = rows, p.HasMore
 		out.Links = append(out.Links, DiscoveryLink{Title: "الكتالوج", URL: "/catalog"})
@@ -219,7 +219,7 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 			if string(x.BusinessID) != business {
 				return out, ErrInvalidSourceEvidence
 			}
-			rows = append(rows, map[string]any{"channel": x.Channel, "status": x.Status})
+			rows = append(rows, map[string]any{"id": string(x.ID), "channel": x.Channel, "status": x.Status})
 		}
 		out.Rows, out.HasMore = rows, p.HasMore
 		out.Links = append(out.Links, DiscoveryLink{Title: "القنوات", URL: "/channels"})
