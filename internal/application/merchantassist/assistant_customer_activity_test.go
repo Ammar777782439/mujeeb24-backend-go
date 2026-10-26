@@ -2,8 +2,7 @@ package merchantassist
 
 import (
 	"context"
-	"errors"
-	"strings"
+		"strings"
 	"testing"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
@@ -95,6 +94,7 @@ func TestNativeToolDoesNotAcceptFabricatedCustomerID(t *testing.T) {
 	model := &nativeModelStub{replies: []ToolCompletion{
 		nativeCall("lookup", "find_customers", `{"search":"أحمد"}`),
 		nativeCall("fake", "customer_activity", `{"record_id":"another-customer"}`),
+		nativeAnswer("وجدت أحمد، لكن أحتاج تحديد السجل المطلوب قبل قراءة التفاصيل."),
 	}}
 	actor := commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1",
 		Permissions: []string{"merchant_ai:use", "customers:read"}}
@@ -102,14 +102,15 @@ func TestNativeToolDoesNotAcceptFabricatedCustomerID(t *testing.T) {
 		Registry: registry, Native: model, Sanitizer: ConservativeSanitizer{},
 		Discovery: &DiscoveryReader{Guard: &guardFixture{}, Customers: linkedCustomerList{}, GetCustomer: linkedCustomerGet{}},
 	}
-	_, err = assistant.Assist(context.Background(), AssistRequest{
+	reply, err := assistant.Assist(context.Background(), AssistRequest{
 		Actor: actor, Business: "business-1", ProjectionID: "auto.v1", Task: contracts.TaskExplain, Question: "أحمد",
 	})
-	if !errors.Is(err, ErrInvalidModelPlan) {
-		t.Fatalf("fabricated ID was not rejected: %v", err)
+	if err != nil || !strings.Contains(reply.Answer, "تحديد") {
+		t.Fatalf("fabricated ID should be refused while the model can clarify: %+v / %v", reply, err)
 	}
-	if len(model.seen) != 2 {
-		t.Fatal("extra native inference after fake ID")
+	if len(model.seen) != 3 ||
+		!strings.Contains(model.seen[2][len(model.seen[2])-1].Content, "unverified_record_reference") {
+		t.Fatal("model did not receive unverified record recovery result")
 	}
 }
 
