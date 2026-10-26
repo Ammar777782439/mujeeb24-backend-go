@@ -423,7 +423,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		}
 		sanitizer := merchantassist.ConservativeSanitizer{}
 		assistant := &merchantassist.Assistant{
-			Registry: registry, Generator: model, Sanitizer: sanitizer,
+			Registry: registry, Generator: model, Native: &merchantgateway.MerchantAssistNativeTools{Client: external.NativeAssistCompletion, Model: "mujeeb-merchant"}, Sanitizer: sanitizer,
 			Discovery: &merchantassist.DiscoveryReader{
 				Guard:                 businessAIGuard,
 				Overview:              dependencies.GetDashboardOverview,
