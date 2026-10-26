@@ -12,12 +12,14 @@ import (
 
 type adviceModel struct {
 	answers []string
-	seen []string
+	seen    []string
 }
 
 func (m *adviceModel) Generate(_ context.Context, _, prompt string) (string, error) {
 	m.seen = append(m.seen, prompt)
-	if len(m.answers) == 0 { return "", nil }
+	if len(m.answers) == 0 {
+		return "", nil
+	}
 	v := m.answers[0]
 	m.answers = m.answers[1:]
 	return v, nil
@@ -31,7 +33,9 @@ func (overviewStub) Handle(_ context.Context, _ queries.GetDashboardOverviewQuer
 
 func TestGuidedAdviceBasedOnAuthorizedOverview(t *testing.T) {
 	registry, err := contracts.NewMerchantAssistRegistry()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	model := &adviceModel{answers: []string{
 		`{"calls":[{"name":"dashboard_overview"}]}`,
 		"عندك ثلاث محادثات تنتظر الموظف وطلبان يحتاجان المراجعة. ابدأ بمتابعة المحادثات ثم راجع الطلبات.",
@@ -46,10 +50,18 @@ func TestGuidedAdviceBasedOnAuthorizedOverview(t *testing.T) {
 		Actor: actor, Business: "business-1", ProjectionID: "auto.v1", Task: contracts.TaskExplain,
 		Question: "ما عرفت ايش ابدأ، إيش تنصحني؟",
 	})
-	if err != nil { t.Fatal(err) }
-	if !strings.Contains(response.Answer, "ابدأ") || len(model.seen) != 2 { t.Fatalf("unexpected response: %+v", response) }
-	if strings.Contains(string(response.Evidence), "principal-1") { t.Fatal("internal actor leaked") }
-	if !strings.Contains(string(response.Evidence), "dashboard") { t.Fatal("expected safe dashboard navigation link") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(response.Answer, "ابدأ") || len(model.seen) != 2 {
+		t.Fatalf("unexpected response: %+v", response)
+	}
+	if strings.Contains(string(response.Evidence), "principal-1") {
+		t.Fatal("internal actor leaked")
+	}
+	if !strings.Contains(string(response.Evidence), "dashboard") {
+		t.Fatal("expected safe dashboard navigation link")
+	}
 }
 
 func TestGuidedAdviceRejectsUnauthorizedTool(t *testing.T) {
@@ -65,8 +77,12 @@ func TestGuidedAdviceRejectsUnauthorizedTool(t *testing.T) {
 		Actor: actor, Business: "business-1", ProjectionID: "auto.v1", Task: contracts.TaskExplain,
 		Question: "اطلع على الطلبات",
 	})
-	if err != ErrInvalidModelPlan { t.Fatalf("expected rejected tool plan, got %v", err) }
-	if len(model.seen) != 1 { t.Fatal("answer should not run after untrusted tool request") }
+	if err != ErrInvalidModelPlan {
+		t.Fatalf("expected rejected tool plan, got %v", err)
+	}
+	if len(model.seen) != 1 {
+		t.Fatal("answer should not run after untrusted tool request")
+	}
 }
 
 func TestGuidanceWithoutRecordDoesNotPretendToKnowBusiness(t *testing.T) {
