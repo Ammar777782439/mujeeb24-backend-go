@@ -112,3 +112,53 @@ func TestAssistantReturnsInvalidArgumentsAsToolResult(t *testing.T) {
 		t.Fatalf("unsafe read was not reported as model tool error: %+v", report)
 	}
 }
+
+func TestMerchantAssistantKeepsSuccessfulReadsWhenConversationHistoryInvalid(t *testing.T) {
+	registry, err := contracts.NewMerchantAssistRegistry()
+	if err != nil { t.Fatal(err) }
+	history, _, _, state, _, _ := makeHistoryReader()
+	state.result.SummaryLastMessageID = "checkpoint-not-in-messages"
+	model := &nativeModelStub{replies: []ToolCompletion{
+		{Provider: "test-provider", FinishReason: "tool_calls", Calls: []ToolCall{
+			{ID: "overview", Name: "dashboard_overview", Arguments: json.RawMessage(`{}`)},
+			{ID: "failed-history", Name: "conversation_history", Arguments: json.RawMessage(`{"record_id":"record-1"}`)},
+		}},
+		nativeAnswer("عندك 3 محادثات بانتظار موظف حسب لوحة التحكم. لم أستطع التحقق من تفاصيل هذه المحادثة."),
+	}}
+	actor := commands.ActorContext{BusinessID: "business-1", PrincipalID: "principal-1",
+		Permissions: []string{"merchant_ai:use", "dashboard:read", "conversations:read"}}
+	assistant := &Assistant{
+		Registry: registry, Native: model, Sanitizer: ConservativeSanitizer{},
+		History: history, Discovery: &DiscoveryReader{Guard: &guardFixture{}, Overview: overviewStub{}},
+	}
+	reply, err := assistant.Assist(context.Background(), AssistRequest{
+		Actor: actor, Business: "business-1", ProjectionID: "auto.v1",
+		Task: contracts.TaskExplain, Question: "اعطني المهم مما يحتاج متابعة",
+		RecordID: "record-1", Search: "screen:chat",
+	})
+	if err != nil || len(model.seen) != 2 || !strings.Contains(reply.Answer, "3 محادثات") {
+		t.Fatalf("failure of one history discarded successful overview: reply=%+v error=%v", reply, err)
+	}
+	h := model.seen[1]
+	if !strings.Contains(h[2].Content, "waiting_human") &&
+		!strings.Contains(h[2].Content, "waiting") {
+		t.Fatalf("verified dashboard evidence was lost: %s", h[2].Content)
+	}
+	if !strings.Contains(h[3].Content, "source_evidence_incomplete") ||
+		strings.Contains(h[3].Content, "checkpoint-not-in-messages") ||
+		strings.Contains(h[3].Content, "record-1") {
+		t.Fatalf("failed tool response leaked unsafe evidence or lost classification: %s", h[3].Content)
+	}
+}
+
+func TestReadRecoveryClassifiesIncompleteEvidenceWithoutOriginalErrorText(t *testing.T) {
+	code := readToolErrorCode(ErrInvalidSourceEvidence)
+	if code != "source_evidence_incomplete" { t.Fatalf("wrong source failure classification: %s", code) }
+	content := readToolFailure(code, "conversation", map[string]ToolDefinition{
+		"list_conversations": {Name: "list_conversations"},
+	})
+	if !strings.Contains(content, "source_evidence_incomplete") ||
+		!strings.Contains(content, "list_conversations") {
+		t.Fatalf("model cannot distinguish partial source evidence: %s", content)
+	}
+}
