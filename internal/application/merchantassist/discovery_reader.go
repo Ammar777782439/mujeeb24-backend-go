@@ -131,7 +131,7 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 	out.Links = []DiscoveryLink{}
 	switch call.Name {
 	case "platform_guide":
-		areas := make([]map[string]any, 0, 7)
+		areas := make([]map[string]any, 0, 18)
 		addArea := func(permission, name, url, detail string) {
 			if !authorization.Has(actor, permission) {
 				return
@@ -144,8 +144,29 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 		addArea(authorization.PermissionCustomersRead, "العملاء", "/customers", "استعراض بيانات العملاء والبحث عنهم")
 		addArea(authorization.PermissionSalesRead, "فرص البيع", "/leads", "متابعة فرص البيع وحالاتها")
 		addArea(authorization.PermissionSalesRead, "الطلبات", "/transactions", "مراجعة الطلبات والمعاملات وحالاتها")
-		addArea(authorization.PermissionCatalogRead, "الكتالوج", "/catalog", "مساعد الكتالوج الذكي مسار مستقل يقترح إضافة وتعديل المنتجات؛ التنفيذ بعد التحقق والصلاحيات والتأكيد. اسأل مجيب هنا للقراءة والشرح فقط")
+		if authorization.Has(actor, authorization.PermissionCatalogRead) {
+			help := "عرض الكتالوج والمنتجات وتفاصيلها؛ مساعد الاستفسارات هنا للقراءة فقط"
+			if authorization.Has(actor, authorization.PermissionCatalogWrite) && authorization.Has(actor, authorization.PermissionMerchantAIUse) {
+				help = "عرض المنتجات؛ ولإضافة أو تعديل منتج استخدم مساعد الكتالوج المستقل من صفحة الكتالوج. المقترحات تمر عبر التحقق والصلاحيات والتأكيد قبل التنفيذ؛ مساعد الاستفسارات لا يكتب المنتجات"
+			}
+			areas = append(areas, map[string]any{"name": "الكتالوج", "url": "/catalog", "description": help})
+			out.Links = append(out.Links, DiscoveryLink{Title: "الكتالوج", URL: "/catalog"})
+		}
 		addArea(authorization.PermissionChannelsRead, "القنوات", "/channels", "متابعة حالة ربط قنوات التواصل")
+		addArea(authorization.PermissionSalesRead, "متابعة مسارات البيع", "/sales-workflows", "متابعة حالات فرص البيع ومسارات المعاملات")
+		addArea(authorization.PermissionSalesRead, "متطلبات بيانات الطلبات", "/settings/sales", "فهم حقول المعلومات المطلوبة من العميل حسب نوع الطلب")
+		addArea(authorization.PermissionTeamRead, "الفريق", "/team", "استعراض الموظفين وصلاحياتهم ودعواتهم")
+		addArea(authorization.PermissionAutomationRead, "قواعد الأتمتة", "/settings/automation-rules", "معرفة قواعد تشغيل الردود والأتمتة")
+		addArea(authorization.PermissionAutomationRead, "الردود الجاهزة", "/settings/canned-replies", "استعراض قوالب الردود المجهزة")
+		addArea(authorization.PermissionAuditRead, "قرارات الذكاء الاصطناعي", "/ai-decisions", "مراجعة القرارات والأدلة التي يعرضها سجل النظام")
+		addArea(authorization.PermissionAuditRead, "سجل التدقيق", "/audit", "مراجعة أحداث النظام حسب صلاحية الموظف")
+		if authorization.Has(actor, authorization.PermissionBusinessRead) || authorization.Has(actor, authorization.PermissionBusinessSettings) {
+			areas = append(areas, map[string]any{"name": "إعدادات المنشأة", "url": "/settings/account", "description": "عرض بيانات وإعدادات المنشأة بحسب الصلاحيات"})
+			out.Links = append(out.Links, DiscoveryLink{Title: "إعدادات المنشأة", URL: "/settings/account"})
+			areas = append(areas, map[string]any{"name": "الدعم", "url": "/support", "description": "التواصل مع دعم مجيب عبر صفحة الدعم المخصصة"})
+			out.Links = append(out.Links, DiscoveryLink{Title: "الدعم", URL: "/support"})
+		}
+
 		out.Rows = map[string]any{"assistant_role": "read_only_business_assistance", "catalog_authoring_role": "separate_reviewed_proposal_workflow", "areas": areas}
 		out.Coverage = "verified_navigation_with_actor_permissions"
 	case "dashboard_overview":
