@@ -17,6 +17,7 @@ type ToolCall struct {
 	ID string
 	Name string
 	Arguments json.RawMessage
+	ThoughtSignature string
 }
 
 type ToolMessage struct {
