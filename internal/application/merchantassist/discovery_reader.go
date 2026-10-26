@@ -140,19 +140,15 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 		out.Coverage = "dashboard_aggregates"
 		out.Links = append(out.Links, DiscoveryLink{Title: "لوحة التحكم", URL: "/dashboard"})
 	case "find_customers":
-		p, err := r.Customers.Handle(ctx, queries.ListCustomersQuery{Meta: meta, Limit: 12, Search: call.Search})
-		if err != nil {
-			return out, errors.Join(ErrReadUnavailable, err)
-		}
-		rows := make([]map[string]any, 0, len(p.Items))
-		for _, x := range p.Items {
-			if string(x.BusinessID) != business {
-				return out, ErrInvalidSourceEvidence
-			}
-			rows = append(rows, map[string]any{"id": string(x.ID), "name": x.DisplayName, "status": x.Status})
-		}
-		out.Rows, out.HasMore = rows, p.HasMore
-		out.Links = append(out.Links, DiscoveryLink{Title: "العملاء", URL: "/customers"})
+		scan, err := scanAllPages(ctx, func(cursor string) (commands.ListResult[commands.CustomerView], error) {
+			return r.Customers.Handle(ctx, queries.ListCustomersQuery{Meta: meta, Limit: assistScanPageSize, Cursor: cursor, Search: call.Search})
+		}, func(x commands.CustomerView) (map[string]any, string, string, *DiscoveryLink, error) {
+			if string(x.BusinessID) != business { return nil, "", "", nil, ErrInvalidSourceEvidence }
+			return map[string]any{"id": string(x.ID), "name": x.DisplayName, "status": x.Status}, string(x.ID), x.Status, &DiscoveryLink{Title: "العملاء", URL: "/customers"}, nil
+		})
+		if err != nil { return out, err }
+		out.Rows, out.Links = scan.Evidence(), scan.Links
+		out.Coverage = "all_pages_scanned_non_snapshot"
 	case "customer_activity":
 		if call.RecordID == "" {
 			return out, ErrInvalidReadRequest
@@ -209,82 +205,55 @@ func (r *DiscoveryReader) Read(ctx context.Context, actor commands.ActorContext,
 		out.Coverage = "customer_and_authorized_related_records"
 		out.Links = append(out.Links, DiscoveryLink{Title: "العملاء", URL: "/customers"})
 	case "list_conversations":
-		p, err := r.Conversations.Handle(ctx, queries.ListConversationsQuery{Meta: meta, Limit: 12})
-		if err != nil {
-			return out, errors.Join(ErrReadUnavailable, err)
-		}
-		rows := make([]map[string]any, 0, len(p.Items))
-		for _, x := range p.Items {
-			if string(x.BusinessID) != business {
-				return out, ErrInvalidSourceEvidence
-			}
-			rows = append(rows, map[string]any{
-				"id": string(x.ID), "customer_id": string(x.CustomerID), "customer_name": x.CustomerDisplayName, "state": x.State, "ownership": x.Ownership,
-				"priority": x.Priority, "last_activity": x.LastActivityAt,
-			})
-			out.Links = append(out.Links, DiscoveryLink{Title: "فتح محادثة", URL: "/chat?conversation_id=" + string(x.ID)})
-		}
-		out.Rows, out.HasMore = rows, p.HasMore
+		scan, err := scanAllPages(ctx, func(cursor string) (commands.ListResult[commands.ConversationView], error) {
+			return r.Conversations.Handle(ctx, queries.ListConversationsQuery{Meta: meta, Limit: assistScanPageSize, Cursor: cursor})
+		}, func(x commands.ConversationView) (map[string]any, string, string, *DiscoveryLink, error) {
+			if string(x.BusinessID) != business { return nil, "", "", nil, ErrInvalidSourceEvidence }
+			return map[string]any{"id": string(x.ID), "customer_id": string(x.CustomerID), "customer_name": x.CustomerDisplayName, "state": x.State, "ownership": x.Ownership, "priority": x.Priority, "last_activity": x.LastActivityAt}, string(x.ID), x.State, &DiscoveryLink{Title: "فتح محادثة", URL: "/chat?conversation_id=" + string(x.ID)}, nil
+		})
+		if err != nil { return out, err }
+		out.Rows, out.Links = scan.Evidence(), scan.Links
+		out.Coverage = "all_pages_scanned_non_snapshot"
 	case "list_leads":
-		p, err := r.Leads.Handle(ctx, queries.ListLeadsQuery{Meta: meta, Limit: 12})
-		if err != nil {
-			return out, errors.Join(ErrReadUnavailable, err)
-		}
-		rows := make([]map[string]any, 0, len(p.Items))
-		for _, x := range p.Items {
-			if string(x.BusinessID) != business {
-				return out, ErrInvalidSourceEvidence
-			}
-			rows = append(rows, map[string]any{"id": string(x.ID), "customer_id": string(x.CustomerID), "status": x.Status})
-		}
-		out.Rows, out.HasMore = rows, p.HasMore
-		out.Links = append(out.Links, DiscoveryLink{Title: "فرص البيع", URL: "/leads"})
+		scan, err := scanAllPages(ctx, func(cursor string) (commands.ListResult[commands.LeadView], error) {
+			return r.Leads.Handle(ctx, queries.ListLeadsQuery{Meta: meta, Limit: assistScanPageSize, Cursor: cursor})
+		}, func(x commands.LeadView) (map[string]any, string, string, *DiscoveryLink, error) {
+			if string(x.BusinessID) != business { return nil, "", "", nil, ErrInvalidSourceEvidence }
+			return map[string]any{"id": string(x.ID), "customer_id": string(x.CustomerID), "status": x.Status}, string(x.ID), x.Status, &DiscoveryLink{Title: "فرص البيع", URL: "/leads"}, nil
+		})
+		if err != nil { return out, err }
+		out.Rows, out.Links = scan.Evidence(), scan.Links
+		out.Coverage = "all_pages_scanned_non_snapshot"
 	case "list_transactions":
-		p, err := r.Transactions.Handle(ctx, queries.ListTransactionsQuery{Meta: meta, Limit: 12})
-		if err != nil {
-			return out, errors.Join(ErrReadUnavailable, err)
-		}
-		rows := make([]map[string]any, 0, len(p.Items))
-		for _, x := range p.Items {
-			if string(x.BusinessID) != business {
-				return out, ErrInvalidSourceEvidence
-			}
-			rows = append(rows, map[string]any{
-				"id": string(x.ID), "customer_id": string(x.CustomerID), "state": x.State,
-				"type": x.TransactionType, "created_at": x.CreatedAt,
-				"amount": x.TotalAmount, "currency": x.Currency,
-			})
-			out.Links = append(out.Links, DiscoveryLink{Title: "فتح طلب", URL: "/transactions?transaction_id=" + string(x.ID)})
-		}
-		out.Rows, out.HasMore = rows, p.HasMore
+		scan, err := scanAllPages(ctx, func(cursor string) (commands.ListResult[commands.TransactionView], error) {
+			return r.Transactions.Handle(ctx, queries.ListTransactionsQuery{Meta: meta, Limit: assistScanPageSize, Cursor: cursor})
+		}, func(x commands.TransactionView) (map[string]any, string, string, *DiscoveryLink, error) {
+			if string(x.BusinessID) != business { return nil, "", "", nil, ErrInvalidSourceEvidence }
+			return map[string]any{"id": string(x.ID), "customer_id": string(x.CustomerID), "state": x.State, "type": x.TransactionType, "created_at": x.CreatedAt, "amount": x.TotalAmount, "currency": x.Currency}, string(x.ID), x.State, &DiscoveryLink{Title: "فتح طلب", URL: "/transactions?transaction_id=" + string(x.ID)}, nil
+		})
+		if err != nil { return out, err }
+		out.Rows, out.Links = scan.Evidence(), scan.Links
+		out.Coverage = "all_pages_scanned_non_snapshot"
 	case "list_catalogs":
-		p, err := r.Catalogs.Handle(ctx, queries.ListCatalogsQuery{Meta: meta, Limit: 12})
-		if err != nil {
-			return out, errors.Join(ErrReadUnavailable, err)
-		}
-		rows := make([]map[string]any, 0, len(p.Items))
-		for _, x := range p.Items {
-			if string(x.BusinessID) != business {
-				return out, ErrInvalidSourceEvidence
-			}
-			rows = append(rows, map[string]any{"id": string(x.ID), "name": x.Name, "status": x.Status})
-		}
-		out.Rows, out.HasMore = rows, p.HasMore
-		out.Links = append(out.Links, DiscoveryLink{Title: "الكتالوج", URL: "/catalog"})
+		scan, err := scanAllPages(ctx, func(cursor string) (commands.ListResult[commands.CatalogView], error) {
+			return r.Catalogs.Handle(ctx, queries.ListCatalogsQuery{Meta: meta, Limit: assistScanPageSize, Cursor: cursor})
+		}, func(x commands.CatalogView) (map[string]any, string, string, *DiscoveryLink, error) {
+			if string(x.BusinessID) != business { return nil, "", "", nil, ErrInvalidSourceEvidence }
+			return map[string]any{"id": string(x.ID), "name": x.Name, "status": x.Status}, string(x.ID), x.Status, &DiscoveryLink{Title: "الكتالوج", URL: "/catalog"}, nil
+		})
+		if err != nil { return out, err }
+		out.Rows, out.Links = scan.Evidence(), scan.Links
+		out.Coverage = "all_pages_scanned_non_snapshot"
 	case "list_channels":
-		p, err := r.Channels.Handle(ctx, queries.ListChannelConnectionsQuery{Meta: meta, Limit: 12})
-		if err != nil {
-			return out, errors.Join(ErrReadUnavailable, err)
-		}
-		rows := make([]map[string]any, 0, len(p.Items))
-		for _, x := range p.Items {
-			if string(x.BusinessID) != business {
-				return out, ErrInvalidSourceEvidence
-			}
-			rows = append(rows, map[string]any{"id": string(x.ID), "channel": x.Channel, "status": x.Status})
-		}
-		out.Rows, out.HasMore = rows, p.HasMore
-		out.Links = append(out.Links, DiscoveryLink{Title: "القنوات", URL: "/channels"})
+		scan, err := scanAllPages(ctx, func(cursor string) (commands.ListResult[commands.ChannelConnectionView], error) {
+			return r.Channels.Handle(ctx, queries.ListChannelConnectionsQuery{Meta: meta, Limit: assistScanPageSize, Cursor: cursor})
+		}, func(x commands.ChannelConnectionView) (map[string]any, string, string, *DiscoveryLink, error) {
+			if string(x.BusinessID) != business { return nil, "", "", nil, ErrInvalidSourceEvidence }
+			return map[string]any{"id": string(x.ID), "channel": x.Channel, "status": x.Status}, string(x.ID), x.Status, &DiscoveryLink{Title: "القنوات", URL: "/channels"}, nil
+		})
+		if err != nil { return out, err }
+		out.Rows, out.Links = scan.Evidence(), scan.Links
+		out.Coverage = "all_pages_scanned_non_snapshot"
 	case "subscription":
 		v, err := r.Subscription.Handle(ctx, queries.GetBusinessSubscriptionQuery{Meta: meta})
 		if err != nil {
