@@ -98,6 +98,20 @@ func (a *Assistant) Assist(ctx context.Context, req AssistRequest) (AssistRespon
 			}
 			data.Policies[i].Value.Summary = txt
 		}
+		// A search with no published matches is not a provider failure. The
+		// runtime business AI policy shown in Settings is stored separately
+		// from published policy versions. Never ask the model to invent
+		// content when no published evidence was found.
+		if len(data.Policies) == 0 && len(data.Knowledge) == 0 {
+			answer := "لم أجد مستندات معرفة منشورة وسارية تطابق موضوع البحث. تحقق من وجود مستند منشور أو جرّب كلمة بحث أخرى."
+			if kind == PublishedPolicies {
+				answer = "لم أجد سياسات منشورة وسارية تطابق موضوع البحث. إعدادات تشغيل المساعد في صفحة الإعدادات ليست بحد ذاتها سياسة منشورة؛ تحقق من وجود سياسة منشورة أو جرّب كلمة بحث أخرى."
+			}
+			emptyEvidence := json.RawMessage(`{"matches":[],"coverage":"no_matching_published_records"}`)
+			return AssistResponse{
+				Answer: answer, ProjectionID: desc.ID, Evidence: emptyEvidence, ReviewRequired: true,
+			}, nil
+		}
 		evidence = data
 	case "customer.v1", "conversation.v1", "lead.v1", "transaction.v1":
 		if a.Records == nil {
