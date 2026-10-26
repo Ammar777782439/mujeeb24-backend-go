@@ -21,17 +21,17 @@ func TestMerchantAssistParameterlessStrictToolReachesDeepSeekTransport(t *testin
 			t.Errorf("incorrect DeepSeek strict endpoint: %s", r.URL.Path)
 		}
 		var body struct {
-			Model string `json:"model"`
+			Model      string `json:"model"`
 			ToolChoice string `json:"tool_choice"`
-			Tools []struct {
+			Tools      []struct {
 				Function struct {
-					Name string `json:"name"`
-					Strict bool `json:"strict"`
+					Name       string `json:"name"`
+					Strict     bool   `json:"strict"`
 					Parameters struct {
-						Type string `json:"type"`
-						Properties map[string]json.RawMessage `json:"properties"`
-						Required []string `json:"required"`
-						AdditionalProperties bool `json:"additionalProperties"`
+						Type                 string                     `json:"type"`
+						Properties           map[string]json.RawMessage `json:"properties"`
+						Required             []string                   `json:"required"`
+						AdditionalProperties bool                       `json:"additionalProperties"`
 					} `json:"parameters"`
 				} `json:"function"`
 			} `json:"tools"`
@@ -58,28 +58,36 @@ func TestMerchantAssistParameterlessStrictToolReachesDeepSeekTransport(t *testin
 	defer server.Close()
 
 	provider, err := native.NewDeepSeek(native.DeepSeekConfig{
-		Model:"deepseek-flash", APIKey:"fake-test-key",
-		BaseURL:server.URL+"/beta", Timeout:time.Second,
+		Model: "deepseek-flash", APIKey: "fake-test-key",
+		BaseURL: server.URL + "/beta", Timeout: time.Second,
 	})
-	if err != nil { t.Fatal(err) }
-	router, err := native.NewRouter(provider,nil,native.Policy{})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	router, err := native.NewRouter(provider, nil, native.Policy{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	client, err := native.NewCompletionClient(router)
-	if err != nil { t.Fatal(err) }
-	assistant := &MerchantAssistNativeTools{Client:client,Model:"mujeeb-merchant"}
+	if err != nil {
+		t.Fatal(err)
+	}
+	assistant := &MerchantAssistNativeTools{Client: client, Model: "mujeeb-merchant"}
 	response, err := assistant.CompleteTools(context.Background(),
-		[]merchantassist.ToolMessage{{Role:"user",Content:"كم عندي عميل؟"}},
+		[]merchantassist.ToolMessage{{Role: "user", Content: "كم عندي عميل؟"}},
 		[]merchantassist.ToolDefinition{{
-			Name:"dashboard_overview", Description:"Read approved dashboard totals",
-			Parameters:map[string]any{
-				"type":"object", "additionalProperties":false,
-				"properties":map[string]any{}, "required":[]string{},
+			Name: "dashboard_overview", Description: "Read approved dashboard totals",
+			Parameters: map[string]any{
+				"type": "object", "additionalProperties": false,
+				"properties": map[string]any{}, "required": []string{},
 			},
 		}}, "")
-	if err != nil { t.Fatalf("strict parameterless tool failed before HTTP: %v",err) }
+	if err != nil {
+		t.Fatalf("strict parameterless tool failed before HTTP: %v", err)
+	}
 	if calls != 1 || response.FinishReason != "tool_calls" ||
-		len(response.Calls)!=1 || response.Calls[0].Name != "dashboard_overview" ||
+		len(response.Calls) != 1 || response.Calls[0].Name != "dashboard_overview" ||
 		string(response.Calls[0].Arguments) != "{}" {
-		t.Fatalf("native strict function regression: calls=%d response=%+v",calls,response)
+		t.Fatalf("native strict function regression: calls=%d response=%+v", calls, response)
 	}
 }

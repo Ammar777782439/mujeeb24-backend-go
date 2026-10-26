@@ -28,10 +28,10 @@ func TestAllMerchantNativeToolContractsHaveStrictRequiredArrays(t *testing.T) {
 				t.Fatalf("DeepSeek strict tools must never contain required:null: %s", raw)
 			}
 			var schema struct {
-				Type string `json:"type"`
-				Properties map[string]json.RawMessage `json:"properties"`
-				Required []string `json:"required"`
-				AdditionalProperties bool `json:"additionalProperties"`
+				Type                 string                     `json:"type"`
+				Properties           map[string]json.RawMessage `json:"properties"`
+				Required             []string                   `json:"required"`
+				AdditionalProperties bool                       `json:"additionalProperties"`
 			}
 			if err := json.Unmarshal(raw, &schema); err != nil {
 				t.Fatal(err)
