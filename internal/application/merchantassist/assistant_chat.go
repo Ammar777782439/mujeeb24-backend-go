@@ -172,7 +172,7 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 			known["lead"][req.RecordID] = true
 		}
 	}
-	messages := []ToolMessage{{Role: "user", Content: question}}
+	messages := []ToolMessage{{Role: "user", Content: merchantReplyStyleAR + "\n\nسؤال التاجر: " + question}}
 	// The current screen record is supplied by the application UI. Give the
 	// model this reference so it does not guess which item "this" refers to.
 	// Every actual read still checks business ownership and staff permissions.
@@ -416,6 +416,7 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 				coverage = read.Coverage
 				links = append(links, read.Links...)
 			}
+			data = decorateMerchantToolEvidence(call.Name, data)
 			output, err := json.Marshal(data)
 			if err != nil || len(output) == 0 || len(output) > 28000 ||
 				evidenceBytes+len(output) > assistMaxToolEvidence {
