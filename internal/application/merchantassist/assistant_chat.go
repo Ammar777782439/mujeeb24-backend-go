@@ -328,8 +328,22 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 					Task: contracts.TaskExplain, Search: args.Search, Limit: 3,
 				})
 				if err != nil {
+					if ctx.Err() != nil {
+						return empty, ctx.Err()
+					}
 					logAssistReadFailure(call.Name, err)
-					return empty, err
+					code := readToolErrorCode(err)
+					results = append(results, ToolMessage{
+						Role: "tool", ToolCallID: call.ID,
+						Content: readToolFailure(code, kind, allowed),
+					})
+					readCache[signature] = struct {
+						callID string
+						coverage string
+					}{callID: call.ID, coverage: code}
+					log.Printf("[MerchantAssist] stage=tool_read_recoverable tool=%s batch_index=%d cause=%s",
+						call.Name, i+1, code)
+					continue
 				}
 				for i := range read.Knowledge {
 					safe, err := a.Sanitizer.Sanitize(ctx, ContentMessage, read.Knowledge[i].Value.Content)
@@ -352,8 +366,22 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 					Task: contracts.TaskSummarize,
 				})
 				if err != nil {
+					if ctx.Err() != nil {
+						return empty, ctx.Err()
+					}
 					logAssistReadFailure(call.Name, err)
-					return empty, err
+					code := readToolErrorCode(err)
+					results = append(results, ToolMessage{
+						Role: "tool", ToolCallID: call.ID,
+						Content: readToolFailure(code, kind, allowed),
+					})
+					readCache[signature] = struct {
+						callID string
+						coverage string
+					}{callID: call.ID, coverage: code}
+					log.Printf("[MerchantAssist] stage=tool_read_recoverable tool=%s batch_index=%d cause=%s",
+						call.Name, i+1, code)
+					continue
 				}
 				data, coverage = read, read.Coverage
 				links = append(links, DiscoveryLink{Title: "فتح المحادثة", URL: "/chat?conversation_id=" + args.RecordID})
@@ -367,8 +395,22 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 					RecordID: args.RecordID, Task: contracts.TaskExplain,
 				})
 				if err != nil {
+					if ctx.Err() != nil {
+						return empty, ctx.Err()
+					}
 					logAssistReadFailure(call.Name, err)
-					return empty, err
+					code := readToolErrorCode(err)
+					results = append(results, ToolMessage{
+						Role: "tool", ToolCallID: call.ID,
+						Content: readToolFailure(code, kind, allowed),
+					})
+					readCache[signature] = struct {
+						callID string
+						coverage string
+					}{callID: call.ID, coverage: code}
+					log.Printf("[MerchantAssist] stage=tool_read_recoverable tool=%s batch_index=%d cause=%s",
+						call.Name, i+1, code)
+					continue
 				}
 				data, coverage = read, "single_record_verified"
 			case "lead_evidence":
@@ -377,8 +419,22 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 					LeadID: args.RecordID, Task: contracts.TaskExplain,
 				})
 				if err != nil {
+					if ctx.Err() != nil {
+						return empty, ctx.Err()
+					}
 					logAssistReadFailure(call.Name, err)
-					return empty, err
+					code := readToolErrorCode(err)
+					results = append(results, ToolMessage{
+						Role: "tool", ToolCallID: call.ID,
+						Content: readToolFailure(code, kind, allowed),
+					})
+					readCache[signature] = struct {
+						callID string
+						coverage string
+					}{callID: call.ID, coverage: code}
+					log.Printf("[MerchantAssist] stage=tool_read_recoverable tool=%s batch_index=%d cause=%s",
+						call.Name, i+1, code)
+					continue
 				}
 				data, coverage = read, "single_lead_verified"
 			default:
@@ -386,8 +442,22 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 					Name: call.Name, Search: args.Search, RecordID: args.RecordID,
 				})
 				if err != nil {
+					if ctx.Err() != nil {
+						return empty, ctx.Err()
+					}
 					logAssistReadFailure(call.Name, err)
-					return empty, err
+					code := readToolErrorCode(err)
+					results = append(results, ToolMessage{
+						Role: "tool", ToolCallID: call.ID,
+						Content: readToolFailure(code, kind, allowed),
+					})
+					readCache[signature] = struct {
+						callID string
+						coverage string
+					}{callID: call.ID, coverage: code}
+					log.Printf("[MerchantAssist] stage=tool_read_recoverable tool=%s batch_index=%d cause=%s",
+						call.Name, i+1, code)
+					continue
 				}
 				rememberIDs(known, call.Name, read.Rows)
 				if call.Name == "customer_activity" {
@@ -420,7 +490,19 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 			output, err := json.Marshal(data)
 			if err != nil || len(output) == 0 || len(output) > 28000 ||
 				evidenceBytes+len(output) > assistMaxToolEvidence {
-				return empty, ErrInvalidSourceEvidence
+				// Large individual evidence is not proof of invalid data.
+				// Return a bounded, explicit unavailable result for just this tool.
+				log.Printf("[MerchantAssist] stage=tool_read_recoverable tool=%s batch_index=%d cause=evidence_size_or_encoding limit=%d",
+					call.Name, i+1, assistMaxToolEvidence)
+				results = append(results, ToolMessage{
+					Role: "tool", ToolCallID: call.ID,
+					Content: readToolFailure("source_evidence_incomplete", kind, allowed),
+				})
+				readCache[signature] = struct {
+					callID string
+					coverage string
+				}{callID: call.ID, coverage: "source_evidence_incomplete"}
+				continue
 			}
 			evidenceBytes += len(output)
 			coverages = append(coverages, coverage)
