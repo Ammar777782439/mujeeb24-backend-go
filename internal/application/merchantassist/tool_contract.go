@@ -75,6 +75,9 @@ func toolDefinitions(available []string) []ToolDefinition {
 	out := make([]ToolDefinition, 0, len(available))
 	for _, name := range available {
 		if spec, ok := definitions[name]; ok {
+			if len(toolStatusDomains[name]) != 0 {
+				spec.Description += " Values of status/state in this tool's result have authoritative Arabic meanings in status_meanings_ar; use those meanings in your Arabic merchant reply. Keep raw codes as internal data, never assume a won lead means a paid or delivered order."
+			}
 			out = append(out, spec)
 		}
 	}
