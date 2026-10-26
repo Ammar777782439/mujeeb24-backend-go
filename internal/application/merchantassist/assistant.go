@@ -39,13 +39,14 @@ type Assistant struct {
 	History   *ConversationHistoryReader
 	Leads     *LeadEvidenceReader
 	Generator TextGenerator
+	Native ToolModel
 	Discovery *DiscoveryReader
 	Sanitizer ContentSanitizer
 }
 
 func (a *Assistant) Assist(ctx context.Context, req AssistRequest) (AssistResponse, error) {
 	var out AssistResponse
-	if a == nil || a.Registry == nil || a.Generator == nil || a.Sanitizer == nil {
+	if a == nil || a.Registry == nil || a.Sanitizer == nil {
 		return out, ErrAssistantUnavailable
 	}
 	if req.Business == "" || len(req.Question) > 1600 || strings.TrimSpace(req.Question) == "" {
@@ -72,6 +73,7 @@ func (a *Assistant) Assist(ctx context.Context, req AssistRequest) (AssistRespon
 	if req.ProjectionID == "auto.v1" {
 		return a.assistConversational(ctx, req, safeQuestion)
 	}
+	if a.Generator == nil { return out, ErrAssistantUnavailable }
 	var evidence any
 	switch req.ProjectionID {
 	case "published_policy.v1", "published_knowledge.v1":
