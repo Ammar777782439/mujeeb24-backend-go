@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"regexp"
 	"net"
 	"net/http"
 	"net/url"
@@ -72,6 +73,98 @@ func NewDeepSeek(cfg DeepSeekConfig) (*DeepSeek, error) {
 	return &DeepSeek{model: cfg.Model, key: cfg.APIKey, endpoint: strings.TrimRight(base, "/") + "/chat/completions", client: client, timeout: cfg.Timeout}, nil
 }
 func (c *DeepSeek) Name() string { return "deepseek" }
+
+// debugToolSummary does not serialize raw prompts, customer evidence, API keys
+// or function arguments. It records the submitted strict contract footprint.
+func debugToolSummary(body map[string]any) (int, string) {
+	raw, ok := body["tools"].([]any)
+	if !ok { return 0, "none" }
+	names := make([]string, 0, len(raw))
+	for _, item := range raw {
+		entry, _ := item.(map[string]any)
+		fn, _ := entry["function"].(map[string]any)
+		name, _ := fn["name"].(string)
+		if regexp.MustCompile(`^[a-zA-Z0-9_-]{1,128}package native
+
+import (
+	"bytes"
+	"context"
+	"crypto/tls"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"regexp"
+	"net"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/catalogdump"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/salesdiag"
+)
+
+const nativeResponseLimit = 4 << 20
+
+// DeepSeekConfig never accepts business-policy configuration or tool executors.
+type DeepSeekConfig struct {
+	Model      string
+	APIKey     string
+	BaseURL    string
+	Timeout    time.Duration
+	HTTPClient *http.Client
+}
+
+// DeepSeek sends generation-only calls to DeepSeek's API directly.
+type DeepSeek struct {
+	model    string
+	key      string
+	endpoint string
+	client   *http.Client
+	timeout  time.Duration
+}
+
+func NewDeepSeek(cfg DeepSeekConfig) (*DeepSeek, error) {
+	if strings.TrimSpace(cfg.APIKey) == "" || strings.TrimSpace(cfg.Model) == "" {
+		return nil, errors.New("DeepSeek API key and model are required")
+	}
+	base := cfg.BaseURL
+	if base == "" {
+		base = "https://api.deepseek.com/beta"
+	}
+	u, err := url.Parse(base)
+	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "/beta" {
+		return nil, errors.New("DeepSeek requires a canonical /beta endpoint")
+	}
+	if u.Scheme != "https" {
+		host := u.Hostname()
+		if u.Scheme != "http" || net.ParseIP(host) == nil || !net.ParseIP(host).IsLoopback() {
+			return nil, errors.New("DeepSeek HTTP is only allowed for local test endpoints")
+		}
+	} else if !strings.EqualFold(u.Hostname(), "api.deepseek.com") {
+		return nil, errors.New("DeepSeek hostname must be api.deepseek.com")
+	}
+	if cfg.Timeout <= 0 {
+		cfg.Timeout = 30 * time.Second
+	}
+	client := cfg.HTTPClient
+	if client == nil {
+		client = &http.Client{
+			Transport:     &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12}},
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		}
+	}
+	return &DeepSeek{model: cfg.Model, key: cfg.APIKey, endpoint: strings.TrimRight(base, "/") + "/chat/completions", client: client, timeout: cfg.Timeout}, nil
+}
+).MatchString(name) {
+			names = append(names, name)
+		}
+	}
+	return len(raw), strings.Join(names, ",")
+}
+
 
 type canonicalDeepSeekRequest struct {
 	Model             string            `json:"model"`
@@ -206,6 +299,9 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	if err != nil {
 		return Response{}, err
 	}
+	toolCount, toolNames := debugToolSummary(body)
+	log.Printf("[DeepSeekNative] request stage=send model=%s tools=%d names=%s messages=%d choice=%s bytes=%d timeout=%s",
+		c.model, toolCount, toolNames, len(messages), canonical.ToolChoice, len(encoded), c.timeout)
 	catalogdump.Record(ctx, "deepseek_wire_request", catalogdump.Raw(encoded))
 	timeoutCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
@@ -215,14 +311,19 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	}
 	httpReq.Header.Set("Authorization", "Bearer "+c.key)
 	httpReq.Header.Set("Content-Type", "application/json")
+	started := time.Now()
 	httpRes, err := c.client.Do(httpReq)
 	if err != nil {
+		reason := "transport_error"
+		if timeoutCtx.Err() != nil { reason = "timeout_or_deadline" }
+		log.Printf("[DeepSeekNative] request_failed stage=http_transport reason=%s elapsed_ms=%d", reason, time.Since(started).Milliseconds())
 		if timeoutCtx.Err() != nil {
 			return Response{}, timeoutCtx.Err()
 		}
 		return Response{}, fmt.Errorf("DeepSeek transport failure: %w", err)
 	}
 	defer httpRes.Body.Close()
+	log.Printf("[DeepSeekNative] response stage=http status=%d elapsed_ms=%d", httpRes.StatusCode, time.Since(started).Milliseconds())
 	catalogdump.Record(ctx, "deepseek_http_status", httpRes.StatusCode)
 	if httpRes.StatusCode < 200 || httpRes.StatusCode >= 300 {
 		body, readErr := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
@@ -230,8 +331,13 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 			catalogdump.Record(ctx, "deepseek_raw_error_response", catalogdump.Raw(body))
 		}
 		if readErr != nil || len(body) > nativeResponseLimit {
+			log.Printf("[DeepSeekNative] request_failed stage=read_error_response status=%d read_error=%t body_too_large=%t",
+				httpRes.StatusCode, readErr != nil, len(body) > nativeResponseLimit)
 			return Response{}, errors.New("DeepSeek error response read/size failure")
 		}
+		code, typ, msg := safeDeepSeekErrorFields(body)
+		log.Printf("[DeepSeekNative] request_failed stage=provider_http status=%d code=%s type=%s message=%q",
+			httpRes.StatusCode, code, typ, msg)
 		return Response{}, &StatusError{Provider: "deepseek", Code: httpRes.StatusCode}
 	}
 	raw, err := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
@@ -249,6 +355,8 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil || len(envelope.Choices) != 1 {
+		log.Printf("[DeepSeekNative] request_failed stage=response_envelope invalid_json=%t choices=%d bytes=%d",
+			err != nil, len(envelope.Choices), len(raw))
 		return Response{}, errors.New("invalid DeepSeek choice envelope")
 	}
 	choice := envelope.Choices[0]
