@@ -39,7 +39,7 @@ type Assistant struct {
 	History   *ConversationHistoryReader
 	Leads     *LeadEvidenceReader
 	Generator TextGenerator
-	Native ToolModel
+	Native    ToolModel
 	Discovery *DiscoveryReader
 	Sanitizer ContentSanitizer
 }
@@ -73,7 +73,9 @@ func (a *Assistant) Assist(ctx context.Context, req AssistRequest) (AssistRespon
 	if req.ProjectionID == "auto.v1" {
 		return a.assistConversational(ctx, req, safeQuestion)
 	}
-	if a.Generator == nil { return out, ErrAssistantUnavailable }
+	if a.Generator == nil {
+		return out, ErrAssistantUnavailable
+	}
 	var evidence any
 	switch req.ProjectionID {
 	case "published_policy.v1", "published_knowledge.v1":

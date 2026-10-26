@@ -15,32 +15,32 @@ import (
 // Merchant Catalog AI's authoring route remains fully independent.
 type MerchantAssistNativeTools struct {
 	Client *native.CompletionClient
-	Model string
+	Model  string
 }
 
 type merchantAssistNativeCall struct {
-	ID string `json:"id"`
-	Type string `json:"type"`
+	ID       string `json:"id"`
+	Type     string `json:"type"`
 	Function struct {
-		Name string `json:"name"`
+		Name      string `json:"name"`
 		Arguments string `json:"arguments"`
 	} `json:"function"`
 	ThoughtSignature string `json:"thought_signature,omitempty"`
 }
 type merchantAssistNativeMessage struct {
-	Role string `json:"role"`
-	Content any `json:"content,omitempty"`
-	ToolCalls []merchantAssistNativeCall `json:"tool_calls,omitempty"`
-	ToolCallID string `json:"tool_call_id,omitempty"`
+	Role       string                     `json:"role"`
+	Content    any                        `json:"content,omitempty"`
+	ToolCalls  []merchantAssistNativeCall `json:"tool_calls,omitempty"`
+	ToolCallID string                     `json:"tool_call_id,omitempty"`
 }
 type merchantAssistNativeResponse struct {
 	Choices []struct {
 		FinishReason string `json:"finish_reason"`
-		Message struct {
-			Role string `json:"role"`
-			Content json.RawMessage `json:"content"`
+		Message      struct {
+			Role      string                     `json:"role"`
+			Content   json.RawMessage            `json:"content"`
 			ToolCalls []merchantAssistNativeCall `json:"tool_calls"`
-			Refusal *string `json:"refusal"`
+			Refusal   *string                    `json:"refusal"`
 		} `json:"message"`
 	} `json:"choices"`
 }
@@ -57,7 +57,9 @@ func (m *MerchantAssistNativeTools) CompleteTools(ctx context.Context, history [
 		}
 		entry := merchantAssistNativeMessage{Role: h.Role}
 		if h.Role == "tool" {
-			if h.ToolCallID == "" { return zero, errors.New("tool result missing call ID") }
+			if h.ToolCallID == "" {
+				return zero, errors.New("tool result missing call ID")
+			}
 			entry.ToolCallID, entry.Content = h.ToolCallID, h.Content
 		} else if h.Role == "user" {
 			entry.Content = h.Content
@@ -89,9 +91,13 @@ func (m *MerchantAssistNativeTools) CompleteTools(ctx context.Context, history [
 		request["parallel_tool_calls"] = false
 	}
 	body, err := json.Marshal(request)
-	if err != nil || len(body) > 90000 { return zero, errors.New("merchant assist request exceeds context limit") }
+	if err != nil || len(body) > 90000 {
+		return zero, errors.New("merchant assist request exceeds context limit")
+	}
 	raw, info, err := m.Client.CompletePinned(ctx, request, pinned)
-	if err != nil { return zero, err }
+	if err != nil {
+		return zero, err
+	}
 	var answer merchantAssistNativeResponse
 	if err := json.Unmarshal(raw, &answer); err != nil || len(answer.Choices) != 1 {
 		return zero, errors.New("invalid merchant assistant native response")
@@ -116,12 +122,16 @@ func (m *MerchantAssistNativeTools) CompleteTools(ctx context.Context, history [
 		}
 		return reply, nil
 	}
-	if choice.FinishReason != "stop" { return zero, errors.New("merchant assistant did not complete") }
+	if choice.FinishReason != "stop" {
+		return zero, errors.New("merchant assistant did not complete")
+	}
 	if err := json.Unmarshal(choice.Message.Content, &reply.Content); err != nil {
 		return zero, errors.New("merchant assistant final content must be text")
 	}
 	reply.Content = strings.TrimSpace(reply.Content)
-	if reply.Content == "" || len(reply.Content) > 4000 { return zero, errors.New("merchant assistant final text is empty or too long") }
+	if reply.Content == "" || len(reply.Content) > 4000 {
+		return zero, errors.New("merchant assistant final text is empty or too long")
+	}
 	return reply, nil
 }
 
