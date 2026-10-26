@@ -123,6 +123,20 @@ func (a *Assistant) assistConversational(ctx context.Context, req AssistRequest,
 			if e != nil {
 				return empty, e
 			}
+			for i := range read.Knowledge {
+				safe, sanitizeErr := a.Sanitizer.Sanitize(ctx, ContentMessage, read.Knowledge[i].Value.Content)
+				if sanitizeErr != nil {
+					return empty, ErrInvalidSourceEvidence
+				}
+				read.Knowledge[i].Value.Content = safe
+			}
+			for i := range read.Policies {
+				safe, sanitizeErr := a.Sanitizer.Sanitize(ctx, ContentMessage, read.Policies[i].Value.Summary)
+				if sanitizeErr != nil {
+					return empty, ErrInvalidSourceEvidence
+				}
+				read.Policies[i].Value.Summary = safe
+			}
 			result = read
 			coverages = append(coverages, "published_matches_only")
 		case "conversation_history":
