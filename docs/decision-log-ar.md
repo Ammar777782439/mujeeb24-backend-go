@@ -57,6 +57,8 @@
 
 | ADR-049 | Capability Selection and Verified Execution Authority — إبقاء System Prompt لقواعد السلوك العامة فقط ونقل شروط اختيار كل قدرة إلى وصف Function Calling؛ فصل ملخص المحادثة إلى طلبات العميل ووعود المساعد والتنفيذ الموثق؛ منع اعتبار وعود المساعد نتائج تشغيل؛ مرجع الحالة الحالية هو `verified_execution_state` المبني من سجل المحادثة الموثوق و`sales` من بيانات المعاملات الموثوقة عند توفرها، وليس `conversation_summary`. | سجل الإنتاج كشف اختيار `respond_without_action` رغم وعد المساعد بتحويل العميل، بينما تجربة Gemini الحية اختارت التحويل الصحيح في سياق معاد البناء. لذا فُصلت سلطة النص عن التنفيذ دون محرك نوايا لغوي في Go ودون تغيير تفويض الإجراءات. | مطبق برمجيًا؛ يتطلب تأهيلًا حيًا |
 
+| ADR-050 | توحيد Merchant Catalog Authoring على Canonical Proposal V3 مع Strict Wire للقيمة الفردية، وربط `AttributeSchema / AttributeDefinition` بقيم `CatalogItem.attributes` و`Variant.attributes`، واشتراط أن ينتج النموذج التسميات العربية والأنواع وقواعد `validation_rules` واختيار القالب، مع بقاء Go مدقّقًا ومُنشئًا للمفاتيح التقنية بعد الموافقة وReact عارضًا للتعريفات المخزنة فقط. | القضاء على تضارب التوثيق ونقل مقترح كامل داخل String، ومنع حفظ مواصفات بلا تسمية عربية موثوقة أو تجاهل قيود الاختيار، دون تعديل Catalog Domain أو ترحيل البيانات التاريخية تلقائيًا. المصدر الحالي: `docs/architecture/merchant-catalog-attribute-schema-ai-contract-ar.md` والعقدان 11 و12. | منفّذ على `fix/merchant-catalog-strict-wire-v3` / PR #18؛ غير مدمج في main |
+
 ## قرارات لم تُحسم بعد
 
 هذه ليست فجوات يجب ملؤها بالتخمين:
