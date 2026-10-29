@@ -44,9 +44,16 @@ type catalogWireDelete struct {
 	ID          string `json:"id"`
 	ReasonGiven string `json:"reason_given"`
 }
+type catalogWireAttributeDefinition struct {
+	Key string `json:"key"`
+	Label string `json:"label"`
+	DataType string `json:"data_type"`
+	ValidationRulesJSON string `json:"validation_rules_json"`
+}
+
 type catalogWireProposal struct {
 	AttributeSchemaName  string                                          `json:"attribute_schema_name"`
-	AttributeDefinitions []merchantcatalogai.ProposedAttributeDefinition `json:"attribute_definitions"`
+	AttributeDefinitions []catalogWireAttributeDefinition `json:"attribute_definitions"`
 	SchemaVersion        int                                             `json:"schema_version"`
 	Status               merchantcatalogai.ProposalStatus                `json:"status"`
 	Operation            merchantcatalogai.Operation                     `json:"operation"`
@@ -112,7 +119,7 @@ func merchantCatalogWireSchema() map[string]any {
 		"evidence_references":   catalogWireArray(catalogWireString()),
 		"missing_information":   catalogWireArray(missing),
 		"attribute_definitions": catalogWireArray(catalogWireObject(map[string]any{
-			"key": catalogWireString(), "label": catalogWireString(), "data_type": catalogWireString(),
+			"key": catalogWireString(), "label": catalogWireString(), "data_type": catalogWireString(), "validation_rules_json": catalogWireString(),
 		})),
 		"create": catalogWireObject(map[string]any{
 			"fields":   catalogWireFieldSchema(merchantcatalogai.ItemCreate{}, "variants", "offers"),
