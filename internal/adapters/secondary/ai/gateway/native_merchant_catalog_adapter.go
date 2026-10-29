@@ -112,32 +112,34 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 		return merchantcatalogai.Proposal{}, err
 	}
 
-	proposalSchema, err := json.Marshal(merchantCatalogProposalSchema())
-	if err != nil {
-		return merchantcatalogai.Proposal{}, errors.New("unable to encode canonical merchant proposal schema")
-	}
-	// The full proposal may contain dynamic attributes that provider strict
-	// schemas cannot represent without altering the merchant contract.
-	// A strict, reversible transport envelope carries the complete proposal
-	// as JSON text; Go validates that canonical JSON before any mutation.
-	proposalEnvelopeSchema := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"canonical_proposal_json": map[string]any{"type": "string"},
-		},
-		"required":             []string{"canonical_proposal_json"},
-		"additionalProperties": false,
-	}
+	// DeepSeek constrains the whole commercial transport hierarchy. Only
+	// individual field values remain JSON strings, decoded and validated in Go.
+	// Never serialize the complete proposal as an unconstrained string.
+	wireSchema := merchantCatalogWireSchema()
 	proposalFormat := map[string]any{
 		"type": "json_schema",
 		"json_schema": map[string]any{
-			"name":   "merchant_catalog_transport",
+			"name": "merchant_catalog_wire",
 			"strict": true,
-			"schema": proposalEnvelopeSchema,
+			"schema": wireSchema,
 		},
 	}
-	trustedProposalInstruction := system + "\n\n# Canonical merchant proposal JSON schema\n" + string(proposalSchema) +
-		"\nReturn the complete proposal matching this canonical contract as the string value of canonical_proposal_json. Never omit commercial fields."
+	trustedProposalInstruction := system + `\n\n# Strict merchant catalog wire transport
+Return the final proposal using the merchant_catalog_wire tool schema.
+All schema object fields are required. For an inactive operation, use empty
+fields/variants/offers arrays and empty IDs/strings, never invented data.
+For create: populate create.fields, create.variants, create.offers.
+For update: populate update.item_id and only requested changes in
+update.changes, update.existing_variants, update.new_variants,
+update.existing_offers, update.new_offers.
+For delete: populate delete.id. For read-only answers: operation=ask_merchant
+with all mutation payloads empty.
+Each fields array contains {name,value_json}; value_json is the JSON
+encoding of that one field value (e.g. "600.0000" encoded as a JSON string,
+or attributes as a JSON object). Field names must match the schema enum.
+Do not omit merchant-requested changes, invent IDs, or move price into item
+attributes. Existing offers are under update.existing_offers only.
+No proposal is executed until the merchant approves it.`
 	allowParallel := false
 	req := nativeMerchantChatRequest{
 		Model:             a.model,
@@ -306,20 +308,9 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 		if err := json.Unmarshal(choice.Message.Content, &content); err != nil || strings.TrimSpace(content) == "" {
 			return merchantcatalogai.Proposal{}, errors.New("merchant catalog returned no strict structured result")
 		}
-		if err := validateStrictArguments([]byte(content), proposalEnvelopeSchema); err != nil {
-			return merchantcatalogai.Proposal{}, fmt.Errorf("invalid native merchant transport envelope: %w", err)
-		}
-		var wrapped struct {
-			CanonicalProposalJSON string `json:"canonical_proposal_json"`
-		}
-		if err := json.Unmarshal([]byte(content), &wrapped); err != nil || strings.TrimSpace(wrapped.CanonicalProposalJSON) == "" {
-			return merchantcatalogai.Proposal{}, errors.New("merchant catalog returned an empty canonical proposal")
-		}
-		// The authoritative Go parser rejects unknown fields and invalid
-		// commercial relations; the model never executes the proposal.
-		proposal, err := parseMerchantCatalogProposal(wrapped.CanonicalProposalJSON)
+		proposal, err := catalogWireParse(content)
 		if err != nil {
-			return merchantcatalogai.Proposal{}, err
+			return merchantcatalogai.Proposal{}, fmt.Errorf("decode strict merchant catalog wire proposal: %w", err)
 		}
 		proposal = proposal.Normalize()
 		if validator, ok := input.Capabilities.(interface {
