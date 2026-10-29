@@ -212,9 +212,10 @@ Merchant message + selected catalog + history + entity contract
   → Provider Adapter يترجم الجولة التالية ويحافظ على ربط الـcall والنتيجة
   → Model قد يختار أداة قراءة أخرى
   → عند انتهاء القراءة: Gateway يلغي tools وينتقل إلى طلب proposal منظم مستقل
-  → Model ينتج canonical_proposal_json
-  → parseMerchantCatalogProposal → Normalize → ValidateReferences → Validate
-  → Proposal فقط؛ الحفظ/التنفيذ لهما مسار اعتماد وصلاحيات منفصل
+  → Model ينتج Strict Wire Proposal (فرع fix/merchant-catalog-strict-wire-v3)
+  → catalogWireParse → parseMerchantCatalogProposal → Normalize → ValidateReferences → Validate
+  → PROPOSAL_STORED للمراجعة فقط (بدون تعديل منتج أو قالب)
+  → موافقة التاجر → ExecuteApproved → transaction لربط/إصدار القالب والتعريفات والقيم
 ```
 
 تفاصيل عقد Merchant الجاري والتي **لا يصح كسرها**:
@@ -223,7 +224,7 @@ Merchant message + selected catalog + history + entity contract
 - تتابع الرسائل: `system → user → assistant(tool_calls) → tool(tool_call_id, content) → ...`، وربط ID أداة القراءة بنتيجتها **ضروري**.
 - نتيجة القراءة تحمل `data` و`has_more` و`next_cursor`. لا تسقط علامة الصفحات؛ التاجر قد يحتاج بقية العناصر.
 - لا يقرر Adapter هل «التاجر يقصد تعديل السعر»؛ النموذج يحدد ما يحتاجه من قراءات ومقترح، ضمن أدوات وصلاحيات مجيب.
-- **النص النهائي ليس تنفيذًا**: `canonical_proposal_json` يحتوي اقتراحًا مطابقًا لـ`merchantCatalogProposalSchema()`، ويتم فحصه في Go. يوجد حقول ديناميكية لا يمكن إرسالها مباشرة ضمن Strict Schema لكل مزود؛ الغلاف النصي الحالي حل نقل لا يلغي التحقق.
+- **النص النهائي ليس تنفيذًا**: `canonical_proposal_json` كان غلافًا نصيًا في النسخة التاريخية للدليل. على فرع `fix/merchant-catalog-strict-wire-v3` تستخدم `merchantCatalogWireSchema()` بنية مغلقة، وتُنقل قيمة كل حقل منفرد عبر `value_json`؛ يحولها Go إلى `Proposal V3` ويُبقي `parseMerchantCatalogProposal` والتحقق من المراجع والمعاني التجارية. على النموذج تأليف `label` عربي لكل مواصفة جديدة، واختيار قالب موثوق من أدوات القراءة، أو تقديم اسم قالب عربي جديد. Go لا يترجم ولا يكتب في الكتالوج قبل الموافقة. [العقد التفصيلي](merchant-catalog-attribute-schema-ai-contract-ar.md).
 - الحالة التي تطلب من التاجر معلومات ناقصة مقبولة عندما يسمح بها العقد، ولا ينبغي إجبار النموذج على اختراع سعر.
 - توجد `thought_signature` ضمن `nativeMerchantChatCall` الحالي؛ بعض المزودين يحتاج بيانات تفكير إضافية لإعادة تشغيل سجل الأدوات. **عالجها وفق وثائقه**، لكن لا تخزن أسرار تفكير حساسة بشكل غير مقصود ولا تمحُ metadata لازمة لاستمرار الجلسة. إن لم يحمل العقد الحالي ما يحتاجه المزود، فهذا **عدم توافق مثبت** يجب معالجته بأصغر امتداد، لا بخدعة داخل الـAdapter.
 - إعداد `merchant_catalog_ai.go` لا يستدعي مزودًا خاصًا؛ يتلقى `MerchantCatalogAuthoringPort` من `bootstrap`. لا تغيّر منطق التنفيذ أو مراجعة التاجر لتبديل شركة AI.
