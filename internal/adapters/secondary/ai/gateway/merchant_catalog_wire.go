@@ -224,11 +224,13 @@ func catalogWireParse(raw string) (merchantcatalogai.Proposal, error) {
 	if err := validateStrictArguments([]byte(raw), merchantCatalogWireSchema()); err != nil {
 		return merchantcatalogai.Proposal{}, fmt.Errorf("merchant wire schema: %w", err)
 	}
+	definitions, err := catalogWireDefinitions(wire.AttributeDefinitions)
+	if err != nil { return merchantcatalogai.Proposal{}, err }
 	proposal := map[string]any{
 		"schema_version": wire.SchemaVersion, "status": wire.Status, "operation": wire.Operation,
 		"response_text": wire.ResponseText, "attribute_schema_name": wire.AttributeSchemaName, "evidence_references": wire.EvidenceReferences,
 		"missing_information":   wire.MissingInformation,
-		"attribute_definitions": wire.AttributeDefinitions,
+		"attribute_definitions": definitions,
 		"create":                nil, "update": nil, "delete": nil,
 	}
 	switch wire.Operation {
