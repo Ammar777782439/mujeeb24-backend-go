@@ -287,7 +287,7 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 			sv = &loaded.Version
 		}
 		if len(q.AttributeDefinitions) > 0 {
-			authoritative, keyMap, err := resolveApprovedAttributeDefinitions(ctx, s.Catalogs, p.BusinessID, p.ID, schema, q.AttributeDefinitions, now)
+			authoritative, keyMap, err := resolveApprovedAttributeDefinitions(ctx, s.Catalogs, p.BusinessID, q.AttributeSchemaName, schema, q.AttributeDefinitions, now)
 			if err != nil {
 				return r, err
 			}
@@ -348,12 +348,29 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 			}
 			schema = &loaded
 		}
+		// The AI selects an existing template by evidence-backed ID.
+		// Go never selects templates by guessing the merchant's sector or
+		// translating an English specification name.
+		if u.AttributeSchemaID != nil {
+			if schema != nil && schema.ID != *u.AttributeSchemaID {
+				return r, appErrors.New(appErrors.CodeValidation, "cannot replace an existing attribute template by inference")
+			}
+			if schema == nil {
+				loaded, schemaErr := s.Catalogs.GetAttributeSchema(ctx, p.BusinessID, *u.AttributeSchemaID)
+				if schemaErr != nil { return r, schemaErr }
+				schema = &loaded
+			}
+		}
 
 		var targetSchemaID *string
 		var targetSchemaVersion *int
+		if schema != nil && item.AttributeSchemaID == nil {
+			targetSchemaID = &schema.ID
+			targetSchemaVersion = &schema.Version
+		}
 		keyMap := map[string]string{}
 		if len(q.AttributeDefinitions) > 0 {
-			authoritative, replacements, materializeErr := resolveApprovedAttributeDefinitions(ctx, s.Catalogs, p.BusinessID, p.ID, schema, q.AttributeDefinitions, now)
+			authoritative, replacements, materializeErr := resolveApprovedAttributeDefinitions(ctx, s.Catalogs, p.BusinessID, q.AttributeSchemaName, schema, q.AttributeDefinitions, now)
 			if materializeErr != nil {
 				return r, materializeErr
 			}
