@@ -1,14 +1,14 @@
 # Mujeeb AI Runtime — provider isolation
 
-Source branch: `feat/gemini-deepseek`; implementation branch: `refactor/provider-agnostic-ai-runtime`.
+Current Merchant Catalog implementation documented on `fix/merchant-catalog-strict-wire-v3` (PR #18). This boundary overview does not assert production deployment.
 
-> **دليل الإضافة الرسمي المفصل (Customer + Catalog + Merchant):** [إضافة نموذج أو مزود AI جديد — خطوات التنفيذ والاختبارات](adding-ai-provider-runbook-ar.md). هذا المستند مرجع الحدود المعمارية السريع؛ يُرجع إلى الدليل المفصل عند إدخال مزود جديد.
+> **المرجع الهندسي لإضافة مزود AI:** [دليل الموفر](adding-ai-provider-runbook-ar.md). **المصدر الحالي للمواصفات والقوالب الخاصة بمساعد التاجر:** [Strict Wire + Arabic Attributes](merchant-catalog-attribute-schema-ai-contract-ar.md). لا تنقل أمثلة العميل أو التقييم الدفعي إلى عقد Merchant النهائي.
 
 ## Responsibility boundaries
 
 - The language model chooses among the **capabilities offered by Mujeeb**. No Go intent engine or keyword classifier decides `evaluate_full_catalog`.
 - Application services own catalog evidence retrieval, tenant isolation, authorization, validation, transactions, handoff, and human review.
-- Gateway adapters produce canonical requests/decisions. Transport provider adapters translate messages, strict tool JSON schemas, tool-call responses and errors to the selected vendor's protocol.
+- Gateway adapters produce canonical requests/decisions. Merchant proposal transport uses `merchantCatalogWireSchema` and the final DeepSeek submission tool `submit_merchant_catalog_proposal`; Go converts the typed wire to Proposal V3. Field values and per-definition rules use validated field-level JSON, not a full-proposal string envelope. Transport adapters translate tool calls and errors to the selected provider protocol.
 - Bootstrap selects the deployment's supported provider in code, not through a merchant dashboard, and provides all AI use cases with the same canonical completion client.
 - Platform Admin reports the actual selected model and credential presence; credentials are not accepted through HTTP.
 - Token admission estimates are conservative if the vendor has no verified token counting endpoint; incomplete catalog evidence is never silently truncated.
@@ -27,7 +27,7 @@ Historical SQL migrations, encrypted records and provider-spend records must rem
 1. Compile and run full Go tests, including race tests for `native` and `gateway`.
 2. Start without `GEMINI_API_KEY`; fail closed if `NATIVE_AI_ENABLED=true` but `DEEPSEEK_API_KEY` is missing.
 3. Exercise a customer capability selection, `evaluate_full_catalog` and a terminal decision with the same DeepSeek provider.
-4. Test merchant authoring tool rounds, summary generation, strict malformed JSON rejection, tenant checks, and human approval.
+4. Test merchant authoring read-only tool rounds, evidence-backed attribute schema selection, AI-authored Arabic `label` / `data_type` / `validation_rules`, strict malformed JSON rejection, tenant checks, and approved execution. Values in `Variant.attributes` must match saved `AttributeDefinition.validation_rules`, without automatic translation or database schema changes.
 5. Verify token counts, cost/pricing state, admin model display, redacted logs, 429/503 handling, and deployment rollback.
 6. Qualify the configured DeepSeek model using real account requests before deploying to production. Mocked HTTP tests do not establish live compatibility.
 
