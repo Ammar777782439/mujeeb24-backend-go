@@ -139,6 +139,31 @@ func (r *ChannelProvisioningStore) SupersedeConnectedByChannelConnection(ctx con
 	return err
 }
 
+func (r *ChannelProvisioningStore) CancelPendingByBusiness(ctx context.Context, businessID, providerRef string) error {
+	if r == nil || r.adapter == nil {
+		return ErrPoolClosed
+	}
+	businessID = strings.TrimSpace(businessID)
+	providerRef = strings.TrimSpace(providerRef)
+	if businessID == "" || providerRef == "" {
+		return invalidRepositoryInput("channel_provisioning.cancel_pending", "business and provider refs are required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return err
+	}
+	const query = `
+		UPDATE channel_provisioning_sessions
+		SET status = 'failed',
+		    failure_code = 'cancelled_by_cleanup',
+		    updated_at = $3
+		WHERE business_id = $1::uuid
+		  AND provider_ref = $2
+		  AND status IN ('pending_authorization', 'provisioning', 'reconnect_required')`
+	_, err = executor.Exec(ctx, query, businessID, providerRef, time.Now().UTC())
+	return err
+}
+
 func (r *ChannelProvisioningStore) MarkProvisioning(ctx context.Context, businessID, id string, patch ports.ChannelProvisioningPatch) (ports.ChannelProvisioningSession, error) {
 	if r == nil || r.adapter == nil {
 		return ports.ChannelProvisioningSession{}, ErrPoolClosed

@@ -180,7 +180,7 @@ func (r *ProviderBrandRepository) ReserveUnused(ctx context.Context, businessID,
           AND NOT EXISTS (
             SELECT 1 FROM channel_provisioning_sessions s
             WHERE s.business_id=b.business_id AND s.provider_ref=b.provider_ref
-              AND s.status IN ('pending_authorization','provisioning','reconnect_required')
+              AND s.status IN ('pending_authorization','provisioning')
               AND s.created_at > now() - interval '15 minutes'
           )
         RETURNING provider_brand_ref`

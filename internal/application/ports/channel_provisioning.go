@@ -45,6 +45,7 @@ type ChannelProvisioningStore interface {
 	GetByOAuthState(ctx context.Context, state string) (ChannelProvisioningSession, error)
 	MarkProvisioning(ctx context.Context, businessID, id string, patch ChannelProvisioningPatch) (ChannelProvisioningSession, error)
 	SupersedeConnectedByChannelConnection(ctx context.Context, businessID, channelConnectionID string) error
+	CancelPendingByBusiness(ctx context.Context, businessID, providerRef string) error
 }
 
 var ErrProviderBrandConflict = errors.New("provider brand mapping conflict")

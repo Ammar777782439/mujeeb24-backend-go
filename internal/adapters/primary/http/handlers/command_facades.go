@@ -151,6 +151,29 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 		out := &contract.Single[contract.ChannelConnection]{}
 		out.Body.Data = channelConnectionProjection(result.Connection)
 		return out, true
+	case "removeChannel":
+		in := input.(*contract.RemoveChannelInput)
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		if s.deps.RemoveChannel == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		connectionID := commands.ConnectionID(in.ConnectionID)
+		meta := commandMeta(ctx, actor, in.CommandHeaders)
+		result, err := s.deps.RemoveChannel.Handle(ctx, commands.RemoveChannelCommand{
+			Meta:         meta,
+			ConnectionID: connectionID,
+			Confirmation: in.Body.Confirmation,
+			Reason:       in.Body.Reason,
+		})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		out := &contract.Single[contract.ChannelConnection]{}
+		out.Body.Data = channelConnectionProjection(result.Connection)
+		return out, true
 	case "createCustomer":
 		in := input.(*contract.CreateCustomerInput)
 		actor, err := s.requireScope(ctx, in.BusinessID)

@@ -36,7 +36,7 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 	cannedReplies := services.CannedReplyService{Repository: cannedReplyRepository, Transactions: adapter}
 	automationRules := services.AutomationRuleService{Repository: postgres.NewAutomationRuleRepository(adapter), Transactions: adapter}
 	channelConnectionRepository := postgres.NewChannelConnectionRepository(adapter)
-	channelRuntime := services.ChannelRuntimeService{Reader: channelConnectionRepository, Runtime: channelConnectionRepository, Transactions: adapter}
+	channelRuntime := services.ChannelRuntimeService{Reader: channelConnectionRepository, Runtime: channelConnectionRepository, Transactions: adapter, HistoryStore: postgres.NewChannelHistoryRepository(adapter)}
 	channelCapabilityRepository := postgres.NewChannelCapabilityRepository(adapter)
 
 	return handlers.Dependencies{
@@ -91,6 +91,7 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 		GetChannelConnection:   services.GetChannelConnectionQueryService{ChannelRuntimeService: channelRuntime},
 		ReconnectChannel:       services.ReconnectChannelCommandService{ChannelRuntimeService: channelRuntime},
 		DisconnectChannel:      services.DisconnectChannelCommandService{ChannelRuntimeService: channelRuntime},
+		RemoveChannel:          services.RemoveChannelCommandService{ChannelRuntimeService: channelRuntime},
 		PreviewChannelHistory:  services.PreviewChannelHistoryService{Store: postgres.NewChannelHistoryRepository(adapter)},
 		PurgeChannelHistory:    services.PurgeChannelHistoryService{Store: postgres.NewChannelHistoryRepository(adapter)},
 

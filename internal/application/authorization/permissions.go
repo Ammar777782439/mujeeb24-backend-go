@@ -68,7 +68,7 @@ func buildOperationPermissions() map[string]string {
 	register(PermissionSalesWrite, "createLead", "updateLead", "qualifyLead", "markLeadLost", "createTransactionDraft", "updateTransactionDraft", "confirmTransaction", "cancelTransaction", "submitTransactionReview")
 	register(PermissionSalesApprove, "reviewSalesWorkflow", "approveTransactionReview", "rejectTransactionReview")
 	register(PermissionChannelsRead, "listChannelConnections", "getChannelConnection", "getConnectionCapabilities", "previewChannelHistoryPurge")
-	register(PermissionChannelsManage, "beginChannelConnection", "reconnectChannel", "disconnectChannel", "purgeChannelHistory")
+	register(PermissionChannelsManage, "beginChannelConnection", "reconnectChannel", "disconnectChannel", "purgeChannelHistory", "removeChannel")
 	register(PermissionAutomationRead, "listAutomationRules")
 	register(PermissionAutomationManage, "createAutomationRule", "updateAutomationRule")
 	register(PermissionAuditRead, "listAuditEvents", "getAuditEvent", "listAIDecisions", "getAIDecision")

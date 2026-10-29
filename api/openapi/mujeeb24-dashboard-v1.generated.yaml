@@ -1240,8 +1240,12 @@ components:
           type: integer
         Name:
           type: string
+        Partitioned:
+          type: boolean
         Path:
           type: string
+        Quoted:
+          type: boolean
         Raw:
           type: string
         RawExpires:
@@ -1261,6 +1265,7 @@ components:
       required:
         - Name
         - Value
+        - Quoted
         - Path
         - Domain
         - Expires
@@ -1269,6 +1274,7 @@ components:
         - Secure
         - HttpOnly
         - SameSite
+        - Partitioned
         - Raw
         - Unparsed
       type: object
@@ -3968,6 +3974,26 @@ components:
         - method
         - reference
         - paid_at
+      type: object
+    RemoveChannelRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/RemoveChannelRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        confirmation:
+          description: "Explicit confirmation string: REMOVE_CHANNEL_AND_PURGE_DATA"
+          enum:
+            - REMOVE_CHANNEL_AND_PURGE_DATA
+          type: string
+        reason:
+          maxLength: 500
+          type: string
+      required:
+        - confirmation
       type: object
     ResendTeamInvitationRequest:
       additionalProperties: false
@@ -9461,6 +9487,98 @@ paths:
       security:
         - bearerAuth: []
       summary: Reconnect channel
+      tags:
+        - Connections
+  /businesses/{business_id}/channel-connections/{connection_id}/remove:
+    post:
+      operationId: removeChannel
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: connection_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemoveChannelRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleChannelConnectionBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Permanently remove channel connection, revoke provider account, and purge local history
       tags:
         - Connections
   /businesses/{business_id}/conversations:

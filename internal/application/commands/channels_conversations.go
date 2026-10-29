@@ -16,6 +16,12 @@ type DisconnectChannelCommand struct {
 	ConnectionID ConnectionID
 	Reason       string
 }
+type RemoveChannelCommand struct {
+	Meta         CommandMeta
+	ConnectionID ConnectionID
+	Confirmation string
+	Reason       string
+}
 type BeginChannelConnectionResult struct {
 	MutationResult
 	Connection   ChannelConnectionView
@@ -28,6 +34,7 @@ type ChannelConnectionResult struct {
 type BeginChannelConnectionHandler = CommandHandler[BeginChannelConnectionCommand, BeginChannelConnectionResult]
 type ReconnectChannelHandler = CommandHandler[ReconnectChannelCommand, ChannelConnectionResult]
 type DisconnectChannelHandler = CommandHandler[DisconnectChannelCommand, ChannelConnectionResult]
+type RemoveChannelHandler = CommandHandler[RemoveChannelCommand, ChannelConnectionResult]
 
 type UpdateConversationCommand struct {
 	Meta           CommandMeta

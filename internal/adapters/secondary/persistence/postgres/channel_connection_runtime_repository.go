@@ -42,7 +42,7 @@ func (r *ChannelConnectionRepository) List(ctx context.Context, businessID, stat
 	if decoded != nil {
 		cursorAt, cursorID = decoded.UpdatedAt, decoded.ID
 	}
-	const query = `SELECT id::text,business_id::text,provider_ref,channel,provider_account_ref,provider_connection_ref,status,secret_reference,resource_version,updated_at FROM channel_connections WHERE business_id=$1::uuid AND ($2='' OR status=$2) AND ($3='' OR channel=$3) AND ($4::timestamptz IS NULL OR (updated_at,id)<($4::timestamptz,$5::uuid)) ORDER BY updated_at DESC,id DESC LIMIT $6`
+	const query = `SELECT id::text,business_id::text,provider_ref,channel,provider_account_ref,provider_connection_ref,status,secret_reference,resource_version,updated_at FROM channel_connections WHERE business_id=$1::uuid AND (CASE WHEN $2='' THEN status<>'archived' ELSE status=$2 END) AND ($3='' OR channel=$3) AND ($4::timestamptz IS NULL OR (updated_at,id)<($4::timestamptz,$5::uuid)) ORDER BY updated_at DESC,id DESC LIMIT $6`
 	rows, err := executor.Query(ctx, query, businessID, strings.TrimSpace(status), strings.TrimSpace(channel), cursorAt, cursorID, limit+1)
 	if err != nil {
 		return ports.ChannelConnectionPage{}, &RepositoryError{Operation: "channel_connection.list", Kind: RepositoryInvalid, Err: err}

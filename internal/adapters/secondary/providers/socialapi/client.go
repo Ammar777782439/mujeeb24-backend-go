@@ -174,7 +174,41 @@ func (c *Client) DeleteBrand(ctx context.Context, brandID string) error {
 	if errors.As(err, &providerErr) && providerErr.StatusCode == http.StatusNotFound {
 		return nil
 	}
+	// Verify from active brands list before returning error
+	brands, listErr := c.ListBrands(ctx)
+	if listErr == nil {
+		for _, b := range brands {
+			if strings.TrimSpace(b.ID) == brandID {
+				return err
+			}
+		}
+		// Brand is confirmed gone from remote list
+		return nil
+	}
 	return err
+}
+
+type UsageResponse struct {
+	ProfileUnitsUsed  int `json:"profile_units_used"`
+	ProfileUnitsLimit int `json:"profile_units_limit"`
+	BrandsUsed        int `json:"brands_used"`
+	BrandsLimit       int `json:"brands_limit"`
+}
+
+func (c *Client) GetUsage(ctx context.Context) (UsageResponse, error) {
+	var response UsageResponse
+	_, err := c.doJSON(ctx, http.MethodGet, "/v1/usage", nil, &response)
+	if err != nil {
+		return UsageResponse{}, err
+	}
+	if response.ProfileUnitsLimit == 0 && response.BrandsLimit > 0 {
+		response.ProfileUnitsLimit = response.BrandsLimit
+		response.ProfileUnitsUsed = response.BrandsUsed
+	} else if response.BrandsLimit == 0 && response.ProfileUnitsLimit > 0 {
+		response.BrandsLimit = response.ProfileUnitsLimit
+		response.BrandsUsed = response.ProfileUnitsUsed
+	}
+	return response, nil
 }
 
 type ConnectRequest struct {

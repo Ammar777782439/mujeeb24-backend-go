@@ -170,7 +170,7 @@ func TestDisconnectChannelReturnsAlreadyDisconnectedWithoutProviderCall(t *testi
 	}
 }
 
-func TestReconnectChannelCallsProviderBeforeLocalTransition(t *testing.T) {
+func TestReconnectChannelDoesNotDisconnectProvider(t *testing.T) {
 	record := ports.ChannelConnectionRecord{
 		ID:                       "connection-1",
 		BusinessID:               "business-1",
@@ -198,8 +198,9 @@ func TestReconnectChannelCallsProviderBeforeLocalTransition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
-	if provider.calls != 1 || provider.accountID != "acc-facebook-1" {
-		t.Fatalf("provider calls=%d account=%q", provider.calls, provider.accountID)
+	// Per Phase 2: reconnecting an account should NOT disconnect it from SocialAPI upfront.
+	if provider.calls != 0 {
+		t.Fatalf("reconnect must not call provider disconnect: calls=%d", provider.calls)
 	}
 	if runtime.transitionCalls != 1 || runtime.expectedVersion != 7 || runtime.targetStatus != "reconnect_required" {
 		t.Fatalf("transition calls=%d expectedVersion=%d target=%q", runtime.transitionCalls, runtime.expectedVersion, runtime.targetStatus)
@@ -245,4 +246,162 @@ func TestReconnectChannelRejectsStaleVersionBeforeProviderCall(t *testing.T) {
 func resourceVersion(value string) *commands.ResourceVersion {
 	v := commands.ResourceVersion(value)
 	return &v
+}
+
+type fakeHistoryStore struct {
+	purgedBusiness   string
+	purgedConnection string
+	purgedKey        string
+	purgedVersion    int64
+	purgeCalls       int
+}
+
+func (f *fakeHistoryStore) Preview(_ context.Context, businessID, connectionID string) (ports.ChannelHistorySummary, error) {
+	return ports.ChannelHistorySummary{}, nil
+}
+
+func (f *fakeHistoryStore) Purge(_ context.Context, businessID, connectionID, key string, expectedVersion int64) (ports.ChannelHistorySummary, error) {
+	f.purgeCalls++
+	f.purgedBusiness = businessID
+	f.purgedConnection = connectionID
+	f.purgedKey = key
+	f.purgedVersion = expectedVersion
+	return ports.ChannelHistorySummary{BusinessID: businessID, ConnectionID: connectionID, Conversations: 10, Messages: 50}, nil
+}
+
+type disconnectBrandCleanupFake struct {
+	brandID       string
+	reserveCalls  int
+	completeCalls int
+}
+
+func (f *disconnectBrandCleanupFake) ReserveUnused(_ context.Context, _, _ string) (string, bool, error) {
+	f.reserveCalls++
+	return f.brandID, f.brandID != "", nil
+}
+
+func (f *disconnectBrandCleanupFake) CompleteDeletion(_ context.Context, _, _, _ string) error {
+	f.completeCalls++
+	return nil
+}
+
+type disconnectBrandProviderFake struct {
+	deleteCalls int
+	deletedID   string
+}
+
+func (f *disconnectBrandProviderFake) ListBrands(_ context.Context) ([]ports.ProviderBrandRecord, error) {
+	return nil, nil
+}
+
+func (f *disconnectBrandProviderFake) CreateBrand(_ context.Context, _ string) (ports.ProviderBrandRecord, error) {
+	return ports.ProviderBrandRecord{}, nil
+}
+
+func (f *disconnectBrandProviderFake) DeleteBrand(_ context.Context, brandID string) error {
+	f.deleteCalls++
+	f.deletedID = brandID
+	return nil
+}
+
+func TestRemoveChannelRequiresPrivilegeAndConfirmation(t *testing.T) {
+	record := ports.ChannelConnectionRecord{
+		ID:              "conn-1",
+		BusinessID:      "biz-1",
+		ResourceVersion: 3,
+		Status:          "active",
+	}
+	history := &fakeHistoryStore{}
+	service := RemoveChannelCommandService{ChannelRuntimeService: ChannelRuntimeService{
+		Reader:       disconnectReaderFake{record: record},
+		Runtime:      &disconnectRuntimeFake{result: record},
+		Transactions: disconnectTxFake{},
+		Disconnector: &disconnectProviderFake{},
+		HistoryStore: history,
+	}}
+
+	// Test viewer role rejected
+	_, err := service.Handle(context.Background(), commands.RemoveChannelCommand{
+		Meta:         commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "biz-1", Role: "viewer"}},
+		ConnectionID: "conn-1",
+		Confirmation: "REMOVE_CHANNEL_AND_PURGE_DATA",
+	})
+	if err == nil {
+		t.Fatal("expected error for non-admin/owner role")
+	}
+
+	// Test missing confirmation rejected
+	_, err = service.Handle(context.Background(), commands.RemoveChannelCommand{
+		Meta:         commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "biz-1", Role: "owner"}},
+		ConnectionID: "conn-1",
+		Confirmation: "WRONG_CONFIRMATION",
+	})
+	if err == nil {
+		t.Fatal("expected error for missing explicit confirmation")
+	}
+}
+
+func TestRemoveChannelDisconnectsProviderPurgesHistoryAndArchives(t *testing.T) {
+	record := ports.ChannelConnectionRecord{
+		ID:                       "conn-1",
+		BusinessID:               "biz-1",
+		ProviderReference:        "socialapi",
+		Channel:                  "instagram",
+		ProviderAccountReference: stringPtr("acc-insta-1"),
+		Status:                   "active",
+		ResourceVersion:          5,
+	}
+	runtime := &disconnectRuntimeFake{result: record}
+	provider := &disconnectProviderFake{}
+	history := &fakeHistoryStore{}
+	brandCleanup := &disconnectBrandCleanupFake{brandID: "brand-1"}
+	brandProvider := &disconnectBrandProviderFake{}
+
+	service := RemoveChannelCommandService{ChannelRuntimeService: ChannelRuntimeService{
+		Reader:        disconnectReaderFake{record: record},
+		Runtime:       runtime,
+		Transactions:  disconnectTxFake{},
+		Disconnector:  provider,
+		HistoryStore:  history,
+		BrandCleanup:  brandCleanup,
+		BrandProvider: brandProvider,
+	}}
+
+	result, err := service.Handle(context.Background(), commands.RemoveChannelCommand{
+		Meta: commands.CommandMeta{
+			Actor:           commands.ActorContext{BusinessID: "biz-1", PrincipalID: "p-1", Role: "owner"},
+			ExpectedVersion: resourceVersion("5"),
+			IdempotencyKey:  "idemp-remove-1",
+		},
+		ConnectionID: "conn-1",
+		Confirmation: "REMOVE_CHANNEL_AND_PURGE_DATA",
+		Reason:       "closing channel",
+	})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+
+	// Provider disconnect was called
+	if provider.calls != 1 || provider.accountID != "acc-insta-1" {
+		t.Fatalf("provider disconnect calls=%d account=%q", provider.calls, provider.accountID)
+	}
+
+	// History was purged
+	if history.purgeCalls != 1 || history.purgedBusiness != "biz-1" || history.purgedConnection != "conn-1" || history.purgedVersion != 5 {
+		t.Fatalf("history purge calls=%d version=%d", history.purgeCalls, history.purgedVersion)
+	}
+
+	// Transitioned to archived
+	if runtime.transitionCalls != 1 || runtime.targetStatus != "archived" || runtime.expectedVersion != 5 {
+		t.Fatalf("runtime transition calls=%d target=%q", runtime.transitionCalls, runtime.targetStatus)
+	}
+
+	// Brand cleanup was triggered (last channel)
+	if brandCleanup.reserveCalls != 1 || brandProvider.deleteCalls != 1 || brandCleanup.completeCalls != 1 {
+		t.Fatalf("brand cleanup calls: reserve=%d delete=%d complete=%d", brandCleanup.reserveCalls, brandProvider.deleteCalls, brandCleanup.completeCalls)
+	}
+
+	if result.Connection.ID != "conn-1" {
+		t.Fatalf("unexpected connection in result: %#v", result.Connection)
+	}
 }

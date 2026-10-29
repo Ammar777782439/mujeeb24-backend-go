@@ -438,6 +438,15 @@ type PurgeChannelHistoryInput struct {
 type ConnectionActionRequest struct {
 	Reason string `json:"reason" minLength:"1" maxLength:"500"`
 }
+type RemoveChannelRequest struct {
+	Confirmation string `json:"confirmation" enum:"REMOVE_CHANNEL_AND_PURGE_DATA" doc:"Explicit confirmation string: REMOVE_CHANNEL_AND_PURGE_DATA"`
+	Reason       string `json:"reason,omitempty" maxLength:"500"`
+}
+type RemoveChannelInput struct {
+	ConnectionPath
+	CommandHeaders
+	Body RemoveChannelRequest
+}
 type UpdateConversationRequest struct {
 	State          string `json:"state,omitempty"`
 	Ownership      string `json:"ownership,omitempty"`

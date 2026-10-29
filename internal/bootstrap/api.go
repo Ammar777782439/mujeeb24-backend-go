@@ -108,8 +108,10 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			channelRuntime.BrandCleanup = postgres.NewProviderBrandRepository(database)
 			channelRuntime.BrandProvider = external.ChannelProvisioningBrand
 		}
+		channelRuntime.HistoryStore = postgres.NewChannelHistoryRepository(database)
 		dependencies.ReconnectChannel = services.ReconnectChannelCommandService{ChannelRuntimeService: channelRuntime}
 		dependencies.DisconnectChannel = services.DisconnectChannelCommandService{ChannelRuntimeService: channelRuntime}
+		dependencies.RemoveChannel = services.RemoveChannelCommandService{ChannelRuntimeService: channelRuntime}
 	}
 	if authentication != nil {
 		dependencies.Scope = handlers.PostgresScopeProvider{Memberships: authentication.Repository}
@@ -595,7 +597,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	// separately from the Render API. CORS is centralized in newCORSMiddleware so the
 	// allowed request headers are covered by a regression-tested contract.
 	corsMux := newCORSMiddleware(wrappedMux, external.FrontendURL)
-	server := &http.Server{Addr: address, Handler: corsMux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
+	server := &http.Server{Addr: address, Handler: corsMux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 3 * time.Minute, IdleTimeout: 60 * time.Second}
 	return &APIRuntime{
 		HTTP:                server,
 		Database:            database,

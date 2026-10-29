@@ -52,6 +52,19 @@ func (s *provisioningSessionStore) SupersedeConnectedByChannelConnection(_ conte
 	}
 	return nil
 }
+func (s *provisioningSessionStore) CancelPendingByBusiness(_ context.Context, businessID, providerRef string) error {
+	for key, session := range s.sessions {
+		if session.BusinessID != businessID || session.ProviderRef != providerRef {
+			continue
+		}
+		if session.Status == ports.ProvisioningPendingAuthorization || session.Status == ports.ProvisioningInProgress || session.Status == ports.ProvisioningReconnectRequired {
+			session.Status = ports.ProvisioningFailed
+			session.FailureCode = "cancelled_by_cleanup"
+			s.sessions[key] = session
+		}
+	}
+	return nil
+}
 
 type provisioningBusinesses struct{}
 

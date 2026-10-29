@@ -19,11 +19,13 @@ type ChannelRuntimeService struct {
 	Provisioning  ports.ChannelProvisioningStore
 	BrandCleanup  ports.ProviderBrandCleanupStore
 	BrandProvider ports.ProviderBrandProvisioner
+	HistoryStore  ports.ChannelHistoryStore
 }
 type ListChannelConnectionsQueryService struct{ ChannelRuntimeService }
 type GetChannelConnectionQueryService struct{ ChannelRuntimeService }
 type ReconnectChannelCommandService struct{ ChannelRuntimeService }
 type DisconnectChannelCommandService struct{ ChannelRuntimeService }
+type RemoveChannelCommandService struct{ ChannelRuntimeService }
 
 func (s ListChannelConnectionsQueryService) Handle(ctx context.Context, query queries.ListChannelConnectionsQuery) (commands.ListResult[commands.ChannelConnectionView], error) {
 	if s.Runtime == nil {
@@ -79,19 +81,6 @@ func (s ReconnectChannelCommandService) Handle(ctx context.Context, command comm
 		result := commands.ChannelConnectionResult{Connection: view}
 		result.ResourceVersion = view.ResourceVersion
 		return result, nil
-	}
-
-	// Provider side is authoritative for the external connection. When an
-	// active connection is being replaced, disconnect the provider account
-	// before changing the local lifecycle state. A stale If-Match is rejected
-	// above before this external side effect.
-	if record.Status == "active" {
-		if record.ProviderAccountReference == nil || strings.TrimSpace(*record.ProviderAccountReference) == "" {
-			return commands.ChannelConnectionResult{}, appErrors.New(appErrors.CodeConflict, "connected channel has no provider account reference")
-		}
-		if err := s.Disconnector.DisconnectAccount(ctx, strings.TrimSpace(*record.ProviderAccountReference)); err != nil {
-			return commands.ChannelConnectionResult{}, err
-		}
 	}
 
 	if s.Provisioning != nil {
@@ -188,10 +177,96 @@ func (s DisconnectChannelCommandService) Handle(ctx context.Context, command com
 	return result, nil
 }
 
+func (s RemoveChannelCommandService) Handle(ctx context.Context, command commands.RemoveChannelCommand) (commands.ChannelConnectionResult, error) {
+	if s.Reader == nil || s.Runtime == nil || s.Transactions == nil || s.Disconnector == nil || s.HistoryStore == nil {
+		return commands.ChannelConnectionResult{}, appErrors.NotImplemented()
+	}
+	if command.Meta.Actor.Role != "owner" && command.Meta.Actor.Role != "admin" {
+		return commands.ChannelConnectionResult{}, appErrors.New(appErrors.CodeForbidden, "owner or admin role is required")
+	}
+	if command.Confirmation != "REMOVE_CHANNEL_AND_PURGE_DATA" {
+		return commands.ChannelConnectionResult{}, appErrors.New(appErrors.CodeValidation, "explicit REMOVE_CHANNEL_AND_PURGE_DATA confirmation is required")
+	}
+	reason := strings.TrimSpace(command.Reason)
+	if reason == "" {
+		reason = "user_channel_removal"
+	}
+	expected, err := parseBusinessExpectedVersion(command.Meta.ExpectedVersion)
+	if err != nil {
+		return commands.ChannelConnectionResult{}, err
+	}
+
+	record, err := s.Reader.GetByID(ctx, string(command.Meta.Actor.BusinessID), string(command.ConnectionID))
+	if err != nil {
+		return commands.ChannelConnectionResult{}, err
+	}
+	if record.Status == "archived" {
+		result := commands.ChannelConnectionResult{Connection: channelConnectionView(record)}
+		result.ResourceVersion = result.Connection.ResourceVersion
+		return result, nil
+	}
+	if record.ResourceVersion != expected {
+		return commands.ChannelConnectionResult{}, appErrors.New(appErrors.CodeConflict, "stale channel connection resource version")
+	}
+
+	// 1. Invalidate any open provisioning sessions
+	if s.Provisioning != nil {
+		_ = s.Provisioning.SupersedeConnectedByChannelConnection(ctx, string(command.Meta.Actor.BusinessID), string(command.ConnectionID))
+	}
+
+	// 2. Disconnect provider account if exists (external side effect outside DB tx)
+	if record.ProviderAccountReference != nil && strings.TrimSpace(*record.ProviderAccountReference) != "" {
+		_ = s.Disconnector.DisconnectAccount(ctx, strings.TrimSpace(*record.ProviderAccountReference))
+	}
+
+	// 3. Purge history and personal data locally
+	idempotencyKey := strings.TrimSpace(command.Meta.IdempotencyKey)
+	if idempotencyKey == "" {
+		idempotencyKey = "remove-" + string(command.ConnectionID)
+	}
+	if _, err := s.HistoryStore.Purge(ctx, string(command.Meta.Actor.BusinessID), string(command.ConnectionID), idempotencyKey, expected); err != nil {
+		return commands.ChannelConnectionResult{}, err
+	}
+
+	// 4. Transition local connection state to 'archived'
+	var result commands.ChannelConnectionResult
+	err = s.Transactions.Within(ctx, func(txCtx context.Context) error {
+		updated, transitionErr := s.Runtime.Transition(txCtx, ports.ChannelConnectionTransition{
+			BusinessID:      string(command.Meta.Actor.BusinessID),
+			ConnectionID:    string(command.ConnectionID),
+			ExpectedVersion: expected,
+			TargetStatus:    "archived",
+			Action:          "remove_requested",
+			Reason:          reason,
+			ActorReference:  string(command.Meta.Actor.PrincipalID),
+		})
+		if transitionErr != nil {
+			return transitionErr
+		}
+		result.Connection = channelConnectionView(updated)
+		result.ResourceVersion = result.Connection.ResourceVersion
+		return nil
+	})
+	if err != nil {
+		return result, err
+	}
+
+	// 5. If this was the last active/connected channel for this business under this provider, delete the Brand at SocialAPI to free up quota
+	if cleanupErr := s.deleteProviderBrandIfUnused(ctx, record.BusinessID, record.ProviderReference); cleanupErr != nil {
+		// Log cleanup error, do not fail removal as local data is already purged and archived
+		return result, nil
+	}
+
+	return result, nil
+}
+
 // deleteProviderBrandIfUnused never calls SocialAPI within a database transaction.
 func (s ChannelRuntimeService) deleteProviderBrandIfUnused(ctx context.Context, businessID, providerRef string) error {
 	if s.BrandCleanup == nil || s.BrandProvider == nil || providerRef != "socialapi" {
 		return nil
+	}
+	if s.Provisioning != nil {
+		_ = s.Provisioning.CancelPendingByBusiness(ctx, businessID, providerRef)
 	}
 	brandID, reserved, err := s.BrandCleanup.ReserveUnused(ctx, businessID, providerRef)
 	if err != nil {
@@ -220,3 +295,4 @@ var _ queries.ListChannelConnectionsHandler = ListChannelConnectionsQueryService
 var _ queries.GetChannelConnectionHandler = GetChannelConnectionQueryService{}
 var _ commands.ReconnectChannelHandler = ReconnectChannelCommandService{}
 var _ commands.DisconnectChannelHandler = DisconnectChannelCommandService{}
+var _ commands.RemoveChannelHandler = RemoveChannelCommandService{}
