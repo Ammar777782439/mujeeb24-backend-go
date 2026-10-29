@@ -1,58 +1,39 @@
-# حالة مشروع Mujeeb 24 Backend
+# حالة مشروع Mujeeb 24 Backend — مرجع التطوير الحالي
 
-> **آخر تحديث:** 2026-10-08. هذه الوثيقة تصف الفرع `feat/universal-catalog-ai-v3`؛ لا تعني دمجه في main أو فرع الإنتاج.
+> **النطاق الزمني:** 2026-10-29. **مرجع حالة مسار Merchant Catalog AI في هذا الملف:** `fix/merchant-catalog-strict-wire-v3` / PR #18. هذه حالة **الفرع البرمجي** وليست إثباتًا لنشر `main` أو Render. حالة بقية الوحدات تُستخرج من كود HEAD وإعداد بيئة التشغيل المعنية، ولا يجوز استنتاجها من تقرير فرع سابق.
 
-## الخلاصة التنفيذية
+## المعمارية العامة المثبتة بالعقود
 
-`Mujeeb 24` هو Backend Go متعدد التجار، يملك بيانات الأعمال والمحادثات والعملاء والرسائل والقرارات وسجل التدقيق داخل PostgreSQL. يعتمد على SocialAPI كناقل قنوات فقط. تم حذف runtime وCompose وadapters وroutes الخاصة بـChatwoot من هذا الفرع؛ لا تُشغّل خدمة خارجية للمحادثات في المنتج أو في Compose المحلي.
+- Mujeeb 24 هو Go Backend متعدد التجار، وPostgreSQL مصدر الحقيقة لبيانات التجارة والمحادثات والمعاملات والسجلات.
+- Catalog Domain يتكوّن من `Catalog → CatalogItem → Attributes/Variants → Offers`؛ الأسعار والتوفر التجاري في Offers.
+- API وDTO وOpenAPI مصدرها العقود المسجّلة في Go، ومصدر آخر نسخة مولّدة `api/openapi/mujeeb24-dashboard-v1.generated.yaml`.
+- SocialAPI ناقل للقنوات وليس مصدر الحقيقة التجارية. عمليات الإرسال والردود لها تحقق وتفويض ومسارات تشغيل مستقلة عن عقد Merchant Catalog.
+- لا تغير ملفات migrations المطبقة سابقًا لتعديل سلوك مساعد الكتالوج.
 
-| المجال | الحالة في هذا الفرع | حد الإثبات |
-| --- | --- | --- |
-| Go API وHuma/OpenAPI | محدث ومختبر | عدد العمليات يُستخرج من المولد الحالي؛ لا يُثبّت رقم تاريخي في تقرير الحالة |
-| JWT وtenant scope | موجود | مثبت باختبارات الوحدات الموجودة؛ راجع التشغيل الحي منفصلًا |
-| دعوات الموظفين بالتوكن | موجود | يدعم حسابًا جديدًا أو قائمًا، توكن SHA-256 أحادي الاستخدام، صلاحيات خادمية، إلغاء وإعادة إصدار |
-| PostgreSQL migrations | ترحيلات تراكمية؛ راجع مجلد migrations الحالي | لا يوجد إسقاط للـschema التاريخي في هذه الدفعة |
-| Event Ledger وOutbox | موجودان | يسجلان ويعالجان ضمن مسار Mujeeb |
-| SocialAPI inbound | موجود | verify/normalize ثم materialization داخل Mujeeb |
-| AutoReply | مربوط مباشرة بـSocialAPI inbound | يظل متوقفًا افتراضيًا ويتطلب LLM/policy محليين |
-| Outbound worker | موجود | يعالج Outbox ويرسل عبر SocialAPI عند تهيئة المزود |
-| Merchant provisioning | SocialAPI-only | OAuth ثم `ChannelConnection`؛ لا ينشئ موارد خدمة محادثات خارجية |
-| Compose محلي | Mujeeb/PostgreSQL/API/worker/gateway فقط | لم يُشغّل Compose داخل sandbox في هذه الجولة |
-| SocialAPI حي وإرسال خارجي | غير مثبت في هذه الجولة | يحتاج credentials آمنة واختبارًا منفصلًا وموافقًا عليه |
+## مساعد التاجر للكتالوج — السلوك الموثق على PR #18
 
-## مسار الرسالة الحالي
+| الطبقة | السلوك |
+| --- | --- |
+| Discovery | أدوات قراءة الكتالوج والقوالب المسموح بها |
+| Model | يفهم التاجر، يكتب `label` العربي و`data_type` و`validation_rules` والقيم، ويختار قالبًا موجودًا بمعرّف مثبت أو يقدم اسم قالب جديدًا |
+| Output | `merchantCatalogWireSchema` و`catalogWireParse` → Canonical Proposal V3 |
+| Approval | تخزين المقترح للمراجعة فقط؛ لا تعديل على المنتج قبل موافقة التاجر |
+| Go executor | يتحقق من المراجع والبيانات والقواعد، وينشئ/يعيد استخدام تعريفات بقيم `attr_...`، ويربط قالب العنصر وإصداره وينفذ ضمن معاملة |
+| PostgreSQL | `attribute_definitions(attribute_key,label,data_type,validation_rules)`، و`catalog_items.attributes` و`variants.attributes` كقيم JSONB |
+| React | تعرض التسميات من `AttributeDefinition.label`، لا من ترجمة مفاتيح JSON |
 
-```text
-SocialAPI webhook موثّق
-  → inbound_event_ledger
-  → Customer / Conversation / CommunicationMessage
-  → AutoReply اختياري: Context + Policy + AIDecision
-  → OutboundMessage + Outbox
-  → worker
-  → SocialAPI send
-```
+- `validation_rules.enum` تحوي القيم المسموحة؛ القيم المختارة لعنصر/خيار محفوظة تحت المفتاح `attr_...` في JSONB. `select/multi_select` لهما قواعد تحقق، ولا تنشئ القوالب Variants تلقائيًا.
+- `AttributeSchema` اختياري في Domain؛ المنتجات القديمة بلا قالب ومفاتيحها الحرة لا تُعرَّب تلقائيًا.
+- هذا الفرع منفصل عن `main`؛ لا يثبت التوثيق بمفرده نجاح الاتصال الحي مع DeepSeek أو نشره.
 
-تظل قاعدة البيانات مصدر الحقيقة. لا يُنفذ الـworker اتصالًا خارجيًا داخل transaction، ولا تُعاد الحالة الخارجية غير المعروفة تلقائيًا بلا reconciliation أو مراجعة.
+## المراجع الحالية
 
-## قرار schema التاريخي
+- [Merchant Catalog AI — Authoring](../contracts/ai/11-merchant-catalog-ai-authoring-closed.md)
+- [Merchant Catalog AI — Proposal V3](../contracts/ai/12-merchant-catalog-ai-proposal-contract-closed.md)
+- [عقد القوالب العربية وKey/Label/Value](architecture/merchant-catalog-attribute-schema-ai-contract-ar.md)
+- [إضافة مزود AI](architecture/adding-ai-provider-runbook-ar.md)
+- [Catalog Contract](../مخطط%20مهم/Mujeeb%2024%20%E2%80%94%20Catalog%20Contract.md)
+- [الهيكلة والمسؤوليات](structure_decision_ar.md)
+- [سجل القرارات المعمارية](decision-log-ar.md)
 
-الـmigrations من `000001` حتى `000045` غير قابلة للتعديل. توقفت خدمات وقراءَات/كتابات Chatwoot في runtime، لكن جداول وأعمدة تاريخية لا تزال في schema كي لا تُحذف بيانات أو تفسد ترقية بيئة قائمة. أي تنظيف لاحق يحتاج backup وخطة restore وموافقة صريحة، ثم migration forward-only جديدة.
-
-## التحقق المتبقي دون دمج
-
-1. تشغيل بوابة الجودة: `gofmt` و`go test ./...` و`go vet ./...` وOpenAPI drift وsecret scan.
-2. محاولة PostgreSQL integration عبر `POSTGRES_TEST_DSN` إذا كانت بيئة PostgreSQL متاحة؛ لا يُدّعى نجاحها إن كانت الحاويات غير متاحة.
-3. التحقق البنيوي من Compose وCaddy في صيغة Mujeeb-only.
-4. مراجعة ملخص الأثر من المستخدم قبل أي `commit` أو `push` إلى الفرع. لا يحدث merge إلى `main` إلا بموافقة منفصلة.
-
-## المستندات المرجعية
-
-- [قرار الترحيل إلى Mujeeb-only](architecture/chatwoot-free-migration-ar.md)
-- [دليل التشغيل المحلي](../deploy/local/README-ar.md)
-- [دليل المطور](developer-guide-ar.md)
-
-## AI الحالي والتنظيف
-
-مسار B2B يستخدم MerchantCatalogAuthoringAdapter؛ مسار B2C يستخدم GeminiCustomerSalesAdapter عبر Interactions مع CatalogBatchController للتقييم الكامل بالدفعات. لا يوجد Customer Sales tool-loop قديم أو registry catalog_data في التشغيل الحالي. Gemini يقترح وMujeeb يتحقق ويطبق السياسة.
-
-AutoReply عبر webhook يحتاج بوابة التكلفة وWorker Pool. غياب الاعتماديات يمنع بدء AI مع استمرار استقبال الرسالة. الاختبارات المحلية لا تثبت اتصال PostgreSQL أو المزود حيًا؛ لا تُعد حالات skipped نجاحًا.
+**قاعدة للصيانة:** عند تغيير Merchant Catalog، حدّث المرجع الموحّد وعقد Proposal ثم الفهرس المعني في نفس PR. لا تضف نسخة ثانية من مستند سابق أو ملحقًا يحافظ على تعليمات متعارضة.
