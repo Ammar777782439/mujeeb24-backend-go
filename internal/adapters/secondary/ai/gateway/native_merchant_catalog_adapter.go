@@ -134,6 +134,12 @@ update.changes, update.existing_variants, update.new_variants,
 update.existing_offers, update.new_offers.
 For delete: populate delete.id. For read-only answers: operation=ask_merchant
 with all mutation payloads empty.
+For every custom English snake_case attribute key appearing in item or variant attributes,
+add one entry to attribute_definitions with {key,label,data_type}; label must be
+merchant-facing Arabic, and the data type must match the actual JSON value.
+Use the exact same semantic key in both places. Never create attr_ keys;
+those come from Go after the merchant approves. Existing attr_ keys from
+real catalog evidence need no new definition.
 Each fields array contains {name,value_json}; value_json is the JSON
 encoding of that one field value (e.g. "600.0000" encoded as a JSON string,
 or attributes as a JSON object). Field names must match the schema enum.
