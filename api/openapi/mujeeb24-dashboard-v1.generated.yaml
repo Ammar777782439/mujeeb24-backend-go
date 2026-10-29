@@ -3932,6 +3932,9 @@ components:
           type: string
         label:
           type: string
+        validation_rules:
+          additionalProperties: {}
+          type: object
       required:
         - key
         - label
