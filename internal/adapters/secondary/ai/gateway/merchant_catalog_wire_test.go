@@ -10,7 +10,7 @@ import (
 func emptyCatalogWireProposal() catalogWireProposal {
 	return catalogWireProposal{
 		SchemaVersion:        merchantcatalogai.ProposalSchemaVersion,
-		AttributeDefinitions: []merchantcatalogai.ProposedAttributeDefinition{},
+		AttributeDefinitions: []catalogWireAttributeDefinition{},
 		Status:               merchantcatalogai.StatusResolved,
 		Operation:            merchantcatalogai.OperationUpdate,
 		ResponseText:         "اقتراح جاهز للمراجعة",
@@ -38,12 +38,12 @@ func decodeCatalogWireForTest(t *testing.T, wire catalogWireProposal) (merchantc
 
 func TestMerchantStrictWireExistingOfferAndDynamicAttributes(t *testing.T) {
 	wire := emptyCatalogWireProposal()
-	wire.AttributeDefinitions = []merchantcatalogai.ProposedAttributeDefinition{
-		{Key: "warranty", Label: "الضمان", DataType: "text"},
-		{Key: "battery_health", Label: "صحة البطارية", DataType: "number"},
-		{Key: "certified", Label: "معتمد", DataType: "boolean"},
-		{Key: "features", Label: "المميزات", DataType: "multi_select"},
-		{Key: "details", Label: "التفاصيل", DataType: "location"},
+	wire.AttributeDefinitions = []catalogWireAttributeDefinition{
+		{Key: "warranty", Label: "الضمان", DataType: "text", ValidationRulesJSON: `{}`},
+		{Key: "battery_health", Label: "صحة البطارية", DataType: "number", ValidationRulesJSON: `{}`},
+		{Key: "certified", Label: "معتمد", DataType: "boolean", ValidationRulesJSON: `{}`},
+		{Key: "features", Label: "المميزات", DataType: "multi_select", ValidationRulesJSON: `{"enum":["A18","OLED"]}`},
+		{Key: "details", Label: "التفاصيل", DataType: "location", ValidationRulesJSON: `{}`},
 	}
 	wire.Update.Changes = []catalogWireField{
 		{Name: "attributes", ValueJSON: `{"warranty":"سنتان","battery_health":99,"certified":true,"features":["A18","OLED"],"details":{"country":"YE"}}`},
@@ -121,8 +121,8 @@ func TestMerchantStrictWireCreatesVariantsAndOffers(t *testing.T) {
 	wire := emptyCatalogWireProposal()
 	wire.Operation = merchantcatalogai.OperationCreate
 	wire.Update.ItemID = ""
-	wire.AttributeDefinitions = []merchantcatalogai.ProposedAttributeDefinition{
-		{Key: "duration_minutes", Label: "المدة بالدقائق", DataType: "number"},
+	wire.AttributeDefinitions = []catalogWireAttributeDefinition{
+		{Key: "duration_minutes", Label: "المدة بالدقائق", DataType: "number", ValidationRulesJSON: `{}`},
 	}
 	wire.Create.Fields = []catalogWireField{
 		{Name: "name", ValueJSON: `"خدمة تجريبية"`},
