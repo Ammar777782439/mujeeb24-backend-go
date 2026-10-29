@@ -119,7 +119,7 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 	proposalFormat := map[string]any{
 		"type": "json_schema",
 		"json_schema": map[string]any{
-			"name": "merchant_catalog_wire",
+			"name":   "merchant_catalog_wire",
 			"strict": true,
 			"schema": wireSchema,
 		},

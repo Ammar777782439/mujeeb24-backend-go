@@ -82,7 +82,7 @@ func catalogWireFieldSchema(sample any, excluded ...string) map[string]any {
 	}
 	sort.Strings(names)
 	return catalogWireArray(catalogWireObject(map[string]any{
-		"name": map[string]any{"type": "string", "enum": names},
+		"name":       map[string]any{"type": "string", "enum": names},
 		"value_json": catalogWireString(),
 	}))
 }
@@ -101,24 +101,24 @@ func merchantCatalogWireSchema() map[string]any {
 		"data_type": catalogWireString(), "reason": catalogWireString(),
 	})
 	return catalogWireObject(map[string]any{
-		"schema_version": map[string]any{"type": "integer", "enum": []any{merchantcatalogai.ProposalSchemaVersion}},
-		"status": map[string]any{"type": "string", "enum": []string{"resolved", "needs_more_data", "not_found", "ambiguous"}},
-		"operation": map[string]any{"type": "string", "enum": []string{"create", "update", "delete", "ask_merchant"}},
-		"response_text": catalogWireString(),
+		"schema_version":      map[string]any{"type": "integer", "enum": []any{merchantcatalogai.ProposalSchemaVersion}},
+		"status":              map[string]any{"type": "string", "enum": []string{"resolved", "needs_more_data", "not_found", "ambiguous"}},
+		"operation":           map[string]any{"type": "string", "enum": []string{"create", "update", "delete", "ask_merchant"}},
+		"response_text":       catalogWireString(),
 		"evidence_references": catalogWireArray(catalogWireString()),
 		"missing_information": catalogWireArray(missing),
 		"create": catalogWireObject(map[string]any{
-			"fields": catalogWireFieldSchema(merchantcatalogai.ItemCreate{}, "variants", "offers"),
+			"fields":   catalogWireFieldSchema(merchantcatalogai.ItemCreate{}, "variants", "offers"),
 			"variants": catalogWireArray(entity(catalogWireFieldSchema(merchantcatalogai.VariantCreate{}))),
-			"offers": catalogWireArray(entity(catalogWireFieldSchema(merchantcatalogai.OfferCreate{}))),
+			"offers":   catalogWireArray(entity(catalogWireFieldSchema(merchantcatalogai.OfferCreate{}))),
 		}),
 		"update": catalogWireObject(map[string]any{
-			"item_id": catalogWireString(),
-			"changes": catalogWireFieldSchema(merchantcatalogai.ItemChanges{}),
+			"item_id":           catalogWireString(),
+			"changes":           catalogWireFieldSchema(merchantcatalogai.ItemChanges{}),
 			"existing_variants": catalogWireArray(existing(catalogWireFieldSchema(merchantcatalogai.VariantUpdate{}, "id"))),
-			"new_variants": catalogWireArray(entity(catalogWireFieldSchema(merchantcatalogai.VariantCreate{}))),
-			"existing_offers": catalogWireArray(existing(catalogWireFieldSchema(merchantcatalogai.OfferUpdate{}, "id"))),
-			"new_offers": catalogWireArray(entity(catalogWireFieldSchema(merchantcatalogai.OfferCreate{}))),
+			"new_variants":      catalogWireArray(entity(catalogWireFieldSchema(merchantcatalogai.VariantCreate{}))),
+			"existing_offers":   catalogWireArray(existing(catalogWireFieldSchema(merchantcatalogai.OfferUpdate{}, "id"))),
+			"new_offers":        catalogWireArray(entity(catalogWireFieldSchema(merchantcatalogai.OfferCreate{}))),
 		}),
 		"delete": catalogWireObject(map[string]any{
 			"id": catalogWireString(), "reason_given": catalogWireString(),
@@ -170,7 +170,9 @@ func catalogWireEntities(entries []catalogWireEntity, sample any) ([]map[string]
 	out := make([]map[string]any, 0, len(entries))
 	for _, entry := range entries {
 		fields, err := catalogWireDecodeFields(entry.Fields, sample)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, fields)
 	}
 	return out, nil
@@ -178,21 +180,31 @@ func catalogWireEntities(entries []catalogWireEntity, sample any) ([]map[string]
 func catalogWireExistingEntities(entries []catalogWireExistingEntity, sample any) ([]map[string]any, error) {
 	out := make([]map[string]any, 0, len(entries))
 	for _, entry := range entries {
-		if strings.TrimSpace(entry.ID) == "" { return nil, errors.New("existing merchant entity lacks ID") }
+		if strings.TrimSpace(entry.ID) == "" {
+			return nil, errors.New("existing merchant entity lacks ID")
+		}
 		fields, err := catalogWireDecodeFields(entry.Fields, sample)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		fields["id"] = entry.ID
 		out = append(out, fields)
 	}
 	return out, nil
 }
 func catalogWireParse(raw string) (merchantcatalogai.Proposal, error) {
-	if len(raw) > 524288 { return merchantcatalogai.Proposal{}, errors.New("merchant wire proposal exceeds size limit") }
+	if len(raw) > 524288 {
+		return merchantcatalogai.Proposal{}, errors.New("merchant wire proposal exceeds size limit")
+	}
 	decoder := json.NewDecoder(strings.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	var wire catalogWireProposal
-	if err := decoder.Decode(&wire); err != nil { return merchantcatalogai.Proposal{}, fmt.Errorf("decode merchant wire proposal: %w", err) }
-	if err := decoder.Decode(new(any)); err != io.EOF { return merchantcatalogai.Proposal{}, errors.New("merchant wire proposal has trailing JSON") }
+	if err := decoder.Decode(&wire); err != nil {
+		return merchantcatalogai.Proposal{}, fmt.Errorf("decode merchant wire proposal: %w", err)
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return merchantcatalogai.Proposal{}, errors.New("merchant wire proposal has trailing JSON")
+	}
 	// The complete provider-facing schema is verified independently.
 	if err := validateStrictArguments([]byte(raw), merchantCatalogWireSchema()); err != nil {
 		return merchantcatalogai.Proposal{}, fmt.Errorf("merchant wire schema: %w", err)
@@ -201,7 +213,7 @@ func catalogWireParse(raw string) (merchantcatalogai.Proposal, error) {
 		"schema_version": wire.SchemaVersion, "status": wire.Status, "operation": wire.Operation,
 		"response_text": wire.ResponseText, "evidence_references": wire.EvidenceReferences,
 		"missing_information": wire.MissingInformation,
-		"create": nil, "update": nil, "delete": nil,
+		"create":              nil, "update": nil, "delete": nil,
 	}
 	switch wire.Operation {
 	case merchantcatalogai.OperationCreate:
@@ -212,11 +224,17 @@ func catalogWireParse(raw string) (merchantcatalogai.Proposal, error) {
 			return merchantcatalogai.Proposal{}, errors.New("inactive merchant proposal operation has data")
 		}
 		create, err := catalogWireDecodeFields(wire.Create.Fields, merchantcatalogai.ItemCreate{})
-		if err != nil { return merchantcatalogai.Proposal{}, err }
+		if err != nil {
+			return merchantcatalogai.Proposal{}, err
+		}
 		variants, err := catalogWireEntities(wire.Create.Variants, merchantcatalogai.VariantCreate{})
-		if err != nil { return merchantcatalogai.Proposal{}, err }
+		if err != nil {
+			return merchantcatalogai.Proposal{}, err
+		}
 		offers, err := catalogWireEntities(wire.Create.Offers, merchantcatalogai.OfferCreate{})
-		if err != nil { return merchantcatalogai.Proposal{}, err }
+		if err != nil {
+			return merchantcatalogai.Proposal{}, err
+		}
 		create["variants"], create["offers"] = variants, offers
 		proposal["create"] = create
 	case merchantcatalogai.OperationUpdate:
@@ -224,17 +242,29 @@ func catalogWireParse(raw string) (merchantcatalogai.Proposal, error) {
 			len(wire.Create.Offers) != 0 || wire.Delete.ID != "" || wire.Delete.ReasonGiven != "" {
 			return merchantcatalogai.Proposal{}, errors.New("inactive merchant proposal operation has data")
 		}
-		if wire.Update.ItemID == "" { return merchantcatalogai.Proposal{}, errors.New("update missing item ID") }
+		if wire.Update.ItemID == "" {
+			return merchantcatalogai.Proposal{}, errors.New("update missing item ID")
+		}
 		changes, err := catalogWireDecodeFields(wire.Update.Changes, merchantcatalogai.ItemChanges{})
-		if err != nil { return merchantcatalogai.Proposal{}, err }
+		if err != nil {
+			return merchantcatalogai.Proposal{}, err
+		}
 		oldVariants, err := catalogWireExistingEntities(wire.Update.ExistingVariants, merchantcatalogai.VariantUpdate{})
-		if err != nil { return merchantcatalogai.Proposal{}, err }
+		if err != nil {
+			return merchantcatalogai.Proposal{}, err
+		}
 		newVariants, err := catalogWireEntities(wire.Update.NewVariants, merchantcatalogai.VariantCreate{})
-		if err != nil { return merchantcatalogai.Proposal{}, err }
+		if err != nil {
+			return merchantcatalogai.Proposal{}, err
+		}
 		oldOffers, err := catalogWireExistingEntities(wire.Update.ExistingOffers, merchantcatalogai.OfferUpdate{})
-		if err != nil { return merchantcatalogai.Proposal{}, err }
+		if err != nil {
+			return merchantcatalogai.Proposal{}, err
+		}
 		newOffers, err := catalogWireEntities(wire.Update.NewOffers, merchantcatalogai.OfferCreate{})
-		if err != nil { return merchantcatalogai.Proposal{}, err }
+		if err != nil {
+			return merchantcatalogai.Proposal{}, err
+		}
 		proposal["update"] = map[string]any{
 			"item_id": wire.Update.ItemID, "changes": changes,
 			"existing_variants": oldVariants, "new_variants": newVariants,
@@ -261,7 +291,9 @@ func catalogWireParse(raw string) (merchantcatalogai.Proposal, error) {
 		return merchantcatalogai.Proposal{}, errors.New("unknown merchant proposal operation")
 	}
 	encoded, err := json.Marshal(proposal)
-	if err != nil { return merchantcatalogai.Proposal{}, err }
+	if err != nil {
+		return merchantcatalogai.Proposal{}, err
+	}
 	if !json.Valid(encoded) {
 		return merchantcatalogai.Proposal{}, errors.New("cannot encode merchant proposal")
 	}

@@ -162,7 +162,7 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 		}}}
 		if synthetic == "submit_merchant_catalog_proposal" {
 			body["tool_choice"] = map[string]any{
-				"type": "function",
+				"type":     "function",
 				"function": map[string]any{"name": synthetic},
 			}
 		} else {

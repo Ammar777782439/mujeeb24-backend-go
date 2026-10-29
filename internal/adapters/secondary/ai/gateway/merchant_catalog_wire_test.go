@@ -9,10 +9,10 @@ import (
 
 func emptyCatalogWireProposal() catalogWireProposal {
 	return catalogWireProposal{
-		SchemaVersion: merchantcatalogai.ProposalSchemaVersion,
-		Status: merchantcatalogai.StatusResolved,
-		Operation: merchantcatalogai.OperationUpdate,
-		ResponseText: "اقتراح جاهز للمراجعة",
+		SchemaVersion:      merchantcatalogai.ProposalSchemaVersion,
+		Status:             merchantcatalogai.StatusResolved,
+		Operation:          merchantcatalogai.OperationUpdate,
+		ResponseText:       "اقتراح جاهز للمراجعة",
 		EvidenceReferences: []string{},
 		MissingInformation: []merchantcatalogai.MissingField{},
 		Create: catalogWireCreate{
@@ -29,7 +29,9 @@ func emptyCatalogWireProposal() catalogWireProposal {
 func decodeCatalogWireForTest(t *testing.T, wire catalogWireProposal) (merchantcatalogai.Proposal, error) {
 	t.Helper()
 	encoded, err := json.Marshal(wire)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	return catalogWireParse(string(encoded))
 }
 
@@ -46,7 +48,9 @@ func TestMerchantStrictWireExistingOfferAndDynamicAttributes(t *testing.T) {
 		},
 	}}
 	proposal, err := decodeCatalogWireForTest(t, wire)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if proposal.Update == nil || proposal.Update.ItemID != "item-1" {
 		t.Fatal("update target lost")
 	}
@@ -69,8 +73,10 @@ func TestMerchantStrictWireRejectsMisplacedExistingOffers(t *testing.T) {
 	wire := emptyCatalogWireProposal()
 	encoded, _ := json.Marshal(wire)
 	var doc map[string]any
-	if err := json.Unmarshal(encoded, &doc); err != nil { t.Fatal(err) }
-	doc["existing_offers"] = []any{map[string]any{"id":"offer-1"}}
+	if err := json.Unmarshal(encoded, &doc); err != nil {
+		t.Fatal(err)
+	}
+	doc["existing_offers"] = []any{map[string]any{"id": "offer-1"}}
 	encoded, _ = json.Marshal(doc)
 	if _, err := catalogWireParse(string(encoded)); err == nil {
 		t.Fatal("accepted existing_offers outside update")
@@ -79,9 +85,9 @@ func TestMerchantStrictWireRejectsMisplacedExistingOffers(t *testing.T) {
 
 func TestMerchantStrictWireRejectsUnknownDuplicateAndTrailingValue(t *testing.T) {
 	for name, fields := range map[string][]catalogWireField{
-		"unknown_field": {{Name: "existing_offers", ValueJSON: `[]`}},
-		"duplicate": {{Name: "name", ValueJSON: `"new"`}, {Name: "name", ValueJSON: `"other"`}},
-		"trailing": {{Name: "name", ValueJSON: `"new" "other"`}},
+		"unknown_field":   {{Name: "existing_offers", ValueJSON: `[]`}},
+		"duplicate":       {{Name: "name", ValueJSON: `"new"`}, {Name: "name", ValueJSON: `"other"`}},
+		"trailing":        {{Name: "name", ValueJSON: `"new" "other"`}},
 		"unintended_null": {{Name: "name", ValueJSON: `null`}},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -130,7 +136,9 @@ func TestMerchantStrictWireCreatesVariantsAndOffers(t *testing.T) {
 		{Name: "status", ValueJSON: `"active"`},
 	}}}
 	proposal, err := decodeCatalogWireForTest(t, wire)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if proposal.Create == nil || len(proposal.Create.Variants) != 1 || len(proposal.Create.Offers) != 1 {
 		t.Fatal("wire create payload lost variants or offers")
 	}
