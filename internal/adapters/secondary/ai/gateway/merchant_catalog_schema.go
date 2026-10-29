@@ -226,6 +226,16 @@ func merchantCatalogProposalSchema() map[string]any {
 			"response_text":       map[string]any{"type": "string", "description": "One proposal targets one catalog item. Multi-item batches and attribute-schema mutations are not supported; return needs_more_data/ask_merchant explaining this limitation rather than silently processing a subset. Discounts and promotions have no executable fields in this contract. If requested, return needs_more_data/ask_merchant explaining this limitation; do not silently drop them or store an executable discount in attributes. Preserve every requested change. Describe only changes actually represented in the proposal payload. Do not claim a description or price change unless its corresponding field is present. A proposal is not proof of execution."},
 			"evidence_references": map[string]any{"type": "array", "items": stringField()},
 			"missing_information": map[string]any{"type": "array", "items": missingField},
+			"attribute_definitions": map[string]any{
+				"type":"array",
+				"items":map[string]any{"type":"object",
+					"properties":map[string]any{
+						"key":stringField(),"label":stringField(),"data_type":stringField(),
+					},
+					"required":[]string{"key","label","data_type"},
+					"additionalProperties":false,
+				},
+			},
 			"create": map[string]any{
 				"anyOf": []map[string]any{
 					itemCreate,
