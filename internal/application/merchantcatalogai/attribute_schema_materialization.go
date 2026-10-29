@@ -91,11 +91,11 @@ func resolveApprovedAttributeDefinitions(
 		newID := uuid.NewString()
 		sum := sha256.Sum256([]byte(newID))
 		stableKey := "attr_" + hex.EncodeToString(sum[:8])
-		for _, collision := byKey[stableKey]; collision.Key != ""; {
+		for {
+			if _, exists := byKey[stableKey]; !exists { break }
 			newID = uuid.NewString()
 			sum = sha256.Sum256([]byte(newID))
 			stableKey = "attr_" + hex.EncodeToString(sum[:8])
-			collision = byKey[stableKey]
 		}
 		definitions = append(definitions, ports.AttributeDefinitionDraft{
 			ID: newID, Key: stableKey, Label: label, DataType: spec.DataType,
