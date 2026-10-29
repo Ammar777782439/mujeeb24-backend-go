@@ -137,7 +137,10 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 		"model": c.model, "messages": messages, "max_tokens": canonical.MaxTokens,
 		"stream": false, "thinking": map[string]string{"type": "disabled"},
 	}
-	const synthetic = "submit_catalog_batch"
+	synthetic := "submit_catalog_batch"
+	if canonical.ResponseFormat != nil && canonical.ResponseFormat.JSONSchema.Name == "merchant_catalog_wire" {
+		synthetic = "submit_merchant_catalog_proposal"
+	}
 	toolSchemas := make(map[string]json.RawMessage)
 	structured := canonical.ResponseFormat != nil
 	if structured {
@@ -154,10 +157,17 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 		}
 		toolSchemas[synthetic] = format.JSONSchema.Schema
 		body["tools"] = []any{map[string]any{"type": "function", "function": map[string]any{
-			"name": synthetic, "description": "Return the requested catalog batch JSON exactly as specified",
+			"name": synthetic, "description": "Submit the exact structured output matching the supplied JSON schema",
 			"strict": true, "parameters": providerSchema,
 		}}}
-		body["tool_choice"] = "required"
+		if synthetic == "submit_merchant_catalog_proposal" {
+			body["tool_choice"] = map[string]any{
+				"type": "function",
+				"function": map[string]any{"name": synthetic},
+			}
+		} else {
+			body["tool_choice"] = "required"
+		}
 	} else if len(canonical.Tools) > 0 {
 		if canonical.ToolChoice != "required" && canonical.ToolChoice != "auto" {
 			return Response{}, errors.New("unsupported function selection mode")
