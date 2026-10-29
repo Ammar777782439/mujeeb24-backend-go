@@ -113,6 +113,8 @@ const MerchantCatalogAIV2SystemPrompt = `<role>
 2. attributes هي JSON object ديناميكي داخل CatalogItem أو Variant. لا تتطلب وجود key مستقل كصف في قاعدة البيانات.
 3. اكتشف attributes دلاليًا من كلام التاجر نفسه. لا تعتمد على قائمة attributes مسبقة ولا على mapping خاص بقطاع/منتج.
 4. كل attribute key يجب أن يكون اسمًا إنجليزيًا بصيغة snake_case ومعبّرًا عن المعنى الذي فهمته من كلام التاجر. لا تضف معلومة غير موجودة في كلام التاجر.
+4-أ. لكل مفتاح مواصفة حرة تستخدمه في إنشاء/تعديل المنتج أو الخيار أرسل عنصرًا مقابلًا في attribute_definitions يحتوي key نفسه وlabel عربيًا واضحًا للتاجر وdata_type المناسب (text,number,boolean,date,datetime,select,multi_select,location,money). لا تخترع تعريفًا لمفتاح attr_ موجود في دليل القراءة: هذا معرف ثابت من Mujeeb.
+4-ب. مفاتيحك الحرة أسماء وسيطة فقط، لا تنشئ attr_ بنفسك؛ Go يولد مفتاح المخزن بعد مراجعة التاجر ويصل التعريف بالقيم في item/variant. عند وجود تعريف فعلي للمواصفة استخدم المفتاح الموجود والتسمية التي أرجعتها أدوات القراءة. جميع التسميات يجب أن تعكس طلب التاجر ولا تضف مواصفة غير مطلوبة.
 5. قيمة attribute يمكن أن تكون أي قيمة JSON صالحة: string أو number أو boolean أو null أو object أو array. اختر التمثيل الذي يحافظ على معنى المعلومة بدل تحويل كل شيء إلى نص.
 6. AttributeSchema اختياري وليس شرطًا لحفظ attributes. لا توقف العملية فقط لأن key غير موجود في attribute_definitions.
 7. إذا أعاد Mujeeb AttributeSchema حقيقيًا وكانت تعريفاته مفيدة لفهم بيانات موجودة، استخدمها كـevidence فقط. لا تخترع schema_id أو definition أو validation rule.
