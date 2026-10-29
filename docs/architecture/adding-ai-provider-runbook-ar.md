@@ -1,5 +1,7 @@
 # الدليل الهندسي لإضافة نموذج أو مزود AI جديد إلى مجيب 24
 
+> **مهم — تحديث PR #18 بتاريخ 2026-10-29:** الجزء الذي يذكر `canonical_proposal_json` أدناه تاريخي ومرتبط بمرجع الـCommit القديم. مسار Strict Wire والقوالب العربية في الفرع الجديد موثّق في [هذا الملحق](merchant-catalog-attribute-schema-ai-contract-ar.md)، ولم يُدمج إلى `main` بعد.
+>
 > **حالة المستند:** دليل تنفيذ ومراجعة لمطور Go، وليس إثباتًا بأن مزودًا جديدًا يعمل تلقائيًا.
 >
 > **مرجع الكود عند إعداد الدليل:** مستودع `Ammar777782439/mujeeb24-backend-go`، فرع `refactor/provider-agnostic-ai-runtime`، Commit `c635dc5cd4d8ed9cbc9871319fd8241b518dd403`، بتاريخ 2026-10-24.
@@ -385,3 +387,31 @@ go vet ./...
 ## 9. معيار القبول النهائي بجملة واحدة
 
 > **إضافة مزود جديد مؤهل تستلزم كتابة Adapter له وفق وثائقه وربطه بإعداد محدود واختباره عبر Customer Sales + Full Catalog + Merchant Catalog AI، دون تغيير منطق الأعمال، ودون أن يخترع Go نية العميل أو التاجر أو ينفذ المزود أدواته بنفسه.**
+
+
+---
+
+## ملحق تحديث 2026-10-29 — Merchant Catalog Strict Wire + Arabic Attributes (فرع PR #18)
+
+**تنبيه مهم:** الخطوات السابقة التي تقول إن `Model ينتج canonical_proposal_json` تصف Commit التاريخي المذكور أعلى المستند. **ليست المسار الحالي على فرع `fix/merchant-catalog-strict-wire-v3`**. لا تنقل هذا الغلاف النصي إلى تكامل مزود جديد عندما تستخدم الفرع.
+
+المسار في الفرع:
+
+```text
+Merchant message → Model chooses trusted read-only discovery tools
+  → merchant_catalog_list_attribute_schemas if an existing template is relevant
+  → Model chooses real attribute_schema_id OR supplies Arabic attribute_schema_name
+  → Model supplies attribute_definitions: {key, label, data_type} for new attributes
+  → Strict merchantCatalogWireSchema → submit_merchant_catalog_proposal
+  → catalogWireParse (field-level value_json only, not full proposal in a string)
+  → parseMerchantCatalogProposal → Normalize → ValidateReferences → Validate
+  → PROPOSAL_STORED (review only; zero catalog mutation)
+  → merchant explicitly approves → ExecuteApproved transaction
+  → reuse/version definitions, assign stable attr_ keys, bind item schema + version, save values
+  → React reads stored definition.label, not a translation dictionary
+```
+
+- **المعنى التجاري واللغة العربية ملك النموذج:** `label` العربي، `data_type` والقيمة، واختيار القالب من IDs ظهرت في أداة القراءة. Go **لا** يترجم ولا يسمي القوالب أو المواصفات، بل يفحصها ويولد المفتاح التقني ويحفظ بعد الموافقة.
+- **عقد المجال لا يتغير:** `CatalogItem.attributes` و`Variant.attributes` كلاهما JSON Object، ويجب أن يظل `Offer` مسؤولًا عن السعر والتوفر. `{name, value_json}` صيغة Wire وسيطة لنقل **قيمة حقل واحد**.
+- **حالة التشغيل:** التوثيق يخص PR #18 غير المدمج. نجاح CI لا يعني أن DeepSeek الحقيقي تأهل أو أن الواجهة عرّبت المواصفات القديمة تلقائيًا.
+- **مرجع لا يجوز تجاهله:** [العقد التفصيلي للربط والبيانات العربية](merchant-catalog-attribute-schema-ai-contract-ar.md). راجع أيضًا [Merchant Catalog AI CLOSED v2](../../contracts/ai/11-merchant-catalog-ai-authoring-closed.md) وعقد Catalog الأساسي.
