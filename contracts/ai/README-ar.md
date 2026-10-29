@@ -1,7 +1,8 @@
-# عقود Mujeeb 24 للذكاء الاصطناعي — المصدر المرجعي المعتمد
+# عقود Mujeeb 24 للذكاء الاصطناعي — فهرس المصادر المعتمدة
 
-> **الحالة:** مغلق نهائيًا. هذه الوثائق هي المصدر الوحيد للحقيقة بشأن تصميم الذكاء الاصطناعي في Mujeeb 24.
-> أي تعارض بين هذه العقود والكود يُحسم لصالح العقد. أي تغيير يجب أن يمر عبر قرار ADR جديد.
+> **المصادر الحالية لمساعد كتالوج التاجر على فرع PR #18:** [عقد Authoring](11-merchant-catalog-ai-authoring-closed.md)، [Proposal V3](12-merchant-catalog-ai-proposal-contract-closed.md)، [Key/Label/Value والقوالب وقواعدها](../../docs/architecture/merchant-catalog-attribute-schema-ai-contract-ar.md)، و[دليل مزود AI](../../docs/architecture/adding-ai-provider-runbook-ar.md). 
+>
+> احتفظ بالعقود المغلقة الخاصة بالاستخدامات الأخرى كما هي، ولا تستخدم أمثلة Gemini القديمة بوصفها تعليمات تشغيل حالية لـMerchant Catalog. أي تعارض في هذا المسار يحسمه عقد Merchant الحالي والكود المتوافق معه بعد مراجعة القرار وتوثيقه في ADR.
 
 ## الترتيب المنطقي للعقود
 
@@ -17,16 +18,19 @@
 | ⑥ | [AI Validation + Authorization Boundary](./06-ai-validation-authorization-boundary-closed.md) | ماذا يحدث بعد أن يقترح Gemini | مغلق |
 | ⑧ | [Observability + Audit + AI Trace](./08-observability-audit-ai-trace-closed.md) | كيف نتتبع كل خطوة | مغلق |
 | ⑨ | [AI Runtime Lifecycle + Failure/Retry/Timeout](./09-ai-runtime-lifecycle-failure-retry-timeout-closed.md) | دورة تشغيل AI Run واحدة | مغلق |
-| 11 | [Merchant Catalog AI Authoring v2](./11-merchant-catalog-ai-authoring-closed.md) | وكيل محادثي للتاجر لإضافة منتج | مغلق — يحل محل v1 |
-| 12 | [Merchant Catalog AI Proposal Contract](./12-merchant-catalog-ai-proposal-contract-closed.md) | العقد الوسيط لـ Proposal وعلاقات Variant/Offer قبل الحفظ | مغلق |
+| 11 | [Merchant Catalog AI Authoring — الحالي](./11-merchant-catalog-ai-authoring-closed.md) | النموذج يصوغ المواصفات بالعربية ويختار القوالب؛ Go يتحقق ويحفظ بعد اعتماد التاجر | **مرجع Merchant الحالي** |
+| 12 | [Merchant Catalog AI Proposal V3](./12-merchant-catalog-ai-proposal-contract-closed.md) | Canonical Proposal بعد النقل المنظم وعلاقات Variant/Offer وتعريفات المواصفات | **مرجع Merchant الحالي** |
+
+| 13 | [قوالب المواصفات العربية: Key / Label / Value](../../docs/architecture/merchant-catalog-attribute-schema-ai-contract-ar.md) | AttributeSchema/AttributeDefinition/validation_rules/Variant JSONB وStrict Wire | **مرجع Merchant الحالي** |
 
 > **ملاحظة:** العقود ⑦ و ⑩ و ⒛ خارج نطاق هذه المجموعة أو غير معتمدة بعد.
 
 ## المبدأ الحاكم
 
 ```
-Gemini يفكر ويقترح.
-Mujeeb يثبت ويأذن وينفذ.
+نموذج AI يفهم ويقترح ضمن الأدلة والعقود.
+Go يتحقق ويثبت الهوية ويؤذن وينفذ بعد موافقة التاجر.
+React تعرض label من تعريف المواصفة ولا تترجم.
 ```
 
 - لا يوجد semantic search داخل Mujeeb
