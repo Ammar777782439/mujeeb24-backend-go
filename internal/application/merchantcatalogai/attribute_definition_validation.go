@@ -1,12 +1,14 @@
 package merchantcatalogai
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"unicode"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/catalogvalidation"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
 // ValidateAttributeDefinitions validates proposed human-readable labels and their
@@ -39,21 +41,36 @@ func (p Proposal) ValidateAttributeDefinitions(requireLabels bool) error {
 		if !hasArabic {
 			return fmt.Errorf("attribute %q requires an Arabic display label", d.Key)
 		}
-		if err := catalogvalidation.ValidateDefinition(d.DataType, map[string]any{}); err != nil {
-			return err
+		rules := d.ValidationRules
+		if rules == nil {
+			rules = map[string]any{}
+		}
+		if err := validateAIAttributeRules(d.DataType, rules); err != nil {
+			return fmt.Errorf("attribute %q: %w", d.Key, err)
 		}
 		byKey[d.Key] = d
 	}
 	used := map[string]bool{}
 	visit := func(attrs map[string]any) error {
-		for key := range attrs {
+		for key, value := range attrs {
 			if strings.HasPrefix(key, "attr_") {
 				continue
 			}
 			used[key] = true
-			if requireLabels {
-				if _, ok := byKey[key]; !ok {
-					return fmt.Errorf("missing Arabic attribute label for %q", key)
+			spec, ok := byKey[key]
+			if requireLabels && !ok {
+				return fmt.Errorf("missing Arabic attribute label for %q", key)
+			}
+			if ok && value != nil {
+				rules, err := json.Marshal(spec.ValidationRules)
+				if err != nil { return fmt.Errorf("attribute %q rules cannot be encoded: %w", key, err) }
+				def := ports.AttributeDefinitionRecord{
+					Key: key, Label: spec.Label, DataType: spec.DataType,
+					ValidationRules: rules,
+				}
+				schema := &ports.AttributeSchemaRecord{Definitions: []ports.AttributeDefinitionRecord{def}}
+				if err := catalogvalidation.ValidatePartialAttributes(schema, map[string]any{key: value}); err != nil {
+					return fmt.Errorf("proposed attribute %q: %w", key, err)
 				}
 			}
 		}
@@ -91,6 +108,50 @@ func (p Proposal) ValidateAttributeDefinitions(requireLabels bool) error {
 	}
 	if !p.IsMutation() && len(byKey) > 0 {
 		return errors.New("read-only merchant proposal cannot contain attribute definitions")
+	}
+	return nil
+}
+
+// validateAIAttributeRules is intentionally narrower than the catalog's
+// extensible validation_rules domain contract: AI may propose only rule types
+// that the current backend actually validates. Unknown keys must not be saved
+// and silently ignored. The model, not Go, authors enum choices.
+func validateAIAttributeRules(dataType string, rules map[string]any) error {
+	if err := catalogvalidation.ValidateDefinition(dataType, rules); err != nil { return err }
+	allowed := map[string]bool{
+		"enum": true, "min": true, "max": true, "regex": true,
+		"currency": true, "timezone": true,
+	}
+	for name := range rules {
+		if !allowed[name] { return fmt.Errorf("unsupported AI attribute validation rule %q", name) }
+	}
+	encoded, err := json.Marshal(rules)
+	if err != nil || len(encoded) > 16384 { return errors.New("attribute validation rules are invalid or too large") }
+	choices, hasChoices := rules["enum"]
+	if dataType == "select" || dataType == "multi_select" {
+		if !hasChoices { return errors.New("select and multi_select require explicit enum choices from model evidence") }
+	}
+	if hasChoices {
+		entries, ok := choices.([]any)
+		if !ok {
+			// JSON parsing of the provider wire uses []any; canonical proposals
+			// are also decoded through JSON before persistence.
+			return errors.New("attribute enum must be a JSON array")
+		}
+		if len(entries) == 0 || len(entries) > 100 { return errors.New("attribute enum must have 1..100 choices") }
+		seen := map[string]bool{}
+		for _, entry := range entries {
+			switch entry.(type) {
+			case string, bool, float64, json.Number, int:
+			default:
+				return errors.New("attribute enum must contain only scalar values")
+			}
+			data, err := json.Marshal(entry)
+			if err != nil { return err }
+			key := string(data)
+			if seen[key] { return errors.New("attribute enum contains duplicate choices") }
+			seen[key] = true
+		}
 	}
 	return nil
 }
