@@ -288,14 +288,23 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 		}
 		if len(q.AttributeDefinitions) > 0 {
 			authoritative, keyMap, err := resolveApprovedAttributeDefinitions(ctx, s.Catalogs, p.BusinessID, p.ID, schema, q.AttributeDefinitions, now)
-			if err != nil { return r, err }
+			if err != nil {
+				return r, err
+			}
 			schema = authoritative
-			if schema != nil { c.AttributeSchemaID = &schema.ID; sv = &schema.Version }
+			if schema != nil {
+				c.AttributeSchemaID = &schema.ID
+				sv = &schema.Version
+			}
 			c.Attributes, err = remapApprovedAttributes(c.Attributes, keyMap)
-			if err != nil { return r, err }
+			if err != nil {
+				return r, err
+			}
 			for i := range c.Variants {
 				c.Variants[i].Attributes, err = remapApprovedAttributes(c.Variants[i].Attributes, keyMap)
-				if err != nil { return r, err }
+				if err != nil {
+					return r, err
+				}
 			}
 		}
 		if e := catalogvalidation.ValidateAttributes(schema, c.Attributes); e != nil {
@@ -345,7 +354,9 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 		keyMap := map[string]string{}
 		if len(q.AttributeDefinitions) > 0 {
 			authoritative, replacements, materializeErr := resolveApprovedAttributeDefinitions(ctx, s.Catalogs, p.BusinessID, p.ID, schema, q.AttributeDefinitions, now)
-			if materializeErr != nil { return r, materializeErr }
+			if materializeErr != nil {
+				return r, materializeErr
+			}
 			keyMap = replacements
 			if authoritative != nil {
 				if schema == nil || authoritative.ID != schema.ID {
@@ -355,14 +366,20 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 				schema = authoritative
 			}
 			c.Attributes, materializeErr = remapApprovedAttributes(c.Attributes, keyMap)
-			if materializeErr != nil { return r, materializeErr }
+			if materializeErr != nil {
+				return r, materializeErr
+			}
 			for i := range u.ExistingVariants {
 				u.ExistingVariants[i].Attributes, materializeErr = remapApprovedAttributes(u.ExistingVariants[i].Attributes, keyMap)
-				if materializeErr != nil { return r, materializeErr }
+				if materializeErr != nil {
+					return r, materializeErr
+				}
 			}
 			for i := range u.NewVariants {
 				u.NewVariants[i].Attributes, materializeErr = remapApprovedAttributes(u.NewVariants[i].Attributes, keyMap)
-				if materializeErr != nil { return r, materializeErr }
+				if materializeErr != nil {
+					return r, materializeErr
+				}
 			}
 		}
 		attrs, e := mergeAttributes(item.Attributes, c.Attributes)
@@ -371,11 +388,17 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 		}
 		if len(keyMap) > 0 {
 			merged, decodeErr := decodeAttributes(attrs)
-			if decodeErr != nil { return r, decodeErr }
+			if decodeErr != nil {
+				return r, decodeErr
+			}
 			merged, decodeErr = remapApprovedAttributes(merged, keyMap)
-			if decodeErr != nil { return r, decodeErr }
+			if decodeErr != nil {
+				return r, decodeErr
+			}
 			attrs, decodeErr = encodedAttributes(merged)
-			if decodeErr != nil { return r, decodeErr }
+			if decodeErr != nil {
+				return r, decodeErr
+			}
 		}
 		if c.Attributes != nil || targetSchemaID != nil {
 			merged, decodeErr := decodeAttributes(attrs)
