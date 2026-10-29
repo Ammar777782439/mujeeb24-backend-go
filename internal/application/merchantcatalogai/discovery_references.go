@@ -89,6 +89,13 @@ func (r *ReadOnlyCapabilityRegistry) ValidateProposalReferences(p Proposal) erro
 		if err := require(p.Update.ItemID, "catalog item"); err != nil {
 			return err
 		}
+		if p.Update.AttributeSchemaID != nil {
+			selected := strings.TrimSpace(*p.Update.AttributeSchemaID)
+			if selected == "" { return errors.New("update attribute_schema_id cannot be empty") }
+			if _, ok := r.attributeSchemaReferences[selected]; !ok {
+				return errors.New("update proposal references an attribute schema that was not returned by attribute schema discovery: " + selected)
+			}
+		}
 		for _, variant := range p.Update.ExistingVariants {
 			if err := require(variant.ID, "variant"); err != nil {
 				return err
