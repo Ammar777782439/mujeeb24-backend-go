@@ -558,6 +558,8 @@ func (r *CatalogRepository) UpdateCatalogItem(ctx context.Context, patch ports.C
                 fulfillment_mode = COALESCE($12, fulfillment_mode),
                 requires_confirmation = COALESCE($13, requires_confirmation),
                 attributes = COALESCE($14::jsonb, attributes),
+                attribute_schema_id = COALESCE($17::uuid, attribute_schema_id),
+                attribute_schema_version = COALESCE($18::integer, attribute_schema_version),
                 resource_version = resource_version + 1,
                 updated_at = $15
         WHERE business_id = $1::uuid AND id = $2::uuid AND resource_version = $16
@@ -570,6 +572,7 @@ func (r *CatalogRepository) UpdateCatalogItem(ctx context.Context, patch ports.C
 		patch.PricingMode, patch.AvailabilityMode, patch.FulfillmentMode,
 		patch.RequiresConfirmation,
 		attributes, patch.UpdatedAt, patch.ExpectedVersion,
+		patch.AttributeSchemaID, patch.AttributeSchemaVersion,
 	).Scan(&item.ID, &item.BusinessID, &item.CatalogID, &item.AttributeSchemaID, &item.AttributeSchemaVersion, &item.ItemType, &item.Name, &item.ShortDescription, &item.LongDescription, &item.Status, &item.PricingMode, &item.AvailabilityMode, &item.FulfillmentMode, &item.RequiresConfirmation, &item.Attributes, &item.ResourceVersion, &item.CreatedAt, &item.UpdatedAt)
 	if err == nil {
 		return item, nil
