@@ -233,6 +233,10 @@ func merchantCatalogProposalSchema() map[string]any {
 				"items": map[string]any{"type": "object",
 					"properties": map[string]any{
 						"key": stringField(), "label": stringField(), "data_type": stringField(),
+						"validation_rules": map[string]any{
+							"type": "object", "additionalProperties": true,
+							"description": "Model-authored constraints from merchant facts or trusted catalog evidence: enum (1..100 scalar choices for select/multi_select), min, max, regex, currency, timezone. Never invent enumerated options.",
+						},
 					},
 					"required":             []string{"key", "label", "data_type"},
 					"additionalProperties": false,
