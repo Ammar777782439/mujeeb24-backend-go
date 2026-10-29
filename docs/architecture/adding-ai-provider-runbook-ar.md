@@ -1,10 +1,8 @@
 # الدليل الهندسي لإضافة نموذج أو مزود AI جديد إلى مجيب 24
 
-> **مهم — تحديث PR #18 بتاريخ 2026-10-29:** الجزء الذي يذكر `canonical_proposal_json` أدناه تاريخي ومرتبط بمرجع الـCommit القديم. مسار Strict Wire والقوالب العربية في الفرع الجديد موثّق في [هذا الملحق](merchant-catalog-attribute-schema-ai-contract-ar.md)، ولم يُدمج إلى `main` بعد.
+> **الحالة:** دليل إضافة مزود AI وفق كود الفرع `fix/merchant-catalog-strict-wire-v3` (PR #18). ليس إثباتًا للنشر في `main` أو الإنتاج.
 >
-> **حالة المستند:** دليل تنفيذ ومراجعة لمطور Go، وليس إثباتًا بأن مزودًا جديدًا يعمل تلقائيًا.
->
-> **مرجع الكود عند إعداد الدليل:** مستودع `Ammar777782439/mujeeb24-backend-go`، فرع `refactor/provider-agnostic-ai-runtime`، Commit `c635dc5cd4d8ed9cbc9871319fd8241b518dd403`، بتاريخ 2026-10-24.
+> **عقد مساعد التاجر:** [Strict Wire + القوالب العربية والتعريفات وقواعدها](merchant-catalog-attribute-schema-ai-contract-ar.md). **لا يستخدم المسار الحالي غلافًا نصيًا واحدًا للمقترح كاملًا**.
 >
 > **النطاق:** ثلاثة استخدامات لنموذج واحد أو مزود واحد: (1) ردود العملاء واتخاذ قرارات القدرات Customer Sales، (2) تقييم كتالوج العميل Catalog Batch/Final Evaluation، (3) مساعد التاجر لإدارة الكتالوج Merchant Catalog Authoring. التلخيص النصي تابع لمسار العميل ويُختبر بصورة مستقلة.
 >
@@ -212,7 +210,9 @@ Merchant message + selected catalog + history + entity contract
   → Provider Adapter يترجم الجولة التالية ويحافظ على ربط الـcall والنتيجة
   → Model قد يختار أداة قراءة أخرى
   → عند انتهاء القراءة: Gateway يلغي tools وينتقل إلى طلب proposal منظم مستقل
-  → Model ينتج Strict Wire Proposal (فرع fix/merchant-catalog-strict-wire-v3)
+  → Model ينتج Merchant Catalog Strict Wire مطابقًا للمخطط البنيوي
+  → submit_merchant_catalog_proposal (DeepSeek final output)
+  → catalogWireDefinitions يفك validation_rules_json الفردية
   → catalogWireParse → parseMerchantCatalogProposal → Normalize → ValidateReferences → Validate
   → PROPOSAL_STORED للمراجعة فقط (بدون تعديل منتج أو قالب)
   → موافقة التاجر → ExecuteApproved → transaction لربط/إصدار القالب والتعريفات والقيم
@@ -224,7 +224,7 @@ Merchant message + selected catalog + history + entity contract
 - تتابع الرسائل: `system → user → assistant(tool_calls) → tool(tool_call_id, content) → ...`، وربط ID أداة القراءة بنتيجتها **ضروري**.
 - نتيجة القراءة تحمل `data` و`has_more` و`next_cursor`. لا تسقط علامة الصفحات؛ التاجر قد يحتاج بقية العناصر.
 - لا يقرر Adapter هل «التاجر يقصد تعديل السعر»؛ النموذج يحدد ما يحتاجه من قراءات ومقترح، ضمن أدوات وصلاحيات مجيب.
-- **النص النهائي ليس تنفيذًا**: `canonical_proposal_json` كان غلافًا نصيًا في النسخة التاريخية للدليل. على فرع `fix/merchant-catalog-strict-wire-v3` تستخدم `merchantCatalogWireSchema()` بنية مغلقة، وتُنقل قيمة كل حقل منفرد عبر `value_json`؛ يحولها Go إلى `Proposal V3` ويُبقي `parseMerchantCatalogProposal` والتحقق من المراجع والمعاني التجارية. على النموذج تأليف `label` عربي لكل مواصفة جديدة، واختيار قالب موثوق من أدوات القراءة، أو تقديم اسم قالب عربي جديد. Go لا يترجم ولا يكتب في الكتالوج قبل الموافقة. [العقد التفصيلي](merchant-catalog-attribute-schema-ai-contract-ar.md).
+- **الإخراج النهائي ليس تنفيذًا:** يفرض `merchantCatalogWireSchema()` هيكل العمليات المغلق. ينقل `value_json` قيمة **حقل واحد**؛ و`validation_rules_json` قواعد **تعريف مواصفة واحد**. يحول Go ذلك إلى `Proposal V3` ويتحقق من المراجع والأنواع والقواعد. النموذج يكتب `label` و`data_type` و`validation_rules` واسم قالب عربي جديد عند الحاجة أو يختار قالبًا موجودًا من دليل موثوق. لا يترجم Go ولا يُنشئ بيانات قبل موافقة التاجر. [العقد التفصيلي](merchant-catalog-attribute-schema-ai-contract-ar.md).
 - الحالة التي تطلب من التاجر معلومات ناقصة مقبولة عندما يسمح بها العقد، ولا ينبغي إجبار النموذج على اختراع سعر.
 - توجد `thought_signature` ضمن `nativeMerchantChatCall` الحالي؛ بعض المزودين يحتاج بيانات تفكير إضافية لإعادة تشغيل سجل الأدوات. **عالجها وفق وثائقه**، لكن لا تخزن أسرار تفكير حساسة بشكل غير مقصود ولا تمحُ metadata لازمة لاستمرار الجلسة. إن لم يحمل العقد الحالي ما يحتاجه المزود، فهذا **عدم توافق مثبت** يجب معالجته بأصغر امتداد، لا بخدعة داخل الـAdapter.
 - إعداد `merchant_catalog_ai.go` لا يستدعي مزودًا خاصًا؛ يتلقى `MerchantCatalogAuthoringPort` من `bootstrap`. لا تغيّر منطق التنفيذ أو مراجعة التاجر لتبديل شركة AI.
@@ -366,7 +366,7 @@ go vet ./...
 
 ## 8. توثيق المصادر: ما هو حقيقة كود وما هو إرشاد عام؟
 
-**حقائق من الكود عند Commit المحدد:** الواجهات وأسماء الملفات، `required/auto`، جولات Merchant القصوى، مسار `canonical_proposal_json`، أسماء `bootstrap`، ومفاتيح التكوين؛ يمكن مطابقتها بروابط الملفات في القسم (1). تتغير هذه الحقائق فقط عندما يتغير الكود.
+**حقائق يُرجع لها المطور من الكود الحالي على الفرع:** الواجهات وأسماء الملفات، جولات Merchant القصوى، `merchantCatalogWireSchema`، أدوات النقل والقراءة، وأسماء `bootstrap` ومفاتيح التكوين. مرجع الربط والقيم العربية: [عقد القوالب](merchant-catalog-attribute-schema-ai-contract-ar.md). تحقّق من آخر HEAD قبل الاعتماد على أي رقم تشغيلي.
 
 **أفضل ممارسات خارجية (مصادر رسمية، راجع آخر إصدار عند اختيار المزود):**
 
@@ -390,29 +390,3 @@ go vet ./...
 > **إضافة مزود جديد مؤهل تستلزم كتابة Adapter له وفق وثائقه وربطه بإعداد محدود واختباره عبر Customer Sales + Full Catalog + Merchant Catalog AI، دون تغيير منطق الأعمال، ودون أن يخترع Go نية العميل أو التاجر أو ينفذ المزود أدواته بنفسه.**
 
 
----
-
-## ملحق تحديث 2026-10-29 — Merchant Catalog Strict Wire + Arabic Attributes (فرع PR #18)
-
-**تنبيه مهم:** الخطوات السابقة التي تقول إن `Model ينتج canonical_proposal_json` تصف Commit التاريخي المذكور أعلى المستند. **ليست المسار الحالي على فرع `fix/merchant-catalog-strict-wire-v3`**. لا تنقل هذا الغلاف النصي إلى تكامل مزود جديد عندما تستخدم الفرع.
-
-المسار في الفرع:
-
-```text
-Merchant message → Model chooses trusted read-only discovery tools
-  → merchant_catalog_list_attribute_schemas if an existing template is relevant
-  → Model chooses real attribute_schema_id OR supplies Arabic attribute_schema_name
-  → Model supplies attribute_definitions: {key, label, data_type} for new attributes
-  → Strict merchantCatalogWireSchema → submit_merchant_catalog_proposal
-  → catalogWireParse (field-level value_json only, not full proposal in a string)
-  → parseMerchantCatalogProposal → Normalize → ValidateReferences → Validate
-  → PROPOSAL_STORED (review only; zero catalog mutation)
-  → merchant explicitly approves → ExecuteApproved transaction
-  → reuse/version definitions, assign stable attr_ keys, bind item schema + version, save values
-  → React reads stored definition.label, not a translation dictionary
-```
-
-- **المعنى التجاري واللغة العربية ملك النموذج:** `label` العربي، `data_type` والقيمة، واختيار القالب من IDs ظهرت في أداة القراءة. Go **لا** يترجم ولا يسمي القوالب أو المواصفات، بل يفحصها ويولد المفتاح التقني ويحفظ بعد الموافقة.
-- **عقد المجال لا يتغير:** `CatalogItem.attributes` و`Variant.attributes` كلاهما JSON Object، ويجب أن يظل `Offer` مسؤولًا عن السعر والتوفر. `{name, value_json}` صيغة Wire وسيطة لنقل **قيمة حقل واحد**.
-- **حالة التشغيل:** التوثيق يخص PR #18 غير المدمج. نجاح CI لا يعني أن DeepSeek الحقيقي تأهل أو أن الواجهة عرّبت المواصفات القديمة تلقائيًا.
-- **مرجع لا يجوز تجاهله:** [العقد التفصيلي للربط والبيانات العربية](merchant-catalog-attribute-schema-ai-contract-ar.md). راجع أيضًا [Merchant Catalog AI CLOSED v2](../../contracts/ai/11-merchant-catalog-ai-authoring-closed.md) وعقد Catalog الأساسي.
