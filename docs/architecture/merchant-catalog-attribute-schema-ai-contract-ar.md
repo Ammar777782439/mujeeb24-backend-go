@@ -1,163 +1,133 @@
-# عقد مساعد التاجر وقوالب المواصفات العربية — Key / Label / Value
+# العقد الهندسي الحالي — مساعد كتالوج التاجر وقوالب المواصفات العربية
 
-> **التاريخ:** 2026-10-29  
-> **الحالة:** ملحق تنفيذي معماري على الفرع `fix/merchant-catalog-strict-wire-v3` ضمن PR #18، **غير مدمج في main وغير مؤهّل للإنتاج حتى اكتمال الاختبارات الحية**.  
-> **المرجع المعياري للمجال:** [Mujeeb 24 — Catalog Contract](../../مخطط%20مهم/Mujeeb%2024%20%E2%80%94%20Catalog%20Contract.md) وعقد [Merchant Catalog AI Authoring CLOSED v2](../../contracts/ai/11-merchant-catalog-ai-authoring-closed.md).  
-> **سبب هذا الملحق:** منع الخلط مستقبلًا بين إنشاء معنى المواصفة بواسطة النموذج، وتوليد هويتها التقنية بواسطة Go، وبين التخزين والعرض في React. هذا الملحق لا يغيّر الدومين ولا يستبدل العقود المغلقة.
+**المصدر المرجعي الحالي للميزة على الفرع `fix/merchant-catalog-strict-wire-v3` (PR #18).** يصف هذا المستند المسار المنفّذ في كود الفرع، ولا يعني أن هذا الكود نُشر في `main` أو الإنتاج. لا توجد ملاحق سابقة أو مساران متوازيان للنقل. المرجع التجاري الأوسع: [Catalog Contract](../../مخطط%20مهم/Mujeeb%2024%20%E2%80%94%20Catalog%20Contract.md)، و[Merchant Catalog AI Authoring](../../contracts/ai/11-merchant-catalog-ai-authoring-closed.md)، و[Proposal V3](../../contracts/ai/12-merchant-catalog-ai-proposal-contract-closed.md).
 
-## 1) قاعدة القرار التي لا يجوز تغييرها
+## 1. المسؤوليات
 
-**النموذج (Gemini/DeepSeek) هو المسؤول عن فهم المعنى التجاري وكتابة `label` العربي و`data_type` والقيمة، وعن اختيار قالب مواصفات موجود من دليل حقيقي عندما يكون مناسبًا.**
+| المكوّن | المسؤولية |
+| --- | --- |
+| التاجر | حقيقة المنتج والسعر والمواصفات، ومراجعة المقترح واعتماده |
+| نموذج AI | يفهم طلب التاجر بالعربية، ويستخرج قيمة المواصفة و`label` العربي و`data_type` و`validation_rules` الموثوقة، ويختار قالبًا مناسبًا من نتائج القراءة، أو يؤلف اسم قالب عربي جديد عند الحاجة |
+| Go Gateway | أدوات القراءة، Strict Wire، فحص الـJSON والحقول والمراجع، وتحويل النقل إلى Canonical Proposal V3 |
+| Go Executor | لا ينشئ أي سجل من مجرد رسالة أو Proposal؛ عند الموافقة يفحص التزامن والصلاحيات، ويطابق تعريفات القالب ويولّد `attr_...` للتعريف الجديد ويحفظ في معاملة |
+| PostgreSQL | القوالب والتعريفات وإصداراتها والقيم الحقيقية للمنتج والخيار |
+| React | تعرض `label` المحفوظ وتستخدم `data_type` و`validation_rules` لإنشاء محرّر مناسب. **لا تترجم أسماء المفاتيح** |
 
-**Go لا يترجم أي مفتاح إنجليزي إلى عربي، ولا يستنتج اسم مواصفة أو قالب من نوع المنتج أو كلمات مفتاحية، ولا ينشئ معاني تجارية.** وظيفته التحقق، والمطابقة مع التعريفات المعتمدة، وتوليد هوية تقنية مستقرة للتعريفات الجديدة، وحفظ التغييرات بعد الموافقة ضمن المعاملة. **React لا تترجم**؛ تعرض `label` المخزّن في التعريف الحقيقي وتقرأ قيمة المفتاح من `attributes`.
+Go **لا يترجم** `battery` إلى «البطارية»، ولا يؤلف اسم قالب أو خيارات `enum` أو يستنتج نية تجارية بقواعد كلمات ثابتة. والنموذج لا ينشئ `attr_...` ولا يختلق UUID لقالب موجود.
 
-| الطبقة | المسؤولية | الممنوع |
-| --- | --- | --- |
-| Merchant | مصدر الحقائق التجارية والموافقة | اعتبار نص الرد اعتمادًا |
-| Model | تفسير طلب التاجر، قيم المواصفات، `label` العربي، `data_type`، اختيار القالب المناسب من الأدلة، واسم القالب العربي الجديد إن لزم | اختراع `schema_id` أو مفاتيح `attr_` أو حقائق لم يذكرها التاجر |
-| Go / Gateway | إتاحة أدوات قراءة مرخّصة، فحص المراجع وStrict Wire، تحويل Proposal والتحقق | ترجمة `battery` إلى «البطارية»، تصنيف نية التاجر بكلمات ثابتة |
-| Go / Approved executor | مطابقة التعريفات الموجودة، إنشاء Version أو تعريف جديد، تعيين `attr_`، تحديث روابط العنصر، الكتابة داخل transaction | إنشاء التعريفات قبل الموافقة أو تبديل تعريف موجود بصمت |
-| PostgreSQL | تسجيل القوالب والتعريفات وقيم العنصر/الخيار وإصداراتها | اعتبار `label` هو المفتاح المخزّن في JSON |
-| React | جلب القالب وتعريفاته وعرض `label` و`value` | ترجمة أو اختراع تسمية بناءً على المفتاح |
-
-## 2) العلاقات الحقيقية وقواعد التخزين
+## 2. نموذج التخزين والعلاقة الفعلية
 
 ```text
-Business
-  └── Catalog
-       └── CatalogItem
-            ├── attribute_schema_id       ───┐
-            ├── attribute_schema_version  ───┤→ AttributeSchema (id, business_id, name, version)
-            ├── attributes (JSONB object)    │      └── AttributeDefinition (schema_id, attribute_key, label, data_type, ...)
-            ├── Variant                      │           ↑
-            │    └── attributes (JSONB object) ───────────┘ uses the associated item's definitions
-            └── Offer (price / availability / currency; NOT attributes)
+attribute_schemas
+  id, business_id, name, version
+    └── attribute_definitions
+          schema_id, attribute_key, label, data_type, validation_rules, ...
+
+catalog_items
+  id, attribute_schema_id, attribute_schema_version, attributes JSONB
+    └── variants
+          catalog_item_id, attributes JSONB
+
+offers
+  price, currency, availability ... (not attributes)
 ```
 
-- `CatalogItem.attributes` و`Variant.attributes` هما **JSON Objects**: القيمة الحقيقية للمواصفة، وليسا مصفوفة `{key,value}` مخزنة في الدومين.
-- `AttributeSchema` مجموعة تعريفات قابلة لإعادة الاستخدام بين عناصر متشابهة؛ `AttributeDefinition` هو **صف تعريف** وليس صف قيمة. يحتوي `attribute_key` (المفتاح التقني) و`label` (الاسم المعروض) و`data_type` وقواعد التحقق.
-- في `CatalogItem`: يجب أن يكون `attribute_schema_id` و`attribute_schema_version` **موجودين معًا أو NULL معًا**، والإصدار موجب. هذا الربط اختياري على مستوى الدومين الأساسي؛ مسار إنشاء مواصفات *عبر AI* في الفرع يسعى لإنتاج تعريفات موثّقة بعد الموافقة.
-- يشارك Variant القالب المرتبط بالعنصر؛ لا يخترع قالبًا مستقلًا لكل خيار. الخاصية العامة على `CatalogItem.attributes`، والخاصة بخيار معيّن على `Variant.attributes`.
-- السعر والعملة والتوفر التجاري في `Offer`؛ لا يُحفظ تعديل السعر في `attributes`.
-- تعريفات وإصدارات القوالب يجب الحفاظ عليها: لا تغيّر `attribute_key` لتعريف موجود، ولا تعِد تأويل قيمة تاريخية بلا مراجعة.
+- `CatalogItem` يرتبط بقالب وإصدار محددين؛ الرابط **اختياري في Catalog Domain الأساسي**، ولهذا قد توجد منتجات قديمة تحمل مفاتيح حرة.
+- `Variant` يستخدم تعريفات قالب المنتج الأب، ولا يحمل `attribute_schema_id` مستقلاً. لا يلزم أن يحتوي كل حقول القالب؛ يستعمل Go `ValidatePartialAttributes` للقيم المقدّمة.
+- `attribute_definitions.attribute_key` هو المفتاح التقني؛ `label` اسم العرض العربي؛ `data_type` نوع القيمة؛ `validation_rules` القيود مثل `enum`.
+- `CatalogItem.attributes` و`Variant.attributes` **JSON Objects** تحتوي `attribute_key → actual_value`، وليست صفوف تعريفات `{key,label,value}` أو مصفوفات `key/value`.
+- السعر والعملة والتوفر من مسؤولية `Offer`، مثل `update.existing_offers` عند تحديث عرض موجود.
+- تعريفات القوالب تُدار بإصدارات؛ لا تتبدل مفاتيح تعريف سابق ولا تُعدّل `enum` محفوظة بصمت.
 
-### مثال مسار العرض المعتمد
-
-التعريف المحفوظ (المفتاح هنا مثال فقط):
+### مثال متوافق مع البيانات المعروضة في pgAdmin
 
 ```json
 {
-  "attribute_key": "attr_1a2b3c4d5e6f7788",
-  "label": "سعة البطارية",
-  "data_type": "text"
-}
-```
-
-قيمة العنصر المحفوظة:
-
-```json
-{
-  "attributes": {
-    "attr_1a2b3c4d5e6f7788": "5000mAh"
-  }
-}
-```
-
-الواجهة **تستخدم `attribute_key` للربط ثم تعرض** «سعة البطارية: 5000mAh»؛ ليست هناك ترجمة من React، وGo لم يخترع الاسم العربي. القيمة يجوز أن تكون عربية أو إنجليزية، نصًا أو رقمًا أو Boolean أو نوع JSON مسموحًا تبعًا لتعريف المواصفة، ولا تُحوّل جميع القيم إلى String. `data_type` يعني تحققًا دلاليًا على النوع وليس مجرد ترجمة للنص.
-
-## 3) دورة مساعد الكتالوج: قراءة القوالب ← مقترح ← موافقة ← حفظ
-
-1. يفهم النموذج طلب التاجر بالعربية ويستخدم أدوات قراءة الكتالوج عند الحاجة.
-2. إذا كان قالب موجود مناسبًا، **النموذج يقرأ** `merchant_catalog_list_attribute_schemas`، ويختار `attribute_schema_id` الحقيقي الذي ورد في الأدلة. لا يختار Go القالب بالتخمين. يستخدم مفاتيح `attr_` وتعريفات القالب نفسها.
-3. عند إنشاء/تعديل مواصفة حرة لا يغطيها قالب ملائم، يكتب النموذج في Proposal دلالات المواصفة: `key` إنجليزي مؤقت `snake_case`، `label` عربي مفهوم، `data_type`، والقيمة في `attributes`. وإذا احتاج **قالبًا جديدًا** يقدم `attribute_schema_name` عربيًا من فهمه التجاري، لا من Go.
-4. Go يتحقق من أسماء الأدوات والـIDs الموثوقة وصحة النقل والأنواع ووجود التسميات؛ يعرض **Proposal للمراجعة فقط**. `PROPOSAL_STORED` ليس تنفيذًا.
-5. **فقط عند `ExecuteApproved`** وبعد التحقق من صاحب الصلاحية وتحديث النسخ (optimistic concurrency)، يجري إنشاء/إعادة استخدام تعريفات `AttributeSchema` وربط مفاتيح `attr_` الجديدة وتحديث `CatalogItem` و`Variant` داخل معاملة واحدة. فشل أي جزء يلغي الكتابات.
-6. عند وجود قالب سابق وتحتاج مواصفة جديدة، يحتفظ التنفيذ بمفاتيح التعريفات السابقة ويُنشئ إصدارًا جديدًا دون تغيير الصيغ القديمة بصمت.
-7. React تسترجع `attribute_schema_id` وتعريفات القالب، ثم تربط قيمة المفتاح من `attributes` بـ`definition.label`. دون `definition` صالح لا يجوز أن تدعي أن المفتاح الإنجليزي صار اسمًا عربيًا.
-
-### ماذا يفعل Go تحديدًا؟
-
-`attribute_schema_materialization.go` يستخدم المعلومات العربية **التي أنتجها النموذج**، يتحقق من وجود التسمية العربية ومن `data_type`، يطابق التعريفات الموجودة في القالب المحدد باستخدام المفتاح/الاسم المحفوظ حيث أمكن، ويُنشئ `attr_` للتعريف الجديد اعتمادًا على ID تقني يولّده Go. لا توجد دالة ترجمة إنجليزي/عربي ولا قاموس قطاعات في Go. المطابقة التقنية ليست تصريحًا لـGo باختراع مرادفات عربية أو دمج مواصفتين متشابهتين بالمعنى دون دليل.
-
-### مثال لاقتراح النموذج، وليس JSON قاعدة البيانات
-
-```json
-{
-  "attribute_schema_name": "مواصفات الهواتف",
   "attribute_definitions": [
-    {"key": "battery_capacity", "label": "سعة البطارية", "data_type": "text"},
-    {"key": "warranty", "label": "الضمان", "data_type": "text"}
-  ],
-  "create": {
-    "attributes": {
-      "battery_capacity": "5000mAh",
-      "warranty": "سنتان"
+    {
+      "attribute_key": "attr_4b40819c06f01d6c",
+      "label": "سعة التخزين",
+      "data_type": "number",
+      "validation_rules": {}
+    },
+    {
+      "attribute_key": "attr_b93f45cdba1161f5",
+      "label": "اللون",
+      "data_type": "multi_select",
+      "validation_rules": {"enum": ["أسود", "أزرق", "أبيض", "رمادي"]}
     }
+  ],
+  "variant_attributes": {
+    "attr_4b40819c06f01d6c": 128,
+    "attr_b93f45cdba1161f5": ["أزرق"]
   }
 }
 ```
 
-هذا **مقتطف توضيحي من حقول Proposal** وليس المقترح الكامل ولا الـWire Schema كاملًا. مفاتيح `battery_capacity/warranty` مؤقتة في مخرجات النموذج. بعد الموافقة يصير لكل تعريف محفوظ `attribute_key` تقني وتصبح مفاتيح `attributes` مرتبطة به. أما عند اختيار قالب موجود، فيُستخدم `attribute_schema_id` الحقيقي وتعريفاته ولا يُنشأ قالب جديد بلا سبب.
+**التعريفات والقيم موضوعة هنا في مثال واحد للشرح فقط**؛ في PostgreSQL التعريفات صفوف في جدولها، وقيم الخيار JSONB في `variants`. React تطابق المفتاح فتظهر «سعة التخزين: 128» و«اللون: أزرق». القالب يحدد الألوان *المسموحة* لكنه لا ينشئ Variants تلقائيًا.
 
-## 4) لا تخلط بين ثلاثة عقود
+## 3. دورة AI كاملة
 
-| العقد | دوره |
+1. التاجر يصف المنتج أو الخدمة أو التعديل.
+2. النموذج يستخدم أدوات القراءة الفعلية ومنها `merchant_catalog_list_attribute_schemas` عندما يحتاج البحث عن قالب، وأدوات العناصر والخيارات والعروض حسب العملية.
+3. إذا كان قالب موجود مناسبًا، يختار النموذج `attribute_schema_id` ظهر في نتائج القراءة الموثوقة ويستخدم مفاتيح تعريفاته الفعلية.
+4. إذا لم يوجد قالب مناسب، يولّد النموذج **مؤقتًا** لكل مواصفة `key` دلاليًا بالإنجليزية `snake_case`، و`label` عربيًا، و`data_type`، و`validation_rules` مستندة إلى طلب التاجر/الأدلة، و`attribute_schema_name` عربيًا لإنشاء القالب اللازم.
+5. Gateway يفحص المخرجات، ويحوّلها إلى `merchantcatalogai.Proposal` V3. `PROPOSAL_STORED` **للمراجعة، وليس للحفظ التجاري**.
+6. عند الموافقة الصريحة فقط، يقوم `ExecuteApproved` بالتأكد من المراجع والصلاحيات ونسخ البيانات، ومطابقة/إنشاء تعريفات وإصدار قالب مناسب، وتحويل مفاتيح المواصفات الجديدة إلى `attr_...`، وربط `attribute_schema_id` والإصدار، وحفظ القيم داخل معاملة.
+7. React تعرض التسميات والقواعد المخزنة من تعريفات القالب، دون ترجمة.
+
+**اختلاف الصياغة التجارية لا يجيز لـGo الدمج الدلالي لتسميتين**. إذا وجد تعريف بمعنى أو قواعد مختلفة لا يستبدلها بصمت، ولا يخترع حقائق ناقصة.
+
+## 4. عقد النقل الحالي مقابل عقد الأعمال
+
+- عقد النقل لمساعد التاجر هو `merchantCatalogWireSchema()`، مع أداة `submit_merchant_catalog_proposal` في تكامل DeepSeek. يقيّد create/update/delete/ask_merchant وحقولًا معروفة.
+- `{name,value_json}` وسيط لنقل **قيمة حقل واحد** (قد تكون `attributes` JSON Object). و`attribute_definitions[].validation_rules_json` سلسلة JSON لقواعد **تعريف واحد**؛ ليست JSON للمقترح كاملًا.
+- `catalogWireDefinitions` يفك القواعد، و`catalogWireParse` يحول الـWire إلى `Proposal V3`، ثم تطبَّق مراحل الفحص والتطبيع وفحص المراجع.
+- الشكل النهائي في `Proposal V3`: `attribute_definitions` فيها `key,label,data_type,validation_rules`، ويظل `create.attributes` و`update.changes.attributes` و`variants[].attributes` JSON Objects.
+- `create.attribute_schema_id` أو `update.attribute_schema_id` يختار قالبًا **موجودًا**. و`attribute_schema_name` يحدد اسم قالب **جديد** من فهم النموذج.
+- مجرد نجاح Strict Schema لا يضمن صحة المعنى أو الادعاءات التجارية. تبقى الحماية النهائية بمراجعة التاجر والتحقق في Go.
+- لا تستخدم `canonical_proposal_json` كسلسلة تحمل المقترح التجاري كاملًا في هذا المسار؛ ليس هذا عقد النقل المطبق على الفرع.
+
+## 5. قواعد التحقق `validation_rules`
+
+النموذج ينتج القيم المسموحة والقواعد مستندًا إلى التاجر أو الأدلة، وGo **يتحقق منها ولا يخترعها**.
+
+| القاعدة | السلوك |
 | --- | --- |
-| `canonical_proposal_json` | **غلاف النقل التاريخي**: String يحمل Proposal V3 كاملًا. موجود في نسخ ودليل مزود أقدم؛ لا يُعتمد مسارًا حاليًا في فرع Strict Wire |
-| `merchantCatalogWireSchema()` | **عقد النقل على فرع PR #18**: بنية مقترح مغلقة، عمليات create/update/delete، ومصفوفات حقول `{name, value_json}`، مع `attribute_definitions` و`attribute_schema_name` ومراجع القوالب. `value_json` نص JSON لقيمة **حقل منفرد** وليس مقترحًا كاملًا |
-| `merchantcatalogai.Proposal` / Canonical Proposal V3 | **عقد الأعمال**: بعد تحويل الـWire إلى بنية Go، تفحصه `parseMerchantCatalogProposal` و`Normalize` و`ValidateReferences` و`Validate`. `attributes` تبقى JSON Object ولا تتغير بنية الدومين |
+| `enum` | قائمة القيم المسموحة، لا تعني أن المنتج يمتلك كل القيم |
+| `select` | يحتاج `enum`، والقيمة المختارة مفردة حسب النوع |
+| `multi_select` | يحتاج `enum`، وقيمة المنتج/الخيار قائمة من القيم المسموحة |
+| `min` / `max` | حدود رقمية تتحقق منها الخدمة |
+| `regex` | صيغة النص عند استخدام هذه القاعدة |
+| `currency` / `timezone` | قيود مدعومة في المسار |
 
-أداة النقل النهائية الخاصة بمساعد الكتالوج في DeepSeek هي `submit_merchant_catalog_proposal` (ولا تعني إذن تنفيذ)، بينما `submit_catalog_batch` تخص مسارات أخرى. تبقى أدوات القراءة للبحث والاستدلال فقط. الالتزام بالـSchema لا يثبت أن الاسم العربي مفهوم أو أن القيمة صحيحة؛ نموذج + تحقق Go + مراجعة التاجر جميعها مطلوبة.
+مسار AI الجديد يقبل فقط أسماء القواعد التي يستطيع Go التحقق منها؛ يحظر `enum` فارغة أو متكررة أو تحتوي كائنات غير مناسبة، ويحد عدد الاختيارات وحجم JSON. لا يبدّل قواعد تعريف محفوظ عند إعادة استخدام قالب موجود. القيم المقترحة على مستوى Variant تُفحص عبر `ValidatePartialAttributes`. قواعد مجال Catalog الأساسية تظل قابلة للتوسّع، لكن هذا لا يعني قبول قواعد ينتجها AI ولا يفسرها المدقق.
 
-## 5) الحالة الواقعية والحدود التي يجب ألا ننساها
+## 6. التوافق مع البيانات الحالية
 
-- **لقطات UI المؤكدة:** منتج بدون قالب يعرض مفاتيح مثل `battery` و`camera` بالإنجليزية؛ منتج بقالب يعرض أسماء عربية من التعريفات مثل «الضمان بالأشهر». هذه نتيجة لوجود/غياب تعريف محفوظ، لا نقص قاموس ترجمة React.
-- **المنتجات القديمة بلا قالب لا تُعرَّب تلقائيًا:** لا يوجد في هذا الفرع ترحيل جماعي للمفاتيح الحرة القديمة إلى تعريفات عربية. تحتاج مقترح مراجعة/ربط أو مسار ترحيل مستقل آمن بموافقة التاجر، بما في ذلك القيم الموجودة في الخيارات.
-- **لا تترجم القيم الإنجليزية آليًا:** `5000mAh` و`Samsung` قيم تجارية محفوظة؛ يمكن عرض `label` عربي دون تغيير القيمة.
-- **إعادة الاستخدام ليست استنتاجًا آليًا من Go:** النموذج يقرر من أدلة القوالب إذا كان القالب مناسبًا، ويعيد `schema_id` الحقيقي؛ Go يتحقق. عند عدم وجود قالب مناسب يقدم النموذج الاسم العربي والتعريفات؛ Go لا يضع اسمًا من رقم المقترح ولا اسمًا مستنتجًا من نوع المنتج.
-- **قيود تنفيذية تحتاج اختبارًا حقيقيًا:** صحة `data_type` المركبة وقواعد الاختيارات `select/multi_select`، تعارض قالب موجود مع قيم حرة، منتجات ذات مواصفات قديمة، حالات التزام DeepSeek بمخطط Strict Wire، تزامن إنشاء إصدارات قوالب، ومعاينة/عرض React للأسماء قبل الاعتماد. لا تصفها بأنها مؤهلة للإنتاج بمجرد نجاح CI.
-- **الأمان:** لا يتحول رد النموذج أو `PROPOSAL_STORED` إلى تنفيذ؛ التنفيذ فقط بعد موافقة التاجر عبر `ExecuteApproved` مع التحقق والصلاحيات والمعاملة.
-- **فرع التنفيذ:** `fix/merchant-catalog-strict-wire-v3` / PR #18، منفصل عن `main`. أي وصف له في هذا الملف هو توثيق لتغيير الفرع، لا إعلان لنشره.
+- المنتجات التي تحتوي مفاتيح حرة مثل `color` و`storage` بلا قالب تُعرض كما هي حتى تُربط بتعريفات موثوقة. **لا يوجد ترحيل تلقائي أو تعريب جماعي**.
+- بعض المنتجات قد تحتوي مفاتيح حرة حتى وهي مرتبطة بقالب؛ وجود القالب لا يعني أن جميع مفاتيحها مُدارة.
+- لا تُترجم قيم التاجر مثل `5000mAh` و`Samsung` ولا تُغيّر أنواعها؛ تُعرض التسميات العربية للتعريفات فقط.
+- تغيير إصدار قالب لا يغيّر روابط كل المنتجات إلى الإصدار الجديد تلقائيًا.
+- لا تغييرات في DDL ولا migrations لهذا التكامل.
 
-## 6) اختبار القبول الذي يحفظ العلاقة
+## 7. ملفات التنفيذ المعتمدة
 
-1. **بدون قالب، إنشاء مواصفة جديدة:** النموذج يرجع `label` عربي و`data_type` وقيمة، ثم بعد الاعتماد يُنشأ التعريف ويُربط مفتاح `attr_` ويحفظ العنصر؛ لا صفوف جديدة قبل الاعتماد.
-2. **قالب موجود مناسب:** النموذج يقرأه ويشير إلى `schema_id` موثوق؛ يستخدم نفس مفاتيح التعريفات دون إنشاء قالب منتحل أو تغيير التسميات.
-3. **توسيع قالب موجود:** يُنشأ إصدار جديد ويحفظ مفاتيح التعريفات السابقة دون محو القيم.
-4. **مواصفة Variant:** تُخزن في `Variant.attributes` ويُعرض `label` من قالب العنصر المرتبط؛ لا تنقل إلى `CatalogItem.attributes` عشوائيًا.
-5. **تحديث عرض سعر قائم:** يبقى تحت `update.existing_offers` وليس `attributes` أو `new_offers`.
-6. **فقدان الاسم العربي/اختلاف النوع/معرّف قالب غير موثوق:** يرفض المسار ولا يخترع ترجمة أو ID ولا يحفظ بيانات جزئية.
-7. **منتج قديم بلا قالب:** يبقى كما هو لحين ترحيل صريح؛ لا تزعم أن أسماء مفاتيحه أصبحت عربية تلقائيًا.
-8. **Mobile/Desktop:** React تعرض التسمية المحفوظة دون قاموس ترجمة؛ أي مفاتيح متبقية بالإنجليزية تُعامل كبيانات بلا تعريف، لا كنجاح.
-9. **PostgreSQL transaction:** فشل تحديث النسخة/الربط يلغي إنشاء القالب والقيم معًا.
-10. **مزود حقيقي:** إجراء دورة أداة قراءة → Wire Proposal → مراجعة → موافقة باستخدام DeepSeek/Gemini المؤهل، بالإضافة إلى الاختبارات الآلية.
+- `internal/domain/ai/prompts/merchant_catalog_v2.go`: تعليمات النموذج.
+- `internal/application/merchantcatalogai/proposal.go`: عقد Proposal V3.
+- `internal/application/merchantcatalogai/discovery_attribute_schemas.go`, `discovery_references.go`: قراءة القوالب والتحقق من IDs.
+- `internal/adapters/secondary/ai/gateway/merchant_catalog_wire.go`, `merchant_catalog_wire_rules.go`, `merchant_catalog_schema.go`, `native_merchant_catalog_adapter.go`: Strict Wire وتحويل القواعد.
+- `internal/application/merchantcatalogai/attribute_definition_validation.go`, `attribute_schema_materialization.go`, `execution.go`: التحقق وإنشاء التعريفات عند اعتماد المقترح.
+- `internal/application/catalogvalidation/attributes.go`: التحقق من أنواع القيم وقواعدها.
+- `internal/application/ports/catalog_repository.go` و`internal/adapters/secondary/persistence/postgres/catalog_repository.go`: ربط القالب والإصدار وقيم الكتالوج.
 
-## 7) الملفات ذات الصلة (مرجع عند تعديل الكود)
+## 8. حالات التحقق الوظيفي
 
-- `internal/application/merchantcatalogai/proposal.go` — Proposal V3 + `ProposedAttributeDefinition` + أسماء/مراجع القوالب.
-- `internal/application/merchantcatalogai/discovery_attribute_schemas.go` و`discovery_references.go` — أدلة القوالب ومعرّفاتها الموثوقة.
-- `internal/adapters/secondary/ai/gateway/merchant_catalog_wire.go` و`native_merchant_catalog_adapter.go` — Wire Schema وفكّه ونقل المقترح.
-- `internal/application/merchantcatalogai/attribute_definition_validation.go` — التحقق من الأسماء العربية والمفاتيح الدلالية.
-- `internal/application/merchantcatalogai/attribute_schema_materialization.go` و`execution.go` — تعيين المفاتيح وربط الإصدار، فقط بعد الموافقة.
-- `internal/application/catalogvalidation/attributes.go` — فحص قيم المواصفات بالنسبة لقالبها.
-- `internal/application/ports/catalog_repository.go` و`internal/adapters/secondary/persistence/postgres/catalog_repository.go` — شكل الدومين وقاعدة البيانات.
-- `internal/domain/ai/prompts/merchant_catalog_v2.go` — مسؤولية النموذج عن المعنى والقالب والاسم العربي.
-- Frontend: `src/app/catalog/components/catalog-form-values.ts` و`merchant-ai-proposal-details.tsx` — عرض أسماء التعريفات في React، وليس ترجمتها.
+- اختيار قالب موجود من مرجع حقيقي وإعادة استخدام مفاتيحه وتسمياته وقواعده.
+- إنشاء قالب عربي وتعريفات جديدة بعد الموافقة فقط، مع مفاتيح `attr_...` من Go.
+- إنشاء/تعديل قيم Variant بما يوافق القواعد، ورفض اختيار لون خارج `enum`.
+- رفض بيانات ناقصة أو `schema_id` مختلق أو تغيير قواعد تعريف موجود بصمت.
+- الحفاظ على مفاتيح وإصدارات القوالب الحالية، وذرية التعديلات في PostgreSQL.
+- مراجعة عربية واضحة قبل الاعتماد، وفصل عرض/تعديل الأسعار في `Offers`.
 
-**خلاصة ثابتة للمطور التالي:** *AI يفهم ويسمي بالعربية ويقترح؛ Go يثبت الهوية ويتحقق ويحفظ بعد الموافقة؛ PostgreSQL يربط `attribute_key` بالتعريف والقيمة؛ React تعرض `label` الحقيقي.* لا تعكس هذه المسؤوليات.
-
-
-## 8) إضافة قواعد التحقق إلى تعريفات المواصفات (ملحق 2026-10-29)
-
-تحافظ القاعدة **على تخزين PostgreSQL الحالي تمامًا**. يحتفظ `attribute_definitions.attribute_key` بمفتاح `attr_...` و`label` العربي و`data_type` و`validation_rules` كـJSONB. `catalog_items.attributes` و`variants.attributes` يحتويان كائن JSON مفاتيحه `attr_...` وقيمه حقائق المنتج/الخيار، وليس تعريفات أو تسميات عربية.
-
-على فرع PR #18 يمكن أن يقترح النموذج مع تعريف المواصفة `validation_rules` من الأدلة التجارية. في نقل DeepSeek Strict Wire فقط تُرسل هذه القواعد داخل `validation_rules_json` (سلسلة JSON **للقواعد وحدها**)، ثم يحوّلها Go إلى `ProposedAttributeDefinition.ValidationRules` قبل فحص المقترح التجاري. لا يُعاد `canonical_proposal_json` ولا تُغيّر `Variant.attributes`.
-
-- لا يجوز للنموذج اختراع `enum`؛ يدرج القيم التي صرّح بها التاجر أو ثبتت بأدلة القالب. أنواع `select` و`multi_select` تتطلب `enum` غير فارغة.
-- يحافظ Go على اختيارات التعريف الموجود ولا يستبدلها صامتًا. إذا حاول المقترح تغيير `enum` لتعريف موجود، يُرفض التعارض بدل تعديل كل المنتجات المرتبطة.
-- يتأكد Go من أن القيم المقترحة للمنتج/الخيار تطابق `data_type` و`validation_rules`. للتحقق من الخيار يستخدم `ValidatePartialAttributes` لأن حقول القالب قد تكون اختيارية على مستوى كل Variant.
-- قواعد AI المقبولة حاليًا محدودة بالقواعد المفهومة والمنفذة فعليًا: `enum`، `min`، `max`، `regex`، `currency`، `timezone`. عقد الدومين الأساسي يبقى قابلًا للتوسّع وفق Catalog Contract؛ هذا القيد يخص المسار المولَّد من AI لمنع حفظ قواعد يتجاهلها Go.
-- UI تعرض `definition.label` و`validation_rules.enum` من البيانات المحفوظة؛ لا تترجم ولا تفترض وجود جميع قيم القالب ضمن Variants فعلية.
-- تُعد فحوصات GitHub ضرورية لكنها لا تستبدل اختبار مزود AI الحقيقي واختبار العرض بعد الاعتماد.
-
-**الفرق الجوهري:** قائمة الألوان المسموحة في `attribute_definitions.validation_rules.enum`، أما اللون المختار في `variants.attributes["attr_..."]`. القالب لا يُنشئ Variants تلقائيًا.
+**قاعدة ملزمة:** النموذج يفهم ويكتب `label/data_type/validation_rules/value` ويختار قالبًا؛ Go يتحقق ويولّد الهوية التقنية فقط ويحفظ بعد الموافقة؛ PostgreSQL يحفظ التعريفات والقيم بروابطها؛ React تعرض التسميات المخزنة دون ترجمة.
