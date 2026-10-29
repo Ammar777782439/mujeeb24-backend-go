@@ -21,7 +21,7 @@ import (
 func resolveApprovedAttributeDefinitions(
 	ctx context.Context,
 	catalogs ports.CatalogRepository,
-	business, proposalID string,
+	business, modelSchemaName string,
 	current *ports.AttributeSchemaRecord,
 	specs []ProposedAttributeDefinition,
 	now time.Time,
@@ -116,9 +116,15 @@ func resolveApprovedAttributeDefinitions(
 	if newDefs == 0 {
 		return current, keys, nil
 	}
-	name := "مواصفات مجيب - " + proposalID
+	name := strings.TrimSpace(modelSchemaName)
 	if current != nil {
+		// A pre-existing template wins; the model may not rename it.
+		if name != "" && name != current.Name {
+			return nil, nil, errors.New("selected schema name does not match existing template")
+		}
 		name = current.Name
+	} else if name == "" {
+		return nil, nil, errors.New("new attribute template requires a name authored by the model")
 	}
 	version, err := catalogs.NextAttributeSchemaVersion(ctx, business, name)
 	if err != nil {
