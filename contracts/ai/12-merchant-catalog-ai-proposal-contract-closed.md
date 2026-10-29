@@ -1,4 +1,6 @@
-12. Merchant Catalog AI Proposal Contract — CLOSED v2
+# 12. Merchant Catalog AI — العقد الحالي للمقترح (Canonical Proposal V3)
+
+> العقد الحالي على فرع `fix/merchant-catalog-strict-wire-v3` / PR #18. للتفاصيل المعمارية للمواصفات العربية والقوالب: [المرجع الموحّد](../../docs/architecture/merchant-catalog-attribute-schema-ai-contract-ar.md).
 
 ## 12.1 الغرض
 
@@ -8,7 +10,29 @@
 
 المسار:
 
-Merchant → Gemini → Proposal Contract → Deterministic Validation → Reference Resolution → Policy → Authorization → Application Service → Catalog Domain
+Merchant → read-only discovery + Model → Strict Wire → catalogWireParse → Canonical Proposal V3 → Normalize/ValidateReferences/Validate → Merchant Review → Approve → ExecuteApproved transaction → Catalog Domain
+
+## 12.1.1 عقد النقل المنفصل عن عقد الأعمال
+
+**عقد Proposal V3 هو العقد التجاري النهائي في Go**، وليس غلاف الاتصال بالمزود ولا صفوف قاعدة البيانات. فرع Merchant Catalog الحالي يستخدم `merchantCatalogWireSchema()` في مرحلة الإخراج المنظم؛ ثم `catalogWireParse` و`parseMerchantCatalogProposal` يحولان الناتج إلى `merchantcatalogai.Proposal` ويجريان التحقق من البنية والمراجع والحقول.
+
+- `submit_merchant_catalog_proposal` أداة الإخراج النهائي في تكامل DeepSeek؛ ليست أداة كتابة للكتالوج.
+- `{name,value_json}` تمثيل محصور لنقل **قيمة حقل منفرد**، و`validation_rules_json` يخص قواعد **تعريف واحد**. لا ترسل المقترح كله كسلسلة JSON عامة.
+- `operation` هو `create` أو `update` أو `delete` أو `ask_merchant` بحسب العقد. الحقول غير النشطة تكون فارغة؛ لا تُنشئ كيانات لم يطلبها التاجر.
+- `PROPOSAL_STORED` يعني أن المقترح جاهز للمراجعة؛ التعديل الفعلي محصور في `ExecuteApproved` بعد اعتماد التاجر وصلاحياته.
+
+## 12.1.2 تعريفات المواصفات والقوالب في Proposal
+
+عندما يحتاج النموذج إضافة مواصفات مُدارة، يحمل المقترح:
+- `attribute_definitions[]`: عناصر `{key,label,data_type,validation_rules}`. `key` اسم `snake_case` مؤقت، و`label` اسم عربي يكتبه النموذج، و`validation_rules` مثل `enum` لمجموعات القيم المقبولة.
+- `attribute_schema_name`: الاسم العربي الذي يكتبه النموذج عندما يحتاج **قالبًا جديدًا**.
+- `create.attribute_schema_id` أو `update.attribute_schema_id`: ID لقالب **موجود** من أدلة `merchant_catalog_list_attribute_schemas`، وليس من اختراع النموذج.
+- `create.attributes` و`update.changes.attributes` و`Variant.attributes`: **JSON Objects** تحتوي المفاتيح الدلالية المؤقتة أو مفاتيح التعريفات الموجودة، مع قيم التاجر الفعلية. لا تصبح هذه مصفوفات `key/value` في Domain.
+
+يتحقق Go من الأسماء العربية والأنواع والقواعد، ومن أن `select/multi_select` معهما `enum`، ومن صحة قيم العنصر والـVariant. عند اعتماد التاجر فقط، ينشئ Go `AttributeDefinition` ويولّد `attr_...` ويحفظ `attribute_schema_id` والإصدار والقيم داخل معاملة. **Go لا يترجم ولا يخترع مواصفات أو ألوانًا أو أسماء قوالب.**
+
+القالب يحدد `enum` الممكنة؛ كل Variant يحتفظ بالقيمة المختارة فقط، وبـ`Offer` مستقل للسعر والتوفر. إعادة استخدام قالب موجود لا تبيح تعديل قواعده بصمت. المنتجات الحرة القديمة لا تُعرّب تلقائيًا.
+
 
 ## 12.2 الفصل بين Domain IDs وProposal References
 
@@ -25,7 +49,7 @@ Merchant → Gemini → Proposal Contract → Deterministic Validation → Refer
 هذا المرجع:
 - لا يُحفظ في PostgreSQL.
 - لا يمثل UUID.
-- لا يجوز أن يكون ID من اختراع Gemini.
+- لا يجوز أن يكون ID من اختراع النموذج.
 - يجب أن يكون فريدًا داخل Proposal.
 - يستخدم لربط Offer بـVariant جديد قبل إنشاء الـVariant فعليًا.
 
@@ -80,7 +104,7 @@ Offer.name = عرض اللون الأحمر
 
 VariantCreate.ref → OfferCreate.variant_ref → Deterministic validation → Create Variant → PostgreSQL returns Variant.id → Resolve variant_ref → Variant.id → Create Offer.variant_id
 
-هذه العملية لا تعتمد على Variant name matching أو fuzzy matching أو semantic matching أو Gemini-generated UUID أو database lookup بعد كل Variant بالاسم.
+هذه العملية لا تعتمد على Variant name matching أو fuzzy matching أو semantic matching أو النموذج-generated UUID أو database lookup بعد كل Variant بالاسم.
 
 ## 12.7 Offer Provenance
 
@@ -115,7 +139,7 @@ VariantCreate.ref → OfferCreate.variant_ref → Deterministic validation → C
 
 هذه provenance fields جزء من Proposal Contract وليست تعليمات Prompt فقط.
 
-## 12.7 قواعد التحقق
+## 12.7.1 قواعد التحقق
 
 Proposal Validator يجب أن يرفض:
 1. Variant بدون ref.
@@ -129,7 +153,7 @@ Reference Validation يجب أن يتحقق من variant_id ضد Actual Catalog 
 
 ## 12.8 مسؤولية التنفيذ
 
-Gemini لا يحوّل variant_ref إلى UUID.
+النموذج لا يحوّل variant_ref إلى UUID.
 
 Application/Execution layer هي التي:
 1. تنشئ الـVariants.
@@ -145,7 +169,7 @@ Proposal schema_version = 3.
 
 ## 12.10 قاعدة المصدر
 
-هذا العقد هو مصدر الحقيقة لبنية Proposal الوسيط.
+هذا العقد مصدر الحقيقة لـCanonical Proposal V3، أما تفاصيل النقل الحالية فهي في `merchant_catalog_wire.go` والدليل المعماري للربط العربي؛ لا تخلط بينهما.
 
 أما تعريف Domain entities وحقول PostgreSQL والعلاقات الدائمة فيبقى في Catalog Entity Contract.
 
