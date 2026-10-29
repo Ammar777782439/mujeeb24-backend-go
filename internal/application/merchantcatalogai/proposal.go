@@ -24,6 +24,15 @@ const (
 	OperationAskMerchant Operation = "ask_merchant"
 )
 
+// ProposedAttributeDefinition describes a merchant-facing specification label.
+// Key is a model-generated semantic snake_case alias, never a persisted attr_ key.
+// The approved executor assigns/reuses authoritative machine keys.
+type ProposedAttributeDefinition struct {
+	Key string `json:"key"`
+	Label string `json:"label"`
+	DataType string `json:"data_type"`
+}
+
 type MissingField struct {
 	Path        string `json:"path"`
 	DisplayName string `json:"display_name"`
@@ -132,6 +141,7 @@ type DeleteOperation struct {
 }
 
 type Proposal struct {
+	AttributeDefinitions []ProposedAttributeDefinition `json:"attribute_definitions,omitempty"`
 	SchemaVersion      int              `json:"schema_version"`
 	Status             ProposalStatus   `json:"status"`
 	Operation          Operation        `json:"operation"`
