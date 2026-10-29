@@ -1,0 +1,27 @@
+name: Temporary format attribute rules
+on:
+  push:
+    branches:
+      - fix/merchant-catalog-strict-wire-v3
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/merchant-catalog-strict-wire-v3
+          persist-credentials: true
+      - name: Format changed contract files
+        shell: bash
+        run: |
+          set -euo pipefail
+          gofmt -w             internal/application/merchantcatalogai/proposal.go             internal/application/merchantcatalogai/attribute_schema_materialization.go             internal/application/merchantcatalogai/attribute_schema_materialization_test.go             internal/application/merchantcatalogai/attribute_definition_validation.go             internal/adapters/secondary/ai/gateway/merchant_catalog_wire.go             internal/adapters/secondary/ai/gateway/merchant_catalog_wire_rules.go             internal/adapters/secondary/ai/gateway/merchant_catalog_wire_test.go             internal/adapters/secondary/ai/gateway/merchant_catalog_schema.go
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add internal/application/merchantcatalogai internal/adapters/secondary/ai/gateway
+          if ! git diff --cached --quiet; then
+            git commit -m "style(merchant-ai): format strict attribute rule contracts"
+            git push origin HEAD:fix/merchant-catalog-strict-wire-v3
+          fi
