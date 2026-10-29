@@ -134,6 +134,14 @@ update.changes, update.existing_variants, update.new_variants,
 update.existing_offers, update.new_offers.
 For delete: populate delete.id. For read-only answers: operation=ask_merchant
 with all mutation payloads empty.
+When selecting an existing template, use only an ID obtained from
+merchant_catalog_list_attribute_schemas. Populate create.attribute_schema_id
+or update.attribute_schema_id as appropriate. Use exact existing definition
+keys (attr_) from that template. Do not invent IDs, Arabic labels or templates.
+For a new template, set root attribute_schema_name to an Arabic merchant-facing
+name that YOU understand from the merchant's product. Go will only persist
+your provided name after approval; it never translates or authors labels.
+Set attribute_schema_name="" when an existing template is selected.
 For every custom English snake_case attribute key appearing in item or variant attributes,
 add one entry to attribute_definitions with {key,label,data_type}; label must be
 merchant-facing Arabic, and the data type must match the actual JSON value.
