@@ -44,6 +44,7 @@ type catalogWireDelete struct {
 	ReasonGiven string `json:"reason_given"`
 }
 type catalogWireProposal struct {
+	AttributeDefinitions []merchantcatalogai.ProposedAttributeDefinition `json:"attribute_definitions"`
 	SchemaVersion      int                              `json:"schema_version"`
 	Status             merchantcatalogai.ProposalStatus `json:"status"`
 	Operation          merchantcatalogai.Operation      `json:"operation"`
@@ -107,6 +108,9 @@ func merchantCatalogWireSchema() map[string]any {
 		"response_text":       catalogWireString(),
 		"evidence_references": catalogWireArray(catalogWireString()),
 		"missing_information": catalogWireArray(missing),
+		"attribute_definitions": catalogWireArray(catalogWireObject(map[string]any{
+			"key": catalogWireString(), "label": catalogWireString(), "data_type": catalogWireString(),
+		})),
 		"create": catalogWireObject(map[string]any{
 			"fields":   catalogWireFieldSchema(merchantcatalogai.ItemCreate{}, "variants", "offers"),
 			"variants": catalogWireArray(entity(catalogWireFieldSchema(merchantcatalogai.VariantCreate{}))),
@@ -213,6 +217,7 @@ func catalogWireParse(raw string) (merchantcatalogai.Proposal, error) {
 		"schema_version": wire.SchemaVersion, "status": wire.Status, "operation": wire.Operation,
 		"response_text": wire.ResponseText, "evidence_references": wire.EvidenceReferences,
 		"missing_information": wire.MissingInformation,
+		"attribute_definitions": wire.AttributeDefinitions,
 		"create":              nil, "update": nil, "delete": nil,
 	}
 	switch wire.Operation {
