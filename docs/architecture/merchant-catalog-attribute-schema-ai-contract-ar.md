@@ -145,3 +145,19 @@ Business
 - Frontend: `src/app/catalog/components/catalog-form-values.ts` و`merchant-ai-proposal-details.tsx` — عرض أسماء التعريفات في React، وليس ترجمتها.
 
 **خلاصة ثابتة للمطور التالي:** *AI يفهم ويسمي بالعربية ويقترح؛ Go يثبت الهوية ويتحقق ويحفظ بعد الموافقة؛ PostgreSQL يربط `attribute_key` بالتعريف والقيمة؛ React تعرض `label` الحقيقي.* لا تعكس هذه المسؤوليات.
+
+
+## 8) إضافة قواعد التحقق إلى تعريفات المواصفات (ملحق 2026-10-29)
+
+تحافظ القاعدة **على تخزين PostgreSQL الحالي تمامًا**. يحتفظ `attribute_definitions.attribute_key` بمفتاح `attr_...` و`label` العربي و`data_type` و`validation_rules` كـJSONB. `catalog_items.attributes` و`variants.attributes` يحتويان كائن JSON مفاتيحه `attr_...` وقيمه حقائق المنتج/الخيار، وليس تعريفات أو تسميات عربية.
+
+على فرع PR #18 يمكن أن يقترح النموذج مع تعريف المواصفة `validation_rules` من الأدلة التجارية. في نقل DeepSeek Strict Wire فقط تُرسل هذه القواعد داخل `validation_rules_json` (سلسلة JSON **للقواعد وحدها**)، ثم يحوّلها Go إلى `ProposedAttributeDefinition.ValidationRules` قبل فحص المقترح التجاري. لا يُعاد `canonical_proposal_json` ولا تُغيّر `Variant.attributes`.
+
+- لا يجوز للنموذج اختراع `enum`؛ يدرج القيم التي صرّح بها التاجر أو ثبتت بأدلة القالب. أنواع `select` و`multi_select` تتطلب `enum` غير فارغة.
+- يحافظ Go على اختيارات التعريف الموجود ولا يستبدلها صامتًا. إذا حاول المقترح تغيير `enum` لتعريف موجود، يُرفض التعارض بدل تعديل كل المنتجات المرتبطة.
+- يتأكد Go من أن القيم المقترحة للمنتج/الخيار تطابق `data_type` و`validation_rules`. للتحقق من الخيار يستخدم `ValidatePartialAttributes` لأن حقول القالب قد تكون اختيارية على مستوى كل Variant.
+- قواعد AI المقبولة حاليًا محدودة بالقواعد المفهومة والمنفذة فعليًا: `enum`، `min`، `max`، `regex`، `currency`، `timezone`. عقد الدومين الأساسي يبقى قابلًا للتوسّع وفق Catalog Contract؛ هذا القيد يخص المسار المولَّد من AI لمنع حفظ قواعد يتجاهلها Go.
+- UI تعرض `definition.label` و`validation_rules.enum` من البيانات المحفوظة؛ لا تترجم ولا تفترض وجود جميع قيم القالب ضمن Variants فعلية.
+- تُعد فحوصات GitHub ضرورية لكنها لا تستبدل اختبار مزود AI الحقيقي واختبار العرض بعد الاعتماد.
+
+**الفرق الجوهري:** قائمة الألوان المسموحة في `attribute_definitions.validation_rules.enum`، أما اللون المختار في `variants.attributes["attr_..."]`. القالب لا يُنشئ Variants تلقائيًا.
