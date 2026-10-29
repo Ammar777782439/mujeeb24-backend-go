@@ -8,6 +8,7 @@ func (p Proposal) Normalize() Proposal {
 		p.Create = nil
 		p.Update = nil
 		p.Delete = nil
+		p.AttributeDefinitions = nil
 		if strings.TrimSpace(p.ResponseText) == "" {
 			p.ResponseText = "حدّد البيانات الناقصة المطلوبة لإتمام العملية."
 		}
