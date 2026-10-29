@@ -32,20 +32,20 @@ type catalogWireCreate struct {
 	Offers   []catalogWireEntity `json:"offers"`
 }
 type catalogWireUpdate struct {
-	AttributeSchemaID string `json:"attribute_schema_id"`
-	ItemID           string                      `json:"item_id"`
-	Changes          []catalogWireField          `json:"changes"`
-	ExistingVariants []catalogWireExistingEntity `json:"existing_variants"`
-	NewVariants      []catalogWireEntity         `json:"new_variants"`
-	ExistingOffers   []catalogWireExistingEntity `json:"existing_offers"`
-	NewOffers        []catalogWireEntity         `json:"new_offers"`
+	AttributeSchemaID string                      `json:"attribute_schema_id"`
+	ItemID            string                      `json:"item_id"`
+	Changes           []catalogWireField          `json:"changes"`
+	ExistingVariants  []catalogWireExistingEntity `json:"existing_variants"`
+	NewVariants       []catalogWireEntity         `json:"new_variants"`
+	ExistingOffers    []catalogWireExistingEntity `json:"existing_offers"`
+	NewOffers         []catalogWireEntity         `json:"new_offers"`
 }
 type catalogWireDelete struct {
 	ID          string `json:"id"`
 	ReasonGiven string `json:"reason_given"`
 }
 type catalogWireProposal struct {
-	AttributeSchemaName string `json:"attribute_schema_name"`
+	AttributeSchemaName  string                                          `json:"attribute_schema_name"`
 	AttributeDefinitions []merchantcatalogai.ProposedAttributeDefinition `json:"attribute_definitions"`
 	SchemaVersion        int                                             `json:"schema_version"`
 	Status               merchantcatalogai.ProposalStatus                `json:"status"`
@@ -104,13 +104,13 @@ func merchantCatalogWireSchema() map[string]any {
 		"data_type": catalogWireString(), "reason": catalogWireString(),
 	})
 	return catalogWireObject(map[string]any{
-		"schema_version":      map[string]any{"type": "integer", "enum": []any{merchantcatalogai.ProposalSchemaVersion}},
-		"status":              map[string]any{"type": "string", "enum": []string{"resolved", "needs_more_data", "not_found", "ambiguous"}},
-		"operation":           map[string]any{"type": "string", "enum": []string{"create", "update", "delete", "ask_merchant"}},
-		"response_text":       catalogWireString(),
+		"schema_version":        map[string]any{"type": "integer", "enum": []any{merchantcatalogai.ProposalSchemaVersion}},
+		"status":                map[string]any{"type": "string", "enum": []string{"resolved", "needs_more_data", "not_found", "ambiguous"}},
+		"operation":             map[string]any{"type": "string", "enum": []string{"create", "update", "delete", "ask_merchant"}},
+		"response_text":         catalogWireString(),
 		"attribute_schema_name": catalogWireString(),
-		"evidence_references": catalogWireArray(catalogWireString()),
-		"missing_information": catalogWireArray(missing),
+		"evidence_references":   catalogWireArray(catalogWireString()),
+		"missing_information":   catalogWireArray(missing),
 		"attribute_definitions": catalogWireArray(catalogWireObject(map[string]any{
 			"key": catalogWireString(), "label": catalogWireString(), "data_type": catalogWireString(),
 		})),
@@ -120,13 +120,13 @@ func merchantCatalogWireSchema() map[string]any {
 			"offers":   catalogWireArray(entity(catalogWireFieldSchema(merchantcatalogai.OfferCreate{}))),
 		}),
 		"update": catalogWireObject(map[string]any{
-			"item_id":           catalogWireString(),
+			"item_id":             catalogWireString(),
 			"attribute_schema_id": catalogWireString(),
-			"changes":           catalogWireFieldSchema(merchantcatalogai.ItemChanges{}),
-			"existing_variants": catalogWireArray(existing(catalogWireFieldSchema(merchantcatalogai.VariantUpdate{}, "id"))),
-			"new_variants":      catalogWireArray(entity(catalogWireFieldSchema(merchantcatalogai.VariantCreate{}))),
-			"existing_offers":   catalogWireArray(existing(catalogWireFieldSchema(merchantcatalogai.OfferUpdate{}, "id"))),
-			"new_offers":        catalogWireArray(entity(catalogWireFieldSchema(merchantcatalogai.OfferCreate{}))),
+			"changes":             catalogWireFieldSchema(merchantcatalogai.ItemChanges{}),
+			"existing_variants":   catalogWireArray(existing(catalogWireFieldSchema(merchantcatalogai.VariantUpdate{}, "id"))),
+			"new_variants":        catalogWireArray(entity(catalogWireFieldSchema(merchantcatalogai.VariantCreate{}))),
+			"existing_offers":     catalogWireArray(existing(catalogWireFieldSchema(merchantcatalogai.OfferUpdate{}, "id"))),
+			"new_offers":          catalogWireArray(entity(catalogWireFieldSchema(merchantcatalogai.OfferCreate{}))),
 		}),
 		"delete": catalogWireObject(map[string]any{
 			"id": catalogWireString(), "reason_given": catalogWireString(),
@@ -277,7 +277,7 @@ func catalogWireParse(raw string) (merchantcatalogai.Proposal, error) {
 		proposal["update"] = map[string]any{
 			"item_id": wire.Update.ItemID, "changes": changes,
 			"attribute_schema_id": nil,
-			"existing_variants": oldVariants, "new_variants": newVariants,
+			"existing_variants":   oldVariants, "new_variants": newVariants,
 			"existing_offers": oldOffers, "new_offers": newOffers,
 		}
 		if wire.Update.AttributeSchemaID != "" {

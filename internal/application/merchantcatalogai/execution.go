@@ -357,7 +357,9 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 			}
 			if schema == nil {
 				loaded, schemaErr := s.Catalogs.GetAttributeSchema(ctx, p.BusinessID, *u.AttributeSchemaID)
-				if schemaErr != nil { return r, schemaErr }
+				if schemaErr != nil {
+					return r, schemaErr
+				}
 				schema = &loaded
 			}
 		}

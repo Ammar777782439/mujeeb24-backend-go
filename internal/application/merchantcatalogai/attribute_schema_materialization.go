@@ -131,15 +131,23 @@ func resolveApprovedAttributeDefinitions(
 		}
 		hasArabic := false
 		for _, char := range name {
-			if unicode.Is(unicode.Arabic, char) { hasArabic = true }
-			if unicode.IsControl(char) { return nil, nil, errors.New("attribute template name has control characters") }
+			if unicode.Is(unicode.Arabic, char) {
+				hasArabic = true
+			}
+			if unicode.IsControl(char) {
+				return nil, nil, errors.New("attribute template name has control characters")
+			}
 		}
-		if !hasArabic { return nil, nil, errors.New("attribute template name must be Arabic") }
+		if !hasArabic {
+			return nil, nil, errors.New("attribute template name must be Arabic")
+		}
 		// An already-named template cannot be silently shadowed by a new
 		// version lacking its previous definitions. The model must select
 		// that existing template by a verified ID instead.
 		existing, err := catalogs.ListAttributeSchemas(ctx, business, name, nil, 1, "")
-		if err != nil { return nil, nil, err }
+		if err != nil {
+			return nil, nil, err
+		}
 		if len(existing.Items) != 0 {
 			return nil, nil, errors.New("attribute template name already exists: select an existing template from catalog evidence")
 		}

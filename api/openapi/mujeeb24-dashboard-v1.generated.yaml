@@ -3890,6 +3890,8 @@ components:
             $ref: "#/components/schemas/ProposedAttributeDefinition"
           nullable: true
           type: array
+        attribute_schema_name:
+          type: string
         create:
           $ref: "#/components/schemas/ItemCreate"
         delete:
@@ -5829,6 +5831,8 @@ components:
     UpdateOperation:
       additionalProperties: false
       properties:
+        attribute_schema_id:
+          type: string
         changes:
           $ref: "#/components/schemas/ItemChanges"
         existing_offers:
