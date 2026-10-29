@@ -304,5 +304,8 @@ func catalogWireParse(raw string) (merchantcatalogai.Proposal, error) {
 	}
 	// Keep the authoritative parser, reference validation, and commercial
 	// authorization boundaries unchanged.
-	return parseMerchantCatalogProposal(string(encoded))
+	proposalValue, err := parseMerchantCatalogProposal(string(encoded))
+	if err != nil { return merchantcatalogai.Proposal{}, err }
+	if err := proposalValue.ValidateAttributeDefinitions(true); err != nil { return merchantcatalogai.Proposal{}, err }
+	return proposalValue, nil
 }
