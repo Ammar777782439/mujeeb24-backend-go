@@ -1,0 +1,38 @@
+name: Temporary merchant schema contract formatting
+on:
+  push:
+    branches:
+      - fix/merchant-catalog-strict-wire-v3
+permissions:
+  contents: write
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/merchant-catalog-strict-wire-v3
+          persist-credentials: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Format and regenerate authoritative API contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          gofmt -w internal/application/merchantcatalogai/*.go \
+            internal/application/ports/catalog_repository.go \
+            internal/adapters/secondary/ai/gateway/merchant_catalog_wire.go \
+            internal/adapters/secondary/ai/gateway/merchant_catalog_schema.go \
+            internal/adapters/secondary/ai/gateway/native_merchant_catalog_adapter.go \
+            internal/domain/ai/prompts/merchant_catalog_v2.go
+          bash scripts/generate-openapi.sh
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add internal/application/merchantcatalogai internal/application/ports/catalog_repository.go \
+            internal/adapters/secondary/ai/gateway internal/domain/ai/prompts/merchant_catalog_v2.go \
+            api/openapi/mujeeb24-dashboard-v1.generated.yaml
+          if ! git diff --cached --quiet; then
+            git commit -m "style(merchant-ai): gofmt and regenerate authoritative OpenAPI schema"
+            git push origin HEAD:fix/merchant-catalog-strict-wire-v3
+          fi
