@@ -123,8 +123,26 @@ func resolveApprovedAttributeDefinitions(
 			return nil, nil, errors.New("selected schema name does not match existing template")
 		}
 		name = current.Name
-	} else if name == "" {
-		return nil, nil, errors.New("new attribute template requires a name authored by the model")
+	} else {
+		// Neither a template name nor its meaning is ever inferred by Go.
+		// A new Arabic template name must be explicitly authored by the model.
+		if name == "" || len([]rune(name)) > 120 {
+			return nil, nil, errors.New("new attribute template requires a model-authored Arabic name")
+		}
+		hasArabic := false
+		for _, char := range name {
+			if unicode.Is(unicode.Arabic, char) { hasArabic = true }
+			if unicode.IsControl(char) { return nil, nil, errors.New("attribute template name has control characters") }
+		}
+		if !hasArabic { return nil, nil, errors.New("attribute template name must be Arabic") }
+		// An already-named template cannot be silently shadowed by a new
+		// version lacking its previous definitions. The model must select
+		// that existing template by a verified ID instead.
+		existing, err := catalogs.ListAttributeSchemas(ctx, business, name, nil, 1, "")
+		if err != nil { return nil, nil, err }
+		if len(existing.Items) != 0 {
+			return nil, nil, errors.New("attribute template name already exists: select an existing template from catalog evidence")
+		}
 	}
 	version, err := catalogs.NextAttributeSchemaVersion(ctx, business, name)
 	if err != nil {
