@@ -153,6 +153,9 @@ func (p Proposal) Validate() error {
 			}
 		}
 	case OperationUpdate:
+		if p.Update != nil && p.Update.AttributeSchemaID != nil && strings.TrimSpace(*p.Update.AttributeSchemaID) == "" {
+			return errors.New("update.attribute_schema_id cannot be empty")
+		}
 		if p.Update == nil || strings.TrimSpace(p.Update.ItemID) == "" {
 			return errors.New("update proposal requires item_id")
 		}
