@@ -28,9 +28,10 @@ const (
 // Key is a model-generated semantic snake_case alias, never a persisted attr_ key.
 // The approved executor assigns/reuses authoritative machine keys.
 type ProposedAttributeDefinition struct {
-	Key      string `json:"key"`
-	Label    string `json:"label"`
-	DataType string `json:"data_type"`
+	Key             string         `json:"key"`
+	Label           string         `json:"label"`
+	DataType        string         `json:"data_type"`
+	ValidationRules map[string]any `json:"validation_rules,omitempty"`
 }
 
 type MissingField struct {
