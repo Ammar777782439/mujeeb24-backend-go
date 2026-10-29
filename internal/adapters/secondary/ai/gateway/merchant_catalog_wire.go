@@ -101,7 +101,7 @@ func merchantCatalogWireSchema() map[string]any {
 		"data_type": catalogWireString(), "reason": catalogWireString(),
 	})
 	return catalogWireObject(map[string]any{
-		"schema_version": map[string]any{"type": "integer", "enum": []int{merchantcatalogai.ProposalSchemaVersion}},
+		"schema_version": map[string]any{"type": "integer", "enum": []any{merchantcatalogai.ProposalSchemaVersion}},
 		"status": map[string]any{"type": "string", "enum": []string{"resolved", "needs_more_data", "not_found", "ambiguous"}},
 		"operation": map[string]any{"type": "string", "enum": []string{"create", "update", "delete", "ask_merchant"}},
 		"response_text": catalogWireString(),
