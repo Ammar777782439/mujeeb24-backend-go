@@ -11,7 +11,6 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/catalogvalidation"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/google/uuid"
 )
