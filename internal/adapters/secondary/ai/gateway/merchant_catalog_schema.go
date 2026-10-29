@@ -227,13 +227,13 @@ func merchantCatalogProposalSchema() map[string]any {
 			"evidence_references": map[string]any{"type": "array", "items": stringField()},
 			"missing_information": map[string]any{"type": "array", "items": missingField},
 			"attribute_definitions": map[string]any{
-				"type":"array",
-				"items":map[string]any{"type":"object",
-					"properties":map[string]any{
-						"key":stringField(),"label":stringField(),"data_type":stringField(),
+				"type": "array",
+				"items": map[string]any{"type": "object",
+					"properties": map[string]any{
+						"key": stringField(), "label": stringField(), "data_type": stringField(),
 					},
-					"required":[]string{"key","label","data_type"},
-					"additionalProperties":false,
+					"required":             []string{"key", "label", "data_type"},
+					"additionalProperties": false,
 				},
 			},
 			"create": map[string]any{

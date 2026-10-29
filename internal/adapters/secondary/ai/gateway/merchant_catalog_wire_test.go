@@ -9,13 +9,13 @@ import (
 
 func emptyCatalogWireProposal() catalogWireProposal {
 	return catalogWireProposal{
-		SchemaVersion:      merchantcatalogai.ProposalSchemaVersion,
+		SchemaVersion:        merchantcatalogai.ProposalSchemaVersion,
 		AttributeDefinitions: []merchantcatalogai.ProposedAttributeDefinition{},
-		Status:             merchantcatalogai.StatusResolved,
-		Operation:          merchantcatalogai.OperationUpdate,
-		ResponseText:       "اقتراح جاهز للمراجعة",
-		EvidenceReferences: []string{},
-		MissingInformation: []merchantcatalogai.MissingField{},
+		Status:               merchantcatalogai.StatusResolved,
+		Operation:            merchantcatalogai.OperationUpdate,
+		ResponseText:         "اقتراح جاهز للمراجعة",
+		EvidenceReferences:   []string{},
+		MissingInformation:   []merchantcatalogai.MissingField{},
 		Create: catalogWireCreate{
 			Fields: []catalogWireField{}, Variants: []catalogWireEntity{}, Offers: []catalogWireEntity{},
 		},
@@ -39,11 +39,11 @@ func decodeCatalogWireForTest(t *testing.T, wire catalogWireProposal) (merchantc
 func TestMerchantStrictWireExistingOfferAndDynamicAttributes(t *testing.T) {
 	wire := emptyCatalogWireProposal()
 	wire.AttributeDefinitions = []merchantcatalogai.ProposedAttributeDefinition{
-		{Key:"warranty",Label:"الضمان",DataType:"text"},
-		{Key:"battery_health",Label:"صحة البطارية",DataType:"number"},
-		{Key:"certified",Label:"معتمد",DataType:"boolean"},
-		{Key:"features",Label:"المميزات",DataType:"multi_select"},
-		{Key:"details",Label:"التفاصيل",DataType:"location"},
+		{Key: "warranty", Label: "الضمان", DataType: "text"},
+		{Key: "battery_health", Label: "صحة البطارية", DataType: "number"},
+		{Key: "certified", Label: "معتمد", DataType: "boolean"},
+		{Key: "features", Label: "المميزات", DataType: "multi_select"},
+		{Key: "details", Label: "التفاصيل", DataType: "location"},
 	}
 	wire.Update.Changes = []catalogWireField{
 		{Name: "attributes", ValueJSON: `{"warranty":"سنتان","battery_health":99,"certified":true,"features":["A18","OLED"],"details":{"country":"YE"}}`},
@@ -122,7 +122,7 @@ func TestMerchantStrictWireCreatesVariantsAndOffers(t *testing.T) {
 	wire.Operation = merchantcatalogai.OperationCreate
 	wire.Update.ItemID = ""
 	wire.AttributeDefinitions = []merchantcatalogai.ProposedAttributeDefinition{
-		{Key:"duration_minutes",Label:"المدة بالدقائق",DataType:"number"},
+		{Key: "duration_minutes", Label: "المدة بالدقائق", DataType: "number"},
 	}
 	wire.Create.Fields = []catalogWireField{
 		{Name: "name", ValueJSON: `"خدمة تجريبية"`},

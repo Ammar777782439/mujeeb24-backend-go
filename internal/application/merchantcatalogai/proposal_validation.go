@@ -91,7 +91,9 @@ func validateOfferCreate(offer OfferCreate, path string, variantRefs map[string]
 }
 
 func (p Proposal) Validate() error {
-	if err := p.ValidateAttributeDefinitions(false); err != nil { return err }
+	if err := p.ValidateAttributeDefinitions(false); err != nil {
+		return err
+	}
 	if p.SchemaVersion != ProposalSchemaVersion {
 		return fmt.Errorf("merchant catalog proposal schema_version must be %d", ProposalSchemaVersion)
 	}

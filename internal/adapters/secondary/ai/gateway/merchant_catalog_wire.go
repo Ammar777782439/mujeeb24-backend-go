@@ -45,15 +45,15 @@ type catalogWireDelete struct {
 }
 type catalogWireProposal struct {
 	AttributeDefinitions []merchantcatalogai.ProposedAttributeDefinition `json:"attribute_definitions"`
-	SchemaVersion      int                              `json:"schema_version"`
-	Status             merchantcatalogai.ProposalStatus `json:"status"`
-	Operation          merchantcatalogai.Operation      `json:"operation"`
-	ResponseText       string                           `json:"response_text"`
-	EvidenceReferences []string                         `json:"evidence_references"`
-	MissingInformation []merchantcatalogai.MissingField `json:"missing_information"`
-	Create             catalogWireCreate                `json:"create"`
-	Update             catalogWireUpdate                `json:"update"`
-	Delete             catalogWireDelete                `json:"delete"`
+	SchemaVersion        int                                             `json:"schema_version"`
+	Status               merchantcatalogai.ProposalStatus                `json:"status"`
+	Operation            merchantcatalogai.Operation                     `json:"operation"`
+	ResponseText         string                                          `json:"response_text"`
+	EvidenceReferences   []string                                        `json:"evidence_references"`
+	MissingInformation   []merchantcatalogai.MissingField                `json:"missing_information"`
+	Create               catalogWireCreate                               `json:"create"`
+	Update               catalogWireUpdate                               `json:"update"`
+	Delete               catalogWireDelete                               `json:"delete"`
 }
 
 func catalogWireObject(properties map[string]any) map[string]any {
@@ -216,9 +216,9 @@ func catalogWireParse(raw string) (merchantcatalogai.Proposal, error) {
 	proposal := map[string]any{
 		"schema_version": wire.SchemaVersion, "status": wire.Status, "operation": wire.Operation,
 		"response_text": wire.ResponseText, "evidence_references": wire.EvidenceReferences,
-		"missing_information": wire.MissingInformation,
+		"missing_information":   wire.MissingInformation,
 		"attribute_definitions": wire.AttributeDefinitions,
-		"create":              nil, "update": nil, "delete": nil,
+		"create":                nil, "update": nil, "delete": nil,
 	}
 	switch wire.Operation {
 	case merchantcatalogai.OperationCreate:
@@ -305,7 +305,11 @@ func catalogWireParse(raw string) (merchantcatalogai.Proposal, error) {
 	// Keep the authoritative parser, reference validation, and commercial
 	// authorization boundaries unchanged.
 	proposalValue, err := parseMerchantCatalogProposal(string(encoded))
-	if err != nil { return merchantcatalogai.Proposal{}, err }
-	if err := proposalValue.ValidateAttributeDefinitions(true); err != nil { return merchantcatalogai.Proposal{}, err }
+	if err != nil {
+		return merchantcatalogai.Proposal{}, err
+	}
+	if err := proposalValue.ValidateAttributeDefinitions(true); err != nil {
+		return merchantcatalogai.Proposal{}, err
+	}
 	return proposalValue, nil
 }

@@ -61,8 +61,12 @@ func resolveApprovedAttributeDefinitions(
 		}
 		hasArabic := false
 		for _, r := range label {
-			if unicode.Is(unicode.Arabic, r) { hasArabic = true }
-			if unicode.IsControl(r) { return nil, nil, errors.New("attribute label contains control characters") }
+			if unicode.Is(unicode.Arabic, r) {
+				hasArabic = true
+			}
+			if unicode.IsControl(r) {
+				return nil, nil, errors.New("attribute label contains control characters")
+			}
 		}
 		if !hasArabic {
 			return nil, nil, fmt.Errorf("attribute %q must have an Arabic display label", spec.Key)
@@ -92,7 +96,9 @@ func resolveApprovedAttributeDefinitions(
 		sum := sha256.Sum256([]byte(newID))
 		stableKey := "attr_" + hex.EncodeToString(sum[:8])
 		for {
-			if _, exists := byKey[stableKey]; !exists { break }
+			if _, exists := byKey[stableKey]; !exists {
+				break
+			}
 			newID = uuid.NewString()
 			sum = sha256.Sum256([]byte(newID))
 			stableKey = "attr_" + hex.EncodeToString(sum[:8])
@@ -107,29 +113,39 @@ func resolveApprovedAttributeDefinitions(
 		keys[spec.Key] = stableKey
 		newDefs++
 	}
-	if newDefs == 0 { return current, keys, nil }
+	if newDefs == 0 {
+		return current, keys, nil
+	}
 	name := "مواصفات مجيب - " + proposalID
 	if current != nil {
 		name = current.Name
 	}
 	version, err := catalogs.NextAttributeSchemaVersion(ctx, business, name)
-	if err != nil { return nil, nil, err }
+	if err != nil {
+		return nil, nil, err
+	}
 	record, err := catalogs.CreateAttributeSchemaVersion(ctx, ports.AttributeSchemaDraft{
 		ID: uuid.NewString(), BusinessID: business, Name: name,
 		Version: version, Definitions: definitions, CreatedAt: now, UpdatedAt: now,
 	})
-	if err != nil { return nil, nil, err }
+	if err != nil {
+		return nil, nil, err
+	}
 	return &record, keys, nil
 }
 
 // Map a proposal's semantic aliases to server-issued machine IDs at the
 // storage boundary. Preserves unmapped legacy/custom attributes verbatim.
 func remapApprovedAttributes(input map[string]any, keys map[string]string) (map[string]any, error) {
-	if input == nil { return nil, nil }
+	if input == nil {
+		return nil, nil
+	}
 	out := make(map[string]any, len(input))
 	for key, value := range input {
 		target := key
-		if actual, ok := keys[key]; ok { target = actual }
+		if actual, ok := keys[key]; ok {
+			target = actual
+		}
 		if _, exists := out[target]; exists {
 			return nil, fmt.Errorf("attribute mapping collision on %q", target)
 		}

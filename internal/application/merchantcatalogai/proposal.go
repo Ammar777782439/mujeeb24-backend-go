@@ -28,8 +28,8 @@ const (
 // Key is a model-generated semantic snake_case alias, never a persisted attr_ key.
 // The approved executor assigns/reuses authoritative machine keys.
 type ProposedAttributeDefinition struct {
-	Key string `json:"key"`
-	Label string `json:"label"`
+	Key      string `json:"key"`
+	Label    string `json:"label"`
 	DataType string `json:"data_type"`
 }
 
@@ -142,15 +142,15 @@ type DeleteOperation struct {
 
 type Proposal struct {
 	AttributeDefinitions []ProposedAttributeDefinition `json:"attribute_definitions,omitempty"`
-	SchemaVersion      int              `json:"schema_version"`
-	Status             ProposalStatus   `json:"status"`
-	Operation          Operation        `json:"operation"`
-	ResponseText       string           `json:"response_text"`
-	EvidenceReferences []string         `json:"evidence_references,omitempty"`
-	MissingInformation []MissingField   `json:"missing_information,omitempty"`
-	Create             *ItemCreate      `json:"create,omitempty"`
-	Update             *UpdateOperation `json:"update,omitempty"`
-	Delete             *DeleteOperation `json:"delete,omitempty"`
+	SchemaVersion        int                           `json:"schema_version"`
+	Status               ProposalStatus                `json:"status"`
+	Operation            Operation                     `json:"operation"`
+	ResponseText         string                        `json:"response_text"`
+	EvidenceReferences   []string                      `json:"evidence_references,omitempty"`
+	MissingInformation   []MissingField                `json:"missing_information,omitempty"`
+	Create               *ItemCreate                   `json:"create,omitempty"`
+	Update               *UpdateOperation              `json:"update,omitempty"`
+	Delete               *DeleteOperation              `json:"delete,omitempty"`
 }
 
 func (p Proposal) IsMutation() bool {
