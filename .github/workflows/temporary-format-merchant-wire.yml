@@ -1,0 +1,33 @@
+name: Temporary merchant AI gofmt
+on:
+  push:
+    branches:
+      - fix/merchant-catalog-strict-wire-v3
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/merchant-catalog-strict-wire-v3
+          persist-credentials: true
+      - name: Format only changed merchant AI Go sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          gofmt -w \
+            internal/adapters/secondary/ai/gateway/merchant_catalog_wire.go \
+            internal/adapters/secondary/ai/gateway/merchant_catalog_wire_test.go \
+            internal/adapters/secondary/ai/gateway/native_merchant_catalog_adapter.go \
+            internal/adapters/secondary/ai/gateway/native_adapters_contract_test.go \
+            internal/adapters/secondary/ai/gateway/native_merchant_listing_test.go \
+            internal/adapters/secondary/ai/native/deepseek.go
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add internal/adapters/secondary/ai/gateway internal/adapters/secondary/ai/native/deepseek.go
+          if ! git diff --cached --quiet; then
+            git commit -m "style(merchant-ai): gofmt strict wire and tests"
+            git push origin HEAD:fix/merchant-catalog-strict-wire-v3
+          fi
