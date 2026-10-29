@@ -127,6 +127,7 @@ func merchantCatalogProposalSchema() map[string]any {
 		"type": "object",
 		"properties": map[string]any{
 			"item_id": stringField(),
+			"attribute_schema_id": optionalReference("Existing template ID selected from merchant_catalog_list_attribute_schemas evidence. Do not invent IDs or infer templates."),
 			"changes": map[string]any{"type": "object", "properties": map[string]any{
 				"name": optionalString(), "status": map[string]any{"type": "string", "description": "Commercial lifecycle state. Omit unless merchant explicitly requested a lifecycle change. Do not reset an existing item to draft during an ordinary edit."}, "attributes": attributeObjectField(),
 				"item_type":         map[string]any{"type": "string", "description": "Entity kind from the canonical contract, not a variant name, audience, category or specification. Omit unless the merchant explicitly requested changing the entity kind."},
@@ -220,6 +221,7 @@ func merchantCatalogProposalSchema() map[string]any {
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"attribute_schema_name": map[string]any{"type":"string","description":"Only the model supplies a merchant-facing Arabic template name when creating a new template. Use empty string when reusing an existing template; Go never translates or generates labels."},
 			"schema_version":      map[string]any{"type": "integer", "enum": []int{merchantcatalogai.ProposalSchemaVersion}, "description": "Merchant Catalog AI Proposal Contract version."},
 			"status":              map[string]any{"type": "string", "enum": []string{"resolved", "ambiguous", "not_found", "needs_more_data"}},
 			"operation":           map[string]any{"type": "string", "enum": []string{"create", "update", "delete", "ask_merchant"}},
