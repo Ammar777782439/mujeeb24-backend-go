@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/catalogvalidation"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
 type testAttributeCatalog struct {
@@ -107,51 +107,72 @@ func TestMerchantAttributeLabelsRejectUnapprovedMissingOrEnglishLabel(t *testing
 func TestModelChoicesArePersistedAndRejectInvalidVariantValue(t *testing.T) {
 	stub := &testAttributeCatalog{next: 1}
 	specs := []ProposedAttributeDefinition{
-		{Key:"color",Label:"اللون",DataType:"multi_select",ValidationRules:map[string]any{
-			"enum":[]any{"أسود","أزرق","أبيض"},
+		{Key: "color", Label: "اللون", DataType: "multi_select", ValidationRules: map[string]any{
+			"enum": []any{"أسود", "أزرق", "أبيض"},
 		}},
-		{Key:"storage",Label:"سعة التخزين",DataType:"number",ValidationRules:map[string]any{"min":64,"max":1024}},
+		{Key: "storage", Label: "سعة التخزين", DataType: "number", ValidationRules: map[string]any{"min": 64, "max": 1024}},
 	}
-	record, mapping, err := resolveApprovedAttributeDefinitions(context.Background(),stub,"business","مواصفات الهواتف",nil,specs,time.Now().UTC())
-	if err != nil { t.Fatal(err) }
-	if len(record.Definitions)!=2 {t.Fatalf("definitions not created: %v",record.Definitions)}
+	record, mapping, err := resolveApprovedAttributeDefinitions(context.Background(), stub, "business", "مواصفات الهواتف", nil, specs, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(record.Definitions) != 2 {
+		t.Fatalf("definitions not created: %v", record.Definitions)
+	}
 	var color ports.AttributeDefinitionRecord
-	for _,d:=range record.Definitions { if d.Key==mapping["color"] { color=d } }
-	if len(color.ValidationRules)==0 { t.Fatal("lost model enum") }
-	if err:=catalogvalidation.ValidatePartialAttributes(record,map[string]any{
-		mapping["color"]:[]any{"أزرق"},mapping["storage"]:256,
-	});err!=nil {t.Fatalf("correct variant rejected: %v",err)}
-	if err:=catalogvalidation.ValidatePartialAttributes(record,map[string]any{mapping["color"]:[]any{"بنفسجي"}});err==nil {
+	for _, d := range record.Definitions {
+		if d.Key == mapping["color"] {
+			color = d
+		}
+	}
+	if len(color.ValidationRules) == 0 {
+		t.Fatal("lost model enum")
+	}
+	if err := catalogvalidation.ValidatePartialAttributes(record, map[string]any{
+		mapping["color"]: []any{"أزرق"}, mapping["storage"]: 256,
+	}); err != nil {
+		t.Fatalf("correct variant rejected: %v", err)
+	}
+	if err := catalogvalidation.ValidatePartialAttributes(record, map[string]any{mapping["color"]: []any{"بنفسجي"}}); err == nil {
 		t.Fatal("accepted variant value outside the saved enum")
 	}
-	if err:=catalogvalidation.ValidatePartialAttributes(record,map[string]any{mapping["storage"]:2048});err==nil {
+	if err := catalogvalidation.ValidatePartialAttributes(record, map[string]any{mapping["storage"]: 2048}); err == nil {
 		t.Fatal("accepted numeric variant outside model constraints")
 	}
 }
 
 func TestMerchantAIRejectsMissingEnumAndInvalidChoices(t *testing.T) {
-	tests:=[]struct{name string; rules map[string]any}{
-		{"missing_enum",map[string]any{}},
-		{"empty_enum",map[string]any{"enum":[]any{}}},
-		{"duplicate_enum",map[string]any{"enum":[]any{"أحمر","أحمر"}}},
-		{"non_scalar_enum",map[string]any{"enum":[]any{map[string]any{"bad":true}}}},
-		{"unknown_rule",map[string]any{"enum":[]any{"أحمر"},"invented":true}},
+	tests := []struct {
+		name  string
+		rules map[string]any
+	}{
+		{"missing_enum", map[string]any{}},
+		{"empty_enum", map[string]any{"enum": []any{}}},
+		{"duplicate_enum", map[string]any{"enum": []any{"أحمر", "أحمر"}}},
+		{"non_scalar_enum", map[string]any{"enum": []any{map[string]any{"bad": true}}}},
+		{"unknown_rule", map[string]any{"enum": []any{"أحمر"}, "invented": true}},
 	}
-	for _,tt:=range tests {t.Run(tt.name,func(t *testing.T){
-		p:=Proposal{SchemaVersion:ProposalSchemaVersion,Status:StatusResolved,Operation:OperationCreate,
-			Create:&ItemCreate{Attributes:map[string]any{"color":[]any{"أحمر"}}},
-			AttributeDefinitions:[]ProposedAttributeDefinition{{Key:"color",Label:"اللون",DataType:"multi_select",ValidationRules:tt.rules}},
-		}
-		if err:=p.ValidateAttributeDefinitions(true);err==nil {t.Fatal("accepted invalid model-authored rules")}
-	})}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := Proposal{SchemaVersion: ProposalSchemaVersion, Status: StatusResolved, Operation: OperationCreate,
+				Create:               &ItemCreate{Attributes: map[string]any{"color": []any{"أحمر"}}},
+				AttributeDefinitions: []ProposedAttributeDefinition{{Key: "color", Label: "اللون", DataType: "multi_select", ValidationRules: tt.rules}},
+			}
+			if err := p.ValidateAttributeDefinitions(true); err == nil {
+				t.Fatal("accepted invalid model-authored rules")
+			}
+		})
+	}
 }
 
 func TestExistingSchemaRulesAreNotSilentlyChangedByModel(t *testing.T) {
-	stub:=&testAttributeCatalog{next:2}
-	old:=&ports.AttributeSchemaRecord{ID:"old",BusinessID:"business",Name:"ألوان المنتجات",Version:1,
-		Definitions:[]ports.AttributeDefinitionRecord{{Key:"attr_1111111111111111",Label:"اللون",DataType:"select",ValidationRules:[]byte(`{"enum":["أسود","أبيض"]}`)}}}
-	_,_,err:=resolveApprovedAttributeDefinitions(context.Background(),stub,"business",old.Name,old,
-		[]ProposedAttributeDefinition{{Key:"color",Label:"اللون",DataType:"select",
-			ValidationRules:map[string]any{"enum":[]any{"أخضر","أبيض"}}}},time.Now().UTC())
-	if err==nil {t.Fatal("model silently replaced existing schema choices")}
+	stub := &testAttributeCatalog{next: 2}
+	old := &ports.AttributeSchemaRecord{ID: "old", BusinessID: "business", Name: "ألوان المنتجات", Version: 1,
+		Definitions: []ports.AttributeDefinitionRecord{{Key: "attr_1111111111111111", Label: "اللون", DataType: "select", ValidationRules: []byte(`{"enum":["أسود","أبيض"]}`)}}}
+	_, _, err := resolveApprovedAttributeDefinitions(context.Background(), stub, "business", old.Name, old,
+		[]ProposedAttributeDefinition{{Key: "color", Label: "اللون", DataType: "select",
+			ValidationRules: map[string]any{"enum": []any{"أخضر", "أبيض"}}}}, time.Now().UTC())
+	if err == nil {
+		t.Fatal("model silently replaced existing schema choices")
+	}
 }

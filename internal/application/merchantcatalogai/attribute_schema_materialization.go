@@ -76,12 +76,16 @@ func resolveApprovedAttributeDefinitions(
 		}
 		seen[spec.Key] = true
 		rules := spec.ValidationRules
-		if rules == nil { rules = map[string]any{} }
+		if rules == nil {
+			rules = map[string]any{}
+		}
 		if err := validateAIAttributeRules(spec.DataType, rules); err != nil {
 			return nil, nil, fmt.Errorf("attribute %q: %w", spec.Key, err)
 		}
 		rulesJSON, err := json.Marshal(rules)
-		if err != nil { return nil, nil, err }
+		if err != nil {
+			return nil, nil, err
+		}
 		if existing, ok := byKey[spec.Key]; ok {
 			if existing.Label != label || existing.DataType != spec.DataType {
 				return nil, nil, errors.New("existing attribute definition cannot be silently redefined")
@@ -199,16 +203,26 @@ func remapApprovedAttributes(input map[string]any, keys map[string]string) (map[
 // An existing template remains authoritative: new model-produced rules must
 // not overwrite the stored definition. Omitted rules preserve those on reuse.
 func verifyExistingAttributeRules(stored []byte, proposed map[string]any) error {
-	if len(proposed) == 0 { return nil }
+	if len(proposed) == 0 {
+		return nil
+	}
 	var original map[string]any
 	if len(stored) > 0 {
-		if err := json.Unmarshal(stored, &original); err != nil { return err }
+		if err := json.Unmarshal(stored, &original); err != nil {
+			return err
+		}
 	}
-	if original == nil { original = map[string]any{} }
+	if original == nil {
+		original = map[string]any{}
+	}
 	current, err := json.Marshal(original)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	requested, err := json.Marshal(proposed)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	if string(current) != string(requested) {
 		return errors.New("validation rules differ from the selected template; do not overwrite existing choices")
 	}

@@ -63,7 +63,9 @@ func (p Proposal) ValidateAttributeDefinitions(requireLabels bool) error {
 			}
 			if ok && value != nil {
 				rules, err := json.Marshal(spec.ValidationRules)
-				if err != nil { return fmt.Errorf("attribute %q rules cannot be encoded: %w", key, err) }
+				if err != nil {
+					return fmt.Errorf("attribute %q rules cannot be encoded: %w", key, err)
+				}
 				def := ports.AttributeDefinitionRecord{
 					Key: key, Label: spec.Label, DataType: spec.DataType,
 					ValidationRules: rules,
@@ -117,19 +119,27 @@ func (p Proposal) ValidateAttributeDefinitions(requireLabels bool) error {
 // that the current backend actually validates. Unknown keys must not be saved
 // and silently ignored. The model, not Go, authors enum choices.
 func validateAIAttributeRules(dataType string, rules map[string]any) error {
-	if err := catalogvalidation.ValidateDefinition(dataType, rules); err != nil { return err }
+	if err := catalogvalidation.ValidateDefinition(dataType, rules); err != nil {
+		return err
+	}
 	allowed := map[string]bool{
 		"enum": true, "min": true, "max": true, "regex": true,
 		"currency": true, "timezone": true,
 	}
 	for name := range rules {
-		if !allowed[name] { return fmt.Errorf("unsupported AI attribute validation rule %q", name) }
+		if !allowed[name] {
+			return fmt.Errorf("unsupported AI attribute validation rule %q", name)
+		}
 	}
 	encoded, err := json.Marshal(rules)
-	if err != nil || len(encoded) > 16384 { return errors.New("attribute validation rules are invalid or too large") }
+	if err != nil || len(encoded) > 16384 {
+		return errors.New("attribute validation rules are invalid or too large")
+	}
 	choices, hasChoices := rules["enum"]
 	if dataType == "select" || dataType == "multi_select" {
-		if !hasChoices { return errors.New("select and multi_select require explicit enum choices from model evidence") }
+		if !hasChoices {
+			return errors.New("select and multi_select require explicit enum choices from model evidence")
+		}
 	}
 	if hasChoices {
 		entries, ok := choices.([]any)
@@ -138,7 +148,9 @@ func validateAIAttributeRules(dataType string, rules map[string]any) error {
 			// are also decoded through JSON before persistence.
 			return errors.New("attribute enum must be a JSON array")
 		}
-		if len(entries) == 0 || len(entries) > 100 { return errors.New("attribute enum must have 1..100 choices") }
+		if len(entries) == 0 || len(entries) > 100 {
+			return errors.New("attribute enum must have 1..100 choices")
+		}
 		seen := map[string]bool{}
 		for _, entry := range entries {
 			switch entry.(type) {
@@ -147,9 +159,13 @@ func validateAIAttributeRules(dataType string, rules map[string]any) error {
 				return errors.New("attribute enum must contain only scalar values")
 			}
 			data, err := json.Marshal(entry)
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 			key := string(data)
-			if seen[key] { return errors.New("attribute enum contains duplicate choices") }
+			if seen[key] {
+				return errors.New("attribute enum contains duplicate choices")
+			}
 			seen[key] = true
 		}
 	}

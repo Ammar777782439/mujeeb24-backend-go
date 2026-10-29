@@ -45,24 +45,24 @@ type catalogWireDelete struct {
 	ReasonGiven string `json:"reason_given"`
 }
 type catalogWireAttributeDefinition struct {
-	Key string `json:"key"`
-	Label string `json:"label"`
-	DataType string `json:"data_type"`
+	Key                 string `json:"key"`
+	Label               string `json:"label"`
+	DataType            string `json:"data_type"`
 	ValidationRulesJSON string `json:"validation_rules_json"`
 }
 
 type catalogWireProposal struct {
-	AttributeSchemaName  string                                          `json:"attribute_schema_name"`
+	AttributeSchemaName  string                           `json:"attribute_schema_name"`
 	AttributeDefinitions []catalogWireAttributeDefinition `json:"attribute_definitions"`
-	SchemaVersion        int                                             `json:"schema_version"`
-	Status               merchantcatalogai.ProposalStatus                `json:"status"`
-	Operation            merchantcatalogai.Operation                     `json:"operation"`
-	ResponseText         string                                          `json:"response_text"`
-	EvidenceReferences   []string                                        `json:"evidence_references"`
-	MissingInformation   []merchantcatalogai.MissingField                `json:"missing_information"`
-	Create               catalogWireCreate                               `json:"create"`
-	Update               catalogWireUpdate                               `json:"update"`
-	Delete               catalogWireDelete                               `json:"delete"`
+	SchemaVersion        int                              `json:"schema_version"`
+	Status               merchantcatalogai.ProposalStatus `json:"status"`
+	Operation            merchantcatalogai.Operation      `json:"operation"`
+	ResponseText         string                           `json:"response_text"`
+	EvidenceReferences   []string                         `json:"evidence_references"`
+	MissingInformation   []merchantcatalogai.MissingField `json:"missing_information"`
+	Create               catalogWireCreate                `json:"create"`
+	Update               catalogWireUpdate                `json:"update"`
+	Delete               catalogWireDelete                `json:"delete"`
 }
 
 func catalogWireObject(properties map[string]any) map[string]any {
@@ -225,7 +225,9 @@ func catalogWireParse(raw string) (merchantcatalogai.Proposal, error) {
 		return merchantcatalogai.Proposal{}, fmt.Errorf("merchant wire schema: %w", err)
 	}
 	definitions, err := catalogWireDefinitions(wire.AttributeDefinitions)
-	if err != nil { return merchantcatalogai.Proposal{}, err }
+	if err != nil {
+		return merchantcatalogai.Proposal{}, err
+	}
 	proposal := map[string]any{
 		"schema_version": wire.SchemaVersion, "status": wire.Status, "operation": wire.Operation,
 		"response_text": wire.ResponseText, "attribute_schema_name": wire.AttributeSchemaName, "evidence_references": wire.EvidenceReferences,
