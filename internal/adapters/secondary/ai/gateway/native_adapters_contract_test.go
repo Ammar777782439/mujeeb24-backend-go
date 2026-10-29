@@ -146,6 +146,26 @@ func (s *nativeMerchantReadStub) Execute(_ context.Context, scope merchantcatalo
 	}, nil
 }
 
+func marshalMerchantWireTestAnswer(proposalJSON string) string {
+	var proposal merchantcatalogai.Proposal
+	if err := json.Unmarshal([]byte(proposalJSON), &proposal); err != nil {
+		panic(err)
+	}
+	wire := emptyCatalogWireProposal()
+	wire.SchemaVersion = proposal.SchemaVersion
+	wire.Status = proposal.Status
+	wire.Operation = proposal.Operation
+	wire.ResponseText = proposal.ResponseText
+	wire.EvidenceReferences = []string{}
+	wire.MissingInformation = []merchantcatalogai.MissingField{}
+	wire.Update.ItemID = ""
+	encoded, err := json.Marshal(wire)
+	if err != nil {
+		panic(err)
+	}
+	return string(encoded)
+}
+
 func TestNativeMerchantReadOnlyToolAndCanonicalFinalValidation(t *testing.T) {
 	caps := &nativeMerchantReadStub{}
 	round := 0
@@ -179,7 +199,7 @@ func TestNativeMerchantReadOnlyToolAndCanonicalFinalValidation(t *testing.T) {
 		}
 		if round == 3 {
 			if len(body.Tools) != 0 || body.ResponseFormat["type"] != "json_schema" ||
-				!strings.Contains(string(body.Messages[0].Content), "Canonical merchant proposal JSON schema") {
+				!strings.Contains(string(body.Messages[0].Content), "Strict merchant catalog wire transport") {
 				t.Error("strict final proposal transport is not isolated from discovery tools")
 			}
 		}
@@ -207,7 +227,7 @@ func TestNativeMerchantReadOnlyToolAndCanonicalFinalValidation(t *testing.T) {
 			}}
 		case 3:
 			proposalJSON := `{"schema_version":3,"status":"needs_more_data","operation":"ask_merchant","response_text":"ما السعر؟"}`
-			envelope, _ := json.Marshal(map[string]string{"canonical_proposal_json": proposalJSON})
+			envelope := []byte(marshalMerchantWireTestAnswer(proposalJSON))
 			choice = map[string]any{"finish_reason": "stop", "message": map[string]any{
 				"role": "assistant", "content": string(envelope),
 			}}
@@ -329,7 +349,7 @@ func TestNativeMerchantFallbackKeepsToolHistoryOnDeepSeek(t *testing.T) {
 				t.Error("final proposal was not requested with strict structured output")
 			}
 			proposal := `{"schema_version":3,"status":"needs_more_data","operation":"ask_merchant","response_text":"ما السعر؟"}`
-			envelope, _ := json.Marshal(map[string]string{"canonical_proposal_json": proposal})
+			envelope := []byte(marshalMerchantWireTestAnswer(proposal))
 			choice = map[string]any{"finish_reason": "stop", "message": map[string]any{
 				"role": "assistant", "content": string(envelope),
 			}}
@@ -409,7 +429,7 @@ func TestNativeMerchantToolResultPreservesPaginationForGeminiAndDeepSeek(t *test
 					choice = map[string]any{"finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": "discovery complete"}}
 				case 3:
 					proposal := `{"schema_version":3,"status":"needs_more_data","operation":"ask_merchant","response_text":"ما السعر؟"}`
-					envelope, _ := json.Marshal(map[string]string{"canonical_proposal_json": proposal})
+					envelope := []byte(marshalMerchantWireTestAnswer(proposal))
 					choice = map[string]any{"finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": string(envelope)}}
 				default:
 					return native.Response{}, errors.New("unexpected merchant model request")
@@ -541,7 +561,7 @@ func TestNativeMerchantGemini503AfterToolCallSwitchesToDeepSeek(t *testing.T) {
 					t.Error("DeepSeek strict proposal round was not preserved")
 				}
 				proposal := `{"schema_version":3,"status":"needs_more_data","operation":"ask_merchant","response_text":"ما السعر؟"}`
-				envelope, _ := json.Marshal(map[string]string{"canonical_proposal_json": proposal})
+				envelope := []byte(marshalMerchantWireTestAnswer(proposal))
 				return makeReply("stop", map[string]any{
 					"role": "assistant", "content": string(envelope),
 				}, "deepseek-flash"), nil
