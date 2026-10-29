@@ -3885,6 +3885,11 @@ components:
     Proposal:
       additionalProperties: false
       properties:
+        attribute_definitions:
+          items:
+            $ref: "#/components/schemas/ProposedAttributeDefinition"
+          nullable: true
+          type: array
         create:
           $ref: "#/components/schemas/ItemCreate"
         delete:
@@ -3915,6 +3920,20 @@ components:
         - status
         - operation
         - response_text
+      type: object
+    ProposedAttributeDefinition:
+      additionalProperties: false
+      properties:
+        data_type:
+          type: string
+        key:
+          type: string
+        label:
+          type: string
+      required:
+        - key
+        - label
+        - data_type
       type: object
     PurgeChannelHistoryRequest:
       additionalProperties: false
