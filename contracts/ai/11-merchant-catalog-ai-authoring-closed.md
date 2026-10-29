@@ -533,3 +533,18 @@ Merchant Catalog AI Authoring Architecture v2 = CLOSED
 هذه النسخة تلغي وتستبدل بالكامل النسخة السابقة من الخطوة 11.
 
 ولا يجوز للـ implementation agent استخدام "AIAuthoringProposal" الحالي أو "GenerateCatalogDraft" الحالي كعقد نهائي دون إعادة مواءمته مع هذه النسخة.
+
+---
+
+## ملحق توثيقي 2026-10-29 — العلاقة بين المواصفات العربية والقوالب
+
+هذا ملحق تنفيذي على فرع `fix/merchant-catalog-strict-wire-v3` / PR #18 ولا يغير قرار CLOSED v2 أو بنية Catalog، ولا يعني النشر في `main`.
+
+- النموذج مسؤول عن المعنى التجاري، واسم المواصفة العربي `label` ونوعها `data_type` وقيمتها، وعن اختيار `attribute_schema_id` موثوق عندما يوجد قالب مناسب. كما يصوغ اسم القالب العربي الجديد عند الحاجة.
+- Go لا يترجم ولا يخترع أسماء عربية؛ يتحقق من البيانات، ويولد هوية `attr_` التقنية للتعريف الجديد أو يعيد استخدام تعريف موثوق، ويحفظ بعد اعتماد التاجر داخل transaction.
+- `AttributeDefinition` يحفظ `attribute_key, label, data_type`، و`CatalogItem.attributes` أو `Variant.attributes` يحفظ القيم في JSON Object؛ `attribute_schema_id` و`attribute_schema_version` يحددان القالب والإصدار.
+- React لا تترجم المفاتيح، بل تعرض `label` المحفوظ مقابل `attributes[attribute_key]`.
+- `canonical_proposal_json` غلاف نصي تاريخي. فرع PR #18 يستخدم Strict Wire منظمًا ثم يحوله إلى Canonical Proposal V3، دون تغيير شكل التخزين.
+- المواصفات الإنجليزية القديمة بدون قالب لا تتعرب تلقائيًا، ولا يتم إنشاء تعريفات أو تعديل منتج قبل الموافقة.
+
+المرجع التفصيلي: [عقد AI والقوالب العربية — Key / Label / Value](../../docs/architecture/merchant-catalog-attribute-schema-ai-contract-ar.md).
