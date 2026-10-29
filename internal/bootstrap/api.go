@@ -15,12 +15,15 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/handlers"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/middleware"
+	merchantgateway "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/gateway"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/auth/ed25519jwt"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
 	realtimePostgres "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/realtime/postgres"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantassist"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/contracts"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
@@ -407,6 +410,60 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		}
 	}
 	dashboardServer := handlers.NewServer(dependencies)
+	// Independent merchant AI Assist: reviewed read-only tools share the
+	// canonical tenant-scoped repositories, native inference router and guard.
+	// If native inference is disabled, the API fails closed as unavailable.
+	if external.NativeAssistCompletion != nil {
+		registry, registryErr := contracts.NewMerchantAssistRegistry()
+		if registryErr != nil {
+			return nil, fmt.Errorf("merchant AI Assist registry: %w", registryErr)
+		}
+		model := &merchantgateway.MerchantAssistCompletion{
+			Client: external.NativeAssistCompletion, Model: "mujeeb-merchant",
+		}
+		sanitizer := merchantassist.ConservativeSanitizer{}
+		assistant := &merchantassist.Assistant{
+			Registry: registry, Generator: model, Native: &merchantgateway.MerchantAssistNativeTools{Client: external.NativeAssistCompletion, Model: "mujeeb-merchant"}, Sanitizer: sanitizer,
+			Discovery: &merchantassist.DiscoveryReader{
+				Guard:                 businessAIGuard,
+				Overview:              dependencies.GetDashboardOverview,
+				Customers:             dependencies.ListCustomers,
+				GetCustomer:           dependencies.GetCustomer,
+				GetTransaction:        dependencies.GetTransaction,
+				CustomerConversations: dependencies.ListCustomerConversations,
+				CustomerTransactions:  dependencies.ListCustomerTransactions,
+				Conversations:         dependencies.ListConversations,
+				Leads:                 dependencies.ListLeads,
+				Transactions:          dependencies.ListTransactions,
+				Catalogs:              dependencies.ListCatalogs,
+				Channels:              dependencies.ListChannelConnections,
+				Subscription:          dependencies.GetBusinessSubscription,
+			},
+			Published: &merchantassist.PublishedReader{
+				Policies:  postgres.NewBusinessPolicyRepository(database),
+				Knowledge: postgres.NewKnowledgeDocumentRepository(database),
+				AIGuard:   businessAIGuard, Now: time.Now,
+			},
+			Records: &merchantassist.RecordReader{
+				Customers:     postgres.NewCustomerRepository(database),
+				Conversations: postgres.NewConversationRepository(database),
+				Leads:         postgres.NewLeadRepository(database),
+				Transactions:  postgres.NewTransactionRepository(database),
+				AIGuard:       businessAIGuard, Now: time.Now,
+			},
+			History: &merchantassist.ConversationHistoryReader{
+				Conversations: postgres.NewConversationRepository(database),
+				State:         postgres.NewConversationStateRepository(database),
+				Messages:      postgres.NewMessageRepository(database),
+				AIGuard:       businessAIGuard, Sanitizer: sanitizer, Now: time.Now,
+			},
+			Leads: &merchantassist.LeadEvidenceReader{
+				Leads:   postgres.NewLeadRepository(database),
+				AIGuard: businessAIGuard, Now: time.Now,
+			},
+		}
+		dashboardServer.WithMerchantAssist(assistant)
+	}
 	dashboardServer = dashboardServer.WithPlatformDeps(handlers.PlatformDeps{
 		Plans:            postgres.NewPlanRepository(database),
 		PlatformBusiness: postgres.NewPlatformBusinessRepository(database),

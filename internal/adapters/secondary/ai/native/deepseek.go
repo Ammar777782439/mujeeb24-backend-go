@@ -180,6 +180,8 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 			}
 			providerSchema, err := deepSeekSchema(tool.Function.Parameters)
 			if err != nil {
+				log.Printf("[DeepSeekNative] stage=local_schema_rejected tool=%s cause=%q",
+					safeDeepSeekDiagnostic(tool.Function.Name, 128), safeDeepSeekDiagnostic(err.Error(), 320))
 				return Response{}, fmt.Errorf("DeepSeek unsupported function schema: %w", err)
 			}
 			var encodedTool map[string]any
@@ -206,6 +208,8 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	if err != nil {
 		return Response{}, err
 	}
+	log.Printf("[DeepSeekNative] stage=request model=%s model_endpoint=beta tools=%d messages=%d choice=%s bytes=%d timeout=%s",
+		c.model, len(canonical.Tools), len(messages), canonical.ToolChoice, len(encoded), c.timeout)
 	catalogdump.Record(ctx, "deepseek_wire_request", catalogdump.Raw(encoded))
 	timeoutCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
@@ -215,14 +219,22 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	}
 	httpReq.Header.Set("Authorization", "Bearer "+c.key)
 	httpReq.Header.Set("Content-Type", "application/json")
+	started := time.Now()
 	httpRes, err := c.client.Do(httpReq)
 	if err != nil {
+		reason := "transport_error"
+		if timeoutCtx.Err() != nil {
+			reason = "timeout_or_deadline"
+		}
+		log.Printf("[DeepSeekNative] stage=transport_failed reason=%s elapsed_ms=%d", reason, time.Since(started).Milliseconds())
 		if timeoutCtx.Err() != nil {
 			return Response{}, timeoutCtx.Err()
 		}
 		return Response{}, fmt.Errorf("DeepSeek transport failure: %w", err)
 	}
 	defer httpRes.Body.Close()
+	log.Printf("[DeepSeekNative] stage=http_response status=%d elapsed_ms=%d",
+		httpRes.StatusCode, time.Since(started).Milliseconds())
 	catalogdump.Record(ctx, "deepseek_http_status", httpRes.StatusCode)
 	if httpRes.StatusCode < 200 || httpRes.StatusCode >= 300 {
 		body, readErr := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
@@ -230,8 +242,13 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 			catalogdump.Record(ctx, "deepseek_raw_error_response", catalogdump.Raw(body))
 		}
 		if readErr != nil || len(body) > nativeResponseLimit {
+			log.Printf("[DeepSeekNative] stage=http_error_body_failed status=%d read_error=%t body_too_large=%t",
+				httpRes.StatusCode, readErr != nil, len(body) > nativeResponseLimit)
 			return Response{}, errors.New("DeepSeek error response read/size failure")
 		}
+		code, typ, msg := safeDeepSeekErrorFields(body)
+		log.Printf("[DeepSeekNative] stage=provider_rejected status=%d code=%s type=%s message=%q",
+			httpRes.StatusCode, code, typ, msg)
 		return Response{}, &StatusError{Provider: "deepseek", Code: httpRes.StatusCode}
 	}
 	raw, err := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
@@ -249,6 +266,8 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil || len(envelope.Choices) != 1 {
+		log.Printf("[DeepSeekNative] stage=invalid_response_envelope json_error=%t choices=%d bytes=%d",
+			err != nil, len(envelope.Choices), len(raw))
 		return Response{}, errors.New("invalid DeepSeek choice envelope")
 	}
 	choice := envelope.Choices[0]

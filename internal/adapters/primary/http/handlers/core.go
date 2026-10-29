@@ -9,8 +9,10 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/authorization"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantassist"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/queries"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/contracts"
 )
 
 type ScopeProvider interface {
@@ -134,6 +136,7 @@ type MerchantCatalogAIV2Deps struct {
 type Server struct {
 	deps                Dependencies
 	merchantCatalogAIV2 MerchantCatalogAIV2Deps
+	merchantAssist      *merchantassist.Assistant
 	platformDeps        PlatformDeps
 	idempotency         *IdempotencyStore
 }
@@ -142,6 +145,11 @@ type operationIDContextKey struct{}
 
 func NewServer(deps Dependencies) *Server {
 	return &Server{deps: deps, idempotency: NewIdempotencyStore()}
+}
+
+func (s *Server) WithMerchantAssist(assistant *merchantassist.Assistant) *Server {
+	s.merchantAssist = assistant
+	return s
 }
 
 func (s *Server) WithMerchantCatalogAIV2(deps MerchantCatalogAIV2Deps) *Server {
@@ -374,6 +382,28 @@ func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (a
 		return s.CreateOutboundMessage(ctx, input.(*contract.ConversationMessageInput))
 	case "listCustomers":
 		return s.ListCustomers(ctx, input.(*contract.CustomerListInput))
+	case "merchantAIAssist":
+		in := input.(*contract.MerchantAssistInput)
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return nil, mapApplicationError(err)
+		}
+		if s.merchantAssist == nil {
+			return nil, mapApplicationError(appErrors.NotImplemented())
+		}
+		result, err := s.merchantAssist.Assist(ctx, merchantassist.AssistRequest{
+			Actor: actor, Business: string(actor.BusinessID),
+			Question: in.Body.Question, Task: contracts.AssistTask(in.Body.Task),
+			ProjectionID: in.Body.ProjectionID, RecordID: in.Body.RecordID, Search: in.Body.Search,
+		})
+		if err != nil {
+			return nil, mapApplicationError(merchantAssistPublicError(err))
+		}
+		out := &contract.Single[contract.MerchantAssistResponse]{}
+		out.Body.Data = contract.MerchantAssistResponse{
+			Answer: result.Answer, ProjectionID: result.ProjectionID, Evidence: result.Evidence, ReviewRequired: true,
+		}
+		return out, nil
 	case "merchantAIExecute":
 		in := input.(*contract.MerchantAIExecuteInput)
 		actor, err := s.requireScope(ctx, in.BusinessID)
