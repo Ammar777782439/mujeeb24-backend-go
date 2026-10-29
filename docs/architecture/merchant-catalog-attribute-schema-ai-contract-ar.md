@@ -86,7 +86,7 @@ offers
 - الشكل النهائي في `Proposal V3`: `attribute_definitions` فيها `key,label,data_type,validation_rules`، ويظل `create.attributes` و`update.changes.attributes` و`variants[].attributes` JSON Objects.
 - `create.attribute_schema_id` أو `update.attribute_schema_id` يختار قالبًا **موجودًا**. و`attribute_schema_name` يحدد اسم قالب **جديد** من فهم النموذج.
 - مجرد نجاح Strict Schema لا يضمن صحة المعنى أو الادعاءات التجارية. تبقى الحماية النهائية بمراجعة التاجر والتحقق في Go.
-- لا تستخدم `canonical_proposal_json` كسلسلة تحمل المقترح التجاري كاملًا في هذا المسار؛ ليس هذا عقد النقل المطبق على الفرع.
+- لا تحمل المقترح التجاري كاملًا في حقل نصي مفتوح؛ النقل المعتمد هنا هو هيكل Wire مغلق مع JSON لقيم الحقول والقواعد الفردية فقط.
 
 ## 5. قواعد التحقق `validation_rules`
 
