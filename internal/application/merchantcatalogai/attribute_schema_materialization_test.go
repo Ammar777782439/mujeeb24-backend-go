@@ -14,6 +14,9 @@ type testAttributeCatalog struct {
 	next    int
 }
 
+func (s *testAttributeCatalog) ListAttributeSchemas(_ context.Context, _, name string, _ *int, _ int, _ string) (ports.AttributeSchemaPage, error) {
+	return ports.AttributeSchemaPage{Items: nil}, nil
+}
 func (s *testAttributeCatalog) NextAttributeSchemaVersion(_ context.Context, _, _ string) (int, error) {
 	return s.next, nil
 }
@@ -34,7 +37,7 @@ func TestMaterializeArabicAttributeDefinitionsAndKeyMapping(t *testing.T) {
 		{Key: "warranty", Label: "الضمان", DataType: "text"},
 		{Key: "battery_health", Label: "صحة البطارية", DataType: "number"},
 	}
-	record, mapping, err := resolveApprovedAttributeDefinitions(context.Background(), stub, "business", "proposal", nil, specs, time.Now().UTC())
+	record, mapping, err := resolveApprovedAttributeDefinitions(context.Background(), stub, "business", "مواصفات الهواتف", nil, specs, time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +63,7 @@ func TestExtendVersionedSchemaPreservesManagedAttributeKey(t *testing.T) {
 	stub := &testAttributeCatalog{next: 3}
 	old := &ports.AttributeSchemaRecord{ID: "old-schema", BusinessID: "business", Name: "مواصفات الهواتف", Version: 2,
 		Definitions: []ports.AttributeDefinitionRecord{{ID: "old-definition", Key: "attr_0123456789abcdef", Label: "اللون", DataType: "text", Required: true}}}
-	record, mapping, err := resolveApprovedAttributeDefinitions(context.Background(), stub, "business", "proposal", old, []ProposedAttributeDefinition{
+	record, mapping, err := resolveApprovedAttributeDefinitions(context.Background(), stub, "business", old.Name, old, []ProposedAttributeDefinition{
 		{Key: "color", Label: "اللون", DataType: "text"},
 		{Key: "warranty", Label: "الضمان", DataType: "text"},
 	}, time.Now().UTC())
