@@ -37,7 +37,7 @@ func (p Proposal) Normalize() Proposal {
 				u.NewOffers[index].VariantID = nil
 			}
 		}
-		emptyItemChanges := u.Changes.Name == nil &&
+		emptyItemChanges := u.AttributeSchemaID == nil && u.Changes.Name == nil &&
 			u.Changes.ItemType == nil &&
 			u.Changes.ShortDescription == nil &&
 			u.Changes.LongDescription == nil &&
