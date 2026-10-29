@@ -127,6 +127,7 @@ type OfferUpdate struct {
 }
 
 type UpdateOperation struct {
+	AttributeSchemaID *string `json:"attribute_schema_id,omitempty"`
 	ItemID           string          `json:"item_id"`
 	Changes          ItemChanges     `json:"changes"`
 	ExistingVariants []VariantUpdate `json:"existing_variants,omitempty"`
@@ -141,6 +142,7 @@ type DeleteOperation struct {
 }
 
 type Proposal struct {
+	AttributeSchemaName string `json:"attribute_schema_name,omitempty"`
 	AttributeDefinitions []ProposedAttributeDefinition `json:"attribute_definitions,omitempty"`
 	SchemaVersion        int                           `json:"schema_version"`
 	Status               ProposalStatus                `json:"status"`
