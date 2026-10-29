@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -195,9 +194,7 @@ func catalogWireParse(raw string) (merchantcatalogai.Proposal, error) {
 	if err := decoder.Decode(&wire); err != nil { return merchantcatalogai.Proposal{}, fmt.Errorf("decode merchant wire proposal: %w", err) }
 	if err := decoder.Decode(new(any)); err != io.EOF { return merchantcatalogai.Proposal{}, errors.New("merchant wire proposal has trailing JSON") }
 	// The complete provider-facing schema is verified independently.
-	schema, err := json.Marshal(merchantCatalogWireSchema())
-	if err != nil { return merchantcatalogai.Proposal{}, err }
-	if err := validateStrictArguments([]byte(raw), schema); err != nil {
+	if err := validateStrictArguments([]byte(raw), merchantCatalogWireSchema()); err != nil {
 		return merchantcatalogai.Proposal{}, fmt.Errorf("merchant wire schema: %w", err)
 	}
 	proposal := map[string]any{
@@ -265,7 +262,7 @@ func catalogWireParse(raw string) (merchantcatalogai.Proposal, error) {
 	}
 	encoded, err := json.Marshal(proposal)
 	if err != nil { return merchantcatalogai.Proposal{}, err }
-	if !json.Valid(encoded) || len(bytes.TrimSpace(encoded)) == 0 {
+	if !json.Valid(encoded) {
 		return merchantcatalogai.Proposal{}, errors.New("cannot encode merchant proposal")
 	}
 	// Keep the authoritative parser, reference validation, and commercial
