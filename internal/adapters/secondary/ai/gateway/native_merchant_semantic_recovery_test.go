@@ -95,7 +95,7 @@ func TestMerchantSemanticWireRetryIsBoundedAndPreservesStrictContract(t *testing
 				encoded, err := json.Marshal(map[string]any{
 					"choices": []any{map[string]any{
 						"finish_reason": "stop",
-						"message": map[string]any{"role": "assistant", "content": wire},
+						"message":       map[string]any{"role": "assistant", "content": wire},
 					}},
 					"usage": map[string]any{"prompt_tokens": 100, "completion_tokens": 25},
 				})
