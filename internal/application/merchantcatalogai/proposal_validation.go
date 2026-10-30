@@ -127,6 +127,9 @@ func (p Proposal) Validate() error {
 		if p.Update != nil || p.Delete != nil {
 			return errors.New("create proposal cannot contain update/delete data")
 		}
+		if len(p.Create.Offers) == 0 {
+			return errors.New("resolved create proposal requires at least one offer; request missing merchant data instead")
+		}
 		if err := validateAttributeObject(p.Create.Attributes, "create.attributes"); err != nil {
 			return err
 		}
