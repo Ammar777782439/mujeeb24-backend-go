@@ -67,9 +67,9 @@ func photoTestService(ids []string) (AutoReplyService, *photoRecordingOutbound, 
 	outbox := &fakeOutboxStore{}
 	service := NewAutoReplyService(
 		&FakeCustomerSalesDecisionPort{Decision: ports.CapabilityDecision{
-			Capability: ports.CustomerSalesCapabilityRespondWithoutAction,
+			Capability:   ports.CustomerSalesCapabilityRespondWithoutAction,
 			ResponseText: "هذه صور الهاتف الأزرق",
-			Selected: []ports.SelectedReference{{ItemID: "phone", VariantID: stringPtr("blue")}},
+			Selected:     []ports.SelectedReference{{ItemID: "phone", VariantID: stringPtr("blue")}},
 		}},
 		&fakeDecisionRepository{},
 		fakeReferenceRepository{record: ports.ConversationReferenceRecord{
@@ -91,7 +91,7 @@ func photoTestService(ids []string) (AutoReplyService, *photoRecordingOutbound, 
 func TestAutoReplyOneTurnCreatesFourIndividuallyTrackedPhotos(t *testing.T) {
 	service, outbound, outbox := photoTestService([]string{"photo-1", "photo-2", "photo-3", "photo-4"})
 	result, err := service.Handle(context.Background(), commands.AutoReplyCommand{
-		Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}},
+		Meta:           commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}},
 		ConversationID: "conversation-1", SourceMessageReference: "inbound-photos",
 		Text: "ارسل لي أربع صور من الهاتف الأزرق", Channel: "whatsapp", ProviderRef: "socialapi",
 	})
@@ -120,7 +120,7 @@ func TestAutoReplyMediaSelectionInvalidIDFallsBackToTextOnly(t *testing.T) {
 	for _, ids := range [][]string{nil, {"wrong-merchant-photo"}, {"photo-1", "photo-1"}} {
 		service, outbound, outbox := photoTestService(ids)
 		result, err := service.Handle(context.Background(), commands.AutoReplyCommand{
-			Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}},
+			Meta:           commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}},
 			ConversationID: "conversation-1", SourceMessageReference: "inbound-one",
 			Text: "صور الهاتف الأزرق", Channel: "whatsapp", ProviderRef: "socialapi",
 		})

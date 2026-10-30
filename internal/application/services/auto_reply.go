@@ -732,8 +732,8 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 				ProviderRef: command.ProviderRef, Channel: command.Channel, Origin: "ai",
 				Transport: "provider", ContentReference: encoded,
 				ProviderIdempotencyKey: photoDedupe,
-				CorrelationID: uuidStringPointer(command.Meta.CorrelationID),
-				CausationID: uuidStringPointer(decision.ID),
+				CorrelationID:          uuidStringPointer(command.Meta.CorrelationID),
+				CausationID:            uuidStringPointer(decision.ID),
 			})
 			if createErr != nil {
 				return mapAIRepositoryError(createErr)
@@ -754,7 +754,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 				ID: s.id(), BusinessID: businessID, OutboundMessageID: photoOutbound.ID,
 				CommandType: OutboundSendCommandType, DedupeKey: photoDedupe,
 				AvailableAt: now.Add(time.Duration(i) * 3 * time.Second),
-				CreatedAt: now, UpdatedAt: now,
+				CreatedAt:   now, UpdatedAt: now,
 			}); enqueueErr != nil {
 				return mapAIRepositoryError(enqueueErr)
 			}

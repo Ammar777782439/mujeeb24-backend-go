@@ -19,8 +19,8 @@ func customerMediaTool(options []ports.CustomerMediaOption) customerSalesTool {
 		allowed = append(allowed, option.MediaLinkID)
 	}
 	return customerSalesTool{
-		Type: "function",
-		Name: "choose_reply_media",
+		Type:        "function",
+		Name:        "choose_reply_media",
 		Description: "Select zero to four approved catalog photo links matching the customer's request. If the customer asks for several views, send several verified photos. If no photos are requested, prefer zero. Only choose IDs explicitly shown in image_options. Never invent images, views or colours. This tool never sends anything.",
 		Parameters: map[string]any{
 			"type": "object", "additionalProperties": false,
@@ -68,8 +68,8 @@ func (c *NativeCustomerSalesAdapter) SelectMedia(ctx context.Context, input port
 	}
 	evidence, err := json.Marshal(map[string]any{
 		"customer_message": input.CustomerMessage,
-		"response_text": input.ResponseText,
-		"image_options": input.Options,
+		"response_text":    input.ResponseText,
+		"image_options":    input.Options,
 	})
 	if err != nil {
 		return ports.CustomerMediaSelectionOutput{}, err
