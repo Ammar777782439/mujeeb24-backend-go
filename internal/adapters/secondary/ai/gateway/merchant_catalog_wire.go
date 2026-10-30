@@ -54,7 +54,6 @@ type catalogWireAttributeDefinition struct {
 type catalogWireProposal struct {
 	AttributeSchemaName  string                           `json:"attribute_schema_name"`
 	AttributeDefinitions []catalogWireAttributeDefinition `json:"attribute_definitions"`
-	SchemaVersion        int                              `json:"schema_version"`
 	Status               merchantcatalogai.ProposalStatus `json:"status"`
 	Operation            merchantcatalogai.Operation      `json:"operation"`
 	ResponseText         string                           `json:"response_text"`
@@ -97,6 +96,9 @@ func catalogWireFieldSchema(sample any, excluded ...string) map[string]any {
 	}))
 }
 
+// The wire schema intentionally omits the canonical proposal schema_version.
+// It is protocol metadata set by Go at the trusted conversion boundary, not
+// a merchant fact or a model-authored value. Unexpected wire keys are rejected.
 // All object keys are required for DeepSeek strict mode; inactive operations
 // are expressed by empty arrays/strings, not by nullable partial objects.
 func merchantCatalogWireSchema() map[string]any {
@@ -111,7 +113,6 @@ func merchantCatalogWireSchema() map[string]any {
 		"data_type": catalogWireString(), "reason": catalogWireString(),
 	})
 	return catalogWireObject(map[string]any{
-		"schema_version":        map[string]any{"type": "integer", "enum": []any{merchantcatalogai.ProposalSchemaVersion}},
 		"status":                map[string]any{"type": "string", "enum": []string{"resolved", "needs_more_data", "not_found", "ambiguous"}},
 		"operation":             map[string]any{"type": "string", "enum": []string{"create", "update", "delete", "ask_merchant"}},
 		"response_text":         catalogWireString(),
@@ -229,7 +230,7 @@ func catalogWireParse(raw string) (merchantcatalogai.Proposal, error) {
 		return merchantcatalogai.Proposal{}, err
 	}
 	proposal := map[string]any{
-		"schema_version": wire.SchemaVersion, "status": wire.Status, "operation": wire.Operation,
+		"schema_version": merchantcatalogai.ProposalSchemaVersion, "status": wire.Status, "operation": wire.Operation,
 		"response_text": wire.ResponseText, "attribute_schema_name": wire.AttributeSchemaName, "evidence_references": wire.EvidenceReferences,
 		"missing_information":   wire.MissingInformation,
 		"attribute_definitions": definitions,

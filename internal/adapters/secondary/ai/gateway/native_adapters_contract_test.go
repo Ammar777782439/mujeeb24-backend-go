@@ -152,7 +152,6 @@ func marshalMerchantWireTestAnswer(proposalJSON string) string {
 		panic(err)
 	}
 	wire := emptyCatalogWireProposal()
-	wire.SchemaVersion = proposal.SchemaVersion
 	wire.Status = proposal.Status
 	wire.Operation = proposal.Operation
 	wire.ResponseText = proposal.ResponseText
@@ -188,8 +187,8 @@ func TestNativeMerchantReadOnlyToolAndCanonicalFinalValidation(t *testing.T) {
 		if err := json.Unmarshal(req.Payload, &body); err != nil {
 			t.Fatal(err)
 		}
-		if body.ParallelToolCalls == nil || *body.ParallelToolCalls {
-			t.Error("merchant allowed parallel model tool calls")
+		if body.ParallelToolCalls != nil {
+			t.Error("merchant should let the provider choose a bounded read-only tool batch")
 		}
 		if len(body.Messages) < 2 || body.Messages[0].Role != "system" || body.Messages[1].Role != "user" {
 			t.Error("merchant trusted and untrusted messages merged")
