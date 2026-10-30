@@ -40,6 +40,30 @@ func (e *MerchantCatalogToolNameError) Error() string {
 	return "DeepSeek did not select the required merchant catalog final tool"
 }
 
+// MerchantCatalogCallEnvelopeError means DeepSeek returned an invalid tool-call
+// envelope for the forced final proposal. Only this read-free model inference
+// can be retried; neither untrusted arguments nor tool calls are executed.
+type MerchantCatalogCallEnvelopeError struct{ Reason string }
+
+func (e *MerchantCatalogCallEnvelopeError) Error() string {
+	return "DeepSeek merchant catalog final call has invalid envelope: " + e.Reason
+}
+
+func merchantCatalogCallEnvelopeReason(id, kind, name, arguments string) string {
+	switch {
+	case id == "":
+		return "missing_call_id"
+	case kind != "function":
+		return "invalid_call_type"
+	case name == "":
+		return "missing_function_name"
+	case !json.Valid([]byte(arguments)):
+		return "invalid_arguments_json"
+	default:
+		return ""
+	}
+}
+
 // DeepSeekConfig never accepts business-policy configuration or tool executors.
 type DeepSeekConfig struct {
 	Model      string
@@ -355,8 +379,18 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 		ids := make(map[string]struct{}, len(choice.Message.ToolCalls))
 		for i := range choice.Message.ToolCalls {
 			call := &choice.Message.ToolCalls[i]
-			if call.ID == "" || call.Type != "function" || call.Function.Name == "" ||
-				!json.Valid([]byte(call.Function.Arguments)) {
+			if reason := merchantCatalogCallEnvelopeReason(
+				call.ID, call.Type, call.Function.Name, call.Function.Arguments,
+			); reason != "" {
+				if structured && synthetic == "submit_merchant_catalog_proposal" {
+					// Report a fixed reason code only. Never log raw arguments,
+					// tool-call IDs, credentials, or merchant/user content.
+					log.Printf("[DeepSeekNative] stage=merchant_final_invalid_call reason=%s call_index=%d calls=%d",
+						reason, i, len(choice.Message.ToolCalls))
+					if len(choice.Message.ToolCalls) == 1 {
+						return Response{}, &MerchantCatalogCallEnvelopeError{Reason: reason}
+					}
+				}
 				return Response{}, errors.New("DeepSeek returned invalid function call")
 			}
 			if _, ok := allowed[call.Function.Name]; !ok {
