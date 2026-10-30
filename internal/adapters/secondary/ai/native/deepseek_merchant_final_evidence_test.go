@@ -106,7 +106,7 @@ func TestDeepSeekFinalTransportDropsStaleToolRolesButRetainsReadEvidence(t *test
 					"tool_calls": []any{map[string]any{
 						"id": "final-1", "type": "function",
 						"function": map[string]any{
-							"name": "submit_merchant_catalog_proposal",
+							"name":      "submit_merchant_catalog_proposal",
 							"arguments": `{"operation":"ask_merchant"}`,
 						},
 					}},
