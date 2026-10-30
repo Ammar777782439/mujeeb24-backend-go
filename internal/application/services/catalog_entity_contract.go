@@ -48,8 +48,8 @@ type CatalogEntityDefinition struct {
 //     item_type is vertical-specific (physical_good, ticket, appointment,
 //     service, etc.) and the merchant decides the value.
 //   - status IN ('draft', 'active', 'inactive', 'archived')
-//   - pricing_mode IN ('fixed', 'starting_from', 'per_unit', 'per_person',
-//     'per_day', 'quote_required', 'dynamic')
+//   - pricing_mode remains a legacy NOT NULL storage column; it is not part of
+//     the canonical CatalogItem entity exposed to AI. Offers own pricing.
 //   - availability_mode IN ('stock', 'schedule', 'supplier_check',
 //     'always_available', 'unknown')
 //   - fulfillment_mode IN ('delivery', 'pickup', 'digital', 'appointment',
@@ -66,7 +66,6 @@ type CatalogItemEntityDefinition struct {
 	ShortDescription       *string        `json:"short_description,omitempty"`
 	LongDescription        *string        `json:"long_description,omitempty"`
 	Status                 string         `json:"status"`
-	PricingMode            string         `json:"pricing_mode"`
 	AvailabilityMode       string         `json:"availability_mode"`
 	FulfillmentMode        string         `json:"fulfillment_mode"`
 	RequiresConfirmation   bool           `json:"requires_confirmation"`
@@ -363,7 +362,6 @@ func BuildCatalogEntityContractPayload() CatalogEntityContractPayload {
 				ShortDescription:       entityContractStrPtr("TEXT?"),
 				LongDescription:        entityContractStrPtr("TEXT?"),
 				Status:                 "draft|active|inactive|archived",
-				PricingMode:            "fixed|starting_from|per_unit|per_person|per_day|quote_required|dynamic",
 				AvailabilityMode:       "stock|schedule|supplier_check|always_available|unknown",
 				FulfillmentMode:        "delivery|pickup|digital|appointment|travel|manual",
 				RequiresConfirmation:   false,
