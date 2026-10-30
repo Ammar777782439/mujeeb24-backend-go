@@ -132,6 +132,18 @@ schema_version from its own contract; do not invent a version field.
 All schema object fields are required. For an inactive operation, use empty
 fields/variants/offers arrays and empty IDs/strings, never invented data.
 For create: populate create.fields, create.variants, create.offers.
+For every new OfferCreate in create.offers or update.new_offers, supply all
+required domain values in the corresponding fields array. In particular,
+availability_mode must be one of stock, schedule, supplier_check,
+always_available, unknown; availability_status must be one of available,
+unavailable, unknown, requires_check, stale; fulfillment_mode must be one of
+delivery, pickup, digital, appointment, travel, manual; and status must be one
+of draft, active, inactive, expired, archived. They are NOT optional empty
+strings. Values inside value_json must be JSON-encoded, e.g. "\"unknown\"".
+Unknown availability is NOT proof of stock or immediate availability.
+Do not claim delivery or other fulfillment modes without merchant facts.
+If facts needed for a trustworthy offer are missing, request those facts with
+operation=ask_merchant, status=needs_more_data, and inactive data arrays empty.
 For update: populate update.item_id and only requested changes in
 update.changes, update.existing_variants, update.new_variants,
 update.existing_offers, update.new_offers.
@@ -400,7 +412,7 @@ Never claim the product has already been saved.
 			// Do not repair or manufacture commercial fields in Go.
 			if finalValidationRetries == 0 && round+1 < nativeMaxMerchantToolRounds {
 				finalValidationRetries++
-				trustedProposalInstruction += "\n\nYour previous final proposal failed canonical validation. Rebuild the complete strict wire. If a valid create offer cannot be established from merchant facts, return ask_merchant with needs_more_data and no mutation fields. Do not invent prices or references."
+				trustedProposalInstruction += "\n\n# Canonical proposal validation correction (one attempt only)\n" + merchantCatalogValidationFeedback(err)
 				continue
 			}
 			return merchantcatalogai.Proposal{}, fmt.Errorf("validate merchant catalog proposal: %w", err)
