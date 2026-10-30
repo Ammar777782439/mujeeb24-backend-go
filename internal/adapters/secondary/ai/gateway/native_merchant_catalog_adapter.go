@@ -355,7 +355,22 @@ No proposal is executed until the merchant approves it.`
 			// rather than silently correcting or persisting untrusted data.
 			if finalValidationRetries == 0 && round+1 < nativeMaxMerchantToolRounds {
 				finalValidationRetries++
-				trustedProposalInstruction += "\n\n# Final proposal semantic recovery (one attempt only)\nYour previous merchant_catalog_wire proposal failed the canonical parser. Return a NEW complete strict tool call. Every validation_rules_json must be a valid nonempty JSON object string such as \"{}\" for no rules. Do not invent attribute definitions, labels, rules, template IDs, offers or prices. When asking the merchant for missing details, use operation=ask_merchant and status=needs_more_data, with attribute_schema_name=\"\", attribute_definitions=[], and empty create, update and delete payloads. Do not assert that a product was saved.\n"
+				trustedProposalInstruction += `
+
+# Final proposal semantic recovery (one attempt only)
+The previous merchant_catalog_wire proposal failed the canonical parser.
+Return a new complete strict tool call with every required field.
+Every validation_rules_json must be a nonempty valid JSON object string
+such as "{}" when no validation constraints apply.
+Do not invent attributes, labels, rules, template IDs, offers or prices.
+When asking the merchant for missing details, use operation=ask_merchant
+and status=needs_more_data, attribute_schema_name="", attribute_definitions=[],
+create={"fields":[],"variants":[],"offers":[]},
+update={"item_id":"","attribute_schema_id":"","changes":[],
+"existing_variants":[],"new_variants":[],"existing_offers":[],"new_offers":[]},
+and delete={"id":"","reason_given":""}.
+Never claim the product has already been saved.
+`
 				continue
 			}
 			return merchantcatalogai.Proposal{}, fmt.Errorf("decode strict merchant catalog wire proposal: %w", err)
