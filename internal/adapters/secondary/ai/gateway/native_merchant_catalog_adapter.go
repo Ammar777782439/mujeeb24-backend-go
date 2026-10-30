@@ -161,11 +161,11 @@ not enough reliable information to create the requested item, return
 operation=ask_merchant and status=needs_more_data with all mutation payloads
 empty. Never invent a price, a template ID, or an offer to satisfy validation.
 No proposal is executed until the merchant approves it.`
-		req := nativeMerchantChatRequest{
-		Model:             a.model,
-		Messages:          []nativeMerchantChatMessage{{Role: "system", Content: system}, {Role: "user", Content: contextualInput}},
-		MaxTokens:         a.maxOutputTokens,
-		Stream:            false,
+	req := nativeMerchantChatRequest{
+		Model:     a.model,
+		Messages:  []nativeMerchantChatMessage{{Role: "system", Content: system}, {Role: "user", Content: contextualInput}},
+		MaxTokens: a.maxOutputTokens,
+		Stream:    false,
 	}
 	allowed := map[string]map[string]any{}
 	if input.Capabilities != nil {
