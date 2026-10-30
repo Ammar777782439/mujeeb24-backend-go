@@ -126,7 +126,6 @@ func TestMerchantStrictWireCreatesVariantsAndOffers(t *testing.T) {
 	wire.Create.Fields = []catalogWireField{
 		{Name: "name", ValueJSON: `"خدمة تجريبية"`},
 		{Name: "item_type", ValueJSON: `"service"`},
-		{Name: "pricing_mode", ValueJSON: `"fixed"`},
 		{Name: "availability_mode", ValueJSON: `"always_available"`},
 		{Name: "fulfillment_mode", ValueJSON: `"pickup"`},
 		{Name: "requires_confirmation", ValueJSON: `true`},
