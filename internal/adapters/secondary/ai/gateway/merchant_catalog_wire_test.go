@@ -9,7 +9,6 @@ import (
 
 func emptyCatalogWireProposal() catalogWireProposal {
 	return catalogWireProposal{
-		SchemaVersion:        merchantcatalogai.ProposalSchemaVersion,
 		AttributeDefinitions: []catalogWireAttributeDefinition{},
 		Status:               merchantcatalogai.StatusResolved,
 		Operation:            merchantcatalogai.OperationUpdate,
@@ -152,5 +151,35 @@ func TestMerchantStrictWireCreatesVariantsAndOffers(t *testing.T) {
 	}
 	if proposal.Create == nil || len(proposal.Create.Variants) != 1 || len(proposal.Create.Offers) != 1 {
 		t.Fatal("wire create payload lost variants or offers")
+	}
+}
+
+func TestMerchantStrictWireAssignsCanonicalVersionAndRejectsModelVersionField(t *testing.T) {
+	wire := emptyCatalogWireProposal()
+	wire.Operation = merchantcatalogai.OperationAskMerchant
+	wire.Status = merchantcatalogai.StatusNeedsMoreData
+	wire.Update.ItemID = ""
+	proposal, err := decodeCatalogWireForTest(t, wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proposal.SchemaVersion != merchantcatalogai.ProposalSchemaVersion {
+		t.Fatalf("Go must assign canonical Proposal V3, got %d", proposal.SchemaVersion)
+	}
+	encoded, err := json.Marshal(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(encoded, &doc); err != nil {
+		t.Fatal(err)
+	}
+	doc["schema_version"] = 1
+	encoded, err = json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := catalogWireParse(string(encoded)); err == nil {
+		t.Fatal("model-authored proposal version unexpectedly accepted in strict transport")
 	}
 }
