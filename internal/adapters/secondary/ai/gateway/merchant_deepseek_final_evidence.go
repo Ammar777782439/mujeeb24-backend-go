@@ -47,9 +47,10 @@ func deepSeekMerchantFinalEvidence(messages []nativeMerchantChatMessage) ([]nati
 				return nil, 0, errors.New("merchant discovery evidence is not valid JSON")
 			}
 			reads = append(reads, readResult{
-				Tool: call.Function.Name, CallID: call.ID,
+				Tool:      call.Function.Name,
+				CallID:    call.ID,
 				Arguments: json.RawMessage(call.Function.Arguments),
-				Result: json.RawMessage(result),
+				Result:    json.RawMessage(result),
 			})
 			i++
 		}
