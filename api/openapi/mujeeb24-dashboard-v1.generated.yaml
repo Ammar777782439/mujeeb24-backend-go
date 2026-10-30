@@ -3885,6 +3885,13 @@ components:
     Proposal:
       additionalProperties: false
       properties:
+        attribute_definitions:
+          items:
+            $ref: "#/components/schemas/ProposedAttributeDefinition"
+          nullable: true
+          type: array
+        attribute_schema_name:
+          type: string
         create:
           $ref: "#/components/schemas/ItemCreate"
         delete:
@@ -3915,6 +3922,23 @@ components:
         - status
         - operation
         - response_text
+      type: object
+    ProposedAttributeDefinition:
+      additionalProperties: false
+      properties:
+        data_type:
+          type: string
+        key:
+          type: string
+        label:
+          type: string
+        validation_rules:
+          additionalProperties: {}
+          type: object
+      required:
+        - key
+        - label
+        - data_type
       type: object
     PurgeChannelHistoryRequest:
       additionalProperties: false
@@ -5830,6 +5854,8 @@ components:
     UpdateOperation:
       additionalProperties: false
       properties:
+        attribute_schema_id:
+          type: string
         changes:
           $ref: "#/components/schemas/ItemChanges"
         existing_offers:

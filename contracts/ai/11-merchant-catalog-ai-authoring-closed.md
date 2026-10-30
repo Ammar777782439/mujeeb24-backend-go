@@ -1,5 +1,7 @@
-11. Merchant Catalog AI Authoring Architecture — CLOSED v2
+11. Merchant Catalog AI Authoring — العقد المعماري الحالي (Proposal V3)
 
+> **العقد الحالي:** هذه الوثيقة محدّثة لمسار `Merchant Catalog AI` مع `Proposal V3` و`Strict Wire`. الاسم العربي للمواصفة وقواعدها من النموذج، والمفاتيح التقنية والتخزين بعد الاعتماد من Go. المرجع التفصيلي [هنا](../../docs/architecture/merchant-catalog-attribute-schema-ai-contract-ar.md).
+>
 11.1 الغرض
 
 Merchant Catalog AI هو وكيل محادثي مستقل مخصص للتاجر، وهدفه الأساسي مساعدة التاجر على إضافة منتج إلى الكتالوج بكل تبعياته المطلوبة من خلال المحادثة.
@@ -59,7 +61,7 @@ Validation primitives
 Authorization primitives
 Audit
 Observability
-Gemini infrastructure
+Model provider infrastructure
 
 ولا يشتركان في:
 
@@ -185,9 +187,9 @@ ask merchant
 
 ---
 
-11.7 Gemini لا ينفذ
+11.7 النموذج لا ينفذ
 
-Gemini مسؤول عن:
+النموذج مسؤول عن:
 
 فهم كلام التاجر
 استخراج البيانات
@@ -196,7 +198,7 @@ Gemini مسؤول عن:
 تنظيم المعلومات
 بناء Proposal
 
-Gemini ليس مسؤولًا عن:
+النموذج ليس مسؤولًا عن:
 
 Database writes
 Authorization
@@ -233,7 +235,7 @@ Catalog Application Service
    ↓
 Catalog Domain
 
-Gemini لا يتجاوز أي طبقة من هذه الطبقات.
+النموذج لا يتجاوز أي طبقة من هذه الطبقات.
 
 ---
 
@@ -268,9 +270,9 @@ search_catalog(query)
 
 ---
 
-11.10 البيانات التي تصل إلى Gemini
+11.10 البيانات التي تصل إلى النموذج
 
-Gemini يحتاج إلى السياق اللازم للعمل، ويشمل على الأقل:
+النموذج يحتاج إلى السياق اللازم للعمل، ويشمل على الأقل:
 
 Catalog Entity Contract
 Current Catalog Evidence
@@ -283,62 +285,42 @@ Current Merchant Message
 
 PostgreSQL = Source of Truth
 Mujeeb = Owner of Evidence and Scope
-Gemini = Reasoning Layer
+النموذج = Reasoning Layer
 
-Gemini لا يختار "business_id" أو نطاق التاجر بنفسه.
+النموذج لا يختار "business_id" أو نطاق التاجر بنفسه.
 
 ---
 
-11.11 Attribute Values
+11.11 المواصفات العربية والقوالب وقواعدها
 
-قيم Attributes لا يتم افتراض أنها Strings دائمًا.
+المصدر المرجعي لتفاصيل التخزين والتوليد والفحص: [عقد AI وقوالب المواصفات العربية](../../docs/architecture/merchant-catalog-attribute-schema-ai-contract-ar.md).
 
-Catalog Contract يدعم:
+**المفاهيم:**
+- `AttributeSchema` قالب قابل لإعادة الاستخدام؛ و`AttributeDefinition` تعريف مستقل بــ`attribute_key` و`label` و`data_type` و`validation_rules`.
+- `CatalogItem` يحمل `attribute_schema_id` و`attribute_schema_version`، ويحفظ قيم المواصفات في `attributes` كـJSON Object.
+- `Variant` يحتفظ بقيمه في `Variant.attributes`، مستعينًا بقالب العنصر الأب. وقد يحتوي فقط جزءًا من تعريفات القالب.
+- `Offer` يملك السعر والتوفر؛ لا نخلطها بالمواصفات.
 
-text
-number
-boolean
-date
-datetime
-select
-multi_select
-location
-money
+**المعنى واللغة:** النموذج وحده يستخرج `label` العربي والقيمة ونوعها `data_type` وقواعدها `validation_rules` بناء على طلب التاجر أو أدلة الكتالوج. لا يكتب Go اسمًا عربيًا أو قائمة ألوان من عنده ولا تترجم React أسماء المفاتيح.
 
-لذلك Gemini قد يقترح القيمة، ولكن Mujeeb يتحقق منها مقابل:
+**اختيار القالب:** يستعلم النموذج من `merchant_catalog_list_attribute_schemas` عن القوالب الموجودة ويختار ID موثوقًا إن كان مناسبًا. إذا احتاج قالبًا جديدًا يقدم `attribute_schema_name` عربيًا و`attribute_definitions` لكل مواصفة جديدة. المفاتيح `snake_case` في مقترح AI مؤقتة، وGo يولّد `attr_...` للتعريفات الجديدة أو يعيد استخدام المفاتيح المعروفة.
 
-AttributeDefinition.data_type
-validation_rules
+**قواعد الاختيار:** يدعم `validation_rules` مثل `enum` و`min/max` و`regex`، مع ضرورة `enum` لـ`select/multi_select` في مسار AI. `enum` تحدد القيم المسموحة في القالب ولا تنشئ Variants تلقائيًا. القيم المقترحة للـVariant تخضع لـ`ValidatePartialAttributes`. ممنوع اختلاق خيارات أو تعديل قواعد تعريف موجود بصمت.
 
-قبل السماح بالتنفيذ.
+**دون تنفيذ مسبق:** أي إنشاء/تحديث لتعريفات القالب وروابط المنتج وقيم الخيار لا يحدث أثناء قراءة النموذج أو عند `PROPOSAL_STORED`؛ بل بعد الاعتماد الصريح داخل `ExecuteApproved` مع صلاحيات التاجر والتحقق والمعاملة.
+
+**الحالات التاريخية:** `AttributeSchema` اختياري في الدومين؛ قد توجد منتجات/Variants بمفاتيح حرة مثل `color`. لا يغيّر هذا المسار بياناتها ولا يترجمها تلقائيًا.
 
 ---
 
 11.12 Variants
 
-الـ Variant جزء من عملية إنشاء المنتج عند الحاجة.
+الـVariant جزء من إنشاء المنتج أو تعديله عند الحاجة، ويحمل `id` و`business_id` و`catalog_item_id` و`name` و`attributes` و`status` وفق Catalog Contract.
 
-والـ Variant وفق Catalog Contract يحتوي على:
-
-id
-business_id
-catalog_item_id
-name
-attributes
-status
-
-و:
-
-attributes
-
-تمثل JSON Object، وليس عقدًا نهائيًا على شكل قائمة من:
-
-attribute_key + value
-
-يمكن استخدام تمثيل وسيط أثناء تعامل AI، لكن يجب تحويله والتحقق منه قبل دخوله إلى Domain Contract.
+`Variant.attributes` و`CatalogItem.attributes` كائنات JSON وليست مصفوفات `attribute_key + value`. عند استخدام قالب رسمي تكون مفاتيحهما مُعرّفات `attr_...` المقابلة لتعريفات `attribute_definitions`، والقيم هي القيم التي قدّمها التاجر. التمثيل المؤقت للـAI ليس قاعدة البيانات.
 
 ---
-
+ 
 11.13 Offers
 
 Offer جزء من عملية Authoring وليس عنصرًا اختياريًا في تصميم الوكيل نفسه.
@@ -366,7 +348,7 @@ validity_until
 
 status
 
-إذا لم يقدم التاجر معلومات تجارية مطلوبة، لا يخترعها Gemini.
+إذا لم يقدم التاجر معلومات تجارية مطلوبة، لا يخترعها النموذج.
 
 يطلبها من التاجر أو يترك العملية في حالة غير مكتملة وفق قواعد المجال.
 
@@ -410,7 +392,7 @@ Delete
 
 11.15 العمليات المركبة
 
-إذا طلب التاجر إنشاء منتج مع عدة Variants وOffers، فلا ينفذ Gemini سلسلة عمليات مستقلة غير منضبطة.
+إذا طلب التاجر إنشاء منتج مع عدة Variants وOffers، فلا ينفذ النموذج سلسلة عمليات مستقلة غير منضبطة.
 
 بدلًا من ذلك:
 
@@ -424,7 +406,7 @@ One Application Use Case
       ↓
 Domain Transaction where applicable
 
-الهدف هو أن يتولى Mujeeb العملية المركبة كوحدة تطبيقية منضبطة، وليس أن يصبح Gemini هو منسق الكتابات في قاعدة البيانات.
+الهدف هو أن يتولى Mujeeb العملية المركبة كوحدة تطبيقية منضبطة، وليس أن يصبح النموذج هو منسق الكتابات في قاعدة البيانات.
 
 ---
 
@@ -432,7 +414,7 @@ Domain Transaction where applicable
 
 يمكن لـ Merchant Catalog AI استخدام أدوات قراءة واكتشاف عند الحاجة:
 
-Gemini
+النموذج
    ↓
 Read/Discovery Tool
    ↓
@@ -440,9 +422,9 @@ Mujeeb
    ↓
 Evidence
    ↓
-Gemini
+النموذج
 
-لكن النسخة الأولى لا تجعل الكتابة المباشرة أدوات Gemini.
+لكن النسخة الأولى لا تجعل الكتابة المباشرة أدوات النموذج.
 
 الكتابة تمر عبر:
 
@@ -526,10 +508,8 @@ Database Agent
 
 ---
 
-11.20 حالة القرار
+11.20 حالة العقد الحالي
 
-Merchant Catalog AI Authoring Architecture v2 = CLOSED
+هذه وثيقة Merchant Catalog AI Authoring المرجعية للميزة على فرع `fix/merchant-catalog-strict-wire-v3` (PR #18). عقد الأعمال `Proposal V3` ونقل Strict Wire يردان في [عقد المقترح](./12-merchant-catalog-ai-proposal-contract-closed.md) وفي [المرجع المعماري للقوالب](../../docs/architecture/merchant-catalog-attribute-schema-ai-contract-ar.md).
 
-هذه النسخة تلغي وتستبدل بالكامل النسخة السابقة من الخطوة 11.
-
-ولا يجوز للـ implementation agent استخدام "AIAuthoringProposal" الحالي أو "GenerateCatalogDraft" الحالي كعقد نهائي دون إعادة مواءمته مع هذه النسخة.
+الاستكشاف أدوات قراءة فقط؛ المقترح مراجعة فقط؛ تغييرات القالب/العنصر/الخيار/العرض لا تُنفذ إلا بعد موافقة التاجر. يُحافظ على Catalog Domain كما هو. وصف الفرع لا يعني الدمج أو النشر.

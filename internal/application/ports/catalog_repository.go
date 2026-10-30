@@ -209,6 +209,8 @@ type CatalogItemPatch struct {
 	FulfillmentMode         *string
 	RequiresConfirmation    *bool
 	Attributes              []byte
+	AttributeSchemaID       *string
+	AttributeSchemaVersion  *int
 	ExpectedVersion         int64
 	UpdatedAt               time.Time
 }

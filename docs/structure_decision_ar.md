@@ -1,6 +1,6 @@
 # هيكلة Mujeeb 24 Backend الحالية
 
-هذه الوثيقة تصف التنفيذ الحالي على `feat/universal-catalog-ai-v3`. ليست خطة لإنشاء مجلدات أو خدمات إضافية. لا دمج إلى main أو فرع الإنتاج ضمن أعمال التنظيف.
+هذه الوثيقة فهرس حدود مجلدات Go. **مرجع مسار مساعد كتالوج التاجر الحالي:** فرع `fix/merchant-catalog-strict-wire-v3`، [عقد المقترح](../contracts/ai/12-merchant-catalog-ai-proposal-contract-closed.md) و[عقد القوالب العربية](architecture/merchant-catalog-attribute-schema-ai-contract-ar.md). لا يعني ذلك دمجًا في main أو نشرًا إنتاجيًا. لا تستخدم أوصاف فروع سابقة لتحديد سلوك النقل أو تخزين المواصفات.
 
 ## حدود المسؤولية
 
@@ -30,9 +30,9 @@
 
 SocialAPI webhook → التحقق وتسجيل الحدث → حفظ العميل والمحادثة والرسالة → AutoReply الاختياري عبر بوابة التكلفة وWorker Pool → اقتراح AI → Validation والسياسة → OutboundMessage وOutbox → worker → SocialAPI.
 
-PostgreSQL مصدر الحقيقة. لا شبكة داخل معاملات قاعدة البيانات، ولا إعادة إرسال تلقائية عند نتيجة مزود مجهولة. Gemini يقترح ولا يملك SQL أو الإرسال المباشر.
+PostgreSQL مصدر الحقيقة. لا شبكة داخل معاملات قاعدة البيانات، ولا إعادة إرسال تلقائية عند نتيجة مزود مجهولة. نموذج AI يقترح ولا يملك SQL أو الإرسال المباشر. وبالنسبة لمساعد التاجر، النموذج وحده يؤلف `label` العربي و`validation_rules`؛ Go يتحقق ويربط ويولّد `attr_...` ويحفظ بعد اعتماد التاجر.
 
-B2B يستخدم تأليف الكتالوج للتاجر عبر MerchantCatalogAuthoringAdapter. B2C يستخدم CustomerSalesDecisionPort عبر Gemini Interactions مع التقييم الكامل للكتالوج بالدفعات عند الحاجة. Intent وKnowledgeContext وAIDecision تبقى ضمن البنية الحالية.
+B2B يستخدم `MerchantCatalogAuthoringAdapter` للاستكشاف وأخذ مقترح `Proposal V3` عبر Strict Wire مع دعم قوالب المواصفات وتعريفاتها. B2C مسار منفصل يعتمد `CustomerSalesDecisionPort`، وأدوات التقييم له مستقلة. لا تخلط عقد Merchant بعقد التقييم أو تستخدم محرك نوايا بالكلمات المفتاحية داخل Go.
 
 ## قواعد صيانة الشجرة
 

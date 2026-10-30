@@ -91,6 +91,9 @@ func validateOfferCreate(offer OfferCreate, path string, variantRefs map[string]
 }
 
 func (p Proposal) Validate() error {
+	if err := p.ValidateAttributeDefinitions(false); err != nil {
+		return err
+	}
 	if p.SchemaVersion != ProposalSchemaVersion {
 		return fmt.Errorf("merchant catalog proposal schema_version must be %d", ProposalSchemaVersion)
 	}
@@ -150,6 +153,9 @@ func (p Proposal) Validate() error {
 			}
 		}
 	case OperationUpdate:
+		if p.Update != nil && p.Update.AttributeSchemaID != nil && strings.TrimSpace(*p.Update.AttributeSchemaID) == "" {
+			return errors.New("update.attribute_schema_id cannot be empty")
+		}
 		if p.Update == nil || strings.TrimSpace(p.Update.ItemID) == "" {
 			return errors.New("update proposal requires item_id")
 		}

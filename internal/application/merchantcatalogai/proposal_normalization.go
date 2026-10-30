@@ -8,6 +8,7 @@ func (p Proposal) Normalize() Proposal {
 		p.Create = nil
 		p.Update = nil
 		p.Delete = nil
+		p.AttributeDefinitions = nil
 		if strings.TrimSpace(p.ResponseText) == "" {
 			p.ResponseText = "حدّد البيانات الناقصة المطلوبة لإتمام العملية."
 		}
@@ -36,7 +37,7 @@ func (p Proposal) Normalize() Proposal {
 				u.NewOffers[index].VariantID = nil
 			}
 		}
-		emptyItemChanges := u.Changes.Name == nil &&
+		emptyItemChanges := u.AttributeSchemaID == nil && u.Changes.Name == nil &&
 			u.Changes.ItemType == nil &&
 			u.Changes.ShortDescription == nil &&
 			u.Changes.LongDescription == nil &&

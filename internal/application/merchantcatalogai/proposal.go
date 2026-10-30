@@ -24,6 +24,16 @@ const (
 	OperationAskMerchant Operation = "ask_merchant"
 )
 
+// ProposedAttributeDefinition describes a merchant-facing specification label.
+// Key is a model-generated semantic snake_case alias, never a persisted attr_ key.
+// The approved executor assigns/reuses authoritative machine keys.
+type ProposedAttributeDefinition struct {
+	Key             string         `json:"key"`
+	Label           string         `json:"label"`
+	DataType        string         `json:"data_type"`
+	ValidationRules map[string]any `json:"validation_rules,omitempty"`
+}
+
 type MissingField struct {
 	Path        string `json:"path"`
 	DisplayName string `json:"display_name"`
@@ -118,12 +128,13 @@ type OfferUpdate struct {
 }
 
 type UpdateOperation struct {
-	ItemID           string          `json:"item_id"`
-	Changes          ItemChanges     `json:"changes"`
-	ExistingVariants []VariantUpdate `json:"existing_variants,omitempty"`
-	NewVariants      []VariantCreate `json:"new_variants,omitempty"`
-	ExistingOffers   []OfferUpdate   `json:"existing_offers,omitempty"`
-	NewOffers        []OfferCreate   `json:"new_offers,omitempty"`
+	AttributeSchemaID *string         `json:"attribute_schema_id,omitempty"`
+	ItemID            string          `json:"item_id"`
+	Changes           ItemChanges     `json:"changes"`
+	ExistingVariants  []VariantUpdate `json:"existing_variants,omitempty"`
+	NewVariants       []VariantCreate `json:"new_variants,omitempty"`
+	ExistingOffers    []OfferUpdate   `json:"existing_offers,omitempty"`
+	NewOffers         []OfferCreate   `json:"new_offers,omitempty"`
 }
 
 type DeleteOperation struct {
@@ -132,15 +143,17 @@ type DeleteOperation struct {
 }
 
 type Proposal struct {
-	SchemaVersion      int              `json:"schema_version"`
-	Status             ProposalStatus   `json:"status"`
-	Operation          Operation        `json:"operation"`
-	ResponseText       string           `json:"response_text"`
-	EvidenceReferences []string         `json:"evidence_references,omitempty"`
-	MissingInformation []MissingField   `json:"missing_information,omitempty"`
-	Create             *ItemCreate      `json:"create,omitempty"`
-	Update             *UpdateOperation `json:"update,omitempty"`
-	Delete             *DeleteOperation `json:"delete,omitempty"`
+	AttributeSchemaName  string                        `json:"attribute_schema_name,omitempty"`
+	AttributeDefinitions []ProposedAttributeDefinition `json:"attribute_definitions,omitempty"`
+	SchemaVersion        int                           `json:"schema_version"`
+	Status               ProposalStatus                `json:"status"`
+	Operation            Operation                     `json:"operation"`
+	ResponseText         string                        `json:"response_text"`
+	EvidenceReferences   []string                      `json:"evidence_references,omitempty"`
+	MissingInformation   []MissingField                `json:"missing_information,omitempty"`
+	Create               *ItemCreate                   `json:"create,omitempty"`
+	Update               *UpdateOperation              `json:"update,omitempty"`
+	Delete               *DeleteOperation              `json:"delete,omitempty"`
 }
 
 func (p Proposal) IsMutation() bool {

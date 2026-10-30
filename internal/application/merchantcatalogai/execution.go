@@ -286,6 +286,27 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 			schema = &loaded
 			sv = &loaded.Version
 		}
+		if len(q.AttributeDefinitions) > 0 {
+			authoritative, keyMap, err := resolveApprovedAttributeDefinitions(ctx, s.Catalogs, p.BusinessID, q.AttributeSchemaName, schema, q.AttributeDefinitions, now)
+			if err != nil {
+				return r, err
+			}
+			schema = authoritative
+			if schema != nil {
+				c.AttributeSchemaID = &schema.ID
+				sv = &schema.Version
+			}
+			c.Attributes, err = remapApprovedAttributes(c.Attributes, keyMap)
+			if err != nil {
+				return r, err
+			}
+			for i := range c.Variants {
+				c.Variants[i].Attributes, err = remapApprovedAttributes(c.Variants[i].Attributes, keyMap)
+				if err != nil {
+					return r, err
+				}
+			}
+		}
 		if e := catalogvalidation.ValidateAttributes(schema, c.Attributes); e != nil {
 			return r, appErrors.New(appErrors.CodeValidation, e.Error())
 		}
@@ -327,11 +348,78 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 			}
 			schema = &loaded
 		}
+		// The AI selects an existing template by evidence-backed ID.
+		// Go never selects templates by guessing the merchant's sector or
+		// translating an English specification name.
+		if u.AttributeSchemaID != nil {
+			if schema != nil && schema.ID != *u.AttributeSchemaID {
+				return r, appErrors.New(appErrors.CodeValidation, "cannot replace an existing attribute template by inference")
+			}
+			if schema == nil {
+				loaded, schemaErr := s.Catalogs.GetAttributeSchema(ctx, p.BusinessID, *u.AttributeSchemaID)
+				if schemaErr != nil {
+					return r, schemaErr
+				}
+				schema = &loaded
+			}
+		}
+
+		var targetSchemaID *string
+		var targetSchemaVersion *int
+		if schema != nil && item.AttributeSchemaID == nil {
+			targetSchemaID = &schema.ID
+			targetSchemaVersion = &schema.Version
+		}
+		keyMap := map[string]string{}
+		if len(q.AttributeDefinitions) > 0 {
+			authoritative, replacements, materializeErr := resolveApprovedAttributeDefinitions(ctx, s.Catalogs, p.BusinessID, q.AttributeSchemaName, schema, q.AttributeDefinitions, now)
+			if materializeErr != nil {
+				return r, materializeErr
+			}
+			keyMap = replacements
+			if authoritative != nil {
+				if schema == nil || authoritative.ID != schema.ID {
+					targetSchemaID = &authoritative.ID
+					targetSchemaVersion = &authoritative.Version
+				}
+				schema = authoritative
+			}
+			c.Attributes, materializeErr = remapApprovedAttributes(c.Attributes, keyMap)
+			if materializeErr != nil {
+				return r, materializeErr
+			}
+			for i := range u.ExistingVariants {
+				u.ExistingVariants[i].Attributes, materializeErr = remapApprovedAttributes(u.ExistingVariants[i].Attributes, keyMap)
+				if materializeErr != nil {
+					return r, materializeErr
+				}
+			}
+			for i := range u.NewVariants {
+				u.NewVariants[i].Attributes, materializeErr = remapApprovedAttributes(u.NewVariants[i].Attributes, keyMap)
+				if materializeErr != nil {
+					return r, materializeErr
+				}
+			}
+		}
 		attrs, e := mergeAttributes(item.Attributes, c.Attributes)
 		if e != nil {
 			return r, e
 		}
-		if c.Attributes != nil {
+		if len(keyMap) > 0 {
+			merged, decodeErr := decodeAttributes(attrs)
+			if decodeErr != nil {
+				return r, decodeErr
+			}
+			merged, decodeErr = remapApprovedAttributes(merged, keyMap)
+			if decodeErr != nil {
+				return r, decodeErr
+			}
+			attrs, decodeErr = encodedAttributes(merged)
+			if decodeErr != nil {
+				return r, decodeErr
+			}
+		}
+		if c.Attributes != nil || targetSchemaID != nil {
 			merged, decodeErr := decodeAttributes(attrs)
 			if decodeErr != nil {
 				return r, decodeErr
@@ -340,13 +428,13 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 				return r, appErrors.New(appErrors.CodeValidation, validationErr.Error())
 			}
 		}
-		if c.Name != nil || c.ItemType != nil || c.Status != nil || c.ShortDescription != nil || c.LongDescription != nil || c.PricingMode != nil || c.AvailabilityMode != nil || c.FulfillmentMode != nil || c.RequiresConfirmation != nil || c.Attributes != nil {
+		if c.Name != nil || c.ItemType != nil || c.Status != nil || c.ShortDescription != nil || c.LongDescription != nil || c.PricingMode != nil || c.AvailabilityMode != nil || c.FulfillmentMode != nil || c.RequiresConfirmation != nil || c.Attributes != nil || targetSchemaID != nil {
 			if c.Status != nil && *c.Status == "active" && s.Entitlements != nil {
 				if e = s.Entitlements.EnsureCatalogItemActivation(ctx, p.BusinessID, r.ItemID, now); e != nil {
 					return r, e
 				}
 			}
-			_, e = s.Catalogs.UpdateCatalogItem(ctx, ports.CatalogItemPatch{ID: r.ItemID, BusinessID: p.BusinessID, Name: c.Name, ItemType: c.ItemType, Status: c.Status, ShortDescription: c.ShortDescription, ShortDescriptionPresent: c.ShortDescription != nil, LongDescription: c.LongDescription, LongDescriptionPresent: c.LongDescription != nil, PricingMode: c.PricingMode, AvailabilityMode: c.AvailabilityMode, FulfillmentMode: c.FulfillmentMode, RequiresConfirmation: c.RequiresConfirmation, Attributes: attrs, ExpectedVersion: p.Versions["item:"+r.ItemID], UpdatedAt: now})
+			_, e = s.Catalogs.UpdateCatalogItem(ctx, ports.CatalogItemPatch{ID: r.ItemID, BusinessID: p.BusinessID, Name: c.Name, ItemType: c.ItemType, Status: c.Status, ShortDescription: c.ShortDescription, ShortDescriptionPresent: c.ShortDescription != nil, LongDescription: c.LongDescription, LongDescriptionPresent: c.LongDescription != nil, PricingMode: c.PricingMode, AvailabilityMode: c.AvailabilityMode, FulfillmentMode: c.FulfillmentMode, RequiresConfirmation: c.RequiresConfirmation, Attributes: attrs, AttributeSchemaID: targetSchemaID, AttributeSchemaVersion: targetSchemaVersion, ExpectedVersion: p.Versions["item:"+r.ItemID], UpdatedAt: now})
 			if e != nil {
 				return r, e
 			}

@@ -96,7 +96,7 @@ func TestMerchantListAllProductsPaginatesWithoutMutation(t *testing.T) {
 				t.Error("not a strict final proposal")
 			}
 			proposal := `{"schema_version":3,"status":"resolved","operation":"ask_merchant","response_text":"منتجات الكتالوج: هاتف، ساعة، سماعة."}`
-			payload, _ := json.Marshal(map[string]string{"canonical_proposal_json": proposal})
+			payload := []byte(marshalMerchantWireTestAnswer(proposal))
 			choice = map[string]any{"finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": string(payload)}}
 		default:
 			return native.Response{}, errors.New("unexpected extra round")

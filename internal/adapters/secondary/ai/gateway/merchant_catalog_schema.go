@@ -126,7 +126,8 @@ func merchantCatalogProposalSchema() map[string]any {
 	update := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"item_id": stringField(),
+			"item_id":             stringField(),
+			"attribute_schema_id": optionalReference("Existing template ID selected from merchant_catalog_list_attribute_schemas evidence. Do not invent IDs or infer templates."),
 			"changes": map[string]any{"type": "object", "properties": map[string]any{
 				"name": optionalString(), "status": map[string]any{"type": "string", "description": "Commercial lifecycle state. Omit unless merchant explicitly requested a lifecycle change. Do not reset an existing item to draft during an ordinary edit."}, "attributes": attributeObjectField(),
 				"item_type":         map[string]any{"type": "string", "description": "Entity kind from the canonical contract, not a variant name, audience, category or specification. Omit unless the merchant explicitly requested changing the entity kind."},
@@ -220,12 +221,27 @@ func merchantCatalogProposalSchema() map[string]any {
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"schema_version":      map[string]any{"type": "integer", "enum": []int{merchantcatalogai.ProposalSchemaVersion}, "description": "Merchant Catalog AI Proposal Contract version."},
-			"status":              map[string]any{"type": "string", "enum": []string{"resolved", "ambiguous", "not_found", "needs_more_data"}},
-			"operation":           map[string]any{"type": "string", "enum": []string{"create", "update", "delete", "ask_merchant"}},
-			"response_text":       map[string]any{"type": "string", "description": "One proposal targets one catalog item. Multi-item batches and attribute-schema mutations are not supported; return needs_more_data/ask_merchant explaining this limitation rather than silently processing a subset. Discounts and promotions have no executable fields in this contract. If requested, return needs_more_data/ask_merchant explaining this limitation; do not silently drop them or store an executable discount in attributes. Preserve every requested change. Describe only changes actually represented in the proposal payload. Do not claim a description or price change unless its corresponding field is present. A proposal is not proof of execution."},
-			"evidence_references": map[string]any{"type": "array", "items": stringField()},
-			"missing_information": map[string]any{"type": "array", "items": missingField},
+			"attribute_schema_name": map[string]any{"type": "string", "description": "Only the model supplies a merchant-facing Arabic template name when creating a new template. Use empty string when reusing an existing template; Go never translates or generates labels."},
+			"schema_version":        map[string]any{"type": "integer", "enum": []int{merchantcatalogai.ProposalSchemaVersion}, "description": "Merchant Catalog AI Proposal Contract version."},
+			"status":                map[string]any{"type": "string", "enum": []string{"resolved", "ambiguous", "not_found", "needs_more_data"}},
+			"operation":             map[string]any{"type": "string", "enum": []string{"create", "update", "delete", "ask_merchant"}},
+			"response_text":         map[string]any{"type": "string", "description": "One proposal targets one catalog item. Multi-item batches and direct attribute-schema mutations are not supported; return needs_more_data/ask_merchant explaining this limitation rather than silently processing a subset. Discounts and promotions have no executable fields in this contract. If requested, return needs_more_data/ask_merchant explaining this limitation; do not silently drop them or store an executable discount in attributes. Preserve every requested change. Describe only changes actually represented in the proposal payload. Do not claim a description or price change unless its corresponding field is present. A proposal is not proof of execution."},
+			"evidence_references":   map[string]any{"type": "array", "items": stringField()},
+			"missing_information":   map[string]any{"type": "array", "items": missingField},
+			"attribute_definitions": map[string]any{
+				"type": "array",
+				"items": map[string]any{"type": "object",
+					"properties": map[string]any{
+						"key": stringField(), "label": stringField(), "data_type": stringField(),
+						"validation_rules": map[string]any{
+							"type": "object", "additionalProperties": true,
+							"description": "Model-authored constraints from merchant facts or trusted catalog evidence: enum (1..100 scalar choices for select/multi_select), min, max, regex, currency, timezone. Never invent enumerated options.",
+						},
+					},
+					"required":             []string{"key", "label", "data_type"},
+					"additionalProperties": false,
+				},
+			},
 			"create": map[string]any{
 				"anyOf": []map[string]any{
 					itemCreate,

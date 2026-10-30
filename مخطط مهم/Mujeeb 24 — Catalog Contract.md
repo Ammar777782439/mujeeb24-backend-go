@@ -287,6 +287,8 @@ attribute_schema_version ≠ NULL
 
 والـversion يجب أن تكون أكبر من صفر.
 
+عند ربط المنتج بقالب توجد علاقة مع `AttributeDefinition` عبر `attribute_schema_id`، ومع مفاتيح JSON داخل `CatalogItem.attributes` و`Variant.attributes`. القالب وإصداره هما مصدر التعريفات، وليس اسم المفتاح الحر أو تخمين React. التفاصيل الملزمة في [عقد مساعد الكتالوج وقوالب المواصفات العربية](../docs/architecture/merchant-catalog-attribute-schema-ai-contract-ar.md).
+
 هذا يمنع وجود:
 
 Schema ID بدون Version
@@ -455,6 +457,14 @@ currency
 timezone
 
 هذه ليست قائمة Enum مغلقة داخل قاعدة البيانات؛ هي أنواع من قواعد التحقق التي يمكن تمثيلها داخل JSON.
+
+### استخدام القواعد مع مساعد التاجر
+
+المعنى التجاري و`label` العربي و`data_type` وقيم القاعدة مثل `enum` يصوغها نموذج AI من بيانات التاجر أو دليل الكتالوج. Go لا يترجم المواصفات ولا يولّد قوائم الألوان، بل يفحص القواعد والقيم ويحفظها بعد الموافقة.
+
+في مسار AI، يحتاج `select` و`multi_select` إلى `enum` صالحة، ويتحقق Go من قيم `CatalogItem.attributes` و`Variant.attributes` مقابل `data_type` و`validation_rules`. القيمة المختارة للـVariant مخزنة في `variants.attributes[attribute_key]` بينما قائمة الخيارات المسموحة مخزنة في `attribute_definitions.validation_rules.enum`، ولا يؤدي إنشاء قالب إلى إنشاء Variants تلقائيًا.
+
+يستخدم النموذج `merchant_catalog_list_attribute_schemas` لإعادة استخدام قالب موجود من دليل موثوق، أو يقترح اسم قالب وتعريفات عربية جديدة. يولّد Go فقط مفاتيح `attr_...` عند اعتماد إنشاء تعريف جديد ويحافظ على إصدارات القوالب. لا يترجم React أسماء المواصفات؛ تعرض `definition.label` من التعريف المرتبط. لا تُعرَّب المنتجات القديمة ذات المفاتيح الحرة تلقائيًا.
 
 ---
 
