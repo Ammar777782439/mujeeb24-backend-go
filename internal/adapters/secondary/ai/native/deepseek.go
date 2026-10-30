@@ -21,6 +21,16 @@ import (
 
 const nativeResponseLimit = 4 << 20
 
+// MerchantCatalogSchemaError reports a provider's malformed final merchant wire.
+// It is safe to retry the *inference* once; no catalog mutation has been executed.
+type MerchantCatalogSchemaError struct{ Cause error }
+
+func (e *MerchantCatalogSchemaError) Error() string {
+	return "DeepSeek function arguments violate schema: " + e.Cause.Error()
+}
+
+func (e *MerchantCatalogSchemaError) Unwrap() error { return e.Cause }
+
 // DeepSeekConfig never accepts business-policy configuration or tool executors.
 type DeepSeekConfig struct {
 	Model      string
@@ -353,6 +363,9 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 			}
 			restored, err := restoreDeepSeekNulls(call.Function.Arguments, toolSchemas[call.Function.Name])
 			if err != nil {
+				if structured && synthetic == "submit_merchant_catalog_proposal" {
+					return Response{}, &MerchantCatalogSchemaError{Cause: err}
+				}
 				return Response{}, fmt.Errorf("DeepSeek function arguments violate schema: %w", err)
 			}
 			call.Function.Arguments = restored

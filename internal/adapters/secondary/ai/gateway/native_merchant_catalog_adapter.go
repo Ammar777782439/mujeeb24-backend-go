@@ -125,7 +125,7 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 			"schema": wireSchema,
 		},
 	}
-	trustedProposalInstruction := system + `\n\n# Strict merchant catalog wire transport
+	trustedProposalInstruction := system + "\n\n" + `# Strict merchant catalog wire transport
 Return the final proposal using the merchant_catalog_wire tool schema.
 The transport tool does NOT include schema_version. Go sets the canonical Proposal V3
 schema_version from its own contract; do not invent a version field.
@@ -160,6 +160,9 @@ A resolved create proposal must contain at least one valid offer. If there is
 not enough reliable information to create the requested item, return
 operation=ask_merchant and status=needs_more_data with all mutation payloads
 empty. Never invent a price, a template ID, or an offer to satisfy validation.
+The response_text must never claim that a product was saved or registered;
+final proposals are for merchant review only. If details are missing, ask for
+those details without claiming the product was created.
 No proposal is executed until the merchant approves it.`
 	req := nativeMerchantChatRequest{
 		Model:     a.model,
@@ -224,6 +227,15 @@ No proposal is executed until the merchant approves it.`
 		}
 		raw, info, err := a.client.CompletePinned(ctx, req, provider)
 		if err != nil {
+			var wireErr *native.MerchantCatalogSchemaError
+			if errors.As(err, &wireErr) && len(req.Tools) == 0 &&
+				finalValidationRetries == 0 && round+1 < nativeMaxMerchantToolRounds {
+				// This is an inference-only retry; no tool or commercial mutation ran.
+				// Keep the strict transport, do not normalize malformed merchant data.
+				finalValidationRetries++
+				trustedProposalInstruction += "\n\n# Strict wire recovery (one attempt only)\nThe previous forced merchant_catalog_wire tool call did not satisfy the\nrequired strict object structure. Reissue one COMPLETE tool call.\nEvery object must contain every schema-required key, even inactive payloads.\nFor operation=ask_merchant: status=needs_more_data when asking for facts;\ncreate={\"fields\":[],\"variants\":[],\"offers\":[]};\nupdate={\"item_id\":\"\",\"attribute_schema_id\":\"\",\"changes\":[],\n\"existing_variants\":[],\"new_variants\":[],\"existing_offers\":[],\"new_offers\":[]};\ndelete={\"id\":\"\",\"reason_given\":\"\"}.\nUse empty arrays for unused collections and empty strings for unused IDs.\nDo not include create fields or offers when operation=ask_merchant.\nDo not fabricate missing prices, variant choices, catalog references,\nor execution results. The response must match the supplied tool schema.\n"
+				continue
+			}
 			return merchantcatalogai.Proposal{}, fmt.Errorf("merchant catalog native request: %w", err)
 		}
 		provider = info.Provider
@@ -346,7 +358,7 @@ No proposal is executed until the merchant approves it.`
 			// Do not repair or manufacture commercial fields in Go.
 			if finalValidationRetries == 0 && round+1 < nativeMaxMerchantToolRounds {
 				finalValidationRetries++
-				req.Messages[0].Content = trustedProposalInstruction + "\n\nYour previous final proposal failed canonical validation. Rebuild the complete strict wire. If a valid create offer cannot be established from merchant facts, return ask_merchant with needs_more_data and no mutation fields. Do not invent prices or references."
+				trustedProposalInstruction += "\n\nYour previous final proposal failed canonical validation. Rebuild the complete strict wire. If a valid create offer cannot be established from merchant facts, return ask_merchant with needs_more_data and no mutation fields. Do not invent prices or references."
 				continue
 			}
 			return merchantcatalogai.Proposal{}, fmt.Errorf("validate merchant catalog proposal: %w", err)
