@@ -113,7 +113,7 @@ func TestCatalogImageUploadStagesAndVerifiesRealPixels(t *testing.T) {
 		t.Fatalf("upload did not verify file: %+v", repo.lastVerify)
 	}
 	if storage.putCount != 1 || storage.deleteCount != 0 || storage.putMime != "image/png" ||
-		storage.putKey != "catalog/"+owner+"/"+assetID || !repo.lastDraft.UploadExpiresAt.Equal(now.Add(30*time.Minute)) {
+		storage.putKey != "catalog/"+owner+"/"+assetID+".png" || !repo.lastDraft.UploadExpiresAt.Equal(now.Add(30*time.Minute)) {
 		t.Fatalf("unexpected R2 upload / staging: %+v", storage)
 	}
 }
