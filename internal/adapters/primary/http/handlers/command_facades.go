@@ -719,3 +719,16 @@ func singleChannelHistory(result commands.ChannelHistoryResult) *contract.Single
 	}
 	return out
 }
+
+// catalogInitialMediaStrings converts the authenticated HTTP UUIDs to application IDs.
+// Product selection remains a DeepSeek concern; these are merchant-selected uploads.
+func catalogInitialMediaStrings(values []contract.UUID) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		result = append(result, string(value))
+	}
+	return result
+}
