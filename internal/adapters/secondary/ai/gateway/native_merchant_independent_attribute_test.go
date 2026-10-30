@@ -52,8 +52,8 @@ func TestMerchantRuleConflictFeedbackCanPreserveIndependentCustomAttribute(t *te
 			Messages []struct {
 				Content string `json:"content"`
 			} `json:"messages"`
-			ResponseFormat map[string]any `json:"response_format"`
-			Tools []map[string]any `json:"tools"`
+			ResponseFormat map[string]any   `json:"response_format"`
+			Tools          []map[string]any `json:"tools"`
 		}
 		if err := json.Unmarshal(req.Payload, &body); err != nil {
 			return native.Response{}, err
@@ -85,7 +85,7 @@ func TestMerchantRuleConflictFeedbackCanPreserveIndependentCustomAttribute(t *te
 			ValidationRulesJSON: `{"enum":["الأسنان","اللثة","الفم"]}`,
 		}}
 		wire.Create.Fields = append(wire.Create.Fields, catalogWireField{
-			Name: "attributes",
+			Name:      "attributes",
 			ValueJSON: `{"target_anatomy":["الأسنان","اللثة","الفم"]}`,
 		})
 		data, err := json.Marshal(wire)
@@ -95,7 +95,7 @@ func TestMerchantRuleConflictFeedbackCanPreserveIndependentCustomAttribute(t *te
 		payload, err := json.Marshal(map[string]any{
 			"choices": []any{map[string]any{
 				"finish_reason": "stop",
-				"message": map[string]any{"role": "assistant", "content": string(data)},
+				"message":       map[string]any{"role": "assistant", "content": string(data)},
 			}},
 			"usage": map[string]any{"prompt_tokens": 80, "completion_tokens": 30},
 		})
