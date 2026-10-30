@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
@@ -79,7 +80,6 @@ func merchantCatalogWireFeedback(raw string) string {
 		enum(path, fields, "status", required, d.OfferStatuses)
 		if required {
 			text(path, fields, "name")
-			text(path, fields, "currency")
 			enum(path, fields, "name_source", true, map[string]string{
 				merchantcatalogai.OfferNameSourceSystemDefault:  "",
 				merchantcatalogai.OfferNameSourceMerchantStated: "",
@@ -88,12 +88,64 @@ func merchantCatalogWireFeedback(raw string) string {
 				merchantcatalogai.OfferPriceSourceMerchantStated: "",
 				merchantcatalogai.OfferPriceSourceNotStated:      "",
 			})
+			text(path, fields, "currency")
+		}
+		var mode, source, nameSource, offerName, currency string
+		for _, f := range fields {
+			switch f.Name {
+			case "pricing_mode":
+				_ = json.Unmarshal([]byte(f.ValueJSON), &mode)
+			case "price_source":
+				_ = json.Unmarshal([]byte(f.ValueJSON), &source)
+			case "name_source":
+				_ = json.Unmarshal([]byte(f.ValueJSON), &nameSource)
+			case "name":
+				_ = json.Unmarshal([]byte(f.ValueJSON), &offerName)
+			case "currency":
+				_ = json.Unmarshal([]byte(f.ValueJSON), &currency)
+			}
+		}
+		if required && (len(currency) != 3 || strings.ToUpper(currency) != currency ||
+			strings.IndexFunc(currency, func(r rune) bool { return r < 'A' || r > 'Z' }) != -1) {
+			add(path + ".currency: require an explicit valid three-letter uppercase currency or trusted business default_currency")
+		}
+		if required && nameSource == merchantcatalogai.OfferNameSourceSystemDefault &&
+			offerName != merchantcatalogai.DefaultOfferName {
+			add(path + ".name: system_default must use the canonical default offer name")
+		}
+		if source == merchantcatalogai.OfferPriceSourceMerchantStated ||
+			mode == "fixed" || mode == "starting_from" || mode == "per_unit" ||
+			mode == "per_person" || mode == "per_day" {
+			text(path, fields, "amount")
+		}
+		if mode == "per_unit" || mode == "per_person" || mode == "per_day" {
+			text(path, fields, "pricing_unit")
 		}
 	}
 	switch w.Operation {
 	case merchantcatalogai.OperationCreate:
 		text("create", w.Create.Fields, "name")
 		text("create", w.Create.Fields, "item_type")
+		foundConfirmation := false
+		for _, field := range w.Create.Fields {
+			if field.Name != "requires_confirmation" {
+				continue
+			}
+			var confirmation bool
+			foundConfirmation = json.Unmarshal([]byte(field.ValueJSON), &confirmation) == nil
+			break
+		}
+		if !foundConfirmation {
+			add("create.requires_confirmation: must be an explicitly encoded JSON boolean true or false")
+		}
+		for i, variant := range w.Create.Variants {
+			if i >= merchantCatalogMaxRepairIssues {
+				break
+			}
+			path := fmt.Sprintf("create.variants[%d]", i)
+			text(path, variant.Fields, "ref")
+			text(path, variant.Fields, "name")
+		}
 		enum("create", w.Create.Fields, "pricing_mode", true, d.PricingModes)
 		enum("create", w.Create.Fields, "availability_mode", true, d.AvailabilityModes)
 		enum("create", w.Create.Fields, "fulfillment_mode", true, d.FulfillmentModes)
@@ -111,6 +163,14 @@ func merchantCatalogWireFeedback(raw string) string {
 		enum("update.changes", w.Update.Changes, "availability_mode", false, d.AvailabilityModes)
 		enum("update.changes", w.Update.Changes, "fulfillment_mode", false, d.FulfillmentModes)
 		enum("update.changes", w.Update.Changes, "status", false, d.ItemStatuses)
+		for i, variant := range w.Update.NewVariants {
+			if i >= merchantCatalogMaxRepairIssues {
+				break
+			}
+			path := fmt.Sprintf("update.new_variants[%d]", i)
+			text(path, variant.Fields, "ref")
+			text(path, variant.Fields, "name")
+		}
 		for i, o := range w.Update.NewOffers {
 			if i >= merchantCatalogMaxRepairIssues {
 				break
@@ -132,10 +192,29 @@ func merchantCatalogWireFeedback(raw string) string {
 			add("ask_merchant: all inactive mutation and template payloads must be empty")
 		}
 	}
+	if strings.TrimSpace(w.ResponseText) == "" {
+		add("response_text: required nonempty merchant-facing message; no false claim of saved changes")
+	}
 	for i, def := range w.AttributeDefinitions {
 		name := fmt.Sprintf("attribute_definitions[%d]", i)
 		if merchantCatalogSafeRepairKey.MatchString(def.Key) {
 			name += "." + def.Key
+		}
+		validType := map[string]bool{"text": true, "number": true, "boolean": true,
+			"date": true, "datetime": true, "select": true, "multi_select": true,
+			"location": true, "money": true}
+		if !validType[def.DataType] {
+			add(name + ".data_type: requires one canonical attribute type (text, number, boolean, date, datetime, select, multi_select, location, money)")
+		}
+		hasArabicLabel := false
+		for _, letter := range def.Label {
+			if unicode.Is(unicode.Arabic, letter) {
+				hasArabicLabel = true
+				break
+			}
+		}
+		if !hasArabicLabel {
+			add(name + ".label: required merchant-facing Arabic label")
 		}
 		var rules struct {
 			Enum []json.RawMessage `json:"enum"`
