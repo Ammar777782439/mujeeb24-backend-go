@@ -2,8 +2,10 @@ package r2
 
 import (
 	"context"
+	"bytes"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -183,5 +185,81 @@ func TestBackblazeHTTPErrorWithoutXMLStillHasStatus(t *testing.T) {
 	if got == nil || !strings.Contains(got.Error(), "HTTP 400") ||
 		!strings.Contains(got.Error(), "code=unavailable") {
 		t.Fatalf("missing HTTP diagnostic: %v", got)
+	}
+}
+
+func TestBackblazeFullHTTPBodyIsSentWithoutChunking(t *testing.T) {
+	data := bytes.Repeat([]byte{0x73, 0x17, 0x44, 0x29}, 117000)
+	var received int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Errorf("wrong method: %s", r.Method)
+		}
+		if len(r.TransferEncoding) != 0 || r.ContentLength != int64(len(data)) {
+			t.Errorf("incorrect HTTP framing: length=%d encoding=%v", r.ContentLength, r.TransferEncoding)
+		}
+		all, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read actual HTTP body: %v", err)
+		}
+		received = int64(len(all))
+		if !bytes.Equal(all, data) {
+			t.Error("actual HTTP body bytes differ from source")
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	c := &Client{
+		Endpoint: "https://s3.us-east-005.backblazeb2.com",
+		Region: "us-east-005", Bucket: "mujeeb24-images",
+		AccessKeyID: "example-key-id", SecretAccessKey: "example-secret",
+		HTTP: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			// Test-only transport rewrite to an in-process HTTP server. The
+			// app still constructs a real SigV4-signed B2-style PUT request.
+			copyRequest := r.Clone(r.Context())
+			copyRequest.URL.Scheme = "http"
+			copyRequest.URL.Host = strings.TrimPrefix(srv.URL, "http://")
+			copyRequest.Host = copyRequest.URL.Host
+			return http.DefaultTransport.RoundTrip(copyRequest)
+		})},
+	}
+	if err := c.Put(context.Background(), "catalog/test/large.jpeg", "image/jpeg", data); err != nil {
+		t.Fatalf("real TCP upload should transmit every byte: %v", err)
+	}
+	if received != int64(len(data)) {
+		t.Fatalf("server received %d bytes, wanted %d", received, len(data))
+	}
+}
+
+func TestBackblazeIncompleteBodyHasTransferEvidence(t *testing.T) {
+	c := &Client{
+		Endpoint: "https://s3.us-east-005.backblazeb2.com",
+		Region: "us-east-005", Bucket: "mujeeb24-images",
+		AccessKeyID: "example-key-id", SecretAccessKey: "example-secret",
+		HTTP: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			buf := make([]byte, 4)
+			_, _ = req.Body.Read(buf)
+			return &http.Response{StatusCode: 400, Proto: "HTTP/1.1",
+				Header: make(http.Header), Body: io.NopCloser(strings.NewReader(
+				"<Error><Code>IncompleteBody</Code></Error>"))}, nil
+		})},
+	}
+	err := c.Put(context.Background(), "catalog/test/truncated.jpg", "image/jpeg", []byte("full-body"))
+	if err == nil {
+		t.Fatal("partial stream must fail")
+	}
+	for _, want := range []string{"HTTP 400", "code=IncompleteBody", "reason=remote_incomplete_body", "body_read=4", "body_expected=9"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("missing failure evidence %q in %q", want, err.Error())
+		}
+	}
+}
+
+func TestBackblazeAccessDeniedNotAssumedToBeBadSignature(t *testing.T) {
+	res := &http.Response{StatusCode: 403, Header: make(http.Header),
+		Body: io.NopCloser(strings.NewReader("<Error><Code>AccessDenied</Code></Error>"))}
+	err := classifyProviderHTTPError("PUT", res)
+	if err == nil || !strings.Contains(err.Error(), "reason=provider_access_denied") {
+		t.Fatalf("403 must not be mislabelled a signature failure: %v", err)
 	}
 }
