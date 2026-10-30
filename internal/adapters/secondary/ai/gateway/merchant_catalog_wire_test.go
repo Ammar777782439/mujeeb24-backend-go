@@ -151,6 +151,14 @@ func TestMerchantStrictWireCreatesVariantsAndOffers(t *testing.T) {
 	if proposal.Create == nil || len(proposal.Create.Variants) != 1 || len(proposal.Create.Offers) != 1 {
 		t.Fatal("wire create payload lost variants or offers")
 	}
+	if proposal.Create.Offers[0].PricingMode != "fixed" {
+		t.Fatal("wire offer pricing mode was not preserved")
+	}
+	// The old root-level field must be rejected rather than ignored.
+	wire.Create.Fields = append(wire.Create.Fields, catalogWireField{Name: "pricing_mode", ValueJSON: `"fixed"`})
+	if _, err := decodeCatalogWireForTest(t, wire); err == nil {
+		t.Fatal("legacy catalog item pricing_mode was accepted in strict wire")
+	}
 }
 
 func TestMerchantStrictWireAssignsCanonicalVersionAndRejectsModelVersionField(t *testing.T) {
