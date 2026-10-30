@@ -43,8 +43,16 @@ func (c listVariantsCapability) Execute(ctx context.Context, execCtx MerchantCat
 	if err != nil {
 		return MerchantCatalogDiscoveryResult{}, err
 	}
-	if _, err := c.repository.GetCatalogItem(ctx, execCtx.BusinessID, c.selectedCatalogID, itemID); err != nil {
+	// The parent item is read and authenticated in the merchant's selected
+	// catalog before listing children. Its exact DB-backed ID is evidence for
+	// this turn even when the child list is empty. The caller must not need
+	// another redundant get_item call to reference that verified parent.
+	item, err := c.repository.GetCatalogItem(ctx, execCtx.BusinessID, c.selectedCatalogID, itemID)
+	if err != nil {
 		return MerchantCatalogDiscoveryResult{}, err
+	}
+	if item.ID != itemID || item.BusinessID != execCtx.BusinessID || item.CatalogID != c.selectedCatalogID {
+		return MerchantCatalogDiscoveryResult{}, errors.New("merchant catalog parent read did not match authorized item scope")
 	}
 
 	status, _ := params["status"].(string)
@@ -55,8 +63,14 @@ func (c listVariantsCapability) Execute(ctx context.Context, execCtx MerchantCat
 	}
 
 	data := make([]map[string]any, 0, len(page.Items))
-	evidenceReferences := make([]string, 0, len(page.Items))
+	// The parent was independently verified above, so its reference belongs
+	// to the same scoped evidence set as its children.
+	evidenceReferences := make([]string, 0, len(page.Items)+1)
+	evidenceReferences = append(evidenceReferences, item.ID)
 	for _, variant := range page.Items {
+		if variant.ID == "" || variant.BusinessID != execCtx.BusinessID || variant.CatalogItemID != item.ID {
+			return MerchantCatalogDiscoveryResult{}, errors.New("merchant catalog read returned a child outside its verified parent item")
+		}
 		data = append(data, map[string]any{
 			"id":              variant.ID,
 			"catalog_item_id": variant.CatalogItemID,
