@@ -12,7 +12,7 @@ import (
 // provider for every read. Switching the upload provider never migrates bytes.
 type CatalogMediaObjectStore struct {
 	WriteProvider string
-	Providers map[string]ports.MediaObjectStorage
+	Providers     map[string]ports.MediaObjectStorage
 }
 
 func (s *CatalogMediaObjectStore) provider(name string) (ports.MediaObjectStorage, error) {
@@ -28,12 +28,16 @@ func (s *CatalogMediaObjectStore) provider(name string) (ports.MediaObjectStorag
 
 func (s *CatalogMediaObjectStore) Put(ctx context.Context, key, mime string, body []byte) error {
 	p, err := s.provider(s.WriteProvider)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	return p.Put(ctx, key, mime, body)
 }
 func (s *CatalogMediaObjectStore) Delete(ctx context.Context, key string) error {
 	p, err := s.provider(s.WriteProvider)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	return p.Delete(ctx, key)
 }
 func (s *CatalogMediaObjectStore) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
@@ -41,7 +45,9 @@ func (s *CatalogMediaObjectStore) PresignGet(ctx context.Context, key string, tt
 }
 func (s *CatalogMediaObjectStore) PresignFromProvider(ctx context.Context, provider, key string, ttl time.Duration) (string, error) {
 	p, err := s.provider(provider)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	return p.PresignGet(ctx, key, ttl)
 }
 

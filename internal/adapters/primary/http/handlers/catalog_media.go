@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log"
 	"strings"
 	"time"
 
@@ -82,6 +83,10 @@ func (s *Server) dispatchCatalogMedia(ctx context.Context, operationID string, i
 		}
 		asset, err := s.deps.CatalogImageUpload.UploadBase64(ctx, business, in.Body.DataBase64, actorID)
 		if err != nil {
+			// Do not expose backend/storage details to the merchant. Keep the
+			// precise failure visible to operators in Render, without file bytes,
+			// credentials or presigned storage URLs.
+			log.Printf("[CatalogMedia] stage=upload_rejected business=%s cause=%v", business, err)
 			return huma.Error422UnprocessableEntity("image upload could not be verified or stored"), true
 		}
 		out := &contract.Single[contract.CatalogMediaAssetView]{}
@@ -113,6 +118,7 @@ func (s *Server) dispatchCatalogMedia(ctx context.Context, operationID string, i
 		link, err := s.deps.CatalogMediaService.Attach(ctx, business, string(in.ItemID), variant,
 			string(in.Body.MediaID), in.Body.IsPrimary, in.Body.SortOrder, in.Body.AltText, actorID)
 		if err != nil {
+			log.Printf("[CatalogMedia] stage=gallery_attach_rejected business=%s item=%s cause=%v", business, in.ItemID, err)
 			return huma.Error422UnprocessableEntity("cannot attach image to this product gallery"), true
 		}
 		out := &contract.Single[contract.CatalogMediaView]{}

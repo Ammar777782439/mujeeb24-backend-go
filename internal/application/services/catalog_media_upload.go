@@ -9,6 +9,7 @@ import (
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -23,11 +24,11 @@ const MaxCatalogMediaBytes = 10 * 1024 * 1024
 // No browser-supplied MIME/hash/dimensions are trusted. Object storage I/O
 // happens outside SQL transactions.
 type CatalogImageUploadService struct {
-	Repository ports.CatalogMediaRepository
-	Objects    ports.MediaObjectStorage
+	Repository      ports.CatalogMediaRepository
+	Objects         ports.MediaObjectStorage
 	StorageProvider string
-	Now        func() time.Time
-	NewID      func() string
+	Now            func() time.Time
+	NewID          func() string
 }
 
 func (s CatalogImageUploadService) UploadBase64(ctx context.Context, businessID, encoded string, createdBy *string) (ports.MediaAsset, error) {
@@ -86,16 +87,21 @@ func (s CatalogImageUploadService) UploadBase64(ctx context.Context, businessID,
 		UploadExpiresAt: now.Add(30 * time.Minute), CreatedBy: createdBy,
 	})
 	if err != nil {
+		log.Printf("[CatalogMedia] stage=asset_stage_failed business=%s provider=%s cause=%v", businessID, provider, err)
 		return ports.MediaAsset{}, err
 	}
+	log.Printf("[CatalogMedia] stage=asset_staged business=%s provider=%s asset=%s mime=%s bytes=%d", businessID, provider, id, format, len(data))
 	if err = s.Objects.Put(ctx, key, format, data); err != nil {
+		log.Printf("[CatalogMedia] stage=object_write_failed business=%s provider=%s asset=%s cause=%v", businessID, provider, id, err)
 		return ports.MediaAsset{}, err
 	}
+	log.Printf("[CatalogMedia] stage=object_written business=%s provider=%s asset=%s", businessID, provider, id)
 	digest := sha256.Sum256(data)
 	asset, err := s.Repository.MarkAssetReady(ctx, businessID, id, ports.VerifiedImage{
 		MimeType: format, SizeBytes: int64(len(data)), SHA256: digest[:], Width: config.Width, Height: config.Height,
 	})
 	if err != nil {
+		log.Printf("[CatalogMedia] stage=asset_ready_failed business=%s provider=%s asset=%s cause=%v", businessID, provider, id, err)
 		// Failure remains visible in a staged row for reconciliation. Storage is
 		// best-effort deleted to avoid orphan bytes if SQL completion fails.
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -104,5 +110,6 @@ func (s CatalogImageUploadService) UploadBase64(ctx context.Context, businessID,
 		return ports.MediaAsset{}, err
 	}
 	asset.MimeType = strings.ToLower(asset.MimeType)
+	log.Printf("[CatalogMedia] stage=upload_committed business=%s provider=%s asset=%s bytes=%d", businessID, provider, id, len(data))
 	return asset, nil
 }

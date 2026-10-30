@@ -96,9 +96,13 @@ func TestBackblazeB2SignsItsRegionAndEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	presigned, err := c.PresignGet(context.Background(), "catalog/business-id/asset.png", 45*time.Minute)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	u, err := url.Parse(presigned)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if u.Host != "s3.us-west-004.backblazeb2.com" ||
 		!strings.Contains(u.Query().Get("X-Amz-Credential"), "/us-west-004/s3/aws4_request") ||
 		u.Query().Get("X-Amz-Expires") != "2700" || u.Query().Get("X-Amz-Signature") == "" {
