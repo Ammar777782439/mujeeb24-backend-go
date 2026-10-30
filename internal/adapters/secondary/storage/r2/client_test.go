@@ -1,8 +1,8 @@
 package r2
 
 import (
-	"context"
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -211,7 +211,7 @@ func TestBackblazeFullHTTPBodyIsSentWithoutChunking(t *testing.T) {
 	defer srv.Close()
 	c := &Client{
 		Endpoint: "https://s3.us-east-005.backblazeb2.com",
-		Region: "us-east-005", Bucket: "mujeeb24-images",
+		Region:   "us-east-005", Bucket: "mujeeb24-images",
 		AccessKeyID: "example-key-id", SecretAccessKey: "example-secret",
 		HTTP: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 			// Test-only transport rewrite to an in-process HTTP server. The
@@ -234,14 +234,14 @@ func TestBackblazeFullHTTPBodyIsSentWithoutChunking(t *testing.T) {
 func TestBackblazeIncompleteBodyHasTransferEvidence(t *testing.T) {
 	c := &Client{
 		Endpoint: "https://s3.us-east-005.backblazeb2.com",
-		Region: "us-east-005", Bucket: "mujeeb24-images",
+		Region:   "us-east-005", Bucket: "mujeeb24-images",
 		AccessKeyID: "example-key-id", SecretAccessKey: "example-secret",
 		HTTP: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			buf := make([]byte, 4)
 			_, _ = req.Body.Read(buf)
 			return &http.Response{StatusCode: 400, Proto: "HTTP/1.1",
 				Header: make(http.Header), Body: io.NopCloser(strings.NewReader(
-				"<Error><Code>IncompleteBody</Code></Error>"))}, nil
+					"<Error><Code>IncompleteBody</Code></Error>"))}, nil
 		})},
 	}
 	err := c.Put(context.Background(), "catalog/test/truncated.jpg", "image/jpeg", []byte("full-body"))
