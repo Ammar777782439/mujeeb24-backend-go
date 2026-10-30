@@ -22,6 +22,7 @@ type CatalogCommandServices struct {
 	Repository   ports.CatalogRepository
 	Transactions ports.TransactionManager
 	Entitlements ports.CatalogActivationEntitlement
+	Media ports.CatalogMediaRepository
 	Now          func() time.Time
 	NewID        func() string
 }
@@ -190,6 +191,14 @@ func (s CreateCatalogItemCommandService) Handle(ctx context.Context, command com
 	if err != nil {
 		return result, err
 	}
+	if len(command.InitialMediaIDs) > 12 {return result, appErrors.New(appErrors.CodeValidation, "no more than 12 catalog images per item create")}
+	if len(command.InitialMediaIDs)>0 && s.Media==nil{return result,appErrors.NotImplemented()}
+	seenMedia:=make(map[string]struct{},len(command.InitialMediaIDs))
+	for _,mediaID:=range command.InitialMediaIDs {
+		if _,uuidErr:=uuid.Parse(mediaID);uuidErr!=nil{return result,appErrors.New(appErrors.CodeValidation,"invalid initial media id")}
+		if _,exists:=seenMedia[mediaID];exists{return result,appErrors.New(appErrors.CodeValidation,"duplicate initial media id")}
+		seenMedia[mediaID]=struct{}{}
+	}
 	if command.InitialOffer != nil {
 		if validationErr := validateOfferValues(command.InitialOffer.Name, command.InitialOffer.PricingMode, command.InitialOffer.AmountMinor, nil, command.InitialOffer.Currency, command.InitialOffer.PricingUnit, command.InitialOffer.AvailabilityMode, command.InitialOffer.AvailabilityStatus, command.InitialOffer.FulfillmentMode, command.InitialOffer.Status); validationErr != nil {
 			return result, appErrors.New(appErrors.CodeValidation, validationErr.Error())
@@ -217,6 +226,16 @@ func (s CreateCatalogItemCommandService) Handle(ctx context.Context, command com
 			})
 			if err != nil {
 				return mapCatalogRepositoryError(err)
+			}
+		}
+		if len(command.InitialMediaIDs)>0 {
+			if err:=s.Media.LockGallery(txCtx,string(command.Meta.Actor.BusinessID),record.ID,nil);err!=nil{return mapCatalogRepositoryError(err)}
+			for order,mediaID:=range command.InitialMediaIDs {
+				_,mediaErr:=s.Media.Attach(txCtx,ports.CatalogMediaAttach{
+					ID:s.id(),BusinessID:string(command.Meta.Actor.BusinessID),CatalogItemID:record.ID,
+					MediaID:mediaID,SortOrder:order,ApprovedAt:now,
+				},order==0)
+				if mediaErr!=nil{return mapCatalogRepositoryError(mediaErr)}
 			}
 		}
 		return nil
