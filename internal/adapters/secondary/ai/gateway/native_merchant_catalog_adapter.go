@@ -26,8 +26,9 @@ type NativeMerchantCatalogAuthoringAdapter struct {
 }
 
 const (
-	nativeMaxMerchantToolRounds = 12
-	nativeMaxMerchantToolCalls  = 32
+	nativeMaxMerchantToolRounds    = 12
+	nativeMaxMerchantToolCalls     = 32
+	nativeMaxMerchantCallsPerRound = 8
 )
 
 func NewNativeMerchantCatalogAuthoringAdapter(client *native.CompletionClient, model string, maxOutputTokens, maxRequestBytes int) (*NativeMerchantCatalogAuthoringAdapter, error) {
@@ -126,6 +127,8 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 	}
 	trustedProposalInstruction := system + `\n\n# Strict merchant catalog wire transport
 Return the final proposal using the merchant_catalog_wire tool schema.
+The transport tool does NOT include schema_version. Go sets the canonical Proposal V3
+schema_version from its own contract; do not invent a version field.
 All schema object fields are required. For an inactive operation, use empty
 fields/variants/offers arrays and empty IDs/strings, never invented data.
 For create: populate create.fields, create.variants, create.offers.
@@ -153,14 +156,16 @@ encoding of that one field value (e.g. "600.0000" encoded as a JSON string,
 or attributes as a JSON object). Field names must match the schema enum.
 Do not omit merchant-requested changes, invent IDs, or move price into item
 attributes. Existing offers are under update.existing_offers only.
+A resolved create proposal must contain at least one valid offer. If there is
+not enough reliable information to create the requested item, return
+operation=ask_merchant and status=needs_more_data with all mutation payloads
+empty. Never invent a price, a template ID, or an offer to satisfy validation.
 No proposal is executed until the merchant approves it.`
-	allowParallel := false
-	req := nativeMerchantChatRequest{
+		req := nativeMerchantChatRequest{
 		Model:             a.model,
 		Messages:          []nativeMerchantChatMessage{{Role: "system", Content: system}, {Role: "user", Content: contextualInput}},
 		MaxTokens:         a.maxOutputTokens,
 		Stream:            false,
-		ParallelToolCalls: &allowParallel,
 	}
 	allowed := map[string]map[string]any{}
 	if input.Capabilities != nil {
@@ -191,6 +196,7 @@ No proposal is executed until the merchant approves it.`
 
 	totalCalls := 0
 	seenCalls := map[string]struct{}{}
+	finalValidationRetries := 0
 	provider := "" // Set after the first successful inference, then keep it for this turn.
 	for round := 0; round < nativeMaxMerchantToolRounds; round++ {
 		if err := ctx.Err(); err != nil {
@@ -251,7 +257,7 @@ No proposal is executed until the merchant approves it.`
 			if choice.FinishReason != "tool_calls" {
 				return merchantcatalogai.Proposal{}, errors.New("merchant tool calls had invalid completion reason")
 			}
-			if len(choice.Message.ToolCalls) != 1 || totalCalls+len(choice.Message.ToolCalls) > nativeMaxMerchantToolCalls {
+			if len(choice.Message.ToolCalls) > nativeMaxMerchantCallsPerRound || totalCalls+len(choice.Message.ToolCalls) > nativeMaxMerchantToolCalls {
 				return merchantcatalogai.Proposal{}, errors.New("merchant discovery call budget exceeded")
 			}
 			if input.Capabilities == nil {
@@ -335,6 +341,14 @@ No proposal is executed until the merchant approves it.`
 			}
 		}
 		if err := proposal.Validate(); err != nil {
+			// A rejected final proposal has no side effects. Give the model one
+			// bounded chance to produce a valid proposal or ask for missing data.
+			// Do not repair or manufacture commercial fields in Go.
+			if finalValidationRetries == 0 && round+1 < nativeMaxMerchantToolRounds {
+				finalValidationRetries++
+				req.Messages[0].Content = trustedProposalInstruction + "\n\nYour previous final proposal failed canonical validation. Rebuild the complete strict wire. If a valid create offer cannot be established from merchant facts, return ask_merchant with needs_more_data and no mutation fields. Do not invent prices or references."
+				continue
+			}
 			return merchantcatalogai.Proposal{}, fmt.Errorf("validate merchant catalog proposal: %w", err)
 		}
 		return proposal, nil
