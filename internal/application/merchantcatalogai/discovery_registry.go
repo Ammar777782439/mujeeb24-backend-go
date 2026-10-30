@@ -12,6 +12,7 @@ import (
 )
 
 type ReadOnlyCapabilityRegistry struct {
+	repository                ports.CatalogRepository
 	capabilities              map[string]MerchantCatalogDiscoveryTool
 	selectedCatalogID         string
 	evidenceReferences        map[string]struct{}
@@ -21,6 +22,7 @@ type ReadOnlyCapabilityRegistry struct {
 
 func NewReadOnlyCapabilityRegistry(repository ports.CatalogRepository, selectedCatalogID string) *ReadOnlyCapabilityRegistry {
 	r := &ReadOnlyCapabilityRegistry{
+		repository:                repository,
 		capabilities:              make(map[string]MerchantCatalogDiscoveryTool),
 		selectedCatalogID:         strings.TrimSpace(selectedCatalogID),
 		evidenceReferences:        make(map[string]struct{}),
@@ -148,4 +150,14 @@ func merchantReadCursorScope(catalogID, tool string, execCtx MerchantCatalogDisc
 	}
 	scope := strings.Join([]string{tool, catalogID, execCtx.BusinessID, execCtx.PrincipalID, execCtx.ConversationID, string(query)}, "\x00")
 	return scope, cursor, nil
+}
+
+
+// ValidateProposalSchemaAttributes is a server-side, tenant-scoped preflight
+// using the existing schema, not model-provided or newly invented definitions.
+func (r *ReadOnlyCapabilityRegistry) ValidateProposalSchemaAttributes(ctx context.Context, businessID string, p Proposal) error {
+	if r == nil || r.repository == nil {
+		return errors.New("merchant catalog schema preflight repository is unavailable")
+	}
+	return ValidateProposalSchemaAttributes(ctx, r.repository, businessID, r.selectedCatalogID, p)
 }
