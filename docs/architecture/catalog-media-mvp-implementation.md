@@ -4,7 +4,7 @@ Status: **in progress; draft PR, do not merge or deploy yet**.
 
 ## Scope
 
-The merchant uploads JPEG/PNG/WebP product photos, associates approved photos with
+The merchant uploads JPEG/PNG product photos (WebP is deferred), associates approved photos with
 catalog items and variants, and the existing DeepSeek `evaluate_full_catalog`
 selects item/variant/offer from customer **text**. After validated selection the
 media resolver obtains the primary image and SocialAPI sends it with the reply.
@@ -90,7 +90,7 @@ supplied by the model. Base path: `/api/v1/businesses/{business_id}`.
 | POST | `/catalog-items/{item_id}/media/{link_id}/primary?variant_id=` | `catalog:write` |
 | DELETE | `/catalog-items/{item_id}/media/{link_id}?variant_id=` | `catalog:write` |
 
-Upload request currently uses `{"data_base64":"..."}`. Go applies a 15 MiB
+Upload request currently uses `{"data_base64":"..."}`. Go applies a 14 MiB
 request-body limit, decodes no more than 10 MiB, validates full JPEG/PNG
 stream and limits pixel count. WebP is **not** yet accepted by this endpoint.
 Uploaded image bytes are stored privately via R2 SigV4 and object MIME metadata.
