@@ -68,6 +68,9 @@ func (c listVariantsCapability) Execute(ctx context.Context, execCtx MerchantCat
 	evidenceReferences := make([]string, 0, len(page.Items)+1)
 	evidenceReferences = append(evidenceReferences, item.ID)
 	for _, variant := range page.Items {
+		if variant.ID == "" || variant.BusinessID != execCtx.BusinessID || variant.CatalogItemID != item.ID {
+			return MerchantCatalogDiscoveryResult{}, errors.New("merchant catalog read returned a child outside its verified parent item")
+		}
 		data = append(data, map[string]any{
 			"id":              variant.ID,
 			"catalog_item_id": variant.CatalogItemID,
