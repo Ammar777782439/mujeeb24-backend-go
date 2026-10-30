@@ -71,6 +71,8 @@ type CreateCatalogItemCommand struct {
 	RequiresConfirmation bool
 	Attributes           map[string]any
 	InitialOffer         *InitialOffer
+	// Already-uploaded, verified media assets to attach atomically on item creation.
+	InitialMediaIDs      []string
 }
 
 type InitialOffer struct {
