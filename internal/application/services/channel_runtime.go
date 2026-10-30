@@ -201,8 +201,13 @@ func (s RemoveChannelCommandService) Handle(ctx context.Context, command command
 		return commands.ChannelConnectionResult{}, err
 	}
 	if record.Status == "archived" {
+		// Repeated removal is idempotent and also resumes Brand cleanup if the
+		// prior request committed locally but the provider call failed.
 		result := commands.ChannelConnectionResult{Connection: channelConnectionView(record)}
 		result.ResourceVersion = result.Connection.ResourceVersion
+		if err := s.deleteProviderBrandIfUnused(ctx, record.BusinessID, record.ProviderReference); err != nil {
+			return result, appErrors.New(appErrors.CodeExternalDependency, "channel removed locally; provider Brand cleanup is pending, retry removal")
+		}
 		return result, nil
 	}
 	if record.ResourceVersion != expected {
@@ -211,26 +216,32 @@ func (s RemoveChannelCommandService) Handle(ctx context.Context, command command
 
 	// 1. Invalidate any open provisioning sessions
 	if s.Provisioning != nil {
-		_ = s.Provisioning.SupersedeConnectedByChannelConnection(ctx, string(command.Meta.Actor.BusinessID), string(command.ConnectionID))
+		if err := s.Provisioning.SupersedeConnectedByChannelConnection(ctx, string(command.Meta.Actor.BusinessID), string(command.ConnectionID)); err != nil {
+			return commands.ChannelConnectionResult{}, err
+		}
 	}
 
-	// 2. Disconnect provider account if exists (external side effect outside DB tx)
+	// 2. Fail closed if the provider account could not be disconnected.
+	// External calls must remain outside the database transaction.
 	if record.ProviderAccountReference != nil && strings.TrimSpace(*record.ProviderAccountReference) != "" {
-		_ = s.Disconnector.DisconnectAccount(ctx, strings.TrimSpace(*record.ProviderAccountReference))
+		if err := s.Disconnector.DisconnectAccount(ctx, strings.TrimSpace(*record.ProviderAccountReference)); err != nil {
+			return commands.ChannelConnectionResult{}, appErrors.New(appErrors.CodeExternalDependency, "provider disconnect failed; local channel history was not removed")
+		}
 	}
 
-	// 3. Purge history and personal data locally
 	idempotencyKey := strings.TrimSpace(command.Meta.IdempotencyKey)
 	if idempotencyKey == "" {
 		idempotencyKey = "remove-" + string(command.ConnectionID)
 	}
-	if _, err := s.HistoryStore.Purge(ctx, string(command.Meta.Actor.BusinessID), string(command.ConnectionID), idempotencyKey, expected); err != nil {
-		return commands.ChannelConnectionResult{}, err
-	}
 
-	// 4. Transition local connection state to 'archived'
+	// 3. Purge channel history and archive the connection in ONE transaction.
+	// Any conflict or FK failure rolls back both operations. The history store
+	// joins the existing tx rather than opening a nested one.
 	var result commands.ChannelConnectionResult
 	err = s.Transactions.Within(ctx, func(txCtx context.Context) error {
+		if _, err := s.HistoryStore.Purge(txCtx, string(command.Meta.Actor.BusinessID), string(command.ConnectionID), idempotencyKey, expected); err != nil {
+			return mapChannelHistoryRepositoryError(err)
+		}
 		updated, transitionErr := s.Runtime.Transition(txCtx, ports.ChannelConnectionTransition{
 			BusinessID:      string(command.Meta.Actor.BusinessID),
 			ConnectionID:    string(command.ConnectionID),
@@ -253,8 +264,7 @@ func (s RemoveChannelCommandService) Handle(ctx context.Context, command command
 
 	// 5. If this was the last active/connected channel for this business under this provider, delete the Brand at SocialAPI to free up quota
 	if cleanupErr := s.deleteProviderBrandIfUnused(ctx, record.BusinessID, record.ProviderReference); cleanupErr != nil {
-		// Log cleanup error, do not fail removal as local data is already purged and archived
-		return result, nil
+		return result, appErrors.New(appErrors.CodeExternalDependency, "channel removed locally; provider Brand cleanup is pending, retry removal")
 	}
 
 	return result, nil
