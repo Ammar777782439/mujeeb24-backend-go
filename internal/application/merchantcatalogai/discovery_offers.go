@@ -68,6 +68,9 @@ func (c listOffersCapability) Execute(ctx context.Context, execCtx MerchantCatal
 	evidenceReferences := make([]string, 0, len(page.Items)+1)
 	evidenceReferences = append(evidenceReferences, item.ID)
 	for _, offer := range page.Items {
+		if offer.ID == "" || offer.BusinessID != execCtx.BusinessID || offer.CatalogItemID != item.ID {
+			return MerchantCatalogDiscoveryResult{}, errors.New("merchant catalog read returned a child outside its verified parent item")
+		}
 		variantID := ""
 		if offer.VariantID != nil {
 			variantID = *offer.VariantID
