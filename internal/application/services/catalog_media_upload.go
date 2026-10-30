@@ -68,7 +68,11 @@ func (s CatalogImageUploadService) UploadBase64(ctx context.Context, businessID,
 	if s.Now != nil {
 		now = s.Now().UTC()
 	}
-	key := "catalog/" + businessID + "/" + id
+	extension := ".jpg"
+	if format == "image/png" {
+		extension = ".png"
+	}
+	key := "catalog/" + businessID + "/" + id + extension
 	_, err = s.Repository.CreatePendingAsset(ctx, ports.PendingMediaAsset{
 		ID: id, BusinessID: businessID, StorageKey: key, UploadExpiresAt: now.Add(30 * time.Minute), CreatedBy: createdBy,
 	})
