@@ -23,7 +23,8 @@ func TestPrivateR2PutUsesSignedRequest(t *testing.T) {
 			if req.Method != "PUT" || req.URL.Host != "abc123.r2.cloudflarestorage.com" {
 				t.Fatalf("unexpected request %s %s", req.Method, req.URL)
 			}
-			if req.URL.EscapedPath() != "/catalog/catalog/business1/asset1" {
+			if req.Header.Get("Content-Type") != "image/png" {t.Fatal("incorrect stored object media type")}
+		if req.URL.EscapedPath() != "/catalog/catalog/business1/asset1" {
 				t.Fatal(req.URL.String())
 			}
 			if !strings.Contains(req.Header.Get("Authorization"), "Credential=key1/20261030/auto/s3/aws4_request") ||
@@ -37,7 +38,7 @@ func TestPrivateR2PutUsesSignedRequest(t *testing.T) {
 			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
 		})},
 	}
-	if err := c.Put(context.Background(), "catalog/business1/asset1", []byte("image-data")); err != nil {
+	if err := c.Put(context.Background(), "catalog/business1/asset1", "image/png", []byte("image-data")); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -68,7 +69,7 @@ func TestR2SignedReadURLIsScoped(t *testing.T) {
 }
 func TestR2RejectsMissingCredentials(t *testing.T) {
 	c := &Client{AccountID: "abc", Bucket: "catalog"}
-	if err := c.Put(context.Background(), "catalog/biz/asset", []byte("data")); err == nil {
+	if err := c.Put(context.Background(), "catalog/biz/asset", "image/png", []byte("data")); err == nil {
 		t.Fatal("missing credentials")
 	}
 }
