@@ -322,12 +322,18 @@ func TestNativeMerchantFallbackKeepsToolHistoryOnDeepSeek(t *testing.T) {
 		if err := json.Unmarshal(req.Payload, &body); err != nil {
 			return native.Response{}, err
 		}
-		if deepSeekCalls > 1 &&
+		if deepSeekCalls == 2 &&
 			(len(body.Messages) != 4 || body.Messages[2].Role != "assistant" ||
 				body.Messages[3].Role != "tool" ||
 				len(body.Messages[2].ToolCalls) != 1 ||
 				body.Messages[2].ToolCalls[0].ID != "read-1") {
-			t.Error("DeepSeek tool history was not preserved")
+			t.Error("DeepSeek discovery lost read tool history")
+		}
+		if deepSeekCalls == 3 &&
+			(len(body.Messages) != 2 || !strings.Contains(string(req.Payload), "Merchant catalog discovery results") ||
+				!strings.Contains(string(req.Payload), "Coffee") ||
+				!strings.Contains(string(req.Payload), "read-1")) {
+			t.Error("DeepSeek final request retained stale tool calls or lost read results")
 		}
 		var choice map[string]any
 		switch deepSeekCalls {
@@ -402,9 +408,9 @@ func TestNativeMerchantToolResultPreservesPaginationForGeminiAndDeepSeek(t *test
 				if err := json.Unmarshal(req.Payload, &body); err != nil {
 					return native.Response{}, err
 				}
-				if rounds > 1 {
+				if rounds == 2 || (rounds == 3 && chosen == "gemini") {
 					if len(body.Messages) != 4 {
-						t.Error("model lost the discovery tool history")
+						t.Error("discovery tool history was lost")
 					} else {
 						var toolResult struct {
 							Data       map[string]any `json:"data"`
@@ -414,6 +420,13 @@ func TestNativeMerchantToolResultPreservesPaginationForGeminiAndDeepSeek(t *test
 						if err := json.Unmarshal([]byte(body.Messages[3].Content), &toolResult); err != nil || toolResult.Data["catalog_item"] != "Coffee" || !toolResult.HasMore || toolResult.NextCursor != "server-next-cursor" {
 							t.Errorf("pagination metadata missing from %s tool result: %+v err=%v", chosen, toolResult, err)
 						}
+					}
+				}
+				if rounds == 3 && chosen == "deepseek" {
+					if len(body.Messages) != 2 || !strings.Contains(body.Messages[1].Content, "server-next-cursor") ||
+						!strings.Contains(body.Messages[1].Content, "Coffee") ||
+						!strings.Contains(body.Messages[1].Content, "has_more") {
+						t.Error("DeepSeek final did not preserve paginated discovery as data")
 					}
 				}
 				var choice map[string]any
