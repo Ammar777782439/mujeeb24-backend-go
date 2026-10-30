@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -150,5 +151,23 @@ func TestValidateStructuralRejectsEmptySelectedReference(t *testing.T) {
 	pipeline := &ValidationPipeline{}
 	if failure := pipeline.validateStructural(ports.CapabilityDecision{Capability: ports.CustomerSalesCapabilityRespondWithoutAction, ResponseText: "ok", Selected: []ports.SelectedReference{{}}}); failure == nil {
 		t.Fatal("empty selected item accepted")
+	}
+}
+
+func TestCatalogEntityContractKeepsPricingOnlyOnOffer(t *testing.T) {
+	payload := BuildCatalogEntityContractPayload()
+	item, err := json.Marshal(payload.Contract.CatalogItem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(item), `"pricing_mode"`) {
+		t.Fatalf("catalog_item must not expose duplicated pricing mode: %s", item)
+	}
+	offer, err := json.Marshal(payload.Contract.Offer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(offer), `"pricing_mode"`) {
+		t.Fatalf("offer must retain pricing_mode: %s", offer)
 	}
 }
