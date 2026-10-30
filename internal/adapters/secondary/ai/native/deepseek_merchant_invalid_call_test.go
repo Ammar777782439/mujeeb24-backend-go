@@ -26,12 +26,12 @@ func TestDeepSeekMerchantFinalClassifiesMalformedCallEnvelope(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
-		name    string
-		id      string
-		kind    string
-		fn      string
-		args    string
-		reason  string
+		name   string
+		id     string
+		kind   string
+		fn     string
+		args   string
+		reason string
 	}{
 		{name: "missing_id", kind: "function", fn: "submit_merchant_catalog_proposal", args: `{"operation":"ask_merchant"}`, reason: "missing_call_id"},
 		{name: "wrong_type", id: "call-1", kind: "not_function", fn: "submit_merchant_catalog_proposal", args: `{"operation":"ask_merchant"}`, reason: "invalid_call_type"},
