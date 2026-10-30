@@ -11,11 +11,11 @@ import (
 
 type schemaPreflightRepo struct {
 	ports.CatalogRepository
-	item        ports.CatalogItemRecord
-	variant     ports.VariantRecord
-	schema      ports.AttributeSchemaRecord
-	reads       int
-	writes      int
+	item    ports.CatalogItemRecord
+	variant ports.VariantRecord
+	schema  ports.AttributeSchemaRecord
+	reads   int
+	writes  int
 }
 
 func (r *schemaPreflightRepo) GetAttributeSchema(_ context.Context, business, id string) (ports.AttributeSchemaRecord, error) {
