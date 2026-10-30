@@ -59,6 +59,8 @@ type ConversationEnricher interface {
 }
 
 type SendMessageCommand struct {
+	Attachments []OutboundAttachment
+
 	Channel                string
 	Buttons                []InteractiveButton
 	ConnectionID           string
