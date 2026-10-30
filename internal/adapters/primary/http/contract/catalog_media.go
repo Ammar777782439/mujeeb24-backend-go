@@ -12,6 +12,17 @@ type CatalogImageUploadInput struct {
  BusinessID UUID `path:"business_id" format:"uuid"`
  Body CatalogImageUploadRequest
 }
+type CatalogMediaReadInput struct {
+ BusinessID UUID `path:"business_id" format:"uuid"`
+ MediaID UUID `path:"media_id" format:"uuid"`
+}
+type CatalogMediaReadView struct {
+ URL string `json:"url"`
+ ExpiresInSeconds int `json:"expires_in_seconds"`
+ MimeType string `json:"mime_type"`
+ Width int `json:"width"`
+ Height int `json:"height"`
+}
 type CatalogMediaAssetView struct {
  ID string `json:"id"`
  MimeType string `json:"mime_type"`
@@ -55,6 +66,10 @@ type CatalogMediaView struct {
 }
 type CatalogMediaListOutput struct {Body struct {Data []CatalogMediaView `json:"data"`}}
 func registerCatalogMediaOperations(api huma.API,dispatcher DashboardOperationHandler){
+ register(api,dispatcher,huma.Operation{OperationID:"getCatalogMediaReadURL",Method:http.MethodGet,
+  Path:"/businesses/{business_id}/media/{media_id}/read-url",Tags:[]string{"CatalogMedia"},
+  Summary:"Get short-lived private catalog image access URL",Security:dashboardSecurity},
+  CatalogMediaReadInput{},Single[CatalogMediaReadView]{})
  register(api,dispatcher,huma.Operation{OperationID:"uploadCatalogImage",Method:http.MethodPost,
   Path:"/businesses/{business_id}/media/uploads",Tags:[]string{"CatalogMedia"},
   Summary:"Upload merchant catalog image to private storage",Security:dashboardSecurity,DefaultStatus:http.StatusCreated},
