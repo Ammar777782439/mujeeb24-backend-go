@@ -91,6 +91,10 @@ func TestBackblazeB2SignsItsRegionAndEndpoint(t *testing.T) {
 			if !strings.Contains(req.Header.Get("Authorization"), "/20261030/us-west-004/s3/aws4_request") {
 				t.Fatal("B2 signing scope must match the actual region")
 			}
+			n, err := io.Copy(io.Discard, req.Body)
+			if err != nil || n != int64(len("sample")) {
+				t.Fatalf("Backblaze test transport failed to read exact upload body bytes=%d err=%v", n, err)
+			}
 			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
 		})},
 	}
