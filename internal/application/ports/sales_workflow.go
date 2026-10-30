@@ -89,7 +89,8 @@ type InteractiveButton struct {
 }
 type InteractiveMessage struct {
 	MediaID     string              `json:"media_id,omitempty"`
-	MediaLinkID string              `json:"media_link_id,omitempty"`
+	MediaLinkID  string              `json:"media_link_id,omitempty"`
+	MediaRequired bool              `json:"media_required,omitempty"`
 	Text        string              `json:"text"`
 	Buttons     []InteractiveButton `json:"buttons,omitempty"`
 }

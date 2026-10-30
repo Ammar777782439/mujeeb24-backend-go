@@ -187,3 +187,29 @@ photo retrieval after worker delay, old/removed links, tenant isolation,
 partial media failures, retry/idempotency and outbound delivery status.
 No such provider-account live test is represented by local HTTP mocks.
 Do not merge or deploy the feature as complete solely on a green GitHub build.
+
+## Multi-photo extension (integration branch only; not production-approved)
+
+The old one-photo limit remains **per SocialAPI REST request**, not per
+customer turn. After the validated terminal informational decision, a
+separate strict `choose_reply_media` model tool may select zero to four
+exact approved link IDs from the already selected item/variant galleries.
+Go does not classify photo intent or rematch product text. A variant gallery
+must match the validated variant exactly, avoiding a wrong-colour photo.
+
+The first selected image accompanies the model-written customer text.
+Additional photos are stored as independent `outbound_messages` +
+Outbox entries with deterministic per-photo dedupe keys, one image
+attachment per request, and independent provider IDs/statuses. Additional
+outbox entries have staggered availability (ordering is best-effort, not
+a cross-provider ordering guarantee). All obligations are committed
+atomically; one customer turn still counts as **one AI reply**. The
+`media_required` envelope flag forbids a caption-only follow-up when
+its image becomes invalid between queueing and dispatch. The original
+text reply may still fall back to text-only.
+
+Remaining release gates: real channel-by-channel SocialAPI media tests,
+live R2 tests, image delivery-status checks, partial failure recovery,
+provider order semantics and confirmation of customer-facing display.
+Do **not** flip the feature flag on in production just because code or
+unit tests compile.

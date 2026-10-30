@@ -324,6 +324,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 
 		if os.Getenv("CATALOG_MEDIA_ENABLED") == "true" {
 			service.CatalogMedia = postgres.NewCatalogMediaRepository(database)
+			if selector, ok := customerSalesDecision.(ports.CustomerMediaSelectionPort); ok {
+				service.MediaSelection = selector
+			}
 		}
 		service.CatalogBatch.GatewayFXRateYER = service.GatewayFXRateYER
 		autoReply = service

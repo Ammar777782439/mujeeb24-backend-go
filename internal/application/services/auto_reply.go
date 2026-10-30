@@ -103,6 +103,8 @@ type AutoReplyService struct {
 	OutboundRepository ports.OutboundMessageRepository
 	// CatalogMedia resolves already-validated selected references; no text search.
 	CatalogMedia ports.CatalogMediaRepository
+	// MediaSelection proposes zero to four approved gallery links after validation.
+	MediaSelection ports.CustomerMediaSelectionPort
 	// Outbox enqueues the actual send.
 	Outbox ports.OutboxStore
 	// MessageRepository records the communication message row.
@@ -452,6 +454,18 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	}
 	log.Printf("[AutoReply] CAPABILITY_AUTHORIZED business=%s conversation=%s run=%s proposed=%s effective=%s policy=%s requires_human=%t",
 		businessID, conversationID, run.ID, proposal.Capability, effective.Capability, effective.PolicyDecision, definition.RequiresHuman)
+	// Media selection is a separate bounded post-validation tool call.
+	// No media tool may trigger business execution or expand product evidence.
+	var candidateMedia []ports.CatalogMediaLink
+	if effective.PolicyDecision == "allowed" {
+		var mediaUsage ports.CustomerSalesUsageTelemetry
+		candidateMedia, mediaUsage = s.selectReplyMedia(ctx, businessID, conversationID, run.ID, command.Text, proposal)
+		out.Usage.InputTokens += mediaUsage.InputTokens
+		out.Usage.CachedTokens += mediaUsage.CachedTokens
+		out.Usage.OutputTokens += mediaUsage.OutputTokens
+		out.Usage.ModelRequests += mediaUsage.ModelRequests
+		out.LatencyMs += mediaUsage.LatencyMs
+	}
 	now := s.now()
 	decisionID := s.id()
 
@@ -615,14 +629,30 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		outboundID := s.id()
 		contentReference := EncodeInlineTextContentReference(replyText)
 		contentType := "text"
-		if s.CatalogMedia != nil && proposal.Capability == ports.CustomerSalesCapabilityRespondWithoutAction && len(proposal.Selected) == 1 && strings.TrimSpace(proposal.Selected[0].ItemID) != "" {
-			selected := proposal.Selected[0]
-			image, mediaErr := s.CatalogMedia.PrimaryForReply(txCtx, businessID, selected.ItemID, selected.VariantID)
-			if mediaErr == nil && image != nil {
-				if encoded, encodeErr := EncodeInteractiveContentReference(ports.InteractiveMessage{Text: replyText, MediaID: image.MediaID, MediaLinkID: image.ID}); encodeErr == nil {
-					contentReference = encoded
-					contentType = "mixed"
+
+		// Revalidate each selected image inside the same transaction that
+		// creates outbound obligations. The worker revalidates at dispatch.
+		approvedMedia := make([]ports.CatalogMediaLink, 0, len(candidateMedia))
+		if s.CatalogMedia != nil {
+			for _, option := range candidateMedia {
+				fresh, mediaErr := s.CatalogMedia.FindApprovedMediaLink(txCtx, businessID, option.ID)
+				if mediaErr != nil || fresh == nil || fresh.MediaID != option.MediaID ||
+					fresh.CatalogItemID != option.CatalogItemID ||
+					!mediaVariantMatches(fresh.VariantID, option.VariantID) {
+					continue
 				}
+				approvedMedia = append(approvedMedia, *fresh)
+			}
+		}
+		if len(approvedMedia) > 0 {
+			first := approvedMedia[0]
+			if encoded, encodeErr := EncodeInteractiveContentReference(ports.InteractiveMessage{
+				Text: replyText, MediaID: first.MediaID, MediaLinkID: first.ID,
+			}); encodeErr == nil {
+				contentReference = encoded
+				contentType = "mixed"
+			} else {
+				return encodeErr
 			}
 		}
 		outbound, outboundErr := s.OutboundRepository.CreatePending(txCtx, ports.OutboundMessageDraft{
@@ -679,6 +709,57 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		result.OutboundMessageID = commands.MessageID(outbound.ID)
 		result.OutboxEntryID = commands.ID(outboxEntry.ID)
 		result.Enqueued = true
+
+		// SocialAPI accepts at most one image per provider request.
+		// Queue each remaining gallery image as an independent durable
+		// outbound+outbox obligation with its own idempotency key and status.
+		// One customer turn still consumes just one commercial AI reply.
+		for i := 1; i < len(approvedMedia); i++ {
+			photo := approvedMedia[i]
+			caption := fmt.Sprintf("📷 صورة %d من %d", i+1, len(approvedMedia))
+			encoded, encodeErr := EncodeInteractiveContentReference(ports.InteractiveMessage{
+				Text: caption, MediaID: photo.MediaID, MediaLinkID: photo.ID,
+				MediaRequired: true,
+			})
+			if encodeErr != nil {
+				return encodeErr
+			}
+			photoOutboundID := s.id()
+			photoDedupe := fmt.Sprintf("%s:photo:%d:%s", dedupeKey, i, photo.ID)
+			photoOutbound, createErr := s.OutboundRepository.CreatePending(txCtx, ports.OutboundMessageDraft{
+				ID: photoOutboundID, BusinessID: businessID, ConversationID: conversationID,
+				ConversationReferenceID: reference.ID, ConnectionID: *reference.ConnectionID,
+				ProviderRef: command.ProviderRef, Channel: command.Channel, Origin: "ai",
+				Transport: "provider", ContentReference: encoded,
+				ProviderIdempotencyKey: photoDedupe,
+				CorrelationID: uuidStringPointer(command.Meta.CorrelationID),
+				CausationID: uuidStringPointer(decision.ID),
+			})
+			if createErr != nil {
+				return mapAIRepositoryError(createErr)
+			}
+			if s.MessageRepository != nil {
+				_, msgErr := s.MessageRepository.Record(txCtx, ports.CommunicationMessageDraft{
+					ID: s.id(), BusinessID: businessID, ConversationReferenceID: reference.ID,
+					OutboundMessageID: &photoOutbound.ID, Direction: "outbound", Origin: "ai",
+					Transport: "provider", ContentType: "mixed", TextContent: &caption,
+					ContentReference: encoded, Visibility: "public",
+					OccurredAt: s.now(), CreatedAt: s.now(),
+				})
+				if msgErr != nil {
+					return mapAIRepositoryError(msgErr)
+				}
+			}
+			if _, enqueueErr := s.Outbox.Enqueue(txCtx, ports.OutboxEntryDraft{
+				ID: s.id(), BusinessID: businessID, OutboundMessageID: photoOutbound.ID,
+				CommandType: OutboundSendCommandType, DedupeKey: photoDedupe,
+				AvailableAt: now.Add(time.Duration(i) * 3 * time.Second),
+				CreatedAt: now, UpdatedAt: now,
+			}); enqueueErr != nil {
+				return mapAIRepositoryError(enqueueErr)
+			}
+			log.Printf("[CatalogMedia] stage=photo_queued business=%s run=%s outbound=%s image=%d/%d", businessID, run.ID, photoOutbound.ID, i+1, len(approvedMedia))
+		}
 		// Preserve main's execution audit lifecycle, within the same transaction
 		// as durable outbound enqueue. Delivery confirmation remains separate.
 		executedRecord, execErr := s.DecisionRepository.MarkExecuted(txCtx, ports.AIDecisionExecutionPatch{

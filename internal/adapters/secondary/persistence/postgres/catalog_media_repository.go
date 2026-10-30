@@ -302,7 +302,7 @@ func (r *CatalogMediaRepository) PrimaryForReply(ctx context.Context, businessID
 	return &m, nil
 }
 
-// FindApprovedMediaLink rechecks the exact link selected at AutoReply creation,
+// FindApprovedMediaLink rechecks an exact approved gallery link at AutoReply creation,
 // including current product, variant and catalog status. Deleted/reassigned
 // photos are never sent by the delayed outbox worker.
 func (r *CatalogMediaRepository) FindApprovedMediaLink(ctx context.Context, businessID, linkID string) (*ports.CatalogMediaLink, error) {
@@ -321,7 +321,7 @@ func (r *CatalogMediaRepository) FindApprovedMediaLink(ctx context.Context, busi
     LEFT JOIN variants v ON v.business_id=l.business_id
        AND v.catalog_item_id=l.catalog_item_id AND v.id=l.variant_id
     WHERE l.business_id=$1::uuid AND l.id=$2::uuid
-      AND l.status='active' AND l.is_primary AND l.approved_at IS NOT NULL
+      AND l.status='active' AND l.approved_at IS NOT NULL
       AND a.status='ready' AND a.deleted_at IS NULL
       AND i.status='active' AND c.status='active'
       AND (l.variant_id IS NULL OR v.status='active')

@@ -65,6 +65,11 @@ func (r MujeebOutboundDeliveryResolver) Resolve(ctx context.Context, businessID,
 			}
 		}
 	}
+	if message.MediaRequired && len(delivery.Attachments) != 1 {
+		// Do not send a misleading image caption if the link was removed,
+		// the asset became unavailable, or signed R2 access failed.
+		return ports.OutboundDelivery{}, appErrors.New(appErrors.CodeInvalidState, "required catalog image became unavailable before dispatch")
+	}
 	return delivery, nil
 }
 
