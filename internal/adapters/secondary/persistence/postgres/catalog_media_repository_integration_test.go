@@ -119,6 +119,13 @@ func TestCatalogMediaTenantAndPrimaryInPostgres(t *testing.T) {
 	if err != nil || primary == nil || primary.MediaID != assetA {
 		t.Fatalf("primary resolver: %+v %v", primary, err)
 	}
+	// The exact previously-approved link may be dereferenced by the outbox
+	// only while it remains active, primary, and in a live catalog.
+	approved, err := repo.FindApprovedMediaLink(ctx, a, linkA)
+	if err != nil || approved == nil || approved.MediaID != assetA {
+		t.Fatalf("exact approved media link: %+v %v", approved, err)
+	}
+
 	// Underlying partial unique index rejects a second primary.
 	_, err = db.Pool().Exec(ctx, `INSERT INTO catalog_media_links
         (id,business_id,catalog_item_id,media_id,is_primary,approved_at)
