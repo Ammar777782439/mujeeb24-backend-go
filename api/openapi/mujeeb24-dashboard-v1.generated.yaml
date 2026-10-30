@@ -1558,6 +1558,12 @@ components:
           type: string
         fulfillment_mode:
           type: string
+        initial_media_ids:
+          items:
+            type: string
+          maxItems: 12
+          nullable: true
+          type: array
         initial_offer:
           $ref: "#/components/schemas/CreateOfferRequest"
         item_type:
