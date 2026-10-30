@@ -53,9 +53,9 @@ func (r MujeebOutboundDeliveryResolver) Resolve(ctx context.Context, businessID,
 		return ports.OutboundDelivery{}, appErrors.New(appErrors.CodeInvalidState, "outbound content is not a supported inline text reference")
 	}
 	delivery:=ports.OutboundDelivery{ConnectionID: connection.ID, ProviderAccountID: providerAccountReferenceValue(connection), ProviderConversationID: reference.ResourceID, Text: message.Text, Buttons: message.Buttons, Channel: connection.Channel, IdempotencyKey: outbound.ProviderIdempotencyKey}
-	if message.MediaID!="" && r.CatalogMedia!=nil && r.MediaObjects!=nil {
-		link,linkErr:=r.CatalogMedia.FindApprovedMediaLink(ctx,businessID,message.MediaID)
-		if linkErr==nil && link!=nil {
+	if message.MediaID!="" && message.MediaLinkID!="" && r.CatalogMedia!=nil && r.MediaObjects!=nil {
+		link,linkErr:=r.CatalogMedia.FindApprovedMediaLink(ctx,businessID,message.MediaLinkID)
+		if linkErr==nil && link!=nil && link.MediaID==message.MediaID {
 			asset,assetErr:=r.CatalogMedia.GetAsset(ctx,businessID,message.MediaID)
 			if assetErr==nil && asset.Status=="ready" && asset.DeletedAt==nil {
 				url,urlErr:=r.MediaObjects.PresignGet(ctx,asset.StorageKey,45*time.Minute)
