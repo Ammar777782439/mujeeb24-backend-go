@@ -41,6 +41,7 @@ func BuildAPIWithHandlersAndMiddleware(handlers DashboardOperationHandler, middl
 		api.UseMiddleware(middlewares...)
 	}
 	registerCoreOperations(api, handlers)
+	registerCatalogMediaOperations(api, handlers)
 	registerExtendedOperations(api, handlers)
 	registerSystemOperations(api, handlers)
 	registerRemainingDashboardOperations(api, handlers)

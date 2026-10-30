@@ -877,6 +877,22 @@ components:
         - variant_statuses
         - offer_statuses
       type: object
+    CatalogImageUploadRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/CatalogImageUploadRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        data_base64:
+          description: JPEG or PNG binary, base64-encoded. Up to 10 MiB decoded.
+          minLength: 1
+          type: string
+      required:
+        - data_base64
+      type: object
     CatalogItem:
       additionalProperties: false
       properties:
@@ -925,6 +941,129 @@ components:
         - availability_mode
         - fulfillment_mode
         - requires_confirmation
+        - resource_version
+      type: object
+    CatalogMediaAssetView:
+      additionalProperties: false
+      properties:
+        height:
+          format: int64
+          type: integer
+        id:
+          type: string
+        mime_type:
+          type: string
+        size_bytes:
+          format: int64
+          type: integer
+        status:
+          type: string
+        width:
+          format: int64
+          type: integer
+      required:
+        - id
+        - mime_type
+        - size_bytes
+        - width
+        - height
+        - status
+      type: object
+    CatalogMediaAttachRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/CatalogMediaAttachRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        alt_text:
+          maxLength: 500
+          type: string
+        is_primary:
+          type: boolean
+        media_id:
+          format: uuid
+          type: string
+        sort_order:
+          format: int64
+          minimum: 0
+          type: integer
+      required:
+        - media_id
+        - is_primary
+        - sort_order
+        - alt_text
+      type: object
+    CatalogMediaListOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/CatalogMediaListOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/CatalogMediaView"
+          nullable: true
+          type: array
+      required:
+        - data
+      type: object
+    CatalogMediaReadView:
+      additionalProperties: false
+      properties:
+        expires_in_seconds:
+          format: int64
+          type: integer
+        height:
+          format: int64
+          type: integer
+        mime_type:
+          type: string
+        url:
+          type: string
+        width:
+          format: int64
+          type: integer
+      required:
+        - url
+        - expires_in_seconds
+        - mime_type
+        - width
+        - height
+      type: object
+    CatalogMediaView:
+      additionalProperties: false
+      properties:
+        alt_text:
+          type: string
+        catalog_item_id:
+          type: string
+        id:
+          type: string
+        is_primary:
+          type: boolean
+        media_id:
+          type: string
+        resource_version:
+          format: int64
+          type: integer
+        sort_order:
+          format: int64
+          type: integer
+        variant_id:
+          type: string
+      required:
+        - id
+        - media_id
+        - catalog_item_id
+        - is_primary
+        - sort_order
+        - alt_text
         - resource_version
       type: object
     ChannelConnection:
@@ -1419,6 +1558,12 @@ components:
           type: string
         fulfillment_mode:
           type: string
+        initial_media_ids:
+          items:
+            type: string
+          maxItems: 12
+          nullable: true
+          type: array
         initial_offer:
           $ref: "#/components/schemas/CreateOfferRequest"
         item_type:
@@ -4376,6 +4521,57 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/CatalogItem"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleCatalogMediaAssetViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleCatalogMediaAssetViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/CatalogMediaAssetView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleCatalogMediaReadViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleCatalogMediaReadViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/CatalogMediaReadView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleCatalogMediaViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleCatalogMediaViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/CatalogMediaView"
         request_id:
           type: string
       required:
@@ -7735,6 +7931,329 @@ paths:
       summary: Update reusable merchant reply
       tags:
         - Inbox
+  /businesses/{business_id}/catalog-items/{item_id}/media:
+    get:
+      operationId: listCatalogMedia
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: item_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - description: Optional exact variant; omitted for product gallery
+          explode: false
+          in: query
+          name: variant_id
+          schema:
+            description: Optional exact variant; omitted for product gallery
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogMediaListOutputBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List product or variant image gallery
+      tags:
+        - CatalogMedia
+    post:
+      operationId: attachCatalogMedia
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: item_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - explode: false
+          in: query
+          name: variant_id
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CatalogMediaAttachRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleCatalogMediaViewBody"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Attach approved image to product or variant
+      tags:
+        - CatalogMedia
+  /businesses/{business_id}/catalog-items/{item_id}/media/{link_id}:
+    delete:
+      operationId: removeCatalogMedia
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: item_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: link_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - explode: false
+          in: query
+          name: variant_id
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleCatalogMediaViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Remove image link from product or variant
+      tags:
+        - CatalogMedia
+  /businesses/{business_id}/catalog-items/{item_id}/media/{link_id}/primary:
+    post:
+      operationId: setCatalogMediaPrimary
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: item_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: link_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - explode: false
+          in: query
+          name: variant_id
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleCatalogMediaViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Select product or variant gallery primary image
+      tags:
+        - CatalogMedia
   /businesses/{business_id}/catalog-items/{item_id}/offers:
     get:
       operationId: listOffers
@@ -11853,6 +12372,146 @@ paths:
       summary: List lead scores
       tags:
         - Leads
+  /businesses/{business_id}/media/uploads:
+    post:
+      operationId: uploadCatalogImage
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CatalogImageUploadRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleCatalogMediaAssetViewBody"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Upload merchant catalog image to private storage
+      tags:
+        - CatalogMedia
+  /businesses/{business_id}/media/{media_id}/read-url:
+    get:
+      operationId: getCatalogMediaReadURL
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: media_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleCatalogMediaReadViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Get short-lived private catalog image access URL
+      tags:
+        - CatalogMedia
   /businesses/{business_id}/merchant-ai/executions:
     post:
       operationId: merchantAIExecute

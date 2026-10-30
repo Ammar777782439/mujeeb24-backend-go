@@ -12,6 +12,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantassist"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/queries"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/ai/contracts"
 )
 
@@ -24,6 +25,8 @@ type PlatformAccessChecker interface {
 }
 
 type Dependencies struct {
+	CatalogMediaService          services.CatalogMediaService
+	CatalogImageUpload           services.CatalogImageUploadService
 	SalesAdmin                   ports.SalesAdminPort
 	Scope                        ScopeProvider
 	PlatformAccess               PlatformAccessChecker
@@ -362,6 +365,9 @@ func singleMessage(v commands.MessageView) *contract.Single[contract.Message] {
 // never through a contract-local generic handler.
 func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (any, error) {
 	ctx = context.WithValue(ctx, operationIDContextKey{}, operationID)
+	if result, handled := s.dispatchCatalogMedia(ctx, operationID, input); handled {
+		return dispatchResult(result)
+	}
 	// Platform operations (operationID starts with "platform") are dispatched
 	// FIRST so they bypass merchant requireScope (which would 403 a platform
 	// super admin because they have no business_memberships row).

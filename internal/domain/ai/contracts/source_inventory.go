@@ -24,7 +24,7 @@ type TableSourceRecord struct {
 }
 
 // sourceInventory is an explicit deny-by-default census from migrations
-// 000001..000081 on backend main. 000053 drops legacy Chatwoot tables.
+// 000001..000083 on backend main. 000053 drops legacy Chatwoot tables.
 // Adding any CREATE TABLE in a future migration requires updating this list
 // and auditing its columns before any AI projection becomes accessible.
 var sourceInventory = []TableSourceRecord{
@@ -108,6 +108,9 @@ var sourceInventory = []TableSourceRecord{
 	{Table: "subscription_addon_payments", IntroducedMigration: 77, RemovedMigration: 0, Domain: "billing", Disposition: SourceProhibited},
 	{Table: "subscription_addons", IntroducedMigration: 77, RemovedMigration: 0, Domain: "billing", Disposition: SourceProjectionCandidate},
 	{Table: "subscription_channel_pass_capacity_approvals", IntroducedMigration: 78, RemovedMigration: 0, Domain: "billing", Disposition: SourceInternalOnly},
+	// Media storage keys and private assets are never direct AI sources.
+	{Table: "media_assets", IntroducedMigration: 83, RemovedMigration: 0, Domain: "media", Disposition: SourceInternalOnly},
+	{Table: "catalog_media_links", IntroducedMigration: 83, RemovedMigration: 0, Domain: "media", Disposition: SourceInternalOnly},
 }
 
 // SourceInventory returns a defensive copy to prevent accidental mutation

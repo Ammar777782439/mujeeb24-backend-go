@@ -2,6 +2,11 @@ package ports
 
 import "context"
 
+type OutboundAttachment struct {
+	URL  string
+	Type string
+}
+
 type OutboundDelivery struct {
 	Channel                string
 	Buttons                []InteractiveButton
@@ -9,6 +14,7 @@ type OutboundDelivery struct {
 	ProviderAccountID      string
 	ProviderConversationID string
 	Text                   string
+	Attachments            []OutboundAttachment
 	IdempotencyKey         string
 }
 
