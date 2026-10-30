@@ -133,20 +133,23 @@ func merchantCatalogWireFeedback(raw string) string {
 		}
 	}
 	for i, def := range w.AttributeDefinitions {
-		if def.DataType != "select" && def.DataType != "multi_select" {
-			continue
-		}
-		var rules struct {
-			Enum []json.RawMessage `json:"enum"`
-		}
-		if json.Unmarshal([]byte(def.ValidationRulesJSON), &rules) == nil && len(rules.Enum) >= 1 && len(rules.Enum) <= 100 {
-			continue
-		}
 		name := fmt.Sprintf("attribute_definitions[%d]", i)
 		if merchantCatalogSafeRepairKey.MatchString(def.Key) {
 			name += "." + def.Key
 		}
-		add(name + ": select/multi_select needs explicit nonempty enum of merchant-stated or evidence-backed values; otherwise ask_merchant")
+		var rules struct {
+			Enum []json.RawMessage `json:"enum"`
+		}
+		if strings.TrimSpace(def.ValidationRulesJSON) == "" ||
+			json.Unmarshal([]byte(def.ValidationRulesJSON), &rules) != nil ||
+			!strings.HasPrefix(strings.TrimSpace(def.ValidationRulesJSON), "{") {
+			add(name + ".validation_rules_json: must be a valid nonempty JSON object string, such as {} when no constraints apply")
+		}
+		if def.DataType == "select" || def.DataType == "multi_select" {
+			if len(rules.Enum) == 0 || len(rules.Enum) > 100 {
+				add(name + ": select/multi_select needs explicit nonempty enum of merchant-stated or evidence-backed values; otherwise ask_merchant")
+			}
+		}
 	}
 	if len(issues) == 0 {
 		return fallback
