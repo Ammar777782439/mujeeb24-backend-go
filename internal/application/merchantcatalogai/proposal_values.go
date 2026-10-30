@@ -44,6 +44,7 @@ func validateProposalValues(p Proposal) error {
 				value, path string
 				allowed     map[string]string
 			}{
+				{offer.PricingMode, "offer.pricing_mode", d.PricingModes},
 				{offer.AvailabilityMode, "offer.availability_mode", d.AvailabilityModes},
 				{offer.AvailabilityStatus, "offer.availability_status", d.AvailabilityStatuses},
 				{offer.FulfillmentMode, "offer.fulfillment_mode", d.FulfillmentModes},
@@ -65,7 +66,6 @@ func validateProposalValues(p Proposal) error {
 			value, path string
 			allowed     map[string]string
 		}{
-			{c.PricingMode, "create.pricing_mode", d.PricingModes},
 			{c.AvailabilityMode, "create.availability_mode", d.AvailabilityModes},
 			{c.FulfillmentMode, "create.fulfillment_mode", d.FulfillmentModes},
 		} {
@@ -97,7 +97,6 @@ func validateProposalValues(p Proposal) error {
 			path    string
 			allowed map[string]string
 		}{
-			{u.Changes.PricingMode, "changes.pricing_mode", d.PricingModes},
 			{u.Changes.AvailabilityMode, "changes.availability_mode", d.AvailabilityModes},
 			{u.Changes.FulfillmentMode, "changes.fulfillment_mode", d.FulfillmentModes},
 			{u.Changes.Status, "changes.status", d.ItemStatuses},
