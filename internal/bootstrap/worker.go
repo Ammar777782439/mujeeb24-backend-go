@@ -37,7 +37,7 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 	outbox := postgres.NewPostgresOutboxStore(database)
 	runtime := &WorkerRuntime{Database: database, EventStore: postgres.NewInboundEventStore(database), Outbox: outbox, SocialAPI: external.SocialAPI, Expiry: postgres.NewSubscriptionRepository(database), PollInterval: cfg.WorkerPollInterval, CycleTimeout: cfg.ShutdownTimeout, BatchSize: cfg.WorkerBatchSize, WorkerOwner: cfg.WorkerOwner}
 	var objects ports.MediaObjectStorage
-	if os.Getenv("R2_ACCOUNT_ID") != "" && os.Getenv("R2_BUCKET") != "" && os.Getenv("R2_ACCESS_KEY_ID") != "" && os.Getenv("R2_SECRET_ACCESS_KEY") != "" {
+	if os.Getenv("CATALOG_MEDIA_ENABLED") == "true" && os.Getenv("R2_ACCOUNT_ID") != "" && os.Getenv("R2_BUCKET") != "" && os.Getenv("R2_ACCESS_KEY_ID") != "" && os.Getenv("R2_SECRET_ACCESS_KEY") != "" {
 		objects = &r2.Client{AccountID: os.Getenv("R2_ACCOUNT_ID"), Bucket: os.Getenv("R2_BUCKET"), AccessKeyID: os.Getenv("R2_ACCESS_KEY_ID"), SecretAccessKey: os.Getenv("R2_SECRET_ACCESS_KEY")}
 	}
 	if external.SocialAPI != nil {
