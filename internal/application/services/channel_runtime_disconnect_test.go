@@ -410,7 +410,6 @@ func TestRemoveChannelDisconnectsProviderPurgesHistoryAndArchives(t *testing.T) 
 	}
 }
 
-
 func TestRemoveChannelFailsClosedWhenProviderDisconnectFails(t *testing.T) {
 	record := ports.ChannelConnectionRecord{
 		ID: "conn-1", BusinessID: "biz-1", ProviderReference: "socialapi",
@@ -425,12 +424,14 @@ func TestRemoveChannelFailsClosedWhenProviderDisconnectFails(t *testing.T) {
 	}}
 	_, err := service.Handle(context.Background(), commands.RemoveChannelCommand{
 		Meta: commands.CommandMeta{
-			Actor: commands.ActorContext{BusinessID: "biz-1", PrincipalID: "p-1", Role: "owner"},
+			Actor:           commands.ActorContext{BusinessID: "biz-1", PrincipalID: "p-1", Role: "owner"},
 			ExpectedVersion: resourceVersion("5"), IdempotencyKey: "remove-1",
 		},
 		ConnectionID: "conn-1", Confirmation: "REMOVE_CHANNEL_AND_PURGE_DATA",
 	})
-	if err == nil { t.Fatal("provider failure must be surfaced") }
+	if err == nil {
+		t.Fatal("provider failure must be surfaced")
+	}
 	if history.purgeCalls != 0 || runtime.transitionCalls != 0 {
 		t.Fatalf("provider error must not purge or archive: purge=%d archive=%d", history.purgeCalls, runtime.transitionCalls)
 	}
@@ -449,13 +450,17 @@ func TestRemoveChannelDoesNotArchiveOnPurgeFailure(t *testing.T) {
 	}}
 	_, err := service.Handle(context.Background(), commands.RemoveChannelCommand{
 		Meta: commands.CommandMeta{
-			Actor: commands.ActorContext{BusinessID: "biz-1", PrincipalID: "p-1", Role: "owner"},
+			Actor:           commands.ActorContext{BusinessID: "biz-1", PrincipalID: "p-1", Role: "owner"},
 			ExpectedVersion: resourceVersion("7"), IdempotencyKey: "remove-7",
 		},
 		ConnectionID: "conn-1", Confirmation: "REMOVE_CHANNEL_AND_PURGE_DATA",
 	})
-	if err == nil { t.Fatal("purge failure must be returned") }
-	if runtime.transitionCalls != 0 { t.Fatal("must not archive channel if history purge failed") }
+	if err == nil {
+		t.Fatal("purge failure must be returned")
+	}
+	if runtime.transitionCalls != 0 {
+		t.Fatal("must not archive channel if history purge failed")
+	}
 }
 
 func TestRemoveChannelArchivedRetryResumesProviderBrandCleanup(t *testing.T) {
@@ -473,10 +478,12 @@ func TestRemoveChannelArchivedRetryResumesProviderBrandCleanup(t *testing.T) {
 		BrandCleanup: brand, BrandProvider: provider,
 	}}
 	_, err := service.Handle(context.Background(), commands.RemoveChannelCommand{
-		Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "biz-1", PrincipalID: "p-1", Role: "owner"}},
+		Meta:         commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "biz-1", PrincipalID: "p-1", Role: "owner"}},
 		ConnectionID: "conn-1", Confirmation: "REMOVE_CHANNEL_AND_PURGE_DATA",
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if provider.deleteCalls != 1 || brand.completeCalls != 1 {
 		t.Fatalf("archived retry must resume Brand cleanup, got delete=%d complete=%d", provider.deleteCalls, brand.completeCalls)
 	}
