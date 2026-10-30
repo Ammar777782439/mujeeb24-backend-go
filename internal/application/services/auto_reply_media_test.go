@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -166,7 +167,7 @@ func TestResolverDoesNotSendCaptionAloneWhenRequiredImageUnavailable(t *testing.
 			ProviderAccountReference: &account, Status: "active",
 		}},
 	}
-	if _, err := resolver.Resolve(context.Background(), "business-1", "outbound"); err == nil {
-		t.Fatal("missing media storage must not send a caption-only image message")
+	if _, err := resolver.Resolve(context.Background(), "business-1", "outbound"); !errors.Is(err, ErrRequiredCatalogMediaUnavailable) {
+		t.Fatalf("missing media storage must produce typed required-media failure, got %v", err)
 	}
 }

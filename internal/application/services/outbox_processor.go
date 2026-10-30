@@ -57,10 +57,14 @@ func (p OutboxProcessor) Process(ctx context.Context, entryID string) error {
 	}
 	delivery, err := p.Resolver.Resolve(ctx, record.BusinessID, record.OutboundMessageID)
 	if err != nil {
-		log.Printf("[Worker] DEAD_LETTER outbox=%s code=outbound_mapping_missing err=%v", record.ID, err)
-		return p.deadLetter(ctx, record, "outbound_mapping_missing")
+		reason := "outbound_mapping_missing"
+		if errors.Is(err, ErrRequiredCatalogMediaUnavailable) {
+			reason = "required_catalog_media_unavailable"
+		}
+		log.Printf("[Worker] DEAD_LETTER outbox=%s outbound=%s code=%s", record.ID, record.OutboundMessageID, reason)
+		return p.deadLetter(ctx, record, reason)
 	}
-	log.Printf("[Worker] SENDING outbox=%s to=%s", record.ID, delivery.ProviderConversationID)
+	log.Printf("[Worker] PROVIDER_SEND_STARTED outbox=%s outbound=%s channel=%s attachments=%d", record.ID, record.OutboundMessageID, delivery.Channel, len(delivery.Attachments))
 	result, err := p.Provider.SendMessage(ctx, ports.SendMessageCommand{ConnectionID: delivery.ConnectionID, ProviderAccountID: delivery.ProviderAccountID, ProviderConversationID: delivery.ProviderConversationID, Text: delivery.Text, Buttons: delivery.Buttons, Attachments: delivery.Attachments, Channel: delivery.Channel, IdempotencyKey: delivery.IdempotencyKey})
 	if err != nil {
 		log.Printf("[Worker] DEAD_LETTER outbox=%s code=provider_send_outcome_unknown err=%v", record.ID, err)
@@ -85,7 +89,7 @@ func (p OutboxProcessor) Process(ctx context.Context, entryID string) error {
 		log.Printf("[Worker] COMPLETE_ERROR outbox=%s err=%v", record.ID, err)
 		return err
 	}
-	log.Printf("[Worker] SENT outbox=%s provider_msg_id=%s", record.ID, result.ProviderMessageID)
+	log.Printf("[Worker] PROVIDER_ACCEPTED outbox=%s outbound=%s provider_msg_id=%s attachments=%d delivery_confirmed=false", record.ID, record.OutboundMessageID, result.ProviderMessageID, len(delivery.Attachments))
 	return nil
 }
 

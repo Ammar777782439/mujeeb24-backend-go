@@ -2,12 +2,18 @@ package services
 
 import (
 	"context"
+	"errors"
+	"log"
 	"strings"
 	"time"
 
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
+
+// ErrRequiredCatalogMediaUnavailable means a selected follow-up image became
+// unresolvable; the worker must dead-letter it rather than send a caption alone.
+var ErrRequiredCatalogMediaUnavailable = errors.New("required catalog media unavailable")
 
 type MujeebOutboundDeliveryResolver struct {
 	OutboundRepository   ports.OutboundMessageRepository
@@ -68,7 +74,15 @@ func (r MujeebOutboundDeliveryResolver) Resolve(ctx context.Context, businessID,
 	if message.MediaRequired && len(delivery.Attachments) != 1 {
 		// Do not send a misleading image caption if the link was removed,
 		// the asset became unavailable, or signed R2 access failed.
-		return ports.OutboundDelivery{}, appErrors.New(appErrors.CodeInvalidState, "required catalog image became unavailable before dispatch")
+		log.Printf("[CatalogMedia] stage=dispatch_rejected business=%s outbound=%s media_link=%s reason=required_image_unavailable", businessID, outboundMessageID, message.MediaLinkID)
+		return ports.OutboundDelivery{}, ErrRequiredCatalogMediaUnavailable
+	}
+	if message.MediaLinkID != "" {
+		if len(delivery.Attachments) == 0 {
+			log.Printf("[CatalogMedia] stage=dispatch_text_fallback business=%s outbound=%s media_link=%s reason=photo_unavailable", businessID, outboundMessageID, message.MediaLinkID)
+		} else {
+			log.Printf("[CatalogMedia] stage=dispatch_image_ready business=%s outbound=%s media_link=%s channel=%s", businessID, outboundMessageID, message.MediaLinkID, delivery.Channel)
+		}
 	}
 	return delivery, nil
 }
