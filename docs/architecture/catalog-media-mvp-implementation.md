@@ -140,3 +140,50 @@ is **false by default** and should remain false until release gates pass.
 - Media UI is a frontend task and not part of this backend-only branch.
 
 Do **not** deploy this draft PR to production based on CI success alone.
+
+
+## Running the implemented Media MVP (private R2; API and Worker)
+
+Media remains disabled unless `CATALOG_MEDIA_ENABLED=true` is set.
+Configure **both the Go API and Go Worker** with the same settings:
+
+```text
+CATALOG_MEDIA_ENABLED=true
+R2_ACCOUNT_ID=<Cloudflare-account-ID>
+R2_BUCKET=<private-bucket-name>
+R2_ACCESS_KEY_ID=<R2-object-access-key>
+R2_SECRET_ACCESS_KEY=<R2-object-secret>
+```
+
+Provision a *private* bucket. Never put R2 secrets into the React build,
+repository, CI logs or returned JSON. Scope the R2 API token to the required
+bucket and operations; store credentials as server-side deployment secrets.
+
+The first Backend MVP upload endpoint is an authenticated JSON/base64 POST,
+`/api/v1/businesses/{business_id}/media/uploads`, with a 10 MiB decoded
+limit and server-side JPEG/PNG decoding; WebP is not accepted by this first
+implementation. The API replies with an opaque `media_id`. Merchant gallery
+operations use `/api/v1/businesses/{business_id}/catalog-items/{item_id}/media`
+with an optional `variant_id`; product creation accepts up to twelve
+`initial_media_ids` and links them in the commercial DB transaction.
+
+`GET /api/v1/businesses/{business_id}/media/{media_id}/read-url` returns
+a short-lived signed GET URL. Signed links are bearer credentials; do not log,
+cache publicly or persist them in the database. Media is not public by default.
+
+Outbound AutoReply continues to use the validated DeepSeek
+`evaluate_full_catalog` result. On a single selected catalog item it can
+resolve a matching approved primary link, save `media_id` and `media_link_id`
+with the outbound text and resolve a fresh R2 URL at worker dispatch.
+Media is optional: unavailable/invalidated links fall back to text. The current
+SocialAPI adapter serializes one image under `attachments` using the
+documented `{type:"image", source_type:"url", source:"https://..."}` shape.
+Do not claim a customer received the photo until provider delivery events show
+it; provider acceptance is not delivery.
+
+**Rollout criteria**: run real R2 PUT + presigned GET against the configured
+bucket and a real SocialAPI channel in a non-production environment, verify
+photo retrieval after worker delay, old/removed links, tenant isolation,
+partial media failures, retry/idempotency and outbound delivery status.
+No such provider-account live test is represented by local HTTP mocks.
+Do not merge or deploy the feature as complete solely on a green GitHub build.
