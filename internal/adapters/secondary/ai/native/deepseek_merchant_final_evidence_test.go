@@ -38,7 +38,7 @@ func merchantFinalRequestWithToolHistory(t *testing.T, toolID string) Request {
 			},
 		},
 		"max_tokens": 2048,
-		"stream": false,
+		"stream":     false,
 		"response_format": map[string]any{
 			"type": "json_schema", "json_schema": map[string]any{
 				"name": "merchant_catalog_wire", "strict": true, "schema": schema,
