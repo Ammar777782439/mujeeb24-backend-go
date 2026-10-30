@@ -74,3 +74,69 @@ Go product text search, and changes to conversation summary/focus.
 
 The above are a **foundation**, not the complete media feature; do not enable
 uploads or image replies until M1/M2 wiring, integration tests and rollout gates pass.
+
+## Implemented HTTP API (draft, feature gated)
+
+All operations are protected by bearer authentication, merchant membership,
+and `catalog:read` / `catalog:write` permissions. No business ID can be
+supplied by the model. Base path: `/api/v1/businesses/{business_id}`.
+
+| Method | Path | Permission |
+|---|---|---|
+| POST | `/media/uploads` | `catalog:write` |
+| GET | `/media/{media_id}/read-url` | `catalog:read` |
+| GET | `/catalog-items/{item_id}/media?variant_id=` | `catalog:read` |
+| POST | `/catalog-items/{item_id}/media?variant_id=` | `catalog:write` |
+| POST | `/catalog-items/{item_id}/media/{link_id}/primary?variant_id=` | `catalog:write` |
+| DELETE | `/catalog-items/{item_id}/media/{link_id}?variant_id=` | `catalog:write` |
+
+Upload request currently uses `{"data_base64":"..."}`. Go applies a 15 MiB
+request-body limit, decodes no more than 10 MiB, validates full JPEG/PNG
+stream and limits pixel count. WebP is **not** yet accepted by this endpoint.
+Uploaded image bytes are stored privately via R2 SigV4 and object MIME metadata.
+Merchant preview URLs expire after 10 minutes.
+
+### Required environment (API and worker)
+
+```text
+CATALOG_MEDIA_ENABLED=false
+R2_ACCOUNT_ID=
+R2_BUCKET=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+```
+
+All R2 credentials belong only in server-side secrets. Never expose them to
+React. Both API and worker must receive consistent config. `CATALOG_MEDIA_ENABLED`
+is **false by default** and should remain false until release gates pass.
+
+### Reply flow
+
+- The existing DeepSeek `evaluate_full_catalog` remains unchanged.
+- If the terminal informational reply contains exactly **one validated**
+  selected item/variant, Go may resolve that gallery's primary approved photo.
+- The outbound message stores both `media_id` and exact `media_link_id`
+  in the versioned inline-message envelope, not a presigned URL.
+- At Outbox dispatch Go checks that exact link is still active, primary and
+  approved and the product/catalog/variant and underlying asset remain active.
+- Only then it issues a 45-minute signed R2 read URL and sends
+  `text + attachments[0]` in one SocialAPI REST call.
+- If the image has been removed or R2 isn't configured, text still sends.
+- A SocialAPI error after sending a combined message has an unknown outcome:
+  do not naively retry another text-only send and risk duplicates.
+
+### Unverified release gates
+
+- **No live R2 credentials have been supplied for an upload and download test.**
+- **No live SocialAPI account/provider media delivery has been verified.**
+- A live channel-specific WhatsApp/Instagram/Facebook media test is required.
+- Upload currently uses base64 JSON, not an efficient streaming binary API;
+  a future raw-upload transport may be needed for high throughput.
+- End-to-end atomic item + first offer + staged media links at item creation
+  remains a separate integration item.
+- Gallery optimistic `If-Match` must be fully wired before concurrent
+  merchant-editor operations are considered production-ready.
+- Pending R2 upload cleanup and unused-asset retention need a reconciler.
+- Media UI is a frontend task and not part of this backend-only branch.
+
+Do **not** deploy this draft PR to production based on CI success alone.
