@@ -13,7 +13,7 @@ import (
 func TestNativeMerchantMultipleReadToolsInOneRound(t *testing.T) {
 	caps := &nativeMerchantReadStub{}
 	round := 0
-	provider := &nativeContractProvider{name: "deepseek"}
+	provider := &nativeContractProvider{name: "gemini"}
 	provider.call = func(req native.Request) (native.Response, error) {
 		round++
 		var body struct {
@@ -70,7 +70,7 @@ func TestNativeMerchantMultipleReadToolsInOneRound(t *testing.T) {
 
 func TestNativeMerchantRecoversInvalidCreateWithClarification(t *testing.T) {
 	round := 0
-	provider := &nativeContractProvider{name: "deepseek"}
+	provider := &nativeContractProvider{name: "gemini"}
 	provider.call = func(req native.Request) (native.Response, error) {
 		round++
 		var content string
