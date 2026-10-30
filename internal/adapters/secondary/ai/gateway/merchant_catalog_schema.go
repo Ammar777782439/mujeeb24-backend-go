@@ -132,7 +132,7 @@ func merchantCatalogProposalSchema() map[string]any {
 				"name": optionalString(), "status": map[string]any{"type": "string", "description": "Commercial lifecycle state. Omit unless merchant explicitly requested a lifecycle change. Do not reset an existing item to draft during an ordinary edit."}, "attributes": attributeObjectField(),
 				"item_type":         map[string]any{"type": "string", "description": "Entity kind from the canonical contract, not a variant name, audience, category or specification. Omit unless the merchant explicitly requested changing the entity kind."},
 				"short_description": optionalString(), "long_description": optionalString(),
-				"availability_mode": optionalString(),
+				"availability_mode":     optionalString(),
 				"fulfillment_mode":      optionalString(),
 				"requires_confirmation": map[string]any{"type": "boolean"},
 			}},
