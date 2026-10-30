@@ -56,14 +56,20 @@ func (s *Server) dispatchCatalogMedia(ctx context.Context, operationID string, i
 	business := string(actor.BusinessID)
 	switch in := input.(type) {
 	case *contract.CatalogMediaReadInput:
-		if s.deps.CatalogImageUpload.Objects == nil {return huma.Error503ServiceUnavailable("private image storage is not configured"),true}
-		asset,err:=s.deps.CatalogMediaService.Media.GetAsset(ctx,business,string(in.MediaID))
-		if err!=nil||asset.Status!="ready"||asset.DeletedAt!=nil{return huma.Error404NotFound("media not found"),true}
-		u,err:=s.deps.CatalogImageUpload.Objects.PresignGet(ctx,asset.StorageKey,10*time.Minute)
-		if err!=nil{return huma.Error503ServiceUnavailable("cannot access private image"),true}
-		out:=&contract.Single[contract.CatalogMediaReadView]{}
-		out.Body.Data=contract.CatalogMediaReadView{URL:u,ExpiresInSeconds:600,MimeType:asset.MimeType,Width:asset.Width,Height:asset.Height}
-		return out,true
+		if s.deps.CatalogImageUpload.Objects == nil {
+			return huma.Error503ServiceUnavailable("private image storage is not configured"), true
+		}
+		asset, err := s.deps.CatalogMediaService.Media.GetAsset(ctx, business, string(in.MediaID))
+		if err != nil || asset.Status != "ready" || asset.DeletedAt != nil {
+			return huma.Error404NotFound("media not found"), true
+		}
+		u, err := s.deps.CatalogImageUpload.Objects.PresignGet(ctx, asset.StorageKey, 10*time.Minute)
+		if err != nil {
+			return huma.Error503ServiceUnavailable("cannot access private image"), true
+		}
+		out := &contract.Single[contract.CatalogMediaReadView]{}
+		out.Body.Data = contract.CatalogMediaReadView{URL: u, ExpiresInSeconds: 600, MimeType: asset.MimeType, Width: asset.Width, Height: asset.Height}
+		return out, true
 	case *contract.CatalogImageUploadInput:
 		if s.deps.CatalogImageUpload.Objects == nil {
 			return huma.Error503ServiceUnavailable("private image storage is not configured"), true
