@@ -191,11 +191,9 @@ func (s RemoveChannelCommandService) Handle(ctx context.Context, command command
 	if reason == "" {
 		reason = "user_channel_removal"
 	}
-	expected, err := parseBusinessExpectedVersion(command.Meta.ExpectedVersion)
-	if err != nil {
-		return commands.ChannelConnectionResult{}, err
-	}
-
+	// Fetch the authoritative record first. An already archived connection
+	// can complete a pending provider cleanup on a safe repeated request even
+	// if the client no longer holds its previous resource version.
 	record, err := s.Reader.GetByID(ctx, string(command.Meta.Actor.BusinessID), string(command.ConnectionID))
 	if err != nil {
 		return commands.ChannelConnectionResult{}, err
@@ -209,6 +207,10 @@ func (s RemoveChannelCommandService) Handle(ctx context.Context, command command
 			return result, appErrors.New(appErrors.CodeExternalDependency, "channel removed locally; provider Brand cleanup is pending, retry removal")
 		}
 		return result, nil
+	}
+	expected, err := parseBusinessExpectedVersion(command.Meta.ExpectedVersion)
+	if err != nil {
+		return commands.ChannelConnectionResult{}, err
 	}
 	if record.ResourceVersion != expected {
 		return commands.ChannelConnectionResult{}, appErrors.New(appErrors.CodeConflict, "stale channel connection resource version")
