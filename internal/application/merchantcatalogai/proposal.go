@@ -47,7 +47,6 @@ type ItemCreate struct {
 	ItemType             string          `json:"item_type"`
 	ShortDescription     *string         `json:"short_description,omitempty"`
 	LongDescription      *string         `json:"long_description,omitempty"`
-	PricingMode          string          `json:"pricing_mode"`
 	AvailabilityMode     string          `json:"availability_mode"`
 	FulfillmentMode      string          `json:"fulfillment_mode"`
 	RequiresConfirmation bool            `json:"requires_confirmation"`
@@ -62,7 +61,6 @@ type ItemChanges struct {
 	ShortDescription     *string        `json:"short_description,omitempty"`
 	LongDescription      *string        `json:"long_description,omitempty"`
 	Status               *string        `json:"status,omitempty"`
-	PricingMode          *string        `json:"pricing_mode,omitempty"`
 	AvailabilityMode     *string        `json:"availability_mode,omitempty"`
 	FulfillmentMode      *string        `json:"fulfillment_mode,omitempty"`
 	Attributes           map[string]any `json:"attributes,omitempty"`
