@@ -170,22 +170,28 @@ func (c *Client) DeleteBrand(ctx context.Context, brandID string) error {
 	if err == nil {
 		return nil
 	}
+	// A 404 alone may mean an inaccessible/scoped Brand rather than a
+	// successful deletion. Never convert other provider failures into success.
 	var providerErr *Error
-	if errors.As(err, &providerErr) && providerErr.StatusCode == http.StatusNotFound {
-		return nil
+	if !errors.As(err, &providerErr) || providerErr.StatusCode != http.StatusNotFound {
+		return err
 	}
-	// Verify from active brands list before returning error
+	// Removal uses the provisioned full-access management credential.
+	// Converge only after both inventory and usage are readable; if either
+	// check fails, leave the persistent deleting state for a safe retry.
 	brands, listErr := c.ListBrands(ctx)
-	if listErr == nil {
-		for _, b := range brands {
-			if strings.TrimSpace(b.ID) == brandID {
-				return err
-			}
-		}
-		// Brand is confirmed gone from remote list
-		return nil
+	if listErr != nil {
+		return err
 	}
-	return err
+	for _, brand := range brands {
+		if strings.TrimSpace(brand.ID) == brandID {
+			return err
+		}
+	}
+	if _, usageErr := c.GetUsage(ctx); usageErr != nil {
+		return err
+	}
+	return nil
 }
 
 type UsageResponse struct {
