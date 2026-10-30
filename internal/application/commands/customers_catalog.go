@@ -72,7 +72,7 @@ type CreateCatalogItemCommand struct {
 	Attributes           map[string]any
 	InitialOffer         *InitialOffer
 	// Already-uploaded, verified media assets to attach atomically on item creation.
-	InitialMediaIDs      []string
+	InitialMediaIDs []string
 }
 
 type InitialOffer struct {
