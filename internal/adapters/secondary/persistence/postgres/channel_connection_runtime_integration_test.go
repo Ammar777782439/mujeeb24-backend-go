@@ -77,4 +77,27 @@ func TestChannelConnectionRuntimeAgainstPostgres(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM channel_connection_state_events WHERE business_id=$1::uuid AND connection_id=$2::uuid AND action='provisioning_activation_failed'`, businessA, connectionID).Scan(&activationFailureEvents); err != nil || activationFailureEvents != 1 {
 		t.Fatalf("activation failure events=%d err=%v", activationFailureEvents, err)
 	}
+
+	// Regression: the remove command archives the connection using
+	// 'remove_requested'. Migration 000082 must allow the audit row while
+	// preserving all previously valid actions.
+	archived, err := repo.Transition(ctx, ports.ChannelConnectionTransition{
+		BusinessID: businessA, ConnectionID: connectionID, ExpectedVersion: 4,
+		TargetStatus: "archived", Action: "remove_requested",
+		Reason: "user_remove", ActorReference: "principal-test",
+	})
+	if err != nil || archived.Status != "archived" || archived.ResourceVersion != 5 {
+		t.Fatalf("remove_requested archive: %#v err=%v", archived, err)
+	}
+	var removeEvents int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM channel_connection_state_events WHERE business_id=$1::uuid AND connection_id=$2::uuid AND action='remove_requested' AND to_status='archived'`, businessA, connectionID).Scan(&removeEvents); err != nil || removeEvents != 1 {
+		t.Fatalf("remove_requested audit events=%d err=%v", removeEvents, err)
+	}
+	if _, err := repo.Transition(ctx, ports.ChannelConnectionTransition{
+		BusinessID: businessA, ConnectionID: connectionID, ExpectedVersion: 5,
+		TargetStatus: "archived", Action: "remove_requested",
+		Reason: "user_remove", ActorReference: "principal-test",
+	}); !IsRepositoryKind(err, RepositoryStale) {
+		t.Fatalf("archived connection must remain terminal: %v", err)
+	}
 }
