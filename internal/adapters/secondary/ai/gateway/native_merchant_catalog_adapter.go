@@ -412,12 +412,17 @@ No proposal is executed until the merchant approves it.`
 		}); ok {
 			if err := validator.ValidateProposalSchemaAttributes(ctx, input.BusinessID, proposal); err != nil {
 				var fieldErr *merchantcatalogai.SchemaAttributePreflightError
+				var definitionErr *merchantcatalogai.SchemaDefinitionPreflightError
 				if finalValidationRetries == 0 && round+1 < nativeMaxMerchantToolRounds {
 					finalValidationRetries++
 					feedback := "The proposed item or variant attributes violate its existing merchant catalog template. Read-only schema evidence must be respected. Choose ask_merchant if an essential value or valid choice is unknown. Do not invent values or change the existing attribute schema."
 					if errors.As(err, &fieldErr) {
 						feedback = "The existing catalog attribute schema rejects " + fieldErr.Path +
 							" (data_type=" + fieldErr.DataType + "). For multi_select use a JSON array of allowed choices, even when only one variant option is selected. For select use one allowed scalar. Required item-level attributes cannot be omitted. Use the actual schema definition and enum from authorized discovery evidence. If data is not known, ask_merchant with no mutations. Do not change or invent the schema."
+					}
+					if errors.As(err, &definitionErr) {
+						feedback = fmt.Sprintf("The model-authored attribute_definitions[%d] conflicts with the selected merchant template (reason=%s, existing_type=%s, proposed_type=%s). Do NOT create a new definition for an existing label or change its type or enum. Remove that duplicate definition and use the existing evidence-backed attr_ key with the stored type/rules. For multi_select, supply a JSON array of stored allowed choices; for select, a single allowed value. If the merchant requests an option outside the current enum, ask_merchant about changing the template; do not silently extend it. If no valid evidence-backed solution exists, return ask_merchant with empty mutations.",
+							definitionErr.Index, definitionErr.Reason, definitionErr.ExpectedType, definitionErr.ProposedType)
 					}
 					trustedProposalInstruction += "\n\n# Existing catalog schema preflight correction (one attempt only)\n" + feedback
 					continue
