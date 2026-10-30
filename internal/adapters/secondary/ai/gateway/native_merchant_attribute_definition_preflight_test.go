@@ -78,9 +78,9 @@ func TestMerchantDefinitionConflictIsRepairedBeforeApprovalOrFailsClosed(t *test
 				data, err := json.Marshal(map[string]any{
 					"choices": []any{map[string]any{
 						"finish_reason": "stop",
-						"message": map[string]any{"role": "assistant", "content": answer},
+						"message":       map[string]any{"role": "assistant", "content": answer},
 					}},
-					"usage": map[string]any{"prompt_tokens": 60, "completion_tokens": 20},
+					"usage":   map[string]any{"prompt_tokens": 60, "completion_tokens": 20},
 				})
 				return native.Response{Payload: data, Model: "gemini", InputTokens: 60, OutputTokens: 20}, err
 			}
