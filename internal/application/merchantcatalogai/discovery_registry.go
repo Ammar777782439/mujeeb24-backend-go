@@ -152,7 +152,6 @@ func merchantReadCursorScope(catalogID, tool string, execCtx MerchantCatalogDisc
 	return scope, cursor, nil
 }
 
-
 // ValidateProposalSchemaAttributes is a server-side, tenant-scoped preflight
 // using the existing schema, not model-provided or newly invented definitions.
 func (r *ReadOnlyCapabilityRegistry) ValidateProposalSchemaAttributes(ctx context.Context, businessID string, p Proposal) error {
