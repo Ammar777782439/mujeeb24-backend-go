@@ -249,6 +249,7 @@ func resourceVersion(value string) *commands.ResourceVersion {
 }
 
 type fakeHistoryStore struct {
+	err              error
 	purgedBusiness   string
 	purgedConnection string
 	purgedKey        string
@@ -266,6 +267,9 @@ func (f *fakeHistoryStore) Purge(_ context.Context, businessID, connectionID, ke
 	f.purgedConnection = connectionID
 	f.purgedKey = key
 	f.purgedVersion = expectedVersion
+	if f.err != nil {
+		return ports.ChannelHistorySummary{}, f.err
+	}
 	return ports.ChannelHistorySummary{BusinessID: businessID, ConnectionID: connectionID, Conversations: 10, Messages: 50}, nil
 }
 
@@ -403,5 +407,80 @@ func TestRemoveChannelDisconnectsProviderPurgesHistoryAndArchives(t *testing.T) 
 
 	if result.Connection.ID != "conn-1" {
 		t.Fatalf("unexpected connection in result: %#v", result.Connection)
+	}
+}
+
+
+func TestRemoveChannelFailsClosedWhenProviderDisconnectFails(t *testing.T) {
+	record := ports.ChannelConnectionRecord{
+		ID: "conn-1", BusinessID: "biz-1", ProviderReference: "socialapi",
+		ProviderAccountReference: stringPtr("provider-1"), ResourceVersion: 5, Status: "active",
+	}
+	provider := &disconnectProviderFake{err: errors.New("provider unavailable")}
+	history := &fakeHistoryStore{}
+	runtime := &disconnectRuntimeFake{result: record}
+	service := RemoveChannelCommandService{ChannelRuntimeService: ChannelRuntimeService{
+		Reader: disconnectReaderFake{record: record}, Runtime: runtime,
+		Transactions: disconnectTxFake{}, Disconnector: provider, HistoryStore: history,
+	}}
+	_, err := service.Handle(context.Background(), commands.RemoveChannelCommand{
+		Meta: commands.CommandMeta{
+			Actor: commands.ActorContext{BusinessID: "biz-1", PrincipalID: "p-1", Role: "owner"},
+			ExpectedVersion: resourceVersion("5"), IdempotencyKey: "remove-1",
+		},
+		ConnectionID: "conn-1", Confirmation: "REMOVE_CHANNEL_AND_PURGE_DATA",
+	})
+	if err == nil { t.Fatal("provider failure must be surfaced") }
+	if history.purgeCalls != 0 || runtime.transitionCalls != 0 {
+		t.Fatalf("provider error must not purge or archive: purge=%d archive=%d", history.purgeCalls, runtime.transitionCalls)
+	}
+}
+
+func TestRemoveChannelDoesNotArchiveOnPurgeFailure(t *testing.T) {
+	record := ports.ChannelConnectionRecord{
+		ID: "conn-1", BusinessID: "biz-1", ProviderReference: "socialapi",
+		ResourceVersion: 7, Status: "active",
+	}
+	history := &fakeHistoryStore{err: errors.New("history constraint failure")}
+	runtime := &disconnectRuntimeFake{result: record}
+	service := RemoveChannelCommandService{ChannelRuntimeService: ChannelRuntimeService{
+		Reader: disconnectReaderFake{record: record}, Runtime: runtime,
+		Transactions: disconnectTxFake{}, Disconnector: &disconnectProviderFake{}, HistoryStore: history,
+	}}
+	_, err := service.Handle(context.Background(), commands.RemoveChannelCommand{
+		Meta: commands.CommandMeta{
+			Actor: commands.ActorContext{BusinessID: "biz-1", PrincipalID: "p-1", Role: "owner"},
+			ExpectedVersion: resourceVersion("7"), IdempotencyKey: "remove-7",
+		},
+		ConnectionID: "conn-1", Confirmation: "REMOVE_CHANNEL_AND_PURGE_DATA",
+	})
+	if err == nil { t.Fatal("purge failure must be returned") }
+	if runtime.transitionCalls != 0 { t.Fatal("must not archive channel if history purge failed") }
+}
+
+func TestRemoveChannelArchivedRetryResumesProviderBrandCleanup(t *testing.T) {
+	record := ports.ChannelConnectionRecord{
+		ID: "conn-1", BusinessID: "biz-1", ProviderReference: "socialapi",
+		ResourceVersion: 8, Status: "archived",
+	}
+	brand := &disconnectBrandCleanupFake{brandID: "brand-1"}
+	provider := &disconnectBrandProviderFake{}
+	history := &fakeHistoryStore{}
+	runtime := &disconnectRuntimeFake{result: record}
+	service := RemoveChannelCommandService{ChannelRuntimeService: ChannelRuntimeService{
+		Reader: disconnectReaderFake{record: record}, Runtime: runtime,
+		Transactions: disconnectTxFake{}, Disconnector: &disconnectProviderFake{}, HistoryStore: history,
+		BrandCleanup: brand, BrandProvider: provider,
+	}}
+	_, err := service.Handle(context.Background(), commands.RemoveChannelCommand{
+		Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "biz-1", PrincipalID: "p-1", Role: "owner"}},
+		ConnectionID: "conn-1", Confirmation: "REMOVE_CHANNEL_AND_PURGE_DATA",
+	})
+	if err != nil { t.Fatal(err) }
+	if provider.deleteCalls != 1 || brand.completeCalls != 1 {
+		t.Fatalf("archived retry must resume Brand cleanup, got delete=%d complete=%d", provider.deleteCalls, brand.completeCalls)
+	}
+	if history.purgeCalls != 0 || runtime.transitionCalls != 0 {
+		t.Fatal("archived retry must not repeat history purge or archive transition")
 	}
 }
