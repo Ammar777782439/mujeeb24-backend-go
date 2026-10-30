@@ -73,7 +73,7 @@ func (c *Client) signingKey(day string) []byte {
 	k = hmac256(k, "s3")
 	return hmac256(k, "aws4_request")
 }
-func (c *Client) request(ctx context.Context, method, key string, body []byte) (*http.Response, error) {
+func (c *Client) request(ctx context.Context, method, key, mime string, body []byte) (*http.Response, error) {
 	if err := c.valid(); err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func (c *Client) request(ctx context.Context, method, key string, body []byte) (
 	req.Header.Set("X-Amz-Content-Sha256", hash)
 	req.Header.Set("Authorization", auth)
 	if method == http.MethodPut {
-		req.Header.Set("Content-Type", "application/octet-stream")
+		req.Header.Set("Content-Type", mime)
 	}
 	client := c.HTTP
 	if client == nil {
@@ -122,11 +122,12 @@ func (c *Client) request(ctx context.Context, method, key string, body []byte) (
 	}
 	return res, nil
 }
-func (c *Client) Put(ctx context.Context, key string, data []byte) error {
+func (c *Client) Put(ctx context.Context, key, mime string, data []byte) error {
 	if len(data) == 0 || len(data) > 10*1024*1024 {
 		return errors.New("image size exceeds limit")
 	}
-	res, err := c.request(ctx, http.MethodPut, key, data)
+	if mime != "image/jpeg" && mime != "image/png" {return errors.New("unsupported R2 media content type")}
+	res, err := c.request(ctx, http.MethodPut, key, mime, data)
 	if err != nil {
 		return err
 	}
@@ -135,7 +136,7 @@ func (c *Client) Put(ctx context.Context, key string, data []byte) error {
 	return nil
 }
 func (c *Client) Delete(ctx context.Context, key string) error {
-	res, err := c.request(ctx, http.MethodDelete, key, nil)
+	res, err := c.request(ctx, http.MethodDelete, key, "", nil)
 	if err != nil {
 		return err
 	}
