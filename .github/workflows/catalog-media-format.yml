@@ -1,0 +1,50 @@
+name: Catalog media experimental formatter
+
+on:
+  push:
+    branches:
+      - integration/catalog-media-main
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out experimental branch
+        uses: actions/checkout@v4
+        with:
+          ref: integration/catalog-media-main
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+      - name: Format only this feature's modified Go files
+        run: |
+          gofmt -w \
+            internal/adapters/secondary/ai/gateway/customer_media_selection.go \
+            internal/adapters/secondary/ai/gateway/customer_media_selection_test.go \
+            internal/application/ports/customer_media_selection.go \
+            internal/application/ports/sales_workflow.go \
+            internal/application/services/auto_reply.go \
+            internal/application/services/auto_reply_media.go \
+            internal/application/services/auto_reply_media_test.go \
+            internal/application/services/outbound_delivery_resolver.go \
+            internal/bootstrap/api.go \
+            internal/adapters/secondary/persistence/postgres/catalog_media_repository.go
+          git diff --check
+      - name: Commit formatting only to experimental branch
+        run: |
+          if git diff --quiet; then
+            echo "Already formatted"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- '*.go'
+          git commit -m "chore(catalog-media): gofmt experimental multi-photo implementation"
+          git push origin HEAD:integration/catalog-media-main
