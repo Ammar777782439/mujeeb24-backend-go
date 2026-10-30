@@ -176,6 +176,22 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	if err != nil {
 		return Response{}, err
 	}
+	if canonical.ResponseFormat != nil &&
+		canonical.ResponseFormat.JSONSchema.Name == "merchant_catalog_wire" {
+		// Do not replay obsolete discovery tool-call roles into the forced final
+		// proposal inference. DeepSeek may otherwise select those stale tool
+		// names even though only submit_merchant_catalog_proposal is offered.
+		// This also handles Gemini 503 fallback during the final inference.
+		var readCount int
+		messages, readCount, err = deepSeekMerchantFinalEvidence(messages)
+		if err != nil {
+			return Response{}, err
+		}
+		if readCount > 0 {
+			log.Printf("[DeepSeekNative] stage=merchant_final_evidence_reset reads=%d messages=%d",
+				readCount, len(messages))
+		}
+	}
 	body := map[string]any{
 		"model": c.model, "messages": messages, "max_tokens": canonical.MaxTokens,
 		"stream": false, "thinking": map[string]string{"type": "disabled"},
