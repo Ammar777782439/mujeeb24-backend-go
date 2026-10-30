@@ -54,6 +54,11 @@ func (s *Server) dispatchCatalogMedia(ctx context.Context, operationID string, i
 		return huma.Error503ServiceUnavailable("catalog media is not configured"), true
 	}
 	business := string(actor.BusinessID)
+	var actorID *string
+	if actor.PrincipalID != "" {
+		value := string(actor.PrincipalID)
+		actorID = &value
+	}
 	switch in := input.(type) {
 	case *contract.CatalogMediaReadInput:
 		if s.deps.CatalogImageUpload.Objects == nil {
@@ -74,7 +79,7 @@ func (s *Server) dispatchCatalogMedia(ctx context.Context, operationID string, i
 		if s.deps.CatalogImageUpload.Objects == nil {
 			return huma.Error503ServiceUnavailable("private image storage is not configured"), true
 		}
-		asset, err := s.deps.CatalogImageUpload.UploadBase64(ctx, business, in.Body.DataBase64, nil)
+		asset, err := s.deps.CatalogImageUpload.UploadBase64(ctx, business, in.Body.DataBase64, actorID)
 		if err != nil {
 			return huma.Error422UnprocessableEntity("image upload could not be verified or stored"), true
 		}
@@ -105,7 +110,7 @@ func (s *Server) dispatchCatalogMedia(ctx context.Context, operationID string, i
 			return err, true
 		}
 		link, err := s.deps.CatalogMediaService.Attach(ctx, business, string(in.ItemID), variant,
-			string(in.Body.MediaID), in.Body.IsPrimary, in.Body.SortOrder, in.Body.AltText, nil)
+			string(in.Body.MediaID), in.Body.IsPrimary, in.Body.SortOrder, in.Body.AltText, actorID)
 		if err != nil {
 			return huma.Error422UnprocessableEntity("cannot attach image to this product gallery"), true
 		}
