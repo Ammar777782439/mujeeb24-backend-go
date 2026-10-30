@@ -23,8 +23,10 @@ func TestPrivateR2PutUsesSignedRequest(t *testing.T) {
 			if req.Method != "PUT" || req.URL.Host != "abc123.r2.cloudflarestorage.com" {
 				t.Fatalf("unexpected request %s %s", req.Method, req.URL)
 			}
-			if req.Header.Get("Content-Type") != "image/png" {t.Fatal("incorrect stored object media type")}
-		if req.URL.EscapedPath() != "/catalog/catalog/business1/asset1" {
+			if req.Header.Get("Content-Type") != "image/png" {
+				t.Fatal("incorrect stored object media type")
+			}
+			if req.URL.EscapedPath() != "/catalog/catalog/business1/asset1" {
 				t.Fatal(req.URL.String())
 			}
 			if !strings.Contains(req.Header.Get("Authorization"), "Credential=key1/20261030/auto/s3/aws4_request") ||

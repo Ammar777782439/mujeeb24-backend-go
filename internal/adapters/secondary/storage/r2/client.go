@@ -126,7 +126,9 @@ func (c *Client) Put(ctx context.Context, key, mime string, data []byte) error {
 	if len(data) == 0 || len(data) > 10*1024*1024 {
 		return errors.New("image size exceeds limit")
 	}
-	if mime != "image/jpeg" && mime != "image/png" {return errors.New("unsupported R2 media content type")}
+	if mime != "image/jpeg" && mime != "image/png" {
+		return errors.New("unsupported R2 media content type")
+	}
 	res, err := c.request(ctx, http.MethodPut, key, mime, data)
 	if err != nil {
 		return err
