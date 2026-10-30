@@ -66,7 +66,8 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
 	// AI Provider Configuration: 6 endpoints added. Total = 140.
 	// Business owner assignment adds 1 platform business lifecycle endpoint. Total = 141.
 	// Later contract work brought the baseline to 144; token-based team invitations add 7. Total = 151.
-	// Catalog Media MVP adds six tenant-scoped operations.\n\toperationIDs := regexp.MustCompile(`(?m)^\s+operationId: ([A-Za-z0-9_]+)$`).FindAllSubmatch(document, -1)
+	// Catalog Media MVP adds six tenant-scoped operations.
+	operationIDs := regexp.MustCompile(`(?m)^\s+operationId: ([A-Za-z0-9_]+)$`).FindAllSubmatch(document, -1)
 	for _, op := range []string{"listSalesWorkflows", "getSalesWorkflow", "reviewSalesWorkflow", "listSalesRequirements", "createSalesRequirement"} {
 		if !bytes.Contains(document, []byte("operationId: "+op)) {
 			t.Fatalf("sales operation missing: %s", op)
