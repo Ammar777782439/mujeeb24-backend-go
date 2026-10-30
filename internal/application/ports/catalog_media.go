@@ -87,7 +87,7 @@ type CatalogMediaRepository interface {
 // MediaObjectStorage is private storage; signed read URLs are generated only
 // at outbound dispatch and never stored in media_assets or message records.
 type MediaObjectStorage interface {
-	Put(context.Context, string, []byte) error
+	Put(context.Context, string, string, []byte) error
 	Delete(context.Context, string) error
 	PresignGet(context.Context, string, time.Duration) (string, error)
 }
