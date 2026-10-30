@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -321,7 +322,9 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			Subscriptions: postgres.NewSubscriptionRepository(database),
 		}
 
-		service.CatalogMedia = postgres.NewCatalogMediaRepository(database)
+		if os.Getenv("CATALOG_MEDIA_ENABLED") == "true" {
+			service.CatalogMedia = postgres.NewCatalogMediaRepository(database)
+		}
 		service.CatalogBatch.GatewayFXRateYER = service.GatewayFXRateYER
 		autoReply = service
 	}
