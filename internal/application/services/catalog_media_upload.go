@@ -38,11 +38,13 @@ func(s CatalogImageUploadService)UploadBase64(ctx context.Context,businessID,enc
  // admitted in the first release. WebP is intentionally rejected, not mislabeled.
  format:=http.DetectContentType(data)
  if format!="image/jpeg"&&format!="image/png"{return ports.MediaAsset{},errors.New("unsupported image format; use JPEG or PNG")}
- config,decodeErr:=image.DecodeConfig(bytes.NewReader(data))
+ config,_,decodeErr:=image.DecodeConfig(bytes.NewReader(data))
  if decodeErr!=nil||config.Width<1||config.Height<1||config.Width>12000||config.Height>12000{
   return ports.MediaAsset{},errors.New("invalid image dimensions")
  }
- if format=="image/jpeg"&&config.ColorModel==nil{return ports.MediaAsset{},errors.New("invalid jpeg")}
+ if int64(config.Width)*int64(config.Height)>16_000_000{return ports.MediaAsset{},errors.New("image pixel count exceeds limit")}
+ // Decode the full stream to reject truncated/corrupted image bodies.
+ if _,_,decodeErr=image.Decode(bytes.NewReader(data));decodeErr!=nil{return ports.MediaAsset{},errors.New("corrupted image body")}
  id:=uuid.NewString();if s.NewID!=nil{id=s.NewID()}
  now:=time.Now().UTC();if s.Now!=nil{now=s.Now().UTC()}
  key:="catalog/"+businessID+"/"+id
