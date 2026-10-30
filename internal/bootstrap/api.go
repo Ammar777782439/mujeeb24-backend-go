@@ -585,6 +585,11 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	// routes (auth, dashboard, SSE) are unaffected — their Huma
 	// bodies are small JSON envelopes.
 	wrappedMux := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if strings.HasPrefix(request.URL.Path, "/api/v1/businesses/") && strings.HasSuffix(request.URL.Path, "/media/uploads") {
+			// JSON/base64 overhead for a maximum 10 MiB image. Enforce this
+			// before Huma allocates the JSON body, including chunked requests.
+			request.Body = http.MaxBytesReader(writer, request.Body, 15*1024*1024)
+		}
 		if strings.HasPrefix(request.URL.Path, "/api/v1/webhooks/") {
 			// 256 KB — SocialAPI webhook payloads are typically
 			// 1-5 KB. 256 KB is generous headroom and still
