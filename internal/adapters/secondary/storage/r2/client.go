@@ -110,6 +110,5 @@ func(c *Client)PresignGet(_ context.Context,key string,ttl time.Duration)(string
  sign:=hex.EncodeToString(hmac256(c.signingKey(date),strings.Join([]string{"AWS4-HMAC-SHA256",timestamp,scope,sha([]byte(canonical))},"\n")))
  params.Set("X-Amz-Signature",sign)
  // Defense in depth: no user-controlled query is included.
- _=sort.Strings
  return "https://"+c.host()+uri+"?"+strings.ReplaceAll(params.Encode(),"+","%20"),nil
 }
