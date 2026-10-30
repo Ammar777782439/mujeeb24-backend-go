@@ -65,6 +65,7 @@ func (m *mediaTestRepo) Remove(_ context.Context, _, _, linkID string, _ *string
 	m.removed = linkID
 	return nil
 }
+func (m *mediaTestRepo) FindApprovedMediaLink(context.Context,string,string)(*ports.CatalogMediaLink,error){return nil,nil}
 func (m *mediaTestRepo) PrimaryForReply(context.Context, string, string, *string) (*ports.CatalogMediaLink, error) {
 	return nil, nil
 }
