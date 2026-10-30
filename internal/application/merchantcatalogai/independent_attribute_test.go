@@ -25,9 +25,9 @@ func independentAttributeFixture() (*schemaPreflightRepo, Proposal) {
 			ValidationRules: map[string]any{"enum": []any{"الأسنان", "اللثة", "الفم"}},
 		}},
 		Create: &ItemCreate{AttributeSchemaID: &id, Attributes: map[string]any{
-			"attr_brand": "Example",
+			"attr_brand":      "Example",
 			"attr_target_age": []any{"بالغون"},
-			"target_anatomy": []any{"الأسنان", "اللثة", "الفم"},
+			"target_anatomy":  []any{"الأسنان", "اللثة", "الفم"},
 		}},
 	}
 	return repo, p
