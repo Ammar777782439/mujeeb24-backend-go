@@ -128,3 +128,45 @@ func TestUnrelatedReadCannotGrantParentItemAuthority(t *testing.T) {
 		t.Fatal("unrelated evidence incorrectly authorizes a catalog item")
 	}
 }
+
+func TestCatalogChildReadRejectsWrongParentAndNeverGrantsAnyEvidence(t *testing.T) {
+	for _, tool := range []string{"merchant_catalog_list_variants", "merchant_catalog_list_offers"} {
+		for _, kind := range []string{"wrong-item", "wrong-business", "blank-id"} {
+			t.Run(tool+"/"+kind, func(t *testing.T) {
+				repo := verifiedParentEvidenceRepo()
+				if tool == "merchant_catalog_list_variants" {
+					switch kind {
+					case "wrong-item":
+						repo.variants[0].CatalogItemID = "other-item"
+					case "wrong-business":
+						repo.variants[0].BusinessID = "other-business"
+					case "blank-id":
+						repo.variants[0].ID = ""
+					}
+				} else {
+					switch kind {
+					case "wrong-item":
+						repo.offers[0].CatalogItemID = "other-item"
+					case "wrong-business":
+						repo.offers[0].BusinessID = "other-business"
+					case "blank-id":
+						repo.offers[0].ID = ""
+					}
+				}
+				r := NewReadOnlyCapabilityRegistry(repo, "catalog-1")
+				_, err := r.Execute(context.Background(), MerchantCatalogDiscoveryExecutionContext{
+					BusinessID: "business-1", PrincipalID: "owner-1", ConversationID: "session-1",
+				}, tool, []byte(`{"item_id":"item-1"}`))
+				if err == nil {
+					t.Fatal("malformed cross-scope child granted evidence")
+				}
+				p := Proposal{Status: StatusResolved, Operation: OperationUpdate, Update: &UpdateOperation{
+					ItemID: "item-1", NewVariants: []VariantCreate{{Ref: "new", Name: "أصفر"}},
+				}}
+				if err := r.ValidateProposalReferences(p); err == nil {
+					t.Fatal("failed child read granted parent authority")
+				}
+			})
+		}
+	}
+}
