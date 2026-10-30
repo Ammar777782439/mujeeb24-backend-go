@@ -16,15 +16,15 @@ func TestDeepSeekMalformedMerchantFinalIsClassifiedWithoutAcceptingIt(t *testing
 			"create": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"fields": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"fields":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 					"variants": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-					"offers": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"offers":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 				},
-				"required": []string{"fields", "variants", "offers"},
+				"required":             []string{"fields", "variants", "offers"},
 				"additionalProperties": false,
 			},
 		},
-		"required": []string{"operation", "create"},
+		"required":             []string{"operation", "create"},
 		"additionalProperties": false,
 	}
 	format, err := json.Marshal(map[string]any{
@@ -44,7 +44,7 @@ func TestDeepSeekMalformedMerchantFinalIsClassifiedWithoutAcceptingIt(t *testing
 					"tool_calls": []any{map[string]any{
 						"id": "call-1", "type": "function",
 						"function": map[string]any{
-							"name": "submit_merchant_catalog_proposal",
+							"name":      "submit_merchant_catalog_proposal",
 							"arguments": `{"operation":"ask_merchant","create":{"fields":[]}}`,
 						},
 					}},
