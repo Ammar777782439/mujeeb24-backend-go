@@ -57,7 +57,7 @@ func TestPreflightRejectsMissingRequiredBrandBeforeApproval(t *testing.T) {
 	repo := schemaPreflightFixture()
 	id := repo.schema.ID
 	proposal := Proposal{Status: StatusResolved, Operation: OperationCreate,
-		Create: &CreateOperation{AttributeSchemaID: &id, Attributes: map[string]any{"attr_color": []any{"أسود"}}},
+		Create: &ItemCreate{AttributeSchemaID: &id, Attributes: map[string]any{"attr_color": []any{"أسود"}}},
 	}
 	err := ValidateProposalSchemaAttributes(context.Background(), repo, "business", "catalog", proposal)
 	var field *SchemaAttributePreflightError
