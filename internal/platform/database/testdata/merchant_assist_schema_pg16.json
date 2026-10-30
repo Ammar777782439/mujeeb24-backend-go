@@ -1,5 +1,5 @@
 {
-  "migration_count": 83,
+  "migration_count": 84,
   "columns": [
     {
       "table": "ai_catalog_batches",
@@ -8714,7 +8714,7 @@
       "table": "media_assets",
       "name": "media_assets_provider_chk",
       "kind": "c",
-      "definition": "CHECK (storage_provider = 'r2'::text)"
+      "definition": "CHECK (storage_provider = ANY (ARRAY['r2'::text, 'backblaze'::text]))"
     },
     {
       "table": "media_assets",
