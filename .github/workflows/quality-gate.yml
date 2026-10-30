@@ -10,6 +10,7 @@ on:
       - feat/customer-sales-workflow-interactive
       - feat/catalog-complete-commercial-entity-atomic
       - feat/gemini-deepseek
+      - integration/catalog-media-main
   workflow_dispatch:
 
 permissions:
