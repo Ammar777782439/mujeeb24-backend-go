@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log"
 	"math"
 	"strconv"
 
@@ -155,9 +156,11 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 		in := input.(*contract.RemoveChannelInput)
 		actor, err := s.requireScope(ctx, in.BusinessID)
 		if err != nil {
+			log.Printf("[ChannelRemove] stage=http_scope_failed business=%s connection=%s error_type=%T err=%v", in.BusinessID, in.ConnectionID, err, err)
 			return mapApplicationError(err), true
 		}
 		if s.deps.RemoveChannel == nil {
+			log.Printf("[ChannelRemove] stage=http_dependency_missing business=%s connection=%s", in.BusinessID, in.ConnectionID)
 			return mapApplicationError(appErrors.NotImplemented()), true
 		}
 		connectionID := commands.ConnectionID(in.ConnectionID)
@@ -169,6 +172,7 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 			Reason:       in.Body.Reason,
 		})
 		if err != nil {
+			log.Printf("[ChannelRemove] stage=http_failed business=%s connection=%s error_type=%T err=%v", in.BusinessID, in.ConnectionID, err, err)
 			return mapApplicationError(err), true
 		}
 		out := &contract.Single[contract.ChannelConnection]{}
