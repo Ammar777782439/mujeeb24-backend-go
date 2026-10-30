@@ -310,6 +310,9 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 				}
 			}
 		}
+		// The legacy catalog_items.pricing_mode column is NOT NULL; its
+		// compatibility value is copied from the first offer at creation.
+		// Offer.PricingMode alone is authoritative for commercial pricing.
 		if e := catalogvalidation.ValidateAttributes(schema, c.Attributes); e != nil {
 			return r, appErrors.New(appErrors.CodeValidation, e.Error())
 		}
@@ -322,7 +325,7 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 		if e != nil {
 			return r, e
 		}
-		item, e := s.Catalogs.CreateCatalogItem(ctx, ports.CatalogItemDraft{ID: uuid.NewString(), BusinessID: p.BusinessID, CatalogID: p.CatalogID, Name: c.Name, ItemType: c.ItemType, ShortDescription: c.ShortDescription, LongDescription: c.LongDescription, AttributeSchemaID: c.AttributeSchemaID, AttributeSchemaVersion: sv, PricingMode: c.PricingMode, AvailabilityMode: c.AvailabilityMode, FulfillmentMode: c.FulfillmentMode, RequiresConfirmation: c.RequiresConfirmation, Attributes: attrs, CreatedAt: now, UpdatedAt: now})
+		item, e := s.Catalogs.CreateCatalogItem(ctx, ports.CatalogItemDraft{ID: uuid.NewString(), BusinessID: p.BusinessID, CatalogID: p.CatalogID, Name: c.Name, ItemType: c.ItemType, ShortDescription: c.ShortDescription, LongDescription: c.LongDescription, AttributeSchemaID: c.AttributeSchemaID, AttributeSchemaVersion: sv, PricingMode: c.Offers[0].PricingMode, AvailabilityMode: c.AvailabilityMode, FulfillmentMode: c.FulfillmentMode, RequiresConfirmation: c.RequiresConfirmation, Attributes: attrs, CreatedAt: now, UpdatedAt: now})
 		if e != nil {
 			return r, e
 		}
@@ -431,13 +434,13 @@ func (s ExecutionService) apply(ctx context.Context, p StoredProposal) (Executio
 				return r, appErrors.New(appErrors.CodeValidation, validationErr.Error())
 			}
 		}
-		if c.Name != nil || c.ItemType != nil || c.Status != nil || c.ShortDescription != nil || c.LongDescription != nil || c.PricingMode != nil || c.AvailabilityMode != nil || c.FulfillmentMode != nil || c.RequiresConfirmation != nil || c.Attributes != nil || targetSchemaID != nil {
+		if c.Name != nil || c.ItemType != nil || c.Status != nil || c.ShortDescription != nil || c.LongDescription != nil || c.AvailabilityMode != nil || c.FulfillmentMode != nil || c.RequiresConfirmation != nil || c.Attributes != nil || targetSchemaID != nil {
 			if c.Status != nil && *c.Status == "active" && s.Entitlements != nil {
 				if e = s.Entitlements.EnsureCatalogItemActivation(ctx, p.BusinessID, r.ItemID, now); e != nil {
 					return r, e
 				}
 			}
-			_, e = s.Catalogs.UpdateCatalogItem(ctx, ports.CatalogItemPatch{ID: r.ItemID, BusinessID: p.BusinessID, Name: c.Name, ItemType: c.ItemType, Status: c.Status, ShortDescription: c.ShortDescription, ShortDescriptionPresent: c.ShortDescription != nil, LongDescription: c.LongDescription, LongDescriptionPresent: c.LongDescription != nil, PricingMode: c.PricingMode, AvailabilityMode: c.AvailabilityMode, FulfillmentMode: c.FulfillmentMode, RequiresConfirmation: c.RequiresConfirmation, Attributes: attrs, AttributeSchemaID: targetSchemaID, AttributeSchemaVersion: targetSchemaVersion, ExpectedVersion: p.Versions["item:"+r.ItemID], UpdatedAt: now})
+			_, e = s.Catalogs.UpdateCatalogItem(ctx, ports.CatalogItemPatch{ID: r.ItemID, BusinessID: p.BusinessID, Name: c.Name, ItemType: c.ItemType, Status: c.Status, ShortDescription: c.ShortDescription, ShortDescriptionPresent: c.ShortDescription != nil, LongDescription: c.LongDescription, LongDescriptionPresent: c.LongDescription != nil, AvailabilityMode: c.AvailabilityMode, FulfillmentMode: c.FulfillmentMode, RequiresConfirmation: c.RequiresConfirmation, Attributes: attrs, AttributeSchemaID: targetSchemaID, AttributeSchemaVersion: targetSchemaVersion, ExpectedVersion: p.Versions["item:"+r.ItemID], UpdatedAt: now})
 			if e != nil {
 				return r, e
 			}
