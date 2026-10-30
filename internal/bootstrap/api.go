@@ -321,6 +321,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			Subscriptions: postgres.NewSubscriptionRepository(database),
 		}
 
+		service.CatalogMedia = postgres.NewCatalogMediaRepository(database)
 		service.CatalogBatch.GatewayFXRateYER = service.GatewayFXRateYER
 		autoReply = service
 	}
