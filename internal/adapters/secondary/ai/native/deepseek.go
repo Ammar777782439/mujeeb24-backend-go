@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/catalogdump"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/merchantcatalogtrace"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/salesdiag"
 )
 
@@ -277,6 +278,7 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	if err != nil {
 		return Response{}, err
 	}
+	merchantcatalogtrace.Dump(ctx, "deepseek_http_request", encoded)
 	log.Printf("[DeepSeekNative] stage=request model=%s model_endpoint=beta tools=%d messages=%d choice=%s bytes=%d timeout=%s",
 		c.model, len(canonical.Tools), len(messages), canonical.ToolChoice, len(encoded), c.timeout)
 	catalogdump.Record(ctx, "deepseek_wire_request", catalogdump.Raw(encoded))
@@ -307,6 +309,7 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 	catalogdump.Record(ctx, "deepseek_http_status", httpRes.StatusCode)
 	if httpRes.StatusCode < 200 || httpRes.StatusCode >= 300 {
 		body, readErr := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
+		merchantcatalogtrace.Dump(ctx, "deepseek_http_error_response", body)
 		if catalogdump.Enabled(ctx) {
 			catalogdump.Record(ctx, "deepseek_raw_error_response", catalogdump.Raw(body))
 		}
@@ -321,6 +324,7 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 		return Response{}, &StatusError{Provider: "deepseek", Code: httpRes.StatusCode}
 	}
 	raw, err := io.ReadAll(io.LimitReader(httpRes.Body, nativeResponseLimit+1))
+	merchantcatalogtrace.Dump(ctx, "deepseek_http_raw_response", raw)
 	catalogdump.Record(ctx, "deepseek_raw_response", catalogdump.Raw(raw))
 	if err != nil || len(raw) > nativeResponseLimit {
 		return Response{}, errors.New("DeepSeek response read/size failure")

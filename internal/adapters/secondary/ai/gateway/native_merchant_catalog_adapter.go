@@ -10,6 +10,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/ai/native"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/merchantcatalogai"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/merchantcatalogtrace"
 )
 
 // NativeMerchantCatalogAuthoringAdapter uses stateless Chat Completions through
@@ -103,6 +104,7 @@ func (a *NativeMerchantCatalogAuthoringAdapter) Propose(ctx context.Context, inp
 		strings.TrimSpace(input.BusinessID) == "" || strings.TrimSpace(input.PrincipalID) == "" {
 		return merchantcatalogai.Proposal{}, errors.New("merchant catalog gateway input is incomplete")
 	}
+	ctx = merchantcatalogtrace.WithSession(ctx, input.SessionID)
 	if a.AIGuard != nil {
 		if err := a.AIGuard.Check(ctx, input.BusinessID); err != nil {
 			return merchantcatalogai.Proposal{}, err
@@ -244,8 +246,10 @@ No proposal is executed until the merchant approves it.`
 				return merchantcatalogai.Proposal{}, err
 			}
 		}
+		merchantcatalogtrace.Dump(ctx, fmt.Sprintf("canonical_request_round_%d", round+1), body)
 		raw, info, err := a.client.CompletePinned(ctx, req, provider)
 		if err != nil {
+			merchantcatalogtrace.Event(ctx, "provider_error", fmt.Sprintf("round=%d pinned_provider=%q error=%q", round+1, provider, err.Error()))
 			var wireErr *native.MerchantCatalogSchemaError
 			var toolNameErr *native.MerchantCatalogToolNameError
 			var envelopeErr *native.MerchantCatalogCallEnvelopeError
@@ -269,6 +273,8 @@ No proposal is executed until the merchant approves it.`
 			return merchantcatalogai.Proposal{}, fmt.Errorf("merchant catalog native request: %w", err)
 		}
 		provider = info.Provider
+		merchantcatalogtrace.Event(ctx, "provider_success", fmt.Sprintf("round=%d provider=%q model=%q attempts=%d", round+1, info.Provider, info.Model, len(info.Trace.Attempts)))
+		merchantcatalogtrace.Dump(ctx, fmt.Sprintf("canonical_response_round_%d", round+1), raw)
 		var response nativeMerchantChatResponse
 		if err := json.Unmarshal(raw, &response); err != nil {
 			return merchantcatalogai.Proposal{}, errors.New("merchant catalog native provider returned invalid chat schema")
@@ -370,8 +376,10 @@ No proposal is executed until the merchant approves it.`
 		if err := json.Unmarshal(choice.Message.Content, &content); err != nil || strings.TrimSpace(content) == "" {
 			return merchantcatalogai.Proposal{}, errors.New("merchant catalog returned no strict structured result")
 		}
+		merchantcatalogtrace.Dump(ctx, fmt.Sprintf("canonical_wire_round_%d", round+1), []byte(content))
 		proposal, err := catalogWireParse(content)
 		if err != nil {
+			merchantcatalogtrace.Event(ctx, "wire_rejected", fmt.Sprintf("round=%d error=%q", round+1, err.Error()))
 			// Strict structural validation already succeeded, but the model may
 			// still supply invalid field JSON, unused definitions, or mutation
 			// data in an ask_merchant response. Request a new proposal once,
@@ -383,11 +391,13 @@ No proposal is executed until the merchant approves it.`
 			}
 			return merchantcatalogai.Proposal{}, fmt.Errorf("decode strict merchant catalog wire proposal: %w", err)
 		}
+		merchantcatalogtrace.Event(ctx, "wire_parsed", fmt.Sprintf("round=%d operation=%q status=%q definitions=%d schema_name=%q", round+1, proposal.Operation, proposal.Status, len(proposal.AttributeDefinitions), proposal.AttributeSchemaName))
 		proposal = proposal.Normalize()
 		if validator, ok := input.Capabilities.(interface {
 			ValidateProposalReferences(merchantcatalogai.Proposal) error
 		}); ok {
 			if err := validator.ValidateProposalReferences(proposal); err != nil {
+				merchantcatalogtrace.Event(ctx, "references_rejected", fmt.Sprintf("round=%d error=%q", round+1, err.Error()))
 				if finalValidationRetries == 0 && round+1 < nativeMaxMerchantToolRounds {
 					finalValidationRetries++
 					trustedProposalInstruction += "\n\n# Canonical catalog reference correction (one attempt only)\nThe previous proposal referenced catalog items, schemas, offers, or variants that Go cannot validate against authorized discovery evidence. Use only exact evidence-backed IDs from this merchant's catalog. If verified references are unavailable, use operation=ask_merchant, status=needs_more_data, and empty mutation fields. Never invent IDs, move data across tenants or retry read-only tools in this final step."
@@ -397,6 +407,7 @@ No proposal is executed until the merchant approves it.`
 			}
 		}
 		if err := proposal.Validate(); err != nil {
+			merchantcatalogtrace.Event(ctx, "proposal_rejected", fmt.Sprintf("round=%d error=%q", round+1, err.Error()))
 			// A rejected final proposal has no side effects. Give the model one
 			// bounded chance to produce a valid proposal or ask for missing data.
 			// Do not repair or manufacture commercial fields in Go.
@@ -430,6 +441,7 @@ No proposal is executed until the merchant approves it.`
 				return merchantcatalogai.Proposal{}, fmt.Errorf("validate merchant catalog proposal attributes: %w", err)
 			}
 		}
+		merchantcatalogtrace.Event(ctx, "proposal_accepted", fmt.Sprintf("round=%d operation=%q status=%q", round+1, proposal.Operation, proposal.Status))
 		return proposal, nil
 	}
 	return merchantcatalogai.Proposal{}, errors.New("merchant catalog maximum model rounds exceeded")
