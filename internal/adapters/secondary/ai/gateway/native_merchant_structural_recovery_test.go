@@ -48,7 +48,7 @@ func TestNativeMerchantRetriesMalformedDeepSeekFinalOnce(t *testing.T) {
 				raw, _ := json.Marshal(map[string]any{
 					"choices": []any{map[string]any{
 						"finish_reason": "stop",
-						"message": map[string]any{"role": "assistant", "content": response},
+						"message":       map[string]any{"role": "assistant", "content": response},
 					}},
 					"usage": map[string]any{"prompt_tokens": 100, "completion_tokens": 25},
 				})
