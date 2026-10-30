@@ -42,7 +42,7 @@ func TestMerchantSchemaPreflightRepairsMissingRequiredAttributeBeforeReview(t *t
 			Messages []struct {
 				Content string `json:"content"`
 			} `json:"messages"`
-			ResponseFormat map[string]any   `json:"response_format"`
+			ResponseFormat map[string]any `json:"response_format"`
 		}
 		if err := json.Unmarshal(req.Payload, &body); err != nil {
 			return native.Response{}, err
