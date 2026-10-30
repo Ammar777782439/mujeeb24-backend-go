@@ -20,7 +20,7 @@ func (s *namedObjectStore) Put(_ context.Context, _, _ string, _ []byte) error {
 	return nil
 }
 func (s *namedObjectStore) Delete(context.Context, string) error { return nil }
-func (s *namedObjectStore) PresignGet(_ context.Context, _, _ time.Duration) (string, error) {
+func (s *namedObjectStore) PresignGet(_ context.Context, _ string, _ time.Duration) (string, error) {
 	s.reads++
 	return "https://" + s.name + ".example.test/asset", nil
 }
