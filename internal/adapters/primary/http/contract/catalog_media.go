@@ -3,6 +3,7 @@ package contract
 import (
 	"github.com/danielgtaylor/huma/v2"
 	"net/http"
+	"time"
 )
 
 type CatalogImageUploadRequest struct {
@@ -77,7 +78,7 @@ func registerCatalogMediaOperations(api huma.API, dispatcher DashboardOperationH
 		CatalogMediaReadInput{}, Single[CatalogMediaReadView]{})
 	register(api, dispatcher, huma.Operation{OperationID: "uploadCatalogImage", Method: http.MethodPost,
 		Path: "/businesses/{business_id}/media/uploads", Tags: []string{"CatalogMedia"},
-		Summary: "Upload merchant catalog image to private storage", Security: dashboardSecurity, DefaultStatus: http.StatusCreated},
+		Summary: "Upload merchant catalog image to private storage", Security: dashboardSecurity, DefaultStatus: http.StatusCreated, MaxBodyBytes: 14 * 1024 * 1024, BodyReadTimeout: 120 * time.Second},
 		CatalogImageUploadInput{}, Single[CatalogMediaAssetView]{})
 	register(api, dispatcher, huma.Operation{OperationID: "listCatalogMedia", Method: http.MethodGet,
 		Path: "/businesses/{business_id}/catalog-items/{item_id}/media", Tags: []string{"CatalogMedia"},
