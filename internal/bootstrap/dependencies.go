@@ -33,6 +33,7 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 	}
 	catalogCommands := services.NewCatalogCommandServices(catalogRepository, adapter)
 	catalogCommands.Entitlements = postgres.NewSubscriptionRepository(adapter)
+	catalogCommands.Media = mediaRepo
 
 	leadRepository := postgres.NewLeadRepository(adapter)
 	transactionRepository := postgres.NewTransactionRepository(adapter)
