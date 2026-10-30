@@ -75,7 +75,7 @@ func (s CatalogImageUploadService) UploadBase64(ctx context.Context, businessID,
 	if err != nil {
 		return ports.MediaAsset{}, err
 	}
-	if err = s.Objects.Put(ctx, key, data); err != nil {
+	if err = s.Objects.Put(ctx, key, format, data); err != nil {
 		return ports.MediaAsset{}, err
 	}
 	digest := sha256.Sum256(data)
