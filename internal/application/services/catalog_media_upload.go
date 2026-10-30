@@ -27,8 +27,8 @@ type CatalogImageUploadService struct {
 	Repository      ports.CatalogMediaRepository
 	Objects         ports.MediaObjectStorage
 	StorageProvider string
-	Now            func() time.Time
-	NewID          func() string
+	Now             func() time.Time
+	NewID           func() string
 }
 
 func (s CatalogImageUploadService) UploadBase64(ctx context.Context, businessID, encoded string, createdBy *string) (ports.MediaAsset, error) {
