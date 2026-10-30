@@ -134,6 +134,8 @@ schema_version from its own contract; do not invent a version field.
 All schema object fields are required. For an inactive operation, use empty
 fields/variants/offers arrays and empty IDs/strings, never invented data.
 For create: populate create.fields, create.variants, create.offers.
+Pricing mode belongs exclusively to offers: include pricing_mode in each
+new offer's fields, never in create.fields or update.changes.
 For every new OfferCreate in create.offers or update.new_offers, supply all
 required domain values in the corresponding fields array. In particular,
 availability_mode must be one of stock, schedule, supplier_check,
