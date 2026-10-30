@@ -13,22 +13,15 @@ jobs:
         with: {fetch-depth: 0}
       - uses: actions/setup-go@v5
         with: {go-version: '1.22.2', cache: true}
-      - name: Format all changed Go files and regenerate canonical OpenAPI
+      - name: Format changed Go code and synchronize canonical OpenAPI
+        shell: bash
         run: |
           set -euo pipefail
-          gofmt -w internal/adapters/secondary/storage/r2/client.go \
-            internal/application/ports/catalog_media.go \
-            internal/application/services/catalog_media_upload.go \
-            internal/adapters/primary/http/contract/catalog_media.go \
-            internal/adapters/primary/http/contract/api.go \
-            internal/adapters/primary/http/handlers/catalog_media.go \
-            internal/adapters/primary/http/handlers/core.go \
-            internal/application/authorization/permissions.go \
-            internal/bootstrap/dependencies.go
+          git diff --name-only -z origin/main...HEAD -- '*.go' | xargs -0 -r gofmt -w
           bash scripts/generate-openapi.sh
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -u
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'style(media): gofmt and synchronize generated OpenAPI'
+          git commit -m 'style(media): gofmt all changed files and generate OpenAPI'
           git push origin HEAD:feat/catalog-media-mvp-backend
