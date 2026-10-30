@@ -236,11 +236,17 @@ No proposal is executed until the merchant approves it.`
 		if err != nil {
 			var wireErr *native.MerchantCatalogSchemaError
 			var toolNameErr *native.MerchantCatalogToolNameError
-			if (errors.As(err, &wireErr) || errors.As(err, &toolNameErr)) && len(req.Tools) == 0 &&
+			var envelopeErr *native.MerchantCatalogCallEnvelopeError
+			if (errors.As(err, &wireErr) || errors.As(err, &toolNameErr) ||
+				errors.As(err, &envelopeErr)) && len(req.Tools) == 0 &&
 				finalValidationRetries == 0 && round+1 < nativeMaxMerchantToolRounds {
 				// This is an inference-only retry; no tool or commercial mutation ran.
 				// Keep the strict transport, do not normalize malformed merchant data.
 				finalValidationRetries++
+				if envelopeErr != nil {
+					trustedProposalInstruction += "\n\n# Final tool-call envelope recovery (one attempt only)\nYour previous final function call was not a well-formed tool call. Submit exactly one function call named submit_merchant_catalog_proposal, with a nonempty call identifier, type=function, and a complete, valid JSON object as its arguments matching the supplied strict schema. Do not call discovery tools here. Do not invent missing business facts, offers or prices.\n"
+					continue
+				}
 				if toolNameErr != nil {
 					trustedProposalInstruction += "\n\n# Final tool name recovery (one attempt only)\nThe previous response selected a function that was NOT offered for this final step. You MUST call ONLY submit_merchant_catalog_proposal. Do NOT call any merchant_catalog_list_* read tools in this final step. Use the exact declared function name, one tool call only, and obey its strict argument schema. Do not invent product information or prices.\n"
 					continue
