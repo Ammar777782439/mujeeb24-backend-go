@@ -1,6 +1,6 @@
 # Mujeeb 24 — Channel history purge & SocialAPI brand lifecycle (implementation gate)
 
-Status: IMPLEMENTED ON FEATURE BRANCH; LATEST CI VALIDATION PENDING; PRODUCTION NOT VERIFIED. Target branch: `feat/universal-catalog-ai-v3`. Do not merge or deploy until all gates pass.
+Status: Updated for backend `main` on 2026-10-30. Permanent removal API exists on `main`; live browser/production outcome remains unverified. The original history-only purge and disconnect actions remain separate.
 
 ## Verified provider contract (2026-10-08)
 - `GET /v1/brands` lists **visible** brands; a brand-scoped API key hides out-of-scope brands and a 404 does NOT prove a brand was deleted. Only an authorized full-access management key may create/delete brands.
@@ -8,6 +8,17 @@ Status: IMPLEMENTED ON FEATURE BRANCH; LATEST CI VALIDATION PENDING; PRODUCTION 
 - `DELETE /v1/accounts/{id}` disconnects that account; `DELETE /v1/brands/{id}` deletes the brand AND disconnects every account under it (204). Never delete the brand on the first of several channel disconnects.
 - Inbox API provides listing, reading, status/archiving, replies and sync; **no general delete-all-DM-history endpoint is documented**. The provider says it does not store DM message contents; the platform remains authoritative. Do not imply local purge deletes messages on Instagram/Facebook/WhatsApp.
 - Sources: https://docs.social-api.ai/llms.txt ; https://docs.social-api.ai/api-reference/brands/delete-a-brand ; https://docs.social-api.ai/api-reference/accounts/disconnect-a-social-account ; https://social-api.ai/blog/direct-messaging-api-2026 ; https://social-api.ai/blog/apis-for-managing-multiple-social-media-accounts
+
+## التنفيذ الحالي للإزالة النهائية في `main`
+
+- `POST /api/v1/businesses/{business_id}/channel-connections/{connection_id}/remove` يتطلب صلاحيات المالك أو المدير، و`confirmation=REMOVE_CHANNEL_AND_PURGE_DATA` و`If-Match` لإصدار القناة. يحتفظ Idempotency-Key بهوية المحاولة عند إعادة الإرسال.
+- **إزالة قناة واحدة** تفصل حساب SocialAPI المحدد وتحذف سجلها المحلي، ثم تؤرشف الربط بحيث يختفي من القائمة الافتراضية. القنوات الأخرى المحفوظة لدى التاجر لا تُحذف.
+- يرفض المسار إكمال الإزالة المحلية إذا رفض SocialAPI فصل الحساب. عملية `HistoryStore.Purge` والأرشفة تنفذ الآن داخل **معاملة PostgreSQL واحدة**، بحيث لا تترك البيانات ممسوحة والقناة نشطة بسبب خطأ في خطوة الأرشفة.
+- عند إزالة **آخر قناة مستخدمة** من Brand، يحاول النظام تحرير Brand بعد إتمام الجزء المحلي. إذا فشل التنظيف الخارجي، يظل `lifecycle_state=deleting` محفوظًا ويعيد `remove` على القناة المؤرشفة محاولة التنظيف؛ لا يُعتبر خطأ المزود نجاحًا.
+- `GET /v1/brands` و`GET /v1/usage` يفحصان قابلية الوصول بعد 404 في حذف Brand. **404 بمفرده ليس إثباتًا** على إزالة Brand.
+- حذف سجل المحادثة وحده عبر `history-purge` لا يفصل حساب SocialAPI ولا يحذف Brand ولا يؤرشف الاتصال.
+- الانقطاع الشبكي بين SocialAPI وPostgreSQL **ليس معاملة موزعة**؛ إن نجح فصل المزود ثم فشلت معاملة PostgreSQL، تبقى المحاولة قابلة لإعادة التنفيذ، لكن يلزم إعادة المحاولة لإكمال الحالة المحلية. لا يصح وصف العملية بأنها ذرية عبر الإنترنت وقاعدة البيانات.
+- هذا التحديث توثيق لسلوك الكود على `main` ولا يثبت نجاح الحذف أمام مزود حقيقي أو أن بيئة localhost أعادت تحميل أحدث نسخة.
 
 ## Product contract
 1. `Disconnect channel` is a **separate** action from `Delete local channel message history`, and from billing / subscription state. No automatic message purge for disconnect, expiry, suspension or downgrade.
