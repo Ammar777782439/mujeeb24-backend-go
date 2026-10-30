@@ -302,14 +302,16 @@ func (r *CatalogMediaRepository) PrimaryForReply(ctx context.Context, businessID
 	return &m, nil
 }
 
-
 // FindApprovedMediaLink rechecks the exact link selected at AutoReply creation,
 // including current product, variant and catalog status. Deleted/reassigned
 // photos are never sent by the delayed outbox worker.
-func (r *CatalogMediaRepository) FindApprovedMediaLink(ctx context.Context,businessID,linkID string)(*ports.CatalogMediaLink,error) {
- db,err:=r.executor(ctx);if err!=nil{return nil,err}
- var m ports.CatalogMediaLink
- err=db.QueryRow(ctx,`SELECT l.id::text,l.business_id::text,l.catalog_item_id::text,
+func (r *CatalogMediaRepository) FindApprovedMediaLink(ctx context.Context, businessID, linkID string) (*ports.CatalogMediaLink, error) {
+	db, err := r.executor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var m ports.CatalogMediaLink
+	err = db.QueryRow(ctx, `SELECT l.id::text,l.business_id::text,l.catalog_item_id::text,
     l.variant_id::text,l.media_id::text,l.is_primary,l.sort_order,l.alt_text,
     l.status,l.approved_at,l.resource_version,l.created_at,l.updated_at
     FROM catalog_media_links l
@@ -323,13 +325,17 @@ func (r *CatalogMediaRepository) FindApprovedMediaLink(ctx context.Context,busin
       AND a.status='ready' AND a.deleted_at IS NULL
       AND i.status='active' AND c.status='active'
       AND (l.variant_id IS NULL OR v.status='active')
-    LIMIT 1`,businessID,linkID).Scan(
-    &m.ID,&m.BusinessID,&m.CatalogItemID,&m.VariantID,&m.MediaID,
-    &m.IsPrimary,&m.SortOrder,&m.AltText,&m.Status,&m.ApprovedAt,
-    &m.ResourceVersion,&m.CreatedAt,&m.UpdatedAt)
- if errors.Is(err,pgx.ErrNoRows){return nil,nil}
- if err!=nil{return nil,fmt.Errorf("find approved media link: %w",err)}
- return &m,nil
+    LIMIT 1`, businessID, linkID).Scan(
+		&m.ID, &m.BusinessID, &m.CatalogItemID, &m.VariantID, &m.MediaID,
+		&m.IsPrimary, &m.SortOrder, &m.AltText, &m.Status, &m.ApprovedAt,
+		&m.ResourceVersion, &m.CreatedAt, &m.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find approved media link: %w", err)
+	}
+	return &m, nil
 }
 
 var _ ports.CatalogMediaRepository = (*CatalogMediaRepository)(nil)

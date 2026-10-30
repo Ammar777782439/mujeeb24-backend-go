@@ -771,16 +771,28 @@ func (c *Client) SendMessage(ctx context.Context, command ports.SendMessageComma
 		Payload string `json:"payload"`
 	}
 	request := struct {
-		Attachments []struct {Type string `json:"type"`; SourceType string `json:"source_type"`; Source string `json:"source"`} `json:"attachments,omitempty"`
+		Attachments []struct {
+			Type       string `json:"type"`
+			SourceType string `json:"source_type"`
+			Source     string `json:"source"`
+		} `json:"attachments,omitempty"`
 		AccountID string   `json:"account_id"`
 		Text      string   `json:"text"`
 		Buttons   []button `json:"buttons,omitempty"`
 	}{AccountID: command.ProviderAccountID, Text: command.Text}
-	if len(command.Attachments)>1 {return ports.ProviderSendResult{},fmt.Errorf("%w: too many attachments",ErrInvalidRequest)}
-	for _,attachment:=range command.Attachments{
-		uri,parseErr:=url.Parse(attachment.URL)
-		if parseErr!=nil||uri.Scheme!="https"||uri.Host==""||attachment.Type!="image"{return ports.ProviderSendResult{},fmt.Errorf("%w: invalid media URL or type",ErrInvalidRequest)}
-		request.Attachments=append(request.Attachments,struct {Type string `json:"type"`; SourceType string `json:"source_type"`; Source string `json:"source"`}{Type:"image",SourceType:"url",Source:attachment.URL})
+	if len(command.Attachments) > 1 {
+		return ports.ProviderSendResult{}, fmt.Errorf("%w: too many attachments", ErrInvalidRequest)
+	}
+	for _, attachment := range command.Attachments {
+		uri, parseErr := url.Parse(attachment.URL)
+		if parseErr != nil || uri.Scheme != "https" || uri.Host == "" || attachment.Type != "image" {
+			return ports.ProviderSendResult{}, fmt.Errorf("%w: invalid media URL or type", ErrInvalidRequest)
+		}
+		request.Attachments = append(request.Attachments, struct {
+			Type       string `json:"type"`
+			SourceType string `json:"source_type"`
+			Source     string `json:"source"`
+		}{Type: "image", SourceType: "url", Source: attachment.URL})
 	}
 	if len(command.Buttons) > 0 {
 		if command.Channel != "instagram" && command.Channel != "facebook" && command.Channel != "whatsapp" {

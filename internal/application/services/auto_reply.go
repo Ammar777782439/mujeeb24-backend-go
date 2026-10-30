@@ -615,13 +615,13 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		outboundID := s.id()
 		contentReference := EncodeInlineTextContentReference(replyText)
 		contentType := "text"
-		if s.CatalogMedia!=nil && len(proposal.Selected)==1 && strings.TrimSpace(proposal.Selected[0].ItemID)!="" {
-			selected:=proposal.Selected[0]
-			image,mediaErr:=s.CatalogMedia.PrimaryForReply(txCtx,businessID,selected.ItemID,selected.VariantID)
-			if mediaErr==nil && image!=nil {
-				if encoded,encodeErr:=EncodeInteractiveContentReference(ports.InteractiveMessage{Text:replyText,MediaID:image.MediaID,MediaLinkID:image.ID});encodeErr==nil {
-					contentReference=encoded
-					contentType="mixed"
+		if s.CatalogMedia != nil && len(proposal.Selected) == 1 && strings.TrimSpace(proposal.Selected[0].ItemID) != "" {
+			selected := proposal.Selected[0]
+			image, mediaErr := s.CatalogMedia.PrimaryForReply(txCtx, businessID, selected.ItemID, selected.VariantID)
+			if mediaErr == nil && image != nil {
+				if encoded, encodeErr := EncodeInteractiveContentReference(ports.InteractiveMessage{Text: replyText, MediaID: image.MediaID, MediaLinkID: image.ID}); encodeErr == nil {
+					contentReference = encoded
+					contentType = "mixed"
 				}
 			}
 		}
