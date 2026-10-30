@@ -180,6 +180,14 @@ label must be merchant-facing Arabic and the data type must match the JSON value
 validation_rules_json must be a nonempty JSON object string, e.g. "{}" when
 there are no constraints. For select and multi_select, provide an evidence-backed
 nonempty enum array. Never send an empty validation_rules_json string.
+A selected template may be extended with NEW, independent attributes after
+merchant approval. Match existing definitions by meaning, type AND rules,
+not by a similar label alone. Never redefine an existing attr_ field or change
+its stored enum to fit an unrelated merchant value. When the merchant describes
+a different concept that collides with an existing Arabic label, give the NEW
+custom attribute a distinct, precise Arabic label and a fresh snake_case alias;
+keep the original attr_ definition and its values unchanged. This is general
+to every industry; do not discard merchant details or substitute allowed values.
 Use the exact same semantic key in both places. Never create attr_ keys;
 those come from Go after the merchant approves. Existing attr_ keys from
 real catalog evidence need no new definition.
@@ -443,7 +451,7 @@ No proposal is executed until the merchant approves it.`
 							" (data_type=" + fieldErr.DataType + "). For multi_select use a JSON array of allowed choices, even when only one variant option is selected. For select use one allowed scalar. Required item-level attributes cannot be omitted. Use the actual schema definition and enum from authorized discovery evidence. If data is not known, ask_merchant with no mutations. Do not change or invent the schema."
 					}
 					if errors.As(err, &definitionErr) {
-						feedback = fmt.Sprintf("The model-authored attribute_definitions[%d] conflicts with the selected merchant template (reason=%s, existing_type=%s, proposed_type=%s). Do NOT create a new definition for an existing label or change its type or enum. Remove that duplicate definition and use the existing evidence-backed attr_ key with the stored type/rules. For multi_select, supply a JSON array of stored allowed choices; for select, a single allowed value. If the merchant requests an option outside the current enum, ask_merchant about changing the template; do not silently extend it. If no valid evidence-backed solution exists, return ask_merchant with empty mutations.",
+						feedback = fmt.Sprintf("The proposed attribute_definitions[%d] failed the selected merchant template preflight (reason=%s, existing_type=%s, proposed_type=%s). Do not overwrite existing definitions or their rules. Keep existing attr_ keys unchanged. If the merchant meant the SAME concept, use its evidence-backed attr_ key with the stored type and enum, and remove the duplicate definition. If the merchant meant a DIFFERENT concept despite a similar or identical display label, preserve the merchant's requested values by adding a separate custom definition with a NEW, semantically precise Arabic label and a fresh snake_case alias; use that alias in attributes. The selected template may gain independent new definitions after approval without rewriting existing definitions. Do not invent values or silently alter enums. If the merchant specifically wants to change an existing definition's rules or its intent cannot be established, ask_merchant with empty mutation/template payloads.",
 							definitionErr.Index, definitionErr.Reason, definitionErr.ExpectedType, definitionErr.ProposedType)
 					}
 					trustedProposalInstruction += "\n\n# Existing catalog schema preflight correction (one attempt only)\n" + feedback
