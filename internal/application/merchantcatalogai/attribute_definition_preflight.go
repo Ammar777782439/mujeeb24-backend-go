@@ -1,7 +1,6 @@
 package merchantcatalogai
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -118,14 +117,4 @@ func preflightRemapAttributes(attrs map[string]any, aliases map[string]string) (
 		return nil, &SchemaDefinitionPreflightError{Index: -1, Reason: "alias_mapping_collision"}
 	}
 	return mapped, nil
-}
-
-// preflightCanonicalRules is retained as a pure validation at the same trust
-// boundary as the transaction-time rules comparison.
-func preflightCanonicalRules(stored []byte, proposed map[string]any) bool {
-	if len(proposed) == 0 {
-		return true
-	}
-	encoded, err := json.Marshal(proposed)
-	return err == nil && verifyExistingAttributeRules(stored, proposed) == nil && len(encoded) > 0
 }
