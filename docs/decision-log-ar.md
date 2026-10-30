@@ -59,6 +59,8 @@
 
 | ADR-050 | توحيد Merchant Catalog Authoring على Canonical Proposal V3 مع Strict Wire للقيمة الفردية، وربط `AttributeSchema / AttributeDefinition` بقيم `CatalogItem.attributes` و`Variant.attributes`، واشتراط أن ينتج النموذج التسميات العربية والأنواع وقواعد `validation_rules` واختيار القالب، مع بقاء Go مدقّقًا ومُنشئًا للمفاتيح التقنية بعد الموافقة وReact عارضًا للتعريفات المخزنة فقط. | القضاء على تضارب التوثيق ونقل مقترح كامل داخل String، ومنع حفظ مواصفات بلا تسمية عربية موثوقة أو تجاهل قيود الاختيار، دون تعديل Catalog Domain أو ترحيل البيانات التاريخية تلقائيًا. المصدر الحالي: `docs/architecture/merchant-catalog-attribute-schema-ai-contract-ar.md` والعقدان 11 و12. | منفّذ على `fix/merchant-catalog-strict-wire-v3` / PR #18؛ غير مدمج في main |
 
+| ADR-051 | اختصار System Prompt لمسار Merchant Catalog AI وحده (v8)، وإزالة تكرار مواصفات الكيانات والنقل من النص السلوكي، مع الإبقاء على Tool Definitions وCatalog Entity Contract وStrict Wire وGo Validation دون تغيير. يركز البرومبت على فهم سياق التاجر ومطابقة المعاني لا أسماء الحقول، وحظر تحويل القيم المجهولة/المشروطة إلى حقائق أو استبدال قيم التاجر لتوافق enum. لا يتغير مسار Merchant Assist أو Customer Sales. | سجل 2026-10-30 أظهر قبول مقترح صحيح بنيويًا حوّل «الأسنان، اللثة، الفم» إلى فئات عمرية ليوافق قالبًا غير مناسب دلاليًا؛ وأظهر رفض ask_merchant لأنه تضمن create.fields. اختصار التعليمات وتحسين التوجيه لا يغنيان عن إصلاح القالب واختبار المخرجات الحية. | مطبق على البرومبت؛ يحتاج اختبارًا حيًا بعد النشر |
+
 ## قرارات لم تُحسم بعد
 
 هذه ليست فجوات يجب ملؤها بالتخمين:
