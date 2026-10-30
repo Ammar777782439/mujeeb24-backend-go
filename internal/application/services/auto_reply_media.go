@@ -86,3 +86,10 @@ func (s AutoReplyService) selectReplyMedia(
 	log.Printf("[CatalogMedia] stage=selected business=%s run=%s candidates=%d images=%d", businessID, runID, len(options), len(selected))
 	return selected, out.Usage
 }
+
+func mediaVariantMatches(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
