@@ -82,3 +82,12 @@ type CatalogMediaRepository interface {
 	Remove(context.Context, string, string, string, *string, string) error
 	PrimaryForReply(context.Context, string, string, *string) (*CatalogMediaLink, error)
 }
+
+
+// MediaObjectStorage is private storage; signed read URLs are generated only
+// at outbound dispatch and never stored in media_assets or message records.
+type MediaObjectStorage interface {
+    Put(context.Context,string,[]byte) error
+    Delete(context.Context,string) error
+    PresignGet(context.Context,string,time.Duration)(string,error)
+}
