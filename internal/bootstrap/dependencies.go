@@ -21,10 +21,14 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 	conversationReferenceRepository := postgres.NewConversationReferenceRepository(adapter)
 	customerRuntime := services.CustomerRuntimeService{Repository: customerRepository, Transactions: adapter}
 	catalogRepository := postgres.NewCatalogRepository(adapter)
-	mediaRepo := postgres.NewCatalogMediaRepository(adapter)
-	mediaService := services.CatalogMediaService{Media: mediaRepo, Transactions: adapter}
+	var mediaRepo ports.CatalogMediaRepository
+	var mediaService services.CatalogMediaService
+	if os.Getenv("CATALOG_MEDIA_ENABLED") == "true" {
+		mediaRepo = postgres.NewCatalogMediaRepository(adapter)
+		mediaService = services.CatalogMediaService{Media: mediaRepo, Transactions: adapter}
+	}
 	var mediaObjects ports.MediaObjectStorage
-	if os.Getenv("R2_ACCOUNT_ID") != "" && os.Getenv("R2_BUCKET") != "" && os.Getenv("R2_ACCESS_KEY_ID") != "" && os.Getenv("R2_SECRET_ACCESS_KEY") != "" {
+	if os.Getenv("CATALOG_MEDIA_ENABLED") == "true" && os.Getenv("R2_ACCOUNT_ID") != "" && os.Getenv("R2_BUCKET") != "" && os.Getenv("R2_ACCESS_KEY_ID") != "" && os.Getenv("R2_SECRET_ACCESS_KEY") != "" {
 		mediaObjects = &r2.Client{AccountID: os.Getenv("R2_ACCOUNT_ID"), Bucket: os.Getenv("R2_BUCKET"), AccessKeyID: os.Getenv("R2_ACCESS_KEY_ID"), SecretAccessKey: os.Getenv("R2_SECRET_ACCESS_KEY")}
 	}
 	catalogCommands := services.NewCatalogCommandServices(catalogRepository, adapter)
