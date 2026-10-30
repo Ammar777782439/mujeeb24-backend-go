@@ -6,6 +6,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -107,6 +108,57 @@ func (c *Client) signingKey(day string) []byte {
 	k = hmac256(k, "s3")
 	return hmac256(k, "aws4_request")
 }
+// Keep provider error diagnostics safe: use XML Code and request ID only.
+// Never echo the raw S3 XML Message (it may contain signed request material).
+func safeProviderToken(v string) string {
+	if v == "" || len(v) > 96 {
+		return "unavailable"
+	}
+	for _, r := range v {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' ||
+			r >= '0' && r <= '9' || r == '-' || r == '_') {
+			return "unavailable"
+		}
+	}
+	return v
+}
+
+func classifyProviderHTTPError(method string, res *http.Response) error {
+	raw, _ := io.ReadAll(io.LimitReader(res.Body, 8192))
+	var body struct {
+		Code      string `xml:"Code"`
+		Message   string `xml:"Message"`
+		RequestID string `xml:"RequestId"`
+	}
+	_ = xml.Unmarshal(raw, &body)
+	id := res.Header.Get("X-Amz-Request-Id")
+	if id == "" {
+		id = body.RequestID
+	}
+	// Classification is deliberately based on controlled strings, not echoed text.
+	reason := "unclassified"
+	m := strings.ToLower(body.Code + " " + body.Message)
+	switch {
+	case strings.Contains(m, "unsupported header") && strings.Contains(m, "checksum"):
+		reason = "unsupported_checksum_header"
+	case strings.Contains(m, "signature") || strings.Contains(m, "authorization"):
+		reason = "signature_or_auth"
+	case strings.Contains(m, "content-length") || strings.Contains(m, "content length"):
+		reason = "content_length"
+	case strings.Contains(m, "digest") || strings.Contains(m, "checksum") ||
+		strings.Contains(m, "uploaded data") || strings.Contains(m, "payload hash"):
+		reason = "content_integrity"
+	case strings.Contains(m, "region") || strings.Contains(m, "endpoint"):
+		reason = "region_or_endpoint"
+	case strings.Contains(m, "bucket"):
+		reason = "bucket_reference"
+	case strings.Contains(m, "invalidrequest") || strings.Contains(m, "malformed"):
+		reason = "malformed_request"
+	}
+	return fmt.Errorf("S3 %s failed: HTTP %d code=%s reason=%s request_id=%s",
+		method, res.StatusCode, safeProviderToken(body.Code), reason, safeProviderToken(id))
+}
+
 func (c *Client) request(ctx context.Context, method, key, mime string, body []byte) (*http.Response, error) {
 	if err := c.valid(); err != nil {
 		return nil, err
@@ -151,8 +203,7 @@ func (c *Client) request(ctx context.Context, method, key, mime string, body []b
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		defer res.Body.Close()
-		_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 2048))
-		return nil, fmt.Errorf("R2 %s failed: HTTP %d", method, res.StatusCode)
+		return nil, classifyProviderHTTPError(method, res)
 	}
 	return res, nil
 }

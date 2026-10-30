@@ -124,3 +124,64 @@ func TestBackblazeRejectsUnsafeOrMismatchedEndpoints(t *testing.T) {
 		}
 	}
 }
+
+func TestBackblazeReturnsSafeErrorCodeAndRequestID(t *testing.T) {
+	c := &Client{
+		Endpoint: "https://s3.us-east-005.backblazeb2.com",
+		Region: "us-east-005",
+		Bucket: "mujeeb24-images",
+		AccessKeyID: "test-access-id",
+		SecretAccessKey: "test-secret",
+		HTTP: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: 400,
+				Header: http.Header{"X-Amz-Request-Id": []string{"request-abc"}},
+				Body: io.NopCloser(strings.NewReader(
+					`<Error><Code>InvalidRequest</Code><Message>Unsupported header x-amz-checksum-sha256; sensitive-example-content</Message></Error>`)),
+			}, nil
+		})},
+	}
+	err := c.Put(context.Background(), "catalog/test/image.jpg", "image/jpeg", []byte("image"))
+	if err == nil {
+		t.Fatal("HTTP 400 must not succeed")
+	}
+	msg := err.Error()
+	for _, expected := range []string{"HTTP 400", "code=InvalidRequest", "reason=unsupported_checksum_header", "request_id=request-abc"} {
+		if !strings.Contains(msg, expected) {
+			t.Fatalf("missing diagnostic %q in %q", expected, msg)
+		}
+	}
+	for _, forbidden := range []string{"test-secret", "sensitive-example-content", "test-access-id"} {
+		if strings.Contains(msg, forbidden) {
+			t.Fatalf("provider response leaked sensitive text in %q", msg)
+		}
+	}
+}
+
+func TestBackblazeRejectsUnsafeDiagnosticTokens(t *testing.T) {
+	res := &http.Response{
+		StatusCode: 400,
+		Header: http.Header{"X-Amz-Request-Id": []string{"not safe\ncontent"}},
+		Body: io.NopCloser(strings.NewReader(
+			`<Error><Code>InvalidRequest extra</Code><Message>private details</Message></Error>`)),
+	}
+	err := classifyProviderHTTPError("PUT", res)
+	if err == nil || !strings.Contains(err.Error(), "code=unavailable") ||
+		!strings.Contains(err.Error(), "request_id=unavailable") ||
+		strings.Contains(err.Error(), "private details") {
+		t.Fatalf("unsafe diagnostic: %v", err)
+	}
+}
+
+func TestBackblazeHTTPErrorWithoutXMLStillHasStatus(t *testing.T) {
+	res := &http.Response{
+		StatusCode: 400,
+		Header: make(http.Header),
+		Body: io.NopCloser(strings.NewReader("not XML")),
+	}
+	got := classifyProviderHTTPError("PUT", res)
+	if got == nil || !strings.Contains(got.Error(), "HTTP 400") ||
+		!strings.Contains(got.Error(), "code=unavailable") {
+		t.Fatalf("missing HTTP diagnostic: %v", got)
+	}
+}
