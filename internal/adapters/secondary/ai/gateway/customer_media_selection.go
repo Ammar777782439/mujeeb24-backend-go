@@ -80,7 +80,7 @@ func (c *NativeCustomerSalesAdapter) SelectMedia(ctx context.Context, input port
 	if err != nil {
 		return ports.CustomerMediaSelectionOutput{}, err
 	}
-	if len([]rune(system))+len([]rune(evidence))+len([]rune(toolJSON)) > c.maxInputCharacters {
+	if len([]rune(system))+len([]rune(string(evidence)))+len([]rune(string(toolJSON))) > c.maxInputCharacters {
 		return ports.CustomerMediaSelectionOutput{}, errors.New("media selection exceeds model context budget")
 	}
 	maxTokens := c.maxOutputTokens
