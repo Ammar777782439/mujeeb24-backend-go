@@ -136,7 +136,11 @@ For update: populate update.item_id and only requested changes in
 update.changes, update.existing_variants, update.new_variants,
 update.existing_offers, update.new_offers.
 For delete: populate delete.id. For read-only answers: operation=ask_merchant
-with all mutation payloads empty.
+with all mutation payloads empty. When asking for missing information, use
+status=needs_more_data and operation=ask_merchant, and keep root
+attribute_schema_name="" and attribute_definitions=[].
+Do not draft attribute definitions or a new template until an actual
+create/update proposal is ready for review.
 When selecting an existing template, use only an ID obtained from
 merchant_catalog_list_attribute_schemas. Populate create.attribute_schema_id
 or update.attribute_schema_id as appropriate. Use exact existing definition
@@ -146,8 +150,11 @@ name that YOU understand from the merchant's product. Go will only persist
 your provided name after approval; it never translates or authors labels.
 Set attribute_schema_name="" when an existing template is selected.
 For every custom English snake_case attribute key appearing in item or variant attributes,
-add one entry to attribute_definitions with {key,label,data_type}; label must be
-merchant-facing Arabic, and the data type must match the actual JSON value.
+add one entry to attribute_definitions with {key,label,data_type,validation_rules_json};
+label must be merchant-facing Arabic and the data type must match the JSON value.
+validation_rules_json must be a nonempty JSON object string, e.g. "{}" when
+there are no constraints. For select and multi_select, provide an evidence-backed
+nonempty enum array. Never send an empty validation_rules_json string.
 Use the exact same semantic key in both places. Never create attr_ keys;
 those come from Go after the merchant approves. Existing attr_ keys from
 real catalog evidence need no new definition.
@@ -342,6 +349,15 @@ No proposal is executed until the merchant approves it.`
 		}
 		proposal, err := catalogWireParse(content)
 		if err != nil {
+			// Strict structural validation already succeeded, but the model may
+			// still supply invalid field JSON, unused definitions, or mutation
+			// data in an ask_merchant response. Request a new proposal once,
+			// rather than silently correcting or persisting untrusted data.
+			if finalValidationRetries == 0 && round+1 < nativeMaxMerchantToolRounds {
+				finalValidationRetries++
+				trustedProposalInstruction += "\n\n# Final proposal semantic recovery (one attempt only)\nYour previous merchant_catalog_wire proposal failed the canonical parser. Return a NEW complete strict tool call. Every validation_rules_json must be a valid nonempty JSON object string such as \"{}\" for no rules. Do not invent attribute definitions, labels, rules, template IDs, offers or prices. When asking the merchant for missing details, use operation=ask_merchant and status=needs_more_data, with attribute_schema_name=\"\", attribute_definitions=[], and empty create, update and delete payloads. Do not assert that a product was saved.\n"
+				continue
+			}
 			return merchantcatalogai.Proposal{}, fmt.Errorf("decode strict merchant catalog wire proposal: %w", err)
 		}
 		proposal = proposal.Normalize()
