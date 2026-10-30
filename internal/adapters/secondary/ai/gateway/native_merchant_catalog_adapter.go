@@ -144,7 +144,12 @@ of draft, active, inactive, expired, archived. They are NOT optional empty
 strings. Values inside value_json must be JSON-encoded, e.g. "\"unknown\"".
 Unknown availability is NOT proof of stock or immediate availability.
 Do not claim delivery or other fulfillment modes without merchant facts.
-If facts needed for a trustworthy offer are missing, request those facts with
+For a new offer with no merchant-stated amount and no other pricing mode requested,
+use pricing_mode=quote_required, price_source=not_stated, omit amount, and set
+currency to the trusted business default_currency when available.
+Never use starting_from without a numeric amount or copy a different item's price.
+If merchant did not name an offer, use name_source=system_default and name="سعر البيع".
+If required non-default business facts are still missing, ask with
 operation=ask_merchant, status=needs_more_data, and inactive data arrays empty.
 For update: populate update.item_id and only requested changes in
 update.changes, update.existing_variants, update.new_variants,
