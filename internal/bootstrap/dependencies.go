@@ -1,6 +1,8 @@
 package bootstrap
 
 import (
+	"os"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/storage/r2"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/handlers"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
@@ -19,6 +21,12 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 	conversationReferenceRepository := postgres.NewConversationReferenceRepository(adapter)
 	customerRuntime := services.CustomerRuntimeService{Repository: customerRepository, Transactions: adapter}
 	catalogRepository := postgres.NewCatalogRepository(adapter)
+	mediaRepo:=postgres.NewCatalogMediaRepository(adapter)
+	mediaService:=services.CatalogMediaService{Media:mediaRepo,Transactions:adapter}
+	var mediaObjects ports.MediaObjectStorage
+	if os.Getenv("R2_ACCOUNT_ID")!="" && os.Getenv("R2_BUCKET")!="" && os.Getenv("R2_ACCESS_KEY_ID")!="" && os.Getenv("R2_SECRET_ACCESS_KEY")!="" {
+		mediaObjects=&r2.Client{AccountID:os.Getenv("R2_ACCOUNT_ID"),Bucket:os.Getenv("R2_BUCKET"),AccessKeyID:os.Getenv("R2_ACCESS_KEY_ID"),SecretAccessKey:os.Getenv("R2_SECRET_ACCESS_KEY")}
+	}
 	catalogCommands := services.NewCatalogCommandServices(catalogRepository, adapter)
 	catalogCommands.Entitlements = postgres.NewSubscriptionRepository(adapter)
 
@@ -95,6 +103,8 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 		PreviewChannelHistory:  services.PreviewChannelHistoryService{Store: postgres.NewChannelHistoryRepository(adapter)},
 		PurgeChannelHistory:    services.PurgeChannelHistoryService{Store: postgres.NewChannelHistoryRepository(adapter)},
 
+		CatalogMediaService:          mediaService,
+		CatalogImageUpload:           services.CatalogImageUploadService{Repository:mediaRepo,Objects:mediaObjects},
 		CreateCatalog:                services.CreateCatalogCommandService{CatalogCommandServices: catalogCommands},
 		UpdateCatalog:                services.UpdateCatalogCommandService{CatalogCommandServices: catalogCommands},
 		CreateAttributeSchemaVersion: services.CreateAttributeSchemaVersionCommandService{CatalogCommandServices: catalogCommands},
