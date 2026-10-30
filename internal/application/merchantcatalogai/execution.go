@@ -53,6 +53,9 @@ func (s ExecutionService) Prepare(ctx context.Context, in ExecutionInput) (strin
 	if in.Proposal.Status != StatusResolved || !in.Proposal.IsMutation() {
 		return "", nil
 	}
+	if err := ValidateProposalSchemaAttributes(ctx, s.Catalogs, in.BusinessID, in.SelectedCatalog.ID, in.Proposal); err != nil {
+		return "", err
+	}
 	p := StoredProposal{ID: uuid.NewString(), BusinessID: in.BusinessID, PrincipalID: in.PrincipalID, SessionID: in.SessionID, CatalogID: in.SelectedCatalog.ID, Proposal: in.Proposal, Versions: map[string]int64{}}
 	if err := s.snapshot(ctx, &p); err != nil {
 		return "", err

@@ -407,6 +407,24 @@ No proposal is executed until the merchant approves it.`
 			}
 			return merchantcatalogai.Proposal{}, fmt.Errorf("validate merchant catalog proposal: %w", err)
 		}
+		if validator, ok := input.Capabilities.(interface {
+			ValidateProposalSchemaAttributes(context.Context, string, merchantcatalogai.Proposal) error
+		}); ok {
+			if err := validator.ValidateProposalSchemaAttributes(ctx, input.BusinessID, proposal); err != nil {
+				var fieldErr *merchantcatalogai.SchemaAttributePreflightError
+				if finalValidationRetries == 0 && round+1 < nativeMaxMerchantToolRounds {
+					finalValidationRetries++
+					feedback := "The proposed item or variant attributes violate its existing merchant catalog template. Read-only schema evidence must be respected. Choose ask_merchant if an essential value or valid choice is unknown. Do not invent values or change the existing attribute schema."
+					if errors.As(err, &fieldErr) {
+						feedback = "The existing catalog attribute schema rejects " + fieldErr.Path +
+							" (data_type=" + fieldErr.DataType + "). For multi_select use a JSON array of allowed choices, even when only one variant option is selected. For select use one allowed scalar. Required item-level attributes cannot be omitted. Use the actual schema definition and enum from authorized discovery evidence. If data is not known, ask_merchant with no mutations. Do not change or invent the schema."
+					}
+					trustedProposalInstruction += "\n\n# Existing catalog schema preflight correction (one attempt only)\n" + feedback
+					continue
+				}
+				return merchantcatalogai.Proposal{}, fmt.Errorf("validate merchant catalog proposal attributes: %w", err)
+			}
+		}
 		return proposal, nil
 	}
 	return merchantcatalogai.Proposal{}, errors.New("merchant catalog maximum model rounds exceeded")

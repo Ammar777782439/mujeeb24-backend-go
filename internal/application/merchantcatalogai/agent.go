@@ -143,6 +143,13 @@ func (a *Agent) HandleTurn(ctx context.Context, in TurnInput) (TurnResult, error
 	if err := proposal.Validate(); err != nil {
 		return TurnResult{}, err
 	}
+	if validator, ok := capabilities.(interface {
+		ValidateProposalSchemaAttributes(context.Context, string, Proposal) error
+	}); ok {
+		if err := validator.ValidateProposalSchemaAttributes(ctx, in.BusinessID, proposal); err != nil {
+			return TurnResult{}, err
+		}
+	}
 
 	// The merchant can disable AI while the model is generating a proposal.
 	if a.AIGuard != nil {
