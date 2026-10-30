@@ -305,6 +305,9 @@ func catalogWireParse(raw string) (merchantcatalogai.Proposal, error) {
 		}
 		proposal["delete"] = map[string]any{"id": wire.Delete.ID, "reason_given": wire.Delete.ReasonGiven}
 	case merchantcatalogai.OperationAskMerchant:
+		if strings.TrimSpace(wire.AttributeSchemaName) != "" || len(wire.AttributeDefinitions) != 0 {
+			return merchantcatalogai.Proposal{}, errors.New("ask merchant operation cannot contain draft attribute templates")
+		}
 		if len(wire.Create.Fields) != 0 || len(wire.Create.Variants) != 0 ||
 			len(wire.Create.Offers) != 0 || wire.Update.ItemID != "" || wire.Update.AttributeSchemaID != "" ||
 			len(wire.Update.Changes) != 0 || len(wire.Update.ExistingVariants) != 0 ||
