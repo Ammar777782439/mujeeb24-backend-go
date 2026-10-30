@@ -378,22 +378,7 @@ No proposal is executed until the merchant approves it.`
 			// rather than silently correcting or persisting untrusted data.
 			if finalValidationRetries == 0 && round+1 < nativeMaxMerchantToolRounds {
 				finalValidationRetries++
-				trustedProposalInstruction += `
-
-# Final proposal semantic recovery (one attempt only)
-The previous merchant_catalog_wire proposal failed the canonical parser.
-Return a new complete strict tool call with every required field.
-Every validation_rules_json must be a nonempty valid JSON object string
-such as "{}" when no validation constraints apply.
-Do not invent attributes, labels, rules, template IDs, offers or prices.
-When asking the merchant for missing details, use operation=ask_merchant
-and status=needs_more_data, attribute_schema_name="", attribute_definitions=[],
-create={"fields":[],"variants":[],"offers":[]},
-update={"item_id":"","attribute_schema_id":"","changes":[],
-"existing_variants":[],"new_variants":[],"existing_offers":[],"new_offers":[]},
-and delete={"id":"","reason_given":""}.
-Never claim the product has already been saved.
-`
+				trustedProposalInstruction += "\n\n# Specific canonical parser feedback (one attempt only)\n" + merchantCatalogWireFeedback(content)
 				continue
 			}
 			return merchantcatalogai.Proposal{}, fmt.Errorf("decode strict merchant catalog wire proposal: %w", err)
@@ -403,6 +388,11 @@ Never claim the product has already been saved.
 			ValidateProposalReferences(merchantcatalogai.Proposal) error
 		}); ok {
 			if err := validator.ValidateProposalReferences(proposal); err != nil {
+				if finalValidationRetries == 0 && round+1 < nativeMaxMerchantToolRounds {
+					finalValidationRetries++
+					trustedProposalInstruction += "\n\n# Canonical catalog reference correction (one attempt only)\nThe previous proposal referenced catalog items, schemas, offers, or variants that Go cannot validate against authorized discovery evidence. Use only exact evidence-backed IDs from this merchant's catalog. If verified references are unavailable, use operation=ask_merchant, status=needs_more_data, and empty mutation fields. Never invent IDs, move data across tenants or retry read-only tools in this final step."
+					continue
+				}
 				return merchantcatalogai.Proposal{}, fmt.Errorf("validate merchant catalog proposal references: %w", err)
 			}
 		}
@@ -412,7 +402,7 @@ Never claim the product has already been saved.
 			// Do not repair or manufacture commercial fields in Go.
 			if finalValidationRetries == 0 && round+1 < nativeMaxMerchantToolRounds {
 				finalValidationRetries++
-				trustedProposalInstruction += "\n\n# Canonical proposal validation correction (one attempt only)\n" + merchantCatalogValidationFeedback(err)
+				trustedProposalInstruction += "\n\n# Canonical proposal validation correction (one attempt only)\n" + merchantCatalogWireFeedback(content) + "\n" + merchantCatalogValidationFeedback(err)
 				continue
 			}
 			return merchantcatalogai.Proposal{}, fmt.Errorf("validate merchant catalog proposal: %w", err)

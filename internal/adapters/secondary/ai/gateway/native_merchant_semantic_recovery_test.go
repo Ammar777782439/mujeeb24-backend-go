@@ -75,7 +75,7 @@ func TestMerchantSemanticWireRetryIsBoundedAndPreservesStrictContract(t *testing
 					t.Error("merchant recovery lost strict final schema")
 				}
 				if calls == 2 && (len(request.Messages) == 0 ||
-					!strings.Contains(request.Messages[0].Content, "Final proposal semantic recovery") ||
+					!strings.Contains(request.Messages[0].Content, "Specific canonical parser feedback") ||
 					!strings.Contains(request.Messages[0].Content, "validation_rules_json")) {
 					t.Error("retry did not preserve strict repair instructions")
 				}
