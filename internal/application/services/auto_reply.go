@@ -619,7 +619,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 			selected:=proposal.Selected[0]
 			image,mediaErr:=s.CatalogMedia.PrimaryForReply(txCtx,businessID,selected.ItemID,selected.VariantID)
 			if mediaErr==nil && image!=nil {
-				if encoded,encodeErr:=EncodeInteractiveContentReference(ports.InteractiveMessage{Text:replyText,MediaID:image.MediaID});encodeErr==nil {
+				if encoded,encodeErr:=EncodeInteractiveContentReference(ports.InteractiveMessage{Text:replyText,MediaID:image.MediaID,MediaLinkID:image.ID});encodeErr==nil {
 					contentReference=encoded
 					contentType="mixed"
 				}
