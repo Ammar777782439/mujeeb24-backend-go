@@ -127,15 +127,15 @@ func TestBackblazeRejectsUnsafeOrMismatchedEndpoints(t *testing.T) {
 
 func TestBackblazeReturnsSafeErrorCodeAndRequestID(t *testing.T) {
 	c := &Client{
-		Endpoint: "https://s3.us-east-005.backblazeb2.com",
-		Region: "us-east-005",
-		Bucket: "mujeeb24-images",
-		AccessKeyID: "test-access-id",
+		Endpoint:        "https://s3.us-east-005.backblazeb2.com",
+		Region:          "us-east-005",
+		Bucket:          "mujeeb24-images",
+		AccessKeyID:     "test-access-id",
 		SecretAccessKey: "test-secret",
 		HTTP: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			return &http.Response{
 				StatusCode: 400,
-				Header: http.Header{"X-Amz-Request-Id": []string{"request-abc"}},
+				Header:     http.Header{"X-Amz-Request-Id": []string{"request-abc"}},
 				Body: io.NopCloser(strings.NewReader(
 					`<Error><Code>InvalidRequest</Code><Message>Unsupported header x-amz-checksum-sha256; sensitive-example-content</Message></Error>`)),
 			}, nil
@@ -176,8 +176,8 @@ func TestBackblazeRejectsUnsafeDiagnosticTokens(t *testing.T) {
 func TestBackblazeHTTPErrorWithoutXMLStillHasStatus(t *testing.T) {
 	res := &http.Response{
 		StatusCode: 400,
-		Header: make(http.Header),
-		Body: io.NopCloser(strings.NewReader("not XML")),
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader("not XML")),
 	}
 	got := classifyProviderHTTPError("PUT", res)
 	if got == nil || !strings.Contains(got.Error(), "HTTP 400") ||

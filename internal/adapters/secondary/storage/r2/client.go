@@ -108,6 +108,7 @@ func (c *Client) signingKey(day string) []byte {
 	k = hmac256(k, "s3")
 	return hmac256(k, "aws4_request")
 }
+
 // Keep provider error diagnostics safe: use XML Code and request ID only.
 // Never echo the raw S3 XML Message (it may contain signed request material).
 func safeProviderToken(v string) string {
