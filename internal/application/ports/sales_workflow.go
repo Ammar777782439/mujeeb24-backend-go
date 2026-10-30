@@ -88,6 +88,7 @@ type InteractiveButton struct {
 	Payload string `json:"payload"`
 }
 type InteractiveMessage struct {
+	MediaID string `json:"media_id,omitempty"`
 	Text    string              `json:"text"`
 	Buttons []InteractiveButton `json:"buttons,omitempty"`
 }
