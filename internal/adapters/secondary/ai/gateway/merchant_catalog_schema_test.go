@@ -140,7 +140,6 @@ func TestMerchantCatalogOfferVariantReferencesCannotBeEmpty(t *testing.T) {
 	}
 }
 
-
 func TestMerchantCatalogPricingModeOwnedOnlyByOffers(t *testing.T) {
 	wire := merchantCatalogWireSchema()["properties"].(map[string]any)
 	create := wire["create"].(map[string]any)["properties"].(map[string]any)
