@@ -3,6 +3,7 @@ package handlers
 import (
  "context"
  "strings"
+ "time"
 
  "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
  "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
@@ -22,13 +23,23 @@ func mediaLinkView(m ports.CatalogMediaLink)contract.CatalogMediaView{
   ResourceVersion:m.ResourceVersion}
 }
 func(s *Server)dispatchCatalogMedia(ctx context.Context,operationID string,input any)(any,bool){
- if operationID!="uploadCatalogImage"&&operationID!="listCatalogMedia"&&
+ if operationID!="getCatalogMediaReadURL"&&operationID!="uploadCatalogImage"&&operationID!="listCatalogMedia"&&
     operationID!="attachCatalogMedia"&&operationID!="setCatalogMediaPrimary"&&operationID!="removeCatalogMedia"{
   return nil,false
  }
  var businessID contract.UUID
  switch in:=input.(type){
+ case *contract.CatalogMediaReadInput:
+  if s.deps.CatalogImageUpload.Objects==nil{return huma.Error503ServiceUnavailable("private image storage is not configured"),true}
+  asset,err:=s.deps.CatalogMediaService.Media.GetAsset(ctx,business,string(in.MediaID))
+  if err!=nil||asset.Status!="ready"||asset.DeletedAt!=nil{return huma.Error404NotFound("media not found"),true}
+  u,err:=s.deps.CatalogImageUpload.Objects.PresignGet(ctx,asset.StorageKey,10*time.Minute)
+  if err!=nil{return huma.Error503ServiceUnavailable("cannot access private image"),true}
+  out:=&contract.Single[contract.CatalogMediaReadView]{}
+  out.Body.Data=contract.CatalogMediaReadView{URL:u,ExpiresInSeconds:600,MimeType:asset.MimeType,Width:asset.Width,Height:asset.Height}
+  return out,true
  case *contract.CatalogImageUploadInput:businessID=in.BusinessID
+ case *contract.CatalogMediaReadInput:businessID=in.BusinessID
  case *contract.CatalogGalleryInput:businessID=in.BusinessID
  case *contract.CatalogMediaAttachInput:businessID=in.BusinessID
  case *contract.CatalogMediaLinkInput:businessID=in.BusinessID
