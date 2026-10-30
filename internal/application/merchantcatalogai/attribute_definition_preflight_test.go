@@ -17,12 +17,12 @@ func proposedColorConflict(pType string, attrs any) Proposal {
 		ResponseText:  "مراجعة تعديل اللون",
 		Update: &UpdateOperation{ItemID: "item",
 			NewVariants: []VariantCreate{{
-				Ref:        "yellow", Name: "أصفر",
+				Ref: "yellow", Name: "أصفر",
 				Attributes: map[string]any{"color": attrs},
 			}},
 		},
 		AttributeDefinitions: []ProposedAttributeDefinition{{
-			Key:             "color", Label: "اللون", DataType: pType,
+			Key: "color", Label: "اللون", DataType: pType,
 			ValidationRules: map[string]any{"enum": []any{"أصفر", "أسود"}},
 		}},
 	}
@@ -89,7 +89,7 @@ func TestPreflightRejectsRuleOverrideAndDuplicateDefinitionLabel(t *testing.T) {
 		"enum": []any{"أسود", "أزرق", "أبيض"},
 	}
 	p.AttributeDefinitions = append(p.AttributeDefinitions, ProposedAttributeDefinition{
-		Key:             "shade", Label: "اللون", DataType: "multi_select",
+		Key: "shade", Label: "اللون", DataType: "multi_select",
 		ValidationRules: map[string]any{"enum": []any{"أسود", "أزرق", "أبيض"}},
 	})
 	err = ValidateProposalSchemaAttributes(context.Background(), repo, "business", "catalog", p)
@@ -119,10 +119,10 @@ func TestPreflightRejectsExistingColorSchemaConflictForCreate(t *testing.T) {
 		Status: StatusResolved, Operation: OperationCreate,
 		Create: &ItemCreate{
 			AttributeSchemaID: &schemaID,
-			Attributes: map[string]any{"attr_brand": "Samsung", "color": "أصفر"},
+			Attributes:        map[string]any{"attr_brand": "Samsung", "color": "أصفر"},
 		},
 		AttributeDefinitions: []ProposedAttributeDefinition{{
-			Key:             "color", Label: "اللون", DataType: "select",
+			Key: "color", Label: "اللون", DataType: "select",
 			ValidationRules: map[string]any{"enum": []any{"أصفر"}},
 		}},
 	}
