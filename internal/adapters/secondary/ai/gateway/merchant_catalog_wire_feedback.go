@@ -91,7 +91,6 @@ func merchantCatalogWireFeedback(raw string) string {
 			text(path, fields, "currency")
 		}
 		var mode, source, nameSource, offerName, currency string
-		var amountPresent bool
 		for _, f := range fields {
 			switch f.Name {
 			case "pricing_mode":
@@ -104,8 +103,6 @@ func merchantCatalogWireFeedback(raw string) string {
 				_ = json.Unmarshal([]byte(f.ValueJSON), &offerName)
 			case "currency":
 				_ = json.Unmarshal([]byte(f.ValueJSON), &currency)
-			case "amount":
-				amountPresent = true
 			}
 		}
 		if required && (len(currency) != 3 || strings.ToUpper(currency) != currency ||
@@ -120,9 +117,6 @@ func merchantCatalogWireFeedback(raw string) string {
 			mode == "fixed" || mode == "starting_from" || mode == "per_unit" ||
 			mode == "per_person" || mode == "per_day" {
 			text(path, fields, "amount")
-		} else if amountPresent {
-			// For quote_required/dynamic, a null amount is permitted by contract.
-			// Go's canonical validator still enforces the exact price provenance.
 		}
 		if mode == "per_unit" || mode == "per_person" || mode == "per_day" {
 			text(path, fields, "pricing_unit")
