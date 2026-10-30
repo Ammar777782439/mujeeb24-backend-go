@@ -2045,8 +2045,6 @@ components:
           type: string
         name:
           type: string
-        pricing_mode:
-          type: string
         requires_confirmation:
           type: boolean
         short_description:
@@ -2077,8 +2075,6 @@ components:
             $ref: "#/components/schemas/OfferCreate"
           nullable: true
           type: array
-        pricing_mode:
-          type: string
         requires_confirmation:
           type: boolean
         short_description:
@@ -2091,7 +2087,6 @@ components:
       required:
         - name
         - item_type
-        - pricing_mode
         - availability_mode
         - fulfillment_mode
         - requires_confirmation
