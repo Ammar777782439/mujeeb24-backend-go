@@ -25,6 +25,7 @@ const MaxCatalogMediaBytes = 10 * 1024 * 1024
 type CatalogImageUploadService struct {
 	Repository ports.CatalogMediaRepository
 	Objects    ports.MediaObjectStorage
+	StorageProvider string
 	Now        func() time.Time
 	NewID      func() string
 }
@@ -73,8 +74,16 @@ func (s CatalogImageUploadService) UploadBase64(ctx context.Context, businessID,
 		extension = ".png"
 	}
 	key := "catalog/" + businessID + "/" + id + extension
+	provider := s.StorageProvider
+	if provider == "" {
+		provider = "r2"
+	}
+	if provider != "r2" && provider != "backblaze" {
+		return ports.MediaAsset{}, errors.New("unsupported image storage provider")
+	}
 	_, err = s.Repository.CreatePendingAsset(ctx, ports.PendingMediaAsset{
-		ID: id, BusinessID: businessID, StorageKey: key, UploadExpiresAt: now.Add(30 * time.Minute), CreatedBy: createdBy,
+		ID: id, BusinessID: businessID, StorageKey: key, StorageProvider: provider,
+		UploadExpiresAt: now.Add(30 * time.Minute), CreatedBy: createdBy,
 	})
 	if err != nil {
 		return ports.MediaAsset{}, err

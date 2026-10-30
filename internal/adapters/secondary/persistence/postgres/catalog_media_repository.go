@@ -33,17 +33,24 @@ func (r *CatalogMediaRepository) CreatePendingAsset(ctx context.Context, draft p
 	if draft.BusinessID == "" || draft.ID == "" || draft.StorageKey == "" || draft.UploadExpiresAt.IsZero() {
 		return ports.MediaAsset{}, errors.New("pending media requires business, asset, storage key and expiry")
 	}
+	provider := draft.StorageProvider
+	if provider == "" {
+		provider = "r2"
+	}
+	if provider != "r2" && provider != "backblaze" {
+		return ports.MediaAsset{}, errors.New("invalid image storage provider")
+	}
 	var result ports.MediaAsset
 	err = db.QueryRow(ctx, `INSERT INTO media_assets
         (id, business_id, purpose, storage_provider, storage_key, status, created_by, upload_expires_at)
-        VALUES ($1::uuid, $2::uuid, 'catalog', 'r2', $3, 'pending_upload', $4, $5)
+        VALUES ($1::uuid, $2::uuid, 'catalog', $3, $4, 'pending_upload', $5, $6)
         RETURNING id::text, business_id::text, storage_key, status, created_at, updated_at`,
-		draft.ID, draft.BusinessID, draft.StorageKey, draft.CreatedBy, draft.UploadExpiresAt,
+		draft.ID, draft.BusinessID, provider, draft.StorageKey, draft.CreatedBy, draft.UploadExpiresAt,
 	).Scan(&result.ID, &result.BusinessID, &result.StorageKey, &result.Status, &result.CreatedAt, &result.UpdatedAt)
 	if err != nil {
 		return ports.MediaAsset{}, fmt.Errorf("media asset insert: %w", err)
 	}
-	result.Purpose, result.StorageProvider = "catalog", "r2"
+	result.Purpose, result.StorageProvider = "catalog", provider
 	result.UploadExpiresAt = &draft.UploadExpiresAt
 	return result, nil
 }
@@ -82,13 +89,13 @@ func (r *CatalogMediaRepository) MarkAssetReady(ctx context.Context, businessID,
         size_bytes=$4, sha256=$5, width=$6, height=$7, updated_at=now()
         WHERE business_id=$1::uuid AND id=$2::uuid AND status='pending_upload'
           AND upload_expires_at > now()
-        RETURNING id::text, business_id::text, storage_key, status, created_at, updated_at`,
+        RETURNING id::text, business_id::text, storage_provider, storage_key, status, created_at, updated_at`,
 		businessID, mediaID, info.MimeType, info.SizeBytes, info.SHA256, info.Width, info.Height).
-		Scan(&a.ID, &a.BusinessID, &a.StorageKey, &a.Status, &a.CreatedAt, &a.UpdatedAt)
+		Scan(&a.ID, &a.BusinessID, &a.StorageProvider, &a.StorageKey, &a.Status, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		return ports.MediaAsset{}, fmt.Errorf("media completion rejected: %w", err)
 	}
-	a.Purpose, a.StorageProvider, a.MimeType = "catalog", "r2", info.MimeType
+	a.Purpose, a.MimeType = "catalog", info.MimeType
 	a.SizeBytes, a.SHA256, a.Width, a.Height = info.SizeBytes, info.SHA256, info.Width, info.Height
 	return a, nil
 }

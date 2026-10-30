@@ -26,6 +26,7 @@ type MediaAsset struct {
 }
 
 type PendingMediaAsset struct {
+	StorageProvider string
 	ID              string
 	BusinessID      string
 	StorageKey      string

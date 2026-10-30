@@ -213,3 +213,51 @@ live R2 tests, image delivery-status checks, partial failure recovery,
 provider order semantics and confirmation of customer-facing display.
 Do **not** flip the feature flag on in production just because code or
 unit tests compile.
+
+## Backblaze B2 private image storage (integration branch, not production-approved)
+
+Catalog images can use either Cloudflare R2 or Backblaze B2 over S3 SigV4.
+The original `R2_*` environment remains unchanged. Unless explicitly
+selected, new uploads continue to use R2.
+
+To choose **Backblaze for new uploads** on BOTH API and Worker:
+
+```env
+CATALOG_MEDIA_ENABLED=true
+S3_PROVIDER=backblaze
+S3_BUCKET=mujeeb24-images
+S3_REGION=us-west-004
+S3_ENDPOINT=https://s3.us-west-004.backblazeb2.com
+S3_ACCESS_KEY_ID=<B2 application key ID>
+S3_SECRET_ACCESS_KEY=<B2 application key secret>
+```
+
+Use the actual region and S3 endpoint shown in your private Backblaze bucket.
+No Cloudflare R2 account ID is accepted as a Backblaze identifier.
+
+If media already exists in R2, **keep R2_ACCOUNT_ID, R2_BUCKET,
+R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY configured on both processes**:
+the persisted `media_assets.storage_provider` selects the original
+provider when a previously uploaded image is read or dispatched.
+Changing the default upload target does **not** migrate historical objects
+or automatically create copies. Misconfigured/unavailable historical
+providers fail closed rather than silently reading a similarly named key
+from another bucket.
+
+`migrations/000084_catalog_media_backblaze.up.sql` permits `backblaze`
+in the existing provider check constraint. Do not bypass migrations.
+Existing R2 assets keep their provider label and storage key; rolling back
+is forbidden while Backblaze records exist.
+
+The existing upload path keeps server-side JPEG/PNG validation,
+the same 10 MiB limit, catalog ownership/variant approval, private object
+storage and 45-minute signed URLs at worker dispatch. B2 endpoint values
+must exactly match `https://s3.<S3_REGION>.backblazeb2.com`; arbitrary
+IP/private/custom endpoints are rejected. Credentials and signed URLs must
+not be put into GitHub, React, or logs.
+
+New images have `storage_provider=backblaze` in PostgreSQL. The API upload
+service and Outbox worker must deploy from the **same branch revision**, and
+run with the same storage credentials. This change is not live-provider
+validation. Test S3 Put/Get/authorization on B2 and actual SocialAPI delivery
+before switching a production tenant.

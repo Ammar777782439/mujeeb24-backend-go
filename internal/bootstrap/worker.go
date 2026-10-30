@@ -7,11 +7,9 @@ import (
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
-	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/storage/r2"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
-	"os"
 )
 
 type WorkerRuntime struct {
@@ -36,9 +34,9 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 	external := BuildExternalAdapters(cfg)
 	outbox := postgres.NewPostgresOutboxStore(database)
 	runtime := &WorkerRuntime{Database: database, EventStore: postgres.NewInboundEventStore(database), Outbox: outbox, SocialAPI: external.SocialAPI, Expiry: postgres.NewSubscriptionRepository(database), PollInterval: cfg.WorkerPollInterval, CycleTimeout: cfg.ShutdownTimeout, BatchSize: cfg.WorkerBatchSize, WorkerOwner: cfg.WorkerOwner}
-	var objects ports.MediaObjectStorage
-	if os.Getenv("CATALOG_MEDIA_ENABLED") == "true" && os.Getenv("R2_ACCOUNT_ID") != "" && os.Getenv("R2_BUCKET") != "" && os.Getenv("R2_ACCESS_KEY_ID") != "" && os.Getenv("R2_SECRET_ACCESS_KEY") != "" {
-		objects = &r2.Client{AccountID: os.Getenv("R2_ACCOUNT_ID"), Bucket: os.Getenv("R2_BUCKET"), AccessKeyID: os.Getenv("R2_ACCESS_KEY_ID"), SecretAccessKey: os.Getenv("R2_SECRET_ACCESS_KEY")}
+	objects, _, storageErr := buildCatalogMediaStorageFromEnv()
+	if storageErr != nil {
+		log.Printf("[CatalogMedia] stage=worker_storage_configuration_failed error=%v", storageErr)
 	}
 	if external.SocialAPI != nil {
 		runtime.Processor = &services.OutboxProcessor{

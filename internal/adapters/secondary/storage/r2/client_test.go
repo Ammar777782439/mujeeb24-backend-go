@@ -75,3 +75,48 @@ func TestR2RejectsMissingCredentials(t *testing.T) {
 		t.Fatal("missing credentials")
 	}
 }
+
+func TestBackblazeB2SignsItsRegionAndEndpoint(t *testing.T) {
+	c := &Client{
+		Endpoint: "https://s3.us-west-004.backblazeb2.com", Region: "us-west-004",
+		Bucket: "mujeeb24", AccessKeyID: "app-key-id", SecretAccessKey: "app-secret",
+		Now: func() time.Time { return time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC) },
+		HTTP: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.URL.Host != "s3.us-west-004.backblazeb2.com" ||
+				req.URL.EscapedPath() != "/mujeeb24/catalog/business-id/asset.png" {
+				t.Fatalf("B2 request wrong endpoint: %s", req.URL)
+			}
+			if !strings.Contains(req.Header.Get("Authorization"), "/20261030/us-west-004/s3/aws4_request") {
+				t.Fatal("B2 signing scope must match the actual region")
+			}
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+		})},
+	}
+	if err := c.Put(context.Background(), "catalog/business-id/asset.png", "image/png", []byte("sample")); err != nil {
+		t.Fatal(err)
+	}
+	presigned, err := c.PresignGet(context.Background(), "catalog/business-id/asset.png", 45*time.Minute)
+	if err != nil { t.Fatal(err) }
+	u, err := url.Parse(presigned)
+	if err != nil { t.Fatal(err) }
+	if u.Host != "s3.us-west-004.backblazeb2.com" ||
+		!strings.Contains(u.Query().Get("X-Amz-Credential"), "/us-west-004/s3/aws4_request") ||
+		u.Query().Get("X-Amz-Expires") != "2700" || u.Query().Get("X-Amz-Signature") == "" {
+		t.Fatalf("invalid B2 signed URL endpoint/credential: %s", u.Host)
+	}
+}
+func TestBackblazeRejectsUnsafeOrMismatchedEndpoints(t *testing.T) {
+	for _, endpoint := range []string{
+		"http://s3.us-west-004.backblazeb2.com",
+		"https://127.0.0.1",
+		"https://s3.us-east-005.backblazeb2.com",
+		"https://s3.us-west-004.backblazeb2.com.attacker.test",
+		"https://s3.us-west-004.backblazeb2.com/extra",
+		"https://s3.us-west-004.backblazeb2.com?x=1",
+	} {
+		c := &Client{Endpoint: endpoint, Region: "us-west-004", Bucket: "catalog", AccessKeyID: "key", SecretAccessKey: "secret"}
+		if _, err := c.PresignGet(context.Background(), "catalog/a/b", time.Minute); err == nil {
+			t.Fatalf("accepted unsafe endpoint %s", endpoint)
+		}
+	}
+}

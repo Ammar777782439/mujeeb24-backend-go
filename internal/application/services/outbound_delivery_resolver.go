@@ -64,7 +64,7 @@ func (r MujeebOutboundDeliveryResolver) Resolve(ctx context.Context, businessID,
 		if linkErr == nil && link != nil && link.MediaID == message.MediaID {
 			asset, assetErr := r.CatalogMedia.GetAsset(ctx, businessID, message.MediaID)
 			if assetErr == nil && asset.Status == "ready" && asset.DeletedAt == nil {
-				url, urlErr := r.MediaObjects.PresignGet(ctx, asset.StorageKey, 45*time.Minute)
+				url, urlErr := PresignCatalogAsset(ctx, r.MediaObjects, asset, 45*time.Minute)
 				if urlErr == nil {
 					delivery.Attachments = []ports.OutboundAttachment{{Type: "image", URL: url}}
 				}

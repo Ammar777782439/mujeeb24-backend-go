@@ -7,6 +7,7 @@ import (
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 )
@@ -68,7 +69,7 @@ func (s *Server) dispatchCatalogMedia(ctx context.Context, operationID string, i
 		if err != nil || asset.Status != "ready" || asset.DeletedAt != nil {
 			return huma.Error404NotFound("media not found"), true
 		}
-		u, err := s.deps.CatalogImageUpload.Objects.PresignGet(ctx, asset.StorageKey, 10*time.Minute)
+		u, err := services.PresignCatalogAsset(ctx, s.deps.CatalogImageUpload.Objects, asset, 10*time.Minute)
 		if err != nil {
 			return huma.Error503ServiceUnavailable("cannot access private image"), true
 		}

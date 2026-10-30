@@ -15,10 +15,12 @@ import (
 	"time"
 )
 
-// Client speaks Cloudflare R2's S3-compatible SigV4 protocol using the Go
-// standard library. No AWS SDK and no network access during unit tests.
+// Client speaks S3-compatible SigV4 for Cloudflare R2 and Backblaze B2.
+// Legacy R2 credentials are preserved; Backblaze sets Endpoint and Region.
 type Client struct {
 	AccountID       string
+	Endpoint        string
+	Region          string
 	Bucket          string
 	AccessKeyID     string
 	SecretAccessKey string
@@ -27,17 +29,44 @@ type Client struct {
 }
 
 func (c *Client) valid() error {
-	if c == nil || c.AccountID == "" || c.Bucket == "" || c.AccessKeyID == "" || c.SecretAccessKey == "" {
-		return errors.New("R2 is not configured")
+	if c == nil || c.Bucket == "" || c.AccessKeyID == "" || c.SecretAccessKey == "" {
+		return errors.New("S3 storage credentials are incomplete")
 	}
-	for _, s := range []string{c.AccountID, c.Bucket} {
-		for _, r := range s {
-			if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-') {
-				return errors.New("invalid R2 account or bucket")
-			}
+	for _, r := range c.Bucket {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-') {
+			return errors.New("invalid object storage bucket")
 		}
 	}
+	if c.Endpoint == "" && c.Region == "" {
+		if c.AccountID == "" {
+			return errors.New("R2 account ID is missing")
+		}
+		for _, r := range c.AccountID {
+			if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-') {
+				return errors.New("invalid R2 account ID")
+			}
+		}
+		return nil
+	}
+	// Restrict signed URL destinations and API calls to official B2 hosts.
+	if c.AccountID != "" || len(c.Region) < 3 {
+		return errors.New("invalid Backblaze B2 region")
+	}
+	for _, r := range c.Region {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') {
+			return errors.New("invalid Backblaze B2 region")
+		}
+	}
+	if c.Endpoint != "https://s3."+c.Region+".backblazeb2.com" {
+		return errors.New("Backblaze B2 endpoint does not match the region")
+	}
 	return nil
+}
+func (c *Client) region() string {
+	if c.Region != "" {
+		return c.Region
+	}
+	return "auto"
 }
 func (c *Client) clock() time.Time {
 	if c.Now != nil {
@@ -45,7 +74,12 @@ func (c *Client) clock() time.Time {
 	}
 	return time.Now().UTC()
 }
-func (c *Client) host() string { return c.AccountID + ".r2.cloudflarestorage.com" }
+func (c *Client) host() string {
+	if c.Endpoint != "" {
+		return strings.TrimPrefix(c.Endpoint, "https://")
+	}
+	return c.AccountID + ".r2.cloudflarestorage.com"
+}
 func escapeKey(key string) (string, error) {
 	if !strings.HasPrefix(key, "catalog/") || strings.Contains(key, "..") || strings.ContainsAny(key, "\\?#") {
 		return "", errors.New("unsafe R2 key")
@@ -69,7 +103,7 @@ func hmac256(k []byte, s string) []byte {
 }
 func (c *Client) signingKey(day string) []byte {
 	k := hmac256([]byte("AWS4"+c.SecretAccessKey), day)
-	k = hmac256(k, "auto")
+	k = hmac256(k, c.region())
 	k = hmac256(k, "s3")
 	return hmac256(k, "aws4_request")
 }
@@ -89,7 +123,7 @@ func (c *Client) request(ctx context.Context, method, key, mime string, body []b
 	canonicalHeaders := "host:" + c.host() + "\nx-amz-content-sha256:" + hash + "\nx-amz-date:" + timestamp + "\n"
 	headers := "host;x-amz-content-sha256;x-amz-date"
 	canonical := strings.Join([]string{method, uri, "", canonicalHeaders, headers, hash}, "\n")
-	scope := date + "/auto/s3/aws4_request"
+	scope := date + "/" + c.region() + "/s3/aws4_request"
 	st := strings.Join([]string{"AWS4-HMAC-SHA256", timestamp, scope, sha([]byte(canonical))}, "\n")
 	sign := hex.EncodeToString(hmac256(c.signingKey(date), st))
 	auth := "AWS4-HMAC-SHA256 Credential=" + c.AccessKeyID + "/" + scope + ", SignedHeaders=" + headers + ", Signature=" + sign
@@ -164,7 +198,7 @@ func (c *Client) PresignGet(_ context.Context, key string, ttl time.Duration) (s
 	now := c.clock()
 	date := now.Format("20060102")
 	timestamp := now.Format("20060102T150405Z")
-	scope := date + "/auto/s3/aws4_request"
+	scope := date + "/" + c.region() + "/s3/aws4_request"
 	params := url.Values{}
 	params.Set("X-Amz-Algorithm", "AWS4-HMAC-SHA256")
 	params.Set("X-Amz-Credential", c.AccessKeyID+"/"+scope)

@@ -161,3 +161,17 @@ func TestCatalogImageUploadDBFailureAttemptsR2Cleanup(t *testing.T) {
 		t.Fatalf("failed media commit must attempt R2 cleanup; err=%v delete=%d", err, storage.deleteCount)
 	}
 }
+
+func TestCatalogImageUploadRecordsSelectedBackblazeProvider(t *testing.T) {
+	repo := &uploadMediaRepository{}
+	store := &uploadObjectStorage{}
+	svc := CatalogImageUploadService{
+		Repository: repo, Objects: store, StorageProvider: "backblaze",
+	}
+	if _, err := svc.UploadBase64(context.Background(), uuid.NewString(), validTestPNG(t), nil); err != nil {
+		t.Fatal(err)
+	}
+	if repo.lastDraft.StorageProvider != "backblaze" || store.putCount != 1 {
+		t.Fatalf("B2 provider was not persisted: %+v puts=%d", repo.lastDraft, store.putCount)
+	}
+}
