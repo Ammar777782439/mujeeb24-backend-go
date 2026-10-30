@@ -32,15 +32,15 @@ func (c *definitionConflictCapabilities) ValidateProposalSchemaAttributes(
 		return nil
 	}
 	return &merchantcatalogai.SchemaDefinitionPreflightError{
-		Index: 0, Reason: "existing_type_conflict",
+		Index:        0, Reason: "existing_type_conflict",
 		ExpectedType: "multi_select", ProposedType: "select",
 	}
 }
 
 func TestMerchantDefinitionConflictIsRepairedBeforeApprovalOrFailsClosed(t *testing.T) {
 	for _, test := range []struct {
-		name        string
-		repair      bool
+		name   string
+		repair bool
 	}{
 		{name: "corrected_to_ask", repair: true},
 		{name: "second_conflict_rejected"},
@@ -55,7 +55,7 @@ func TestMerchantDefinitionConflictIsRepairedBeforeApprovalOrFailsClosed(t *test
 					Messages []struct {
 						Content string `json:"content"`
 					} `json:"messages"`
-					ResponseFormat map[string]any `json:"response_format"`
+					ResponseFormat map[string]any   `json:"response_format"`
 					Tools          []map[string]any `json:"tools"`
 				}
 				if err := json.Unmarshal(req.Payload, &body); err != nil {
