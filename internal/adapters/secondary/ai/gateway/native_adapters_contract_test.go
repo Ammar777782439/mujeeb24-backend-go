@@ -636,9 +636,9 @@ func TestNativeMerchantAllowsTwoReadCallsInOneModelRound(t *testing.T) {
 				"role": "assistant", "content": nil,
 				"tool_calls": []any{
 					map[string]any{"id": "read-1", "type": "function",
-						"function": map[string]any{"name": "read_catalog", "arguments": "{\\\"query\\\":\\\"coffee\\\"}"}},
+						"function": map[string]any{"name": "read_catalog", "arguments": `{"query":"coffee"}`}},
 					map[string]any{"id": "read-2", "type": "function",
-						"function": map[string]any{"name": "read_catalog", "arguments": "{\\\"query\\\":\\\"tea\\\"}"}},
+						"function": map[string]any{"name": "read_catalog", "arguments": `{"query":"tea"}`}},
 				},
 			}}
 		case 2:
