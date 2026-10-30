@@ -161,7 +161,7 @@ func TestBackblazeReturnsSafeErrorCodeAndRequestID(t *testing.T) {
 func TestBackblazeRejectsUnsafeDiagnosticTokens(t *testing.T) {
 	res := &http.Response{
 		StatusCode: 400,
-		Header: http.Header{"X-Amz-Request-Id": []string{"not safe\ncontent"}},
+		Header:     http.Header{"X-Amz-Request-Id": []string{"not safe\ncontent"}},
 		Body: io.NopCloser(strings.NewReader(
 			`<Error><Code>InvalidRequest extra</Code><Message>private details</Message></Error>`)),
 	}
