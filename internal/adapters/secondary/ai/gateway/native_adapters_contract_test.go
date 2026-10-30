@@ -603,5 +603,3 @@ func TestNativeMerchantGemini503AfterToolCallSwitchesToDeepSeek(t *testing.T) {
 		})
 	}
 }
-
-
