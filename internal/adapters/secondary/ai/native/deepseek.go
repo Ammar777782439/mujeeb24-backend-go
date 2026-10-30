@@ -31,6 +31,15 @@ func (e *MerchantCatalogSchemaError) Error() string {
 
 func (e *MerchantCatalogSchemaError) Unwrap() error { return e.Cause }
 
+// MerchantCatalogToolNameError reports a model response that selected a
+// different function from the one forced for the strict Merchant Catalog wire.
+// The unoffered call must NEVER be executed, interpreted or normalized.
+type MerchantCatalogToolNameError struct{}
+
+func (e *MerchantCatalogToolNameError) Error() string {
+	return "DeepSeek did not select the required merchant catalog final tool"
+}
+
 // DeepSeekConfig never accepts business-policy configuration or tool executors.
 type DeepSeekConfig struct {
 	Model      string
@@ -351,6 +360,15 @@ func (c *DeepSeek) Generate(ctx context.Context, request Request) (Response, err
 				return Response{}, errors.New("DeepSeek returned invalid function call")
 			}
 			if _, ok := allowed[call.Function.Name]; !ok {
+				if structured && synthetic == "submit_merchant_catalog_proposal" {
+					// Only log the bounded, redacted tool name, never merchant
+					// arguments, prompts, or API credentials.
+					log.Printf("[DeepSeekNative] stage=merchant_final_tool_mismatch expected=%s returned=%q calls=%d",
+						synthetic, safeDeepSeekDiagnostic(call.Function.Name, 80), len(choice.Message.ToolCalls))
+					if len(choice.Message.ToolCalls) == 1 {
+						return Response{}, &MerchantCatalogToolNameError{}
+					}
+				}
 				return Response{}, errors.New("DeepSeek returned function not offered by Mujeeb")
 			}
 			if _, duplicate := ids[call.ID]; duplicate {

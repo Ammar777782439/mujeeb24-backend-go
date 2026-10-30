@@ -235,11 +235,16 @@ No proposal is executed until the merchant approves it.`
 		raw, info, err := a.client.CompletePinned(ctx, req, provider)
 		if err != nil {
 			var wireErr *native.MerchantCatalogSchemaError
-			if errors.As(err, &wireErr) && len(req.Tools) == 0 &&
+			var toolNameErr *native.MerchantCatalogToolNameError
+			if (errors.As(err, &wireErr) || errors.As(err, &toolNameErr)) && len(req.Tools) == 0 &&
 				finalValidationRetries == 0 && round+1 < nativeMaxMerchantToolRounds {
 				// This is an inference-only retry; no tool or commercial mutation ran.
 				// Keep the strict transport, do not normalize malformed merchant data.
 				finalValidationRetries++
+				if toolNameErr != nil {
+					trustedProposalInstruction += "\n\n# Final tool name recovery (one attempt only)\nThe previous response selected a function that was NOT offered for this final step. You MUST call ONLY submit_merchant_catalog_proposal. Do NOT call any merchant_catalog_list_* read tools in this final step. Use the exact declared function name, one tool call only, and obey its strict argument schema. Do not invent product information or prices.\n"
+					continue
+				}
 				trustedProposalInstruction += "\n\n# Strict wire recovery (one attempt only)\nThe previous forced merchant_catalog_wire tool call did not satisfy the\nrequired strict object structure. Reissue one COMPLETE tool call.\nEvery object must contain every schema-required key, even inactive payloads.\nFor operation=ask_merchant: status=needs_more_data when asking for facts;\ncreate={\"fields\":[],\"variants\":[],\"offers\":[]};\nupdate={\"item_id\":\"\",\"attribute_schema_id\":\"\",\"changes\":[],\n\"existing_variants\":[],\"new_variants\":[],\"existing_offers\":[],\"new_offers\":[]};\ndelete={\"id\":\"\",\"reason_given\":\"\"}.\nUse empty arrays for unused collections and empty strings for unused IDs.\nDo not include create fields or offers when operation=ask_merchant.\nDo not fabricate missing prices, variant choices, catalog references,\nor execution results. The response must match the supplied tool schema.\n"
 				continue
 			}
