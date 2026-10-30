@@ -115,7 +115,6 @@ func TestProposalValidateCreateResolvesNewVariantOffersByRef(t *testing.T) {
 		Create: &ItemCreate{
 			Name:                 "ساعة",
 			ItemType:             "physical_good",
-			PricingMode:          "fixed",
 			AvailabilityMode:     "always_available",
 			FulfillmentMode:      "delivery",
 			RequiresConfirmation: false,
@@ -145,7 +144,6 @@ func TestProposalValidateCreateRejectsDatabaseVariantID(t *testing.T) {
 		Create: &ItemCreate{
 			Name:                 "ساعة",
 			ItemType:             "physical_good",
-			PricingMode:          "fixed",
 			AvailabilityMode:     "always_available",
 			FulfillmentMode:      "delivery",
 			RequiresConfirmation: false,
@@ -176,7 +174,6 @@ func TestProposalValidateRejectsUnknownVariantRef(t *testing.T) {
 		Create: &ItemCreate{
 			Name:                 "ساعة",
 			ItemType:             "physical_good",
-			PricingMode:          "fixed",
 			AvailabilityMode:     "always_available",
 			FulfillmentMode:      "delivery",
 			RequiresConfirmation: false,
@@ -210,7 +207,6 @@ func TestProposalValidateCreateOfferProvenance(t *testing.T) {
 			Create: &ItemCreate{
 				Name:             "ساعة",
 				ItemType:         "physical_good",
-				PricingMode:      "fixed",
 				AvailabilityMode: "always_available",
 				FulfillmentMode:  "delivery",
 				Offers:           []OfferCreate{offer},
@@ -281,7 +277,6 @@ func TestProposalValidateAllowsDynamicAttributesWithoutSchema(t *testing.T) {
 		Create: &ItemCreate{
 			Name:                 "ساعة",
 			ItemType:             "physical_good",
-			PricingMode:          "fixed",
 			AvailabilityMode:     "always_available",
 			FulfillmentMode:      "delivery",
 			RequiresConfirmation: false,
@@ -318,7 +313,6 @@ func TestProposalValidateRejectsNonEnglishAttributeKey(t *testing.T) {
 		Create: &ItemCreate{
 			Name:             "ساعة",
 			ItemType:         "physical_good",
-			PricingMode:      "fixed",
 			AvailabilityMode: "always_available",
 			FulfillmentMode:  "delivery",
 			Attributes:       map[string]any{"مقاوم_للماء": true},
