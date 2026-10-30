@@ -30,7 +30,13 @@ while IFS= read -r file; do
   [[ -f "$file" ]] && go_files+=("$file")
 done < <(git ls-files '*.go')
 mapfile -t unformatted < <("$gofmt_bin" -l "${go_files[@]}")
-(( ${#unformatted[@]} == 0 )) || fail "gofmt required: ${unformatted[*]}"
+if (( ${#unformatted[@]} > 0 )); then
+  # Print the exact formatting diff before failing for faster, auditable CI repair.
+  for file in "${unformatted[@]}"; do
+    "$gofmt_bin" -d "$file"
+  done
+  fail "gofmt required: ${unformatted[*]}"
+fi
 git diff --check
 
 printf '%s\n' '[4/6] validating generated OpenAPI contract'
