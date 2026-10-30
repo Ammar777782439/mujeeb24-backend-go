@@ -156,7 +156,7 @@ func TestMerchantCatalogPricingModeOwnedOnlyByOffers(t *testing.T) {
 		return false
 	}
 	for scope, fields := range map[string]map[string]any{
-		"create.fields": create["fields"].(map[string]any),
+		"create.fields":  create["fields"].(map[string]any),
 		"update.changes": update["changes"].(map[string]any),
 	} {
 		if has(fieldNames(fields), "pricing_mode") {
