@@ -79,7 +79,7 @@ func merchantCatalogProposalSchema() map[string]any {
 		"type": "object",
 		"properties": map[string]any{
 			"name": stringField(), "attribute_schema_id": optionalString(), "item_type": stringField(),
-			"short_description": optionalString(), "long_description": optionalString(), "pricing_mode": stringField(),
+			"short_description": optionalString(), "long_description": optionalString(),
 			"availability_mode": stringField(), "fulfillment_mode": stringField(),
 			"requires_confirmation": map[string]any{"type": "boolean"},
 			"attributes":            attributeObjectField(),
@@ -121,7 +121,7 @@ func merchantCatalogProposalSchema() map[string]any {
 				},
 			},
 		},
-		"required": []string{"name", "item_type", "pricing_mode", "availability_mode", "fulfillment_mode", "requires_confirmation", "offers"},
+		"required": []string{"name", "item_type", "availability_mode", "fulfillment_mode", "requires_confirmation", "offers"},
 	}
 	update := map[string]any{
 		"type": "object",
@@ -132,7 +132,7 @@ func merchantCatalogProposalSchema() map[string]any {
 				"name": optionalString(), "status": map[string]any{"type": "string", "description": "Commercial lifecycle state. Omit unless merchant explicitly requested a lifecycle change. Do not reset an existing item to draft during an ordinary edit."}, "attributes": attributeObjectField(),
 				"item_type":         map[string]any{"type": "string", "description": "Entity kind from the canonical contract, not a variant name, audience, category or specification. Omit unless the merchant explicitly requested changing the entity kind."},
 				"short_description": optionalString(), "long_description": optionalString(),
-				"pricing_mode": optionalString(), "availability_mode": optionalString(),
+				"availability_mode": optionalString(),
 				"fulfillment_mode":      optionalString(),
 				"requires_confirmation": map[string]any{"type": "boolean"},
 			}},
@@ -302,7 +302,6 @@ func constrainMerchantCatalogSchemaValues(schema map[string]any) {
 	update := root["update"].(map[string]any)["anyOf"].([]map[string]any)[0]["properties"].(map[string]any)
 	changes := update["changes"].(map[string]any)["properties"].(map[string]any)
 	for _, properties := range []map[string]any{create, changes} {
-		properties["pricing_mode"] = enum(d.PricingModes)
 		properties["availability_mode"] = enum(d.AvailabilityModes)
 		properties["fulfillment_mode"] = enum(d.FulfillmentModes)
 	}
