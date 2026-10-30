@@ -108,11 +108,23 @@ func ValidateProposalSchemaAttributes(
 			}
 			schema = &loaded
 		}
-		if err := preflightSchemaAttributes(schema, p.Create.Attributes, "create", true); err != nil {
+		aliases, _, err := preflightAttributeDefinitionBindings(schema, p.AttributeSchemaName, p.AttributeDefinitions)
+		if err != nil {
+			return err
+		}
+		attrs, err := preflightRemapAttributes(p.Create.Attributes, aliases)
+		if err != nil {
+			return err
+		}
+		if err := preflightSchemaAttributes(schema, attrs, "create", true); err != nil {
 			return err
 		}
 		for i, variant := range p.Create.Variants {
-			if err := preflightSchemaAttributes(schema, variant.Attributes, fmt.Sprintf("create.variants[%d]", i), false); err != nil {
+			attrs, err := preflightRemapAttributes(variant.Attributes, aliases)
+			if err != nil {
+				return err
+			}
+			if err := preflightSchemaAttributes(schema, attrs, fmt.Sprintf("create.variants[%d]", i), false); err != nil {
 				return err
 			}
 		}
@@ -145,11 +157,19 @@ func ValidateProposalSchemaAttributes(
 			schema = &loaded
 		}
 	}
+	aliases, _, err := preflightAttributeDefinitionBindings(schema, p.AttributeSchemaName, p.AttributeDefinitions)
+	if err != nil {
+		return err
+	}
 	if schema == nil {
 		return nil
 	}
+	changes, err := preflightRemapAttributes(u.Changes.Attributes, aliases)
+	if err != nil {
+		return err
+	}
 	if u.Changes.Attributes != nil || (item.AttributeSchemaID == nil && u.AttributeSchemaID != nil) {
-		raw, err := mergeAttributes(item.Attributes, u.Changes.Attributes)
+		raw, err := mergeAttributes(item.Attributes, changes)
 		if err != nil {
 			return errors.New("preflight cannot merge current item attributes")
 		}
@@ -165,7 +185,11 @@ func ValidateProposalSchemaAttributes(
 		}
 	}
 	for i, v := range u.NewVariants {
-		if err := preflightSchemaAttributes(schema, v.Attributes, fmt.Sprintf("update.new_variants[%d]", i), false); err != nil {
+		attrs, err := preflightRemapAttributes(v.Attributes, aliases)
+		if err != nil {
+			return err
+		}
+		if err := preflightSchemaAttributes(schema, attrs, fmt.Sprintf("update.new_variants[%d]", i), false); err != nil {
 			return err
 		}
 	}
@@ -180,7 +204,11 @@ func ValidateProposalSchemaAttributes(
 		if current.CatalogItemID != u.ItemID {
 			return errors.New("preflight variant belongs to a different catalog item")
 		}
-		raw, err := mergeAttributes(current.Attributes, v.Attributes)
+		attrs, err := preflightRemapAttributes(v.Attributes, aliases)
+		if err != nil {
+			return err
+		}
+		raw, err := mergeAttributes(current.Attributes, attrs)
 		if err != nil {
 			return errors.New("preflight cannot merge current variant attributes")
 		}
