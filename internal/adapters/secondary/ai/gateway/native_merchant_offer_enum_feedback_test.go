@@ -21,7 +21,6 @@ func offerAvailabilityWire(t *testing.T, mode string) string {
 	wire.Create.Fields = []catalogWireField{
 		{Name: "name", ValueJSON: `"جلكسي اس 8"`},
 		{Name: "item_type", ValueJSON: `"physical_good"`},
-		{Name: "pricing_mode", ValueJSON: `"fixed"`},
 		{Name: "availability_mode", ValueJSON: `"unknown"`},
 		{Name: "fulfillment_mode", ValueJSON: `"manual"`},
 		{Name: "requires_confirmation", ValueJSON: `true`},

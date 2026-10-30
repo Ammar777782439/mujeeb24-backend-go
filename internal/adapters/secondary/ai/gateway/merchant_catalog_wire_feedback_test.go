@@ -19,7 +19,6 @@ func merchantInvalidMultiFieldWire(t *testing.T, brokenEnum bool) string {
 	w.Create.Fields = []catalogWireField{
 		{Name: "name", ValueJSON: `"secret-sample-name"`},
 		{Name: "item_type", ValueJSON: `"physical_good"`},
-		{Name: "pricing_mode", ValueJSON: `""`},
 		{Name: "availability_mode", ValueJSON: `""`},
 		{Name: "fulfillment_mode", ValueJSON: `""`},
 	}
@@ -51,7 +50,7 @@ func TestMerchantWireFeedbackEnumeratesAllProblemsWithoutLeakingMerchantValues(t
 	raw := merchantInvalidMultiFieldWire(t, true)
 	correction := merchantCatalogWireFeedback(raw)
 	for _, field := range []string{
-		"create.pricing_mode", "create.availability_mode", "create.fulfillment_mode",
+		"create.availability_mode", "create.fulfillment_mode",
 		"create.offers[0].pricing_mode", "create.offers[0].availability_mode",
 		"create.offers[0].availability_status", "create.offers[0].fulfillment_mode",
 		"create.offers[0].status", "attribute_definitions[0].color", "ask_merchant",
@@ -73,7 +72,7 @@ func TestMerchantWireFeedbackEnumeratesAllProblemsWithoutLeakingMerchantValues(t
 func TestMerchantWireFeedbackDoesNotFlagValidEnums(t *testing.T) {
 	good := offerAvailabilityWire(t, "unknown")
 	correction := merchantCatalogWireFeedback(good)
-	if strings.Contains(correction, "create.pricing_mode") ||
+	if strings.Contains(correction, "create.offers[0].pricing_mode") ||
 		strings.Contains(correction, "create.offers[0].availability_mode") {
 		t.Errorf("valid offer was called invalid: %s", correction)
 	}
@@ -109,7 +108,7 @@ func TestMerchantParserAndCanonicalErrorsGiveModelAllFieldFeedback(t *testing.T)
 					t.Error("strict final output schema lost")
 				}
 				if rounds == 2 {
-					if len(request.Messages) < 1 || !strings.Contains(request.Messages[0].Content, "create.pricing_mode") ||
+					if len(request.Messages) < 1 || !strings.Contains(request.Messages[0].Content, "create.offers[0].pricing_mode") ||
 						!strings.Contains(request.Messages[0].Content, "create.offers[0].availability_mode") {
 						t.Error("model did not receive all field corrections")
 					}

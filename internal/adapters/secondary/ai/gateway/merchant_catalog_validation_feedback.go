@@ -26,7 +26,6 @@ func merchantCatalogValidationFeedback(err error) string {
 		{path: "offer.status", choices: d.OfferStatuses},
 		{path: "create.availability_mode", choices: d.AvailabilityModes},
 		{path: "create.fulfillment_mode", choices: d.FulfillmentModes},
-		{path: "create.pricing_mode", choices: d.PricingModes},
 	}
 	for _, field := range fields {
 		if !strings.HasPrefix(err.Error(), field.path+" has unsupported value ") {

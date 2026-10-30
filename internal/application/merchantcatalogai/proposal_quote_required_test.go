@@ -14,7 +14,6 @@ func TestProposalAllowsQuoteRequiredCreateWithoutMerchantAmount(t *testing.T) {
 		Create: &ItemCreate{
 			Name:                 "استشارة تجريبية",
 			ItemType:             "service",
-			PricingMode:          "quote_required",
 			AvailabilityMode:     "unknown",
 			FulfillmentMode:      "appointment",
 			RequiresConfirmation: false,
@@ -34,7 +33,6 @@ func TestProposalAllowsQuoteRequiredCreateWithoutMerchantAmount(t *testing.T) {
 	if err := p.Validate(); err != nil {
 		t.Fatalf("unpriced quote_required proposal should validate: %v", err)
 	}
-	p.Create.PricingMode = "starting_from"
 	p.Create.Offers[0].PricingMode = "starting_from"
 	if err := p.Validate(); err == nil {
 		t.Fatal("starting_from without merchant-stated numeric amount must fail")

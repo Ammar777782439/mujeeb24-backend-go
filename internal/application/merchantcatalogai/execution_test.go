@@ -187,7 +187,7 @@ func TestApprovalRejectsCrossCatalogItem(t *testing.T) {
 func TestApprovalCreateReplaysWithoutCreatingAnotherProduct(t *testing.T) {
 	s, r, _ := executionFixture()
 	amount, currency := "5000.1234", "YER"
-	input := ExecutionInput{BusinessID: "business", PrincipalID: "principal", SessionID: "session", SelectedCatalog: ports.CatalogRecord{ID: "catalog"}, Proposal: Proposal{SchemaVersion: ProposalSchemaVersion, Status: StatusResolved, Operation: OperationCreate, ResponseText: "Review", Create: &ItemCreate{Name: "New entity", ItemType: "custom", PricingMode: "fixed", AvailabilityMode: "stock", FulfillmentMode: "delivery", Offers: []OfferCreate{{Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault, PricingMode: "fixed", Amount: &amount, PriceSource: OfferPriceSourceMerchantStated, Currency: &currency, AvailabilityMode: "stock", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"}}}}}
+	input := ExecutionInput{BusinessID: "business", PrincipalID: "principal", SessionID: "session", SelectedCatalog: ports.CatalogRecord{ID: "catalog"}, Proposal: Proposal{SchemaVersion: ProposalSchemaVersion, Status: StatusResolved, Operation: OperationCreate, ResponseText: "Review", Create: &ItemCreate{Name: "New entity", ItemType: "custom", AvailabilityMode: "stock", FulfillmentMode: "delivery", Offers: []OfferCreate{{Name: DefaultOfferName, NameSource: OfferNameSourceSystemDefault, PricingMode: "fixed", Amount: &amount, PriceSource: OfferPriceSourceMerchantStated, Currency: &currency, AvailabilityMode: "stock", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"}}}}}
 	id, err := s.Prepare(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)

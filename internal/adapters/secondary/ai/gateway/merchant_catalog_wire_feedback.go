@@ -146,7 +146,6 @@ func merchantCatalogWireFeedback(raw string) string {
 			text(path, variant.Fields, "ref")
 			text(path, variant.Fields, "name")
 		}
-		enum("create", w.Create.Fields, "pricing_mode", true, d.PricingModes)
 		enum("create", w.Create.Fields, "availability_mode", true, d.AvailabilityModes)
 		enum("create", w.Create.Fields, "fulfillment_mode", true, d.FulfillmentModes)
 		if len(w.Create.Offers) == 0 {
@@ -159,7 +158,6 @@ func merchantCatalogWireFeedback(raw string) string {
 			offer(fmt.Sprintf("create.offers[%d]", i), o.Fields, true)
 		}
 	case merchantcatalogai.OperationUpdate:
-		enum("update.changes", w.Update.Changes, "pricing_mode", false, d.PricingModes)
 		enum("update.changes", w.Update.Changes, "availability_mode", false, d.AvailabilityModes)
 		enum("update.changes", w.Update.Changes, "fulfillment_mode", false, d.FulfillmentModes)
 		enum("update.changes", w.Update.Changes, "status", false, d.ItemStatuses)

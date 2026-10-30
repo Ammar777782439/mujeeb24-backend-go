@@ -139,3 +139,47 @@ func TestMerchantCatalogOfferVariantReferencesCannotBeEmpty(t *testing.T) {
 		}
 	}
 }
+
+func TestMerchantCatalogPricingModeOwnedOnlyByOffers(t *testing.T) {
+	wire := merchantCatalogWireSchema()["properties"].(map[string]any)
+	create := wire["create"].(map[string]any)["properties"].(map[string]any)
+	update := wire["update"].(map[string]any)["properties"].(map[string]any)
+	fieldNames := func(fields map[string]any) []string {
+		return fields["items"].(map[string]any)["properties"].(map[string]any)["name"].(map[string]any)["enum"].([]string)
+	}
+	has := func(names []string, key string) bool {
+		for _, name := range names {
+			if name == key {
+				return true
+			}
+		}
+		return false
+	}
+	for scope, fields := range map[string]map[string]any{
+		"create.fields":  create["fields"].(map[string]any),
+		"update.changes": update["changes"].(map[string]any),
+	} {
+		if has(fieldNames(fields), "pricing_mode") {
+			t.Errorf("%s must not expose catalog item pricing_mode", scope)
+		}
+	}
+	if !has(fieldNames(create["offers"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)["fields"].(map[string]any)), "pricing_mode") {
+		t.Error("create.offers must expose pricing_mode")
+	}
+	if !has(fieldNames(update["new_offers"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)["fields"].(map[string]any)), "pricing_mode") {
+		t.Error("update.new_offers must expose pricing_mode")
+	}
+	if !has(fieldNames(update["existing_offers"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)["fields"].(map[string]any)), "pricing_mode") {
+		t.Error("update.existing_offers must expose pricing_mode")
+	}
+
+	proposal := merchantCatalogProposalSchema()["properties"].(map[string]any)
+	item := proposal["create"].(map[string]any)["anyOf"].([]map[string]any)[0]["properties"].(map[string]any)
+	changes := proposal["update"].(map[string]any)["anyOf"].([]map[string]any)[0]["properties"].(map[string]any)["changes"].(map[string]any)["properties"].(map[string]any)
+	if _, ok := item["pricing_mode"]; ok {
+		t.Error("canonical item create schema exposes duplicated pricing_mode")
+	}
+	if _, ok := changes["pricing_mode"]; ok {
+		t.Error("canonical item changes schema exposes duplicated pricing_mode")
+	}
+}

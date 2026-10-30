@@ -16,7 +16,6 @@ func TestMerchantFeedbackReportsDependentCommercialAndVariantFields(t *testing.T
 	wire.Create.Fields = []catalogWireField{
 		{Name: "name", ValueJSON: `"هاتف تجريبي"`},
 		{Name: "item_type", ValueJSON: `"physical_good"`},
-		{Name: "pricing_mode", ValueJSON: `"per_unit"`},
 		{Name: "availability_mode", ValueJSON: `"unknown"`},
 		{Name: "fulfillment_mode", ValueJSON: `"manual"`},
 	}
@@ -70,7 +69,6 @@ func TestMerchantFeedbackPermitsUnpricedQuoteRequiredOffer(t *testing.T) {
 	wire.Create.Fields = []catalogWireField{
 		{Name: "name", ValueJSON: `"خدمة تجريبية"`},
 		{Name: "item_type", ValueJSON: `"service"`},
-		{Name: "pricing_mode", ValueJSON: `"quote_required"`},
 		{Name: "availability_mode", ValueJSON: `"unknown"`},
 		{Name: "fulfillment_mode", ValueJSON: `"manual"`},
 		{Name: "requires_confirmation", ValueJSON: `true`},

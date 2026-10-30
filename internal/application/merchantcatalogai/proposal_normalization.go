@@ -42,7 +42,6 @@ func (p Proposal) Normalize() Proposal {
 			u.Changes.ShortDescription == nil &&
 			u.Changes.LongDescription == nil &&
 			u.Changes.Status == nil &&
-			u.Changes.PricingMode == nil &&
 			u.Changes.AvailabilityMode == nil &&
 			u.Changes.FulfillmentMode == nil &&
 			u.Changes.Attributes == nil &&
