@@ -1,5 +1,5 @@
 {
-  "migration_count": 81,
+  "migration_count": 82,
   "columns": [
     {
       "table": "ai_catalog_batches",
@@ -7137,7 +7137,7 @@
       "table": "channel_connection_state_events",
       "name": "channel_connection_state_events_action_chk",
       "kind": "c",
-      "definition": "CHECK (action = ANY (ARRAY['reconnect_requested'::text, 'disconnect_requested'::text, 'provisioning_activation_failed'::text]))"
+      "definition": "CHECK (action = ANY (ARRAY['reconnect_requested'::text, 'disconnect_requested'::text, 'provisioning_activation_failed'::text, 'remove_requested'::text]))"
     },
     {
       "table": "channel_connection_state_events",
