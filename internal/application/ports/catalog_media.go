@@ -81,6 +81,7 @@ type CatalogMediaRepository interface {
 	SetPrimary(context.Context, string, string, string, *string, string) error
 	Remove(context.Context, string, string, string, *string, string) error
 	PrimaryForReply(context.Context, string, string, *string) (*CatalogMediaLink, error)
+	FindApprovedMediaLink(context.Context,string,string)(*CatalogMediaLink,error)
 }
 
 
