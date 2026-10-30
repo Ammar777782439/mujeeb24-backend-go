@@ -32,7 +32,7 @@ func (c *definitionConflictCapabilities) ValidateProposalSchemaAttributes(
 		return nil
 	}
 	return &merchantcatalogai.SchemaDefinitionPreflightError{
-		Index:        0, Reason: "existing_type_conflict",
+		Index: 0, Reason: "existing_type_conflict",
 		ExpectedType: "multi_select", ProposedType: "select",
 	}
 }
