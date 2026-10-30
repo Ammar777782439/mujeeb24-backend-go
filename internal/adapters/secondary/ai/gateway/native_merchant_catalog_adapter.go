@@ -153,6 +153,10 @@ Never use starting_from without a numeric amount or copy a different item's pric
 If merchant did not name an offer, use name_source=system_default and name="سعر البيع".
 If required non-default business facts are still missing, ask with
 operation=ask_merchant, status=needs_more_data, and inactive data arrays empty.
+Ask specific grouped questions in response_text, with matching critical
+missing_information entries; do not silently omit essential customer-facing facts.
+Do not request an offer amount merely because it was not stated when a valid
+quote_required offer can communicate the pricing truth.
 For update: populate update.item_id and only requested changes in
 update.changes, update.existing_variants, update.new_variants,
 update.existing_offers, update.new_offers.
