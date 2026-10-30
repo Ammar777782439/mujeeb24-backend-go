@@ -59,7 +59,9 @@ func (r *ChannelHistoryRepository) Purge(ctx context.Context, businessID, connec
 		return ports.ChannelHistorySummary{}, invalidRepositoryInput("channel_history.purge", "business, connection, key and version required")
 	}
 	var result ports.ChannelHistorySummary
-	err := r.adapter.Within(ctx, func(txCtx context.Context) error {
+	// Reuse the caller's transaction when permanent removal needs the purge
+	// and archive transition to commit or roll back together.
+	run := func(txCtx context.Context) error {
 		executor, err := r.adapter.Executor(txCtx)
 		if err != nil {
 			return err
@@ -239,7 +241,13 @@ func (r *ChannelHistoryRepository) Purge(ctx context.Context, businessID, connec
 		}
 		result.PurgedAt = &cutoff
 		return nil
-	})
+	}
+	var err error
+	if _, insideTransaction := transactionFromContext(ctx); insideTransaction {
+		err = run(ctx)
+	} else {
+		err = r.adapter.Within(ctx, run)
+	}
 	return result, err
 }
 
