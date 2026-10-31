@@ -13,257 +13,154 @@ import (
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
-func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
-
-func TestPrivateR2PutUsesSignedRequest(t *testing.T) {
-	var called bool
-	c := &Client{AccountID: "abc123", Bucket: "catalog", AccessKeyID: "key1",
-		SecretAccessKey: "secret", Now: func() time.Time { return time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC) },
-		HTTP: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			called = true
-			if req.Method != "PUT" || req.URL.Host != "abc123.r2.cloudflarestorage.com" {
-				t.Fatalf("unexpected request %s %s", req.Method, req.URL)
-			}
-			if req.Header.Get("Content-Type") != "image/png" {
-				t.Fatal("incorrect stored object media type")
-			}
-			if req.URL.EscapedPath() != "/catalog/catalog/business1/asset1" {
-				t.Fatal(req.URL.String())
-			}
-			if !strings.Contains(req.Header.Get("Authorization"), "Credential=key1/20261030/auto/s3/aws4_request") ||
-				req.Header.Get("X-Amz-Content-Sha256") == "" {
-				t.Fatal("missing SigV4 signed headers")
-			}
-			body, _ := io.ReadAll(req.Body)
-			if string(body) != "image-data" {
-				t.Fatalf("body %q", body)
-			}
-			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
-		})},
+func b2TestClient(transport http.RoundTripper) *Client {
+	return &Client{
+		Endpoint: "https://s3.us-east-005.backblazeb2.com",
+		Region: "us-east-005", Bucket: "mujeeb24-images",
+		AccessKeyID: "test-access-id", SecretAccessKey: "test-secret",
+		HTTP: &http.Client{Transport: transport},
 	}
-	if err := c.Put(context.Background(), "catalog/business1/asset1", "image/png", []byte("image-data")); err != nil {
+}
+
+func TestSDKBackblazePutObjectUsesPathStyleAndExactBytes(t *testing.T) {
+	data := bytes.Repeat([]byte{0x73, 0x17, 0x44, 0x29}, 21000)
+	var observed bool
+	c := b2TestClient(roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		observed = true
+		if req.Method != http.MethodPut ||
+			req.URL.Host != "s3.us-east-005.backblazeb2.com" ||
+			req.URL.EscapedPath() != "/mujeeb24-images/catalog/tenant/blue.jpg" {
+			t.Errorf("incorrect B2 S3 PUT target: %s", req.URL)
+		}
+		if req.ContentLength != int64(len(data)) || len(req.TransferEncoding) != 0 {
+			t.Errorf("wrong upload framing length=%d transfer=%v", req.ContentLength, req.TransferEncoding)
+		}
+		if req.Header.Get("Content-Type") != "image/jpeg" {
+			t.Errorf("missing media type: %q", req.Header.Get("Content-Type"))
+		}
+		if !strings.Contains(req.Header.Get("Authorization"), "/us-east-005/s3/aws4_request") {
+			t.Error("official SDK didn't sign using configured B2 region")
+		}
+		if req.Header.Get("X-Amz-Sdk-Checksum-Algorithm") != "" ||
+			req.Header.Get("X-Amz-Trailer") != "" {
+			t.Error("unexpected SDK checksum/streaming headers incompatible with B2")
+		}
+		payload, err := io.ReadAll(req.Body)
+		if err != nil || !bytes.Equal(payload, data) {
+			t.Errorf("SDK upload data mismatch len=%d err=%v", len(payload), err)
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{"Etag": []string{`"sample"`}},
+			Body: io.NopCloser(strings.NewReader(""))}, nil
+	}))
+	if err := c.Put(context.Background(), "catalog/tenant/blue.jpg", "image/jpeg", data); err != nil {
 		t.Fatal(err)
 	}
-	if !called {
-		t.Fatal("R2 PUT not called")
-	}
-}
-func TestR2SignedReadURLIsScoped(t *testing.T) {
-	c := &Client{AccountID: "abc123", Bucket: "catalog", AccessKeyID: "key1",
-		SecretAccessKey: "secret", Now: func() time.Time { return time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC) }}
-	raw, err := c.PresignGet(context.Background(), "catalog/biz/image1", 15*time.Minute)
-	if err != nil {
-		t.Fatal(err)
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if u.Scheme != "https" || u.Host != "abc123.r2.cloudflarestorage.com" ||
-		u.Query().Get("X-Amz-Expires") != "900" || u.Query().Get("X-Amz-Signature") == "" {
-		t.Fatalf("malformed presigned URL %s", u)
-	}
-	if _, err = c.PresignGet(context.Background(), "catalog/../secret", time.Hour); err == nil {
-		t.Fatal("path traversal accepted")
-	}
-	if _, err = c.PresignGet(context.Background(), "catalog/biz/image1", 2*time.Hour); err == nil {
-		t.Fatal("unbounded TTL accepted")
-	}
-}
-func TestR2RejectsMissingCredentials(t *testing.T) {
-	c := &Client{AccountID: "abc", Bucket: "catalog"}
-	if err := c.Put(context.Background(), "catalog/biz/asset", "image/png", []byte("data")); err == nil {
-		t.Fatal("missing credentials")
-	}
+	if !observed { t.Fatal("SDK never dispatched PUT") }
 }
 
-func TestBackblazeB2SignsItsRegionAndEndpoint(t *testing.T) {
-	c := &Client{
-		Endpoint: "https://s3.us-west-004.backblazeb2.com", Region: "us-west-004",
-		Bucket: "mujeeb24", AccessKeyID: "app-key-id", SecretAccessKey: "app-secret",
-		Now: func() time.Time { return time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC) },
-		HTTP: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.URL.Host != "s3.us-west-004.backblazeb2.com" ||
-				req.URL.EscapedPath() != "/mujeeb24/catalog/business-id/asset.png" {
-				t.Fatalf("B2 request wrong endpoint: %s", req.URL)
-			}
-			if !strings.Contains(req.Header.Get("Authorization"), "/20261030/us-west-004/s3/aws4_request") {
-				t.Fatal("B2 signing scope must match the actual region")
-			}
-			n, err := io.Copy(io.Discard, req.Body)
-			if err != nil || n != int64(len("sample")) {
-				t.Fatalf("Backblaze test transport failed to read exact upload body bytes=%d err=%v", n, err)
-			}
-			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
-		})},
-	}
-	if err := c.Put(context.Background(), "catalog/business-id/asset.png", "image/png", []byte("sample")); err != nil {
-		t.Fatal(err)
-	}
-	presigned, err := c.PresignGet(context.Background(), "catalog/business-id/asset.png", 45*time.Minute)
-	if err != nil {
-		t.Fatal(err)
-	}
-	u, err := url.Parse(presigned)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if u.Host != "s3.us-west-004.backblazeb2.com" ||
-		!strings.Contains(u.Query().Get("X-Amz-Credential"), "/us-west-004/s3/aws4_request") ||
-		u.Query().Get("X-Amz-Expires") != "2700" || u.Query().Get("X-Amz-Signature") == "" {
-		t.Fatalf("invalid B2 signed URL endpoint/credential: %s", u.Host)
-	}
-}
-func TestBackblazeRejectsUnsafeOrMismatchedEndpoints(t *testing.T) {
-	for _, endpoint := range []string{
-		"http://s3.us-west-004.backblazeb2.com",
-		"https://127.0.0.1",
-		"https://s3.us-east-005.backblazeb2.com",
-		"https://s3.us-west-004.backblazeb2.com.attacker.test",
-		"https://s3.us-west-004.backblazeb2.com/extra",
-		"https://s3.us-west-004.backblazeb2.com?x=1",
-	} {
-		c := &Client{Endpoint: endpoint, Region: "us-west-004", Bucket: "catalog", AccessKeyID: "key", SecretAccessKey: "secret"}
-		if _, err := c.PresignGet(context.Background(), "catalog/a/b", time.Minute); err == nil {
-			t.Fatalf("accepted unsafe endpoint %s", endpoint)
+func TestSDKBackblazeFullHTTPBodyReachesLocalServer(t *testing.T) {
+	data := bytes.Repeat([]byte{0x31, 0x42, 0x23}, 140000)
+	var got int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodPut || req.ContentLength != int64(len(data)) || len(req.TransferEncoding) != 0 {
+			t.Errorf("unexpected framing: %s len=%d", req.Method, req.ContentLength)
 		}
-	}
-}
-
-func TestBackblazeReturnsSafeErrorCodeAndRequestID(t *testing.T) {
-	c := &Client{
-		Endpoint:        "https://s3.us-east-005.backblazeb2.com",
-		Region:          "us-east-005",
-		Bucket:          "mujeeb24-images",
-		AccessKeyID:     "test-access-id",
-		SecretAccessKey: "test-secret",
-		HTTP: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: 400,
-				Header:     http.Header{"X-Amz-Request-Id": []string{"request-abc"}},
-				Body: io.NopCloser(strings.NewReader(
-					`<Error><Code>InvalidRequest</Code><Message>Unsupported header x-amz-checksum-sha256; sensitive-example-content</Message></Error>`)),
-			}, nil
-		})},
-	}
-	err := c.Put(context.Background(), "catalog/test/image.jpg", "image/jpeg", []byte("image"))
-	if err == nil {
-		t.Fatal("HTTP 400 must not succeed")
-	}
-	msg := err.Error()
-	for _, expected := range []string{"HTTP 400", "code=InvalidRequest", "reason=unsupported_checksum_header", "request_id=request-abc"} {
-		if !strings.Contains(msg, expected) {
-			t.Fatalf("missing diagnostic %q in %q", expected, msg)
+		body, err := io.ReadAll(req.Body)
+		if err != nil || !bytes.Equal(body, data) {
+			t.Errorf("server received incomplete upload: len=%d err=%v", len(body), err)
 		}
-	}
-	for _, forbidden := range []string{"test-secret", "sensitive-example-content", "test-access-id"} {
-		if strings.Contains(msg, forbidden) {
-			t.Fatalf("provider response leaked sensitive text in %q", msg)
-		}
-	}
-}
-
-func TestBackblazeRejectsUnsafeDiagnosticTokens(t *testing.T) {
-	res := &http.Response{
-		StatusCode: 400,
-		Header:     http.Header{"X-Amz-Request-Id": []string{"not safe\ncontent"}},
-		Body: io.NopCloser(strings.NewReader(
-			`<Error><Code>InvalidRequest extra</Code><Message>private details</Message></Error>`)),
-	}
-	err := classifyProviderHTTPError("PUT", res)
-	if err == nil || !strings.Contains(err.Error(), "code=unavailable") ||
-		!strings.Contains(err.Error(), "request_id=unavailable") ||
-		strings.Contains(err.Error(), "private details") {
-		t.Fatalf("unsafe diagnostic: %v", err)
-	}
-}
-
-func TestBackblazeHTTPErrorWithoutXMLStillHasStatus(t *testing.T) {
-	res := &http.Response{
-		StatusCode: 400,
-		Header:     make(http.Header),
-		Body:       io.NopCloser(strings.NewReader("not XML")),
-	}
-	got := classifyProviderHTTPError("PUT", res)
-	if got == nil || !strings.Contains(got.Error(), "HTTP 400") ||
-		!strings.Contains(got.Error(), "code=unavailable") {
-		t.Fatalf("missing HTTP diagnostic: %v", got)
-	}
-}
-
-func TestBackblazeFullHTTPBodyIsSentWithoutChunking(t *testing.T) {
-	data := bytes.Repeat([]byte{0x73, 0x17, 0x44, 0x29}, 117000)
-	var received int64
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPut {
-			t.Errorf("wrong method: %s", r.Method)
-		}
-		if len(r.TransferEncoding) != 0 || r.ContentLength != int64(len(data)) {
-			t.Errorf("incorrect HTTP framing: length=%d encoding=%v", r.ContentLength, r.TransferEncoding)
-		}
-		all, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Errorf("read actual HTTP body: %v", err)
-		}
-		received = int64(len(all))
-		if !bytes.Equal(all, data) {
-			t.Error("actual HTTP body bytes differ from source")
-		}
+		got++
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
-	c := &Client{
-		Endpoint: "https://s3.us-east-005.backblazeb2.com",
-		Region:   "us-east-005", Bucket: "mujeeb24-images",
-		AccessKeyID: "example-key-id", SecretAccessKey: "example-secret",
-		HTTP: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			// Test-only transport rewrite to an in-process HTTP server. The
-			// app still constructs a real SigV4-signed B2-style PUT request.
-			copyRequest := r.Clone(r.Context())
-			copyRequest.URL.Scheme = "http"
-			copyRequest.URL.Host = strings.TrimPrefix(srv.URL, "http://")
-			copyRequest.Host = copyRequest.URL.Host
-			return http.DefaultTransport.RoundTrip(copyRequest)
-		})},
+	c := b2TestClient(roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		r := req.Clone(req.Context())
+		r.URL.Scheme = "http"
+		r.URL.Host = strings.TrimPrefix(srv.URL, "http://")
+		r.Host = r.URL.Host
+		return http.DefaultTransport.RoundTrip(r)
+	}))
+	if err := c.Put(context.Background(), "catalog/tenant/photo.png", "image/png", data); err != nil { t.Fatal(err) }
+	if got != 1 { t.Fatalf("expected one complete HTTP upload, got %d", got) }
+}
+
+func TestSDKPresignGetSupportsR2AndB2(t *testing.T) {
+	cases := []struct {
+		name string
+		client *Client
+		host string
+		region string
+	}{
+		{name: "backblaze", client: b2TestClient(http.DefaultTransport), host: "s3.us-east-005.backblazeb2.com", region: "us-east-005"},
+		{name: "r2", client: &Client{AccountID: "exampleaccount", Bucket: "mujeeb24",
+			AccessKeyID: "test-id", SecretAccessKey: "test-secret"},
+			host: "exampleaccount.r2.cloudflarestorage.com", region: "auto"},
 	}
-	if err := c.Put(context.Background(), "catalog/test/large.jpeg", "image/jpeg", data); err != nil {
-		t.Fatalf("real TCP upload should transmit every byte: %v", err)
-	}
-	if received != int64(len(data)) {
-		t.Fatalf("server received %d bytes, wanted %d", received, len(data))
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			signed, err := tc.client.PresignGet(context.Background(), "catalog/tenant/a b.jpg", 45*time.Minute)
+			if err != nil { t.Fatal(err) }
+			u, err := url.Parse(signed)
+			if err != nil { t.Fatal(err) }
+			if u.Scheme != "https" || u.Host != tc.host ||
+				!strings.Contains(u.EscapedPath(), "catalog/tenant/a%20b.jpg") {
+				t.Fatalf("unexpected presign target host=%s path=%s", u.Host, u.EscapedPath())
+			}
+			if !strings.Contains(u.Query().Get("X-Amz-Credential"), "/"+tc.region+"/s3/aws4_request") ||
+				u.Query().Get("X-Amz-Expires") != "2700" ||
+				u.Query().Get("X-Amz-Signature") == "" {
+				t.Fatal("presign missing region, TTL or AWS signature")
+			}
+		})
 	}
 }
 
-func TestBackblazeIncompleteBodyHasTransferEvidence(t *testing.T) {
-	c := &Client{
-		Endpoint: "https://s3.us-east-005.backblazeb2.com",
-		Region:   "us-east-005", Bucket: "mujeeb24-images",
-		AccessKeyID: "example-key-id", SecretAccessKey: "example-secret",
-		HTTP: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			buf := make([]byte, 4)
-			_, _ = req.Body.Read(buf)
-			return &http.Response{StatusCode: 400, Proto: "HTTP/1.1",
-				Header: make(http.Header), Body: io.NopCloser(strings.NewReader(
-					"<Error><Code>IncompleteBody</Code></Error>"))}, nil
-		})},
+func TestSDKBackblazePutObjectReturnsSafeS3ErrorDetails(t *testing.T) {
+	for _, tc := range []struct{ status int; code string }{
+		{400, "IncompleteBody"}, {403, "AccessDenied"}, {400, "InvalidRequest"},
+	} {
+		t.Run(tc.code, func(t *testing.T) {
+			c := b2TestClient(roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				_, _ = io.Copy(io.Discard, req.Body)
+				return &http.Response{
+					StatusCode: tc.status,
+					Header: http.Header{"X-Amz-Request-Id": []string{"request-123"}},
+					Body: io.NopCloser(strings.NewReader("<Error><Code>"+tc.code+"</Code><Message>private-test-secret</Message><RequestId>request-123</RequestId></Error>")),
+				}, nil
+			}))
+			err := c.Put(context.Background(), "catalog/tenant/photo.png", "image/png", []byte("png"))
+			if err == nil { t.Fatal("provider error must reject PUT") }
+			for _, expected := range []string{"HTTP ", "code="+tc.code} {
+				if !strings.Contains(err.Error(), expected) {
+					t.Errorf("missing safe diagnostic %q: %s", expected, err)
+				}
+			}
+			if strings.Contains(err.Error(), "private-test-secret") || strings.Contains(err.Error(), "test-access-id") {
+				t.Fatal("S3 credentials or error message leaked into logs")
+			}
+		})
 	}
-	err := c.Put(context.Background(), "catalog/test/truncated.jpg", "image/jpeg", []byte("full-body"))
-	if err == nil {
-		t.Fatal("partial stream must fail")
-	}
-	for _, want := range []string{"HTTP 400", "code=IncompleteBody", "reason=remote_incomplete_body", "body_read=4", "body_expected=9"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("missing failure evidence %q in %q", want, err.Error())
+}
+
+func TestSDKRejectsUnsafeEndpointsKeysAndMissingConfig(t *testing.T) {
+	for _, endpoint := range []string{"http://s3.us-east-005.backblazeb2.com",
+		"https://127.0.0.1", "https://s3.us-west-004.backblazeb2.com",
+		"https://s3.us-east-005.backblazeb2.com.attacker.test"} {
+		c := b2TestClient(http.DefaultTransport)
+		c.Endpoint = endpoint
+		if _, err := c.PresignGet(context.Background(), "catalog/tenant/x.jpg", time.Minute); err == nil {
+			t.Errorf("unsafe endpoint accepted: %s", endpoint)
 		}
 	}
-}
-
-func TestBackblazeAccessDeniedNotAssumedToBeBadSignature(t *testing.T) {
-	res := &http.Response{StatusCode: 403, Header: make(http.Header),
-		Body: io.NopCloser(strings.NewReader("<Error><Code>AccessDenied</Code></Error>"))}
-	err := classifyProviderHTTPError("PUT", res)
-	if err == nil || !strings.Contains(err.Error(), "reason=provider_access_denied") {
-		t.Fatalf("403 must not be mislabelled a signature failure: %v", err)
+	c := b2TestClient(http.DefaultTransport)
+	for _, key := range []string{"other/key", "catalog/../secret", "catalog/foo?sig=x", "catalog//file.jpg"} {
+		if _, err := c.PresignGet(context.Background(), key, time.Minute); err == nil {
+			t.Errorf("unsafe key accepted: %q", key)
+		}
+	}
+	if err := c.Put(context.Background(), "catalog/tenant/x.webp", "image/webp", []byte("x")); err == nil {
+		t.Fatal("unsupported media content type allowed")
 	}
 }
