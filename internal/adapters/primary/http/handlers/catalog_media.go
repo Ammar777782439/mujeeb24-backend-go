@@ -75,18 +75,23 @@ func (s *Server) dispatchCatalogMedia(ctx context.Context, operationID string, i
 			return huma.Error404NotFound("media not found"), true
 		}
 		if operationID == "getCatalogMediaPreview" {
-			u, signErr := services.PresignCatalogAsset(ctx, s.deps.CatalogImageUpload.Objects, asset, time.Minute)
-			if signErr != nil {
+			previewCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+			defer cancel()
+			data, readErr := services.ReadCatalogAsset(previewCtx, s.deps.CatalogImageUpload.Objects, asset)
+			if readErr != nil {
+				log.Printf("[CatalogMedia] stage=preview_read_failed business=%s asset=%s reason=storage_read_failed cause=%v", business, asset.ID, readErr)
 				return huma.Error503ServiceUnavailable("image preview is unavailable"), true
 			}
-			imageBytes, fetchErr := fetchPrivateCatalogPreview(ctx, u, asset.MimeType)
-			if fetchErr != nil {
+			imageBytes, validationErr := verifyCatalogPreview(data, asset)
+			if validationErr != nil {
+				log.Printf("[CatalogMedia] stage=preview_read_failed business=%s asset=%s reason=content_verification_failed cause=%v", business, asset.ID, validationErr)
 				return huma.Error503ServiceUnavailable("image preview is unavailable"), true
 			}
+			log.Printf("[CatalogMedia] stage=preview_ready business=%s asset=%s bytes=%d", business, asset.ID, len(imageBytes))
 			out := &contract.CatalogMediaPreviewOutput{CacheControl: "private, no-store"}
 			out.Body.Data = contract.CatalogMediaPreviewView{
 				DataBase64: base64.StdEncoding.EncodeToString(imageBytes),
-				MimeType:   asset.MimeType, Width: asset.Width, Height: asset.Height,
+				MimeType: asset.MimeType, Width: asset.Width, Height: asset.Height,
 			}
 			return out, true
 		}
