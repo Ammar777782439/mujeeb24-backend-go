@@ -349,18 +349,18 @@ type MessageAttachment struct {
 	PreviewPath string `json:"preview_path"`
 }
 type Message struct {
-	ID                       UUID      `json:"id"`
-	ConversationID           UUID      `json:"conversation_id"`
-	Direction                string    `json:"direction"`
-	Origin                   string    `json:"origin"`
-	Status                   string    `json:"status"`
-	Text                     string    `json:"text"`
-	ContentType              string    `json:"content_type,omitempty"`
+	ID                       UUID                `json:"id"`
+	ConversationID           UUID                `json:"conversation_id"`
+	Direction                string              `json:"direction"`
+	Origin                   string              `json:"origin"`
+	Status                   string              `json:"status"`
+	Text                     string              `json:"text"`
+	ContentType              string              `json:"content_type,omitempty"`
 	Attachments              []MessageAttachment `json:"attachments,omitempty"`
-	ProviderMessageReference *string   `json:"provider_message_reference,omitempty"`
-	OccurredAt               time.Time `json:"occurred_at"`
-	CreatedAt                time.Time `json:"created_at"`
-	Private                  bool      `json:"private"`
+	ProviderMessageReference *string             `json:"provider_message_reference,omitempty"`
+	OccurredAt               time.Time           `json:"occurred_at"`
+	CreatedAt                time.Time           `json:"created_at"`
+	Private                  bool                `json:"private"`
 }
 type ConversationRead struct {
 	ConversationID    UUID   `json:"conversation_id"`

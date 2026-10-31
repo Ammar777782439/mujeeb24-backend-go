@@ -19,13 +19,15 @@ type CatalogMediaReadInput struct {
 }
 type CatalogMediaPreviewView struct {
 	DataBase64 string `json:"data_base64" doc:"Base64-encoded JPEG/PNG image from merchant-authorized private storage. No provider links returned."`
-	MimeType string `json:"mime_type"`
-	Width int `json:"width"`
-	Height int `json:"height"`
+	MimeType   string `json:"mime_type"`
+	Width      int    `json:"width"`
+	Height     int    `json:"height"`
 }
 type CatalogMediaPreviewOutput struct {
 	CacheControl string `header:"Cache-Control"`
-	Body struct { Data CatalogMediaPreviewView `json:"data"` }
+	Body         struct {
+		Data CatalogMediaPreviewView `json:"data"`
+	}
 }
 type CatalogMediaReadView struct {
 	URL              string `json:"url"`
@@ -84,7 +86,7 @@ type CatalogMediaListOutput struct {
 func registerCatalogMediaOperations(api huma.API, dispatcher DashboardOperationHandler) {
 	register(api, dispatcher, huma.Operation{OperationID: "getCatalogMediaPreview", Method: http.MethodGet,
 		Path: "/businesses/{business_id}/media/{media_id}/preview", Tags: []string{"CatalogMedia"},
-		Summary: "Fetch an authorized private catalog photo through Mujeeb, without exposing storage URLs",
+		Summary:  "Fetch an authorized private catalog photo through Mujeeb, without exposing storage URLs",
 		Security: dashboardSecurity}, CatalogMediaReadInput{}, CatalogMediaPreviewOutput{})
 	register(api, dispatcher, huma.Operation{OperationID: "getCatalogMediaReadURL", Method: http.MethodGet,
 		Path: "/businesses/{business_id}/media/{media_id}/read-url", Tags: []string{"CatalogMedia"},

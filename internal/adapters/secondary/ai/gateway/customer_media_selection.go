@@ -30,7 +30,7 @@ func customerMediaTool(options []ports.CustomerMediaOption) customerSalesTool {
 					"description": "Ordered list of zero to four exact approved image link IDs. Empty array means no photos.",
 				},
 				"reply_text": map[string]any{
-					"type": "string",
+					"type":        "string",
 					"description": "Final customer-facing Arabic text consistent with selected photos. If any photo is selected, never say photos cannot be shared. Never claim actual delivery. If no photo is selected, do not promise images.",
 				},
 			},
@@ -132,7 +132,7 @@ func (c *NativeCustomerSalesAdapter) SelectMedia(ctx context.Context, input port
 	}
 	return ports.CustomerMediaSelectionOutput{
 		MediaLinkIDs: args.MediaLinkIDs,
-		ReplyText: args.ReplyText,
+		ReplyText:    args.ReplyText,
 		Usage: ports.CustomerSalesUsageTelemetry{
 			Provider: info.Provider, Model: info.Model,
 			InputTokens: response.Usage.PromptTokens, CachedTokens: response.Usage.CachedTokens,

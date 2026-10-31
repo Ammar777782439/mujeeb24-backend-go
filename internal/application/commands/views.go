@@ -58,7 +58,7 @@ type ConversationView struct {
 	ResourceVersion     ResourceVersion
 }
 type MessageAttachmentView struct {
-	Type string
+	Type    string
 	MediaID string
 }
 

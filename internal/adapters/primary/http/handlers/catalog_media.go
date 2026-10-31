@@ -83,7 +83,7 @@ func (s *Server) dispatchCatalogMedia(ctx context.Context, operationID string, i
 			out := &contract.CatalogMediaPreviewOutput{CacheControl: "private, no-store"}
 			out.Body.Data = contract.CatalogMediaPreviewView{
 				DataBase64: base64.StdEncoding.EncodeToString(imageBytes),
-				MimeType: asset.MimeType, Width: asset.Width, Height: asset.Height,
+				MimeType:   asset.MimeType, Width: asset.Width, Height: asset.Height,
 			}
 			return out, true
 		}
