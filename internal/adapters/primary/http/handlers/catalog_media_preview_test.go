@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"bytes"
-	"net/http"
 	"strings"
 	"testing"
 )
