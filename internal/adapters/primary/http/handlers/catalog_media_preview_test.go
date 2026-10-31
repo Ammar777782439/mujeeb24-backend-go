@@ -2,33 +2,12 @@ package handlers
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"strings"
 	"testing"
-)
 
-func TestCatalogPreviewAllowsOnlyTrustedSignedPrivateHosts(t *testing.T) {
-	for _, u := range []string{
-		"https://s3.us-east-005.backblazeb2.com/mujeeb24-images/catalog/a.jpg?X-Amz-Signature=abc",
-		"https://0123456789abcdef.r2.cloudflarestorage.com/catalog/a.jpg?X-Amz-Signature=abc",
-	} {
-		if !isTrustedCatalogObjectURL(u) {
-			t.Errorf("valid presigned host denied: %s", u)
-		}
-	}
-	for _, u := range []string{
-		"http://s3.us-east-005.backblazeb2.com/catalog/a.jpg?X-Amz-Signature=abc",
-		"https://s3.us-east-005.backblazeb2.com.attacker.test/a?X-Amz-Signature=abc",
-		"https://user:password@s3.us-east-005.backblazeb2.com/a?X-Amz-Signature=abc",
-		"https://127.0.0.1/a?X-Amz-Signature=abc",
-		"https://s3.us-east-005.backblazeb2.com/a",
-		"https://s3.us-east-005.backblazeb2.com:8443/a?X-Amz-Signature=abc",
-		"https://0123456789abcdef.r2.cloudflarestorage.com.attacker.test/a?X-Amz-Signature=abc",
-	} {
-		if isTrustedCatalogObjectURL(u) {
-			t.Errorf("untrusted signed host accepted: %s", u)
-		}
-	}
-}
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+)
 
 func TestCatalogPreviewValidatesBytesAndBounds(t *testing.T) {
 	jpeg := append([]byte{0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 'J', 'F', 'I', 'F', 0}, bytes.Repeat([]byte{1}, 80)...)
@@ -45,7 +24,26 @@ func TestCatalogPreviewValidatesBytesAndBounds(t *testing.T) {
 	if _, err := verifiedPreviewBytes(strings.NewReader(""), "image/jpeg"); err == nil {
 		t.Fatal("empty image accepted")
 	}
-	if _, err := verifiedPreviewBytes(bytes.NewReader(make([]byte, maxPrivatePreviewBytes+1)), "image/jpeg"); err == nil {
+	if _, err := verifiedPreviewBytes(bytes.NewReader(make([]byte,maxPrivatePreviewBytes+1)), "image/jpeg"); err == nil {
 		t.Fatal("oversized image accepted")
+	}
+}
+
+func TestCatalogPreviewVerifiesStoredImageIntegrity(t *testing.T) {
+	jpeg := append([]byte{0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 'J', 'F', 'I', 'F', 0}, bytes.Repeat([]byte{0x13}, 80)...)
+	digest := sha256.Sum256(jpeg)
+	asset := ports.MediaAsset{MimeType: "image/jpeg", SizeBytes:int64(len(jpeg)), SHA256:digest[:]}
+	result, err := verifyCatalogPreview(jpeg, asset)
+	if err != nil || !bytes.Equal(result,jpeg) {
+		t.Fatalf("verified private image rejected: %v",err)
+	}
+	asset.SizeBytes++
+	if _, err := verifyCatalogPreview(jpeg, asset); err == nil {
+		t.Fatal("mismatched persisted image size accepted")
+	}
+	asset.SizeBytes--
+	asset.SHA256=bytes.Repeat([]byte{1},sha256.Size)
+	if _, err := verifyCatalogPreview(jpeg,asset); err == nil {
+		t.Fatal("corrupted private object accepted")
 	}
 }

@@ -1,51 +1,37 @@
 package handlers
 
 import (
-	"context"
+	"bytes"
+	"crypto/sha256"
 	"errors"
 	"io"
 	"net/http"
-	"net/url"
-	"strings"
-	"time"
+
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
 const maxPrivatePreviewBytes = 10 * 1024 * 1024
 
-// isTrustedCatalogObjectURL prevents the API from becoming an arbitrary URL
-// fetcher. The signed URL originates in our own configured storage SDK and is
-// never returned to merchants by this endpoint.
-func isTrustedCatalogObjectURL(raw string) bool {
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.User != nil ||
-		u.Fragment != "" || u.Port() != "" || u.RawQuery == "" ||
-		u.Query().Get("X-Amz-Signature") == "" {
-		return false
+// verifyCatalogPreview validates the recorded image without allowing the
+// API to become a generic object reader. SHA256/size are verified when present.
+func verifyCatalogPreview(data []byte, asset ports.MediaAsset) ([]byte, error) {
+	imageBytes, err := verifiedPreviewBytes(bytes.NewReader(data), asset.MimeType)
+	if err != nil {
+		return nil, err
 	}
-	host := strings.ToLower(u.Hostname())
-	parts := strings.Split(host, ".")
-	if len(parts) != 4 {
-		return false
+	if asset.SizeBytes > 0 && int64(len(imageBytes)) != asset.SizeBytes {
+		return nil, errors.New("image byte count differs from stored metadata")
 	}
-	if parts[1] == "r2" && parts[2] == "cloudflarestorage" && parts[3] == "com" {
-		return isSafePreviewLabel(parts[0])
-	}
-	if parts[0] == "s3" && parts[2] == "backblazeb2" && parts[3] == "com" {
-		return isSafePreviewLabel(parts[1])
-	}
-	return false
-}
-
-func isSafePreviewLabel(v string) bool {
-	if v == "" {
-		return false
-	}
-	for _, c := range v {
-		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
-			return false
+	if len(asset.SHA256) > 0 {
+		if len(asset.SHA256) != sha256.Size {
+			return nil, errors.New("invalid stored image checksum")
+		}
+		digest := sha256.Sum256(imageBytes)
+		if !bytes.Equal(digest[:], asset.SHA256) {
+			return nil, errors.New("image checksum mismatch")
 		}
 	}
-	return true
+	return imageBytes, nil
 }
 
 func verifiedPreviewBytes(r io.Reader, mime string) ([]byte, error) {
@@ -60,29 +46,4 @@ func verifiedPreviewBytes(r io.Reader, mime string) ([]byte, error) {
 		return nil, errors.New("media preview bytes do not match recorded type")
 	}
 	return data, nil
-}
-
-func fetchPrivateCatalogPreview(ctx context.Context, signedURL, mime string) ([]byte, error) {
-	if !isTrustedCatalogObjectURL(signedURL) {
-		return nil, errors.New("untrusted catalog image host")
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, signedURL, nil)
-	if err != nil {
-		return nil, errors.New("invalid signed image request")
-	}
-	client := &http.Client{
-		Timeout: 20 * time.Second,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	res, err := client.Do(req)
-	if err != nil {
-		return nil, errors.New("private image fetch failed")
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK || res.ContentLength > maxPrivatePreviewBytes {
-		return nil, errors.New("private image storage rejected read")
-	}
-	return verifiedPreviewBytes(res.Body, mime)
 }

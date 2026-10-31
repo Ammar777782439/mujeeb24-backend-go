@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -167,6 +168,42 @@ func (c *Client) Put(ctx context.Context, key, mime string, data []byte) error {
 		Body:          bytes.NewReader(data),
 	})
 	return wrapSDKError("PUT", err)
+}
+
+// Get retrieves a private object directly using an SDK-signed S3 GET, without
+// constructing a presigned URL or making a second unsigned HTTP request.
+// Enforce the same 10 MiB upper bound as media uploads.
+func (c *Client) Get(ctx context.Context, key string) ([]byte, error) {
+	if err := validateKey(key); err != nil {
+		return nil, err
+	}
+	client, err := c.sdk()
+	if err != nil {
+		return nil, err
+	}
+	result, err := client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(c.Bucket),
+		Key: aws.String(key),
+	})
+	if err != nil {
+		return nil, wrapSDKError("GET", err)
+	}
+	defer result.Body.Close()
+	const maxObjectSize = 10 * 1024 * 1024
+	if result.ContentLength != nil && *result.ContentLength > maxObjectSize {
+		return nil, errors.New("private image exceeds maximum size")
+	}
+	data, err := io.ReadAll(io.LimitReader(result.Body, maxObjectSize+1))
+	if err != nil {
+		return nil, errors.New("private image could not be read completely")
+	}
+	if len(data) == 0 || len(data) > maxObjectSize {
+		return nil, errors.New("private image is empty or too large")
+	}
+	if result.ContentLength != nil && *result.ContentLength >= 0 && int64(len(data)) != *result.ContentLength {
+		return nil, errors.New("private image length mismatch")
+	}
+	return data, nil
 }
 
 // ProbeBucketLocation is read-only and checks S3 SigV4 independently of PUT.

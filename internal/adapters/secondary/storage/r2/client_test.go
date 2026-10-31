@@ -230,3 +230,67 @@ func TestSDKBackblazeReadonlyS3SignatureProbe(t *testing.T) {
 		t.Fatal("S3 signature probe never called storage provider")
 	}
 }
+
+func TestSDKDirectGetReadsPrivateBackblazeObject(t *testing.T) {
+	payload := bytes.Repeat([]byte{0xff, 0xd8, 0xff, 0xd9}, 2400)
+	called := false
+	c := b2TestClient(roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		called = true
+		if req.Method != http.MethodGet ||
+			req.URL.Host != "s3.us-east-005.backblazeb2.com" ||
+			req.URL.EscapedPath() != "/mujeeb24-images/catalog/tenant/sample.jpg" {
+			t.Errorf("unexpected private GET target: %s %s", req.Method, req.URL)
+		}
+		if !strings.Contains(req.Header.Get("Authorization"), "/us-east-005/s3/aws4_request") {
+			t.Error("SDK did not sign the direct GET")
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Header: http.Header{"Content-Length": []string{fmt.Sprint(len(payload))}},
+			Body: io.NopCloser(bytes.NewReader(payload)),
+		}, nil
+	}))
+	got, err := c.Get(context.Background(), "catalog/tenant/sample.jpg")
+	if err != nil || !bytes.Equal(got, payload) || !called {
+		t.Fatalf("direct GET failed: bytes=%d called=%t err=%v", len(got), called, err)
+	}
+}
+
+func TestSDKDirectGetRejectsMismatchedLengthAndOversizedObjects(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		declared int
+		payload string
+	}{
+		{"truncated", 20, "only-five"},
+		{"empty", 0, ""},
+		{"too_large", 10*1024*1024+1, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := b2TestClient(roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: 200,
+					Header: http.Header{"Content-Length": []string{fmt.Sprint(tc.declared)}},
+					Body: io.NopCloser(strings.NewReader(tc.payload)),
+				}, nil
+			}))
+			if _, err := c.Get(context.Background(), "catalog/tenant/sample.png"); err == nil {
+				t.Fatal("invalid object body must be rejected")
+			}
+		})
+	}
+}
+func TestSDKDirectGetSanitizesPrivateProviderErrors(t *testing.T) {
+	c := b2TestClient(roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 403,
+			Header: http.Header{"X-Amz-Request-Id": []string{"request-123"}},
+			Body: io.NopCloser(strings.NewReader("<Error><Code>AccessDenied</Code><Message>PRIVATE-SECRET</Message></Error>")),
+		}, nil
+	}))
+	_, err := c.Get(context.Background(), "catalog/tenant/sample.jpg")
+	if err == nil || !strings.Contains(err.Error(), "code=AccessDenied") ||
+		strings.Contains(err.Error(), "PRIVATE-SECRET") {
+		t.Fatalf("unsafe or missing S3 provider diagnostic: %v", err)
+	}
+}

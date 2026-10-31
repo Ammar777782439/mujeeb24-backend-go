@@ -37,9 +37,10 @@ are unchanged.
 
 Authenticated `GET /api/v1/businesses/{business_id}/media/{media_id}/preview`
 verifies the caller's business scope and that the media asset is ready and
-not deleted. The API generates a short-lived storage read URL **only inside
-the backend**, fetches from an allowlisted S3-compatible endpoint with no
-redirect following, validates JPEG/PNG image content with a 10 MiB maximum,
+not deleted. The API fetches bytes directly through the official AWS SDK
+GetObject, routed to the asset's recorded R2/Backblaze provider, without
+creating a second presigned HTTP request. It validates JPEG/PNG image
+content, size and persisted checksum (when present), with a 10 MiB maximum,
 and replies with:
 
 ```json
@@ -69,3 +70,21 @@ the Worker separately attempts provider delivery.
 The backend still cannot guarantee model wording is perfect; observe real
 messages and evaluate text/image consistency with regression tests. It
 does not turn provider errors into model-generated customer claims.
+
+## Debugging preview failures
+
+Look for `[CatalogMedia] stage=preview_lookup_failed`,
+`stage=preview_read_failed`, or `stage=preview_ready` in backend logs,
+filtering by the image's `media_id`. The logs contain **no** provider URL,
+storage credentials, or file bytes. If these stages never occur, inspect the
+HTTP status in the browser Network tab: authorization (401/403), route
+deployment, or JSON decoding may be responsible.
+
+`preview_path` points to an authenticated JSON endpoint, **not** a raw
+image URL. The frontend must call it with its normal Bearer authorization,
+read `data.data_base64` and `data.mime_type`, and render a data URL
+(`data:image/jpeg;base64,...`), or an equivalent blob URL. Putting
+`preview_path` straight into an HTML `img.src` will not work because
+the endpoint returns JSON and browsers cannot attach the Bearer header to
+an ordinary image navigation. No customer/provider account information
+is ever sent to the merchant.

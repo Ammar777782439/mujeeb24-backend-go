@@ -1,0 +1,36 @@
+name: Temporary catalog preview Go formatter
+
+on:
+  push:
+    branches: [integration/catalog-media-main]
+    paths: ['.github/workflows/temporary-catalog-preview-format.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.repository == 'Ammar777782439/mujeeb24-backend-go'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.2'
+          cache: false
+      - name: Format modified Go sources
+        run: |
+          set -euo pipefail
+          gofmt -w internal/adapters/secondary/storage/r2/client.go internal/adapters/secondary/storage/r2/client_test.go
+          gofmt -w internal/application/ports/catalog_media.go
+          gofmt -w internal/application/services/catalog_media_object_store.go internal/application/services/catalog_media_object_store_test.go
+          gofmt -w internal/adapters/primary/http/handlers/catalog_media.go internal/adapters/primary/http/handlers/catalog_media_preview.go internal/adapters/primary/http/handlers/catalog_media_preview_test.go
+          git diff --check
+          git add internal/adapters/secondary/storage/r2/client.go internal/adapters/secondary/storage/r2/client_test.go internal/application/ports/catalog_media.go internal/application/services/catalog_media_object_store.go internal/application/services/catalog_media_object_store_test.go internal/adapters/primary/http/handlers/catalog_media.go internal/adapters/primary/http/handlers/catalog_media_preview.go internal/adapters/primary/http/handlers/catalog_media_preview_test.go
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'style(catalog-media): gofmt direct S3 preview transport tests'
+            git push origin HEAD:refs/heads/integration/catalog-media-main
+          fi

@@ -92,3 +92,9 @@ type MediaObjectStorage interface {
 	Delete(context.Context, string) error
 	PresignGet(context.Context, string, time.Duration) (string, error)
 }
+
+// MediaObjectReader is an optional private read capability for dashboard
+// previews. It does not change the existing outbound presigned URL contract.
+type MediaObjectReader interface {
+	Get(context.Context, string) ([]byte, error)
+}

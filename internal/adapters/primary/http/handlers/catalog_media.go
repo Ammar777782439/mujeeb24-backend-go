@@ -69,6 +69,9 @@ func (s *Server) dispatchCatalogMedia(ctx context.Context, operationID string, i
 		}
 		asset, err := s.deps.CatalogMediaService.Media.GetAsset(ctx, business, string(in.MediaID))
 		if err != nil || asset.Status != "ready" || asset.DeletedAt != nil {
+			if operationID == "getCatalogMediaPreview" {
+				log.Printf("[CatalogMedia] stage=preview_lookup_failed business=%s media=%s reason=missing_or_unavailable", business, in.MediaID)
+			}
 			return huma.Error404NotFound("media not found"), true
 		}
 		if operationID == "getCatalogMediaPreview" {
