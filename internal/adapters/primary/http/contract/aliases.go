@@ -33,6 +33,7 @@ type Capability = dto.Capability
 type CustomerSummary = dto.CustomerSummary
 type Conversation = dto.Conversation
 type Message = dto.Message
+type MessageAttachment = dto.MessageAttachment
 type ConversationRead = dto.ConversationRead
 type CannedReply = dto.CannedReply
 type AutomationRule = dto.AutomationRule
