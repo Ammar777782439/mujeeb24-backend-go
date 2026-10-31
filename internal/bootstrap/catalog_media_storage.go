@@ -52,6 +52,25 @@ func buildCatalogMediaStorageFromEnv() (ports.MediaObjectStorage, string, error)
 			return nil, "", fmt.Errorf("invalid Backblaze B2 storage settings: %w", err)
 		}
 		backends["backblaze"] = client
+		if selected == "backblaze" && os.Getenv("CATALOG_MEDIA_B2_DIAGNOSTICS") == "true" {
+			// Explicit, read-only operational diagnosis. It neither writes
+			// objects nor logs credentials, auth tokens, or response bodies.
+			probeCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+			keyCheck := checkB2Credentials(probeCtx, nil, b2NativeAuthorizationEndpoint,
+				client.AccessKeyID, client.SecretAccessKey, client.Bucket, client.Endpoint)
+			log.Printf("[CatalogMedia] stage=b2_native_key_check result=%s endpoint_match=%t bucket_scope=%s write_files=%t",
+				keyCheck.Result, keyCheck.EndpointMatch, keyCheck.BucketScope, keyCheck.CanWrite)
+			if keyCheck.Result == "key_pair_valid" {
+				if probeErr := client.ProbeBucketLocation(probeCtx); probeErr != nil {
+					log.Printf("[CatalogMedia] stage=b2_s3_readonly_check result=failed cause=%v", probeErr)
+				} else {
+					log.Printf("[CatalogMedia] stage=b2_s3_readonly_check result=success")
+				}
+			} else {
+				log.Printf("[CatalogMedia] stage=b2_s3_readonly_check result=skipped reason=key_check_unverified")
+			}
+			cancel()
+		}
 	}
 	if backends[selected] == nil {
 		return nil, "", fmt.Errorf("catalog media storage provider %s is not configured", selected)

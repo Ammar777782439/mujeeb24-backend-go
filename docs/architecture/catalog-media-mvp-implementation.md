@@ -283,3 +283,36 @@ CI tests verify SDK-generated requests, full-body transport to an in-process
 HTTP server, bounded signed URL generation, and structured error redaction.
 This does **not** demonstrate successful live upload to a customer's B2
 bucket: external provider integration needs independent operational proof.
+
+## Opt-in Backblaze authentication diagnostics (safe and read-only)
+
+When an upload fails with `SignatureDoesNotMatch`, distinguish a wrong
+key pair from a S3 request-signing problem using two independent probes.
+
+Temporarily set `CATALOG_MEDIA_B2_DIAGNOSTICS=true` in Render for the
+API service and redeploy. The default is **off**. No new storage keys are
+required; the probes read the existing `S3_ACCESS_KEY_ID`,
+`S3_SECRET_ACCESS_KEY`, `S3_BUCKET` and `S3_ENDPOINT` only in memory.
+
+1. `stage=b2_native_key_check` calls the official Backblaze v4
+   `b2_authorize_account` HTTPS endpoint with Basic authentication.
+   `result=invalid_key_pair` means Backblaze rejected the current
+   application key ID / application key combination.
+   `result=key_pair_valid` means those credentials are valid, and
+   `endpoint_match`, `bucket_scope`, `write_files` show the
+   returned S3 URL and scoped permissions.
+2. `stage=b2_s3_readonly_check` signs a `GetBucketLocation` request
+   using the very same AWS SDK Go v2 configuration as the upload.
+   Success demonstrates that S3 can authenticate a simple signed read.
+   Failure with `SignatureDoesNotMatch` isolates an S3 configuration /
+   request signing problem separate from the binary PUT payload.
+
+These probes make no object writes or deletions. Only sanitized status
+labels and error codes are logged. The response's bearer authorization
+token, raw response JSON/XML, URLs with signatures, key ID and secret
+are **never** logged. Probe errors do not stop the API or Worker.
+Disable the diagnostic flag and redeploy when complete.
+
+Do not conclude that an S3 signing bug is proven solely because a PUT
+fails; credentials, key scope, HTTP proxy/request modification, or
+provider-specific signature rules must be distinguished.

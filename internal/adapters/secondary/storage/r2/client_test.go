@@ -203,3 +203,30 @@ func TestSDKBackblazeDeleteUsesSignedSDKRequest(t *testing.T) {
 		t.Fatal("delete was not dispatched")
 	}
 }
+
+func TestSDKBackblazeReadonlyS3SignatureProbe(t *testing.T) {
+	visited := false
+	c := b2TestClient(roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		visited = true
+		if req.Method != http.MethodGet ||
+			req.URL.Host != "s3.us-east-005.backblazeb2.com" ||
+			req.URL.EscapedPath() != "/mujeeb24-images" ||
+			req.URL.RawQuery != "location=" {
+			t.Errorf("unexpected read-only probe request: %s %s", req.Method, req.URL)
+		}
+		if !strings.Contains(req.Header.Get("Authorization"), "/us-east-005/s3/aws4_request") {
+			t.Error("read-only S3 probe does not use signed regional credentials")
+		}
+		body := `<?xml version="1.0" encoding="UTF-8"?><LocationConstraint>us-east-005</LocationConstraint>`
+		return &http.Response{
+			StatusCode: 200, Header: make(http.Header),
+			Body: io.NopCloser(strings.NewReader(body)),
+		}, nil
+	}))
+	if err := c.ProbeBucketLocation(context.Background()); err != nil {
+		t.Fatalf("read-only S3 authorization probe failed: %v", err)
+	}
+	if !visited {
+		t.Fatal("S3 signature probe never called storage provider")
+	}
+}

@@ -169,6 +169,19 @@ func (c *Client) Put(ctx context.Context, key, mime string, data []byte) error {
 	return wrapSDKError("PUT", err)
 }
 
+// ProbeBucketLocation is read-only and checks S3 SigV4 independently of PUT.
+// Backblaze documents GetBucketLocation as a supported operation.
+func (c *Client) ProbeBucketLocation(ctx context.Context) error {
+	client, err := c.sdk()
+	if err != nil {
+		return err
+	}
+	_, err = client.GetBucketLocation(ctx, &s3.GetBucketLocationInput{
+		Bucket: aws.String(c.Bucket),
+	})
+	return wrapSDKError("GET_BUCKET_LOCATION", err)
+}
+
 func (c *Client) Delete(ctx context.Context, key string) error {
 	if err := validateKey(key); err != nil {
 		return err
