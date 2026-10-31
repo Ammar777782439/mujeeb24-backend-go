@@ -36,7 +36,7 @@ func (r galleryMediaRepo) FindApprovedMediaLink(_ context.Context, businessID, i
 }
 
 type photoSelectionFake struct {
-	ids []string
+	ids       []string
 	replyText string
 }
 
@@ -176,15 +176,17 @@ func TestResolverDoesNotSendCaptionAloneWhenRequiredImageUnavailable(t *testing.
 func TestMediaSelectionFinalizesTextAfterChoosingApprovedPhoto(t *testing.T) {
 	service, outbound, _ := photoTestService([]string{"photo-1"})
 	service.MediaSelection = photoSelectionFake{
-		ids: []string{"photo-1"},
+		ids:       []string{"photo-1"},
 		replyText: "هذه صورة الهاتف الأزرق المتاحة في كتالوجنا.",
 	}
 	_, err := service.Handle(context.Background(), commands.AutoReplyCommand{
-		Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}},
+		Meta:           commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}},
 		ConversationID: "conversation-1", SourceMessageReference: "inbound-final-copy",
 		Text: "أرسل لي صورة الهاتف الأزرق", Channel: "whatsapp", ProviderRef: "socialapi",
 	})
-	if err != nil { t.Fatalf("media-aware reply failed: %v", err) }
+	if err != nil {
+		t.Fatalf("media-aware reply failed: %v", err)
+	}
 	if len(outbound.drafts) != 1 {
 		t.Fatalf("expected one media outbound, got %d", len(outbound.drafts))
 	}
