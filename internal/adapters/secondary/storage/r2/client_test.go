@@ -3,6 +3,7 @@ package r2
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -148,7 +149,7 @@ func TestSDKBackblazePutObjectReturnsSafeS3ErrorDetails(t *testing.T) {
 			if err == nil {
 				t.Fatal("provider error must reject PUT")
 			}
-			for _, expected := range []string{"HTTP ", "code=" + tc.code} {
+			for _, expected := range []string{fmt.Sprintf("HTTP %d", tc.status), "code=" + tc.code} {
 				if !strings.Contains(err.Error(), expected) {
 					t.Errorf("missing safe diagnostic %q: %s", expected, err)
 				}
@@ -178,5 +179,27 @@ func TestSDKRejectsUnsafeEndpointsKeysAndMissingConfig(t *testing.T) {
 	}
 	if err := c.Put(context.Background(), "catalog/tenant/x.webp", "image/webp", []byte("x")); err == nil {
 		t.Fatal("unsupported media content type allowed")
+	}
+}
+
+func TestSDKBackblazeDeleteUsesSignedSDKRequest(t *testing.T) {
+	var sent bool
+	c := b2TestClient(roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		sent = true
+		if req.Method != http.MethodDelete ||
+			req.URL.Host != "s3.us-east-005.backblazeb2.com" ||
+			req.URL.EscapedPath() != "/mujeeb24-images/catalog/tenant/deleted.jpg" {
+			t.Errorf("unexpected DELETE target: %s %s", req.Method, req.URL)
+		}
+		if !strings.Contains(req.Header.Get("Authorization"), "/us-east-005/s3/aws4_request") {
+			t.Error("SDK did not sign B2 DELETE")
+		}
+		return &http.Response{StatusCode: 204, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(""))}, nil
+	}))
+	if err := c.Delete(context.Background(), "catalog/tenant/deleted.jpg"); err != nil {
+		t.Fatal(err)
+	}
+	if !sent {
+		t.Fatal("delete was not dispatched")
 	}
 }
