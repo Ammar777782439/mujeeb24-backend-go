@@ -246,8 +246,8 @@ func TestSDKDirectGetReadsPrivateBackblazeObject(t *testing.T) {
 		}
 		return &http.Response{
 			StatusCode: 200,
-			Header: http.Header{"Content-Length": []string{fmt.Sprint(len(payload))}},
-			Body: io.NopCloser(bytes.NewReader(payload)),
+			Header:     http.Header{"Content-Length": []string{fmt.Sprint(len(payload))}},
+			Body:       io.NopCloser(bytes.NewReader(payload)),
 		}, nil
 	}))
 	got, err := c.Get(context.Background(), "catalog/tenant/sample.jpg")
@@ -258,20 +258,20 @@ func TestSDKDirectGetReadsPrivateBackblazeObject(t *testing.T) {
 
 func TestSDKDirectGetRejectsMismatchedLengthAndOversizedObjects(t *testing.T) {
 	for _, tc := range []struct {
-		name string
+		name     string
 		declared int
-		payload string
+		payload  string
 	}{
 		{"truncated", 20, "only-five"},
 		{"empty", 0, ""},
-		{"too_large", 10*1024*1024+1, ""},
+		{"too_large", 10*1024*1024 + 1, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := b2TestClient(roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				return &http.Response{
 					StatusCode: 200,
-					Header: http.Header{"Content-Length": []string{fmt.Sprint(tc.declared)}},
-					Body: io.NopCloser(strings.NewReader(tc.payload)),
+					Header:     http.Header{"Content-Length": []string{fmt.Sprint(tc.declared)}},
+					Body:       io.NopCloser(strings.NewReader(tc.payload)),
 				}, nil
 			}))
 			if _, err := c.Get(context.Background(), "catalog/tenant/sample.png"); err == nil {
@@ -284,8 +284,8 @@ func TestSDKDirectGetSanitizesPrivateProviderErrors(t *testing.T) {
 	c := b2TestClient(roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: 403,
-			Header: http.Header{"X-Amz-Request-Id": []string{"request-123"}},
-			Body: io.NopCloser(strings.NewReader("<Error><Code>AccessDenied</Code><Message>PRIVATE-SECRET</Message></Error>")),
+			Header:     http.Header{"X-Amz-Request-Id": []string{"request-123"}},
+			Body:       io.NopCloser(strings.NewReader("<Error><Code>AccessDenied</Code><Message>PRIVATE-SECRET</Message></Error>")),
 		}, nil
 	}))
 	_, err := c.Get(context.Background(), "catalog/tenant/sample.jpg")

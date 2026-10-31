@@ -13,7 +13,7 @@ type namedObjectStore struct {
 	name  string
 	puts  int
 	reads int
-	gets int
+	gets  int
 }
 
 func (s *namedObjectStore) Put(_ context.Context, _, _ string, _ []byte) error {
@@ -66,22 +66,22 @@ func TestCatalogDirectPreviewReadUsesRecordedProvider(t *testing.T) {
 	b2 := &namedObjectStore{name: "backblaze"}
 	storage := &CatalogMediaObjectStore{
 		WriteProvider: "backblaze",
-		Providers: map[string]ports.MediaObjectStorage{"r2": r2, "backblaze": b2},
+		Providers:     map[string]ports.MediaObjectStorage{"r2": r2, "backblaze": b2},
 	}
 	data, err := ReadCatalogAsset(context.Background(), storage, ports.MediaAsset{
-		StorageProvider:"r2",StorageKey:"catalog/biz/old.jpg",
+		StorageProvider: "r2", StorageKey: "catalog/biz/old.jpg",
 	})
-	if err != nil || string(data)!="r2" || r2.gets!=1 || b2.gets!=0 {
-		t.Fatalf("historical R2 image was misrouted: data=%s err=%v",data,err)
+	if err != nil || string(data) != "r2" || r2.gets != 1 || b2.gets != 0 {
+		t.Fatalf("historical R2 image was misrouted: data=%s err=%v", data, err)
 	}
 	data, err = ReadCatalogAsset(context.Background(), storage, ports.MediaAsset{
-		StorageProvider:"backblaze",StorageKey:"catalog/biz/new.jpg",
+		StorageProvider: "backblaze", StorageKey: "catalog/biz/new.jpg",
 	})
-	if err != nil || string(data)!="backblaze" || b2.gets!=1 {
-		t.Fatalf("Backblaze image was misrouted: data=%s err=%v",data,err)
+	if err != nil || string(data) != "backblaze" || b2.gets != 1 {
+		t.Fatalf("Backblaze image was misrouted: data=%s err=%v", data, err)
 	}
 	if _, err := ReadCatalogAsset(context.Background(), storage, ports.MediaAsset{
-		StorageProvider:"unknown",StorageKey:"catalog/biz/old.jpg",
+		StorageProvider: "unknown", StorageKey: "catalog/biz/old.jpg",
 	}); err == nil {
 		t.Fatal("unknown provider must not read from default store")
 	}

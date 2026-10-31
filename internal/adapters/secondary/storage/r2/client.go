@@ -183,7 +183,7 @@ func (c *Client) Get(ctx context.Context, key string) ([]byte, error) {
 	}
 	result, err := client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(c.Bucket),
-		Key: aws.String(key),
+		Key:    aws.String(key),
 	})
 	if err != nil {
 		return nil, wrapSDKError("GET", err)
