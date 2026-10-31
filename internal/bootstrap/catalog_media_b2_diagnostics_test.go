@@ -111,3 +111,44 @@ func TestB2CredentialCheckDistinguishes401UnsupportedFromInvalidPair(t *testing.
 		})
 	}
 }
+
+func TestB2CredentialDiagnosticsNoKeySecretInUnexpected401(t *testing.T) {
+	keyID, secret := "synthetic-id-0002", "secret-with-opaque-data"
+	for _, tc := range []struct {
+		name string
+		response string
+		kind string
+		providerCode string
+	}{
+		{"json_unknown_code", `{"code":"unexpected_code","message":"secret-with-opaque-data"}`, "json", "unexpected_code"},
+		{"html_response", `<html><body>secret-with-opaque-data</body></html>`, "html_or_xml", "unavailable"},
+		{"empty", "", "empty", "unavailable"},
+		{"malformed", `{"code":"inject dangerous\\ntext"}`, "json", "unavailable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(tc.response))
+			}))
+			defer server.Close()
+			got := checkB2Credentials(context.Background(), server.Client(), server.URL, keyID, secret,
+				"mujeeb24-images", "https://s3.us-east-005.backblazeb2.com")
+			if got.Result != "auth_401_unclassified" || got.ResponseKind != tc.kind ||
+				got.ProviderCode != tc.providerCode || got.KeyIDSuffix != "0002" ||
+				got.KeyIDWhitespace || got.SecretWhitespace {
+				t.Fatalf("unexpected sanitized diagnostics: %+v", got)
+			}
+			if strings.Contains(got.ProviderCode, secret) || strings.Contains(got.KeyIDSuffix, secret) {
+				t.Fatal("secret leaked")
+			}
+		})
+	}
+}
+func TestB2CredentialDiagnosticsDetectsWhitespaceWithoutLoggingIt(t *testing.T) {
+	got := checkB2Credentials(context.Background(), &http.Client{Timeout: time.Millisecond},
+		":bad-url", "synthetic-0001 ", " synthetic-secret",
+		"mujeeb24-images", "https://s3.us-east-005.backblazeb2.com")
+	if got.KeyIDSuffix != "001 " || !got.KeyIDWhitespace || !got.SecretWhitespace {
+		t.Fatalf("credential whitespace diagnostics wrong: %+v", got)
+	}
+}

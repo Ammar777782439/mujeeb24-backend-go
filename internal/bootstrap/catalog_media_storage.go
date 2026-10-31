@@ -58,8 +58,10 @@ func buildCatalogMediaStorageFromEnv() (ports.MediaObjectStorage, string, error)
 			probeCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 			keyCheck := checkB2Credentials(probeCtx, nil, b2NativeAuthorizationEndpoint,
 				client.AccessKeyID, client.SecretAccessKey, client.Bucket, client.Endpoint)
-			log.Printf("[CatalogMedia] stage=b2_native_key_check result=%s endpoint_match=%t bucket_scope=%s write_files=%t",
-				keyCheck.Result, keyCheck.EndpointMatch, keyCheck.BucketScope, keyCheck.CanWrite)
+			log.Printf("[CatalogMedia] stage=b2_native_key_check result=%s response_kind=%s provider_code=%s key_id_suffix=%s key_id_outer_whitespace=%t secret_outer_whitespace=%t endpoint_match=%t bucket_scope=%s write_files=%t",
+				keyCheck.Result, keyCheck.ResponseKind, keyCheck.ProviderCode, keyCheck.KeyIDSuffix,
+				keyCheck.KeyIDWhitespace, keyCheck.SecretWhitespace, keyCheck.EndpointMatch,
+				keyCheck.BucketScope, keyCheck.CanWrite)
 			if keyCheck.Result == "key_pair_valid" {
 				if probeErr := client.ProbeBucketLocation(probeCtx); probeErr != nil {
 					log.Printf("[CatalogMedia] stage=b2_s3_readonly_check result=failed cause=%v", probeErr)
