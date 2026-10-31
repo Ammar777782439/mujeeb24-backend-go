@@ -47,7 +47,7 @@ func checkB2Credentials(ctx context.Context, client *http.Client, authURL, keyID
 		APIInfo struct {
 			StorageAPI struct {
 				S3APIURL string `json:"s3ApiUrl"`
-				Allowed struct {
+				Allowed  struct {
 					Buckets []struct {
 						Name *string `json:"name"`
 					} `json:"buckets"`
