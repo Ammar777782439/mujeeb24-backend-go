@@ -275,7 +275,7 @@ func (s *Server) dispatchCommand(ctx context.Context, operationID string, input 
 		if err != nil {
 			return mapApplicationError(err), true
 		}
-		result, err := s.deps.CreateCatalogItem.Handle(ctx, commands.CreateCatalogItemCommand{Meta: commandMeta(ctx, actor, in.CommandHeaders), CatalogID: commands.CatalogID(in.CatalogID), AttributeSchemaID: optionalAttributeSchemaID(in.Body.AttributeSchemaID), ItemType: in.Body.ItemType, Name: in.Body.Name, ShortDescription: in.Body.ShortDescription, LongDescription: in.Body.LongDescription, PricingMode: in.Body.PricingMode, AvailabilityMode: in.Body.AvailabilityMode, FulfillmentMode: in.Body.FulfillmentMode, RequiresConfirmation: in.Body.RequiresConfirmation, Attributes: in.Body.Attributes, InitialOffer: initialOffer})
+		result, err := s.deps.CreateCatalogItem.Handle(ctx, commands.CreateCatalogItemCommand{Meta: commandMeta(ctx, actor, in.CommandHeaders), CatalogID: commands.CatalogID(in.CatalogID), AttributeSchemaID: optionalAttributeSchemaID(in.Body.AttributeSchemaID), ItemType: in.Body.ItemType, Name: in.Body.Name, ShortDescription: in.Body.ShortDescription, LongDescription: in.Body.LongDescription, PricingMode: in.Body.PricingMode, AvailabilityMode: in.Body.AvailabilityMode, FulfillmentMode: in.Body.FulfillmentMode, RequiresConfirmation: in.Body.RequiresConfirmation, Attributes: in.Body.Attributes, InitialOffer: initialOffer, InitialMediaIDs: catalogInitialMediaStrings(in.Body.InitialMediaIDs)})
 		if err != nil {
 			return mapApplicationError(err), true
 		}

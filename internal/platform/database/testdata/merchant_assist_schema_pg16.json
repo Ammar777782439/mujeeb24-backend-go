@@ -1,5 +1,5 @@
 {
-  "migration_count": 82,
+  "migration_count": 83,
   "columns": [
     {
       "table": "ai_catalog_batches",
@@ -2093,6 +2093,97 @@
       "default": "1"
     },
     {
+      "table": "catalog_media_links",
+      "name": "id",
+      "type": "uuid",
+      "not_null": true
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "business_id",
+      "type": "uuid",
+      "not_null": true
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "catalog_item_id",
+      "type": "uuid",
+      "not_null": true
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "variant_id",
+      "type": "uuid",
+      "not_null": false
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "media_id",
+      "type": "uuid",
+      "not_null": true
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "is_primary",
+      "type": "boolean",
+      "not_null": true,
+      "default": "false"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "sort_order",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "alt_text",
+      "type": "text",
+      "not_null": true,
+      "default": "''::text"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "status",
+      "type": "text",
+      "not_null": true,
+      "default": "'active'::text"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "approved_by",
+      "type": "text",
+      "not_null": false
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "approved_at",
+      "type": "timestamp with time zone",
+      "not_null": false
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "resource_version",
+      "type": "bigint",
+      "not_null": true,
+      "default": "1"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "not_null": true,
+      "default": "now()"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "updated_at",
+      "type": "timestamp with time zone",
+      "not_null": true,
+      "default": "now()"
+    },
+    {
       "table": "catalogs",
       "name": "id",
       "type": "uuid",
@@ -3774,6 +3865,106 @@
       "type": "bigint",
       "not_null": true,
       "default": "1"
+    },
+    {
+      "table": "media_assets",
+      "name": "id",
+      "type": "uuid",
+      "not_null": true
+    },
+    {
+      "table": "media_assets",
+      "name": "business_id",
+      "type": "uuid",
+      "not_null": true
+    },
+    {
+      "table": "media_assets",
+      "name": "purpose",
+      "type": "text",
+      "not_null": true,
+      "default": "'catalog'::text"
+    },
+    {
+      "table": "media_assets",
+      "name": "storage_provider",
+      "type": "text",
+      "not_null": true
+    },
+    {
+      "table": "media_assets",
+      "name": "storage_key",
+      "type": "text",
+      "not_null": true
+    },
+    {
+      "table": "media_assets",
+      "name": "mime_type",
+      "type": "text",
+      "not_null": false
+    },
+    {
+      "table": "media_assets",
+      "name": "size_bytes",
+      "type": "bigint",
+      "not_null": false
+    },
+    {
+      "table": "media_assets",
+      "name": "sha256",
+      "type": "bytea",
+      "not_null": false
+    },
+    {
+      "table": "media_assets",
+      "name": "width",
+      "type": "integer",
+      "not_null": false
+    },
+    {
+      "table": "media_assets",
+      "name": "height",
+      "type": "integer",
+      "not_null": false
+    },
+    {
+      "table": "media_assets",
+      "name": "status",
+      "type": "text",
+      "not_null": true,
+      "default": "'pending_upload'::text"
+    },
+    {
+      "table": "media_assets",
+      "name": "created_by",
+      "type": "text",
+      "not_null": false
+    },
+    {
+      "table": "media_assets",
+      "name": "upload_expires_at",
+      "type": "timestamp with time zone",
+      "not_null": false
+    },
+    {
+      "table": "media_assets",
+      "name": "deleted_at",
+      "type": "timestamp with time zone",
+      "not_null": false
+    },
+    {
+      "table": "media_assets",
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "not_null": true,
+      "default": "now()"
+    },
+    {
+      "table": "media_assets",
+      "name": "updated_at",
+      "type": "timestamp with time zone",
+      "not_null": true,
+      "default": "now()"
     },
     {
       "table": "merchant_ai_messages",
@@ -5985,13 +6176,13 @@
       "table": "ai_catalog_batches",
       "name": "ai_catalog_batches_batch_number_chk",
       "kind": "c",
-      "definition": "CHECK (batch_number > 0)"
+      "definition": "CHECK (batch_number \u003e 0)"
     },
     {
       "table": "ai_catalog_batches",
       "name": "ai_catalog_batches_items_count_chk",
       "kind": "c",
-      "definition": "CHECK (items_count >= 0)"
+      "definition": "CHECK (items_count \u003e= 0)"
     },
     {
       "table": "ai_catalog_batches",
@@ -6069,7 +6260,7 @@
       "table": "ai_decisions",
       "name": "ai_decisions_confidence_value_chk",
       "kind": "c",
-      "definition": "CHECK (confidence_value IS NULL OR confidence_value >= 0::numeric AND confidence_value <= 1::numeric)"
+      "definition": "CHECK (confidence_value IS NULL OR confidence_value \u003e= 0::numeric AND confidence_value \u003c= 1::numeric)"
     },
     {
       "table": "ai_decisions",
@@ -6081,13 +6272,13 @@
       "table": "ai_decisions",
       "name": "ai_decisions_conversation_ref_chk",
       "kind": "c",
-      "definition": "CHECK (source_message_reference IS NULL OR length(btrim(source_message_reference)) > 0)"
+      "definition": "CHECK (source_message_reference IS NULL OR length(btrim(source_message_reference)) \u003e 0)"
     },
     {
       "table": "ai_decisions",
       "name": "ai_decisions_decided_at_chk",
       "kind": "c",
-      "definition": "CHECK (decided_at IS NULL OR decided_at >= created_at)"
+      "definition": "CHECK (decided_at IS NULL OR decided_at \u003e= created_at)"
     },
     {
       "table": "ai_decisions",
@@ -6117,7 +6308,7 @@
       "table": "ai_decisions",
       "name": "ai_decisions_expiry_chk",
       "kind": "c",
-      "definition": "CHECK (expires_at IS NULL OR expires_at >= created_at)"
+      "definition": "CHECK (expires_at IS NULL OR expires_at \u003e= created_at)"
     },
     {
       "table": "ai_decisions",
@@ -6129,19 +6320,19 @@
       "table": "ai_decisions",
       "name": "ai_decisions_human_review_reason_chk",
       "kind": "c",
-      "definition": "CHECK (human_review_reason IS NULL OR length(btrim(human_review_reason)) > 0)"
+      "definition": "CHECK (human_review_reason IS NULL OR length(btrim(human_review_reason)) \u003e 0)"
     },
     {
       "table": "ai_decisions",
       "name": "ai_decisions_human_review_requested_by_chk",
       "kind": "c",
-      "definition": "CHECK (human_review_requested_by IS NULL OR length(btrim(human_review_requested_by)) > 0)"
+      "definition": "CHECK (human_review_requested_by IS NULL OR length(btrim(human_review_requested_by)) \u003e 0)"
     },
     {
       "table": "ai_decisions",
       "name": "ai_decisions_intent_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(intent_base)) > 0 OR requested_capability IS NOT NULL)"
+      "definition": "CHECK (length(btrim(intent_base)) \u003e 0 OR requested_capability IS NOT NULL)"
     },
     {
       "table": "ai_decisions",
@@ -6177,19 +6368,19 @@
       "table": "ai_decisions",
       "name": "ai_decisions_requested_capability_chk",
       "kind": "c",
-      "definition": "CHECK (requested_capability IS NULL OR length(btrim(requested_capability)) > 0)"
+      "definition": "CHECK (requested_capability IS NULL OR length(btrim(requested_capability)) \u003e 0)"
     },
     {
       "table": "ai_decisions",
       "name": "ai_decisions_resource_version_chk",
       "kind": "c",
-      "definition": "CHECK (resource_version > 0)"
+      "definition": "CHECK (resource_version \u003e 0)"
     },
     {
       "table": "ai_decisions",
       "name": "ai_decisions_schema_version_chk",
       "kind": "c",
-      "definition": "CHECK (schema_version > 0)"
+      "definition": "CHECK (schema_version \u003e 0)"
     },
     {
       "table": "ai_gemini_interactions",
@@ -6249,19 +6440,19 @@
       "table": "ai_provider_pricing_versions",
       "name": "ai_provider_pricing_cached_chk",
       "kind": "c",
-      "definition": "CHECK (cached_input_per_million_yer >= 0)"
+      "definition": "CHECK (cached_input_per_million_yer \u003e= 0)"
     },
     {
       "table": "ai_provider_pricing_versions",
       "name": "ai_provider_pricing_effective_chk",
       "kind": "c",
-      "definition": "CHECK (effective_to IS NULL OR effective_to > effective_from)"
+      "definition": "CHECK (effective_to IS NULL OR effective_to \u003e effective_from)"
     },
     {
       "table": "ai_provider_pricing_versions",
       "name": "ai_provider_pricing_prices_positive_chk",
       "kind": "c",
-      "definition": "CHECK (input_per_million_yer > 0 AND output_per_million_yer > 0)"
+      "definition": "CHECK (input_per_million_yer \u003e 0 AND output_per_million_yer \u003e 0)"
     },
     {
       "table": "ai_provider_pricing_versions",
@@ -6273,7 +6464,7 @@
       "table": "ai_provider_pricing_versions",
       "name": "ai_provider_pricing_version_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(pricing_version)) > 0)"
+      "definition": "CHECK (length(btrim(pricing_version)) \u003e 0)"
     },
     {
       "table": "ai_provider_pricing_versions",
@@ -6351,7 +6542,7 @@
       "table": "ai_stage_latencies",
       "name": "ai_stage_latencies_latency_chk",
       "kind": "c",
-      "definition": "CHECK (latency_ms >= 0)"
+      "definition": "CHECK (latency_ms \u003e= 0)"
     },
     {
       "table": "ai_stage_latencies",
@@ -6405,13 +6596,13 @@
       "table": "ai_usage_records",
       "name": "ai_usage_gateway_cost_nonnegative",
       "kind": "c",
-      "definition": "CHECK (gateway_cost_usd IS NULL OR gateway_cost_usd >= 0::numeric)"
+      "definition": "CHECK (gateway_cost_usd IS NULL OR gateway_cost_usd \u003e= 0::numeric)"
     },
     {
       "table": "ai_usage_records",
       "name": "ai_usage_gateway_fx_positive",
       "kind": "c",
-      "definition": "CHECK (gateway_fx_yer_per_usd IS NULL OR gateway_fx_yer_per_usd > 0::numeric)"
+      "definition": "CHECK (gateway_fx_yer_per_usd IS NULL OR gateway_fx_yer_per_usd \u003e 0::numeric)"
     },
     {
       "table": "ai_usage_records",
@@ -6429,19 +6620,19 @@
       "table": "ai_usage_records",
       "name": "ai_usage_records_completed_after_started_chk",
       "kind": "c",
-      "definition": "CHECK (completed_at >= started_at)"
+      "definition": "CHECK (completed_at \u003e= started_at)"
     },
     {
       "table": "ai_usage_records",
       "name": "ai_usage_records_cost_nonneg_chk",
       "kind": "c",
-      "definition": "CHECK (provider_cost_yer >= 0)"
+      "definition": "CHECK (provider_cost_yer \u003e= 0)"
     },
     {
       "table": "ai_usage_records",
       "name": "ai_usage_records_counts_nonneg_chk",
       "kind": "c",
-      "definition": "CHECK (model_requests >= 0 AND tool_calls >= 0 AND final_ai_replies >= 0)"
+      "definition": "CHECK (model_requests \u003e= 0 AND tool_calls \u003e= 0 AND final_ai_replies \u003e= 0)"
     },
     {
       "table": "ai_usage_records",
@@ -6459,7 +6650,7 @@
       "table": "ai_usage_records",
       "name": "ai_usage_records_tokens_nonneg_chk",
       "kind": "c",
-      "definition": "CHECK (input_tokens >= 0 AND cached_input_tokens >= 0 AND output_tokens >= 0)"
+      "definition": "CHECK (input_tokens \u003e= 0 AND cached_input_tokens \u003e= 0 AND output_tokens \u003e= 0)"
     },
     {
       "table": "ai_usage_telemetry",
@@ -6471,7 +6662,7 @@
       "table": "ai_usage_telemetry",
       "name": "ai_usage_telemetry_cost_chk",
       "kind": "c",
-      "definition": "CHECK (estimated_cost_micros >= 0)"
+      "definition": "CHECK (estimated_cost_micros \u003e= 0)"
     },
     {
       "table": "ai_usage_telemetry",
@@ -6489,13 +6680,13 @@
       "table": "ai_usage_telemetry",
       "name": "ai_usage_telemetry_tokens_chk",
       "kind": "c",
-      "definition": "CHECK (input_tokens >= 0 AND cached_tokens >= 0 AND output_tokens >= 0)"
+      "definition": "CHECK (input_tokens \u003e= 0 AND cached_tokens \u003e= 0 AND output_tokens \u003e= 0)"
     },
     {
       "table": "attribute_definitions",
       "name": "attribute_definitions_key_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(attribute_key)) > 0)"
+      "definition": "CHECK (length(btrim(attribute_key)) \u003e 0)"
     },
     {
       "table": "attribute_definitions",
@@ -6507,13 +6698,13 @@
       "table": "attribute_definitions",
       "name": "attribute_definitions_label_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(label)) > 0)"
+      "definition": "CHECK (length(btrim(label)) \u003e 0)"
     },
     {
       "table": "attribute_definitions",
       "name": "attribute_definitions_order_chk",
       "kind": "c",
-      "definition": "CHECK (display_order >= 0)"
+      "definition": "CHECK (display_order \u003e= 0)"
     },
     {
       "table": "attribute_definitions",
@@ -6555,7 +6746,7 @@
       "table": "attribute_schemas",
       "name": "attribute_schemas_name_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(name)) > 0)"
+      "definition": "CHECK (length(btrim(name)) \u003e 0)"
     },
     {
       "table": "attribute_schemas",
@@ -6567,7 +6758,7 @@
       "table": "attribute_schemas",
       "name": "attribute_schemas_version_chk",
       "kind": "c",
-      "definition": "CHECK (version > 0)"
+      "definition": "CHECK (version \u003e 0)"
     },
     {
       "table": "attribute_schemas",
@@ -6579,7 +6770,7 @@
       "table": "audit_events",
       "name": "audit_events_action_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(action)) > 0)"
+      "definition": "CHECK (length(btrim(action)) \u003e 0)"
     },
     {
       "table": "audit_events",
@@ -6591,13 +6782,13 @@
       "table": "audit_events",
       "name": "audit_events_after_reference_chk",
       "kind": "c",
-      "definition": "CHECK (after_reference IS NULL OR length(btrim(after_reference)) > 0)"
+      "definition": "CHECK (after_reference IS NULL OR length(btrim(after_reference)) \u003e 0)"
     },
     {
       "table": "audit_events",
       "name": "audit_events_before_reference_chk",
       "kind": "c",
-      "definition": "CHECK (before_reference IS NULL OR length(btrim(before_reference)) > 0)"
+      "definition": "CHECK (before_reference IS NULL OR length(btrim(before_reference)) \u003e 0)"
     },
     {
       "table": "audit_events",
@@ -6609,7 +6800,7 @@
       "table": "audit_events",
       "name": "audit_events_decision_reference_chk",
       "kind": "c",
-      "definition": "CHECK (decision_reference IS NULL OR length(btrim(decision_reference)) > 0)"
+      "definition": "CHECK (decision_reference IS NULL OR length(btrim(decision_reference)) \u003e 0)"
     },
     {
       "table": "audit_events",
@@ -6627,19 +6818,19 @@
       "table": "audit_events",
       "name": "audit_events_reason_code_chk",
       "kind": "c",
-      "definition": "CHECK (reason_code IS NULL OR length(btrim(reason_code)) > 0)"
+      "definition": "CHECK (reason_code IS NULL OR length(btrim(reason_code)) \u003e 0)"
     },
     {
       "table": "audit_events",
       "name": "audit_events_redaction_version_chk",
       "kind": "c",
-      "definition": "CHECK (redaction_version > 0)"
+      "definition": "CHECK (redaction_version \u003e 0)"
     },
     {
       "table": "audit_events",
       "name": "audit_events_resource_type_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(resource_type)) > 0)"
+      "definition": "CHECK (length(btrim(resource_type)) \u003e 0)"
     },
     {
       "table": "audit_events",
@@ -6651,7 +6842,7 @@
       "table": "audit_events",
       "name": "audit_events_schema_version_chk",
       "kind": "c",
-      "definition": "CHECK (schema_version > 0)"
+      "definition": "CHECK (schema_version \u003e 0)"
     },
     {
       "table": "automation_executions",
@@ -6675,7 +6866,7 @@
       "table": "automation_executions",
       "name": "automation_executions_reason_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(reason_code)) > 0)"
+      "definition": "CHECK (length(btrim(reason_code)) \u003e 0)"
     },
     {
       "table": "automation_executions",
@@ -6723,7 +6914,7 @@
       "table": "automation_rules",
       "name": "automation_rules_name_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(name)) > 0)"
+      "definition": "CHECK (length(btrim(name)) \u003e 0)"
     },
     {
       "table": "automation_rules",
@@ -6735,13 +6926,13 @@
       "table": "automation_rules",
       "name": "automation_rules_position_positive_chk",
       "kind": "c",
-      "definition": "CHECK (\"position\" > 0)"
+      "definition": "CHECK (\"position\" \u003e 0)"
     },
     {
       "table": "automation_rules",
       "name": "automation_rules_resource_version_chk",
       "kind": "c",
-      "definition": "CHECK (resource_version > 0)"
+      "definition": "CHECK (resource_version \u003e 0)"
     },
     {
       "table": "automation_rules",
@@ -6813,7 +7004,7 @@
       "table": "business_policies",
       "name": "business_policies_resource_version_positive_chk",
       "kind": "c",
-      "definition": "CHECK (resource_version > 0)"
+      "definition": "CHECK (resource_version \u003e 0)"
     },
     {
       "table": "business_policy_versions",
@@ -6843,7 +7034,7 @@
       "table": "business_policy_versions",
       "name": "business_policy_versions_key_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(policy_key)) > 0)"
+      "definition": "CHECK (length(btrim(policy_key)) \u003e 0)"
     },
     {
       "table": "business_policy_versions",
@@ -6873,25 +7064,25 @@
       "table": "business_policy_versions",
       "name": "business_policy_versions_summary_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(summary)) > 0)"
+      "definition": "CHECK (length(btrim(summary)) \u003e 0)"
     },
     {
       "table": "business_policy_versions",
       "name": "business_policy_versions_title_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(title)) > 0)"
+      "definition": "CHECK (length(btrim(title)) \u003e 0)"
     },
     {
       "table": "business_policy_versions",
       "name": "business_policy_versions_validity_chk",
       "kind": "c",
-      "definition": "CHECK (valid_until IS NULL OR valid_until > valid_from)"
+      "definition": "CHECK (valid_until IS NULL OR valid_until \u003e valid_from)"
     },
     {
       "table": "business_policy_versions",
       "name": "business_policy_versions_version_chk",
       "kind": "c",
-      "definition": "CHECK (version > 0)"
+      "definition": "CHECK (version \u003e 0)"
     },
     {
       "table": "businesses",
@@ -6903,13 +7094,13 @@
       "table": "businesses",
       "name": "businesses_locale_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(locale)) > 0)"
+      "definition": "CHECK (length(btrim(locale)) \u003e 0)"
     },
     {
       "table": "businesses",
       "name": "businesses_name_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(name)) > 0)"
+      "definition": "CHECK (length(btrim(name)) \u003e 0)"
     },
     {
       "table": "businesses",
@@ -6921,13 +7112,13 @@
       "table": "businesses",
       "name": "businesses_resource_version_positive_chk",
       "kind": "c",
-      "definition": "CHECK (resource_version > 0)"
+      "definition": "CHECK (resource_version \u003e 0)"
     },
     {
       "table": "businesses",
       "name": "businesses_slug_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(slug)) > 0)"
+      "definition": "CHECK (length(btrim(slug)) \u003e 0)"
     },
     {
       "table": "businesses",
@@ -6951,7 +7142,7 @@
       "table": "canned_replies",
       "name": "canned_replies_body_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(body)) > 0)"
+      "definition": "CHECK (length(btrim(body)) \u003e 0)"
     },
     {
       "table": "canned_replies",
@@ -6969,7 +7160,7 @@
       "table": "canned_replies",
       "name": "canned_replies_resource_version_chk",
       "kind": "c",
-      "definition": "CHECK (resource_version > 0)"
+      "definition": "CHECK (resource_version \u003e 0)"
     },
     {
       "table": "canned_replies",
@@ -6981,7 +7172,7 @@
       "table": "canned_replies",
       "name": "canned_replies_shortcut_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(shortcut)) > 0)"
+      "definition": "CHECK (length(btrim(shortcut)) \u003e 0)"
     },
     {
       "table": "canned_replies",
@@ -6993,7 +7184,7 @@
       "table": "canned_replies",
       "name": "canned_replies_title_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(title)) > 0)"
+      "definition": "CHECK (length(btrim(title)) \u003e 0)"
     },
     {
       "table": "catalog_items",
@@ -7035,7 +7226,7 @@
       "table": "catalog_items",
       "name": "catalog_items_name_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(name)) > 0)"
+      "definition": "CHECK (length(btrim(name)) \u003e 0)"
     },
     {
       "table": "catalog_items",
@@ -7053,13 +7244,13 @@
       "table": "catalog_items",
       "name": "catalog_items_resource_version_chk",
       "kind": "c",
-      "definition": "CHECK (resource_version > 0)"
+      "definition": "CHECK (resource_version \u003e 0)"
     },
     {
       "table": "catalog_items",
       "name": "catalog_items_schema_version_pair_chk",
       "kind": "c",
-      "definition": "CHECK (attribute_schema_id IS NULL AND attribute_schema_version IS NULL OR attribute_schema_id IS NOT NULL AND attribute_schema_version IS NOT NULL AND attribute_schema_version > 0)"
+      "definition": "CHECK (attribute_schema_id IS NULL AND attribute_schema_version IS NULL OR attribute_schema_id IS NOT NULL AND attribute_schema_version IS NOT NULL AND attribute_schema_version \u003e 0)"
     },
     {
       "table": "catalog_items",
@@ -7071,7 +7262,73 @@
       "table": "catalog_items",
       "name": "catalog_items_type_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(item_type)) > 0)"
+      "definition": "CHECK (length(btrim(item_type)) \u003e 0)"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "catalog_media_links_active_approval_chk",
+      "kind": "c",
+      "definition": "CHECK (status \u003c\u003e 'active'::text OR approved_at IS NOT NULL)"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "catalog_media_links_alt_chk",
+      "kind": "c",
+      "definition": "CHECK (char_length(alt_text) \u003c= 500)"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "catalog_media_links_business_asset_fk",
+      "kind": "f",
+      "definition": "FOREIGN KEY (business_id, media_id) REFERENCES media_assets(business_id, id) ON DELETE RESTRICT"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "catalog_media_links_business_id_uq",
+      "kind": "u",
+      "definition": "UNIQUE (business_id, id)"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "catalog_media_links_business_item_fk",
+      "kind": "f",
+      "definition": "FOREIGN KEY (business_id, catalog_item_id) REFERENCES catalog_items(business_id, id) ON DELETE RESTRICT"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "catalog_media_links_business_item_variant_fk",
+      "kind": "f",
+      "definition": "FOREIGN KEY (business_id, catalog_item_id, variant_id) REFERENCES variants(business_id, catalog_item_id, id) ON DELETE RESTRICT"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "catalog_media_links_order_chk",
+      "kind": "c",
+      "definition": "CHECK (sort_order \u003e= 0)"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "catalog_media_links_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "catalog_media_links_primary_active_chk",
+      "kind": "c",
+      "definition": "CHECK (NOT is_primary OR status = 'active'::text)"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "catalog_media_links_status_chk",
+      "kind": "c",
+      "definition": "CHECK (status = ANY (ARRAY['active'::text, 'removed'::text]))"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "catalog_media_links_version_chk",
+      "kind": "c",
+      "definition": "CHECK (resource_version \u003e 0)"
     },
     {
       "table": "catalogs",
@@ -7089,7 +7346,7 @@
       "table": "catalogs",
       "name": "catalogs_name_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(name)) > 0)"
+      "definition": "CHECK (length(btrim(name)) \u003e 0)"
     },
     {
       "table": "catalogs",
@@ -7101,7 +7358,7 @@
       "table": "catalogs",
       "name": "catalogs_resource_version_chk",
       "kind": "c",
-      "definition": "CHECK (resource_version > 0)"
+      "definition": "CHECK (resource_version \u003e 0)"
     },
     {
       "table": "catalogs",
@@ -7125,7 +7382,7 @@
       "table": "channel_connection_capabilities",
       "name": "channel_connection_capabilities_evidence_chk",
       "kind": "c",
-      "definition": "CHECK (evidence_source IS NULL OR length(btrim(evidence_source)) > 0)"
+      "definition": "CHECK (evidence_source IS NULL OR length(btrim(evidence_source)) \u003e 0)"
     },
     {
       "table": "channel_connection_capabilities",
@@ -7143,7 +7400,7 @@
       "table": "channel_connection_state_events",
       "name": "channel_connection_state_events_actor_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(actor_reference)) > 0)"
+      "definition": "CHECK (length(btrim(actor_reference)) \u003e 0)"
     },
     {
       "table": "channel_connection_state_events",
@@ -7167,7 +7424,7 @@
       "table": "channel_connection_state_events",
       "name": "channel_connection_state_events_reason_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(reason)) > 0)"
+      "definition": "CHECK (length(btrim(reason)) \u003e 0)"
     },
     {
       "table": "channel_connections",
@@ -7191,7 +7448,7 @@
       "table": "channel_connections",
       "name": "channel_connections_connection_ref_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(provider_connection_ref)) > 0)"
+      "definition": "CHECK (length(btrim(provider_connection_ref)) \u003e 0)"
     },
     {
       "table": "channel_connections",
@@ -7209,19 +7466,19 @@
       "table": "channel_connections",
       "name": "channel_connections_provider_ref_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(provider_ref)) > 0)"
+      "definition": "CHECK (length(btrim(provider_ref)) \u003e 0)"
     },
     {
       "table": "channel_connections",
       "name": "channel_connections_resource_version_positive_chk",
       "kind": "c",
-      "definition": "CHECK (resource_version > 0)"
+      "definition": "CHECK (resource_version \u003e 0)"
     },
     {
       "table": "channel_connections",
       "name": "channel_connections_secret_ref_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(secret_reference)) > 0)"
+      "definition": "CHECK (length(btrim(secret_reference)) \u003e 0)"
     },
     {
       "table": "channel_connections",
@@ -7239,7 +7496,7 @@
       "table": "channel_history_purges",
       "name": "channel_history_purges_idempotency_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(idempotency_key)) > 0)"
+      "definition": "CHECK (length(btrim(idempotency_key)) \u003e 0)"
     },
     {
       "table": "channel_history_purges",
@@ -7269,7 +7526,7 @@
       "table": "channel_provider_brands",
       "name": "channel_provider_brands_name_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(display_name)) > 0)"
+      "definition": "CHECK (length(btrim(display_name)) \u003e 0)"
     },
     {
       "table": "channel_provider_brands",
@@ -7287,13 +7544,13 @@
       "table": "channel_provider_brands",
       "name": "channel_provider_brands_provider_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(provider_ref)) > 0)"
+      "definition": "CHECK (length(btrim(provider_ref)) \u003e 0)"
     },
     {
       "table": "channel_provider_brands",
       "name": "channel_provider_brands_ref_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(provider_brand_ref)) > 0)"
+      "definition": "CHECK (length(btrim(provider_brand_ref)) \u003e 0)"
     },
     {
       "table": "channel_provisioning_sessions",
@@ -7329,13 +7586,13 @@
       "table": "channel_provisioning_sessions",
       "name": "channel_provisioning_display_name_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(display_name)) > 0)"
+      "definition": "CHECK (length(btrim(display_name)) \u003e 0)"
     },
     {
       "table": "channel_provisioning_sessions",
       "name": "channel_provisioning_failure_chk",
       "kind": "c",
-      "definition": "CHECK (failure_code IS NULL OR length(btrim(failure_code)) > 0)"
+      "definition": "CHECK (failure_code IS NULL OR length(btrim(failure_code)) \u003e 0)"
     },
     {
       "table": "channel_provisioning_sessions",
@@ -7347,7 +7604,7 @@
       "table": "channel_provisioning_sessions",
       "name": "channel_provisioning_provider_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(provider_ref)) > 0)"
+      "definition": "CHECK (length(btrim(provider_ref)) \u003e 0)"
     },
     {
       "table": "channel_provisioning_sessions",
@@ -7359,7 +7616,7 @@
       "table": "channel_provisioning_sessions",
       "name": "channel_provisioning_state_chk",
       "kind": "c",
-      "definition": "CHECK (oauth_state IS NULL OR length(btrim(oauth_state)) > 0)"
+      "definition": "CHECK (oauth_state IS NULL OR length(btrim(oauth_state)) \u003e 0)"
     },
     {
       "table": "channel_provisioning_sessions",
@@ -7371,13 +7628,13 @@
       "table": "commercial_transactions",
       "name": "commercial_transactions_agreement_version_check",
       "kind": "c",
-      "definition": "CHECK (agreement_version > 0)"
+      "definition": "CHECK (agreement_version \u003e 0)"
     },
     {
       "table": "commercial_transactions",
       "name": "commercial_transactions_amount_chk",
       "kind": "c",
-      "definition": "CHECK (total_amount IS NULL OR total_amount >= 0::numeric)"
+      "definition": "CHECK (total_amount IS NULL OR total_amount \u003e= 0::numeric)"
     },
     {
       "table": "commercial_transactions",
@@ -7401,7 +7658,7 @@
       "table": "commercial_transactions",
       "name": "commercial_transactions_cancellation_reason_chk",
       "kind": "c",
-      "definition": "CHECK (cancellation_reason IS NULL OR length(btrim(cancellation_reason)) > 0)"
+      "definition": "CHECK (cancellation_reason IS NULL OR length(btrim(cancellation_reason)) \u003e 0)"
     },
     {
       "table": "commercial_transactions",
@@ -7437,13 +7694,13 @@
       "table": "commercial_transactions",
       "name": "commercial_transactions_resource_version_chk",
       "kind": "c",
-      "definition": "CHECK (resource_version > 0)"
+      "definition": "CHECK (resource_version \u003e 0)"
     },
     {
       "table": "commercial_transactions",
       "name": "commercial_transactions_schema_version_chk",
       "kind": "c",
-      "definition": "CHECK (schema_version > 0)"
+      "definition": "CHECK (schema_version \u003e 0)"
     },
     {
       "table": "commercial_transactions",
@@ -7479,7 +7736,7 @@
       "table": "communication_messages",
       "name": "communication_messages_content_reference_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(content_reference)) > 0)"
+      "definition": "CHECK (length(btrim(content_reference)) \u003e 0)"
     },
     {
       "table": "communication_messages",
@@ -7503,7 +7760,7 @@
       "table": "communication_messages",
       "name": "communication_messages_external_reference_chk",
       "kind": "c",
-      "definition": "CHECK (provider_message_id IS NULL OR length(btrim(provider_message_id)) > 0)"
+      "definition": "CHECK (provider_message_id IS NULL OR length(btrim(provider_message_id)) \u003e 0)"
     },
     {
       "table": "communication_messages",
@@ -7533,7 +7790,7 @@
       "table": "communication_messages",
       "name": "communication_messages_text_content_chk",
       "kind": "c",
-      "definition": "CHECK (content_type <> 'text'::text OR text_content IS NOT NULL)"
+      "definition": "CHECK (content_type \u003c\u003e 'text'::text OR text_content IS NOT NULL)"
     },
     {
       "table": "communication_messages",
@@ -7569,7 +7826,7 @@
       "table": "conversation_labels",
       "name": "conversation_labels_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(label)) > 0)"
+      "definition": "CHECK (length(btrim(label)) \u003e 0)"
     },
     {
       "table": "conversation_labels",
@@ -7647,7 +7904,7 @@
       "table": "conversation_references",
       "name": "conversation_references_provider_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(provider_ref)) > 0)"
+      "definition": "CHECK (length(btrim(provider_ref)) \u003e 0)"
     },
     {
       "table": "conversation_references",
@@ -7659,13 +7916,13 @@
       "table": "conversation_references",
       "name": "conversation_references_resource_id_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(resource_id)) > 0)"
+      "definition": "CHECK (length(btrim(resource_id)) \u003e 0)"
     },
     {
       "table": "conversation_references",
       "name": "conversation_references_resource_type_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(resource_type)) > 0)"
+      "definition": "CHECK (length(btrim(resource_type)) \u003e 0)"
     },
     {
       "table": "conversation_references",
@@ -7731,13 +7988,13 @@
       "table": "conversation_state",
       "name": "conversation_state_summary_turn_count_check",
       "kind": "c",
-      "definition": "CHECK (summary_turn_count >= 0)"
+      "definition": "CHECK (summary_turn_count \u003e= 0)"
     },
     {
       "table": "conversation_state",
       "name": "conversation_state_version_chk",
       "kind": "c",
-      "definition": "CHECK (version > 0)"
+      "definition": "CHECK (version \u003e 0)"
     },
     {
       "table": "conversations",
@@ -7749,7 +8006,7 @@
       "table": "conversations",
       "name": "conversations_assignment_ref_chk",
       "kind": "c",
-      "definition": "CHECK (assignment_reference IS NULL OR length(btrim(assignment_reference)) > 0)"
+      "definition": "CHECK (assignment_reference IS NULL OR length(btrim(assignment_reference)) \u003e 0)"
     },
     {
       "table": "conversations",
@@ -7791,7 +8048,7 @@
       "table": "conversations",
       "name": "conversations_resource_version_positive_chk",
       "kind": "c",
-      "definition": "CHECK (resource_version > 0)"
+      "definition": "CHECK (resource_version \u003e 0)"
     },
     {
       "table": "conversations",
@@ -7827,7 +8084,7 @@
       "table": "customers",
       "name": "customers_merged_target_chk",
       "kind": "c",
-      "definition": "CHECK (status <> 'merged'::text OR merged_into_customer_id IS NOT NULL)"
+      "definition": "CHECK (status \u003c\u003e 'merged'::text OR merged_into_customer_id IS NOT NULL)"
     },
     {
       "table": "customers",
@@ -7845,7 +8102,7 @@
       "table": "customers",
       "name": "customers_resource_version_positive_chk",
       "kind": "c",
-      "definition": "CHECK (resource_version > 0)"
+      "definition": "CHECK (resource_version \u003e 0)"
     },
     {
       "table": "customers",
@@ -7905,13 +8162,13 @@
       "table": "external_identities",
       "name": "external_identities_provider_ref_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(provider_ref)) > 0)"
+      "definition": "CHECK (length(btrim(provider_ref)) \u003e 0)"
     },
     {
       "table": "external_identities",
       "name": "external_identities_user_ref_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(external_user_id)) > 0)"
+      "definition": "CHECK (length(btrim(external_user_id)) \u003e 0)"
     },
     {
       "table": "identity_matches",
@@ -7971,7 +8228,7 @@
       "table": "identity_matches",
       "name": "identity_matches_order_chk",
       "kind": "c",
-      "definition": "CHECK (left_identity_id < right_identity_id)"
+      "definition": "CHECK (left_identity_id \u003c right_identity_id)"
     },
     {
       "table": "identity_matches",
@@ -7995,7 +8252,7 @@
       "table": "inbound_event_ledger",
       "name": "inbound_event_attempt_count_chk",
       "kind": "c",
-      "definition": "CHECK (attempt_count >= 0)"
+      "definition": "CHECK (attempt_count \u003e= 0)"
     },
     {
       "table": "inbound_event_ledger",
@@ -8013,7 +8270,7 @@
       "table": "inbound_event_ledger",
       "name": "inbound_event_connection_ref_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(provider_connection_ref)) > 0)"
+      "definition": "CHECK (length(btrim(provider_connection_ref)) \u003e 0)"
     },
     {
       "table": "inbound_event_ledger",
@@ -8025,7 +8282,7 @@
       "table": "inbound_event_ledger",
       "name": "inbound_event_dedupe_strategy_consistency_chk",
       "kind": "c",
-      "definition": "CHECK (dedupe_strategy <> 'dedupe_uncertain'::text OR (processing_state = ANY (ARRAY['unresolved'::text, 'retryable_failed'::text, 'dead_letter'::text, 'rejected'::text])))"
+      "definition": "CHECK (dedupe_strategy \u003c\u003e 'dedupe_uncertain'::text OR (processing_state = ANY (ARRAY['unresolved'::text, 'retryable_failed'::text, 'dead_letter'::text, 'rejected'::text])))"
     },
     {
       "table": "inbound_event_ledger",
@@ -8037,7 +8294,7 @@
       "table": "inbound_event_ledger",
       "name": "inbound_event_id_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(provider_event_id)) > 0)"
+      "definition": "CHECK (length(btrim(provider_event_id)) \u003e 0)"
     },
     {
       "table": "inbound_event_ledger",
@@ -8049,13 +8306,13 @@
       "table": "inbound_event_ledger",
       "name": "inbound_event_lease_chk",
       "kind": "c",
-      "definition": "CHECK (processing_state = 'processing'::text AND processing_owner IS NOT NULL AND lease_expires_at IS NOT NULL OR processing_state <> 'processing'::text AND processing_owner IS NULL AND lease_expires_at IS NULL)"
+      "definition": "CHECK (processing_state = 'processing'::text AND processing_owner IS NOT NULL AND lease_expires_at IS NOT NULL OR processing_state \u003c\u003e 'processing'::text AND processing_owner IS NULL AND lease_expires_at IS NULL)"
     },
     {
       "table": "inbound_event_ledger",
       "name": "inbound_event_lease_token_chk",
       "kind": "c",
-      "definition": "CHECK (processing_state = 'processing'::text AND processing_lease_token IS NOT NULL OR processing_state <> 'processing'::text AND processing_lease_token IS NULL)"
+      "definition": "CHECK (processing_state = 'processing'::text AND processing_lease_token IS NOT NULL OR processing_state \u003c\u003e 'processing'::text AND processing_lease_token IS NULL)"
     },
     {
       "table": "inbound_event_ledger",
@@ -8073,7 +8330,7 @@
       "table": "inbound_event_ledger",
       "name": "inbound_event_processed_at_chk",
       "kind": "c",
-      "definition": "CHECK (processing_state = 'processed'::text AND processed_at IS NOT NULL OR processing_state <> 'processed'::text AND processed_at IS NULL)"
+      "definition": "CHECK (processing_state = 'processed'::text AND processed_at IS NOT NULL OR processing_state \u003c\u003e 'processed'::text AND processed_at IS NULL)"
     },
     {
       "table": "inbound_event_ledger",
@@ -8085,7 +8342,7 @@
       "table": "inbound_event_ledger",
       "name": "inbound_event_provider_ref_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(provider_ref)) > 0)"
+      "definition": "CHECK (length(btrim(provider_ref)) \u003e 0)"
     },
     {
       "table": "inbound_event_ledger",
@@ -8097,7 +8354,7 @@
       "table": "inbound_event_ledger",
       "name": "inbound_event_result_code_chk",
       "kind": "c",
-      "definition": "CHECK (processing_result_code IS NULL OR length(btrim(processing_result_code)) > 0)"
+      "definition": "CHECK (processing_result_code IS NULL OR length(btrim(processing_result_code)) \u003e 0)"
     },
     {
       "table": "inbound_event_ledger",
@@ -8115,7 +8372,7 @@
       "table": "inbound_webhook_payloads",
       "name": "inbound_webhook_payloads_delivery_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(delivery_id)) > 0)"
+      "definition": "CHECK (length(btrim(delivery_id)) \u003e 0)"
     },
     {
       "table": "inbound_webhook_payloads",
@@ -8127,7 +8384,7 @@
       "table": "inbound_webhook_payloads",
       "name": "inbound_webhook_payloads_payload_chk",
       "kind": "c",
-      "definition": "CHECK (octet_length(payload) > 0)"
+      "definition": "CHECK (octet_length(payload) \u003e 0)"
     },
     {
       "table": "inbound_webhook_payloads",
@@ -8139,7 +8396,7 @@
       "table": "inbound_webhook_payloads",
       "name": "inbound_webhook_payloads_provider_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(provider_ref)) > 0)"
+      "definition": "CHECK (length(btrim(provider_ref)) \u003e 0)"
     },
     {
       "table": "inbound_webhook_payloads",
@@ -8169,7 +8426,7 @@
       "table": "knowledge_documents",
       "name": "knowledge_documents_content_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(content)) > 0)"
+      "definition": "CHECK (length(btrim(content)) \u003e 0)"
     },
     {
       "table": "knowledge_documents",
@@ -8181,7 +8438,7 @@
       "table": "knowledge_documents",
       "name": "knowledge_documents_key_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(knowledge_key)) > 0)"
+      "definition": "CHECK (length(btrim(knowledge_key)) \u003e 0)"
     },
     {
       "table": "knowledge_documents",
@@ -8199,7 +8456,7 @@
       "table": "knowledge_documents",
       "name": "knowledge_documents_source_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(source_reference)) > 0)"
+      "definition": "CHECK (length(btrim(source_reference)) \u003e 0)"
     },
     {
       "table": "knowledge_documents",
@@ -8211,19 +8468,19 @@
       "table": "knowledge_documents",
       "name": "knowledge_documents_title_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(title)) > 0)"
+      "definition": "CHECK (length(btrim(title)) \u003e 0)"
     },
     {
       "table": "knowledge_documents",
       "name": "knowledge_documents_validity_chk",
       "kind": "c",
-      "definition": "CHECK (valid_until IS NULL OR valid_until > valid_from)"
+      "definition": "CHECK (valid_until IS NULL OR valid_until \u003e valid_from)"
     },
     {
       "table": "knowledge_documents",
       "name": "knowledge_documents_version_chk",
       "kind": "c",
-      "definition": "CHECK (version > 0)"
+      "definition": "CHECK (version \u003e 0)"
     },
     {
       "table": "lead_attributions",
@@ -8301,13 +8558,13 @@
       "table": "lead_scores",
       "name": "lead_scores_value_chk",
       "kind": "c",
-      "definition": "CHECK (value >= 0::numeric AND value <= 100::numeric)"
+      "definition": "CHECK (value \u003e= 0::numeric AND value \u003c= 100::numeric)"
     },
     {
       "table": "leads",
       "name": "leads_assignment_reference_chk",
       "kind": "c",
-      "definition": "CHECK (assigned_ownership_reference IS NULL OR length(btrim(assigned_ownership_reference)) > 0)"
+      "definition": "CHECK (assigned_ownership_reference IS NULL OR length(btrim(assigned_ownership_reference)) \u003e 0)"
     },
     {
       "table": "leads",
@@ -8343,13 +8600,13 @@
       "table": "leads",
       "name": "leads_intent_reference_chk",
       "kind": "c",
-      "definition": "CHECK (intent_reference IS NULL OR length(btrim(intent_reference)) > 0)"
+      "definition": "CHECK (intent_reference IS NULL OR length(btrim(intent_reference)) \u003e 0)"
     },
     {
       "table": "leads",
       "name": "leads_lost_reason_chk",
       "kind": "c",
-      "definition": "CHECK (status <> 'lost'::text OR lost_reason IS NOT NULL AND length(btrim(lost_reason)) > 0)"
+      "definition": "CHECK (status \u003c\u003e 'lost'::text OR lost_reason IS NOT NULL AND length(btrim(lost_reason)) \u003e 0)"
     },
     {
       "table": "leads",
@@ -8367,7 +8624,7 @@
       "table": "leads",
       "name": "leads_qualification_reason_chk",
       "kind": "c",
-      "definition": "CHECK (qualification_reason IS NULL OR length(btrim(qualification_reason)) > 0)"
+      "definition": "CHECK (qualification_reason IS NULL OR length(btrim(qualification_reason)) \u003e 0)"
     },
     {
       "table": "leads",
@@ -8385,7 +8642,7 @@
       "table": "leads",
       "name": "leads_resource_version_chk",
       "kind": "c",
-      "definition": "CHECK (resource_version > 0)"
+      "definition": "CHECK (resource_version \u003e 0)"
     },
     {
       "table": "leads",
@@ -8397,7 +8654,7 @@
       "table": "leads",
       "name": "leads_score_value_chk",
       "kind": "c",
-      "definition": "CHECK (current_score_value IS NULL OR current_score_value >= 0::numeric AND current_score_value <= 100::numeric)"
+      "definition": "CHECK (current_score_value IS NULL OR current_score_value \u003e= 0::numeric AND current_score_value \u003c= 100::numeric)"
     },
     {
       "table": "leads",
@@ -8416,6 +8673,90 @@
       "name": "leads_status_chk",
       "kind": "c",
       "definition": "CHECK (status = ANY (ARRAY['new'::text, 'interested'::text, 'qualified'::text, 'won'::text, 'lost'::text]))"
+    },
+    {
+      "table": "media_assets",
+      "name": "media_assets_business_fk",
+      "kind": "f",
+      "definition": "FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE RESTRICT"
+    },
+    {
+      "table": "media_assets",
+      "name": "media_assets_business_id_uq",
+      "kind": "u",
+      "definition": "UNIQUE (business_id, id)"
+    },
+    {
+      "table": "media_assets",
+      "name": "media_assets_deleted_marked_chk",
+      "kind": "c",
+      "definition": "CHECK (status \u003c\u003e 'deleted'::text OR deleted_at IS NOT NULL)"
+    },
+    {
+      "table": "media_assets",
+      "name": "media_assets_dimensions_chk",
+      "kind": "c",
+      "definition": "CHECK (width IS NULL AND height IS NULL OR width \u003e 0 AND height \u003e 0 AND width \u003c= 12000 AND height \u003c= 12000)"
+    },
+    {
+      "table": "media_assets",
+      "name": "media_assets_mime_chk",
+      "kind": "c",
+      "definition": "CHECK (mime_type IS NULL OR (mime_type = ANY (ARRAY['image/jpeg'::text, 'image/png'::text, 'image/webp'::text])))"
+    },
+    {
+      "table": "media_assets",
+      "name": "media_assets_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "media_assets",
+      "name": "media_assets_provider_chk",
+      "kind": "c",
+      "definition": "CHECK (storage_provider = 'r2'::text)"
+    },
+    {
+      "table": "media_assets",
+      "name": "media_assets_purpose_chk",
+      "kind": "c",
+      "definition": "CHECK (purpose = 'catalog'::text)"
+    },
+    {
+      "table": "media_assets",
+      "name": "media_assets_ready_complete_chk",
+      "kind": "c",
+      "definition": "CHECK (status \u003c\u003e 'ready'::text OR mime_type IS NOT NULL AND size_bytes IS NOT NULL AND sha256 IS NOT NULL AND width IS NOT NULL AND height IS NOT NULL AND deleted_at IS NULL)"
+    },
+    {
+      "table": "media_assets",
+      "name": "media_assets_sha256_chk",
+      "kind": "c",
+      "definition": "CHECK (sha256 IS NULL OR octet_length(sha256) = 32)"
+    },
+    {
+      "table": "media_assets",
+      "name": "media_assets_size_chk",
+      "kind": "c",
+      "definition": "CHECK (size_bytes IS NULL OR size_bytes \u003e 0 AND size_bytes \u003c= 10485760)"
+    },
+    {
+      "table": "media_assets",
+      "name": "media_assets_status_chk",
+      "kind": "c",
+      "definition": "CHECK (status = ANY (ARRAY['pending_upload'::text, 'ready'::text, 'rejected'::text, 'deleted'::text]))"
+    },
+    {
+      "table": "media_assets",
+      "name": "media_assets_storage_key_chk",
+      "kind": "c",
+      "definition": "CHECK (length(btrim(storage_key)) \u003e 0)"
+    },
+    {
+      "table": "media_assets",
+      "name": "media_assets_storage_key_uq",
+      "kind": "u",
+      "definition": "UNIQUE (storage_provider, storage_key)"
     },
     {
       "table": "merchant_ai_messages",
@@ -8493,7 +8834,7 @@
       "table": "offers",
       "name": "offers_amount_chk",
       "kind": "c",
-      "definition": "CHECK (amount IS NULL OR amount >= 0::numeric)"
+      "definition": "CHECK (amount IS NULL OR amount \u003e= 0::numeric)"
     },
     {
       "table": "offers",
@@ -8511,7 +8852,7 @@
       "table": "offers",
       "name": "offers_availability_validity_chk",
       "kind": "c",
-      "definition": "CHECK (availability_valid_until IS NULL OR availability_checked_at IS NULL OR availability_valid_until >= availability_checked_at)"
+      "definition": "CHECK (availability_valid_until IS NULL OR availability_checked_at IS NULL OR availability_valid_until \u003e= availability_checked_at)"
     },
     {
       "table": "offers",
@@ -8547,7 +8888,7 @@
       "table": "offers",
       "name": "offers_name_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(name)) > 0)"
+      "definition": "CHECK (length(btrim(name)) \u003e 0)"
     },
     {
       "table": "offers",
@@ -8577,7 +8918,7 @@
       "table": "offers",
       "name": "offers_resource_version_chk",
       "kind": "c",
-      "definition": "CHECK (resource_version > 0)"
+      "definition": "CHECK (resource_version \u003e 0)"
     },
     {
       "table": "offers",
@@ -8589,7 +8930,7 @@
       "table": "offers",
       "name": "offers_validity_chk",
       "kind": "c",
-      "definition": "CHECK (validity_until IS NULL OR validity_from IS NULL OR validity_until >= validity_from)"
+      "definition": "CHECK (validity_until IS NULL OR validity_from IS NULL OR validity_until \u003e= validity_from)"
     },
     {
       "table": "offers",
@@ -8643,7 +8984,7 @@
       "table": "order_lines",
       "name": "order_lines_item_name_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(item_name_snapshot)) > 0)"
+      "definition": "CHECK (length(btrim(item_name_snapshot)) \u003e 0)"
     },
     {
       "table": "order_lines",
@@ -8673,13 +9014,13 @@
       "table": "order_lines",
       "name": "order_lines_quantity_chk",
       "kind": "c",
-      "definition": "CHECK (quantity > 0::numeric)"
+      "definition": "CHECK (quantity \u003e 0::numeric)"
     },
     {
       "table": "order_lines",
       "name": "order_lines_total_price_chk",
       "kind": "c",
-      "definition": "CHECK (line_total_snapshot IS NULL OR line_total_snapshot >= 0::numeric)"
+      "definition": "CHECK (line_total_snapshot IS NULL OR line_total_snapshot \u003e= 0::numeric)"
     },
     {
       "table": "order_lines",
@@ -8691,7 +9032,7 @@
       "table": "order_lines",
       "name": "order_lines_unit_price_chk",
       "kind": "c",
-      "definition": "CHECK (unit_price_snapshot IS NULL OR unit_price_snapshot >= 0::numeric)"
+      "definition": "CHECK (unit_price_snapshot IS NULL OR unit_price_snapshot \u003e= 0::numeric)"
     },
     {
       "table": "order_lines",
@@ -8733,7 +9074,7 @@
       "table": "outbound_delivery_status_updates",
       "name": "outbound_delivery_updates_message_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(provider_message_id)) > 0)"
+      "definition": "CHECK (length(btrim(provider_message_id)) \u003e 0)"
     },
     {
       "table": "outbound_delivery_status_updates",
@@ -8745,7 +9086,7 @@
       "table": "outbound_delivery_status_updates",
       "name": "outbound_delivery_updates_provider_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(provider_ref)) > 0)"
+      "definition": "CHECK (length(btrim(provider_ref)) \u003e 0)"
     },
     {
       "table": "outbound_delivery_status_updates",
@@ -8757,7 +9098,7 @@
       "table": "outbound_messages",
       "name": "outbound_messages_attempt_count_chk",
       "kind": "c",
-      "definition": "CHECK (attempt_count >= 0)"
+      "definition": "CHECK (attempt_count \u003e= 0)"
     },
     {
       "table": "outbound_messages",
@@ -8787,7 +9128,7 @@
       "table": "outbound_messages",
       "name": "outbound_messages_content_ref_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(content_reference)) > 0)"
+      "definition": "CHECK (length(btrim(content_reference)) \u003e 0)"
     },
     {
       "table": "outbound_messages",
@@ -8805,7 +9146,7 @@
       "table": "outbound_messages",
       "name": "outbound_messages_idempotency_key_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(provider_idempotency_key)) > 0)"
+      "definition": "CHECK (length(btrim(provider_idempotency_key)) \u003e 0)"
     },
     {
       "table": "outbound_messages",
@@ -8829,7 +9170,7 @@
       "table": "outbound_messages",
       "name": "outbound_messages_provider_ref_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(provider_ref)) > 0)"
+      "definition": "CHECK (length(btrim(provider_ref)) \u003e 0)"
     },
     {
       "table": "outbound_messages",
@@ -8853,7 +9194,7 @@
       "table": "outbox_entries",
       "name": "outbox_entries_attempt_count_chk",
       "kind": "c",
-      "definition": "CHECK (attempt_count >= 0)"
+      "definition": "CHECK (attempt_count \u003e= 0)"
     },
     {
       "table": "outbox_entries",
@@ -8871,19 +9212,19 @@
       "table": "outbox_entries",
       "name": "outbox_entries_command_type_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(command_type)) > 0)"
+      "definition": "CHECK (length(btrim(command_type)) \u003e 0)"
     },
     {
       "table": "outbox_entries",
       "name": "outbox_entries_completed_at_chk",
       "kind": "c",
-      "definition": "CHECK (status = 'completed'::text AND completed_at IS NOT NULL OR status <> 'completed'::text AND completed_at IS NULL)"
+      "definition": "CHECK (status = 'completed'::text AND completed_at IS NOT NULL OR status \u003c\u003e 'completed'::text AND completed_at IS NULL)"
     },
     {
       "table": "outbox_entries",
       "name": "outbox_entries_dedupe_key_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(dedupe_key)) > 0)"
+      "definition": "CHECK (length(btrim(dedupe_key)) \u003e 0)"
     },
     {
       "table": "outbox_entries",
@@ -8895,13 +9236,13 @@
       "table": "outbox_entries",
       "name": "outbox_entries_lease_chk",
       "kind": "c",
-      "definition": "CHECK (status = 'processing'::text AND lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL OR status <> 'processing'::text AND lease_owner IS NULL AND lease_expires_at IS NULL)"
+      "definition": "CHECK (status = 'processing'::text AND lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL OR status \u003c\u003e 'processing'::text AND lease_owner IS NULL AND lease_expires_at IS NULL)"
     },
     {
       "table": "outbox_entries",
       "name": "outbox_entries_lease_token_chk",
       "kind": "c",
-      "definition": "CHECK (status = 'processing'::text AND lease_token IS NOT NULL OR status <> 'processing'::text AND lease_token IS NULL)"
+      "definition": "CHECK (status = 'processing'::text AND lease_token IS NOT NULL OR status \u003c\u003e 'processing'::text AND lease_token IS NULL)"
     },
     {
       "table": "outbox_entries",
@@ -8925,7 +9266,7 @@
       "table": "outbox_entries",
       "name": "outbox_entries_result_code_chk",
       "kind": "c",
-      "definition": "CHECK (result_code IS NULL OR length(btrim(result_code)) > 0)"
+      "definition": "CHECK (result_code IS NULL OR length(btrim(result_code)) \u003e 0)"
     },
     {
       "table": "outbox_entries",
@@ -8937,13 +9278,13 @@
       "table": "plans",
       "name": "plans_ai_catalog_limit_nonneg_chk",
       "kind": "c",
-      "definition": "CHECK (ai_catalog_limit >= 0)"
+      "definition": "CHECK (ai_catalog_limit \u003e= 0)"
     },
     {
       "table": "plans",
       "name": "plans_ai_reply_limit_positive_chk",
       "kind": "c",
-      "definition": "CHECK (ai_reply_limit > 0)"
+      "definition": "CHECK (ai_reply_limit \u003e 0)"
     },
     {
       "table": "plans",
@@ -8955,19 +9296,19 @@
       "table": "plans",
       "name": "plans_channel_ceiling_chk",
       "kind": "c",
-      "definition": "CHECK (channel_ceiling >= included_channel_limit)"
+      "definition": "CHECK (channel_ceiling \u003e= included_channel_limit)"
     },
     {
       "table": "plans",
       "name": "plans_channel_limit_positive_chk",
       "kind": "c",
-      "definition": "CHECK (channel_limit > 0)"
+      "definition": "CHECK (channel_limit \u003e 0)"
     },
     {
       "table": "plans",
       "name": "plans_code_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(code)) > 0)"
+      "definition": "CHECK (length(btrim(code)) \u003e 0)"
     },
     {
       "table": "plans",
@@ -8979,19 +9320,19 @@
       "table": "plans",
       "name": "plans_display_name_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(display_name)) > 0)"
+      "definition": "CHECK (length(btrim(display_name)) \u003e 0)"
     },
     {
       "table": "plans",
       "name": "plans_included_channel_limit_positive_chk",
       "kind": "c",
-      "definition": "CHECK (included_channel_limit > 0)"
+      "definition": "CHECK (included_channel_limit \u003e 0)"
     },
     {
       "table": "plans",
       "name": "plans_internal_ai_cost_budget_positive_chk",
       "kind": "c",
-      "definition": "CHECK (internal_ai_cost_budget_yer > 0)"
+      "definition": "CHECK (internal_ai_cost_budget_yer \u003e 0)"
     },
     {
       "table": "plans",
@@ -9003,7 +9344,7 @@
       "table": "plans",
       "name": "plans_price_positive_chk",
       "kind": "c",
-      "definition": "CHECK (price_yer > 0)"
+      "definition": "CHECK (price_yer \u003e 0)"
     },
     {
       "table": "plans",
@@ -9015,7 +9356,7 @@
       "table": "plans",
       "name": "plans_seat_limit_positive_chk",
       "kind": "c",
-      "definition": "CHECK (seat_limit > 0)"
+      "definition": "CHECK (seat_limit \u003e 0)"
     },
     {
       "table": "plans",
@@ -9027,7 +9368,7 @@
       "table": "platform_audit_events",
       "name": "platform_audit_action_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(action)) > 0)"
+      "definition": "CHECK (length(btrim(action)) \u003e 0)"
     },
     {
       "table": "platform_audit_events",
@@ -9051,7 +9392,7 @@
       "table": "platform_audit_events",
       "name": "platform_audit_target_type_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(target_type)) > 0)"
+      "definition": "CHECK (length(btrim(target_type)) \u003e 0)"
     },
     {
       "table": "platform_super_admins",
@@ -9081,7 +9422,7 @@
       "table": "principals",
       "name": "principals_display_name_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(display_name)) > 0)"
+      "definition": "CHECK (length(btrim(display_name)) \u003e 0)"
     },
     {
       "table": "principals",
@@ -9093,13 +9434,13 @@
       "table": "principals",
       "name": "principals_email_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(email)) > 0)"
+      "definition": "CHECK (length(btrim(email)) \u003e 0)"
     },
     {
       "table": "principals",
       "name": "principals_password_hash_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(password_hash)) > 0)"
+      "definition": "CHECK (length(btrim(password_hash)) \u003e 0)"
     },
     {
       "table": "principals",
@@ -9117,7 +9458,7 @@
       "table": "refresh_sessions",
       "name": "refresh_sessions_expiry_after_create_chk",
       "kind": "c",
-      "definition": "CHECK (expires_at > created_at)"
+      "definition": "CHECK (expires_at \u003e created_at)"
     },
     {
       "table": "refresh_sessions",
@@ -9183,7 +9524,7 @@
       "table": "sales_command_results",
       "name": "sales_command_results_idempotency_key_check",
       "kind": "c",
-      "definition": "CHECK (length(idempotency_key) >= 1 AND length(idempotency_key) <= 250)"
+      "definition": "CHECK (length(idempotency_key) \u003e= 1 AND length(idempotency_key) \u003c= 250)"
     },
     {
       "table": "sales_command_results",
@@ -9279,7 +9620,7 @@
       "table": "sales_transaction_requirements",
       "name": "sales_transaction_requirements_schema_version_check",
       "kind": "c",
-      "definition": "CHECK (schema_version > 0)"
+      "definition": "CHECK (schema_version \u003e 0)"
     },
     {
       "table": "sales_transaction_requirements",
@@ -9339,7 +9680,7 @@
       "table": "sales_workflows",
       "name": "sales_workflows_resource_version_check",
       "kind": "c",
-      "definition": "CHECK (resource_version > 0)"
+      "definition": "CHECK (resource_version \u003e 0)"
     },
     {
       "table": "sales_workflows",
@@ -9369,13 +9710,13 @@
       "table": "subscription_addon_payments",
       "name": "subscription_addon_payments_amount_yer_check",
       "kind": "c",
-      "definition": "CHECK (amount_yer > 0)"
+      "definition": "CHECK (amount_yer \u003e 0)"
     },
     {
       "table": "subscription_addon_payments",
       "name": "subscription_addon_payments_idempotency_key_check",
       "kind": "c",
-      "definition": "CHECK (length(btrim(idempotency_key)) > 0)"
+      "definition": "CHECK (length(btrim(idempotency_key)) \u003e 0)"
     },
     {
       "table": "subscription_addon_payments",
@@ -9399,7 +9740,7 @@
       "table": "subscription_addon_payments",
       "name": "subscription_addon_payments_reference_check",
       "kind": "c",
-      "definition": "CHECK (length(btrim(reference)) > 0)"
+      "definition": "CHECK (length(btrim(reference)) \u003e 0)"
     },
     {
       "table": "subscription_addons",
@@ -9411,7 +9752,7 @@
       "table": "subscription_addons",
       "name": "subscription_addons_ai_reply_delta_check",
       "kind": "c",
-      "definition": "CHECK (ai_reply_delta >= 0)"
+      "definition": "CHECK (ai_reply_delta \u003e= 0)"
     },
     {
       "table": "subscription_addons",
@@ -9423,19 +9764,19 @@
       "table": "subscription_addons",
       "name": "subscription_addons_cancelled_state_chk",
       "kind": "c",
-      "definition": "CHECK (status <> 'CANCELLED'::text AND cancelled_at IS NULL OR status = 'CANCELLED'::text AND cancelled_at IS NOT NULL)"
+      "definition": "CHECK (status \u003c\u003e 'CANCELLED'::text AND cancelled_at IS NULL OR status = 'CANCELLED'::text AND cancelled_at IS NOT NULL)"
     },
     {
       "table": "subscription_addons",
       "name": "subscription_addons_catalog_delta_check",
       "kind": "c",
-      "definition": "CHECK (catalog_delta >= 0)"
+      "definition": "CHECK (catalog_delta \u003e= 0)"
     },
     {
       "table": "subscription_addons",
       "name": "subscription_addons_channel_delta_check",
       "kind": "c",
-      "definition": "CHECK (channel_delta >= 0)"
+      "definition": "CHECK (channel_delta \u003e= 0)"
     },
     {
       "table": "subscription_addons",
@@ -9459,13 +9800,13 @@
       "table": "subscription_addons",
       "name": "subscription_addons_price_yer_snapshot_check",
       "kind": "c",
-      "definition": "CHECK (price_yer_snapshot > 0)"
+      "definition": "CHECK (price_yer_snapshot \u003e 0)"
     },
     {
       "table": "subscription_addons",
       "name": "subscription_addons_seat_delta_check",
       "kind": "c",
-      "definition": "CHECK (seat_delta >= 0)"
+      "definition": "CHECK (seat_delta \u003e= 0)"
     },
     {
       "table": "subscription_addons",
@@ -9495,13 +9836,13 @@
       "table": "subscription_ai_usage",
       "name": "subscription_ai_usage_cost_nonneg_chk",
       "kind": "c",
-      "definition": "CHECK (provider_cost_yer >= 0)"
+      "definition": "CHECK (provider_cost_yer \u003e= 0)"
     },
     {
       "table": "subscription_ai_usage",
       "name": "subscription_ai_usage_counts_nonneg_chk",
       "kind": "c",
-      "definition": "CHECK (model_requests >= 0 AND tool_calls >= 0)"
+      "definition": "CHECK (model_requests \u003e= 0 AND tool_calls \u003e= 0)"
     },
     {
       "table": "subscription_ai_usage",
@@ -9513,7 +9854,7 @@
       "table": "subscription_ai_usage",
       "name": "subscription_ai_usage_replies_nonneg_chk",
       "kind": "c",
-      "definition": "CHECK (ai_replies_used >= 0)"
+      "definition": "CHECK (ai_replies_used \u003e= 0)"
     },
     {
       "table": "subscription_ai_usage",
@@ -9525,13 +9866,13 @@
       "table": "subscription_ai_usage",
       "name": "subscription_ai_usage_tokens_nonneg_chk",
       "kind": "c",
-      "definition": "CHECK (input_tokens >= 0 AND cached_input_tokens >= 0 AND output_tokens >= 0)"
+      "definition": "CHECK (input_tokens \u003e= 0 AND cached_input_tokens \u003e= 0 AND output_tokens \u003e= 0)"
     },
     {
       "table": "subscription_channel_pass_capacity_approvals",
       "name": "subscription_channel_pass_capacity_app_max_channel_passes_check",
       "kind": "c",
-      "definition": "CHECK (max_channel_passes > 0)"
+      "definition": "CHECK (max_channel_passes \u003e 0)"
     },
     {
       "table": "subscription_channel_pass_capacity_approvals",
@@ -9555,13 +9896,13 @@
       "table": "subscription_channel_pass_capacity_approvals",
       "name": "subscription_channel_pass_capacity_approvals_reason_check",
       "kind": "c",
-      "definition": "CHECK (length(btrim(reason)) > 0)"
+      "definition": "CHECK (length(btrim(reason)) \u003e 0)"
     },
     {
       "table": "subscription_payments",
       "name": "subscription_payments_amount_positive_chk",
       "kind": "c",
-      "definition": "CHECK (amount_yer > 0)"
+      "definition": "CHECK (amount_yer \u003e 0)"
     },
     {
       "table": "subscription_payments",
@@ -9579,7 +9920,7 @@
       "table": "subscription_payments",
       "name": "subscription_payments_idempotency_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (idempotency_key IS NULL OR length(btrim(idempotency_key)) > 0)"
+      "definition": "CHECK (idempotency_key IS NULL OR length(btrim(idempotency_key)) \u003e 0)"
     },
     {
       "table": "subscription_payments",
@@ -9597,7 +9938,7 @@
       "table": "subscription_payments",
       "name": "subscription_payments_reference_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(reference)) > 0)"
+      "definition": "CHECK (length(btrim(reference)) \u003e 0)"
     },
     {
       "table": "subscription_payments",
@@ -9621,19 +9962,19 @@
       "table": "subscriptions",
       "name": "subscriptions_ai_catalog_limit_nonneg_chk",
       "kind": "c",
-      "definition": "CHECK (ai_catalog_limit >= 0)"
+      "definition": "CHECK (ai_catalog_limit \u003e= 0)"
     },
     {
       "table": "subscriptions",
       "name": "subscriptions_ai_reply_limit_positive_chk",
       "kind": "c",
-      "definition": "CHECK (ai_reply_limit > 0)"
+      "definition": "CHECK (ai_reply_limit \u003e 0)"
     },
     {
       "table": "subscriptions",
       "name": "subscriptions_amount_due_positive_chk",
       "kind": "c",
-      "definition": "CHECK (amount_due_yer > 0)"
+      "definition": "CHECK (amount_due_yer \u003e 0)"
     },
     {
       "table": "subscriptions",
@@ -9657,13 +9998,13 @@
       "table": "subscriptions",
       "name": "subscriptions_channel_ceiling_chk",
       "kind": "c",
-      "definition": "CHECK (channel_ceiling >= included_channel_limit)"
+      "definition": "CHECK (channel_ceiling \u003e= included_channel_limit)"
     },
     {
       "table": "subscriptions",
       "name": "subscriptions_channel_limit_positive_chk",
       "kind": "c",
-      "definition": "CHECK (channel_limit > 0)"
+      "definition": "CHECK (channel_limit \u003e 0)"
     },
     {
       "table": "subscriptions",
@@ -9675,19 +10016,19 @@
       "table": "subscriptions",
       "name": "subscriptions_included_channel_limit_positive_chk",
       "kind": "c",
-      "definition": "CHECK (included_channel_limit > 0)"
+      "definition": "CHECK (included_channel_limit \u003e 0)"
     },
     {
       "table": "subscriptions",
       "name": "subscriptions_internal_ai_cost_budget_positive_chk",
       "kind": "c",
-      "definition": "CHECK (internal_ai_cost_budget_yer > 0)"
+      "definition": "CHECK (internal_ai_cost_budget_yer \u003e 0)"
     },
     {
       "table": "subscriptions",
       "name": "subscriptions_period_chk",
       "kind": "c",
-      "definition": "CHECK (period_end > period_start)"
+      "definition": "CHECK (period_end \u003e period_start)"
     },
     {
       "table": "subscriptions",
@@ -9705,13 +10046,13 @@
       "table": "subscriptions",
       "name": "subscriptions_price_snapshot_positive_chk",
       "kind": "c",
-      "definition": "CHECK (price_yer_snapshot > 0)"
+      "definition": "CHECK (price_yer_snapshot \u003e 0)"
     },
     {
       "table": "subscriptions",
       "name": "subscriptions_seat_limit_positive_chk",
       "kind": "c",
-      "definition": "CHECK (seat_limit > 0)"
+      "definition": "CHECK (seat_limit \u003e 0)"
     },
     {
       "table": "subscriptions",
@@ -9729,7 +10070,7 @@
       "table": "support_messages",
       "name": "support_messages_body_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(body)) > 0)"
+      "definition": "CHECK (length(btrim(body)) \u003e 0)"
     },
     {
       "table": "support_messages",
@@ -9801,7 +10142,7 @@
       "table": "support_tickets",
       "name": "support_tickets_subject_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(subject)) > 0)"
+      "definition": "CHECK (length(btrim(subject)) \u003e 0)"
     },
     {
       "table": "team_invitations",
@@ -9825,7 +10166,7 @@
       "table": "team_invitations",
       "name": "team_invitations_display_name_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(display_name)) > 0)"
+      "definition": "CHECK (length(btrim(display_name)) \u003e 0)"
     },
     {
       "table": "team_invitations",
@@ -9837,13 +10178,13 @@
       "table": "team_invitations",
       "name": "team_invitations_email_not_blank_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(email)) > 0)"
+      "definition": "CHECK (length(btrim(email)) \u003e 0)"
     },
     {
       "table": "team_invitations",
       "name": "team_invitations_expiry_after_create_chk",
       "kind": "c",
-      "definition": "CHECK (expires_at > created_at)"
+      "definition": "CHECK (expires_at \u003e created_at)"
     },
     {
       "table": "team_invitations",
@@ -9855,7 +10196,7 @@
       "table": "team_invitations",
       "name": "team_invitations_non_owner_role_chk",
       "kind": "c",
-      "definition": "CHECK (role <> 'owner'::text)"
+      "definition": "CHECK (role \u003c\u003e 'owner'::text)"
     },
     {
       "table": "team_invitations",
@@ -9945,7 +10286,7 @@
       "table": "transaction_reviews",
       "name": "transaction_reviews_decision_reason_chk",
       "kind": "c",
-      "definition": "CHECK (decision_reason IS NULL OR length(btrim(decision_reason)) > 0)"
+      "definition": "CHECK (decision_reason IS NULL OR length(btrim(decision_reason)) \u003e 0)"
     },
     {
       "table": "transaction_reviews",
@@ -9969,7 +10310,7 @@
       "table": "transaction_reviews",
       "name": "transaction_reviews_reviewer_chk",
       "kind": "c",
-      "definition": "CHECK (reviewer_reference IS NULL OR length(btrim(reviewer_reference)) > 0)"
+      "definition": "CHECK (reviewer_reference IS NULL OR length(btrim(reviewer_reference)) \u003e 0)"
     },
     {
       "table": "transaction_reviews",
@@ -10017,7 +10358,7 @@
       "table": "variants",
       "name": "variants_name_chk",
       "kind": "c",
-      "definition": "CHECK (length(btrim(name)) > 0)"
+      "definition": "CHECK (length(btrim(name)) \u003e 0)"
     },
     {
       "table": "variants",
@@ -10029,7 +10370,7 @@
       "table": "variants",
       "name": "variants_resource_version_chk",
       "kind": "c",
-      "definition": "CHECK (resource_version > 0)"
+      "definition": "CHECK (resource_version \u003e 0)"
     },
     {
       "table": "variants",
@@ -10062,7 +10403,7 @@
     {
       "table": "ai_runs",
       "name": "uq_ai_runs_idempotency",
-      "definition": "CREATE UNIQUE INDEX uq_ai_runs_idempotency ON public.ai_runs USING btree (business_id, idempotency_key) WHERE (status <> ALL (ARRAY['completed'::text, 'failed'::text, 'cancelled'::text]))"
+      "definition": "CREATE UNIQUE INDEX uq_ai_runs_idempotency ON public.ai_runs USING btree (business_id, idempotency_key) WHERE (status \u003c\u003e ALL (ARRAY['completed'::text, 'failed'::text, 'cancelled'::text]))"
     },
     {
       "table": "ai_usage_records",
@@ -10080,9 +10421,29 @@
       "definition": "CREATE UNIQUE INDEX canned_replies_business_shortcut_uq ON public.canned_replies USING btree (business_id, shortcut)"
     },
     {
+      "table": "catalog_media_links",
+      "name": "uq_catalog_media_product_asset",
+      "definition": "CREATE UNIQUE INDEX uq_catalog_media_product_asset ON public.catalog_media_links USING btree (business_id, catalog_item_id, media_id) WHERE ((status = 'active'::text) AND (variant_id IS NULL))"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "uq_catalog_media_product_primary",
+      "definition": "CREATE UNIQUE INDEX uq_catalog_media_product_primary ON public.catalog_media_links USING btree (business_id, catalog_item_id) WHERE ((status = 'active'::text) AND is_primary AND (variant_id IS NULL))"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "uq_catalog_media_variant_asset",
+      "definition": "CREATE UNIQUE INDEX uq_catalog_media_variant_asset ON public.catalog_media_links USING btree (business_id, catalog_item_id, variant_id, media_id) WHERE ((status = 'active'::text) AND (variant_id IS NOT NULL))"
+    },
+    {
+      "table": "catalog_media_links",
+      "name": "uq_catalog_media_variant_primary",
+      "definition": "CREATE UNIQUE INDEX uq_catalog_media_variant_primary ON public.catalog_media_links USING btree (business_id, catalog_item_id, variant_id) WHERE ((status = 'active'::text) AND is_primary AND (variant_id IS NOT NULL))"
+    },
+    {
       "table": "channel_connections",
       "name": "uq_channel_connections_provider_account",
-      "definition": "CREATE UNIQUE INDEX uq_channel_connections_provider_account ON public.channel_connections USING btree (provider_ref, provider_account_ref) WHERE ((provider_account_ref IS NOT NULL) AND (length(btrim(provider_account_ref)) > 0))"
+      "definition": "CREATE UNIQUE INDEX uq_channel_connections_provider_account ON public.channel_connections USING btree (provider_ref, provider_account_ref) WHERE ((provider_account_ref IS NOT NULL) AND (length(btrim(provider_account_ref)) \u003e 0))"
     },
     {
       "table": "channel_provisioning_sessions",
@@ -10092,7 +10453,7 @@
     {
       "table": "channel_provisioning_sessions",
       "name": "uq_channel_provisioning_oauth_state",
-      "definition": "CREATE UNIQUE INDEX uq_channel_provisioning_oauth_state ON public.channel_provisioning_sessions USING btree (oauth_state) WHERE ((oauth_state IS NOT NULL) AND (length(btrim(oauth_state)) > 0))"
+      "definition": "CREATE UNIQUE INDEX uq_channel_provisioning_oauth_state ON public.channel_provisioning_sessions USING btree (oauth_state) WHERE ((oauth_state IS NOT NULL) AND (length(btrim(oauth_state)) \u003e 0))"
     },
     {
       "table": "communication_messages",

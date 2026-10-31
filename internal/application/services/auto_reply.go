@@ -101,6 +101,8 @@ type AutoReplyService struct {
 	ReferenceRepository ports.ConversationReferenceRepository
 	// OutboundRepository creates outbound messages.
 	OutboundRepository ports.OutboundMessageRepository
+	// CatalogMedia resolves already-validated selected references; no text search.
+	CatalogMedia ports.CatalogMediaRepository
 	// Outbox enqueues the actual send.
 	Outbox ports.OutboxStore
 	// MessageRepository records the communication message row.
@@ -612,6 +614,17 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		dedupeKey := "auto-reply:" + sourceMessageRef
 		outboundID := s.id()
 		contentReference := EncodeInlineTextContentReference(replyText)
+		contentType := "text"
+		if s.CatalogMedia != nil && proposal.Capability == ports.CustomerSalesCapabilityRespondWithoutAction && len(proposal.Selected) == 1 && strings.TrimSpace(proposal.Selected[0].ItemID) != "" {
+			selected := proposal.Selected[0]
+			image, mediaErr := s.CatalogMedia.PrimaryForReply(txCtx, businessID, selected.ItemID, selected.VariantID)
+			if mediaErr == nil && image != nil {
+				if encoded, encodeErr := EncodeInteractiveContentReference(ports.InteractiveMessage{Text: replyText, MediaID: image.MediaID, MediaLinkID: image.ID}); encodeErr == nil {
+					contentReference = encoded
+					contentType = "mixed"
+				}
+			}
+		}
 		outbound, outboundErr := s.OutboundRepository.CreatePending(txCtx, ports.OutboundMessageDraft{
 			ID:                      outboundID,
 			BusinessID:              businessID,
@@ -639,7 +652,7 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 				Direction:               "outbound",
 				Origin:                  "ai",
 				Transport:               "provider",
-				ContentType:             "text",
+				ContentType:             contentType,
 				TextContent:             &replyText,
 				ContentReference:        contentReference,
 				Visibility:              "public",
