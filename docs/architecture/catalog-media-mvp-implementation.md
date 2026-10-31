@@ -261,3 +261,25 @@ service and Outbox worker must deploy from the **same branch revision**, and
 run with the same storage credentials. This change is not live-provider
 validation. Test S3 Put/Get/authorization on B2 and actual SocialAPI delivery
 before switching a production tenant.
+
+## Official AWS SDK S3 transport (integration branch)
+
+The previous hand-written S3 SigV4/HTTP client has been removed.
+Both Backblaze B2 and Cloudflare R2 now use the **official AWS SDK for Go v2**:
+`s3.PutObject`, `s3.DeleteObject` and `s3.NewPresignClient(...).PresignGetObject`.
+The existing `ports.MediaObjectStorage` contract and storage-provider routing
+are preserved, as are `R2_*` and `S3_*` environment variable names.
+
+The SDK is pinned to compatible releases for this repository's Go 1.22 CI:
+`github.com/aws/aws-sdk-go-v2/service/s3 v1.71.1`, predating the
+default CRC32 upload checksum behavior introduced in v1.73.0.
+Keep it pinned while the target stores are being verified; upgrading to
+newer S3 clients requires a checksum-compatibility regression test.
+Use the configured Backblaze region and endpoint, path-style addressing,
+private buckets, static credentials, 10 MiB upload limits and bounded
+presigned GET TTLs. Never expose signed URLs or secret credentials in logs.
+
+CI tests verify SDK-generated requests, full-body transport to an in-process
+HTTP server, bounded signed URL generation, and structured error redaction.
+This does **not** demonstrate successful live upload to a customer's B2
+bucket: external provider integration needs independent operational proof.
