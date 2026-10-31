@@ -13,12 +13,13 @@ import (
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
+
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 func b2TestClient(transport http.RoundTripper) *Client {
 	return &Client{
 		Endpoint: "https://s3.us-east-005.backblazeb2.com",
-		Region: "us-east-005", Bucket: "mujeeb24-images",
+		Region:   "us-east-005", Bucket: "mujeeb24-images",
 		AccessKeyID: "test-access-id", SecretAccessKey: "test-secret",
 		HTTP: &http.Client{Transport: transport},
 	}
@@ -57,7 +58,9 @@ func TestSDKBackblazePutObjectUsesPathStyleAndExactBytes(t *testing.T) {
 	if err := c.Put(context.Background(), "catalog/tenant/blue.jpg", "image/jpeg", data); err != nil {
 		t.Fatal(err)
 	}
-	if !observed { t.Fatal("SDK never dispatched PUT") }
+	if !observed {
+		t.Fatal("SDK never dispatched PUT")
+	}
 }
 
 func TestSDKBackblazeFullHTTPBodyReachesLocalServer(t *testing.T) {
@@ -82,15 +85,19 @@ func TestSDKBackblazeFullHTTPBodyReachesLocalServer(t *testing.T) {
 		r.Host = r.URL.Host
 		return http.DefaultTransport.RoundTrip(r)
 	}))
-	if err := c.Put(context.Background(), "catalog/tenant/photo.png", "image/png", data); err != nil { t.Fatal(err) }
-	if got != 1 { t.Fatalf("expected one complete HTTP upload, got %d", got) }
+	if err := c.Put(context.Background(), "catalog/tenant/photo.png", "image/png", data); err != nil {
+		t.Fatal(err)
+	}
+	if got != 1 {
+		t.Fatalf("expected one complete HTTP upload, got %d", got)
+	}
 }
 
 func TestSDKPresignGetSupportsR2AndB2(t *testing.T) {
 	cases := []struct {
-		name string
+		name   string
 		client *Client
-		host string
+		host   string
 		region string
 	}{
 		{name: "backblaze", client: b2TestClient(http.DefaultTransport), host: "s3.us-east-005.backblazeb2.com", region: "us-east-005"},
@@ -101,9 +108,13 @@ func TestSDKPresignGetSupportsR2AndB2(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			signed, err := tc.client.PresignGet(context.Background(), "catalog/tenant/a b.jpg", 45*time.Minute)
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			u, err := url.Parse(signed)
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			if u.Scheme != "https" || u.Host != tc.host ||
 				!strings.Contains(u.EscapedPath(), "catalog/tenant/a%20b.jpg") {
 				t.Fatalf("unexpected presign target host=%s path=%s", u.Host, u.EscapedPath())
@@ -118,7 +129,10 @@ func TestSDKPresignGetSupportsR2AndB2(t *testing.T) {
 }
 
 func TestSDKBackblazePutObjectReturnsSafeS3ErrorDetails(t *testing.T) {
-	for _, tc := range []struct{ status int; code string }{
+	for _, tc := range []struct {
+		status int
+		code   string
+	}{
 		{400, "IncompleteBody"}, {403, "AccessDenied"}, {400, "InvalidRequest"},
 	} {
 		t.Run(tc.code, func(t *testing.T) {
@@ -126,13 +140,15 @@ func TestSDKBackblazePutObjectReturnsSafeS3ErrorDetails(t *testing.T) {
 				_, _ = io.Copy(io.Discard, req.Body)
 				return &http.Response{
 					StatusCode: tc.status,
-					Header: http.Header{"X-Amz-Request-Id": []string{"request-123"}},
-					Body: io.NopCloser(strings.NewReader("<Error><Code>"+tc.code+"</Code><Message>private-test-secret</Message><RequestId>request-123</RequestId></Error>")),
+					Header:     http.Header{"X-Amz-Request-Id": []string{"request-123"}},
+					Body:       io.NopCloser(strings.NewReader("<Error><Code>" + tc.code + "</Code><Message>private-test-secret</Message><RequestId>request-123</RequestId></Error>")),
 				}, nil
 			}))
 			err := c.Put(context.Background(), "catalog/tenant/photo.png", "image/png", []byte("png"))
-			if err == nil { t.Fatal("provider error must reject PUT") }
-			for _, expected := range []string{"HTTP ", "code="+tc.code} {
+			if err == nil {
+				t.Fatal("provider error must reject PUT")
+			}
+			for _, expected := range []string{"HTTP ", "code=" + tc.code} {
 				if !strings.Contains(err.Error(), expected) {
 					t.Errorf("missing safe diagnostic %q: %s", expected, err)
 				}

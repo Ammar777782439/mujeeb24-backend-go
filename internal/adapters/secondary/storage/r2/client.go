@@ -94,8 +94,8 @@ func (c *Client) sdk() (*s3.Client, error) {
 		return nil, err
 	}
 	cfg := aws.Config{
-		Region: c.region(),
-		Credentials: credentials.NewStaticCredentialsProvider(c.AccessKeyID, c.SecretAccessKey, ""),
+		Region:           c.region(),
+		Credentials:      credentials.NewStaticCredentialsProvider(c.AccessKeyID, c.SecretAccessKey, ""),
 		RetryMaxAttempts: 2,
 	}
 	if c.HTTP != nil {
@@ -133,12 +133,12 @@ func wrapSDKError(op string, err error) error {
 		code = safeDiagnosticToken(apiErr.ErrorCode())
 	}
 	status := 0
-	var responseStatus interface { HTTPStatusCode() int }
+	var responseStatus interface{ HTTPStatusCode() int }
 	if errors.As(err, &responseStatus) {
 		status = responseStatus.HTTPStatusCode()
 	}
 	requestID := "unavailable"
-	var responseID interface { ServiceRequestID() string }
+	var responseID interface{ ServiceRequestID() string }
 	if errors.As(err, &responseID) {
 		requestID = safeDiagnosticToken(responseID.ServiceRequestID())
 	}
@@ -160,11 +160,11 @@ func (c *Client) Put(ctx context.Context, key, mime string, data []byte) error {
 		return err
 	}
 	_, err = client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(c.Bucket),
-		Key: aws.String(key),
-		ContentType: aws.String(mime),
+		Bucket:        aws.String(c.Bucket),
+		Key:           aws.String(key),
+		ContentType:   aws.String(mime),
 		ContentLength: aws.Int64(int64(len(data))),
-		Body: bytes.NewReader(data),
+		Body:          bytes.NewReader(data),
 	})
 	return wrapSDKError("PUT", err)
 }
@@ -179,7 +179,7 @@ func (c *Client) Delete(ctx context.Context, key string) error {
 	}
 	_, err = client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(c.Bucket),
-		Key: aws.String(key),
+		Key:    aws.String(key),
 	})
 	return wrapSDKError("DELETE", err)
 }
@@ -197,7 +197,7 @@ func (c *Client) PresignGet(ctx context.Context, key string, ttl time.Duration) 
 	}
 	signed, err := s3.NewPresignClient(client).PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(c.Bucket),
-		Key: aws.String(key),
+		Key:    aws.String(key),
 	}, func(opts *s3.PresignOptions) {
 		opts.Expires = ttl
 	})
