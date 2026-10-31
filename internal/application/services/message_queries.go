@@ -25,10 +25,6 @@ func (s MessageQueryService) ListConversationMessages(ctx context.Context, query
 	}
 	items := make([]commands.MessageView, 0, len(page.Items))
 	for _, record := range page.Items {
-		text := ""
-		if record.TextContent != nil {
-			text = *record.TextContent
-		}
 		items = append(items, messageView(record))
 	}
 	return commands.ListResult[commands.MessageView]{Items: items, NextCursor: page.NextCursor, HasMore: page.HasMore}, nil

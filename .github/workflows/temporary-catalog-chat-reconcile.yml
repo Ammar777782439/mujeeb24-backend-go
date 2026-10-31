@@ -1,4 +1,4 @@
-name: Temporary reconcile catalog chat API contract
+name: Temporary reconcile catalog chat API contract v2
 
 on:
   push:
