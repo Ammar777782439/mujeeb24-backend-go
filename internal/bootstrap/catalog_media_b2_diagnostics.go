@@ -65,8 +65,8 @@ func checkB2Credentials(ctx context.Context, client *http.Client, authURL, keyID
 	result := b2CredentialCheck{
 		Result: "unavailable", ResponseKind: "none",
 		ProviderCode: "unavailable", BucketScope: "unknown",
-		KeyIDSuffix: b2KeyIDSuffix(keyID),
-		KeyIDWhitespace: strings.TrimSpace(keyID) != keyID,
+		KeyIDSuffix:      b2KeyIDSuffix(keyID),
+		KeyIDWhitespace:  strings.TrimSpace(keyID) != keyID,
 		SecretWhitespace: strings.TrimSpace(secret) != secret,
 	}
 	if client == nil {

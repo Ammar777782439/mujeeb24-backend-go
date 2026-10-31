@@ -115,9 +115,9 @@ func TestB2CredentialCheckDistinguishes401UnsupportedFromInvalidPair(t *testing.
 func TestB2CredentialDiagnosticsNoKeySecretInUnexpected401(t *testing.T) {
 	keyID, secret := "synthetic-id-0002", "secret-with-opaque-data"
 	for _, tc := range []struct {
-		name string
-		response string
-		kind string
+		name         string
+		response     string
+		kind         string
 		providerCode string
 	}{
 		{"json_unknown_code", `{"code":"unexpected_code","message":"secret-with-opaque-data"}`, "json", "unexpected_code"},
