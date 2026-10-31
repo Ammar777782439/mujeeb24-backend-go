@@ -36,7 +36,24 @@ func checkB2Credentials(ctx context.Context, client *http.Client, authURL, keyID
 	defer resp.Body.Close()
 	switch resp.StatusCode {
 	case http.StatusUnauthorized:
-		result.Result = "invalid_key_pair"
+		// Backblaze distinguishes 401 unauthorized (invalid key ID / secret)
+		// from 401 unsupported (key cannot use this API version). Do not
+		// treat every 401 as invalid credentials.
+		var failure struct {
+			Code string `json:"code"`
+		}
+		if json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&failure) != nil {
+			result.Result = "auth_401_unclassified"
+			return result
+		}
+		switch failure.Code {
+		case "unauthorized":
+			result.Result = "invalid_key_pair"
+		case "unsupported":
+			result.Result = "api_version_unsupported"
+		default:
+			result.Result = "auth_401_unclassified"
+		}
 		return result
 	case http.StatusOK:
 	default:

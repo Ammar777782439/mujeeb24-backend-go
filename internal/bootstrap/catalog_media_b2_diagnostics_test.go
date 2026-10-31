@@ -82,3 +82,32 @@ func TestB2CredentialCheckReturnsTransportErrorWithoutCredentials(t *testing.T) 
 		t.Fatalf("cancelled diagnostic should never authorize: %+v", result)
 	}
 }
+
+func TestB2CredentialCheckDistinguishes401UnsupportedFromInvalidPair(t *testing.T) {
+	for _, tc := range []struct {
+		name, response, expected string
+	}{
+		{"unsupported", `{"status":401,"code":"unsupported","message":"private error"}`, "api_version_unsupported"},
+		{"unauthorized", `{"status":401,"code":"unauthorized","message":"private error"}`, "invalid_key_pair"},
+		{"unknown", `{"status":401,"code":"unexpected","message":"private error"}`, "auth_401_unclassified"},
+		{"invalid_json", `garbage`, "auth_401_unclassified"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(tc.response))
+			}))
+			defer server.Close()
+			result := checkB2Credentials(context.Background(), server.Client(), server.URL,
+				"synthetic-id", "synthetic-secret", "mujeeb24-images",
+				"https://s3.us-east-005.backblazeb2.com")
+			if result.Result != tc.expected {
+				t.Fatalf("unexpected 401 diagnosis: result=%q expected=%q", result.Result, tc.expected)
+			}
+			if strings.Contains(result.Result, "private") ||
+				strings.Contains(result.Result, "synthetic-secret") {
+				t.Fatal("error response leaked secrets")
+			}
+		})
+	}
+}
