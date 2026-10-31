@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/base64"
 	"log"
 	"strings"
 	"time"
@@ -29,7 +30,7 @@ func mediaLinkView(m ports.CatalogMediaLink) contract.CatalogMediaView {
 		ResourceVersion: m.ResourceVersion}
 }
 func (s *Server) dispatchCatalogMedia(ctx context.Context, operationID string, input any) (any, bool) {
-	if operationID != "getCatalogMediaReadURL" && operationID != "uploadCatalogImage" && operationID != "listCatalogMedia" &&
+	if operationID != "getCatalogMediaPreview" && operationID != "getCatalogMediaReadURL" && operationID != "uploadCatalogImage" && operationID != "listCatalogMedia" &&
 		operationID != "attachCatalogMedia" && operationID != "setCatalogMediaPrimary" && operationID != "removeCatalogMedia" {
 		return nil, false
 	}
@@ -69,6 +70,22 @@ func (s *Server) dispatchCatalogMedia(ctx context.Context, operationID string, i
 		asset, err := s.deps.CatalogMediaService.Media.GetAsset(ctx, business, string(in.MediaID))
 		if err != nil || asset.Status != "ready" || asset.DeletedAt != nil {
 			return huma.Error404NotFound("media not found"), true
+		}
+		if operationID == "getCatalogMediaPreview" {
+			u, signErr := services.PresignCatalogAsset(ctx, s.deps.CatalogImageUpload.Objects, asset, time.Minute)
+			if signErr != nil {
+				return huma.Error503ServiceUnavailable("image preview is unavailable"), true
+			}
+			imageBytes, fetchErr := fetchPrivateCatalogPreview(ctx, u, asset.MimeType)
+			if fetchErr != nil {
+				return huma.Error503ServiceUnavailable("image preview is unavailable"), true
+			}
+			out := &contract.CatalogMediaPreviewOutput{CacheControl: "private, no-store"}
+			out.Body.Data = contract.CatalogMediaPreviewView{
+				DataBase64: base64.StdEncoding.EncodeToString(imageBytes),
+				MimeType: asset.MimeType, Width: asset.Width, Height: asset.Height,
+			}
+			return out, true
 		}
 		u, err := services.PresignCatalogAsset(ctx, s.deps.CatalogImageUpload.Objects, asset, 10*time.Minute)
 		if err != nil {

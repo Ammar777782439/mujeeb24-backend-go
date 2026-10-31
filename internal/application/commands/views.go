@@ -57,6 +57,11 @@ type ConversationView struct {
 	LastActivityAt      time.Time
 	ResourceVersion     ResourceVersion
 }
+type MessageAttachmentView struct {
+	Type string
+	MediaID string
+}
+
 type MessageView struct {
 	ID                       MessageID
 	ConversationID           ConversationID
@@ -64,6 +69,8 @@ type MessageView struct {
 	Origin                   string
 	Status                   string
 	Text                     string
+	ContentType              string
+	Attachments              []MessageAttachmentView
 	ProviderMessageReference *string
 	OccurredAt               time.Time
 	CreatedAt                time.Time

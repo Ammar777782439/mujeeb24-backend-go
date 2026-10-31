@@ -13,11 +13,11 @@ import (
 func (s AutoReplyService) selectReplyMedia(
 	ctx context.Context, businessID, conversationID, runID, customerText string,
 	decision ports.CapabilityDecision,
-) ([]ports.CatalogMediaLink, ports.CustomerSalesUsageTelemetry) {
+) ([]ports.CatalogMediaLink, string, ports.CustomerSalesUsageTelemetry) {
 	if s.CatalogMedia == nil || s.MediaSelection == nil ||
 		decision.Capability != ports.CustomerSalesCapabilityRespondWithoutAction ||
 		len(decision.Selected) == 0 || len(decision.Selected) > 3 {
-		return nil, ports.CustomerSalesUsageTelemetry{}
+		return nil, "", ports.CustomerSalesUsageTelemetry{}
 	}
 	options := make([]ports.CustomerMediaOption, 0, 12)
 	links := make(map[string]ports.CatalogMediaLink)
@@ -28,7 +28,7 @@ func (s AutoReplyService) selectReplyMedia(
 		gallery, err := s.CatalogMedia.ListGallery(ctx, businessID, selected.ItemID, selected.VariantID)
 		if err != nil {
 			log.Printf("[CatalogMedia] stage=gallery_failed business=%s run=%s fallback=text", businessID, runID)
-			return nil, ports.CustomerSalesUsageTelemetry{}
+			return nil, "", ports.CustomerSalesUsageTelemetry{}
 		}
 		for _, link := range gallery {
 			if len(options) >= 12 {
@@ -57,7 +57,7 @@ func (s AutoReplyService) selectReplyMedia(
 		}
 	}
 	if len(options) == 0 {
-		return nil, ports.CustomerSalesUsageTelemetry{}
+		return nil, "", ports.CustomerSalesUsageTelemetry{}
 	}
 	out, err := s.MediaSelection.SelectMedia(ctx, ports.CustomerMediaSelectionInput{
 		BusinessID: businessID, ConversationID: conversationID, RunID: runID,
@@ -65,12 +65,12 @@ func (s AutoReplyService) selectReplyMedia(
 	})
 	if err != nil {
 		log.Printf("[CatalogMedia] stage=selection_failed business=%s run=%s fallback=text", businessID, runID)
-		return nil, ports.CustomerSalesUsageTelemetry{}
+		return nil, "", ports.CustomerSalesUsageTelemetry{}
 	}
 	// Independently validate model output even when another port implementation
 	// is injected. Repeated or unapproved IDs can never be sent.
 	if len(out.MediaLinkIDs) > 4 {
-		return nil, out.Usage
+		return nil, "", out.Usage
 	}
 	seen := make(map[string]bool)
 	selected := make([]ports.CatalogMediaLink, 0, len(out.MediaLinkIDs))
@@ -78,13 +78,13 @@ func (s AutoReplyService) selectReplyMedia(
 		link, ok := links[id]
 		if !ok || seen[id] {
 			log.Printf("[CatalogMedia] stage=invalid_model_media business=%s run=%s fallback=text", businessID, runID)
-			return nil, out.Usage
+			return nil, "", out.Usage
 		}
 		seen[id] = true
 		selected = append(selected, link)
 	}
 	log.Printf("[CatalogMedia] stage=selected business=%s run=%s candidates=%d images=%d", businessID, runID, len(options), len(selected))
-	return selected, out.Usage
+	return selected, out.ReplyText, out.Usage
 }
 
 func mediaVariantMatches(a, b *string) bool {

@@ -128,7 +128,7 @@ func (s *Server) dispatchAdditionalQuery(ctx context.Context, operationID string
 		if err != nil {
 			return mapApplicationError(err), true
 		}
-		return messageList(view), true
+		return messageList(view, string(actor.BusinessID)), true
 	case "listCannedReplies":
 		in := input.(*contract.CannedReplyListInput)
 		if s.deps.ListCannedReplies == nil {
@@ -542,10 +542,25 @@ func conversationList(v commands.ListResult[commands.ConversationView]) *contrac
 	}
 	return listPage(items, v.NextCursor, v.HasMore)
 }
-func messageList(v commands.ListResult[commands.MessageView]) *contract.List[contract.Message] {
+func messageList(v commands.ListResult[commands.MessageView], businessID string) *contract.List[contract.Message] {
 	items := make([]contract.Message, 0, len(v.Items))
 	for _, item := range v.Items {
-		items = append(items, contract.Message{ID: contract.UUID(item.ID), ConversationID: contract.UUID(item.ConversationID), Direction: item.Direction, Origin: item.Origin, Status: item.Status, Text: item.Text, ProviderMessageReference: item.ProviderMessageReference, OccurredAt: item.OccurredAt, CreatedAt: item.CreatedAt, Private: item.Private})
+		msg := contract.Message{
+			ID: contract.UUID(item.ID), ConversationID: contract.UUID(item.ConversationID),
+			Direction: item.Direction, Origin: item.Origin, Status: item.Status, Text: item.Text,
+			ContentType: item.ContentType, ProviderMessageReference: item.ProviderMessageReference,
+			OccurredAt: item.OccurredAt, CreatedAt: item.CreatedAt, Private: item.Private,
+		}
+		for _, attachment := range item.Attachments {
+			if attachment.Type != "image" || attachment.MediaID == "" {
+				continue
+			}
+			msg.Attachments = append(msg.Attachments, contract.MessageAttachment{
+				Type: "image", MediaID: contract.UUID(attachment.MediaID),
+				PreviewPath: "/api/v1/businesses/" + businessID + "/media/" + attachment.MediaID + "/preview",
+			})
+		}
+		items = append(items, msg)
 	}
 	return listPage(items, v.NextCursor, v.HasMore)
 }

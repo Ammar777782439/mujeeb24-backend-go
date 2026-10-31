@@ -459,7 +459,13 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	var candidateMedia []ports.CatalogMediaLink
 	if effective.PolicyDecision == "allowed" {
 		var mediaUsage ports.CustomerSalesUsageTelemetry
-		candidateMedia, mediaUsage = s.selectReplyMedia(ctx, businessID, conversationID, run.ID, command.Text, proposal)
+		var mediaReply string
+		candidateMedia, mediaReply, mediaUsage = s.selectReplyMedia(ctx, businessID, conversationID, run.ID, command.Text, proposal)
+		if len(candidateMedia) > 0 && strings.TrimSpace(mediaReply) != "" {
+			// Final wording is generated after the selected photos are known.
+			// This text is a preparation message, never proof of delivery.
+			proposal.ResponseText = mediaReply
+		}
 		out.Usage.InputTokens += mediaUsage.InputTokens
 		out.Usage.CachedTokens += mediaUsage.CachedTokens
 		out.Usage.OutputTokens += mediaUsage.OutputTokens

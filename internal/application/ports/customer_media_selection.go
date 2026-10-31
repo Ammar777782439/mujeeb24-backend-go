@@ -23,6 +23,8 @@ type CustomerMediaSelectionInput struct {
 
 type CustomerMediaSelectionOutput struct {
 	MediaLinkIDs []string
+	// ReplyText is authored after image selection, not a delivery confirmation.
+	ReplyText string
 	Usage        CustomerSalesUsageTelemetry
 }
 

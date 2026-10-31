@@ -1,0 +1,49 @@
+name: Temporary reconcile catalog chat API contract
+
+on:
+  push:
+    branches: [integration/catalog-media-main]
+    paths: ['.github/workflows/temporary-catalog-chat-reconcile.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    if: github.repository == 'Ammar777782439/mujeeb24-backend-go'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.2'
+          cache: true
+      - name: Format backend and regenerate source-driven OpenAPI
+        run: |
+          set -euo pipefail
+          gofmt -w internal/application/ports/customer_media_selection.go
+          gofmt -w internal/adapters/secondary/ai/gateway/customer_media_selection.go internal/adapters/secondary/ai/gateway/customer_sales_capabilities.go
+          gofmt -w internal/application/services/auto_reply_media.go internal/application/services/auto_reply.go
+          gofmt -w internal/application/commands/views.go internal/application/services/message_queries.go internal/application/services/message_queries_media_test.go
+          gofmt -w internal/adapters/secondary/persistence/postgres/message_repository.go
+          gofmt -w internal/adapters/primary/http/dto/types.go internal/adapters/primary/http/handlers/query_facades.go
+          gofmt -w internal/adapters/primary/http/contract/catalog_media.go internal/adapters/primary/http/handlers/catalog_media.go
+          gofmt -w internal/adapters/primary/http/handlers/catalog_media_preview.go internal/adapters/primary/http/handlers/catalog_media_preview_test.go
+          go run ./cmd/openapi-gen
+          git diff --check
+          git add internal/application/ports/customer_media_selection.go
+          git add internal/adapters/secondary/ai/gateway/customer_media_selection.go internal/adapters/secondary/ai/gateway/customer_sales_capabilities.go
+          git add internal/application/services/auto_reply_media.go internal/application/services/auto_reply.go
+          git add internal/application/commands/views.go internal/application/services/message_queries.go internal/application/services/message_queries_media_test.go
+          git add internal/adapters/secondary/persistence/postgres/message_repository.go
+          git add internal/adapters/primary/http/dto/types.go internal/adapters/primary/http/handlers/query_facades.go
+          git add internal/adapters/primary/http/contract/catalog_media.go internal/adapters/primary/http/handlers/catalog_media.go
+          git add internal/adapters/primary/http/handlers/catalog_media_preview.go internal/adapters/primary/http/handlers/catalog_media_preview_test.go
+          git add api/openapi/mujeeb24-dashboard-v1.generated.yaml
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'chore(catalog-media): format merchant chat backend and regenerate OpenAPI'
+            git push origin HEAD:refs/heads/integration/catalog-media-main
+          fi

@@ -29,7 +29,7 @@ func (s MessageQueryService) ListConversationMessages(ctx context.Context, query
 		if record.TextContent != nil {
 			text = *record.TextContent
 		}
-		items = append(items, commands.MessageView{ID: commands.MessageID(record.ID), ConversationID: commands.ConversationID(record.ConversationID), Direction: record.Direction, Origin: record.Origin, Status: record.Status, Text: text, ProviderMessageReference: record.ProviderMessageID, OccurredAt: record.OccurredAt, CreatedAt: record.CreatedAt, Private: record.Visibility == "private"})
+		items = append(items, messageView(record))
 	}
 	return commands.ListResult[commands.MessageView]{Items: items, NextCursor: page.NextCursor, HasMore: page.HasMore}, nil
 }
@@ -41,5 +41,17 @@ func messageView(record ports.CommunicationMessageRecord) commands.MessageView {
 	if record.TextContent != nil {
 		text = *record.TextContent
 	}
-	return commands.MessageView{ID: commands.MessageID(record.ID), ConversationID: commands.ConversationID(record.ConversationID), Direction: record.Direction, Origin: record.Origin, Status: record.Status, Text: text, ProviderMessageReference: record.ProviderMessageID, OccurredAt: record.OccurredAt, CreatedAt: record.CreatedAt, Private: record.Visibility == "private"}
+	view := commands.MessageView{
+		ID: commands.MessageID(record.ID), ConversationID: commands.ConversationID(record.ConversationID),
+		Direction: record.Direction, Origin: record.Origin, Status: record.Status, Text: text,
+		ContentType: record.ContentType, ProviderMessageReference: record.ProviderMessageID,
+		OccurredAt: record.OccurredAt, CreatedAt: record.CreatedAt, Private: record.Visibility == "private",
+	}
+	if record.Visibility == "public" && record.Direction == "outbound" && record.ContentType == "mixed" {
+		message, err := DecodeInteractiveContentReference(record.ContentReference)
+		if err == nil && message.MediaID != "" && message.MediaLinkID != "" {
+			view.Attachments = []commands.MessageAttachmentView{{Type: "image", MediaID: message.MediaID}}
+		}
+	}
+	return view
 }

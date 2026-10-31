@@ -343,6 +343,11 @@ type Conversation struct {
 	LastActivityAt  time.Time         `json:"last_activity_at"`
 	ResourceVersion string            `json:"resource_version"`
 }
+type MessageAttachment struct {
+	Type        string `json:"type" enum:"image"`
+	MediaID     UUID   `json:"media_id"`
+	PreviewPath string `json:"preview_path"`
+}
 type Message struct {
 	ID                       UUID      `json:"id"`
 	ConversationID           UUID      `json:"conversation_id"`
@@ -350,6 +355,8 @@ type Message struct {
 	Origin                   string    `json:"origin"`
 	Status                   string    `json:"status"`
 	Text                     string    `json:"text"`
+	ContentType              string    `json:"content_type,omitempty"`
+	Attachments              []MessageAttachment `json:"attachments,omitempty"`
 	ProviderMessageReference *string   `json:"provider_message_reference,omitempty"`
 	OccurredAt               time.Time `json:"occurred_at"`
 	CreatedAt                time.Time `json:"created_at"`

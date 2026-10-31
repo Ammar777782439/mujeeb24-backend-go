@@ -66,7 +66,7 @@ func customerSalesTools(capabilities []ports.CustomerSalesCapability) []customer
 		description := ""
 		switch capability {
 		case ports.CustomerSalesCapabilityRespondWithoutAction:
-			description = "Use only for factual answers, explanations, acknowledgments, or greetings that require NO external operation. If the customer wants to proceed, subscribe, purchase, change an order, or speak to a person, this is not a suitable capability. Earlier assistant promises and conversation summaries are not evidence of executed operations. When no offered executor can perform the requested action, choose handoff_to_human."
+			description = "A customer's request for an existing product's catalog photos is informational; a separate media-selection step is available after this response. Do not deny supported photo sharing and do not claim photos have reached the customer. Use only for factual answers, explanations, acknowledgments, or greetings that require NO external operation. If the customer wants to proceed, subscribe, purchase, change an order, or speak to a person, this is not a suitable capability. Earlier assistant promises and conversation summaries are not evidence of executed operations. When no offered executor can perform the requested action, choose handoff_to_human."
 		case ports.CustomerSalesCapabilityAsk:
 			description = "Ask ONLY when an essential fact must be supplied by the customer to understand the goal or use an available executor. Do not reconfirm a clear intent to proceed, defer an unsupported operation by asking questions, or request merchant catalog facts that evaluate_full_catalog can retrieve."
 		case ports.CustomerSalesCapabilityHandoff:
