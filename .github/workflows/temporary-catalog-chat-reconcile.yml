@@ -1,4 +1,4 @@
-name: Temporary reconcile catalog chat API contract v2
+name: Temporary reconcile catalog chat API contract v3
 
 on:
   push:
@@ -26,7 +26,7 @@ jobs:
           set -euo pipefail
           gofmt -w internal/application/ports/customer_media_selection.go
           gofmt -w internal/adapters/secondary/ai/gateway/customer_media_selection.go internal/adapters/secondary/ai/gateway/customer_sales_capabilities.go
-          gofmt -w internal/application/services/auto_reply_media.go internal/application/services/auto_reply.go
+          gofmt -w internal/application/services/auto_reply_media.go internal/application/services/auto_reply_media_test.go internal/application/services/auto_reply.go
           gofmt -w internal/application/commands/views.go internal/application/services/message_queries.go internal/application/services/message_queries_media_test.go
           gofmt -w internal/adapters/secondary/persistence/postgres/message_repository.go
           gofmt -w internal/adapters/primary/http/dto/types.go internal/adapters/primary/http/handlers/query_facades.go
@@ -36,7 +36,7 @@ jobs:
           git diff --check
           git add internal/application/ports/customer_media_selection.go
           git add internal/adapters/secondary/ai/gateway/customer_media_selection.go internal/adapters/secondary/ai/gateway/customer_sales_capabilities.go
-          git add internal/application/services/auto_reply_media.go internal/application/services/auto_reply.go
+          git add internal/application/services/auto_reply_media.go internal/application/services/auto_reply_media_test.go internal/application/services/auto_reply.go
           git add internal/application/commands/views.go internal/application/services/message_queries.go internal/application/services/message_queries_media_test.go
           git add internal/adapters/secondary/persistence/postgres/message_repository.go
           git add internal/adapters/primary/http/dto/types.go internal/adapters/primary/http/handlers/query_facades.go

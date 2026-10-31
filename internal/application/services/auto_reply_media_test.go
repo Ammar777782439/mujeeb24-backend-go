@@ -37,10 +37,11 @@ func (r galleryMediaRepo) FindApprovedMediaLink(_ context.Context, businessID, i
 
 type photoSelectionFake struct {
 	ids []string
+	replyText string
 }
 
 func (m photoSelectionFake) SelectMedia(_ context.Context, _ ports.CustomerMediaSelectionInput) (ports.CustomerMediaSelectionOutput, error) {
-	return ports.CustomerMediaSelectionOutput{MediaLinkIDs: m.ids}, nil
+	return ports.CustomerMediaSelectionOutput{MediaLinkIDs: m.ids, ReplyText: m.replyText}, nil
 }
 
 type photoRecordingOutbound struct {
@@ -169,5 +170,27 @@ func TestResolverDoesNotSendCaptionAloneWhenRequiredImageUnavailable(t *testing.
 	}
 	if _, err := resolver.Resolve(context.Background(), "business-1", "outbound"); !errors.Is(err, ErrRequiredCatalogMediaUnavailable) {
 		t.Fatalf("missing media storage must produce typed required-media failure, got %v", err)
+	}
+}
+
+func TestMediaSelectionFinalizesTextAfterChoosingApprovedPhoto(t *testing.T) {
+	service, outbound, _ := photoTestService([]string{"photo-1"})
+	service.MediaSelection = photoSelectionFake{
+		ids: []string{"photo-1"},
+		replyText: "هذه صورة الهاتف الأزرق المتاحة في كتالوجنا.",
+	}
+	_, err := service.Handle(context.Background(), commands.AutoReplyCommand{
+		Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: "business-1"}},
+		ConversationID: "conversation-1", SourceMessageReference: "inbound-final-copy",
+		Text: "أرسل لي صورة الهاتف الأزرق", Channel: "whatsapp", ProviderRef: "socialapi",
+	})
+	if err != nil { t.Fatalf("media-aware reply failed: %v", err) }
+	if len(outbound.drafts) != 1 {
+		t.Fatalf("expected one media outbound, got %d", len(outbound.drafts))
+	}
+	final, err := DecodeInteractiveContentReference(outbound.drafts[0].ContentReference)
+	if err != nil || final.MediaLinkID != "photo-1" ||
+		final.Text != "هذه صورة الهاتف الأزرق المتاحة في كتالوجنا." {
+		t.Fatalf("model's post-selection copy was not persisted with its photo: %+v err=%v", final, err)
 	}
 }
