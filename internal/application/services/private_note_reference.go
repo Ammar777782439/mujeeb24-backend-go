@@ -34,3 +34,13 @@ func decodePrivateNoteReference(reference string) (privateNoteReference, bool) {
 	err := json.Unmarshal([]byte(strings.TrimPrefix(reference, privateNoteReferencePrefix)), &result)
 	return result, err == nil && uuid.Validate(result.RelatedMessageID) == nil
 }
+
+// Scope the retry identity to the authenticated author as well as the tenant
+// and conversation; sharing an Idempotency-Key cannot expose another author's note.
+func privateNoteID(businessID, conversationID, principalID, key string) string {
+	if key == "" {
+		return uuid.NewString()
+	}
+	scope, _ := json.Marshal([]string{"private-note-v1", businessID, conversationID, principalID, key})
+	return uuid.NewSHA1(uuid.NameSpaceURL, scope).String()
+}

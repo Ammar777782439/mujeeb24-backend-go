@@ -53,6 +53,26 @@ func TestPrivateNoteReferencePreservesContextAndLegacyNotes(t *testing.T) {
 	}
 }
 
+func TestPrivateNoteRetryIdentityIncludesAuthorTenantAndConversation(t *testing.T) {
+	original := privateNoteID("business", "conversation", "author", "retry-key")
+	if original != privateNoteID("business", "conversation", "author", "retry-key") {
+		t.Fatal("note retry identity changed")
+	}
+	for _, id := range []string{
+		privateNoteID("other", "conversation", "author", "retry-key"),
+		privateNoteID("business", "other", "author", "retry-key"),
+		privateNoteID("business", "conversation", "other", "retry-key"),
+		privateNoteID("business", "conversation", "author", "other-key"),
+	} {
+		if id == original {
+			t.Fatal("retry identity crossed its scope")
+		}
+	}
+	if privateNoteID("business", "conversation", "author", "") == privateNoteID("business", "conversation", "author", "") {
+		t.Fatal("requests without a retry key must remain independent")
+	}
+}
+
 func TestPrivateNotesNeverEnterCustomerModelHistoryOrSummary(t *testing.T) {
 	publicText, secret := "public customer question", "internal-only handling instructions"
 	records := []ports.CommunicationMessageRecord{{ID: "public", Visibility: "public", Direction: "inbound", TextContent: &publicText}, {ID: "note", Visibility: "private", Direction: "outbound", TextContent: &secret}}

@@ -23,6 +23,7 @@ type ConversationRuntimeService struct {
 	References   ports.ConversationReferenceRepository
 	Messages     ports.MessageRepository
 	NoteTargets  ports.PrivateNoteTargetReader
+	PrivateNotes ports.PrivateNoteRepository
 	Transactions ports.TransactionManager
 	Realtime     ports.RealtimePublisher
 }
@@ -207,6 +208,7 @@ func (s AddPrivateNoteCommandService) Handle(ctx context.Context, command comman
 	if text == "" {
 		return commands.MessageResult{}, appErrors.New(appErrors.CodeValidation, "private note text is required")
 	}
+	created := true
 	var result commands.MessageResult
 	err := s.Transactions.Within(ctx, func(txCtx context.Context) error {
 		if _, conversationErr := s.Reader.GetByID(txCtx, string(command.Meta.Actor.BusinessID), string(command.ConversationID)); conversationErr != nil {
@@ -220,7 +222,7 @@ func (s AddPrivateNoteCommandService) Handle(ctx context.Context, command comman
 			return appErrors.New(appErrors.CodeConflict, "current provider reference is not active")
 		}
 		now := time.Now().UTC()
-		id := uuid.NewString()
+		id := privateNoteID(string(command.Meta.Actor.BusinessID), string(command.ConversationID), string(command.Meta.Actor.PrincipalID), command.Meta.IdempotencyKey)
 		referenceText := "private-note:" + id
 		if command.RelatedMessageID != nil {
 			if uuid.Validate(*command.RelatedMessageID) != nil {
@@ -239,14 +241,24 @@ func (s AddPrivateNoteCommandService) Handle(ctx context.Context, command comman
 			}
 			referenceText = encodePrivateNoteReference(id, target.ID, quote)
 		}
-		message, messageErr := s.Messages.Record(txCtx, ports.CommunicationMessageDraft{ID: id, BusinessID: string(command.Meta.Actor.BusinessID), ConversationReferenceID: reference.ID, Direction: "outbound", Origin: "human", Transport: "mujeeb", ContentType: "text", TextContent: &text, ContentReference: referenceText, Visibility: "private", OccurredAt: now, CreatedAt: now})
+		draft := ports.CommunicationMessageDraft{ID: id, BusinessID: string(command.Meta.Actor.BusinessID), ConversationReferenceID: reference.ID, Direction: "outbound", Origin: "human", Transport: "mujeeb", ContentType: "text", TextContent: &text, ContentReference: referenceText, Visibility: "private", OccurredAt: now, CreatedAt: now}
+		var message ports.CommunicationMessageRecord
+		var messageErr error
+		if command.Meta.IdempotencyKey != "" {
+			if s.PrivateNotes == nil {
+				return appErrors.NotImplemented()
+			}
+			message, created, messageErr = s.PrivateNotes.RecordPrivateNoteOnce(txCtx, string(command.ConversationID), draft)
+		} else {
+			message, messageErr = s.Messages.Record(txCtx, draft)
+		}
 		if messageErr != nil {
 			return messageErr
 		}
 		result.Message = messageView(message)
 		return nil
 	})
-	if err == nil && s.Realtime != nil {
+	if err == nil && created && s.Realtime != nil {
 		data, _ := json.Marshal(result.Message)
 		_ = s.Realtime.Publish(ctx, ports.RealtimeEvent{
 			EventID:      uuid.NewString(),

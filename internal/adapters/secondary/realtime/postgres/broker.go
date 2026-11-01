@@ -101,100 +101,83 @@ func (b *Broker) StartListener(ctx context.Context) {
 
 func (b *Broker) runListener(ctx context.Context) {
 	defer b.wg.Done()
-	// Per audit B-CRIT-1: this is a long-lived goroutine driving Postgres
-	// LISTEN/NOTIFY. A panic from pgx internals or a malformed payload
-	// would crash the API worker process and silently break realtime
-	// delivery to all SSE clients. Recover, log loudly, and let the
-	// outer for-loop reconnect on the next iteration.
+	reconnectListener(ctx, b.listenOnce, b.LogWarning)
+}
+
+// Recover per connection attempt, not around the entire goroutine: recovering
+// at the outer goroutine boundary returns forever and silently stops realtime.
+func runListenerAttempt(ctx context.Context, attempt func(context.Context) error) (err error) {
 	defer func() {
-		if r := recover(); r != nil {
-			if b.LogWarning != nil {
-				b.LogWarning(fmt.Sprintf("[Realtime] LISTENER_PANIC recovered=%v", r))
-			} else {
-				log.Printf("[Realtime] LISTENER_PANIC recovered=%v", r)
-			}
+		if recover() != nil {
+			err = errors.New("realtime listener recovered from an internal failure")
 		}
 	}()
-	backoff := 100 * time.Millisecond
-	maxBackoff := 5 * time.Second
+	return attempt(ctx)
+}
 
-	for {
-		if err := ctx.Err(); err != nil {
+func reconnectListener(ctx context.Context, attempt func(context.Context) error, warn func(string, ...any)) {
+	backoff := 100 * time.Millisecond
+	for ctx.Err() == nil {
+		started := time.Now()
+		err := runListenerAttempt(ctx, attempt)
+		if ctx.Err() != nil {
 			return
 		}
-
-		conn, err := b.pool.Acquire(ctx)
-		if err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			if b.LogWarning != nil {
-				b.LogWarning("acquire connection for LISTEN failed: %v", err)
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(backoff):
-				backoff = min(backoff*2, maxBackoff)
-				continue
-			}
+		if warn != nil {
+			warn("LISTEN connection ended; reconnecting: %v", err)
 		}
-
-		backoff = 100 * time.Millisecond // reset backoff on successful acquire
-		pgxConn := conn.Conn()
-
-		_, err = pgxConn.Exec(ctx, "LISTEN "+RealtimeNotificationChannel)
-		if err != nil {
-			conn.Release()
-			if ctx.Err() != nil {
-				return
-			}
-			if b.LogWarning != nil {
-				b.LogWarning("exec LISTEN failed: %v", err)
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(backoff):
-				continue
-			}
+		if time.Since(started) >= time.Second {
+			backoff = 100 * time.Millisecond
 		}
+		timer := time.NewTimer(backoff)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+		backoff = min(backoff*2, 5*time.Second)
+	}
+}
 
+func (b *Broker) listenOnce(ctx context.Context) error {
+	conn, err := b.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire LISTEN connection: %w", err)
+	}
+	defer conn.Release()
+	pgxConn := conn.Conn()
+	// Never return a subscribed or possibly interrupted connection to query
+	// borrowers. Closing it also clears its PostgreSQL LISTEN registration.
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = pgxConn.Close(cleanupCtx)
+	}()
+	if _, err := pgxConn.Exec(ctx, "LISTEN "+RealtimeNotificationChannel); err != nil {
+		return fmt.Errorf("exec LISTEN: %w", err)
+	}
+	if b.Hub != nil {
+		b.Hub.ResyncAll()
+	}
+	b.readyOnce.Do(func() { close(b.ready) })
+	for {
+		notification, err := pgxConn.WaitForNotification(ctx)
+		if err != nil {
+			return fmt.Errorf("wait for notification: %w", err)
+		}
+		if notification == nil || strings.TrimSpace(notification.Payload) == "" {
+			continue
+		}
+		var event ports.RealtimeEvent
+		if err := json.Unmarshal([]byte(notification.Payload), &event); err != nil {
+			if b.LogWarning != nil {
+				b.LogWarning("discarding malformed notification payload: %v", err)
+			}
+			continue
+		}
 		if b.Hub != nil {
-			b.Hub.ResyncAll()
-		}
-		b.readyOnce.Do(func() { close(b.ready) })
-		// Inner notification loop
-		for {
-			if ctx.Err() != nil {
-				conn.Release()
-				return
-			}
-
-			notification, waitErr := pgxConn.WaitForNotification(ctx)
-			if waitErr != nil {
-				conn.Release()
-				if ctx.Err() != nil {
-					return
-				}
-				if b.LogWarning != nil {
-					b.LogWarning("WaitForNotification returned error: %v", waitErr)
-				}
-				break // break inner loop to reconnect
-			}
-
-			if notification != nil && strings.TrimSpace(notification.Payload) != "" {
-				var event ports.RealtimeEvent
-				if jsonErr := json.Unmarshal([]byte(notification.Payload), &event); jsonErr != nil {
-					if b.LogWarning != nil {
-						b.LogWarning("discarding malformed notification payload: %v", jsonErr)
-					}
-					continue
-				}
-				if b.Hub != nil {
-					b.Hub.Broadcast(event)
-				}
-			}
+			b.Hub.Broadcast(event)
 		}
 	}
 }

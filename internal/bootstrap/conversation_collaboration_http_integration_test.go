@@ -144,8 +144,18 @@ func exerciseInboxCollaborationHTTP(t *testing.T, ctx context.Context, runtime *
 	}
 	noteText := strings.TrimSpace(strings.Repeat("ملاحظة داخلية طويلة ", 400))
 	noteBody, _ := json.Marshal(map[string]string{"text": noteText, "related_message_id": inboundID})
-	governanceHTTPRequest(t, runtime.HTTP.Handler, http.MethodPost, conversationPath+"/notes", noteBody, ownerToken, uuid.NewString(), http.StatusAccepted)
+	noteKey := uuid.NewString()
+	firstNote := governanceHTTPRequest(t, runtime.HTTP.Handler, http.MethodPost, conversationPath+"/notes", noteBody, ownerToken, noteKey, http.StatusAccepted)
 	await("conversation.note_added")
+	replayedNote := governanceHTTPRequest(t, runtime.HTTP.Handler, http.MethodPost, conversationPath+"/notes", noteBody, ownerToken, noteKey, http.StatusAccepted)
+	var original, replayed struct {
+		Data contract.Message `json:"data"`
+	}
+	if json.Unmarshal(firstNote.Body.Bytes(), &original) != nil || json.Unmarshal(replayedNote.Body.Bytes(), &replayed) != nil || original.Data.ID != replayed.Data.ID || !original.Data.CreatedAt.Equal(replayed.Data.CreatedAt) {
+		t.Fatal("note retry changed its identity or timestamp")
+	}
+	changedNote, _ := json.Marshal(map[string]string{"text": "a different note", "related_message_id": inboundID})
+	governanceHTTPRequest(t, runtime.HTTP.Handler, http.MethodPost, conversationPath+"/notes", changedNote, ownerToken, noteKey, http.StatusConflict)
 	timeline := governanceHTTPRequest(t, runtime.HTTP.Handler, http.MethodGet, conversationPath+"/messages", nil, staffToken, "", http.StatusOK)
 	var messages struct {
 		Data []contract.Message `json:"data"`
@@ -168,6 +178,47 @@ func exerciseInboxCollaborationHTTP(t *testing.T, ctx context.Context, runtime *
 	for _, target := range []string{uuid.NewString(), noteID} {
 		invalid, _ := json.Marshal(map[string]string{"text": "must not save", "related_message_id": target})
 		governanceHTTPRequest(t, runtime.HTTP.Handler, http.MethodPost, conversationPath+"/notes", invalid, ownerToken, uuid.NewString(), http.StatusNotFound)
+	}
+	// The same browser retry key belongs to a different authenticated author.
+	staffNote := governanceHTTPRequest(t, runtime.HTTP.Handler, http.MethodPost, conversationPath+"/notes", noteBody, staffToken, noteKey, http.StatusAccepted)
+	var staffCreated struct {
+		Data contract.Message `json:"data"`
+	}
+	if json.Unmarshal(staffNote.Body.Bytes(), &staffCreated) != nil || staffCreated.Data.ID == original.Data.ID {
+		t.Fatal("note retry identity crossed author scope")
+	}
+	// Concurrent duplicate saves must commit exactly one additional note.
+	concurrentKey := uuid.NewString()
+	responses := make(chan *httptest.ResponseRecorder, 6)
+	for i := 0; i < 6; i++ {
+		go func() {
+			request := httptest.NewRequest(http.MethodPost, conversationPath+"/notes", strings.NewReader(string(noteBody))).WithContext(ctx)
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("Authorization", "Bearer "+ownerToken)
+			request.Header.Set("Idempotency-Key", concurrentKey)
+			response := httptest.NewRecorder()
+			runtime.HTTP.Handler.ServeHTTP(response, request)
+			responses <- response
+		}()
+	}
+	var concurrentID contract.UUID
+	for i := 0; i < 6; i++ {
+		response := <-responses
+		var saved struct {
+			Data contract.Message `json:"data"`
+		}
+		if response.Code != http.StatusAccepted || json.Unmarshal(response.Body.Bytes(), &saved) != nil || saved.Data.ID == "" {
+			t.Fatalf("concurrent note save status=%d", response.Code)
+		}
+		if concurrentID == "" {
+			concurrentID = saved.Data.ID
+		} else if concurrentID != saved.Data.ID {
+			t.Fatal("concurrent note retries created distinct messages")
+		}
+	}
+	var messageCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM communication_messages WHERE business_id=$1::uuid`, businessID).Scan(&messageCount); err != nil || messageCount != 4 {
+		t.Fatalf("expected inbound + three independent notes, got %d", messageCount)
 	}
 	var outbound, outbox int
 	if err := pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM outbound_messages WHERE business_id=$1::uuid),(SELECT count(*) FROM outbox_entries WHERE business_id=$1::uuid)`, businessID).Scan(&outbound, &outbox); err != nil || outbound != 0 || outbox != 0 {

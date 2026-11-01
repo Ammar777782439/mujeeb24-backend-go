@@ -168,3 +168,38 @@ func (r *MessageRepository) GetPrivateNoteTarget(ctx context.Context, businessID
 	}
 	return target, nil
 }
+
+// RecordPrivateNoteOnce uses a transaction-scoped lock so parallel HTTP retries
+// observe the committed original note, including its original timestamps.
+// The ordinary public/provider message insertion path remains unchanged.
+func (r *MessageRepository) RecordPrivateNoteOnce(ctx context.Context, conversationID string, draft ports.CommunicationMessageDraft) (ports.CommunicationMessageRecord, bool, error) {
+	if r == nil || r.adapter == nil {
+		return ports.CommunicationMessageRecord{}, false, ErrPoolClosed
+	}
+	if _, ok := transactionFromContext(ctx); !ok {
+		return ports.CommunicationMessageRecord{}, false, ErrTransactionExecutorMissing
+	}
+	if conversationID == "" || draft.ID == "" || draft.BusinessID == "" || draft.Visibility != "private" || draft.Direction != "outbound" || draft.Origin != "human" || draft.Transport != "mujeeb" || draft.ContentType != "text" || draft.TextContent == nil || strings.TrimSpace(*draft.TextContent) == "" {
+		return ports.CommunicationMessageRecord{}, false, invalidRepositoryInput("private_note.record_once", "a scoped private note is required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.CommunicationMessageRecord{}, false, err
+	}
+	if _, err := executor.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "private-note/"+draft.BusinessID+"/"+draft.ID); err != nil {
+		return ports.CommunicationMessageRecord{}, false, err
+	}
+	const query = `SELECT m.id::text,m.business_id::text,r.conversation_id::text,m.conversation_reference_id::text,m.inbound_event_id::text,m.outbound_message_id::text,m.direction,m.origin,m.transport,m.provider_message_id,m.content_type,m.text_content,m.content_reference,m.visibility,m.occurred_at,m.created_at,'recorded' FROM communication_messages m JOIN conversation_references r ON r.business_id=m.business_id AND r.id=m.conversation_reference_id WHERE m.business_id=$1::uuid AND r.conversation_id=$2::uuid AND m.id=$3::uuid`
+	existing, err := scanCommunicationMessage(executor.QueryRow(ctx, query, draft.BusinessID, conversationID, draft.ID))
+	if err == nil {
+		if existing.Visibility != "private" || existing.Direction != "outbound" || existing.Origin != "human" || existing.Transport != "mujeeb" || existing.ContentType != "text" || existing.ContentReference != draft.ContentReference || existing.TextContent == nil || *existing.TextContent != *draft.TextContent {
+			return ports.CommunicationMessageRecord{}, false, &RepositoryError{Operation: "private_note.record_once", Kind: RepositoryConflict, Err: errors.New("idempotency key payload changed")}
+		}
+		return existing, false, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return ports.CommunicationMessageRecord{}, false, err
+	}
+	record, err := r.Record(ctx, draft)
+	return record, err == nil, err
+}

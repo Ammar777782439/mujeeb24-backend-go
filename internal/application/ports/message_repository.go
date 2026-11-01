@@ -58,3 +58,9 @@ type MessageRepository interface {
 	Record(ctx context.Context, draft CommunicationMessageDraft) (CommunicationMessageRecord, error)
 	ListByConversation(ctx context.Context, businessID, conversationID string, limit int, cursor string) (MessagePage, error)
 }
+
+// PrivateNoteRepository must atomically return an existing identical note or
+// insert it once within the caller's transaction. A changed payload conflicts.
+type PrivateNoteRepository interface {
+	RecordPrivateNoteOnce(ctx context.Context, conversationID string, draft CommunicationMessageDraft) (record CommunicationMessageRecord, created bool, err error)
+}
