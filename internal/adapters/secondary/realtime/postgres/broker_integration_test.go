@@ -114,7 +114,17 @@ func TestBrokerReestablishesListenAfterDatabaseConnectionTermination(t *testing.
 		t.Fatal("no delivery after LISTEN recovery")
 	}
 	broker.Close()
-	if pool.Stat().AcquiredConns() != 0 {
-		t.Fatal("LISTEN retained a pool connection after shutdown")
+	// pgxpool destroys a closed connection asynchronously after Release.
+	// Observe the eventual count, not the in-flight destruction callback.
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.NewTimer(time.Second)
+	defer deadline.Stop()
+	for pool.Stat().AcquiredConns() != 0 {
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatal("LISTEN retained a pool connection after shutdown")
+		}
 	}
 }
