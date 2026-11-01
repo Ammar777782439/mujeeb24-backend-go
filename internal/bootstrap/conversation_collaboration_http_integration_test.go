@@ -142,7 +142,7 @@ func exerciseInboxCollaborationHTTP(t *testing.T, ctx context.Context, runtime *
 			t.Fatal("assignment missing from read model")
 		}
 	}
-	noteText := strings.Repeat("ملاحظة داخلية طويلة ", 400)
+	noteText := strings.TrimSpace(strings.Repeat("ملاحظة داخلية طويلة ", 400))
 	noteBody, _ := json.Marshal(map[string]string{"text": noteText, "related_message_id": inboundID})
 	governanceHTTPRequest(t, runtime.HTTP.Handler, http.MethodPost, conversationPath+"/notes", noteBody, ownerToken, uuid.NewString(), http.StatusAccepted)
 	await("conversation.note_added")
@@ -158,7 +158,7 @@ func exerciseInboxCollaborationHTTP(t *testing.T, ctx context.Context, runtime *
 		if m.Private {
 			noteID = string(m.ID)
 			if m.RelatedMessageID == nil || *m.RelatedMessageID != inboundID || m.RelatedMessageText == nil || *m.RelatedMessageText != text || m.Text != noteText {
-				t.Fatal("note lost private/related message context")
+				t.Fatalf("note context mismatch: target=%v quote=%v text_length=%d expected_length=%d", m.RelatedMessageID, m.RelatedMessageText != nil && *m.RelatedMessageText == text, len(m.Text), len(noteText))
 			}
 		}
 	}
