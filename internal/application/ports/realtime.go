@@ -15,7 +15,7 @@ type RealtimeEvent struct {
 	ResourceID    string          `json:"resource_id"`
 	OccurredAt    time.Time       `json:"occurred_at"`
 	CorrelationID *string         `json:"correlation_id,omitempty"`
-	Data          json.RawMessage `json:"data"`
+	Data          json.RawMessage `json:"data,omitempty"`
 }
 
 // RealtimePublisher is the application port for emitting committed domain/platform events.

@@ -50,7 +50,7 @@ func exerciseInboxCollaborationHTTP(t *testing.T, ctx context.Context, runtime *
 		}
 	}
 	text := "أحتاج معرفة السعر قبل تأكيد الطلب"
-	if _, err := postgres.NewMessageRepository(runtime.Database).Record(ctx, ports.CommunicationMessageDraft{ID: inboundID, BusinessID: businessID, ConversationReferenceID: referenceID, Direction: "inbound", Origin: "customer", Transport: "socialapi", ContentType: "text", TextContent: &text, ContentReference: "inbound:" + inboundID, Visibility: "public", OccurredAt: time.Now().UTC(), CreatedAt: time.Now().UTC()}); err != nil {
+	if _, err := postgres.NewMessageRepository(runtime.Database).Record(ctx, ports.CommunicationMessageDraft{ID: inboundID, BusinessID: businessID, ConversationReferenceID: referenceID, Direction: "inbound", Origin: "customer", Transport: "provider", ContentType: "text", TextContent: &text, ContentReference: "inbound:" + inboundID, Visibility: "public", OccurredAt: time.Now().UTC(), CreatedAt: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}
 	base := "/api/v1/businesses/" + businessID
