@@ -146,6 +146,17 @@ func TestPlatformTeamGovernanceHTTPAgainstPostgres(t *testing.T) {
 	ownerToken := login(ownerEmail)
 	merchantBase := "/api/v1/businesses/" + businessID
 	platformBase := "/api/v1/platform/businesses/" + businessID
+	policyResponse := governanceHTTPRequest(t, handler, http.MethodGet, merchantBase+"/policy", nil, ownerToken, "", http.StatusOK)
+	var initialPolicy struct {
+		Data contract.BusinessPolicy `json:"data"`
+	}
+	if err := json.Unmarshal(policyResponse.Body.Bytes(), &initialPolicy); err != nil || string(initialPolicy.Data.BusinessID) != businessID || initialPolicy.Data.ResourceVersion != "1" || initialPolicy.Data.AIMode != "assist" || initialPolicy.Data.AllowAutoReply || initialPolicy.Data.AllowAutoLeadCreation || initialPolicy.Data.AllowAutoTransactionDraft || initialPolicy.Data.AllowAutoConfirmation || initialPolicy.Data.SalesWorkflowEnabled || initialPolicy.Data.AllowSalesInteractions {
+		t.Fatal("new owner cannot read the initialized non-automated business policy")
+	}
+	policyForbidden := callBusinessMutation(t, handler, merchantBase+"/policy", []byte(`{"default_human_review":true}`), ownerToken, "1")
+	if policyForbidden.Code != http.StatusForbidden {
+		t.Fatalf("policy settings permission bypass: status=%d", policyForbidden.Code)
+	}
 	governanceHTTPRequest(t, handler, http.MethodGet, merchantBase+"/catalogs", nil, ownerToken, "", http.StatusOK)
 	governanceHTTPRequest(t, handler, http.MethodGet, merchantBase+"/dashboard/overview", nil, ownerToken, "", http.StatusForbidden)
 	governanceHTTPRequest(t, handler, http.MethodGet, platformBase+"/team/members", nil, ownerToken, "", http.StatusForbidden)
@@ -196,6 +207,21 @@ func TestPlatformTeamGovernanceHTTPAgainstPostgres(t *testing.T) {
 		governanceHTTPRequest(t, handler, http.MethodPatch, permissionPath, []byte(invalid), adminToken, "", http.StatusUnprocessableEntity)
 	}
 	ownerPermissionPath := platformBase + "/team/members/" + string(ownerID) + "/permissions"
+	governanceHTTPRequest(t, handler, http.MethodPatch, ownerPermissionPath, []byte(`{"permissions":["catalog:read","business:read","business:settings"],"reason":"Owner policy management"}`), adminToken, "", http.StatusOK)
+	savedPolicy := callBusinessMutation(t, handler, merchantBase+"/policy", []byte(`{"default_human_review":true}`), ownerToken, "1")
+	if savedPolicy.Code != http.StatusOK {
+		t.Fatalf("save initialized policy: status=%d", savedPolicy.Code)
+	}
+	var savedPolicyData struct {
+		Data contract.BusinessPolicy `json:"data"`
+	}
+	if err := json.Unmarshal(savedPolicy.Body.Bytes(), &savedPolicyData); err != nil || !savedPolicyData.Data.DefaultHumanReview || savedPolicyData.Data.ResourceVersion != "2" || savedPolicyData.Data.AllowAutoReply {
+		t.Fatal("policy update lost its version or changed unrelated automation")
+	}
+	stalePolicy := callBusinessMutation(t, handler, merchantBase+"/policy", []byte(`{"default_human_review":false}`), ownerToken, "1")
+	if stalePolicy.Code != http.StatusConflict {
+		t.Fatalf("stale policy overwrite must be rejected: status=%d", stalePolicy.Code)
+	}
 	governanceHTTPRequest(t, handler, http.MethodPatch, ownerPermissionPath, []byte(`{"permissions":["catalog:read"],"reason":"Owner scope review"}`), adminToken, "", http.StatusOK)
 	var ownerRole, ownerStatus string
 	if err := pool.QueryRow(ctx, `SELECT role,status FROM business_memberships WHERE business_id=$1::uuid AND principal_id=$2::uuid`, businessID, ownerID).Scan(&ownerRole, &ownerStatus); err != nil || ownerRole != "owner" || ownerStatus != "active" {

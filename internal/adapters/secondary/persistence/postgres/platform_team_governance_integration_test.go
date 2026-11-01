@@ -50,7 +50,7 @@ func TestPlatformOwnerAndTeamGovernanceAgainstPostgres(t *testing.T) {
 	emails := []string{"owner-" + ids[0] + "@governance.test", "failed-" + ids[2] + "@governance.test", "staff-" + ids[0] + "@governance.test", "race-a-" + ids[3] + "@governance.test", "race-b-" + ids[3] + "@governance.test"}
 	defer func() {
 		clean := context.Background()
-		for _, query := range []string{`DELETE FROM platform_audit_events WHERE business_id=ANY($1::uuid[])`, `DELETE FROM business_memberships WHERE business_id=ANY($1::uuid[])`, `DELETE FROM businesses WHERE id=ANY($1::uuid[])`} {
+		for _, query := range []string{`DELETE FROM platform_audit_events WHERE business_id=ANY($1::uuid[])`, `DELETE FROM business_memberships WHERE business_id=ANY($1::uuid[])`, `DELETE FROM business_policies WHERE business_id=ANY($1::uuid[])`, `DELETE FROM businesses WHERE id=ANY($1::uuid[])`} {
 			if _, err := adapter.Pool().Exec(clean, query, ids); err != nil {
 				t.Errorf("cleanup: %v", err)
 			}

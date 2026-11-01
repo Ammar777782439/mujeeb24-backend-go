@@ -2,15 +2,20 @@ package services
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
+	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/queries"
 )
 
 type stubBusinessManagementRepo struct {
-	lastUpdate ports.BusinessRuntimePolicyUpdate
-	record     ports.BusinessRuntimePolicyRecord
+	lastUpdate  ports.BusinessRuntimePolicyUpdate
+	getError    error
+	updateError error
+	record      ports.BusinessRuntimePolicyRecord
 }
 
 func (s *stubBusinessManagementRepo) UpdateProfile(_ context.Context, _ ports.BusinessProfileUpdate) (ports.BusinessRecord, error) {
@@ -18,11 +23,14 @@ func (s *stubBusinessManagementRepo) UpdateProfile(_ context.Context, _ ports.Bu
 }
 
 func (s *stubBusinessManagementRepo) GetRuntimePolicy(_ context.Context, _ string) (ports.BusinessRuntimePolicyRecord, error) {
-	return s.record, nil
+	return s.record, s.getError
 }
 
 func (s *stubBusinessManagementRepo) UpdateRuntimePolicy(_ context.Context, update ports.BusinessRuntimePolicyUpdate) (ports.BusinessRuntimePolicyRecord, error) {
 	s.lastUpdate = update
+	if s.updateError != nil {
+		return ports.BusinessRuntimePolicyRecord{}, s.updateError
+	}
 	rec := s.record
 	if update.SalesWorkflowEnabled != nil {
 		rec.SalesWorkflowEnabled = *update.SalesWorkflowEnabled
@@ -79,5 +87,24 @@ func TestUpdateBusinessPolicyForwardsSalesFlags(t *testing.T) {
 	}
 	if result.Policy.ResourceVersion != "2" {
 		t.Fatalf("expected resource version 2, got %s", result.Policy.ResourceVersion)
+	}
+}
+
+func TestBusinessPolicyMissingAndStaleAreTypedErrors(t *testing.T) {
+	repo := &stubBusinessManagementRepo{getError: governancePersistenceError("not_found"), updateError: governancePersistenceError("stale")}
+	service := BusinessManagementService{Repository: repo, Transactions: stubTx{}}
+	_, err := service.GetPolicy(context.Background(), queries.GetBusinessPolicyQuery{})
+	if !hasApplicationCode(err, appErrors.CodeNotFound) {
+		t.Fatalf("missing policy must not become an internal error: %v", err)
+	}
+	version := commands.ResourceVersion("1")
+	flag := true
+	_, err = service.UpdatePolicy(context.Background(), commands.UpdateBusinessPolicyCommand{Meta: commands.CommandMeta{ExpectedVersion: &version}, DefaultHumanReview: &flag})
+	if !hasApplicationCode(err, appErrors.CodeStaleResource) {
+		t.Fatalf("stale policy must not become an internal error: %v", err)
+	}
+	unexpected := errors.New("unexpected storage failure")
+	if mapBusinessPolicyRepositoryError(unexpected) != unexpected {
+		t.Fatal("unexpected storage failures must stay internal")
 	}
 }

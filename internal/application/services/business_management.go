@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"strconv"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
@@ -25,7 +26,7 @@ func (s BusinessManagementService) GetPolicy(ctx context.Context, query queries.
 	}
 	record, err := s.Repository.GetRuntimePolicy(ctx, string(query.Meta.Actor.BusinessID))
 	if err != nil {
-		return commands.BusinessPolicyView{}, err
+		return commands.BusinessPolicyView{}, mapBusinessPolicyRepositoryError(err)
 	}
 	return businessPolicyView(record), nil
 }
@@ -82,7 +83,7 @@ func (s BusinessManagementService) UpdatePolicy(ctx context.Context, command com
 			AllowSalesInteractions:    command.AllowSalesInteractions,
 		})
 		if updateErr != nil {
-			return updateErr
+			return mapBusinessPolicyRepositoryError(updateErr)
 		}
 		result.Policy = businessPolicyView(record)
 		result.ResourceVersion = result.Policy.ResourceVersion
@@ -113,3 +114,21 @@ func businessPolicyView(record ports.BusinessRuntimePolicyRecord) commands.Busin
 var _ queries.GetBusinessPolicyHandler = BusinessPolicyQueryService{}
 var _ commands.UpdateBusinessProfileHandler = UpdateBusinessProfileService{}
 var _ commands.UpdateBusinessPolicyHandler = UpdateBusinessPolicyService{}
+
+// Policy failures retain their API meaning without exposing database details.
+func mapBusinessPolicyRepositoryError(err error) error {
+	var kinded interface{ ErrorKind() string }
+	if !errors.As(err, &kinded) {
+		return err
+	}
+	switch kinded.ErrorKind() {
+	case "not_found":
+		return appErrors.New(appErrors.CodeNotFound, "سياسات المنشأة غير موجودة.")
+	case "stale":
+		return appErrors.New(appErrors.CodeStaleResource, "تغيرت السياسات. حدّثها قبل حفظ التعديل.")
+	case "conflict":
+		return appErrors.New(appErrors.CodeConflict, "تعذّر حفظ السياسات بحالتها الحالية.")
+	default:
+		return err
+	}
+}

@@ -65,10 +65,9 @@ const platformBusinessSelectColumns = `b.id::text, b.name, b.slug, b.status,
 
 const platformBusinessReturnColumns = `id::text, name, slug, status, NULL::text AS owner_identity_summary, NULL::text AS subscription_summary, created_at, updated_at`
 
-// Create inserts a new business row with status='pending_setup'.
-// Per Contract §9: the Platform Admin creates the business; the owner
-// invitation is a SEPARATE step using the existing team invitation mechanism.
-// The admin does NOT enter the owner's password.
+// Create atomically inserts the pending business and its policy in one SQL
+// statement. New policy automation stays off until the merchant configures it.
+// ProvisionBusinessService may compose this statement with owner activation.
 func (r *PlatformBusinessRepository) Create(ctx context.Context, create ports.PlatformBusinessCreate) (ports.PlatformBusinessRecord, error) {
 	if r == nil || r.adapter == nil {
 		return ports.PlatformBusinessRecord{}, ErrPoolClosed
@@ -100,9 +99,22 @@ func (r *PlatformBusinessRepository) Create(ctx context.Context, create ports.Pl
 	}
 	var record ports.PlatformBusinessRecord
 	err = executor.QueryRow(ctx,
-		`INSERT INTO businesses (id, name, slug, status, vertical_type, timezone, default_currency, locale, created_at, updated_at)
+		`WITH created_business AS (
+                 INSERT INTO businesses (id, name, slug, status, vertical_type, timezone, default_currency, locale, created_at, updated_at)
                  VALUES ($1::uuid, $2, $3, 'pending_setup', $4, $5, $6, $7, $8, $8)
-                 RETURNING `+platformBusinessReturnColumns,
+                 RETURNING id, name, slug, status, created_at, updated_at
+             ), created_policy AS (
+                 INSERT INTO business_policies (
+                     business_id, ai_mode, default_human_review,
+                     allow_auto_reply, allow_auto_lead_creation, allow_auto_transaction_draft,
+                     allow_auto_confirmation, sales_workflow_enabled, allow_sales_interactions,
+                     created_at, updated_at
+                 ) SELECT id, 'assist', false, false, false, false, false, false, false,
+                          created_at, updated_at
+                   FROM created_business
+                 RETURNING business_id
+             ) SELECT `+platformBusinessReturnColumns+` FROM created_business
+               WHERE EXISTS (SELECT 1 FROM created_policy WHERE business_id = created_business.id)`,
 		create.ID, create.Name, create.Slug, create.VerticalType, create.Timezone, create.DefaultCurrency, create.Locale, create.Now,
 	).Scan(&record.ID, &record.Name, &record.Slug, &record.PlatformStatus, &record.OwnerIdentitySummary, &record.SubscriptionSummary, &record.CreatedAt, &record.UpdatedAt)
 	if err != nil {
