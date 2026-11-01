@@ -119,8 +119,8 @@ func (OptionalNullableTimestamp) Schema(huma.Registry) *huma.Schema {
 // the owner wildcard because existing owner memberships are persisted as ["*"].
 type Permissions []string
 
-// GrantablePermissions is the set callers may explicitly grant to non-owner
-// team members. The wildcard is deliberately excluded.
+// GrantablePermissions is the explicit set allowed for owners and employees.
+// The wildcard is deliberately excluded from all new grants.
 type GrantablePermissions []string
 
 func (Permissions) Schema(huma.Registry) *huma.Schema {

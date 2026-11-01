@@ -16,23 +16,43 @@ package dto
 // ============================================================================
 
 type AssignBusinessOwnerRequest struct {
-	Email       string `json:"email" minLength:"3" maxLength:"320"`
-	DisplayName string `json:"display_name" minLength:"1" maxLength:"200"`
-	Password    string `json:"password" minLength:"12" maxLength:"256"`
+	Email       string               `json:"email" minLength:"3" maxLength:"320"`
+	DisplayName string               `json:"display_name" minLength:"1" maxLength:"200"`
+	Password    string               `json:"password" minLength:"12" maxLength:"72"`
+	Permissions GrantablePermissions `json:"permissions,omitempty" minItems:"1"`
 }
 
 type AssignBusinessOwnerView struct {
-	PrincipalID    string `json:"principal_id"`
-	Email          string `json:"email"`
-	DisplayName    string `json:"display_name"`
-	Role           string `json:"role"`
-	BusinessStatus string `json:"business_status"`
+	PrincipalID    string      `json:"principal_id"`
+	Email          string      `json:"email"`
+	DisplayName    string      `json:"display_name"`
+	Role           string      `json:"role"`
+	BusinessStatus string      `json:"business_status"`
+	Permissions    Permissions `json:"permissions"`
 }
 
 type AssignBusinessOwnerInput struct {
 	PlatformBusinessPath
 	PlatformCommandHeaders
 	Body AssignBusinessOwnerRequest
+}
+
+type PlatformTeamListInput struct {
+	PlatformBusinessPath
+	Limit  int    `query:"limit" minimum:"1" maximum:"100" default:"50"`
+	Cursor string `query:"cursor"`
+}
+
+type PlatformTeamMemberPermissionsRequest struct {
+	Permissions GrantablePermissions `json:"permissions" minItems:"1"`
+	Reason      string               `json:"reason" minLength:"3" maxLength:"500"`
+}
+
+type PlatformTeamMemberPermissionsInput struct {
+	PlatformBusinessPath
+	PlatformCommandHeaders
+	PrincipalID UUID `path:"principal_id" format:"uuid"`
+	Body        PlatformTeamMemberPermissionsRequest
 }
 
 type PlatformTeamInvitationCreateInput struct {
@@ -671,12 +691,13 @@ type BusinessAIUsageView struct {
 // ----------------------------------------------------------------------------
 
 type CreateBusinessRequest struct {
-	Name            string `json:"name" minLength:"1" maxLength:"256"`
-	Slug            string `json:"slug" minLength:"1" maxLength:"128"`
-	VerticalType    string `json:"vertical_type" enum:"retail,travel,services,restaurant,clinic,hospitality,education,real_estate,other"`
-	Timezone        string `json:"timezone" default:"Asia/Aden"`
-	DefaultCurrency string `json:"default_currency" minLength:"3" maxLength:"3"`
-	Locale          string `json:"locale" minLength:"2" maxLength:"10"`
+	Owner           *AssignBusinessOwnerRequest `json:"owner,omitempty" doc:"Create a new owner with explicit permissions and activate atomically; omitted keeps pending_setup compatibility."`
+	Name            string                      `json:"name" minLength:"1" maxLength:"256"`
+	Slug            string                      `json:"slug" minLength:"1" maxLength:"128"`
+	VerticalType    string                      `json:"vertical_type" enum:"retail,travel,services,restaurant,clinic,hospitality,education,real_estate,other"`
+	Timezone        string                      `json:"timezone" default:"Asia/Aden"`
+	DefaultCurrency string                      `json:"default_currency" minLength:"3" maxLength:"3"`
+	Locale          string                      `json:"locale" minLength:"2" maxLength:"10"`
 }
 
 type CreateBusinessInput struct {

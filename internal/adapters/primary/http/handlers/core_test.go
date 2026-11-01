@@ -347,3 +347,20 @@ func TestUpdateConversationHTTPDispatchesCorrectly(t *testing.T) {
 		t.Fatalf("expected ai_mode_override disabled, got %#v", handler.command)
 	}
 }
+
+func TestRestrictedOwnerIsAuthorizedByExplicitPermissionsIncludingImagePreview(t *testing.T) {
+	actor := commands.ActorContext{PrincipalID: "owner-1", BusinessID: "business-1", Role: "owner", Permissions: []string{"conversations:read"}}
+	server := NewServer(Dependencies{Scope: fakeScope{actor: actor}})
+	for _, op := range []string{"listConversationMessages", "getCatalogMediaPreview"} {
+		ctx := context.WithValue(context.Background(), operationIDContextKey{}, op)
+		if _, err := server.requireScope(ctx, "business-1"); err != nil {
+			t.Fatalf("read permission rejected %s: %v", op, err)
+		}
+	}
+	for _, op := range []string{"createOutboundMessage", "updateTeamMemberAccess", "updateCatalogItem"} {
+		ctx := context.WithValue(context.Background(), operationIDContextKey{}, op)
+		if _, err := server.requireScope(ctx, "business-1"); err == nil {
+			t.Fatalf("owner role bypassed %s permission", op)
+		}
+	}
+}

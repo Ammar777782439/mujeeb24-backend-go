@@ -75,14 +75,9 @@ type PlatformBusinessLifecyclePort interface {
 	Archive(ctx context.Context, businessID string, now time.Time) (PlatformBusinessRecord, error)
 }
 
-// PlatformBusinessCreate is the input for creating a new business from the
-// Platform Admin. Per Contract §9: the admin creates the business + initial
-// owner invitation. The owner invitation is a SEPARATE call using the existing
-// team invitation mechanism (POST /businesses/{id}/team/invitations).
-//
-// The new business starts in status='pending_setup' — the pre-activation
-// state owned by the merchant bootstrap flow. The admin does NOT enter the
-// owner's password.
+// PlatformBusinessOwnerPort supports the initial owner activation.
+// ProvisionBusinessService composes Create + owner account + activation + audit
+// in one transaction. Owner-less legacy requests remain pending_setup.
 type PlatformBusinessOwnerPort interface {
 	GetByID(ctx context.Context, businessID string) (PlatformBusinessRecord, error)
 	ActivateFromPendingSetup(ctx context.Context, businessID string, now time.Time) (PlatformBusinessRecord, error)

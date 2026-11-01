@@ -284,9 +284,37 @@ components:
           minLength: 3
           type: string
         password:
-          maxLength: 256
+          maxLength: 72
           minLength: 12
           type: string
+        permissions:
+          items:
+            enum:
+              - audit:read
+              - automation:manage
+              - automation:read
+              - business:read
+              - business:settings
+              - catalog:read
+              - catalog:write
+              - channels:manage
+              - channels:read
+              - conversations:assign
+              - conversations:read
+              - conversations:reply
+              - customers:read
+              - customers:write
+              - dashboard:read
+              - merchant_ai:use
+              - sales:approve
+              - sales:read
+              - sales:write
+              - team:manage
+              - team:read
+            type: string
+          minItems: 1
+          nullable: true
+          type: array
       required:
         - email
         - display_name
@@ -301,6 +329,34 @@ components:
           type: string
         email:
           type: string
+        permissions:
+          items:
+            enum:
+              - "*"
+              - audit:read
+              - automation:manage
+              - automation:read
+              - business:read
+              - business:settings
+              - catalog:read
+              - catalog:write
+              - channels:manage
+              - channels:read
+              - conversations:assign
+              - conversations:read
+              - conversations:reply
+              - customers:read
+              - customers:write
+              - dashboard:read
+              - merchant_ai:use
+              - sales:approve
+              - sales:read
+              - sales:write
+              - team:manage
+              - team:read
+            type: string
+          nullable: true
+          type: array
         principal_id:
           type: string
         role:
@@ -311,6 +367,7 @@ components:
         - display_name
         - role
         - business_status
+        - permissions
       type: object
     AssignConversationRequest:
       additionalProperties: false
@@ -1521,6 +1578,9 @@ components:
           maxLength: 256
           minLength: 1
           type: string
+        owner:
+          $ref: "#/components/schemas/AssignBusinessOwnerRequest"
+          description: Create a new owner with explicit permissions and activate atomically; omitted keeps pending_setup compatibility.
         slug:
           maxLength: 128
           minLength: 1
@@ -4049,6 +4109,51 @@ components:
         - admin_state
         - health_state
         - configured
+      type: object
+    PlatformTeamMemberPermissionsRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/PlatformTeamMemberPermissionsRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        permissions:
+          items:
+            enum:
+              - audit:read
+              - automation:manage
+              - automation:read
+              - business:read
+              - business:settings
+              - catalog:read
+              - catalog:write
+              - channels:manage
+              - channels:read
+              - conversations:assign
+              - conversations:read
+              - conversations:reply
+              - customers:read
+              - customers:write
+              - dashboard:read
+              - merchant_ai:use
+              - sales:approve
+              - sales:read
+              - sales:write
+              - team:manage
+              - team:read
+            type: string
+          minItems: 1
+          nullable: true
+          type: array
+        reason:
+          maxLength: 500
+          minLength: 3
+          type: string
+      required:
+        - permissions
+        - reason
       type: object
     Principal:
       additionalProperties: false
@@ -16257,7 +16362,7 @@ paths:
           description: Internal Server Error
       security:
         - bearerAuth: []
-      summary: Create a new business (status=pending_setup). Per Contract §9, §13.
+      summary: Create a business; with owner, provision and activate atomically.
       tags:
         - Platform.Businesses
   /platform/businesses/{business_id}:
@@ -16781,6 +16886,77 @@ paths:
       tags:
         - Platform.Businesses
   /platform/businesses/{business_id}/team/invitations:
+    get:
+      operationId: platformListTeamInvitations
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            default: 50
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListTeamInvitationBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List business invitations without acceptance tokens.
+      tags:
+        - Platform.Businesses
     post:
       operationId: platformCreateTeamInvitation
       parameters:
@@ -16858,6 +17034,164 @@ paths:
       security:
         - bearerAuth: []
       summary: Create an audited employee invitation for a business.
+      tags:
+        - Platform.Businesses
+  /platform/businesses/{business_id}/team/members:
+    get:
+      operationId: platformListTeamMembers
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            default: 50
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListTeamMemberBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List business members for platform team governance only.
+      tags:
+        - Platform.Businesses
+  /platform/businesses/{business_id}/team/members/{principal_id}/permissions:
+    patch:
+      operationId: platformUpdateTeamMemberPermissions
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+        - in: path
+          name: principal_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlatformTeamMemberPermissionsRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleTeamMemberBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Change member permissions with transactional audit; preserve role and status.
       tags:
         - Platform.Businesses
   /platform/channels:

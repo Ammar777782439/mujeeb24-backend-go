@@ -413,9 +413,10 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	var assignBusinessOwner *services.AssignBusinessOwnerService
 	if authentication != nil {
 		assignBusinessOwner = &services.AssignBusinessOwnerService{
-			Transactions:       database,
-			PrincipalBootstrap: authentication.Repository,
-			Business:           postgres.NewPlatformBusinessRepository(database),
+			Transactions:  database,
+			OwnerAccounts: authentication.Repository,
+			Business:      postgres.NewPlatformBusinessRepository(database),
+			Audit:         postgres.NewPlatformAuditRepository(database),
 		}
 	}
 	dashboardServer := handlers.NewServer(dependencies)
@@ -488,6 +489,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 
 		NativeAISettings:    external.NativeAISettings,
 		AssignBusinessOwner: assignBusinessOwner,
+		ProvisionBusiness:   &services.ProvisionBusinessService{Transactions: database, Business: postgres.NewPlatformBusinessRepository(database), Owners: assignBusinessOwner, Audit: postgres.NewPlatformAuditRepository(database)},
+		TeamGovernance:      &services.PlatformTeamGovernanceService{Repository: postgres.NewTeamRepository(database), Business: postgres.NewPlatformBusinessRepository(database), Transactions: database, Audit: postgres.NewPlatformAuditRepository(database)},
 	})
 
 	var merchantCatalogErr error

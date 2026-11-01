@@ -13,15 +13,17 @@ import (
 // The store is process-local (single-instance V1). Multi-instance would
 // require a shared store (Redis/DB). Entries expire after 24 hours.
 type IdempotencyStore struct {
-	mu    sync.RWMutex
-	store map[string]idempotencyEntry
-	ttl   time.Duration
+	executionMu sync.Mutex
+	mu          sync.RWMutex
+	store       map[string]idempotencyEntry
+	ttl         time.Duration
 }
 
 type idempotencyEntry struct {
-	result   any
-	Err      error
-	cachedAt time.Time
+	fingerprint string
+	result      any
+	Err         error
+	cachedAt    time.Time
 }
 
 func NewIdempotencyStore() *IdempotencyStore {

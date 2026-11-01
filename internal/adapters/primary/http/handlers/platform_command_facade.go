@@ -43,6 +43,8 @@ type PlatformDeps struct {
 	ModelDiscovery      ports.ModelDiscoveryClient
 	NativeAISettings    *ports.NativeAIPlatformConfig
 	AssignBusinessOwner *services.AssignBusinessOwnerService
+	ProvisionBusiness   *services.ProvisionBusinessService
+	TeamGovernance      *services.PlatformTeamGovernanceService
 }
 
 // WithPlatformDeps is the explicit setter for Platform-side dependencies.
@@ -75,6 +77,9 @@ func (s *Server) dispatchPlatformCommand(ctx context.Context, operationID string
 		return mapApplicationError(appErrors.New(appErrors.CodeForbidden, "platform super admin scope required")), true
 	}
 	_ = platformAdminID
+	if result, handled := s.dispatchGovernanceIdempotency(ctx, operationID, input); handled {
+		return result, true
+	}
 
 	// Per Contract §59: enforce Idempotency-Key for the 4 operations that
 	// the contract explicitly requires: Business creation, Subscription
@@ -173,6 +178,12 @@ func (s *Server) dispatchPlatformCommandInner(ctx context.Context, operationID s
 		return s.platformAssignBusinessOwner(ctx, input.(*dto.AssignBusinessOwnerInput))
 	case "platformCreateTeamInvitation":
 		return s.platformCreateTeamInvitation(ctx, input.(*dto.PlatformTeamInvitationCreateInput))
+	case "platformListTeamMembers":
+		return s.platformListTeamMembers(ctx, input.(*dto.PlatformTeamListInput))
+	case "platformListTeamInvitations":
+		return s.platformListTeamInvitations(ctx, input.(*dto.PlatformTeamListInput))
+	case "platformUpdateTeamMemberPermissions":
+		return s.platformUpdateTeamMemberPermissions(ctx, input.(*dto.PlatformTeamMemberPermissionsInput))
 	case "platformListBusinesses":
 		return s.platformListBusinesses(ctx, input.(*dto.PlatformBusinessListInput))
 	case "platformGetBusiness":
@@ -587,19 +598,18 @@ func (s *Server) platformAssignBusinessOwner(ctx context.Context, in *dto.Assign
 		return mapApplicationError(appErrors.NotImplemented()), true
 	}
 	result, err := s.platformDeps.AssignBusinessOwner.Handle(ctx, services.AssignBusinessOwnerInput{
-		BusinessID:  string(in.BusinessID),
-		Email:       in.Body.Email,
-		DisplayName: in.Body.DisplayName,
-		Password:    in.Body.Password,
-		Now:         time.Now().UTC(),
+		Actor:         platformGovernanceActor(ctx),
+		Permissions:   in.Body.Permissions,
+		CorrelationID: in.XCorrelationID,
+		BusinessID:    string(in.BusinessID),
+		Email:         in.Body.Email,
+		DisplayName:   in.Body.DisplayName,
+		Password:      in.Body.Password,
+		Now:           time.Now().UTC(),
 	})
 	if err != nil {
 		return mapApplicationError(err), true
 	}
-	s.appendPlatformAudit(ctx, "business.owner_assigned", "business", &result.BusinessID, &result.BusinessID, "SUCCESS", "", map[string]any{
-		"principal_id": result.PrincipalID,
-		"role":         result.Role,
-	})
 	out := &contract.Single[dto.AssignBusinessOwnerView]{}
 	out.Body.Data = dto.AssignBusinessOwnerView{
 		PrincipalID:    result.PrincipalID,
@@ -607,6 +617,7 @@ func (s *Server) platformAssignBusinessOwner(ctx context.Context, in *dto.Assign
 		DisplayName:    result.DisplayName,
 		Role:           result.Role,
 		BusinessStatus: result.BusinessStatus,
+		Permissions:    result.Permissions,
 	}
 	return out, true
 }
@@ -2098,11 +2109,8 @@ func (s *Server) platformGetAIUsageByBusiness(ctx context.Context, in *dto.Platf
 // Create Business façade — Contract §9, §13
 // ----------------------------------------------------------------------------
 
-// platformCreateBusiness creates a new business with status='pending_setup'.
-// Per Contract §9: the Platform Admin creates the business; the owner
-// invitation is a SEPARATE step using the existing team invitation mechanism
-// (POST /businesses/{id}/team/invitations). The admin does NOT enter the
-// owner's password.
+// platformCreateBusiness supports atomic business and owner provisioning.
+// Owner-less requests retain the existing pending_setup flow.
 //
 // Per Contract §46: audits `business.created`.
 func (s *Server) platformCreateBusiness(ctx context.Context, in *dto.CreateBusinessInput) (any, bool) {
@@ -2124,7 +2132,7 @@ func (s *Server) platformCreateBusiness(ctx context.Context, in *dto.CreateBusin
 	if strings.TrimSpace(in.Body.Locale) == "" {
 		return mapApplicationError(appErrors.New(appErrors.CodeValidation, "locale is required")), true
 	}
-	record, err := s.platformDeps.PlatformBusiness.Create(ctx, ports.PlatformBusinessCreate{
+	create := ports.PlatformBusinessCreate{
 		ID:              uuid.NewString(),
 		Name:            in.Body.Name,
 		Slug:            in.Body.Slug,
@@ -2133,7 +2141,21 @@ func (s *Server) platformCreateBusiness(ctx context.Context, in *dto.CreateBusin
 		DefaultCurrency: strings.ToUpper(in.Body.DefaultCurrency),
 		Locale:          in.Body.Locale,
 		Now:             time.Now().UTC(),
-	})
+	}
+	if in.Body.Owner != nil {
+		if s.platformDeps.ProvisionBusiness == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		owner := in.Body.Owner
+		record, err := s.platformDeps.ProvisionBusiness.Handle(ctx, services.ProvisionBusinessInput{Actor: platformGovernanceActor(ctx), Business: create, CorrelationID: in.XCorrelationID, Owner: services.AssignBusinessOwnerInput{Email: owner.Email, DisplayName: owner.DisplayName, Password: owner.Password, Permissions: owner.Permissions}})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		out := &contract.Single[dto.PlatformBusinessView]{}
+		out.Body.Data = platformBusinessProjection(record)
+		return out, true
+	}
+	record, err := s.platformDeps.PlatformBusiness.Create(ctx, create)
 	if err != nil {
 		failureCode := classifyPlatformRepoErrorKind(err)
 		s.appendPlatformAudit(ctx, "business.created", "business", nil, nil, "FAILURE", failureCode, map[string]any{

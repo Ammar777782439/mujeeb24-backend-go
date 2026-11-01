@@ -76,8 +76,8 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
 			t.Fatalf("sales operation missing: %s", op)
 		}
 	}
-	if len(operationIDs) != 171 {
-		t.Fatalf("generated %d operations, want 171", len(operationIDs))
+	if len(operationIDs) != 174 {
+		t.Fatalf("generated %d operations, want 174", len(operationIDs))
 	}
 	for _, op := range []string{"platformCreateSubscriptionAddon", "platformListSubscriptionAddons", "platformRecordSubscriptionAddonPayment", "platformCancelSubscriptionAddon", "platformApproveChannelPassCapacity"} {
 		if !bytes.Contains(document, []byte("operationId: "+op)) {

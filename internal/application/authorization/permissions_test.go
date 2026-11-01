@@ -46,7 +46,10 @@ func TestNormalizePermissionsAndGrantBoundary(t *testing.T) {
 	if !CanGrant(actor, []string{"team:read"}) || CanGrant(actor, []string{"team:manage"}) {
 		t.Fatal("admin grant boundary did not enforce subset rule")
 	}
-	if !CanGrant(commands.ActorContext{Role: "owner"}, KnownPermissions()) {
-		t.Fatal("owner must be able to grant every registered permission")
+	if CanGrant(commands.ActorContext{Role: "owner", Permissions: []string{"catalog:read"}}, KnownPermissions()) {
+		t.Fatal("limited owner must not grant unheld permissions")
+	}
+	if !CanGrant(commands.ActorContext{Role: "owner", Permissions: []string{"*"}}, KnownPermissions()) {
+		t.Fatal("existing wildcard owners retain full access")
 	}
 }

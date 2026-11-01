@@ -57,7 +57,7 @@ func buildOperationPermissions() map[string]string {
 	register(PermissionDashboardRead, "getDashboardOverview")
 	register(PermissionTeamRead, "listTeamMembers", "listTeamInvitations")
 	register(PermissionTeamManage, "createTeamInvitation", "revokeTeamInvitation", "resendTeamInvitation", "updateTeamMemberRole", "updateTeamMemberAccess", "revokeTeamMember")
-	register(PermissionConversationsRead, "listConversations", "getConversation", "listConversationMessages", "listCustomerConversations", "markConversationRead")
+	register(PermissionConversationsRead, "getCatalogMediaPreview", "listConversations", "getConversation", "listConversationMessages", "listCustomerConversations", "markConversationRead")
 	register(PermissionConversationsReply, "createOutboundMessage", "addPrivateNote", "updateConversationLabels", "sendCannedReply", "listCannedReplies", "createCannedReply", "updateCannedReply")
 	register(PermissionConversationsAssign, "assignConversation", "updateConversation")
 	register(PermissionCustomersRead, "listCustomers", "getCustomer")
@@ -102,9 +102,6 @@ func NormalizePermissions(values []string) ([]string, bool) {
 }
 
 func Has(actor commands.ActorContext, permission string) bool {
-	if actor.Role == "owner" {
-		return true
-	}
 	for _, granted := range actor.Permissions {
 		if granted == PermissionAll || granted == permission {
 			return true
@@ -114,9 +111,6 @@ func Has(actor commands.ActorContext, permission string) bool {
 }
 
 func CanGrant(actor commands.ActorContext, requested []string) bool {
-	if actor.Role == "owner" {
-		return true
-	}
 	for _, permission := range requested {
 		if !Has(actor, permission) {
 			return false

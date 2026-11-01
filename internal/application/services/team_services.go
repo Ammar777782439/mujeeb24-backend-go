@@ -98,7 +98,7 @@ func (s InspectTeamInvitationQueryService) Handle(ctx context.Context, query que
 }
 
 func (s InviteTeamMemberCommandService) Handle(ctx context.Context, command commands.InviteTeamMemberCommand) (commands.TeamInvitationResult, error) {
-	if !canManageTeam(command.Meta.Actor.Role) {
+	if !canManageTeam(command.Meta.Actor.Role) || !authorization.Has(command.Meta.Actor, authorization.PermissionTeamManage) {
 		return commands.TeamInvitationResult{}, appErrors.New(appErrors.CodeForbidden, "only owner or admin can invite team members")
 	}
 	return s.invite(ctx, command, true)
@@ -172,7 +172,7 @@ func (s AcceptNewTeamInvitationCommandService) Handle(ctx context.Context, comma
 }
 
 func (s RevokeTeamInvitationCommandService) Handle(ctx context.Context, command commands.RevokeTeamInvitationCommand) (commands.TeamInvitationView, error) {
-	if err := s.requireTeamManager(command.Meta.Actor.Role); err != nil {
+	if err := s.requireTeamManager(command.Meta.Actor); err != nil {
 		return commands.TeamInvitationView{}, err
 	}
 	if uuid.Validate(string(command.InvitationID)) != nil {
@@ -188,7 +188,7 @@ func (s RevokeTeamInvitationCommandService) Handle(ctx context.Context, command 
 }
 
 func (s ResendTeamInvitationCommandService) Handle(ctx context.Context, command commands.ResendTeamInvitationCommand) (commands.TeamInvitationResult, error) {
-	if err := s.requireTeamManager(command.Meta.Actor.Role); err != nil {
+	if err := s.requireTeamManager(command.Meta.Actor); err != nil {
 		return commands.TeamInvitationResult{}, err
 	}
 	if uuid.Validate(string(command.InvitationID)) != nil {
@@ -215,7 +215,7 @@ func (s ResendTeamInvitationCommandService) Handle(ctx context.Context, command 
 }
 
 func (s UpdateTeamMemberRoleCommandService) Handle(ctx context.Context, command commands.UpdateTeamMemberRoleCommand) (commands.TeamMemberView, error) {
-	if err := s.requireTeamManager(command.Meta.Actor.Role); err != nil {
+	if err := s.requireTeamManager(command.Meta.Actor); err != nil {
 		return commands.TeamMemberView{}, err
 	}
 	role := normalizeTeamRole(command.Role)
@@ -232,7 +232,7 @@ func (s UpdateTeamMemberRoleCommandService) Handle(ctx context.Context, command 
 }
 
 func (s UpdateTeamMemberAccessCommandService) Handle(ctx context.Context, command commands.UpdateTeamMemberAccessCommand) (commands.TeamMemberView, error) {
-	if err := s.requireTeamManager(command.Meta.Actor.Role); err != nil {
+	if err := s.requireTeamManager(command.Meta.Actor); err != nil {
 		return commands.TeamMemberView{}, err
 	}
 	role := normalizeTeamRole(command.Role)
@@ -254,7 +254,7 @@ func (s UpdateTeamMemberAccessCommandService) Handle(ctx context.Context, comman
 }
 
 func (s RevokeTeamMemberCommandService) Handle(ctx context.Context, command commands.RevokeTeamMemberCommand) (commands.TeamMemberView, error) {
-	if err := s.requireTeamManager(command.Meta.Actor.Role); err != nil {
+	if err := s.requireTeamManager(command.Meta.Actor); err != nil {
 		return commands.TeamMemberView{}, err
 	}
 	if !validTeamPrincipalID(command.PrincipalID) || command.PrincipalID == command.Meta.Actor.PrincipalID {
@@ -269,18 +269,18 @@ func (s RevokeTeamMemberCommandService) Handle(ctx context.Context, command comm
 	return teamMemberView(record), nil
 }
 
-func (s TeamService) requireTeamManager(role string) error {
+func (s TeamService) requireTeamManager(actor commands.ActorContext) error {
 	if s.Repository == nil {
 		return appErrors.NotImplemented()
 	}
-	if !canManageTeam(role) {
+	if !canManageTeam(actor.Role) || !authorization.Has(actor, authorization.PermissionTeamManage) {
 		return appErrors.New(appErrors.CodeForbidden, "only owner or admin can manage team members")
 	}
 	return nil
 }
 
 func canReadTeam(actor commands.ActorContext) bool {
-	return canManageTeam(actor.Role) || authorization.Has(actor, authorization.PermissionTeamRead)
+	return authorization.Has(actor, authorization.PermissionTeamRead)
 }
 
 type normalizedInvitationInput struct {
