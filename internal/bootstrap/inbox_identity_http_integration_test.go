@@ -76,11 +76,15 @@ func exerciseInboxIdentityHTTP(t *testing.T, ctx context.Context, runtime *APIRu
 		governanceHTTPRequest(t, handler, http.MethodGet, path+suffix, nil, otherToken, "", http.StatusNotFound)
 	}
 	for _, item := range []struct{ Suffix, Body string }{
-		{"/notes", `{"text":"must not send"}`}, {"/read", `{}`}, {"/messages", `{"text":"must not send"}`}, {"/labels", `{"add":["private"]}`},
+		{"/notes", `{"text":"must not send"}`}, {"/read", `{}`}, {"/messages", `{"text":"must not send"}`},
 	} {
 		governanceHTTPRequest(t, handler, http.MethodPost, path+item.Suffix, []byte(item.Body), otherToken, uuid.NewString(), http.StatusNotFound)
 	}
 
+	labelDenied := callBusinessMutationWithMethod(t, handler, http.MethodPost, path+"/labels", []byte(`{"add":["private"]}`), otherToken, "2")
+	if labelDenied.Code != http.StatusNotFound {
+		t.Fatalf("labels bypassed scope: %d", labelDenied.Code)
+	}
 	forbiddenAssign := callBusinessMutationWithMethod(t, handler, http.MethodPost, path+"/assign", []byte(`{"assignee_principal_id":"`+otherID+`"}`), otherToken, "2")
 	if forbiddenAssign.Code != http.StatusNotFound {
 		t.Fatalf("assign permission bypassed another agent's scope: %d", forbiddenAssign.Code)
