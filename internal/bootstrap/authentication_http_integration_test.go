@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/authorization"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/platform/config"
@@ -113,6 +114,21 @@ func TestAuthenticationHTTPRuntimeAgainstPostgres(t *testing.T) {
 	if response := callAuthRequest(t, handler, http.MethodGet, "/api/v1/businesses/"+businessB+"/catalogs", nil, "Bearer "+accessToken, ""); response.Code != http.StatusForbidden {
 		t.Fatalf("other business status=%d body=%s", response.Code, response.Body.String())
 	}
+	// Owner role does not bypass a restricted permission set. Permissions are
+	// resolved from the current membership, not frozen in the access token.
+	if response := callAuthRequest(t, handler, http.MethodGet, "/api/v1/businesses/"+businessA+"/dashboard/overview", nil, "Bearer "+accessToken, ""); response.Code != http.StatusForbidden {
+		t.Fatalf("restricted owner dashboard status=%d", response.Code)
+	}
+	if response := callAuthRequest(t, handler, http.MethodPost, "/api/v1/businesses/"+businessA+"/channel-connections", []byte(`{"provider":"socialapi","channel":"whatsapp","display_name":"Permission Boundary"}`), "Bearer "+accessToken, ""); response.Code != http.StatusForbidden {
+		t.Fatalf("restricted owner channel management status=%d", response.Code)
+	}
+	fullPermissions, err := json.Marshal(authorization.KnownPermissions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE business_memberships SET permissions=$3::jsonb WHERE business_id=$1::uuid AND principal_id=$2::uuid`, businessA, principalID, fullPermissions); err != nil {
+		t.Fatalf("grant fixture permissions: %v", err)
+	}
 	if response := callAuthRequest(t, handler, http.MethodPost, "/api/v1/businesses/"+businessA+"/channel-connections", []byte(`{"provider":"socialapi","channel":"whatsapp","display_name":"Local Disabled Provisioning"}`), "Bearer "+accessToken, ""); response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("disabled provisioning status=%d body=%s", response.Code, response.Body.String())
 	}
@@ -157,6 +173,13 @@ func TestAuthenticationHTTPRuntimeAgainstPostgres(t *testing.T) {
 	mergeCustomer := callScopedMutation(t, handler, http.MethodPost, "/api/v1/businesses/"+businessA+"/customers/"+firstCustomerID+"/merge", []byte(`{"target_customer_id":"`+extractID(t, targetCustomer)+`","reason":"duplicate"}`), accessToken, extractResourceVersion(t, updatedCustomer))
 	if mergeCustomer.Code != http.StatusAccepted {
 		t.Fatalf("merge customer status=%d body=%s", mergeCustomer.Code, mergeCustomer.Body.String())
+	}
+	// Revoking a permission takes effect on the next request using the SAME JWT.
+	if _, err := pool.Exec(ctx, `UPDATE business_memberships SET permissions='["catalog:read"]'::jsonb WHERE business_id=$1::uuid AND principal_id=$2::uuid`, businessA, principalID); err != nil {
+		t.Fatal(err)
+	}
+	if response := callAuthRequest(t, handler, http.MethodGet, "/api/v1/businesses/"+businessA+"/dashboard/overview", nil, "Bearer "+accessToken, ""); response.Code != http.StatusForbidden {
+		t.Fatalf("revoked dashboard permission still accepted: status=%d", response.Code)
 	}
 	refresh := callAuthRequest(t, handler, http.MethodPost, "/api/v1/auth/refresh", nil, "", refreshCookie)
 	if refresh.Code != http.StatusOK {
