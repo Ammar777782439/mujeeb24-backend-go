@@ -26,10 +26,10 @@ func exerciseInboxCollaborationHTTP(t *testing.T, ctx context.Context, runtime *
 	defer func() {
 		for _, query := range []string{
 			`DELETE FROM outbox_entries WHERE business_id=$1::uuid`,
-			`DELETE FROM outbound_messages WHERE business_id=$1::uuid`,
 			`DELETE FROM conversation_read_cursors WHERE business_id=$1::uuid`,
 			`DELETE FROM conversation_state WHERE business_id=$1::uuid`,
 			`DELETE FROM communication_messages WHERE business_id=$1::uuid`,
+			`DELETE FROM outbound_messages WHERE business_id=$1::uuid`,
 			`DELETE FROM conversation_references WHERE business_id=$1::uuid`,
 			`DELETE FROM conversations WHERE business_id=$1::uuid`,
 			`DELETE FROM channel_connections WHERE business_id=$1::uuid`,
