@@ -8,7 +8,7 @@ import (
 
 const (
 	allowedCORSMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-	allowedCORSHeaders = "Accept, Content-Type, Authorization, X-Request-ID, X-Correlation-ID, Idempotency-Key, If-Match"
+	allowedCORSHeaders = "Accept, Content-Type, Authorization, X-Request-ID, X-Correlation-ID, Idempotency-Key, If-Match, Cache-Control"
 )
 
 func frontendOrigin(frontendURL string) string {

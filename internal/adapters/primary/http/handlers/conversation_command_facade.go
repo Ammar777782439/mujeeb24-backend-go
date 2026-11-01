@@ -59,9 +59,10 @@ func (s *Server) addPrivateNote(ctx context.Context, input *contract.Conversatio
 	}
 
 	result, err := s.deps.AddPrivateNote.Handle(ctx, commands.AddPrivateNoteCommand{
-		Meta:           commandMeta(ctx, actor, input.CommandHeaders),
-		ConversationID: commands.ConversationID(input.ConversationID),
-		Text:           input.Body.Text,
+		Meta:             commandMeta(ctx, actor, input.CommandHeaders),
+		ConversationID:   commands.ConversationID(input.ConversationID),
+		Text:             input.Body.Text,
+		RelatedMessageID: input.Body.RelatedMessageID,
 	})
 	if err != nil {
 		return mapApplicationError(err)

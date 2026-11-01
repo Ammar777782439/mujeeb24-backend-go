@@ -9,6 +9,7 @@ import (
 	"time"
 
 	realtimePostgres "github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/realtime/postgres"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/authorization"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 )
@@ -54,7 +55,7 @@ func (h *RealtimeSSEHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify tenant authorization using PostgresScopeProvider
-	_, err := h.Scope.Resolve(r.Context(), commands.BusinessID(businessID))
+	actor, err := h.Scope.Resolve(r.Context(), commands.BusinessID(businessID))
 	if err != nil {
 		status := http.StatusForbidden
 		code := "forbidden"
@@ -63,7 +64,11 @@ func (h *RealtimeSSEHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			status = http.StatusUnauthorized
 			code = "unauthorized"
 		}
-		writeError(w, status, code, err.Error())
+		writeError(w, status, code, "realtime access is not permitted")
+		return
+	}
+	if !authorization.Has(actor, authorization.PermissionConversationsRead) {
+		writeError(w, http.StatusForbidden, "forbidden", "conversation read permission is required")
 		return
 	}
 
@@ -90,12 +95,28 @@ func (h *RealtimeSSEHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	// Flush initial headers
-	flusher.Flush()
-
 	conn := realtimePostgres.NewClientConnection(businessID, topics, conversationID, h.BufferSize)
 	h.Hub.Register(conn)
 	defer h.Hub.Unregister(conn)
+	// Register before the browser sees an open connection. Each write gets a
+	// bounded fresh deadline instead of inheriting the server's JSON timeout.
+	controller := http.NewResponseController(w)
+	writeFrame := func(frame string) bool {
+		if deadlineErr := controller.SetWriteDeadline(time.Now().Add(10 * time.Second)); deadlineErr != nil && !errors.Is(deadlineErr, http.ErrNotSupported) {
+			return false
+		}
+		// A heartbeat may be further away than the per-write timeout (and
+		// HTTP/2 enforces stream deadlines while idle). Clear it after flush.
+		defer controller.SetWriteDeadline(time.Time{})
+		if _, writeErr := fmt.Fprint(w, frame); writeErr != nil {
+			return false
+		}
+		flusher.Flush()
+		return true
+	}
+	if !writeFrame(": connected\n\n") {
+		return
+	}
 
 	interval := h.HeartbeatInterval
 	if interval <= 0 {
@@ -103,6 +124,10 @@ func (h *RealtimeSSEHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	// Reconnect periodically through token verification as well as rechecking
+	// the current membership on every heartbeat.
+	lifetime := time.NewTimer(5 * time.Minute)
+	defer lifetime.Stop()
 
 	for {
 		select {
@@ -110,11 +135,16 @@ func (h *RealtimeSSEHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-conn.Done:
 			return
+		case <-lifetime.C:
+			return
 		case <-ticker.C:
-			if _, writeErr := fmt.Fprintf(w, ": ping\n\n"); writeErr != nil {
+			current, scopeErr := h.Scope.Resolve(r.Context(), commands.BusinessID(businessID))
+			if scopeErr != nil || !authorization.Has(current, authorization.PermissionConversationsRead) {
 				return
 			}
-			flusher.Flush()
+			if !writeFrame(": ping\n\n") {
+				return
+			}
 		case event, ok := <-conn.Events:
 			if !ok {
 				return
@@ -123,10 +153,9 @@ func (h *RealtimeSSEHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				continue
 			}
-			if _, writeErr := fmt.Fprintf(w, "id: %s\nevent: %s\ndata: %s\n\n", event.EventID, event.EventType, string(payload)); writeErr != nil {
+			if !writeFrame(fmt.Sprintf("id: %s\nevent: %s\ndata: %s\n\n", event.EventID, event.EventType, string(payload))) {
 				return
 			}
-			flusher.Flush()
 		}
 	}
 }

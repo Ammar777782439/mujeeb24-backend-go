@@ -56,9 +56,10 @@ type UpdateConversationLabelsCommand struct {
 	Remove         []string
 }
 type AddPrivateNoteCommand struct {
-	Meta           CommandMeta
-	ConversationID ConversationID
-	Text           string
+	RelatedMessageID *string
+	Meta             CommandMeta
+	ConversationID   ConversationID
+	Text             string
 }
 type CreateOutboundMessageCommand struct {
 	Meta           CommandMeta

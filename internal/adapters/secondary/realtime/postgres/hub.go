@@ -4,6 +4,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 	"github.com/google/uuid"
@@ -174,6 +175,9 @@ func (h *LocalHub) Close() {
 }
 
 func connMatches(conn *ClientConnection, domainTopic string, event ports.RealtimeEvent) bool {
+	if event.EventType == "realtime.resync_required" {
+		return true
+	}
 	// Topic filtering: if Topics map is empty, client is subscribed to all authorized topics.
 	if len(conn.Topics) > 0 {
 		if _, matches := conn.Topics[domainTopic]; !matches {
@@ -190,6 +194,20 @@ func connMatches(conn *ClientConnection, domainTopic string, event ports.Realtim
 		}
 	}
 	return true
+}
+
+// Notifications are transient. Once LISTEN is restored, every connected view
+// must refresh from HTTP to recover events missed during the database gap.
+func (h *LocalHub) ResyncAll() {
+	h.mu.RLock()
+	businesses := make([]string, 0, len(h.connections))
+	for businessID := range h.connections {
+		businesses = append(businesses, businessID)
+	}
+	h.mu.RUnlock()
+	for _, businessID := range businesses {
+		h.Broadcast(ports.RealtimeEvent{EventID: uuid.NewString(), EventType: "realtime.resync_required", BusinessID: businessID, ResourceType: "business", ResourceID: businessID, OccurredAt: time.Now().UTC()})
+	}
 }
 
 func eventDomainTopic(eventType string) string {

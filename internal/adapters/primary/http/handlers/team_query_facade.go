@@ -5,12 +5,15 @@ import (
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/contract"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/dto"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/queries"
 )
 
 func (s *Server) dispatchTeamQuery(ctx context.Context, operationID string, input any) (any, bool) {
 	switch operationID {
+	case "listConversationAssignees":
+		return s.listConversationAssignees(ctx, input.(*contract.TeamMemberListInput)), true
 	case "listTeamMembers":
 		return s.listTeamMembers(ctx, input.(*contract.TeamMemberListInput)), true
 	case "listTeamInvitations":
@@ -79,4 +82,25 @@ func (s *Server) inspectTeamInvitation(ctx context.Context, input *contract.Team
 		return mapApplicationError(err)
 	}
 	return singleTeamInvitation(result)
+}
+
+func (s *Server) listConversationAssignees(ctx context.Context, input *contract.TeamMemberListInput) any {
+	if s.deps.ListConversationAssignees == nil {
+		return mapApplicationError(appErrors.NotImplemented())
+	}
+	actor, err := s.requireScope(ctx, input.BusinessID)
+	if err != nil {
+		return mapApplicationError(err)
+	}
+	result, err := s.deps.ListConversationAssignees.Handle(ctx, queries.ListTeamMembersQuery{Meta: queryMeta(actor, "", ""), Limit: input.Limit, Cursor: input.Cursor})
+	if err != nil {
+		return mapApplicationError(err)
+	}
+	out := &contract.List[dto.ConversationAssignee]{}
+	out.Body.Data = make([]dto.ConversationAssignee, 0, len(result.Items))
+	for _, m := range result.Items {
+		out.Body.Data = append(out.Body.Data, dto.ConversationAssignee{PrincipalID: dto.UUID(m.PrincipalID), DisplayName: m.DisplayName, Role: m.Role})
+	}
+	out.Body.Pagination = contract.Page{NextCursor: optionalString(result.NextCursor), HasMore: result.HasMore}
+	return out
 }

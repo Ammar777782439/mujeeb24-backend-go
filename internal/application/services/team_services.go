@@ -423,3 +423,27 @@ var _ commands.ResendTeamInvitationHandler = ResendTeamInvitationCommandService{
 var _ commands.UpdateTeamMemberRoleHandler = UpdateTeamMemberRoleCommandService{}
 var _ commands.UpdateTeamMemberAccessHandler = UpdateTeamMemberAccessCommandService{}
 var _ commands.RevokeTeamMemberHandler = RevokeTeamMemberCommandService{}
+
+// The inbox assignment picker needs only eligible agents, not team management access.
+type ListConversationAssigneesQueryService struct{ TeamService }
+
+func (s ListConversationAssigneesQueryService) Handle(ctx context.Context, query queries.ListTeamMembersQuery) (commands.ListResult[commands.TeamMemberView], error) {
+	if s.Repository == nil {
+		return commands.ListResult[commands.TeamMemberView]{}, appErrors.NotImplemented()
+	}
+	if !canAssignConversations(query.Meta.Actor.Role) || !authorization.Has(query.Meta.Actor, authorization.PermissionConversationsAssign) {
+		return commands.ListResult[commands.TeamMemberView]{}, appErrors.New(appErrors.CodeForbidden, "conversation assignment permission is required")
+	}
+	page, err := s.Repository.ListMembers(ctx, string(query.Meta.Actor.BusinessID), query.Limit, query.Cursor)
+	if err != nil {
+		return commands.ListResult[commands.TeamMemberView]{}, mapTeamRepositoryError(err)
+	}
+	eligible := make([]ports.TeamMemberRecord, 0, len(page.Items))
+	for _, member := range page.Items {
+		if eligibleConversationAssignee(member) {
+			eligible = append(eligible, member)
+		}
+	}
+	page.Items = eligible
+	return teamMemberList(page), nil
+}

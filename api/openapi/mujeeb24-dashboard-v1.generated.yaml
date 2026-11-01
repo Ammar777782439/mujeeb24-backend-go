@@ -1442,6 +1442,20 @@ components:
         - last_activity_at
         - resource_version
       type: object
+    ConversationAssignee:
+      additionalProperties: false
+      properties:
+        display_name:
+          type: string
+        principal_id:
+          type: string
+        role:
+          type: string
+      required:
+        - principal_id
+        - display_name
+        - role
+      type: object
     ConversationRead:
       additionalProperties: false
       properties:
@@ -2768,6 +2782,29 @@ components:
         - pagination
         - request_id
       type: object
+    ListConversationAssigneeBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ListConversationAssigneeBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          items:
+            $ref: "#/components/schemas/ConversationAssignee"
+          nullable: true
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Page"
+        request_id:
+          type: string
+      required:
+        - data
+        - pagination
+        - request_id
+      type: object
     ListConversationBody:
       additionalProperties: false
       properties:
@@ -3541,6 +3578,11 @@ components:
           type: boolean
         provider_message_reference:
           type: string
+        related_message_id:
+          format: uuid
+          type: string
+        related_message_text:
+          type: string
         status:
           type: string
         text:
@@ -4176,6 +4218,9 @@ components:
           example: /api/v1/schemas/PrivateNoteRequest.json
           format: uri
           readOnly: true
+          type: string
+        related_message_id:
+          format: uuid
           type: string
         text:
           maxLength: 10000
@@ -10374,6 +10419,84 @@ paths:
       security:
         - bearerAuth: []
       summary: List merchant conversations
+      tags:
+        - Conversations
+  /businesses/{business_id}/conversations/assignees:
+    get:
+      operationId: listConversationAssignees
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            default: 25
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListConversationAssigneeBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: List eligible conversation assignees
       tags:
         - Conversations
   /businesses/{business_id}/conversations/{conversation_id}:

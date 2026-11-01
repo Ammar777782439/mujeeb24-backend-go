@@ -45,6 +45,7 @@ func TestCORSMiddlewareAllowsDashboardMutationHeaders(t *testing.T) {
 		"idempotency-key",
 		"x-request-id",
 		"x-correlation-id",
+		"cache-control",
 	} {
 		if !strings.Contains(allowedHeaders, header) {
 			t.Fatalf("allow-headers = %q, missing %q", allowedHeaders, header)

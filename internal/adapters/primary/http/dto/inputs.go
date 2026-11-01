@@ -196,7 +196,8 @@ type LabelsRequest struct {
 	Remove []string `json:"remove,omitempty" maxItems:"50"`
 }
 type PrivateNoteRequest struct {
-	Text string `json:"text" minLength:"1" maxLength:"10000"`
+	RelatedMessageID *string `json:"related_message_id,omitempty" format:"uuid"`
+	Text             string  `json:"text" minLength:"1" maxLength:"10000"`
 }
 type CreateCannedReplyRequest struct {
 	Title    string `json:"title" minLength:"1" maxLength:"200"`

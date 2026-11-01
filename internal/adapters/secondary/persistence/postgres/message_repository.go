@@ -152,3 +152,19 @@ func decodeMessageCursor(value string) (*messageCursor, error) {
 }
 
 var _ ports.MessageRepository = (*MessageRepository)(nil)
+
+func (r *MessageRepository) GetPrivateNoteTarget(ctx context.Context, businessID, conversationID, messageID string) (ports.CommunicationMessageRecord, error) {
+	if r == nil || r.adapter == nil {
+		return ports.CommunicationMessageRecord{}, ErrPoolClosed
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.CommunicationMessageRecord{}, err
+	}
+	var target ports.CommunicationMessageRecord
+	err = executor.QueryRow(ctx, `SELECT m.id::text, m.text_content FROM communication_messages m JOIN conversation_references r ON r.business_id=m.business_id AND r.id=m.conversation_reference_id WHERE m.business_id=$1::uuid AND r.conversation_id=$2::uuid AND m.id=$3::uuid AND m.direction='inbound' AND m.visibility='public'`, businessID, conversationID, messageID).Scan(&target.ID, &target.TextContent)
+	if err != nil {
+		return ports.CommunicationMessageRecord{}, classifyRepositoryGetError("message.private_note_target", err)
+	}
+	return target, nil
+}

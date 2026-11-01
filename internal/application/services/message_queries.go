@@ -43,6 +43,12 @@ func messageView(record ports.CommunicationMessageRecord) commands.MessageView {
 		ContentType: record.ContentType, ProviderMessageReference: record.ProviderMessageID,
 		OccurredAt: record.OccurredAt, CreatedAt: record.CreatedAt, Private: record.Visibility == "private",
 	}
+	if view.Private {
+		if reference, ok := decodePrivateNoteReference(record.ContentReference); ok {
+			view.RelatedMessageID = &reference.RelatedMessageID
+			view.RelatedMessageText = &reference.Quote
+		}
+	}
 	if record.Visibility == "public" && record.Direction == "outbound" && record.ContentType == "mixed" {
 		message, err := DecodeInteractiveContentReference(record.ContentReference)
 		if err == nil && message.MediaID != "" && message.MediaLinkID != "" {

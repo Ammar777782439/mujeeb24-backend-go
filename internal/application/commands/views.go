@@ -45,6 +45,7 @@ type ChannelProvisioningView struct {
 	AuthorizationURL string
 }
 type ConversationView struct {
+	AssignmentReference *string
 	ID                  ConversationID
 	BusinessID          BusinessID
 	CustomerID          CustomerID
@@ -63,6 +64,8 @@ type MessageAttachmentView struct {
 }
 
 type MessageView struct {
+	RelatedMessageID         *string
+	RelatedMessageText       *string
 	ID                       MessageID
 	ConversationID           ConversationID
 	Direction                string

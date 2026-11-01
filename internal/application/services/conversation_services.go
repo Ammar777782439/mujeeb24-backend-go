@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/authorization"
 	"strings"
 	"time"
 
@@ -20,6 +22,7 @@ type ConversationRuntimeService struct {
 	Labels       ports.ConversationLabelRepository
 	References   ports.ConversationReferenceRepository
 	Messages     ports.MessageRepository
+	NoteTargets  ports.PrivateNoteTargetReader
 	Transactions ports.TransactionManager
 	Realtime     ports.RealtimePublisher
 }
@@ -87,7 +90,7 @@ func (s UpdateConversationCommandService) Handle(ctx context.Context, command co
 	err = s.Transactions.Within(ctx, func(txCtx context.Context) error {
 		record, updateErr := s.Repository.Update(txCtx, ports.ConversationUpdate{BusinessID: string(command.Meta.Actor.BusinessID), ConversationID: string(command.ConversationID), ExpectedVersion: expected, State: command.State, Ownership: command.Ownership, AIModeOverride: command.AIModeOverride, Priority: command.Priority})
 		if updateErr != nil {
-			return updateErr
+			return mapConversationRepositoryError(updateErr)
 		}
 		view, viewErr := s.viewWithLabels(txCtx, record)
 		if viewErr != nil {
@@ -128,18 +131,19 @@ func (s AssignConversationCommandService) Handle(ctx context.Context, command co
 		return commands.ConversationResult{}, appErrors.New(appErrors.CodeValidation, "assignee_principal_id must be a UUID")
 	}
 	ownership := "human"
+	state, aiMode := "human_handling", "disabled"
 	var result commands.ConversationResult
 	err = s.Transactions.Within(ctx, func(txCtx context.Context) error {
 		assignee, assigneeErr := s.Assignees.ResolveActiveMember(txCtx, string(command.Meta.Actor.BusinessID), assignment)
 		if assigneeErr != nil {
 			return mapTeamRepositoryError(assigneeErr)
 		}
-		if !canReceiveConversationAssignment(assignee.Role) {
+		if !eligibleConversationAssignee(assignee) {
 			return appErrors.New(appErrors.CodeForbidden, "team member cannot receive conversation assignments")
 		}
-		record, updateErr := s.Repository.Update(txCtx, ports.ConversationUpdate{BusinessID: string(command.Meta.Actor.BusinessID), ConversationID: string(command.ConversationID), ExpectedVersion: expected, Ownership: &ownership, AssignmentReference: &assignment})
+		record, updateErr := s.Repository.Update(txCtx, ports.ConversationUpdate{BusinessID: string(command.Meta.Actor.BusinessID), ConversationID: string(command.ConversationID), ExpectedVersion: expected, State: &state, AIModeOverride: &aiMode, Ownership: &ownership, AssignmentReference: &assignment})
 		if updateErr != nil {
-			return updateErr
+			return mapConversationRepositoryError(updateErr)
 		}
 		view, viewErr := s.viewWithLabels(txCtx, record)
 		if viewErr != nil {
@@ -217,7 +221,25 @@ func (s AddPrivateNoteCommandService) Handle(ctx context.Context, command comman
 		}
 		now := time.Now().UTC()
 		id := uuid.NewString()
-		message, messageErr := s.Messages.Record(txCtx, ports.CommunicationMessageDraft{ID: id, BusinessID: string(command.Meta.Actor.BusinessID), ConversationReferenceID: reference.ID, Direction: "outbound", Origin: "human", Transport: "mujeeb", ContentType: "text", TextContent: &text, ContentReference: "private-note:" + id, Visibility: "private", OccurredAt: now, CreatedAt: now})
+		referenceText := "private-note:" + id
+		if command.RelatedMessageID != nil {
+			if uuid.Validate(*command.RelatedMessageID) != nil {
+				return appErrors.New(appErrors.CodeValidation, "related_message_id must be a UUID")
+			}
+			if s.NoteTargets == nil {
+				return appErrors.NotImplemented()
+			}
+			target, targetErr := s.NoteTargets.GetPrivateNoteTarget(txCtx, string(command.Meta.Actor.BusinessID), string(command.ConversationID), *command.RelatedMessageID)
+			if targetErr != nil {
+				return mapConversationRepositoryError(targetErr)
+			}
+			quote := ""
+			if target.TextContent != nil {
+				quote = *target.TextContent
+			}
+			referenceText = encodePrivateNoteReference(id, target.ID, quote)
+		}
+		message, messageErr := s.Messages.Record(txCtx, ports.CommunicationMessageDraft{ID: id, BusinessID: string(command.Meta.Actor.BusinessID), ConversationReferenceID: reference.ID, Direction: "outbound", Origin: "human", Transport: "mujeeb", ContentType: "text", TextContent: &text, ContentReference: referenceText, Visibility: "private", OccurredAt: now, CreatedAt: now})
 		if messageErr != nil {
 			return messageErr
 		}
@@ -236,7 +258,7 @@ func (s AddPrivateNoteCommandService) Handle(ctx context.Context, command comman
 			Data:         data,
 		})
 	}
-	return result, err
+	return result, mapConversationRepositoryError(err)
 }
 
 func (s ConversationRuntimeService) viewWithLabels(ctx context.Context, record ports.ConversationRecord) (commands.ConversationView, error) {
@@ -258,3 +280,28 @@ var _ commands.UpdateConversationHandler = UpdateConversationCommandService{}
 var _ commands.AssignConversationHandler = AssignConversationCommandService{}
 var _ commands.UpdateConversationLabelsHandler = UpdateConversationLabelsCommandService{}
 var _ commands.AddPrivateNoteHandler = AddPrivateNoteCommandService{}
+
+func eligibleConversationAssignee(member ports.TeamMemberRecord) bool {
+	actor := commands.ActorContext{Permissions: member.Permissions}
+	return member.Status == "active" && canReceiveConversationAssignment(member.Role) && authorization.Has(actor, authorization.PermissionConversationsRead) && authorization.Has(actor, authorization.PermissionConversationsReply)
+}
+
+func mapConversationRepositoryError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var kinded interface{ ErrorKind() string }
+	if !errors.As(err, &kinded) {
+		return err
+	}
+	switch kinded.ErrorKind() {
+	case "not_found":
+		return appErrors.New(appErrors.CodeNotFound, "المحادثة أو الرسالة غير موجودة في هذه المنشأة.")
+	case "stale":
+		return appErrors.New(appErrors.CodeStaleResource, "تغيرت المحادثة. حدّثها ثم أعد المحاولة.")
+	case "conflict":
+		return appErrors.New(appErrors.CodeConflict, "تعذّر تعديل المحادثة بحالتها الحالية.")
+	default:
+		return err
+	}
+}

@@ -44,7 +44,7 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 	messageRepository := postgres.NewMessageRepository(adapter)
 	readCursorRepository := postgres.NewConversationReadCursorRepository(adapter)
 	cannedReplyRepository := postgres.NewCannedReplyRepository(adapter)
-	conversationRuntime := services.ConversationRuntimeService{Repository: conversationRepository, Reader: conversationRepository, Assignees: teamRepository, Labels: conversationLabelRepository, References: conversationReferenceRepository, Messages: messageRepository, Transactions: adapter, Realtime: realtime}
+	conversationRuntime := services.ConversationRuntimeService{Repository: conversationRepository, Reader: conversationRepository, Assignees: teamRepository, Labels: conversationLabelRepository, References: conversationReferenceRepository, Messages: messageRepository, NoteTargets: messageRepository, Transactions: adapter, Realtime: realtime}
 	manualOutbound := services.ManualOutboundMessageService{References: conversationReferenceRepository, Connections: postgres.NewChannelConnectionRepository(adapter), Outbound: postgres.NewOutboundMessageRepository(adapter), Outbox: postgres.NewPostgresOutboxStore(adapter), Messages: messageRepository, Conversations: conversationRepository, Transactions: adapter, Realtime: realtime}
 	cannedReplies := services.CannedReplyService{Repository: cannedReplyRepository, Transactions: adapter}
 	automationRules := services.AutomationRuleService{Repository: postgres.NewAutomationRuleRepository(adapter), Transactions: adapter}
@@ -90,13 +90,14 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 		RevokeTeamMember:          services.RevokeTeamMemberCommandService{TeamService: teamService},
 		GetConversation:           services.GetConversationQueryService{Repository: conversationRepository, Labels: conversationLabelRepository},
 
-		ListConversationMessages: services.MessageQueryService{Repository: messageRepository},
-		ListCannedReplies:        services.ListCannedRepliesQueryService{CannedReplyService: cannedReplies},
-		ListAutomationRules:      services.ListAutomationRulesQueryService{AutomationRuleService: automationRules},
-		ListTeamMembers:          services.ListTeamMembersQueryService{TeamService: teamService},
-		ListTeamInvitations:      services.ListTeamInvitationsQueryService{TeamService: teamService},
-		InspectTeamInvitation:    services.InspectTeamInvitationQueryService{TeamService: teamService},
-		CreateOutboundMessage:    manualOutbound,
+		ListConversationMessages:  services.MessageQueryService{Repository: messageRepository},
+		ListCannedReplies:         services.ListCannedRepliesQueryService{CannedReplyService: cannedReplies},
+		ListAutomationRules:       services.ListAutomationRulesQueryService{AutomationRuleService: automationRules},
+		ListConversationAssignees: services.ListConversationAssigneesQueryService{TeamService: teamService},
+		ListTeamMembers:           services.ListTeamMembersQueryService{TeamService: teamService},
+		ListTeamInvitations:       services.ListTeamInvitationsQueryService{TeamService: teamService},
+		InspectTeamInvitation:     services.InspectTeamInvitationQueryService{TeamService: teamService},
+		CreateOutboundMessage:     manualOutbound,
 		GetConnectionCapabilities: services.ConnectionCapabilitiesQueryService{
 			Repository: channelCapabilityRepository,
 		},

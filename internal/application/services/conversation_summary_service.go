@@ -296,6 +296,7 @@ func listConversationHistory(ctx context.Context, repo ports.MessageRepository, 
 	const maxMessages = 10000
 	var history []ports.CommunicationMessageRecord
 	cursor := ""
+	scanned := 0
 	for {
 		page, err := repo.ListByConversation(ctx, businessID, conversationID, pageSize, cursor)
 		if err != nil {
@@ -304,7 +305,15 @@ func listConversationHistory(ctx context.Context, repo ports.MessageRepository, 
 		if len(page.Items) == 0 && page.HasMore {
 			return nil, errors.New("empty conversation page with continuation")
 		}
-		history = append(history, page.Items...)
+		scanned += len(page.Items)
+		if scanned > maxMessages {
+			return nil, errors.New("conversation exceeds safe summary history bound")
+		}
+		for _, message := range page.Items {
+			if message.Visibility != "private" {
+				history = append(history, message)
+			}
+		}
 		if len(history) > maxMessages {
 			return nil, errors.New("conversation exceeds safe summary history bound")
 		}
@@ -329,6 +338,9 @@ func transcriptChunks(records []ports.CommunicationMessageRecord, maxBytes, maxC
 	var chunks []string
 	var current strings.Builder
 	for _, r := range records {
+		if r.Visibility == "private" {
+			continue
+		}
 		text := ""
 		if r.TextContent != nil {
 			text = strings.TrimSpace(*r.TextContent)
@@ -528,6 +540,9 @@ func summaryStrPtr(s string) *string { return &s }
 func buildTranscript(records []ports.CommunicationMessageRecord) string {
 	var b strings.Builder
 	for _, r := range records {
+		if r.Visibility == "private" {
+			continue
+		}
 		text := ""
 		if r.TextContent != nil {
 			text = strings.TrimSpace(*r.TextContent)

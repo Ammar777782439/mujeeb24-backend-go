@@ -222,6 +222,9 @@ func TestPlatformTeamGovernanceHTTPAgainstPostgres(t *testing.T) {
 	if stalePolicy.Code != http.StatusConflict {
 		t.Fatalf("stale policy overwrite must be rejected: status=%d", stalePolicy.Code)
 	}
+	governanceHTTPRequest(t, handler, http.MethodPatch, ownerPermissionPath, []byte(`{"permissions":["conversations:read","conversations:reply","conversations:assign"],"reason":"Inbox collaboration test"}`), adminToken, "", http.StatusOK)
+	governanceHTTPRequest(t, handler, http.MethodPatch, permissionPath, []byte(`{"permissions":["conversations:read","conversations:reply"],"reason":"Inbox employee test"}`), adminToken, "", http.StatusOK)
+	exerciseInboxCollaborationHTTP(t, ctx, runtime, businessID, string(staff.ID), ownerToken, staffToken)
 	governanceHTTPRequest(t, handler, http.MethodPatch, ownerPermissionPath, []byte(`{"permissions":["catalog:read"],"reason":"Owner scope review"}`), adminToken, "", http.StatusOK)
 	var ownerRole, ownerStatus string
 	if err := pool.QueryRow(ctx, `SELECT role,status FROM business_memberships WHERE business_id=$1::uuid AND principal_id=$2::uuid`, businessID, ownerID).Scan(&ownerRole, &ownerStatus); err != nil || ownerRole != "owner" || ownerStatus != "active" {

@@ -106,6 +106,7 @@ type Dependencies struct {
 	GetConnectionCapabilities queries.GetConnectionCapabilitiesHandler
 	ListCannedReplies         queries.ListCannedRepliesHandler
 	ListAutomationRules       queries.ListAutomationRulesHandler
+	ListConversationAssignees queries.ListTeamMembersHandler
 	ListTeamMembers           queries.ListTeamMembersHandler
 	ListTeamInvitations       queries.ListTeamInvitationsHandler
 	InspectTeamInvitation     queries.InspectTeamInvitationHandler
@@ -332,6 +333,10 @@ func optionalCustomerID(v contract.UUID) *commands.CustomerID {
 	return &id
 }
 func conversationProjection(v commands.ConversationView) contract.Conversation {
+	var assignment map[string]string
+	if v.AssignmentReference != nil && *v.AssignmentReference != "" {
+		assignment = map[string]string{"principal_id": *v.AssignmentReference}
+	}
 	return contract.Conversation{
 		ID:              contract.UUID(v.ID),
 		BusinessID:      contract.UUID(v.BusinessID),
@@ -340,6 +345,7 @@ func conversationProjection(v commands.ConversationView) contract.Conversation {
 		Ownership:       v.Ownership,
 		AIMode:          v.AIMode,
 		Priority:        v.Priority,
+		Assignment:      assignment,
 		Labels:          v.Labels,
 		LastActivityAt:  v.LastActivityAt,
 		ResourceVersion: string(v.ResourceVersion),
@@ -355,7 +361,7 @@ func singleConversation(v commands.ConversationView) *contract.Single[contract.C
 }
 func singleMessage(v commands.MessageView) *contract.Single[contract.Message] {
 	out := &contract.Single[contract.Message]{}
-	out.Body.Data = contract.Message{ID: contract.UUID(v.ID), ConversationID: contract.UUID(v.ConversationID), Direction: v.Direction, Origin: v.Origin, Status: v.Status, Text: v.Text, CreatedAt: v.CreatedAt, Private: v.Private}
+	out.Body.Data = contract.Message{ID: contract.UUID(v.ID), ConversationID: contract.UUID(v.ConversationID), Direction: v.Direction, Origin: v.Origin, Status: v.Status, Text: v.Text, CreatedAt: v.CreatedAt, OccurredAt: v.OccurredAt, Private: v.Private, ContentType: v.ContentType, RelatedMessageID: v.RelatedMessageID, RelatedMessageText: v.RelatedMessageText}
 	return out
 }
 

@@ -284,6 +284,9 @@ func listMessagesAfterCheckpoint(ctx context.Context, repo ports.MessageReposito
 func buildRecentMessageEvidence(records []ports.CommunicationMessageRecord, sourceReference string, now time.Time) []ports.CustomerSalesRecentMessageEvidence {
 	items := make([]ports.CustomerSalesRecentMessageEvidence, 0, len(records))
 	for _, record := range records {
+		if record.Visibility == "private" {
+			continue
+		}
 		if record.ProviderMessageID != nil && strings.TrimSpace(*record.ProviderMessageID) == strings.TrimSpace(sourceReference) {
 			continue
 		}

@@ -49,6 +49,11 @@ type MessagePage struct {
 	HasMore    bool
 }
 
+// PrivateNoteTargetReader only resolves public inbound messages in the requested tenant and conversation.
+type PrivateNoteTargetReader interface {
+	GetPrivateNoteTarget(ctx context.Context, businessID, conversationID, messageID string) (CommunicationMessageRecord, error)
+}
+
 type MessageRepository interface {
 	Record(ctx context.Context, draft CommunicationMessageDraft) (CommunicationMessageRecord, error)
 	ListByConversation(ctx context.Context, businessID, conversationID string, limit int, cursor string) (MessagePage, error)

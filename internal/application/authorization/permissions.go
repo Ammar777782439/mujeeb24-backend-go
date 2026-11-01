@@ -59,7 +59,7 @@ func buildOperationPermissions() map[string]string {
 	register(PermissionTeamManage, "createTeamInvitation", "revokeTeamInvitation", "resendTeamInvitation", "updateTeamMemberRole", "updateTeamMemberAccess", "revokeTeamMember")
 	register(PermissionConversationsRead, "getCatalogMediaPreview", "listConversations", "getConversation", "listConversationMessages", "listCustomerConversations", "markConversationRead")
 	register(PermissionConversationsReply, "createOutboundMessage", "addPrivateNote", "updateConversationLabels", "sendCannedReply", "listCannedReplies", "createCannedReply", "updateCannedReply")
-	register(PermissionConversationsAssign, "assignConversation", "updateConversation")
+	register(PermissionConversationsAssign, "assignConversation", "updateConversation", "listConversationAssignees")
 	register(PermissionCustomersRead, "listCustomers", "getCustomer")
 	register(PermissionCustomersWrite, "createCustomer", "updateCustomer", "mergeCustomer")
 	register(PermissionCatalogRead, "getCatalogMediaReadURL", "listCatalogMedia", "listCatalogs", "getCatalog", "getCatalogEntityContract", "listCatalogItems", "getCatalogItem", "listOffers", "listVariants", "listAttributeSchemas", "getAttributeSchema")

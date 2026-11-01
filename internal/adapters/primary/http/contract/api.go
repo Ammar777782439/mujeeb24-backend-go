@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/dto"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -216,6 +217,7 @@ func registerRemainingDashboardOperations(api huma.API, dispatcher DashboardOper
 	register(api, dispatcher, huma.Operation{OperationID: "removeChannel", Method: http.MethodPost, Path: "/businesses/{business_id}/channel-connections/{connection_id}/remove", Tags: []string{"Connections"}, Summary: "Permanently remove channel connection, revoke provider account, and purge local history", Security: dashboardSecurity, DefaultStatus: http.StatusOK}, RemoveChannelInput{}, Single[ChannelConnection]{})
 	register(api, dispatcher, huma.Operation{OperationID: "assignConversation", Method: http.MethodPost, Path: "/businesses/{business_id}/conversations/{conversation_id}/assign", Tags: []string{"Conversations"}, Summary: "Assign conversation", Security: dashboardSecurity}, ConversationAssignInput{}, Single[Conversation]{})
 	register(api, dispatcher, huma.Operation{OperationID: "updateConversationLabels", Method: http.MethodPost, Path: "/businesses/{business_id}/conversations/{conversation_id}/labels", Tags: []string{"Conversations"}, Summary: "Update conversation labels", Security: dashboardSecurity}, ConversationLabelsInput{}, Single[Conversation]{})
+	register(api, dispatcher, huma.Operation{OperationID: "listConversationAssignees", Method: http.MethodGet, Path: "/businesses/{business_id}/conversations/assignees", Tags: []string{"Conversations"}, Summary: "List eligible conversation assignees", Security: dashboardSecurity}, TeamMemberListInput{}, List[dto.ConversationAssignee]{})
 	register(api, dispatcher, huma.Operation{OperationID: "addPrivateNote", Method: http.MethodPost, Path: "/businesses/{business_id}/conversations/{conversation_id}/notes", Tags: []string{"Conversations"}, Summary: "Add private note", Security: dashboardSecurity, DefaultStatus: http.StatusAccepted}, ConversationNoteInput{}, Single[Message]{})
 	register(api, dispatcher, huma.Operation{OperationID: "markConversationRead", Method: http.MethodPost, Path: "/businesses/{business_id}/conversations/{conversation_id}/read", Tags: []string{"Conversations"}, Summary: "Mark conversation read for current principal", Security: dashboardSecurity}, ConversationReadInput{}, Single[ConversationRead]{})
 	register(api, dispatcher, huma.Operation{OperationID: "listCannedReplies", Method: http.MethodGet, Path: "/businesses/{business_id}/canned-replies", Tags: []string{"Inbox"}, Summary: "List reusable merchant replies", Security: dashboardSecurity}, CannedReplyListInput{}, List[CannedReply]{})

@@ -348,7 +348,15 @@ type MessageAttachment struct {
 	MediaID     UUID   `json:"media_id"`
 	PreviewPath string `json:"preview_path"`
 }
+type ConversationAssignee struct {
+	PrincipalID UUID   `json:"principal_id"`
+	DisplayName string `json:"display_name"`
+	Role        string `json:"role"`
+}
+
 type Message struct {
+	RelatedMessageID         *string             `json:"related_message_id,omitempty" format:"uuid"`
+	RelatedMessageText       *string             `json:"related_message_text,omitempty"`
 	ID                       UUID                `json:"id"`
 	ConversationID           UUID                `json:"conversation_id"`
 	Direction                string              `json:"direction"`

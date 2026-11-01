@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,13 +21,87 @@ type mockScopeProvider struct {
 	resolveFn func(ctx context.Context, businessID commands.BusinessID) (commands.ActorContext, error)
 }
 
+func TestRealtimeRequiresConversationPermissionAndRechecksRevocation(t *testing.T) {
+	hub := realtimePostgres.NewLocalHub()
+	defer hub.Close()
+	var allowed atomic.Bool
+	scope := mockScopeProvider{resolveFn: func(_ context.Context, business commands.BusinessID) (commands.ActorContext, error) {
+		actor := commands.ActorContext{BusinessID: business, Role: "owner"}
+		if allowed.Load() {
+			actor.Permissions = []string{"conversations:read"}
+		}
+		return actor, nil
+	}}
+	handler := NewRealtimeSSEHandler(hub, scope)
+	handler.HeartbeatInterval = 10 * time.Millisecond
+	denied := httptest.NewRecorder()
+	handler.ServeHTTP(denied, httptest.NewRequest(http.MethodGet, "/api/v1/businesses/tenant/realtime/events", nil))
+	if denied.Code != http.StatusForbidden {
+		t.Fatalf("restricted owner SSE status=%d", denied.Code)
+	}
+	allowed.Store(true)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	request, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/api/v1/businesses/tenant/realtime/events", nil)
+	response, err := server.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	reader := bufio.NewScanner(response.Body)
+	if !reader.Scan() || reader.Text() != ": connected" || hub.ActiveConnectionCount("tenant") != 1 {
+		t.Fatal("SSE opened before its subscription was ready")
+	}
+	allowed.Store(false)
+	for reader.Scan() {
+	}
+	if ctx.Err() != nil || hub.ActiveConnectionCount("tenant") != 0 {
+		t.Fatal("revoked SSE remained open")
+	}
+}
+
+func TestRealtimeStreamSurvivesOrdinaryHTTPWriteDeadline(t *testing.T) {
+	hub := realtimePostgres.NewLocalHub()
+	defer hub.Close()
+	handler := NewRealtimeSSEHandler(hub, mockScopeProvider{})
+	handler.HeartbeatInterval = 15 * time.Millisecond
+	server := httptest.NewUnstartedServer(handler)
+	server.Config.WriteTimeout = 30 * time.Millisecond
+	server.Start()
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	request, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/api/v1/businesses/tenant/realtime/events", nil)
+	response, err := server.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	reader := bufio.NewScanner(response.Body)
+	heartbeats := 0
+	for reader.Scan() {
+		if reader.Text() == ": ping" {
+			heartbeats++
+			if heartbeats == 6 {
+				break
+			}
+		}
+	}
+	if heartbeats != 6 {
+		t.Fatalf("write deadline stopped a healthy stream after %d heartbeats", heartbeats)
+	}
+}
+
 func (m mockScopeProvider) Resolve(ctx context.Context, businessID commands.BusinessID) (commands.ActorContext, error) {
 	if m.resolveFn != nil {
 		return m.resolveFn(ctx, businessID)
 	}
 	return commands.ActorContext{
-		BusinessID: businessID,
-		Role:       "owner",
+		BusinessID:  businessID,
+		Role:        "owner",
+		Permissions: []string{"conversations:read"},
 	}, nil
 }
 

@@ -70,6 +70,7 @@ func conversationView(record ports.ConversationRecord) commands.ConversationView
 		Ownership:           record.Ownership,
 		AIMode:              aiMode,
 		Priority:            record.Priority,
+		AssignmentReference: record.AssignmentReference,
 		LastActivityAt:      record.LastActivityAt,
 		ResourceVersion:     commands.ResourceVersion(strconv.FormatInt(record.ResourceVersion, 10)),
 	}

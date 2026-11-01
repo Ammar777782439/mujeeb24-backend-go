@@ -26,6 +26,8 @@ type Broker struct {
 	startOnce  sync.Once
 	closeOnce  sync.Once
 	LogWarning func(format string, args ...any)
+	ready      chan struct{}
+	readyOnce  sync.Once
 }
 
 func NewBroker(pool *pgxpool.Pool, hub *LocalHub) *Broker {
@@ -33,8 +35,9 @@ func NewBroker(pool *pgxpool.Pool, hub *LocalHub) *Broker {
 		hub = NewLocalHub()
 	}
 	return &Broker{
-		pool: pool,
-		Hub:  hub,
+		pool:  pool,
+		Hub:   hub,
+		ready: make(chan struct{}),
 		LogWarning: func(format string, args ...any) {
 			log.Printf("[RealtimeBroker] "+format, args...)
 		},
@@ -50,6 +53,10 @@ func (b *Broker) Publish(ctx context.Context, event ports.RealtimeEvent) error {
 	if event.OccurredAt.IsZero() {
 		event.OccurredAt = time.Now().UTC()
 	}
+	// This stream invalidates HTTP views; it does not transport message bodies.
+	// Keep private text out of notifications and stay below PostgreSQL NOTIFY's
+	// payload limit even when the original message is long.
+	event.Data = nil
 	encoded, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("marshal realtime event: %w", err)
@@ -82,6 +89,7 @@ func (b *Broker) Publish(ctx context.Context, event ports.RealtimeEvent) error {
 func (b *Broker) StartListener(ctx context.Context) {
 	b.startOnce.Do(func() {
 		if b.pool == nil {
+			b.readyOnce.Do(func() { close(b.ready) })
 			return
 		}
 		listenerCtx, cancel := context.WithCancel(ctx)
@@ -152,6 +160,10 @@ func (b *Broker) runListener(ctx context.Context) {
 			}
 		}
 
+		if b.Hub != nil {
+			b.Hub.ResyncAll()
+		}
+		b.readyOnce.Do(func() { close(b.ready) })
 		// Inner notification loop
 		for {
 			if ctx.Err() != nil {
@@ -184,6 +196,17 @@ func (b *Broker) runListener(ctx context.Context) {
 				}
 			}
 		}
+	}
+}
+
+// WaitReady is useful for startup probes and deterministic cross-instance tests.
+// It never reports readiness until PostgreSQL has acknowledged LISTEN.
+func (b *Broker) WaitReady(ctx context.Context) error {
+	select {
+	case <-b.ready:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
