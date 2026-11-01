@@ -122,3 +122,18 @@ func TestLimitedOwnerCannotBypassTeamManagementOrGrantBoundary(t *testing.T) {
 		t.Fatal("forbidden invitation reached persistence")
 	}
 }
+
+type governancePersistenceError string
+
+func (e governancePersistenceError) Error() string     { return "internal persistence detail" }
+func (e governancePersistenceError) ErrorKind() string { return string(e) }
+
+func TestGovernanceKnownPersistenceOutcomesAreMapped(t *testing.T) {
+	if err := mapGovernanceRepositoryError(governancePersistenceError("not_found"), "Conflict"); !hasApplicationCode(err, appErrors.CodeNotFound) {
+		t.Fatalf("missing resource is not a 404 application error: %v", err)
+	}
+	failure := errors.New("unexpected database failure")
+	if mapGovernanceRepositoryError(failure, "Conflict") != failure {
+		t.Fatal("unexpected failures must remain internal")
+	}
+}

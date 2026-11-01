@@ -40,7 +40,7 @@ func (s PlatformTeamGovernanceService) validate(ctx context.Context, actor comma
 		return appErrors.NotImplemented()
 	}
 	_, err := s.Business.GetByID(ctx, businessID)
-	return err
+	return mapGovernanceRepositoryError(err, "تعذّر إتمام العملية بحالة المنشأة الحالية.")
 }
 
 func (s PlatformTeamGovernanceService) ListMembers(ctx context.Context, actor commands.ActorContext, businessID string, limit int, cursor string) (commands.ListResult[commands.TeamMemberView], error) {

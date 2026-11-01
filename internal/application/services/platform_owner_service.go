@@ -110,7 +110,7 @@ func (s AssignBusinessOwnerService) assignInTransaction(ctx context.Context, pre
 	in := prepared.input
 	current, err := s.Business.GetByID(ctx, in.BusinessID)
 	if err != nil {
-		return AssignBusinessOwnerResult{}, err
+		return AssignBusinessOwnerResult{}, mapGovernanceRepositoryError(err, "المنشأة لديها مالك أو مفعلة بالفعل.")
 	}
 	if current.PlatformStatus != "pending_setup" || (current.OwnerIdentitySummary != nil && strings.TrimSpace(*current.OwnerIdentitySummary) != "") {
 		return AssignBusinessOwnerResult{}, appErrors.New(appErrors.CodeConflict, "business already has an owner or is not pending_setup")
@@ -118,11 +118,11 @@ func (s AssignBusinessOwnerService) assignInTransaction(ctx context.Context, pre
 	// Claim the pending business before creating the principal. Concurrent
 	// assignments cannot commit two owners; every later failure rolls this back.
 	if _, err = s.Business.ActivateFromPendingSetup(ctx, in.BusinessID, in.Now); err != nil {
-		return AssignBusinessOwnerResult{}, err
+		return AssignBusinessOwnerResult{}, mapGovernanceRepositoryError(err, "المنشأة لديها مالك أو مفعلة بالفعل.")
 	}
 	principal, err := s.OwnerAccounts.CreateOwnerPrincipalAndMembership(ctx, prepared.principal, commands.BusinessID(in.BusinessID), in.Permissions, in.Now)
 	if err != nil {
-		return AssignBusinessOwnerResult{}, err
+		return AssignBusinessOwnerResult{}, mapGovernanceRepositoryError(err, "البريد الإلكتروني للمالك مستخدم مسبقًا.")
 	}
 	result := AssignBusinessOwnerResult{BusinessID: in.BusinessID, PrincipalID: string(principal.ID), Email: principal.Email, DisplayName: principal.DisplayName, Role: TeamRoleOwner, Permissions: in.Permissions, BusinessStatus: "ACTIVE"}
 	err = appendGovernanceAudit(ctx, s.Audit, in.Actor, "business.owner_assigned", "business", in.BusinessID, in.BusinessID, in.CorrelationID, in.Now, map[string]any{"principal_id": result.PrincipalID, "role": result.Role, "permissions": result.Permissions})

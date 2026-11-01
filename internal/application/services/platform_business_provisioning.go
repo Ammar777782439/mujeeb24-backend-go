@@ -33,7 +33,7 @@ func (s ProvisionBusinessService) Handle(ctx context.Context, in ProvisionBusine
 	var result ports.PlatformBusinessRecord
 	err = s.Transactions.Within(ctx, func(txCtx context.Context) error {
 		if _, err := s.Business.Create(txCtx, in.Business); err != nil {
-			return err
+			return mapGovernanceRepositoryError(err, "معرّف المنشأة مستخدم مسبقًا.")
 		}
 		if _, err := s.Owners.assignInTransaction(txCtx, prepared); err != nil {
 			return err

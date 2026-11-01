@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,11 +20,15 @@ func (ownerTxStub) Within(ctx context.Context, fn func(context.Context) error) e
 type ownerPrincipalStub struct {
 	called      bool
 	permissions []string
+	err         error
 }
 
 func (s *ownerPrincipalStub) CreateOwnerPrincipalAndMembership(_ context.Context, principal ports.PrincipalRecord, _ commands.BusinessID, permissions []string, _ time.Time) (ports.PrincipalRecord, error) {
 	s.called = true
 	s.permissions = permissions
+	if s.err != nil {
+		return ports.PrincipalRecord{}, s.err
+	}
 	principal.Status = "active"
 	return principal, nil
 }
@@ -87,5 +93,17 @@ func TestAssignBusinessOwnerServiceRejectsActiveBusiness(t *testing.T) {
 		Password:    "a-strong-owner-password",
 	}); err == nil {
 		t.Fatal("expected active business to reject owner assignment")
+	}
+}
+
+func TestAssignOwnerReturnsConflictWithoutLeakingPersistenceDetails(t *testing.T) {
+	principalRepo := &ownerPrincipalStub{err: governancePersistenceError("conflict")}
+	service := AssignBusinessOwnerService{Transactions: ownerTxStub{}, OwnerAccounts: principalRepo, Business: &ownerBusinessStub{statusBefore: "pending_setup"}, Audit: &governanceAuditStub{}}
+	_, err := service.Handle(context.Background(), AssignBusinessOwnerInput{Actor: governanceActor(), BusinessID: "00000000-0000-0000-0000-000000000701", Email: "new@example.test", DisplayName: "Owner", Password: "isolated-test-password", Permissions: []string{"catalog:read"}})
+	if !hasApplicationCode(err, appErrors.CodeConflict) {
+		t.Fatalf("duplicate identity must be a conflict: %v", err)
+	}
+	if strings.Contains(err.Error(), "internal persistence detail") {
+		t.Fatal("persistence details leaked")
 	}
 }
