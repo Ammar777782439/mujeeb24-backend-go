@@ -236,7 +236,7 @@ func exerciseInboxCollaborationHTTP(t *testing.T, ctx context.Context, runtime *
 	if err := pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM outbound_messages WHERE business_id=$1::uuid),(SELECT count(*) FROM outbox_entries WHERE business_id=$1::uuid)`, businessID).Scan(&outbound, &outbox); err != nil || outbound != 0 || outbox != 0 {
 		t.Fatal("private note enqueued a customer delivery")
 	}
-	exerciseInboxIdentityHTTP(t, ctx, runtime, businessID, staffID, ownerToken, staffToken, customerID, connectionID, conversationID, referenceID, inboundID, func(id string) { extraPrincipals = append(extraPrincipals, id) })
+	exerciseInboxIdentityHTTP(t, ctx, runtime, businessID, staffID, ownerToken, staffToken, customerID, connectionID, conversationID, referenceID, inboundID, func(id string) { extraPrincipals = append(extraPrincipals, id) }, events)
 }
 
 func callBusinessMutationWithMethod(t *testing.T, handler http.Handler, method, path string, body []byte, token, version string) *httptest.ResponseRecorder {

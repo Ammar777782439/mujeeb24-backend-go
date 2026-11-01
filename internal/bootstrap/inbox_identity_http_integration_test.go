@@ -20,7 +20,7 @@ import (
 )
 
 // Uses real authenticated sessions and PostgreSQL row locks. No provider sends.
-func exerciseInboxIdentityHTTP(t *testing.T, ctx context.Context, runtime *APIRuntime, businessID, staffID, ownerToken, staffToken, customerID, connectionID, conversationID, referenceID, inboundID string, registerPrincipal func(string)) {
+func exerciseInboxIdentityHTTP(t *testing.T, ctx context.Context, runtime *APIRuntime, businessID, staffID, ownerToken, staffToken, customerID, connectionID, conversationID, referenceID, inboundID string, registerPrincipal func(string), events <-chan ports.RealtimeEvent) {
 	t.Helper()
 	pool := runtime.Database.Pool()
 	handler := runtime.HTTP.Handler
@@ -75,10 +75,12 @@ func exerciseInboxIdentityHTTP(t *testing.T, ctx context.Context, runtime *APIRu
 	for _, suffix := range []string{"", "/messages", "/summary"} {
 		governanceHTTPRequest(t, handler, http.MethodGet, path+suffix, nil, otherToken, "", http.StatusNotFound)
 	}
-	for _, suffix := range []string{"/notes", "/read", "/messages", "/labels"} {
-		body := []byte(`{"text":"must not send","add":["private"]}`)
-		governanceHTTPRequest(t, handler, http.MethodPost, path+suffix, body, otherToken, uuid.NewString(), http.StatusNotFound)
+	for _, item := range []struct{ Suffix, Body string }{
+		{"/notes", `{"text":"must not send"}`}, {"/read", `{}`}, {"/messages", `{"text":"must not send"}`}, {"/labels", `{"add":["private"]}`},
+	} {
+		governanceHTTPRequest(t, handler, http.MethodPost, path+item.Suffix, []byte(item.Body), otherToken, uuid.NewString(), http.StatusNotFound)
 	}
+
 	forbiddenAssign := callBusinessMutationWithMethod(t, handler, http.MethodPost, path+"/assign", []byte(`{"assignee_principal_id":"`+otherID+`"}`), otherToken, "2")
 	if forbiddenAssign.Code != http.StatusNotFound {
 		t.Fatalf("assign permission bypassed another agent's scope: %d", forbiddenAssign.Code)
@@ -191,6 +193,26 @@ func exerciseInboxIdentityHTTP(t *testing.T, ctx context.Context, runtime *APIRu
 	transfer := callBusinessMutationWithMethod(t, handler, http.MethodPost, path+"/assign", []byte(fmt.Sprintf(`{"assignee_principal_id":%q}`, otherID)), ownerToken, current.Data.ResourceVersion)
 	if transfer.Code != http.StatusOK {
 		t.Fatalf("transfer failed: %d %s", transfer.Code, transfer.Body.String())
+	}
+	// The previous assignee gets a generic invalidation, never another agent’s conversation ID.
+	timer := time.NewTimer(3 * time.Second)
+	defer timer.Stop()
+	receivedResync := false
+	for !receivedResync {
+		select {
+		case event, ok := <-events:
+			if !ok {
+				t.Fatal("SSE closed before ownership resync")
+			}
+			if event.EventType == "realtime.resync_required" {
+				if event.ResourceID != businessID || event.ResourceType != "business" || len(event.Data) > 0 {
+					t.Fatal("SSE leaked transferred conversation")
+				}
+				receivedResync = true
+			}
+		case <-timer.C:
+			t.Fatal("former assignee did not receive access resync")
+		}
 	}
 	governanceHTTPRequest(t, handler, http.MethodGet, path+"/messages", nil, staffToken, "", http.StatusNotFound)
 	governanceHTTPRequest(t, handler, http.MethodPost, path+"/messages", []byte(`{"text":"stale composer"}`), staffToken, uuid.NewString(), http.StatusNotFound)
