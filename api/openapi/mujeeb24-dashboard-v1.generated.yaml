@@ -1411,6 +1411,16 @@ components:
           type: object
         business_id:
           type: string
+        can_add_note:
+          type: boolean
+        can_assign:
+          type: boolean
+        can_claim:
+          type: boolean
+        can_reply:
+          type: boolean
+        channel:
+          type: string
         customer:
           $ref: "#/components/schemas/CustomerSummary"
         id:
@@ -1423,6 +1433,16 @@ components:
         last_activity_at:
           format: date-time
           type: string
+        last_message_author_name:
+          type: string
+        last_message_content_type:
+          type: string
+        last_message_direction:
+          type: string
+        last_message_origin:
+          type: string
+        last_message_text:
+          type: string
         ownership:
           type: string
         priority:
@@ -1431,7 +1451,16 @@ components:
           type: string
         state:
           type: string
+        unread_count:
+          format: int64
+          minimum: 0
+          type: integer
       required:
+        - unread_count
+        - can_reply
+        - can_claim
+        - can_assign
+        - can_add_note
         - id
         - business_id
         - customer
@@ -1456,6 +1485,32 @@ components:
         - display_name
         - role
       type: object
+    ConversationInboxOverview:
+      additionalProperties: false
+      properties:
+        assigned_to_me:
+          format: int64
+          minimum: 0
+          type: integer
+        state_counts:
+          additionalProperties:
+            format: int64
+            type: integer
+          type: object
+        total:
+          format: int64
+          minimum: 0
+          type: integer
+        unassigned:
+          format: int64
+          minimum: 0
+          type: integer
+      required:
+        - total
+        - assigned_to_me
+        - unassigned
+        - state_counts
+      type: object
     ConversationRead:
       additionalProperties: false
       properties:
@@ -1468,6 +1523,27 @@ components:
       required:
         - conversation_id
         - status
+      type: object
+    ConversationSummary:
+      additionalProperties: false
+      properties:
+        conversation_id:
+          type: string
+        covered_inbound_turns:
+          format: int64
+          minimum: 0
+          type: integer
+        status:
+          enum:
+            - available
+            - not_available
+          type: string
+        text:
+          type: string
+      required:
+        - conversation_id
+        - status
+        - covered_inbound_turns
       type: object
     Cookie:
       additionalProperties: false
@@ -3558,6 +3634,11 @@ components:
             $ref: "#/components/schemas/MessageAttachment"
           nullable: true
           type: array
+        author_display_name:
+          type: string
+        author_principal_id:
+          format: uuid
+          type: string
         content_type:
           type: string
         conversation_id:
@@ -4887,6 +4968,23 @@ components:
         - data
         - request_id
       type: object
+    SingleConversationInboxOverviewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleConversationInboxOverviewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/ConversationInboxOverview"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
     SingleConversationReadBody:
       additionalProperties: false
       properties:
@@ -4898,6 +4996,23 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/ConversationRead"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleConversationSummaryBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleConversationSummaryBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/ConversationSummary"
         request_id:
           type: string
       required:
@@ -10326,6 +10441,21 @@ paths:
     get:
       operationId: listConversations
       parameters:
+        - explode: false
+          in: query
+          name: scope
+          schema:
+            enum:
+              - all
+              - mine
+              - unassigned
+            type: string
+        - explode: false
+          in: query
+          name: search
+          schema:
+            maxLength: 200
+            type: string
         - in: path
           name: business_id
           required: true
@@ -10497,6 +10627,120 @@ paths:
       security:
         - bearerAuth: []
       summary: List eligible conversation assignees
+      tags:
+        - Conversations
+  /businesses/{business_id}/conversations/inbox-overview:
+    get:
+      operationId: getConversationInboxOverview
+      parameters:
+        - explode: false
+          in: query
+          name: scope
+          schema:
+            enum:
+              - all
+              - mine
+              - unassigned
+            type: string
+        - explode: false
+          in: query
+          name: search
+          schema:
+            maxLength: 200
+            type: string
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            default: 25
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: state
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: ownership
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: channel
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: customer_id
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleConversationInboxOverviewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Read scoped inbox counts
       tags:
         - Conversations
   /businesses/{business_id}/conversations/{conversation_id}:
@@ -10850,6 +11094,92 @@ paths:
       summary: Queue a reusable reply for delivery
       tags:
         - Inbox
+  /businesses/{business_id}/conversations/{conversation_id}/claim:
+    post:
+      operationId: claimConversation
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: conversation_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+        - in: header
+          name: X-Request-ID
+          schema:
+            type: string
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleConversationBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Claim conversation for current employee
+      tags:
+        - Conversations
   /businesses/{business_id}/conversations/{conversation_id}/labels:
     post:
       operationId: updateConversationLabels
@@ -11313,6 +11643,76 @@ paths:
       security:
         - bearerAuth: []
       summary: Mark conversation read for current principal
+      tags:
+        - Conversations
+  /businesses/{business_id}/conversations/{conversation_id}/summary:
+    get:
+      operationId: getConversationSummary
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: conversation_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleConversationSummaryBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Read persisted conversation summary
       tags:
         - Conversations
   /businesses/{business_id}/customers:

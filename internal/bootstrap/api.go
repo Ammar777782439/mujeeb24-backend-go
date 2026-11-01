@@ -235,6 +235,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 			postgres.NewMessageRepository(database),
 			customerSalesDecision,
 		)
+		service.SummaryService.Realtime = realtimeBroker
 		service.SummaryService.AIUsage = postgres.NewAIUsageRepository(database)
 		service.SummaryService.AIPricing = service.AIPricing
 		service.SummaryService.GatewayFXRateYER = service.GatewayFXRateYER
@@ -520,6 +521,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	_, mux := contract.BuildAPIWithHandlersAndMiddleware(dashboardServer, apiMiddleware)
 
 	realtimeSSEHandler := handlers.NewRealtimeSSEHandler(realtimeHub, dependencies.Scope)
+	realtimeSSEHandler.Inbox = postgres.NewConversationRepository(database)
 	var sseHTTPHandler http.Handler = realtimeSSEHandler
 	if authentication != nil {
 		sseHTTPHandler = middleware.RequireAccessToken(authentication.Verifier, realtimeSSEHandler)

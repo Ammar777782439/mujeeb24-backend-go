@@ -59,6 +59,7 @@ const SlidingWindowSize = 4
 // of conversation history. It is invoked after each successful AutoReply
 // to check if the summary needs to be refreshed.
 type ConversationSummaryService struct {
+	Realtime        ports.RealtimePublisher
 	StateRepository ports.ConversationStateRepository
 	Messages        ports.MessageRepository
 	// CustomerSalesDecisionPort is the only AI execution path for summaries.
@@ -281,6 +282,9 @@ func (s *ConversationSummaryService) MaybeSummarize(
 	if !committed {
 		result.SkippedReason = "concurrent_summary_update"
 		return result, nil
+	}
+	if s.Realtime != nil {
+		_ = s.Realtime.Publish(ctx, ports.RealtimeEvent{EventID: uuid.NewString(), EventType: "conversation.summary_updated", BusinessID: businessID, ResourceType: "conversation", ResourceID: conversationID, OccurredAt: time.Now().UTC()})
 	}
 	result.Summarized = true
 	result.NewTurnCount = totalInbound

@@ -18,6 +18,7 @@ import (
 type ConversationRuntimeService struct {
 	Repository   ports.ConversationRuntimeRepository
 	Reader       ports.ConversationRepository
+	Inbox        ports.ConversationInboxRepository
 	Assignees    ports.TeamMemberResolver
 	Labels       ports.ConversationLabelRepository
 	References   ports.ConversationReferenceRepository
@@ -36,7 +37,7 @@ type UpdateConversationLabelsCommandService struct{ ConversationRuntimeService }
 type AddPrivateNoteCommandService struct{ ConversationRuntimeService }
 
 func (s ListConversationsQueryService) Handle(ctx context.Context, query queries.ListConversationsQuery) (commands.ListResult[commands.ConversationView], error) {
-	if s.Repository == nil {
+	if s.Inbox == nil {
 		return commands.ListResult[commands.ConversationView]{}, appErrors.NotImplemented()
 	}
 	var customerID *string
@@ -44,13 +45,13 @@ func (s ListConversationsQueryService) Handle(ctx context.Context, query queries
 		value := string(*query.CustomerID)
 		customerID = &value
 	}
-	page, err := s.Repository.List(ctx, string(query.Meta.Actor.BusinessID), query.State, query.Ownership, query.Channel, customerID, query.Limit, query.Cursor)
+	page, err := s.Inbox.ListInbox(ctx, ports.ConversationInboxFilter{BusinessID: string(query.Meta.Actor.BusinessID), Access: authorization.ConversationAccess(query.Meta.Actor), Scope: query.Scope, Search: query.Search, State: query.State, Ownership: query.Ownership, Channel: query.Channel, CustomerID: customerID, Limit: query.Limit, Cursor: query.Cursor})
 	if err != nil {
 		return commands.ListResult[commands.ConversationView]{}, err
 	}
 	items := make([]commands.ConversationView, 0, len(page.Items))
 	for _, record := range page.Items {
-		view, viewErr := s.viewWithLabels(ctx, record)
+		view, viewErr := s.viewWithLabels(ctx, record, query.Meta.Actor)
 		if viewErr != nil {
 			return commands.ListResult[commands.ConversationView]{}, viewErr
 		}
@@ -60,17 +61,17 @@ func (s ListConversationsQueryService) Handle(ctx context.Context, query queries
 }
 
 func (s ListCustomerConversationsQueryService) Handle(ctx context.Context, query queries.ListCustomerConversationsQuery) (commands.ListResult[commands.ConversationView], error) {
-	if s.Repository == nil {
+	if s.Inbox == nil {
 		return commands.ListResult[commands.ConversationView]{}, appErrors.NotImplemented()
 	}
 	customerID := string(query.CustomerID)
-	page, err := s.Repository.List(ctx, string(query.Meta.Actor.BusinessID), "", "", "", &customerID, query.Limit, query.Cursor)
+	page, err := s.Inbox.ListInbox(ctx, ports.ConversationInboxFilter{BusinessID: string(query.Meta.Actor.BusinessID), Access: authorization.ConversationAccess(query.Meta.Actor), CustomerID: &customerID, Limit: query.Limit, Cursor: query.Cursor})
 	if err != nil {
 		return commands.ListResult[commands.ConversationView]{}, err
 	}
 	items := make([]commands.ConversationView, 0, len(page.Items))
 	for _, record := range page.Items {
-		view, viewErr := s.viewWithLabels(ctx, record)
+		view, viewErr := s.viewWithLabels(ctx, record, query.Meta.Actor)
 		if viewErr != nil {
 			return commands.ListResult[commands.ConversationView]{}, viewErr
 		}
@@ -80,6 +81,9 @@ func (s ListCustomerConversationsQueryService) Handle(ctx context.Context, query
 }
 
 func (s UpdateConversationCommandService) Handle(ctx context.Context, command commands.UpdateConversationCommand) (commands.ConversationResult, error) {
+	if !canAssignConversations(command.Meta.Actor.Role) || !authorization.Has(command.Meta.Actor, authorization.PermissionConversationsAssign) {
+		return commands.ConversationResult{}, appErrors.New(appErrors.CodeForbidden, "ليس لديك صلاحية تعديل المحادثة.")
+	}
 	if s.Repository == nil || s.Transactions == nil {
 		return commands.ConversationResult{}, appErrors.NotImplemented()
 	}
@@ -89,11 +93,14 @@ func (s UpdateConversationCommandService) Handle(ctx context.Context, command co
 	}
 	var result commands.ConversationResult
 	err = s.Transactions.Within(ctx, func(txCtx context.Context) error {
+		if _, accessErr := readInboxConversation(txCtx, s.Inbox, command.Meta.Actor, string(command.ConversationID), true); accessErr != nil {
+			return accessErr
+		}
 		record, updateErr := s.Repository.Update(txCtx, ports.ConversationUpdate{BusinessID: string(command.Meta.Actor.BusinessID), ConversationID: string(command.ConversationID), ExpectedVersion: expected, State: command.State, Ownership: command.Ownership, AIModeOverride: command.AIModeOverride, Priority: command.Priority})
 		if updateErr != nil {
 			return mapConversationRepositoryError(updateErr)
 		}
-		view, viewErr := s.viewWithLabels(txCtx, record)
+		view, viewErr := s.viewAfterChange(txCtx, record, command.Meta.Actor)
 		if viewErr != nil {
 			return viewErr
 		}
@@ -120,7 +127,7 @@ func (s AssignConversationCommandService) Handle(ctx context.Context, command co
 	if s.Repository == nil || s.Assignees == nil || s.Transactions == nil {
 		return commands.ConversationResult{}, appErrors.NotImplemented()
 	}
-	if !canAssignConversations(command.Meta.Actor.Role) {
+	if !canAssignConversations(command.Meta.Actor.Role) || !authorization.Has(command.Meta.Actor, authorization.PermissionConversationsAssign) {
 		return commands.ConversationResult{}, appErrors.New(appErrors.CodeForbidden, "current team role cannot assign conversations")
 	}
 	expected, err := parseBusinessExpectedVersion(command.Meta.ExpectedVersion)
@@ -135,6 +142,9 @@ func (s AssignConversationCommandService) Handle(ctx context.Context, command co
 	state, aiMode := "human_handling", "disabled"
 	var result commands.ConversationResult
 	err = s.Transactions.Within(ctx, func(txCtx context.Context) error {
+		if _, accessErr := readInboxConversation(txCtx, s.Inbox, command.Meta.Actor, string(command.ConversationID), true); accessErr != nil {
+			return accessErr
+		}
 		assignee, assigneeErr := s.Assignees.ResolveActiveMember(txCtx, string(command.Meta.Actor.BusinessID), assignment)
 		if assigneeErr != nil {
 			return mapTeamRepositoryError(assigneeErr)
@@ -146,7 +156,7 @@ func (s AssignConversationCommandService) Handle(ctx context.Context, command co
 		if updateErr != nil {
 			return mapConversationRepositoryError(updateErr)
 		}
-		view, viewErr := s.viewWithLabels(txCtx, record)
+		view, viewErr := s.viewAfterChange(txCtx, record, command.Meta.Actor)
 		if viewErr != nil {
 			return viewErr
 		}
@@ -182,6 +192,9 @@ func (s UpdateConversationLabelsCommandService) Handle(ctx context.Context, comm
 	}
 	var result commands.ConversationResult
 	err = s.Transactions.Within(ctx, func(txCtx context.Context) error {
+		if _, accessErr := readInboxConversation(txCtx, s.Inbox, command.Meta.Actor, string(command.ConversationID), true); accessErr != nil {
+			return accessErr
+		}
 		record, versionErr := s.Repository.AdvanceVersion(txCtx, string(command.Meta.Actor.BusinessID), string(command.ConversationID), expected)
 		if versionErr != nil {
 			return versionErr
@@ -189,7 +202,7 @@ func (s UpdateConversationLabelsCommandService) Handle(ctx context.Context, comm
 		if labelErr := s.Labels.Apply(txCtx, string(command.Meta.Actor.BusinessID), string(command.ConversationID), command.Add, command.Remove); labelErr != nil {
 			return labelErr
 		}
-		view, viewErr := s.viewWithLabels(txCtx, record)
+		view, viewErr := s.viewAfterChange(txCtx, record, command.Meta.Actor)
 		if viewErr != nil {
 			return viewErr
 		}
@@ -211,7 +224,7 @@ func (s AddPrivateNoteCommandService) Handle(ctx context.Context, command comman
 	created := true
 	var result commands.MessageResult
 	err := s.Transactions.Within(ctx, func(txCtx context.Context) error {
-		if _, conversationErr := s.Reader.GetByID(txCtx, string(command.Meta.Actor.BusinessID), string(command.ConversationID)); conversationErr != nil {
+		if _, conversationErr := readInboxConversation(txCtx, s.Inbox, command.Meta.Actor, string(command.ConversationID), true); conversationErr != nil {
 			return conversationErr
 		}
 		reference, referenceErr := s.References.GetCurrentByConversation(txCtx, string(command.Meta.Actor.BusinessID), string(command.ConversationID), "provider")
@@ -241,7 +254,8 @@ func (s AddPrivateNoteCommandService) Handle(ctx context.Context, command comman
 			}
 			referenceText = encodePrivateNoteReference(id, target.ID, quote)
 		}
-		draft := ports.CommunicationMessageDraft{ID: id, BusinessID: string(command.Meta.Actor.BusinessID), ConversationReferenceID: reference.ID, Direction: "outbound", Origin: "human", Transport: "mujeeb", ContentType: "text", TextContent: &text, ContentReference: referenceText, Visibility: "private", OccurredAt: now, CreatedAt: now}
+		author := string(command.Meta.Actor.PrincipalID)
+		draft := ports.CommunicationMessageDraft{AuthorPrincipalID: &author, ID: id, BusinessID: string(command.Meta.Actor.BusinessID), ConversationReferenceID: reference.ID, Direction: "outbound", Origin: "human", Transport: "mujeeb", ContentType: "text", TextContent: &text, ContentReference: referenceText, Visibility: "private", OccurredAt: now, CreatedAt: now}
 		var message ports.CommunicationMessageRecord
 		var messageErr error
 		if command.Meta.IdempotencyKey != "" {
@@ -273,8 +287,8 @@ func (s AddPrivateNoteCommandService) Handle(ctx context.Context, command comman
 	return result, mapConversationRepositoryError(err)
 }
 
-func (s ConversationRuntimeService) viewWithLabels(ctx context.Context, record ports.ConversationRecord) (commands.ConversationView, error) {
-	view := conversationView(record)
+func (s ConversationRuntimeService) viewWithLabels(ctx context.Context, record ports.ConversationRecord, actor commands.ActorContext) (commands.ConversationView, error) {
+	view := conversationViewForActor(record, actor)
 	if s.Labels == nil {
 		return view, nil
 	}

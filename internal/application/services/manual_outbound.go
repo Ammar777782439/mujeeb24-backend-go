@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/authorization"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
@@ -19,6 +20,7 @@ type ManualOutboundMessageService struct {
 	Outbox        ports.OutboxStore
 	Messages      ports.MessageRepository
 	Conversations ports.ConversationRuntimeRepository
+	Inbox         ports.ConversationInboxRepository
 	Transactions  ports.TransactionManager
 	Realtime      ports.RealtimePublisher
 	Now           func() time.Time
@@ -26,7 +28,7 @@ type ManualOutboundMessageService struct {
 }
 
 func (s ManualOutboundMessageService) Handle(ctx context.Context, command commands.CreateOutboundMessageCommand) (commands.MessageResult, error) {
-	if s.References == nil || s.Connections == nil || s.Outbound == nil || s.Outbox == nil || s.Transactions == nil {
+	if s.References == nil || s.Connections == nil || s.Outbound == nil || s.Outbox == nil || s.Transactions == nil || s.Messages == nil || s.Inbox == nil {
 		return commands.MessageResult{}, appErrors.NotImplemented()
 	}
 	text := strings.TrimSpace(command.Text)
@@ -47,6 +49,14 @@ func (s ManualOutboundMessageService) Handle(ctx context.Context, command comman
 	dedupeKey := "manual-outbound:" + idempotencyKey
 	var result commands.MessageResult
 	err := s.Transactions.Within(ctx, func(txCtx context.Context) error {
+		current, accessErr := readInboxConversation(txCtx, s.Inbox, command.Meta.Actor, conversationID, true)
+		if accessErr != nil {
+			return accessErr
+		}
+		if !authorization.CanReplyToConversation(command.Meta.Actor, current) {
+			return appErrors.New(appErrors.CodeConflict, "استلم المحادثة قبل الرد، وتأكد أنها غير مغلقة.")
+		}
+		var recordedMessage ports.CommunicationMessageRecord
 		reference, referenceErr := s.References.GetCurrentByConversation(txCtx, businessID, conversationID, "provider")
 		if referenceErr != nil {
 			return mapAIRepositoryError(referenceErr)
@@ -67,7 +77,9 @@ func (s ManualOutboundMessageService) Handle(ctx context.Context, command comman
 			return mapAIRepositoryError(outboundErr)
 		}
 		if s.Messages != nil {
+			author := string(command.Meta.Actor.PrincipalID)
 			msgDraft := ports.CommunicationMessageDraft{
+				AuthorPrincipalID:       &author,
 				ID:                      newID(),
 				BusinessID:              businessID,
 				ConversationReferenceID: reference.ID,
@@ -82,7 +94,9 @@ func (s ManualOutboundMessageService) Handle(ctx context.Context, command comman
 				OccurredAt:              now,
 				CreatedAt:               now,
 			}
-			if _, msgErr := s.Messages.Record(txCtx, msgDraft); msgErr != nil {
+			var msgErr error
+			recordedMessage, msgErr = s.Messages.Record(txCtx, msgDraft)
+			if msgErr != nil {
 				return mapAIRepositoryError(msgErr)
 			}
 		}
@@ -102,7 +116,8 @@ func (s ManualOutboundMessageService) Handle(ctx context.Context, command comman
 				return mapAIRepositoryError(convErr)
 			}
 		}
-		result.Message = commands.MessageView{ID: commands.MessageID(outbound.ID), ConversationID: commands.ConversationID(outbound.ConversationID), Direction: outbound.Direction, Origin: outbound.Origin, Status: outbound.Status, Text: text, ProviderMessageReference: outbound.ProviderMessageID, OccurredAt: now, CreatedAt: now}
+		recordedMessage.ConversationID = conversationID
+		result.Message = messageView(recordedMessage)
 		return nil
 	})
 	if err == nil && s.Realtime != nil {

@@ -6,6 +6,8 @@ import (
 )
 
 type CommunicationMessageRecord struct {
+	AuthorPrincipalID       *string
+	AuthorDisplayName       *string
 	ID                      string
 	BusinessID              string
 	ConversationID          string
@@ -26,6 +28,7 @@ type CommunicationMessageRecord struct {
 }
 
 type CommunicationMessageDraft struct {
+	AuthorPrincipalID       *string
 	ID                      string
 	BusinessID              string
 	ConversationReferenceID string

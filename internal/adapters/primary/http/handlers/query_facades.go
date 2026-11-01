@@ -551,6 +551,7 @@ func messageList(v commands.ListResult[commands.MessageView], businessID string)
 			ContentType: item.ContentType, ProviderMessageReference: item.ProviderMessageReference,
 			OccurredAt: item.OccurredAt, CreatedAt: item.CreatedAt, Private: item.Private,
 			RelatedMessageID: item.RelatedMessageID, RelatedMessageText: item.RelatedMessageText,
+			AuthorPrincipalID: item.AuthorPrincipalID, AuthorDisplayName: item.AuthorDisplayName,
 		}
 		for _, attachment := range item.Attachments {
 			if attachment.Type != "image" || attachment.MediaID == "" {

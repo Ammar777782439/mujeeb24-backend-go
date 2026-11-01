@@ -12,6 +12,8 @@ func (s *Server) dispatchConversationCommand(ctx context.Context, operationID st
 	switch operationID {
 	case "updateConversation":
 		return s.updateConversation(ctx, input.(*contract.ConversationUpdateInput)), true
+	case "claimConversation":
+		return s.claimConversation(ctx, input.(*contract.ConversationReadInput)), true
 	case "assignConversation":
 		return s.assignConversation(ctx, input.(*contract.ConversationAssignInput)), true
 	case "addPrivateNote":
@@ -113,5 +115,20 @@ func (s *Server) assignConversation(ctx context.Context, input *contract.Convers
 		return mapApplicationError(err)
 	}
 
+	return singleConversation(result.Conversation)
+}
+
+func (s *Server) claimConversation(ctx context.Context, input *contract.ConversationReadInput) any {
+	if s.deps.ClaimConversation == nil {
+		return mapApplicationError(appErrors.NotImplemented())
+	}
+	actor, err := s.requireScope(ctx, input.BusinessID)
+	if err != nil {
+		return mapApplicationError(err)
+	}
+	result, err := s.deps.ClaimConversation.Handle(ctx, commands.ClaimConversationCommand{Meta: commandMeta(ctx, actor, input.CommandHeaders), ConversationID: commands.ConversationID(input.ConversationID)})
+	if err != nil {
+		return mapApplicationError(err)
+	}
 	return singleConversation(result.Conversation)
 }

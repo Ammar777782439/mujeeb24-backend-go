@@ -25,19 +25,19 @@ func (s GetCustomerQueryService) Handle(ctx context.Context, query queries.GetCu
 }
 
 type GetConversationQueryService struct {
-	Repository ports.ConversationRepository
-	Labels     ports.ConversationLabelRepository
+	Inbox  ports.ConversationInboxRepository
+	Labels ports.ConversationLabelRepository
 }
 
 func (s GetConversationQueryService) Handle(ctx context.Context, query queries.GetConversationQuery) (commands.ConversationView, error) {
-	if s.Repository == nil {
+	if s.Inbox == nil {
 		return commands.ConversationView{}, appErrors.NotImplemented()
 	}
-	record, err := s.Repository.GetByID(ctx, string(query.Meta.Actor.BusinessID), string(query.ConversationID))
+	record, err := readInboxConversation(ctx, s.Inbox, query.Meta.Actor, string(query.ConversationID), false)
 	if err != nil {
 		return commands.ConversationView{}, err
 	}
-	view := conversationView(record)
+	view := conversationViewForActor(record, query.Meta.Actor)
 	if s.Labels != nil {
 		labels, labelErr := s.Labels.List(ctx, string(query.Meta.Actor.BusinessID), string(query.ConversationID))
 		if labelErr != nil {

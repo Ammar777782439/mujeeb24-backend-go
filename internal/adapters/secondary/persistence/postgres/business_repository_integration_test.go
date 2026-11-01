@@ -266,7 +266,7 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 		t.Fatalf("capability crossed tenant boundary: %v", err)
 	}
 	capabilityService := services.ConnectionCapabilitiesQueryService{Repository: capabilityRepo}
-	capabilityView, err := capabilityService.Handle(ctx, queries.GetConnectionCapabilitiesQuery{Meta: queries.QueryMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, ConnectionID: commands.ConnectionID(connectionA)})
+	capabilityView, err := capabilityService.Handle(ctx, queries.GetConnectionCapabilitiesQuery{Meta: queries.QueryMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA), PrincipalID: "00000000-0000-0000-0000-000000000001", Role: "owner", Permissions: []string{"*"}}}, ConnectionID: commands.ConnectionID(connectionA)})
 	if err != nil || len(capabilityView.Items) != 3 || capabilityView.Items[1].Name != "receive_messages" || !capabilityView.Items[1].Enabled || !capabilityView.Items[1].CheckedAt.Equal(time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC)) || capabilityView.Items[1].EvidenceSource != "provider-contract" {
 		t.Fatalf("application capability mapping: %#v err=%v", capabilityView, err)
 	}
@@ -403,12 +403,12 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 		t.Fatalf("attribute schema crossed tenant boundary: %v", err)
 	}
 	catalogQueryService := services.ListCatalogsQueryService{Repository: catalogRepo}
-	catalogViewPage, err := catalogQueryService.Handle(ctx, queries.ListCatalogsQuery{Meta: queries.QueryMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, Limit: 1, Status: "active"})
+	catalogViewPage, err := catalogQueryService.Handle(ctx, queries.ListCatalogsQuery{Meta: queries.QueryMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA), PrincipalID: "00000000-0000-0000-0000-000000000001", Role: "owner", Permissions: []string{"*"}}}, Limit: 1, Status: "active"})
 	if err != nil || len(catalogViewPage.Items) != 1 || catalogViewPage.Items[0].Name != "Services" || !catalogViewPage.HasMore || catalogViewPage.NextCursor == "" {
 		t.Fatalf("catalog application mapping: %#v err=%v", catalogViewPage, err)
 	}
 	schemaQueryService := services.GetAttributeSchemaQueryService{Repository: catalogRepo}
-	schemaView, err := schemaQueryService.Handle(ctx, queries.GetAttributeSchemaQuery{Meta: queries.QueryMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, SchemaID: commands.AttributeSchemaID(schemaA)})
+	schemaView, err := schemaQueryService.Handle(ctx, queries.GetAttributeSchemaQuery{Meta: queries.QueryMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA), PrincipalID: "00000000-0000-0000-0000-000000000001", Role: "owner", Permissions: []string{"*"}}}, SchemaID: commands.AttributeSchemaID(schemaA)})
 	if err != nil || len(schemaView.Definitions) != 1 || schemaView.Definitions[0].Key != "color" {
 		t.Fatalf("schema application mapping: %#v err=%v", schemaView, err)
 	}
@@ -422,21 +422,21 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 		return id
 	}
 	createCatalogService := services.CreateCatalogCommandService{CatalogCommandServices: commandServices}
-	createdCatalog, err := createCatalogService.Handle(ctx, commands.CreateCatalogCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, Name: "Created Catalog", Description: "Created through application"})
+	createdCatalog, err := createCatalogService.Handle(ctx, commands.CreateCatalogCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA), PrincipalID: "00000000-0000-0000-0000-000000000001", Role: "owner", Permissions: []string{"*"}}}, Name: "Created Catalog", Description: "Created through application"})
 	if err != nil || createdCatalog.Catalog.ID != commands.CatalogID(catalogWrite) || createdCatalog.ResourceVersion != "1" {
 		t.Fatalf("catalog command create: %#v err=%v", createdCatalog, err)
 	}
 	updateCatalogService := services.UpdateCatalogCommandService{CatalogCommandServices: commandServices}
 	newCatalogName := "Updated Catalog"
-	updatedCatalog, err := updateCatalogService.Handle(ctx, commands.UpdateCatalogCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}, ExpectedVersion: resourceVersion("1")}, CatalogID: commands.CatalogID(catalogWrite), Name: &newCatalogName})
+	updatedCatalog, err := updateCatalogService.Handle(ctx, commands.UpdateCatalogCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA), PrincipalID: "00000000-0000-0000-0000-000000000001", Role: "owner", Permissions: []string{"*"}}, ExpectedVersion: resourceVersion("1")}, CatalogID: commands.CatalogID(catalogWrite), Name: &newCatalogName})
 	if err != nil || updatedCatalog.Catalog.Name != newCatalogName || updatedCatalog.ResourceVersion != "2" {
 		t.Fatalf("catalog command update: %#v err=%v", updatedCatalog, err)
 	}
-	if _, err := updateCatalogService.Handle(ctx, commands.UpdateCatalogCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}, ExpectedVersion: resourceVersion("1")}, CatalogID: commands.CatalogID(catalogWrite), Name: &newCatalogName}); !isApplicationCode(err, "stale_resource") {
+	if _, err := updateCatalogService.Handle(ctx, commands.UpdateCatalogCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA), PrincipalID: "00000000-0000-0000-0000-000000000001", Role: "owner", Permissions: []string{"*"}}, ExpectedVersion: resourceVersion("1")}, CatalogID: commands.CatalogID(catalogWrite), Name: &newCatalogName}); !isApplicationCode(err, "stale_resource") {
 		t.Fatalf("expected stale catalog update, got %v", err)
 	}
 	createSchemaService := services.CreateAttributeSchemaVersionCommandService{CatalogCommandServices: commandServices}
-	createdSchema, err := createSchemaService.Handle(ctx, commands.CreateAttributeSchemaVersionCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, Name: "Write schema", Definitions: []commands.AttributeDefinition{{Label: "Brand", DataType: "text", Required: true, DisplayOrder: 0}}})
+	createdSchema, err := createSchemaService.Handle(ctx, commands.CreateAttributeSchemaVersionCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA), PrincipalID: "00000000-0000-0000-0000-000000000001", Role: "owner", Permissions: []string{"*"}}}, Name: "Write schema", Definitions: []commands.AttributeDefinition{{Label: "Brand", DataType: "text", Required: true, DisplayOrder: 0}}})
 	if err != nil || createdSchema.Schema.ID != commands.AttributeSchemaID(schemaWrite) || createdSchema.Schema.Version != 1 || len(createdSchema.Schema.Definitions) != 1 {
 		t.Fatalf("schema command create: %#v err=%v", createdSchema, err)
 	}
@@ -447,7 +447,7 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 	createItemService := services.CreateCatalogItemCommandService{CatalogCommandServices: commandServices}
 	shortDescription := "Compact description"
 	longDescription := "Detailed merchant description"
-	createdItem, err := createItemService.Handle(ctx, commands.CreateCatalogItemCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, CatalogID: commands.CatalogID(catalogWrite), AttributeSchemaID: attributeSchemaID(schemaWrite), ItemType: "physical_good", Name: "Created phone", ShortDescription: &shortDescription, LongDescription: &longDescription, PricingMode: "fixed", AvailabilityMode: "stock", FulfillmentMode: "delivery", Attributes: map[string]any{attributeKey: "Mujeeb"}})
+	createdItem, err := createItemService.Handle(ctx, commands.CreateCatalogItemCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA), PrincipalID: "00000000-0000-0000-0000-000000000001", Role: "owner", Permissions: []string{"*"}}}, CatalogID: commands.CatalogID(catalogWrite), AttributeSchemaID: attributeSchemaID(schemaWrite), ItemType: "physical_good", Name: "Created phone", ShortDescription: &shortDescription, LongDescription: &longDescription, PricingMode: "fixed", AvailabilityMode: "stock", FulfillmentMode: "delivery", Attributes: map[string]any{attributeKey: "Mujeeb"}})
 	if err != nil || createdItem.Item.ID != commands.CatalogItemID(itemWrite) || createdItem.Item.AttributeSchemaVersion == nil || *createdItem.Item.AttributeSchemaVersion != 1 {
 		t.Fatalf("item command create: %#v err=%v", createdItem, err)
 	}
@@ -456,7 +456,7 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 	}
 	createOfferService := services.CreateOfferCommandService{CatalogCommandServices: commandServices}
 	amountMinor := int64(125050)
-	createdOffer, err := createOfferService.Handle(ctx, commands.CreateOfferCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, CatalogItemID: commands.CatalogItemID(itemWrite), Name: "Created offer", PricingMode: "fixed", AmountMinor: &amountMinor, Currency: stringPointer("YER"), AvailabilityMode: "stock", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"})
+	createdOffer, err := createOfferService.Handle(ctx, commands.CreateOfferCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA), PrincipalID: "00000000-0000-0000-0000-000000000001", Role: "owner", Permissions: []string{"*"}}}, CatalogItemID: commands.CatalogItemID(itemWrite), Name: "Created offer", PricingMode: "fixed", AmountMinor: &amountMinor, Currency: stringPointer("YER"), AvailabilityMode: "stock", AvailabilityStatus: "available", FulfillmentMode: "delivery", Status: "active"})
 	if err != nil || createdOffer.Offer.ID != commands.OfferID(offerWrite) || createdOffer.Offer.Amount == nil || *createdOffer.Offer.Amount != "1250.5000" || createdOffer.ResourceVersion != "1" {
 		t.Fatalf("offer command create: %#v err=%v", createdOffer, err)
 	}
@@ -464,7 +464,7 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 		t.Fatalf("merchant offer evidence metadata is incomplete: %#v", createdOffer.Offer)
 	}
 	createVariantService := services.CreateVariantCommandService{CatalogCommandServices: commandServices}
-	createdVariant, err := createVariantService.Handle(ctx, commands.CreateVariantCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, CatalogItemID: commands.CatalogItemID(itemWrite), Name: "Created black", Attributes: map[string]any{"color": "black"}})
+	createdVariant, err := createVariantService.Handle(ctx, commands.CreateVariantCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA), PrincipalID: "00000000-0000-0000-0000-000000000001", Role: "owner", Permissions: []string{"*"}}}, CatalogItemID: commands.CatalogItemID(itemWrite), Name: "Created black", Attributes: map[string]any{"color": "black"}})
 	if err != nil || createdVariant.Variant.ID != commands.VariantID(variantWrite) || createdVariant.ResourceVersion != "1" {
 		t.Fatalf("variant command create: %#v err=%v", createdVariant, err)
 	}
@@ -600,8 +600,8 @@ func TestCoreRepositoriesRespectBusinessScopeAgainstPostgres(t *testing.T) {
 	if _, err := messageRepo.ListByConversation(ctx, businessA, "00000000-0000-0000-0000-000000000099", 2, ""); !IsRepositoryKind(err, RepositoryNotFound) {
 		t.Fatalf("missing conversation list must be typed not-found, got %v", err)
 	}
-	service := services.MessageQueryService{Repository: messageRepo}
-	viewPage, err := service.Handle(ctx, queries.ListConversationMessagesQuery{Meta: queries.QueryMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA)}}, ConversationID: commands.ConversationID(conversationA), Limit: 2})
+	service := services.MessageQueryService{Repository: messageRepo, Inbox: NewConversationRepository(adapter)}
+	viewPage, err := service.Handle(ctx, queries.ListConversationMessagesQuery{Meta: queries.QueryMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(businessA), PrincipalID: "00000000-0000-0000-0000-000000000001", Role: "owner", Permissions: []string{"*"}}}, ConversationID: commands.ConversationID(conversationA), Limit: 2})
 	if err != nil || len(viewPage.Items) != 2 || viewPage.Items[0].Text != commitText || viewPage.Items[1].Text != textC || viewPage.Items[1].ProviderMessageReference == nil || !viewPage.Items[0].OccurredAt.Equal(time.Date(2025, 1, 1, 10, 3, 0, 0, time.UTC)) {
 		t.Fatalf("application message view: %#v err=%v", viewPage, err)
 	}

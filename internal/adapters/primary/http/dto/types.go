@@ -331,17 +331,28 @@ type CustomerSummary struct {
 	DisplayName *string `json:"display_name,omitempty"`
 }
 type Conversation struct {
-	ID              UUID              `json:"id"`
-	BusinessID      UUID              `json:"business_id"`
-	Customer        CustomerSummary   `json:"customer"`
-	State           string            `json:"state"`
-	Ownership       string            `json:"ownership"`
-	AIMode          string            `json:"ai_mode"`
-	Priority        string            `json:"priority"`
-	Assignment      map[string]string `json:"assignment,omitempty"`
-	Labels          []string          `json:"labels,omitempty"`
-	LastActivityAt  time.Time         `json:"last_activity_at"`
-	ResourceVersion string            `json:"resource_version"`
+	Channel                *string           `json:"channel,omitempty"`
+	LastMessageText        *string           `json:"last_message_text,omitempty"`
+	LastMessageContentType *string           `json:"last_message_content_type,omitempty"`
+	LastMessageDirection   *string           `json:"last_message_direction,omitempty"`
+	LastMessageOrigin      *string           `json:"last_message_origin,omitempty"`
+	LastMessageAuthorName  *string           `json:"last_message_author_name,omitempty"`
+	UnreadCount            int               `json:"unread_count" minimum:"0"`
+	CanReply               bool              `json:"can_reply"`
+	CanClaim               bool              `json:"can_claim"`
+	CanAssign              bool              `json:"can_assign"`
+	CanAddNote             bool              `json:"can_add_note"`
+	ID                     UUID              `json:"id"`
+	BusinessID             UUID              `json:"business_id"`
+	Customer               CustomerSummary   `json:"customer"`
+	State                  string            `json:"state"`
+	Ownership              string            `json:"ownership"`
+	AIMode                 string            `json:"ai_mode"`
+	Priority               string            `json:"priority"`
+	Assignment             map[string]string `json:"assignment,omitempty"`
+	Labels                 []string          `json:"labels,omitempty"`
+	LastActivityAt         time.Time         `json:"last_activity_at"`
+	ResourceVersion        string            `json:"resource_version"`
 }
 type MessageAttachment struct {
 	Type        string `json:"type" enum:"image"`
@@ -355,6 +366,8 @@ type ConversationAssignee struct {
 }
 
 type Message struct {
+	AuthorPrincipalID        *string             `json:"author_principal_id,omitempty" format:"uuid"`
+	AuthorDisplayName        *string             `json:"author_display_name,omitempty"`
 	RelatedMessageID         *string             `json:"related_message_id,omitempty" format:"uuid"`
 	RelatedMessageText       *string             `json:"related_message_text,omitempty"`
 	ID                       UUID                `json:"id"`
@@ -633,4 +646,17 @@ type CatalogEntityContract struct {
 	CatalogStatuses map[string]string `json:"catalog_statuses"`
 	VariantStatuses map[string]string `json:"variant_statuses"`
 	OfferStatuses   map[string]string `json:"offer_statuses"`
+}
+
+type ConversationSummary struct {
+	ConversationID      UUID   `json:"conversation_id"`
+	Status              string `json:"status" enum:"available,not_available"`
+	Text                string `json:"text,omitempty"`
+	CoveredInboundTurns int    `json:"covered_inbound_turns" minimum:"0"`
+}
+type ConversationInboxOverview struct {
+	Total        int            `json:"total" minimum:"0"`
+	AssignedToMe int            `json:"assigned_to_me" minimum:"0"`
+	Unassigned   int            `json:"unassigned" minimum:"0"`
+	StateCounts  map[string]int `json:"state_counts"`
 }

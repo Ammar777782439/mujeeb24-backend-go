@@ -87,17 +87,25 @@ type CustomerRuntimeRepository interface {
 }
 
 type ConversationRecord struct {
-	ID                  string
-	BusinessID          string
-	CustomerID          string
-	CustomerDisplayName *string
-	State               string
-	Ownership           string
-	AIModeOverride      *string
-	Priority            string
-	AssignmentReference *string
-	ResourceVersion     int64
-	LastActivityAt      time.Time
+	AssigneeDisplayName    *string
+	Channel                *string
+	LastMessageText        *string
+	LastMessageContentType *string
+	LastMessageDirection   *string
+	LastMessageOrigin      *string
+	LastMessageAuthorName  *string
+	UnreadCount            int
+	ID                     string
+	BusinessID             string
+	CustomerID             string
+	CustomerDisplayName    *string
+	State                  string
+	Ownership              string
+	AIModeOverride         *string
+	Priority               string
+	AssignmentReference    *string
+	ResourceVersion        int64
+	LastActivityAt         time.Time
 	// LastGeminiInteractionID per contract ③ §4 + migration 000057.
 	//
 	// Per contract ③ §4, this is the gemini_interaction_id returned by the

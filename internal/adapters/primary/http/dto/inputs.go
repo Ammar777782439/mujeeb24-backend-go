@@ -98,6 +98,8 @@ type CatalogListInput struct {
 	Status string `query:"status"`
 }
 type ConversationListInput struct {
+	Scope  string `query:"scope" enum:"all,mine,unassigned"`
+	Search string `query:"search" maxLength:"200"`
 	BusinessPath
 	ListQuery
 	State      string `query:"state"`

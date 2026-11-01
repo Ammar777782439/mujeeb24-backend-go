@@ -14,6 +14,7 @@ import (
 )
 
 type MarkConversationReadService struct {
+	Inbox      ports.ConversationInboxRepository
 	Repository ports.ConversationReadCursorRepository
 	Now        func() time.Time
 }
@@ -31,6 +32,9 @@ func (s MarkConversationReadService) Handle(ctx context.Context, command command
 	now := time.Now().UTC()
 	if s.Now != nil {
 		now = s.Now().UTC()
+	}
+	if _, err := readInboxConversation(ctx, s.Inbox, command.Meta.Actor, conversationID, false); err != nil {
+		return commands.ConversationReadResult{}, err
 	}
 	cursor, err := s.Repository.MarkRead(ctx, businessID, conversationID, principalID, now)
 	if err != nil {

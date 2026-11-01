@@ -45,18 +45,30 @@ type ChannelProvisioningView struct {
 	AuthorizationURL string
 }
 type ConversationView struct {
-	AssignmentReference *string
-	ID                  ConversationID
-	BusinessID          BusinessID
-	CustomerID          CustomerID
-	CustomerDisplayName *string
-	State               string
-	Ownership           string
-	AIMode              string
-	Priority            string
-	Labels              []string
-	LastActivityAt      time.Time
-	ResourceVersion     ResourceVersion
+	AssigneeDisplayName    *string
+	Channel                *string
+	LastMessageText        *string
+	LastMessageContentType *string
+	LastMessageDirection   *string
+	LastMessageOrigin      *string
+	LastMessageAuthorName  *string
+	UnreadCount            int
+	CanReply               bool
+	CanClaim               bool
+	CanAssign              bool
+	CanAddNote             bool
+	AssignmentReference    *string
+	ID                     ConversationID
+	BusinessID             BusinessID
+	CustomerID             CustomerID
+	CustomerDisplayName    *string
+	State                  string
+	Ownership              string
+	AIMode                 string
+	Priority               string
+	Labels                 []string
+	LastActivityAt         time.Time
+	ResourceVersion        ResourceVersion
 }
 type MessageAttachmentView struct {
 	Type    string
@@ -64,6 +76,8 @@ type MessageAttachmentView struct {
 }
 
 type MessageView struct {
+	AuthorPrincipalID        *string
+	AuthorDisplayName        *string
 	RelatedMessageID         *string
 	RelatedMessageText       *string
 	ID                       MessageID
@@ -278,4 +292,11 @@ type CatalogEntityContractView struct {
 	CatalogStatuses map[string]string
 	VariantStatuses map[string]string
 	OfferStatuses   map[string]string
+}
+
+type ConversationSummaryView struct {
+	ConversationID      ConversationID
+	Status              string
+	Text                string
+	CoveredInboundTurns int
 }

@@ -100,6 +100,8 @@ type DashboardOverviewView struct {
 type GetDashboardOverviewHandler = commands.QueryHandler[GetDashboardOverviewQuery, DashboardOverviewView]
 
 type ListConversationsQuery struct {
+	Scope      string
+	Search     string
 	Meta       QueryMeta
 	Limit      int
 	Cursor     string
@@ -318,3 +320,11 @@ type GetAuditEventQuery struct {
 }
 type ListAuditEventsHandler = commands.QueryHandler[ListAuditEventsQuery, commands.ListResult[commands.AuditEventView]]
 type GetAuditEventHandler = commands.QueryHandler[GetAuditEventQuery, commands.AuditEventView]
+
+type GetConversationSummaryQuery = GetConversationQuery
+type GetConversationSummaryHandler = commands.QueryHandler[GetConversationSummaryQuery, commands.ConversationSummaryView]
+type GetConversationInboxOverviewQuery struct {
+	Meta   QueryMeta
+	Scope  string
+	Search string
+}

@@ -16,6 +16,7 @@ func (f *fakeMessageRepository) Record(_ context.Context, draft ports.Communicat
 	f.recorded = draft
 	return ports.CommunicationMessageRecord{
 		ID:                      draft.ID,
+		AuthorPrincipalID:       draft.AuthorPrincipalID,
 		BusinessID:              draft.BusinessID,
 		ConversationReferenceID: draft.ConversationReferenceID,
 		OutboundMessageID:       draft.OutboundMessageID,
@@ -78,6 +79,7 @@ func TestManualOutboundRecordsCommunicationMessageAndEnqueuesOutbox(t *testing.T
 	convRepo := &fakeConversationRuntimeRepository{}
 
 	svc := ManualOutboundMessageService{
+		Inbox:         unitOwnedInbox{},
 		References:    refRepo,
 		Connections:   connRepo,
 		Outbound:      outboundRepo,
@@ -89,7 +91,7 @@ func TestManualOutboundRecordsCommunicationMessageAndEnqueuesOutbox(t *testing.T
 
 	cmd := commands.CreateOutboundMessageCommand{
 		Meta: commands.CommandMeta{
-			Actor:          commands.ActorContext{BusinessID: "biz-1"},
+			Actor:          commands.ActorContext{BusinessID: "biz-1", PrincipalID: "author-1", Role: "owner", Permissions: []string{"*"}},
 			IdempotencyKey: "idem-manual-1",
 		},
 		ConversationID: "conv-1",
@@ -123,4 +125,13 @@ func TestManualOutboundRecordsCommunicationMessageAndEnqueuesOutbox(t *testing.T
 	if tr.BusinessID != "biz-1" || tr.ConversationID != "conv-1" || tr.State == nil || *tr.State != "waiting_customer" || tr.Ownership == nil || *tr.Ownership != "human" {
 		t.Errorf("unexpected conversation transition: %#v", tr)
 	}
+}
+
+type unitOwnedInbox struct {
+	ports.ConversationInboxRepository
+}
+
+func (unitOwnedInbox) GetInboxConversation(_ context.Context, businessID, conversationID string, access ports.ConversationAccess, _ bool) (ports.ConversationRecord, error) {
+	assigned := access.PrincipalID
+	return ports.ConversationRecord{ID: conversationID, BusinessID: businessID, State: "human_handling", Ownership: "human", AssignmentReference: &assigned}, nil
 }

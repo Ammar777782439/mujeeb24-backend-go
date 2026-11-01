@@ -88,7 +88,7 @@ func (r *ConversationRepository) Update(ctx context.Context, update ports.Conver
 	if err != nil {
 		return ports.ConversationRecord{}, err
 	}
-	const query = `UPDATE conversations SET state=COALESCE($4,state),ownership=COALESCE($5,ownership),ai_mode_override=COALESCE($6,ai_mode_override),priority=COALESCE($7,priority),assignment_reference=COALESCE($8,assignment_reference),resource_version=resource_version+1,updated_at=now() WHERE business_id=$1::uuid AND id=$2::uuid AND resource_version=$3 RETURNING id::text,business_id::text,customer_id::text,state,ownership,ai_mode_override,priority,assignment_reference,resource_version,last_activity_at`
+	const query = `UPDATE conversations SET state=COALESCE($4,state),ownership=COALESCE($5,ownership),ai_mode_override=COALESCE($6,ai_mode_override),priority=COALESCE($7,priority),assignment_reference=CASE WHEN COALESCE($5,ownership)<>'human' THEN NULL ELSE COALESCE($8,assignment_reference) END,resource_version=resource_version+1,updated_at=now() WHERE business_id=$1::uuid AND id=$2::uuid AND resource_version=$3 RETURNING id::text,business_id::text,customer_id::text,state,ownership,ai_mode_override,priority,assignment_reference,resource_version,last_activity_at`
 	var record ports.ConversationRecord
 	err = executor.QueryRow(ctx, query, update.BusinessID, update.ConversationID, update.ExpectedVersion, nilIfBlank(update.State), nilIfBlank(update.Ownership), nilIfBlank(update.AIModeOverride), nilIfBlank(update.Priority), nilIfBlank(update.AssignmentReference)).Scan(&record.ID, &record.BusinessID, &record.CustomerID, &record.State, &record.Ownership, &record.AIModeOverride, &record.Priority, &record.AssignmentReference, &record.ResourceVersion, &record.LastActivityAt)
 	if err == nil {

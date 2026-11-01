@@ -12,6 +12,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/authorization"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
 
 const (
@@ -21,6 +22,7 @@ const (
 type RealtimeSSEHandler struct {
 	Hub               *realtimePostgres.LocalHub
 	Scope             ScopeProvider
+	Inbox             ports.ConversationInboxRepository
 	HeartbeatInterval time.Duration
 	BufferSize        int
 }
@@ -88,6 +90,16 @@ func (h *RealtimeSSEHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	conversationID := strings.TrimSpace(r.URL.Query().Get("conversation_id"))
+	if !authorization.ConversationAccess(actor).Supervisor && h.Inbox == nil {
+		writeError(w, http.StatusNotImplemented, "not_implemented", "conversation access is not configured")
+		return
+	}
+	if conversationID != "" && h.Inbox != nil {
+		if _, err := h.Inbox.GetInboxConversation(r.Context(), businessID, conversationID, authorization.ConversationAccess(actor), false); err != nil {
+			writeError(w, http.StatusNotFound, "not_found", "conversation is not available")
+			return
+		}
+	}
 
 	// Set required SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -142,12 +154,28 @@ func (h *RealtimeSSEHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if scopeErr != nil || !authorization.Has(current, authorization.PermissionConversationsRead) {
 				return
 			}
+			actor = current
 			if !writeFrame(": ping\n\n") {
 				return
 			}
 		case event, ok := <-conn.Events:
 			if !ok {
 				return
+			}
+			if !authorization.ConversationAccess(actor).Supervisor && (strings.HasPrefix(event.EventType, "conversation.") || event.EventType == "ai.human_handoff_triggered") {
+				visible := false
+				if event.ResourceType == "conversation" && h.Inbox != nil {
+					record, err := h.Inbox.GetInboxConversation(r.Context(), businessID, event.ResourceID, authorization.ConversationAccess(actor), false)
+					visible = err == nil && authorization.CanReadConversation(actor, record)
+				}
+				if !visible {
+					// A previous assignee still needs invalidation when access is
+					// removed, but receives no identifier from a colleague's chat.
+					event.EventType = "realtime.resync_required"
+					event.ResourceType = "business"
+					event.ResourceID = businessID
+					event.Data = nil
+				}
 			}
 			payload, err := json.Marshal(event)
 			if err != nil {

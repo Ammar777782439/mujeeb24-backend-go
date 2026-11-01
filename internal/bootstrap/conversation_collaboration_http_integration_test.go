@@ -22,8 +22,13 @@ func exerciseInboxCollaborationHTTP(t *testing.T, ctx context.Context, runtime *
 	t.Helper()
 	pool := runtime.Database.Pool()
 	customerID, connectionID, conversationID, referenceID, inboundID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	var extraPrincipals []string
 	defer func() {
 		for _, query := range []string{
+			`DELETE FROM outbox_entries WHERE business_id=$1::uuid`,
+			`DELETE FROM outbound_messages WHERE business_id=$1::uuid`,
+			`DELETE FROM conversation_read_cursors WHERE business_id=$1::uuid`,
+			`DELETE FROM conversation_state WHERE business_id=$1::uuid`,
 			`DELETE FROM communication_messages WHERE business_id=$1::uuid`,
 			`DELETE FROM conversation_references WHERE business_id=$1::uuid`,
 			`DELETE FROM conversations WHERE business_id=$1::uuid`,
@@ -32,6 +37,13 @@ func exerciseInboxCollaborationHTTP(t *testing.T, ctx context.Context, runtime *
 		} {
 			if _, err := pool.Exec(context.Background(), query, businessID); err != nil {
 				t.Error(err)
+			}
+		}
+		for _, id := range extraPrincipals {
+			for _, query := range []string{`DELETE FROM refresh_sessions WHERE principal_id=$1::uuid`, `DELETE FROM business_memberships WHERE principal_id=$1::uuid`, `DELETE FROM principals WHERE id=$1::uuid`} {
+				if _, err := pool.Exec(context.Background(), query, id); err != nil {
+					t.Error(err)
+				}
 			}
 		}
 	}()
@@ -224,6 +236,7 @@ func exerciseInboxCollaborationHTTP(t *testing.T, ctx context.Context, runtime *
 	if err := pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM outbound_messages WHERE business_id=$1::uuid),(SELECT count(*) FROM outbox_entries WHERE business_id=$1::uuid)`, businessID).Scan(&outbound, &outbox); err != nil || outbound != 0 || outbox != 0 {
 		t.Fatal("private note enqueued a customer delivery")
 	}
+	exerciseInboxIdentityHTTP(t, ctx, runtime, businessID, staffID, ownerToken, staffToken, customerID, connectionID, conversationID, referenceID, inboundID, func(id string) { extraPrincipals = append(extraPrincipals, id) })
 }
 
 func callBusinessMutationWithMethod(t *testing.T, handler http.Handler, method, path string, body []byte, token, version string) *httptest.ResponseRecorder {

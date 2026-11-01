@@ -38,6 +38,9 @@ type Dependencies struct {
 	GetBusinessSubscription      queries.GetBusinessSubscriptionHandler
 	ListConversations            queries.ListConversationsHandler
 	GetConversation              queries.GetConversationHandler
+	ClaimConversation            commands.ClaimConversationHandler
+	GetConversationSummary       queries.GetConversationSummaryHandler
+	GetConversationInboxOverview queries.GetConversationInboxOverviewHandler
 	ListConversationMessages     queries.ListConversationMessagesHandler
 	CreateOutboundMessage        commands.CreateOutboundMessageHandler
 	ListCustomers                queries.ListCustomersHandler
@@ -208,7 +211,7 @@ func (s *Server) ListConversations(ctx context.Context, in *contract.Conversatio
 	if err != nil {
 		return nil, mapApplicationError(err)
 	}
-	result, err := s.deps.ListConversations.Handle(ctx, queries.ListConversationsQuery{Meta: queryMeta(actor, "", ""), Limit: in.Limit, Cursor: in.Cursor, State: in.State, Ownership: in.Ownership, Channel: in.Channel, CustomerID: optionalCustomerID(in.CustomerID)})
+	result, err := s.deps.ListConversations.Handle(ctx, queries.ListConversationsQuery{Meta: queryMeta(actor, "", ""), Limit: in.Limit, Cursor: in.Cursor, Scope: in.Scope, Search: in.Search, State: in.State, Ownership: in.Ownership, Channel: in.Channel, CustomerID: optionalCustomerID(in.CustomerID)})
 	if err != nil {
 		return nil, mapApplicationError(err)
 	}
@@ -336,16 +339,20 @@ func conversationProjection(v commands.ConversationView) contract.Conversation {
 	var assignment map[string]string
 	if v.AssignmentReference != nil && *v.AssignmentReference != "" {
 		assignment = map[string]string{"principal_id": *v.AssignmentReference}
+		if v.AssigneeDisplayName != nil {
+			assignment["display_name"] = *v.AssigneeDisplayName
+		}
 	}
 	return contract.Conversation{
-		ID:              contract.UUID(v.ID),
-		BusinessID:      contract.UUID(v.BusinessID),
-		Customer:        contract.CustomerSummary{ID: contract.UUID(v.CustomerID), DisplayName: v.CustomerDisplayName},
-		State:           v.State,
-		Ownership:       v.Ownership,
-		AIMode:          v.AIMode,
-		Priority:        v.Priority,
-		Assignment:      assignment,
+		ID:                     contract.UUID(v.ID),
+		BusinessID:             contract.UUID(v.BusinessID),
+		Customer:               contract.CustomerSummary{ID: contract.UUID(v.CustomerID), DisplayName: v.CustomerDisplayName},
+		State:                  v.State,
+		Ownership:              v.Ownership,
+		AIMode:                 v.AIMode,
+		Priority:               v.Priority,
+		Assignment:             assignment,
+		LastMessageContentType: v.LastMessageContentType, Channel: v.Channel, LastMessageText: v.LastMessageText, LastMessageDirection: v.LastMessageDirection, LastMessageOrigin: v.LastMessageOrigin, LastMessageAuthorName: v.LastMessageAuthorName, UnreadCount: v.UnreadCount, CanReply: v.CanReply, CanClaim: v.CanClaim, CanAssign: v.CanAssign, CanAddNote: v.CanAddNote,
 		Labels:          v.Labels,
 		LastActivityAt:  v.LastActivityAt,
 		ResourceVersion: string(v.ResourceVersion),
@@ -361,7 +368,7 @@ func singleConversation(v commands.ConversationView) *contract.Single[contract.C
 }
 func singleMessage(v commands.MessageView) *contract.Single[contract.Message] {
 	out := &contract.Single[contract.Message]{}
-	out.Body.Data = contract.Message{ID: contract.UUID(v.ID), ConversationID: contract.UUID(v.ConversationID), Direction: v.Direction, Origin: v.Origin, Status: v.Status, Text: v.Text, CreatedAt: v.CreatedAt, OccurredAt: v.OccurredAt, Private: v.Private, ContentType: v.ContentType, RelatedMessageID: v.RelatedMessageID, RelatedMessageText: v.RelatedMessageText}
+	out.Body.Data = contract.Message{ID: contract.UUID(v.ID), ConversationID: contract.UUID(v.ConversationID), Direction: v.Direction, Origin: v.Origin, Status: v.Status, Text: v.Text, CreatedAt: v.CreatedAt, OccurredAt: v.OccurredAt, Private: v.Private, ContentType: v.ContentType, AuthorPrincipalID: v.AuthorPrincipalID, AuthorDisplayName: v.AuthorDisplayName, RelatedMessageID: v.RelatedMessageID, RelatedMessageText: v.RelatedMessageText}
 	return out
 }
 
@@ -378,6 +385,9 @@ func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (a
 	// FIRST so they bypass merchant requireScope (which would 403 a platform
 	// super admin because they have no business_memberships row).
 	if result, handled := s.dispatchPlatformCommand(ctx, operationID, input); handled {
+		return dispatchResult(result)
+	}
+	if result, handled := s.dispatchInboxQuery(ctx, operationID, input); handled {
 		return dispatchResult(result)
 	}
 	if result, handled := s.dispatchQuery(ctx, operationID, input); handled {

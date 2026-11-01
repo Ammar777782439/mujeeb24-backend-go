@@ -51,8 +51,8 @@ func TestMarkConversationReadReturnsCurrentMessageCursor(t *testing.T) {
 	messageID := "00000000-0000-0000-0000-000000000908"
 	readAt := time.Date(2026, 8, 28, 10, 5, 0, 0, time.UTC)
 	repository := &fakeReadCursorRepository{cursor: ports.ConversationReadCursor{BusinessID: "00000000-0000-0000-0000-000000000001", ConversationID: "00000000-0000-0000-0000-000000000907", PrincipalID: "00000000-0000-0000-0000-000000000009", LastReadMessageID: &messageID}}
-	service := MarkConversationReadService{Repository: repository, Now: func() time.Time { return readAt }}
-	result, err := service.Handle(context.Background(), commands.MarkConversationReadCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(repository.cursor.BusinessID), PrincipalID: commands.PrincipalID(repository.cursor.PrincipalID)}}, ConversationID: commands.ConversationID(repository.cursor.ConversationID)})
+	service := MarkConversationReadService{Repository: repository, Inbox: unitOwnedInbox{}, Now: func() time.Time { return readAt }}
+	result, err := service.Handle(context.Background(), commands.MarkConversationReadCommand{Meta: commands.CommandMeta{Actor: commands.ActorContext{BusinessID: commands.BusinessID(repository.cursor.BusinessID), PrincipalID: commands.PrincipalID(repository.cursor.PrincipalID), Role: "owner", Permissions: []string{"*"}}}, ConversationID: commands.ConversationID(repository.cursor.ConversationID)})
 	if err != nil {
 		t.Fatalf("mark read: %v", err)
 	}

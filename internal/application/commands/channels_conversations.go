@@ -79,3 +79,9 @@ type AssignConversationHandler = CommandHandler[AssignConversationCommand, Conve
 type UpdateConversationLabelsHandler = CommandHandler[UpdateConversationLabelsCommand, ConversationResult]
 type AddPrivateNoteHandler = CommandHandler[AddPrivateNoteCommand, MessageResult]
 type CreateOutboundMessageHandler = CommandHandler[CreateOutboundMessageCommand, MessageResult]
+
+type ClaimConversationCommand struct {
+	Meta           CommandMeta
+	ConversationID ConversationID
+}
+type ClaimConversationHandler = CommandHandler[ClaimConversationCommand, ConversationResult]
