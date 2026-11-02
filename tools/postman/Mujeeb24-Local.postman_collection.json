@@ -1244,6 +1244,24 @@
                                                 ]
                                   }
                               ]
+                 },
+                 {
+                     "name": "09 Dashboard follow-up summary",
+                     "item": [
+                         {
+                             "name": "Authorized customers requiring follow-up",
+                             "request": {
+                                 "method": "GET",
+                                 "header": [
+                                     {
+                                         "key": "Authorization",
+                                         "value": "Bearer {{access_token}}"
+                                     }
+                                 ],
+                                 "url": "{{base_url}}/api/v1/businesses/{{business_id}}/dashboard/follow-ups"
+                             }
+                         }
+                     ]
                  }
              ],
     "variable":  [

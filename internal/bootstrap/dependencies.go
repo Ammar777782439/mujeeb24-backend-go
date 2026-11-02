@@ -61,6 +61,7 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 		UpdateBusinessProfile:        services.UpdateBusinessProfileService{BusinessManagementService: businessManagement},
 		UpdateBusinessPolicy:         services.UpdateBusinessPolicyService{BusinessManagementService: businessManagement},
 		GetDashboardOverview:         services.DashboardOverviewQueryService{Repository: dashboardRepository},
+		GetDashboardFollowUps:        services.DashboardFollowUpsQueryService{Repository: dashboardRepository},
 		GetBusinessSubscription:      services.BusinessSubscriptionQueryService{Repository: dashboardRepository},
 		GetCustomer:                  services.GetCustomerQueryService{Repository: customerRepository},
 		ListCustomers:                services.ListCustomersQueryService{CustomerRuntimeService: customerRuntime},

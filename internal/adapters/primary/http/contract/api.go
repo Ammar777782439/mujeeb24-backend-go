@@ -55,6 +55,7 @@ func BuildAPIWithHandlersAndMiddleware(handlers DashboardOperationHandler, middl
 var dashboardSecurity = []map[string][]string{{"bearerAuth": {}}}
 
 func registerCoreOperations(api huma.API, dispatcher DashboardOperationHandler) {
+	register(api, dispatcher, huma.Operation{OperationID: "getDashboardFollowUps", Method: http.MethodGet, Path: "/businesses/{business_id}/dashboard/follow-ups", Tags: []string{"Dashboard"}, Summary: "Get authorized customers requiring sales follow-up", Security: dashboardSecurity}, BusinessPath{}, Single[dto.DashboardFollowUps]{})
 	register(api, dispatcher, huma.Operation{OperationID: "getCurrentPrincipal", Method: http.MethodGet, Path: "/me", Tags: []string{"Me"}, Summary: "Get the authenticated principal", Security: dashboardSecurity}, EmptyInput{}, Single[Principal]{})
 	register(api, dispatcher, huma.Operation{OperationID: "listAccessibleBusinesses", Method: http.MethodGet, Path: "/me/businesses", Tags: []string{"Me"}, Summary: "List businesses accessible to the principal", Security: dashboardSecurity}, MeBusinessListInput{}, List[BusinessMembership]{})
 	register(api, dispatcher, huma.Operation{OperationID: "getBusiness", Method: http.MethodGet, Path: "/businesses/{business_id}", Tags: []string{"Business"}, Summary: "Get a business projection", Security: dashboardSecurity}, BusinessPath{}, Single[Business]{})

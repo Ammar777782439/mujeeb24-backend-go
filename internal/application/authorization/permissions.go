@@ -54,7 +54,7 @@ func buildOperationPermissions() map[string]string {
 	}
 	register(PermissionBusinessRead, "getBusiness", "getBusinessPolicy", "getBusinessSubscription")
 	register(PermissionBusinessSettings, "createSalesRequirement", "updateBusinessProfile", "updateBusinessPolicy")
-	register(PermissionDashboardRead, "getDashboardOverview")
+	register(PermissionDashboardRead, "getDashboardOverview", "getDashboardFollowUps")
 	register(PermissionTeamRead, "listTeamMembers", "listTeamInvitations")
 	register(PermissionTeamManage, "createTeamInvitation", "revokeTeamInvitation", "resendTeamInvitation", "updateTeamMemberRole", "updateTeamMemberAccess", "revokeTeamMember")
 	register(PermissionConversationsRead, "getCatalogMediaPreview", "listConversations", "getConversation", "listConversationMessages", "getConversationSummary", "getConversationInboxOverview", "listCustomerConversations", "markConversationRead")

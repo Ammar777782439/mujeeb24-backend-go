@@ -35,6 +35,7 @@ type Dependencies struct {
 	GetBusiness                  queries.GetBusinessHandler
 	GetBusinessPolicy            queries.GetBusinessPolicyHandler
 	GetDashboardOverview         queries.GetDashboardOverviewHandler
+	GetDashboardFollowUps        queries.GetDashboardFollowUpsHandler
 	GetBusinessSubscription      queries.GetBusinessSubscriptionHandler
 	ListConversations            queries.ListConversationsHandler
 	GetConversation              queries.GetConversationHandler
@@ -378,6 +379,9 @@ func singleMessage(v commands.MessageView) *contract.Single[contract.Message] {
 // never through a contract-local generic handler.
 func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (any, error) {
 	ctx = context.WithValue(ctx, operationIDContextKey{}, operationID)
+	if result, handled := s.dispatchDashboardFollowUps(ctx, operationID, input); handled {
+		return dispatchResult(result)
+	}
 	if result, handled := s.dispatchCatalogMedia(ctx, operationID, input); handled {
 		return dispatchResult(result)
 	}

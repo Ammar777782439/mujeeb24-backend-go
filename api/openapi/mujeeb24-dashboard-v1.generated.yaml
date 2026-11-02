@@ -2224,6 +2224,80 @@ components:
       required:
         - id
       type: object
+    DashboardFollowUp:
+      additionalProperties: false
+      properties:
+        assignee_name:
+          type: string
+        attention:
+          enum:
+            - waiting_human
+            - awaiting_review
+            - follow_up_due
+            - unassigned
+            - new
+            - interested
+            - qualified
+          type: string
+        channel:
+          type: string
+        conversation_id:
+          type: string
+        customer_id:
+          type: string
+        customer_name:
+          type: string
+        interest_reason:
+          type: string
+        last_customer_message:
+          type: string
+        last_customer_message_at:
+          format: date-time
+          type: string
+        lead_id:
+          type: string
+        lead_status:
+          enum:
+            - new
+            - interested
+            - qualified
+          type: string
+        next_action_at:
+          format: date-time
+          type: string
+        product_name:
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+        workflow_id:
+          type: string
+      required:
+        - lead_id
+        - customer_id
+        - customer_name
+        - lead_status
+        - attention
+        - updated_at
+      type: object
+    DashboardFollowUps:
+      additionalProperties: false
+      properties:
+        as_of:
+          format: date-time
+          type: string
+        has_more:
+          type: boolean
+        items:
+          items:
+            $ref: "#/components/schemas/DashboardFollowUp"
+          nullable: true
+          type: array
+      required:
+        - items
+        - has_more
+        - as_of
+      type: object
     DashboardOverview:
       additionalProperties: false
       properties:
@@ -5030,6 +5104,23 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/Customer"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleDashboardFollowUpsBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleDashboardFollowUpsBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/DashboardFollowUps"
         request_id:
           type: string
       required:
@@ -12301,6 +12392,70 @@ paths:
       summary: List customer transactions
       tags:
         - Customers
+  /businesses/{business_id}/dashboard/follow-ups:
+    get:
+      operationId: getDashboardFollowUps
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleDashboardFollowUpsBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Get authorized customers requiring sales follow-up
+      tags:
+        - Dashboard
   /businesses/{business_id}/dashboard/overview:
     get:
       operationId: getDashboardOverview
