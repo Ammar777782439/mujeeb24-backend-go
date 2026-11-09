@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	maxConversationImageBytes = 10 * 1024 * 1024
-	maxConversationImagePixels = 16_000_000
-	maxConversationImageEdge = 12_000
+	maxConversationImageBytes        = 10 * 1024 * 1024
+	maxConversationImagePixels       = 16_000_000
+	maxConversationImageEdge         = 12_000
 	maxConversationIngestionAttempts = 8
 )
 

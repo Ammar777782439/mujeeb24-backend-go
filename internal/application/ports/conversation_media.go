@@ -8,7 +8,6 @@ import (
 
 var ErrTransientMediaProvider = errors.New("transient media provider failure")
 
-
 // InboundMediaSource is a short-lived provider URL resolved just in time for
 // ingestion. The URL must never be persisted as a canonical media reference.
 type InboundMediaSource struct {
@@ -110,7 +109,6 @@ type MessageAttachmentRepository interface {
 	MarkReady(ctx context.Context, businessID, attachmentID string) (MessageAttachmentRecord, error)
 	MarkFailed(ctx context.Context, businessID, attachmentID string) (MessageAttachmentRecord, error)
 }
-
 
 // MediaObjectProviderWriter writes to the provider recorded on the MediaAsset,
 // not whichever provider is currently selected for new uploads.

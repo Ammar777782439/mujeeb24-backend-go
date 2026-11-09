@@ -92,7 +92,7 @@ func TestConversationMediaWritesToTheProviderRecordedOnTheAsset(t *testing.T) {
 	b2 := &namedObjectStore{name: "backblaze"}
 	storage := &CatalogMediaObjectStore{
 		WriteProvider: "backblaze",
-		Providers: map[string]ports.MediaObjectStorage{"r2": r2, "backblaze": b2},
+		Providers:     map[string]ports.MediaObjectStorage{"r2": r2, "backblaze": b2},
 	}
 	if err := storage.PutToProvider(context.Background(), "r2", "conversation/business/asset.png", "image/png", []byte("image")); err != nil {
 		t.Fatal(err)

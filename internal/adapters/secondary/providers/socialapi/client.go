@@ -1188,7 +1188,9 @@ type Error struct {
 func (e *Error) IsRetryable() bool { return e != nil && e.Retryable }
 
 func (e *Error) RetryAfterDuration() time.Duration {
-	if e == nil { return 0 }
+	if e == nil {
+		return 0
+	}
 	return e.RetryAfter
 }
 

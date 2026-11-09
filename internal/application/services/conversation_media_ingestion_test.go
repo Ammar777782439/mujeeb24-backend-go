@@ -14,12 +14,12 @@ import (
 )
 
 type conversationMediaAttachmentsFake struct {
-	claimed []ports.ClaimedMessageAttachmentIngestion
-	retried int
-	retryAt time.Time
+	claimed   []ports.ClaimedMessageAttachmentIngestion
+	retried   int
+	retryAt   time.Time
 	retryCode string
-	ready int
-	failed int
+	ready     int
+	failed    int
 }
 
 func (f *conversationMediaAttachmentsFake) Create(context.Context, ports.MessageAttachmentDraft) (ports.MessageAttachmentRecord, error) {
@@ -46,9 +46,9 @@ func (f *conversationMediaAttachmentsFake) MarkFailed(context.Context, string, s
 }
 
 type conversationMediaAssetsFake struct {
-	asset ports.MediaAsset
+	asset    ports.MediaAsset
 	rejected int
-	marked ports.VerifiedImage
+	marked   ports.VerifiedImage
 }
 
 func (f *conversationMediaAssetsFake) CreatePendingIngestion(context.Context, ports.PendingConversationMediaAsset) (ports.MediaAsset, error) {
@@ -71,8 +71,8 @@ func (f *conversationMediaAssetsFake) MarkIngestionRejected(context.Context, str
 
 type conversationMediaResolverFake struct {
 	source ports.InboundMediaSource
-	err error
-	calls int
+	err    error
+	calls  int
 }
 func (f *conversationMediaResolverFake) ResolveInboundMediaSource(context.Context, string, string, string) (ports.InboundMediaSource, error) {
 	f.calls++
@@ -80,8 +80,8 @@ func (f *conversationMediaResolverFake) ResolveInboundMediaSource(context.Contex
 }
 
 type conversationMediaDownloaderFake struct {
-	body []byte
-	err error
+	body  []byte
+	err   error
 	calls int
 }
 func (f *conversationMediaDownloaderFake) DownloadInboundMedia(context.Context, string, int64) ([]byte, string, error) {
@@ -91,10 +91,10 @@ func (f *conversationMediaDownloaderFake) DownloadInboundMedia(context.Context, 
 
 type conversationMediaObjectsFake struct {
 	provider string
-	key string
-	mime string
-	body []byte
-	puts int
+	key      string
+	mime     string
+	body     []byte
+	puts     int
 }
 func (f *conversationMediaObjectsFake) Put(context.Context, string, string, []byte) error {
 	return errors.New("provider-pinned Put must be used")
@@ -104,15 +104,18 @@ func (f *conversationMediaObjectsFake) PutToProvider(_ context.Context, provider
 	f.puts++
 	return nil
 }
-func (f *conversationMediaObjectsFake) DeleteFromProvider(context.Context, string, string) error { return nil }
+func (f *conversationMediaObjectsFake) DeleteFromProvider(context.Context, string, string) error {
+	return nil
+}
 func (f *conversationMediaObjectsFake) Delete(context.Context, string) error { return nil }
 func (f *conversationMediaObjectsFake) PresignGet(context.Context, string, time.Duration) (string, error) {
 	return "", errors.New("not used")
 }
 
-type conversationMediaRetryError struct { delay time.Duration }
-func (e conversationMediaRetryError) Error() string { return "provider temporarily unavailable" }
-func (e conversationMediaRetryError) IsRetryable() bool { return true }
+type conversationMediaRetryError struct{ delay time.Duration }
+
+func (e conversationMediaRetryError) Error() string                     { return "provider temporarily unavailable" }
+func (e conversationMediaRetryError) IsRetryable() bool                 { return true }
 func (e conversationMediaRetryError) RetryAfterDuration() time.Duration { return e.delay }
 
 func validConversationPNG(t *testing.T) []byte {

@@ -33,6 +33,7 @@ func (s *CatalogMediaObjectStore) Put(ctx context.Context, key, mime string, bod
 	}
 	return p.Put(ctx, key, mime, body)
 }
+
 // PutToProvider writes using the provider persisted on the owning MediaAsset.
 // It deliberately bypasses WriteProvider so pending uploads remain pinned to
 // the provider selected when their database row was created.
