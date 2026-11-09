@@ -1,6 +1,7 @@
 package socialapi
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -93,7 +94,7 @@ func TestClientNormalizesInboundMediaWithoutPersistingTemporaryURLs(t *testing.T
 	}
 }
 
-func TestClientRejectsInboundMediaWithoutStablePlatformMessageID(t *testing.T) {
+func TestClientUsesStableSocialAPIInteractionIDWhenPlatformMessageIDIsAbsent(t *testing.T) {
 	body := []byte(`{"event":"dm.received","data":{"id":"sapi_dm_media_2","type":"dm","platform":"instagram","account_id":"acc_1","conversation_id":"conv_1","author":{"id":"customer-1"},"content":{"text":"","media":[{"url":"https://cdn.example.test/image.jpg","type":"image"}]}}}`)
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	mac := hmac.New(sha256.New, []byte("secret"))
@@ -102,11 +103,33 @@ func TestClientRejectsInboundMediaWithoutStablePlatformMessageID(t *testing.T) {
 		"X-SocialAPI-Signature-V2": "sha256=" + hex.EncodeToString(mac.Sum(nil)),
 		"X-SocialAPI-Timestamp":    timestamp,
 	}
+	events, err := NewClient(Config{WebhookSecret: "secret"}).NormalizeWebhook(
+		httptest.NewRequest(http.MethodPost, "/", nil).Context(), headers, body,
+	)
+	if err != nil || len(events) != 1 || len(events[0].Attachments) != 1 {
+		t.Fatalf("stable SocialAPI interaction id should support media lookup: events=%#v err=%v", events, err)
+	}
+	interactionID, index, err := decodeInboundMediaReference(events[0].Attachments[0].ProviderMediaReference)
+	if err != nil || interactionID != "sapi_dm_media_2" || index != 0 {
+		t.Fatalf("unexpected opaque media lookup reference: id=%q index=%d err=%v", interactionID, index, err)
+	}
+}
+
+func TestClientRejectsInboundMediaWithoutStableSocialAPIInteractionID(t *testing.T) {
+	body := []byte(`{"event":"dm.received","data":{"id":"","type":"dm","platform":"instagram","account_id":"acc_1","conversation_id":"conv_1","platform_id":"platform-message-2","author":{"id":"customer-1"},"content":{"media":[{"url":"https://cdn.example.test/image.jpg","type":"image"}]}}}`)
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	mac := hmac.New(sha256.New, []byte("secret"))
+	_, _ = mac.Write([]byte(timestamp + "." + string(body)))
+	headers := map[string]string{
+		"X-SocialAPI-Signature-V2": "sha256=" + hex.EncodeToString(mac.Sum(nil)),
+		"X-SocialAPI-Timestamp":    timestamp,
+		"X-SocialAPI-Delivery":     "delivery-without-interaction-id",
+	}
 	_, err := NewClient(Config{WebhookSecret: "secret"}).NormalizeWebhook(
 		httptest.NewRequest(http.MethodPost, "/", nil).Context(), headers, body,
 	)
 	if !errors.Is(err, ErrInvalidResponse) {
-		t.Fatalf("expected missing stable platform id to be rejected, got %v", err)
+		t.Fatalf("expected a missing stable SocialAPI interaction id to be rejected, got %v", err)
 	}
 }
 
@@ -124,6 +147,120 @@ func TestClientRejectsUnknownInboundMediaType(t *testing.T) {
 	)
 	if !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("expected unsupported media kind, got %v", err)
+	}
+}
+
+func TestClientResolvesInboundMediaThroughConversationHistory(t *testing.T) {
+	interactionID := "sapi_dm_stable-interaction"
+	attachmentURL := "https://cdn.example.test/private-image.jpg"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/inbox/conversations/conversation-1/messages" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.String())
+			http.Error(w, "unexpected request", http.StatusBadRequest)
+			return
+		}
+		if r.URL.Query().Get("limit") != "200" {
+			t.Errorf("expected bounded 200-message page, got query %q", r.URL.RawQuery)
+			http.Error(w, "unexpected query", http.StatusBadRequest)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer test-key" {
+			t.Errorf("SocialAPI authorization header missing")
+			http.Error(w, "missing auth", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":[{"id":"other-message","platform_id":"platform-1","attachment_type":"image","attachment_url":"https://cdn.example.test/other.jpg"},{"id":"sapi_dm_stable-interaction","platform_id":"platform-2","attachment_type":"image","attachment_url":"https://cdn.example.test/private-image.jpg"}],"pagination":{"has_more":false,"next_cursor":""}}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "test-key", HTTPClient: server.Client()})
+	reference := encodeInboundMediaReference(interactionID, 0)
+	source, err := client.ResolveInboundMediaSource(context.Background(), "conversation-1", reference, "image")
+	if err != nil {
+		t.Fatalf("ResolveInboundMediaSource: %v", err)
+	}
+	if source.URL != attachmentURL || source.Kind != "image" {
+		t.Fatalf("unexpected media source: %#v", source)
+	}
+}
+
+func TestClientRejectsUnsupportedInboundMediaPositionBeforeCallingSocialAPI(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "test-key", HTTPClient: server.Client()})
+	_, err := client.ResolveInboundMediaSource(
+		context.Background(),
+		"conversation-1",
+		encodeInboundMediaReference("sapi_dm_stable-interaction", 1),
+		"image",
+	)
+	if !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("expected unsupported media position, got %v", err)
+	}
+	if requests != 0 {
+		t.Fatalf("unsupported attachment position must not call SocialAPI; requests=%d", requests)
+	}
+}
+
+func TestClientRejectsInboundMediaKindMismatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":[{"id":"sapi_dm_stable-interaction","platform_id":"platform-1","attachment_type":"video","attachment_url":"https://cdn.example.test/clip.mp4"}],"pagination":{"has_more":false,"next_cursor":""}}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "test-key", HTTPClient: server.Client()})
+	_, err := client.ResolveInboundMediaSource(
+		context.Background(),
+		"conversation-1",
+		encodeInboundMediaReference("sapi_dm_stable-interaction", 0),
+		"image",
+	)
+	if !errors.Is(err, ErrInvalidResponse) {
+		t.Fatalf("expected provider kind mismatch, got %v", err)
+	}
+}
+
+func TestClientRejectsNonHTTPSInboundMediaSource(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":[{"id":"sapi_dm_stable-interaction","attachment_type":"image","attachment_url":"http://cdn.example.test/photo.jpg"}],"pagination":{"has_more":false,"next_cursor":""}}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "test-key", HTTPClient: server.Client()})
+	_, err := client.ResolveInboundMediaSource(
+		context.Background(),
+		"conversation-1",
+		encodeInboundMediaReference("sapi_dm_stable-interaction", 0),
+		"image",
+	)
+	if !errors.Is(err, ErrInvalidResponse) {
+		t.Fatalf("expected non-HTTPS provider URL to be rejected, got %v", err)
+	}
+}
+
+func TestClientRejectsInboundMediaWithoutHistoryMatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":[{"id":"different-message","attachment_type":"image","attachment_url":"https://cdn.example.test/photo.jpg"}],"pagination":{"has_more":false,"next_cursor":""}}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "test-key", HTTPClient: server.Client()})
+	_, err := client.ResolveInboundMediaSource(
+		context.Background(),
+		"conversation-1",
+		encodeInboundMediaReference("sapi_dm_not-present", 0),
+		"image",
+	)
+	if !errors.Is(err, ErrInboundMediaNotFound) {
+		t.Fatalf("expected stable message not found, got %v", err)
 	}
 }
 

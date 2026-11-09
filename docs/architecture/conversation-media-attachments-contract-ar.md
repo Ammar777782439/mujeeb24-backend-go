@@ -39,7 +39,8 @@ Business brand media
 - Migration `000087_conversation_media_attachments` adds `media_kind`, adds the `pending_ingestion` asset status, permits the `conversation_attachment` purpose, and creates `message_attachments`.
 - `message_attachments` references both `communication_messages` and `media_assets` through composite `(business_id, id)` foreign keys.
 - `ConversationMediaIngestionRepository` creates pending conversation assets for supported logical kinds and promotes verified image metadata only.
-- SocialAPI webhook normalization reads `content.media[]`, validates that its URLs are HTTPS, discards those URLs, and emits opaque references based on the stable platform message ID and attachment position.
+- SocialAPI webhook normalization reads `content.media[]`, validates that its URLs are HTTPS, discards those URLs, and emits opaque references based on the stable SocialAPI interaction ID and attachment position.
+- `InboundMediaSourceResolver` resolves that opaque ID through SocialAPI's authenticated conversation message-history endpoint and returns the current `attachment_url` only for immediate ingestion use; the URL is not stored.
 - `ProviderInboundStore.Materialize` creates pending MediaAsset and MessageAttachment records atomically with the communication message. The provider reference is not a URL.
 - `MessageAttachmentRepository` creates and lists tenant-scoped links. A relation can become `ready` only if its underlying conversation MediaAsset is already `ready` and has the same kind.
 - Provider source references are opaque IDs only; HTTP(S) URLs are rejected by the repository and database constraint. The reference is cleared after successful ingestion.
@@ -47,7 +48,7 @@ Business brand media
 
 ## 4. Current implementation limit
 
-**The verified-to-ready path is image-only.** Image/video/audio/file events can be materialized as pending placeholders; there is not yet a worker to download their bytes, determine verified MIME/size, write Object Storage, or transition them to ready. The current `media_assets` MIME and verification contract is still image-specific.
+**The verified-to-ready path is image-only.** The source resolver follows the current SocialAPI message-history schema, which exposes one `attachment_url` per message. It resolves position zero; positions above zero are rejected as unsupported. The actual HTTP download, byte verification and object-storage write remain pending. Image/video/audio/file events can be materialized as pending placeholders; there is not yet a worker to download their bytes, determine verified MIME/size, write Object Storage, or transition them to ready. The current `media_assets` MIME and verification contract is still image-specific.
 
 No claim is made that WhatsApp, Instagram and Facebook expose identical media behavior. Inbound retrieval and outbound delivery must be verified separately for every channel and media kind before enabling them.
 
@@ -56,8 +57,9 @@ No claim is made that WhatsApp, Instagram and Facebook expose identical media be
 ```text
 SocialAPI webhook
   -> signature verification + event ledger/idempotency
-  -> normalize content.media[] to opaque message-id/index references
+  -> normalize content.media[] to opaque SocialAPI interaction-id/index references
   -> persist message + pending MediaAsset + MessageAttachment in one local transaction
+  -> source resolver looks up the stable interaction ID in SocialAPI message history
   -> [next] claim pending reference through an internal worker port
   -> [next] fetch provider bytes outside the transaction
   -> [next] verify MIME, size, dimensions and checksum
@@ -99,11 +101,19 @@ Never persist public or presigned URLs as canonical references. Generate a short
 ## 8. Next implementation gates
 
 1. Add the scoped pending-reference claim/read port and durable ingestion worker.
-2. Resolve the SocialAPI platform message ID and attachment position to its current `attachment_url`.
+2. Resolve the whole opaque SocialAPI interaction ID and attachment position through the authenticated conversation message-history endpoint; use the returned `attachment_url` only for immediate ingestion.
 3. Download and verify image bytes, store them privately, and transition asset+relation atomically.
 4. Add authorized message attachment projections and realtime state notifications.
 5. Add authenticated private upload/finalize for outbound media, then route through Outbox.
 6. Verify per-channel constraints and live delivery before enabling the feature.
 7. Complete brand-media relation, orphan cleanup, storage quotas and backup/restore proof.
 
-This is a persistence foundation, not end-to-end support for customer media.
+## 9. Provider contract references
+
+- Repository evidence: [`docs/integration/socialapi-official-research.md`](../integration/socialapi-official-research.md).
+- Upstream message history: [List messages in a conversation](https://docs.social-api.ai/api-reference/inbox/list-messages-in-a-conversation).
+- Upstream inbox behavior: [Unified inbox](https://docs.social-api.ai/guides/inbox).
+
+SocialAPI interaction IDs are treated as opaque strings. The adapter encodes and decodes the whole ID for an internal reference; it does not parse prefixes or embedded platform identifiers.
+
+This is a persistence and source-resolution foundation, not end-to-end support for customer media.

@@ -26,10 +26,11 @@ import (
 const defaultBaseURL = "https://api.social-api.ai"
 
 var (
-	ErrNotConfigured  = errors.New("socialapi client is not configured")
-	ErrInvalidWebhook = errors.New("socialapi webhook signature is invalid")
-	ErrReplay         = errors.New("socialapi webhook timestamp is outside tolerance")
-	ErrUnsupported    = errors.New("socialapi operation is unsupported by the verified contract")
+	ErrNotConfigured        = errors.New("socialapi client is not configured")
+	ErrInvalidWebhook       = errors.New("socialapi webhook signature is invalid")
+	ErrReplay               = errors.New("socialapi webhook timestamp is outside tolerance")
+	ErrUnsupported          = errors.New("socialapi operation is unsupported by the verified contract")
+	ErrInboundMediaNotFound = errors.New("socialapi inbound media source was not found")
 )
 
 type Client struct {
@@ -693,8 +694,11 @@ func (c *Client) NormalizeWebhook(ctx context.Context, headers map[string]string
 	}
 	event := channel.InboundEvent{ID: uuid.NewString(), Provider: channel.ProviderSocialAPI, Channel: providerChannel, ProviderConnectionID: envelope.Data.AccountID, ProviderEventID: providerEventID, DeliveryID: deliveryID, DedupeStrategy: dedupeStrategy, EventType: normalizedEventType, InteractionKind: interaction, ProviderMessageID: providerMessageID, ProviderConversationID: providerConversationID, ExternalUserID: externalUserID, Text: text, Direction: direction, Origin: origin, DeliveryStatus: strings.ToLower(strings.TrimSpace(envelope.Data.Status)), ReceivedAt: receivedAt}
 	if len(envelope.Data.Content.Media) > 0 {
-		if strings.TrimSpace(envelope.Data.PlatformID) == "" {
-			return nil, fmt.Errorf("%w: media-bearing DM has no platform message id", ErrInvalidResponse)
+		// The stable SocialAPI interaction ID is the lookup key in the
+		// authenticated message history. A delivery ID is only a webhook
+		// deduplication fallback and is not suitable for media resolution.
+		if strings.TrimSpace(envelope.Data.ID) == "" {
+			return nil, fmt.Errorf("%w: media-bearing DM has no stable SocialAPI interaction id", ErrInvalidResponse)
 		}
 		event.Attachments = make([]channel.InboundAttachmentReference, 0, len(envelope.Data.Content.Media))
 		for index, item := range envelope.Data.Content.Media {
@@ -706,7 +710,7 @@ func (c *Client) NormalizeWebhook(ctx context.Context, headers map[string]string
 				return nil, kindErr
 			}
 			reference := channel.InboundAttachmentReference{
-				ProviderMediaReference: encodeInboundMediaReference(providerMessageID, index),
+				ProviderMediaReference: encodeInboundMediaReference(providerEventID, index),
 				Kind:                   kind,
 			}
 			if err := reference.Validate(); err != nil {
@@ -750,11 +754,68 @@ func inboundAttachmentKind(value string) (channel.AttachmentKind, error) {
 	}
 }
 
-// The reference contains only the provider message identity and attachment
-// position. The webhook's temporary URL is intentionally not persisted.
-func encodeInboundMediaReference(platformMessageID string, index int) string {
-	encoded := base64.RawURLEncoding.EncodeToString([]byte(platformMessageID))
+// The reference contains only the stable SocialAPI interaction ID and
+// attachment position. The webhook's temporary URL is intentionally discarded.
+func encodeInboundMediaReference(socialAPIInteractionID string, index int) string {
+	encoded := base64.RawURLEncoding.EncodeToString([]byte(socialAPIInteractionID))
 	return fmt.Sprintf("socialapi:v1:%s:%d", encoded, index)
+}
+
+func decodeInboundMediaReference(reference string) (string, int, error) {
+	const prefix = "socialapi:v1:"
+	if !strings.HasPrefix(reference, prefix) {
+		return "", 0, fmt.Errorf("%w: invalid inbound media reference", ErrInvalidRequest)
+	}
+	parts := strings.SplitN(strings.TrimPrefix(reference, prefix), ":", 2)
+	if len(parts) != 2 {
+		return "", 0, fmt.Errorf("%w: invalid inbound media reference", ErrInvalidRequest)
+	}
+	interactionIDBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil || len(interactionIDBytes) == 0 || !utf8.Valid(interactionIDBytes) {
+		return "", 0, fmt.Errorf("%w: invalid inbound media identity", ErrInvalidRequest)
+	}
+	index, err := strconv.Atoi(parts[1])
+	if err != nil || index < 0 {
+		return "", 0, fmt.Errorf("%w: invalid inbound media position", ErrInvalidRequest)
+	}
+	return string(interactionIDBytes), index, nil
+}
+
+// ResolveInboundMediaSource resolves media through SocialAPI's authenticated
+// message-history endpoint. Its public response contract exposes one
+// attachment_url per message, so only position zero can currently be fetched.
+func (c *Client) ResolveInboundMediaSource(ctx context.Context, providerConversationID, providerMediaReference, expectedKind string) (ports.InboundMediaSource, error) {
+	if strings.TrimSpace(providerConversationID) == "" {
+		return ports.InboundMediaSource{}, fmt.Errorf("%w: provider conversation id is required", ErrInvalidRequest)
+	}
+	interactionID, index, err := decodeInboundMediaReference(providerMediaReference)
+	if err != nil {
+		return ports.InboundMediaSource{}, err
+	}
+	if index != 0 {
+		return ports.InboundMediaSource{}, fmt.Errorf("%w: SocialAPI exposes a single attachment_url per message", ErrUnsupported)
+	}
+	response, err := c.ListConversationMessages(ctx, providerConversationID, InboxMessagesQuery{Limit: 200})
+	if err != nil {
+		return ports.InboundMediaSource{}, err
+	}
+	for _, message := range response.Data {
+		if message.ID != interactionID {
+			continue
+		}
+		kind, kindErr := inboundAttachmentKind(message.AttachmentType)
+		if kindErr != nil {
+			return ports.InboundMediaSource{}, kindErr
+		}
+		if string(kind) != expectedKind {
+			return ports.InboundMediaSource{}, fmt.Errorf("%w: provider attachment kind does not match the stored reference", ErrInvalidResponse)
+		}
+		if err := validateInboundMediaURL(message.AttachmentURL); err != nil {
+			return ports.InboundMediaSource{}, fmt.Errorf("%w: provider attachment URL is invalid", ErrInvalidResponse)
+		}
+		return ports.InboundMediaSource{URL: message.AttachmentURL, Kind: string(kind)}, nil
+	}
+	return ports.InboundMediaSource{}, ErrInboundMediaNotFound
 }
 
 func validateInboundMediaURL(raw string) error {
@@ -1031,4 +1092,5 @@ var ErrTransport = errors.New("socialapi transport error")
 var _ ports.ChannelProvider = (*Client)(nil)
 var _ ports.ChannelAccountDisconnector = (*Client)(nil)
 var _ ports.ConversationEnricher = (*Client)(nil)
+var _ ports.InboundMediaSourceResolver = (*Client)(nil)
 var _ ports.WebhookReceiver = (*Client)(nil)

@@ -7,7 +7,7 @@ Defines the application boundary interfaces (Hexagonal Inbound and Outbound Port
 - `TransactionManager`: Atomic transaction application boundary (`Within(ctx, fn)`) ([transaction.go](./transaction.go#L8)).
 - `CustomerRepository` / `CustomerRuntimeRepository`: Customer persistence, versioned updates, and profile merging ([core_repositories.go](./core_repositories.go#L20)).
 - `CatalogRepository` / `CatalogMediaRepository`: Product catalogs, attributes, variants, offers, and media attachment assets ([catalog_repository.go](./catalog_repository.go) / [catalog_media.go](./catalog_media.go)).
-- `ConversationMediaIngestionRepository` / `MessageAttachmentRepository`: Tenant-scoped media ingestion metadata and independent Communication-to-MediaAsset relations ([conversation_media.go](./conversation_media.go)).
+- `ConversationMediaIngestionRepository` / `MessageAttachmentRepository` / `InboundMediaSourceResolver`: Tenant-scoped media ingestion metadata, independent Communication-to-MediaAsset relations, and short-lived provider media-source resolution ([conversation_media.go](./conversation_media.go)).
 - `OutboxStore`: Outbox pattern state transitions, claim leases, completions, `MarkRetryableFailure`, `Requeue`, and dead-letter moves ([outbox.go](./outbox.go#L8)).
 - `ChannelProvider` / `WebhookReceiver`: Omnichannel dispatch and inbound webhook ingestion ([channel_provider.go](./channel_provider.go)). `ProviderInboundStore.Materialize` also persists provider-neutral pending attachment references in the inbound message transaction ([provider_inbound.go](./provider_inbound.go)).
 - `CustomerSalesDecisionPort`: Canonical AI inference port for customer sales decisions and capability tool execution ([customer_sales_contract.go](./customer_sales_contract.go)).
