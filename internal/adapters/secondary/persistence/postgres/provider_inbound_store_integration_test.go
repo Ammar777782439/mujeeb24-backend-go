@@ -190,6 +190,17 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 	if err != nil || failedAsset.Status != "rejected" {
 		t.Fatalf("terminal attachment failure must reject its pending MediaAsset atomically: asset=%#v err=%v", failedAsset, err)
 	}
+	var terminalSourceReference *string
+	if err := adapter.Pool().QueryRow(ctx, `
+		SELECT source_provider_media_reference
+		FROM message_attachments
+		WHERE business_id = $1::uuid AND id = $2::uuid
+	`, businessID, reclaimed[0].AttachmentID).Scan(&terminalSourceReference); err != nil {
+		t.Fatalf("read terminal attachment source reference: %v", err)
+	}
+	if terminalSourceReference != nil {
+		t.Fatal("terminal attachment must clear its opaque provider reference")
+	}
 
 	// A message and its media asset must belong to the same business.
 	_, err = attachments.Create(ctx, ports.MessageAttachmentDraft{

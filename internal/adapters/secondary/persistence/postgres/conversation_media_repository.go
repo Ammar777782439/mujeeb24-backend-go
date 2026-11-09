@@ -416,7 +416,7 @@ func (r *MessageAttachmentRepository) MarkFailed(ctx context.Context, businessID
 	row := db.QueryRow(ctx, `
 		WITH updated AS (
 			UPDATE message_attachments
-			SET status = 'failed', ingestion_lease_until = NULL, ingestion_last_error_code = 'permanent_failure', updated_at = now()
+			SET status = 'failed', source_provider_media_reference = NULL, ingestion_lease_until = NULL, ingestion_last_error_code = 'permanent_failure', updated_at = now()
 			WHERE business_id = $1::uuid AND id = $2::uuid AND status = 'pending_ingestion'
 			RETURNING *
 		),
