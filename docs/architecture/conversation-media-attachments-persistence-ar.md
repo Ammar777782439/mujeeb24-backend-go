@@ -1,7 +1,7 @@
 # Conversation Media & Attachments — Persistence Slice 2
 
 **Branch:** `feat/conversation-media-attachments`  
-**Scope:** Tenant-safe media ingestion metadata, message-to-media relations, and inbound webhook normalization/materialization. The SocialAPI downloader, upload endpoint, and outbound attachment transport are still not enabled.
+**Scope:** Tenant-safe media ingestion metadata, message-to-media relations, inbound webhook normalization/materialization, and the first bounded WhatsApp image-ingestion worker slice. The public upload endpoint and outbound attachment transport are still not enabled.
 
 ## What changed
 
@@ -22,7 +22,7 @@
 - A Catalog-purpose asset cannot be attached to a conversation.
 - The current verified-to-ready path remains image-only. Video/audio/document/file can be represented as pending placeholders, but are not yet downloaded, verified, made ready, or delivered.
 - Source provider media references are opaque identifiers only. URL values are rejected before persistence and are never copied into a message DTO.
-- The provider reference is cleared from the relation after successful ingestion; a later worker will need a dedicated, tenant-scoped internal claim/read port while ingestion is pending.
+- A lease-based claim/retry queue is present. It currently claims only WhatsApp image attachments; Facebook/Instagram URL retrieval and video/audio/document/file verification are deliberately left queued for later channel-specific implementations.
 
 ## Atomicity and operations
 

@@ -86,3 +86,24 @@ func TestCatalogDirectPreviewReadUsesRecordedProvider(t *testing.T) {
 		t.Fatal("unknown provider must not read from default store")
 	}
 }
+
+func TestConversationMediaWritesToTheProviderRecordedOnTheAsset(t *testing.T) {
+	r2 := &namedObjectStore{name: "r2"}
+	b2 := &namedObjectStore{name: "backblaze"}
+	storage := &CatalogMediaObjectStore{
+		WriteProvider: "backblaze",
+		Providers: map[string]ports.MediaObjectStorage{"r2": r2, "backblaze": b2},
+	}
+	if err := storage.PutToProvider(context.Background(), "r2", "conversation/business/asset.png", "image/png", []byte("image")); err != nil {
+		t.Fatal(err)
+	}
+	if r2.puts != 1 || b2.puts != 0 {
+		t.Fatalf("pending asset must stay on recorded R2 provider: r2=%d b2=%d", r2.puts, b2.puts)
+	}
+	if err := storage.DeleteFromProvider(context.Background(), "r2", "conversation/business/asset.png"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := storage.provider("missing"); err == nil {
+		t.Fatal("missing historical provider must fail closed")
+	}
+}

@@ -19,6 +19,7 @@ type WorkerRuntime struct {
 	Outbox                   ports.OutboxStore
 	SocialAPI                ports.ChannelProvider
 	ConversationMediaObjects ports.MediaObjectStorage
+	MediaIngestion           *services.ConversationMediaIngestionProcessor
 	Processor                *services.OutboxProcessor
 	Expiry                   ports.SubscriptionExpiryRepository
 	PollInterval             time.Duration
@@ -44,6 +45,23 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 		log.Printf("[ConversationMedia] stage=worker_storage_configuration_failed error=%v", conversationStorageErr)
 	}
 	runtime.ConversationMediaObjects = conversationObjects
+	if conversationObjects != nil && external.SocialAPI != nil && cfg.SocialAPIAPIKey != "" {
+		resolver, resolverOK := external.SocialAPI.(ports.InboundMediaSourceResolver)
+		downloader, downloaderOK := external.SocialAPI.(ports.InboundMediaDownloader)
+		if resolverOK && downloaderOK {
+			runtime.MediaIngestion = &services.ConversationMediaIngestionProcessor{
+				Attachments: postgres.NewMessageAttachmentRepository(database),
+				Assets:      postgres.NewConversationMediaIngestionRepository(database),
+				Resolver:    resolver,
+				Downloader:  downloader,
+				Objects:     conversationObjects,
+			}
+		} else {
+			log.Printf("[ConversationMedia] stage=worker_not_started reason=socialapi_media_contract_unavailable")
+		}
+	} else if conversationObjects != nil && cfg.SocialAPIAPIKey == "" {
+		log.Printf("[ConversationMedia] stage=worker_not_started reason=socialapi_api_key_missing")
+	}
 	if external.SocialAPI != nil {
 		runtime.Processor = &services.OutboxProcessor{
 			Outbox: outbox,
@@ -110,6 +128,14 @@ func (r *WorkerRuntime) RunOnce(ctx context.Context) (int, error) {
 	if r.Expiry != nil {
 		count, err := r.Expiry.ExpireDue(ctx, time.Now().UTC(), limit)
 		if err != nil {
+			return processed, err
+		}
+		processed += count
+	}
+	if r.MediaIngestion != nil {
+		count, err := r.MediaIngestion.Process(ctx, limit)
+		if err != nil {
+			log.Printf("[ConversationMedia] stage=worker_batch_failed err=%v", err)
 			return processed, err
 		}
 		processed += count

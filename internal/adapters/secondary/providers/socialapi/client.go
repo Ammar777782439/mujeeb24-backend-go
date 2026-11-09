@@ -1185,6 +1185,13 @@ type Error struct {
 	RetryAfter time.Duration
 }
 
+func (e *Error) IsRetryable() bool { return e != nil && e.Retryable }
+
+func (e *Error) RetryAfterDuration() time.Duration {
+	if e == nil { return 0 }
+	return e.RetryAfter
+}
+
 func (e *Error) Error() string {
 	if e.Code != "" && e.Message != "" {
 		return fmt.Sprintf("socialapi http %d: %s: %s", e.StatusCode, e.Code, e.Message)
@@ -1204,7 +1211,7 @@ func retryableStatus(statusCode int) bool {
 	}
 }
 
-var ErrTransport = errors.New("socialapi transport error")
+var ErrTransport = ports.ErrTransientMediaProvider
 
 var _ ports.ChannelProvider = (*Client)(nil)
 var _ ports.ChannelAccountDisconnector = (*Client)(nil)

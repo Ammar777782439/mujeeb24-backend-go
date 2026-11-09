@@ -275,6 +275,8 @@ func (r *MessageAttachmentRepository) ClaimPendingIngestions(ctx context.Context
 			  ON cm.business_id = ma.business_id AND cm.id = ma.communication_message_id
 			JOIN conversation_references cr
 			  ON cr.business_id = cm.business_id AND cr.id = cm.conversation_reference_id
+			JOIN channel_connections cc
+			  ON cc.business_id = cr.business_id AND cc.id = cr.connection_id
 			JOIN media_assets a
 			  ON a.business_id = ma.business_id AND a.id = ma.media_asset_id
 			WHERE ma.status = 'pending_ingestion'
@@ -284,7 +286,9 @@ func (r *MessageAttachmentRepository) ClaimPendingIngestions(ctx context.Context
 			  AND cr.system = 'provider'
 			  AND cr.resource_type = 'conversation'
 			  AND a.purpose = 'conversation_attachment'
-			  AND a.status = 'pending_ingestion'
+			  AND a.status IN ('pending_ingestion', 'ready')
+			  AND ma.kind = 'image'
+			  AND cc.channel = 'whatsapp'
 			ORDER BY ma.created_at, ma.id
 			LIMIT $1
 			FOR UPDATE OF ma SKIP LOCKED
@@ -301,13 +305,15 @@ func (r *MessageAttachmentRepository) ClaimPendingIngestions(ctx context.Context
 		          ma.ingestion_attempts
 		)
 		SELECT c.id::text, c.business_id::text, c.communication_message_id::text,
-		       c.media_asset_id::text, cr.resource_id, c.source_provider_media_reference,
+		       c.media_asset_id::text, cr.resource_id, cc.channel, c.source_provider_media_reference,
 		       c.kind, a.storage_provider, a.storage_key, c.ingestion_attempts
 		FROM claimed c
 		JOIN communication_messages cm
 		  ON cm.business_id = c.business_id AND cm.id = c.communication_message_id
 		JOIN conversation_references cr
 		  ON cr.business_id = cm.business_id AND cr.id = cm.conversation_reference_id
+		JOIN channel_connections cc
+		  ON cc.business_id = cr.business_id AND cc.id = cr.connection_id
 		JOIN media_assets a
 		  ON a.business_id = c.business_id AND a.id = c.media_asset_id
 		ORDER BY c.id
@@ -320,7 +326,7 @@ func (r *MessageAttachmentRepository) ClaimPendingIngestions(ctx context.Context
 	for rows.Next() {
 		var item ports.ClaimedMessageAttachmentIngestion
 		if err := rows.Scan(&item.AttachmentID, &item.BusinessID, &item.CommunicationMessageID,
-			&item.MediaAssetID, &item.ProviderConversationID, &item.ProviderMediaReference,
+			&item.MediaAssetID, &item.ProviderConversationID, &item.Channel, &item.ProviderMediaReference,
 			&item.Kind, &item.StorageProvider, &item.StorageKey, &item.AttemptCount); err != nil {
 			return nil, fmt.Errorf("scan claimed message attachment ingestion: %w", err)
 		}
