@@ -8,8 +8,11 @@ import (
 // InboundMediaSource is a short-lived provider URL resolved just in time for
 // ingestion. The URL must never be persisted as a canonical media reference.
 type InboundMediaSource struct {
-	URL  string
-	Kind string
+	// URL is used for platform-hosted media. ProviderMediaID is used when
+	// SocialAPI must proxy the download (WhatsApp and Telegram).
+	URL             string
+	ProviderMediaID string
+	Kind            string
 }
 
 // InboundMediaSourceResolver resolves an opaque webhook reference through the

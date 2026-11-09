@@ -243,7 +243,7 @@ func TestClientDownloadsSocialAPIMediaWithBearerAndBoundedBody(t *testing.T) {
 
 func TestClientTreatsSocialAPIMedia504AsRetryableAnd410AsTerminal(t *testing.T) {
 	for _, tc := range []struct {
-		status   int
+		status    int
 		retryable bool
 	}{
 		{status: http.StatusGatewayTimeout, retryable: true},
