@@ -64,7 +64,6 @@ func TestCatalogMediaStorageRejectsMissingOrUnsafeB2Config(t *testing.T) {
 	}
 }
 
-
 func TestConversationMediaStorageHasIndependentFeatureFlag(t *testing.T) {
 	t.Setenv("CATALOG_MEDIA_ENABLED", "false")
 	t.Setenv("CONVERSATION_MEDIA_ENABLED", "true")

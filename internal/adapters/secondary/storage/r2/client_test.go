@@ -295,7 +295,6 @@ func TestSDKDirectGetSanitizesPrivateProviderErrors(t *testing.T) {
 	}
 }
 
-
 func TestObjectKeyNamespacesAllowCatalogAndConversationOnly(t *testing.T) {
 	for _, key := range []string{
 		"catalog/business-1/asset-1.jpg",

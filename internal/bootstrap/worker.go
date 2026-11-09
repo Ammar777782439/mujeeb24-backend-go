@@ -13,18 +13,18 @@ import (
 )
 
 type WorkerRuntime struct {
-	SalesActions              *services.SalesActionProcessor
-	Database                  *postgres.Adapter
-	EventStore                ports.EventStore
-	Outbox                    ports.OutboxStore
-	SocialAPI                 ports.ChannelProvider
-	ConversationMediaObjects  ports.MediaObjectStorage
-	Processor                 *services.OutboxProcessor
-	Expiry                    ports.SubscriptionExpiryRepository
-	PollInterval              time.Duration
-	CycleTimeout              time.Duration
-	BatchSize                 int
-	WorkerOwner               string
+	SalesActions             *services.SalesActionProcessor
+	Database                 *postgres.Adapter
+	EventStore               ports.EventStore
+	Outbox                   ports.OutboxStore
+	SocialAPI                ports.ChannelProvider
+	ConversationMediaObjects ports.MediaObjectStorage
+	Processor                *services.OutboxProcessor
+	Expiry                   ports.SubscriptionExpiryRepository
+	PollInterval             time.Duration
+	CycleTimeout             time.Duration
+	BatchSize                int
+	WorkerOwner              string
 }
 
 func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime, error) {
