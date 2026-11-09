@@ -5,12 +5,14 @@ import (
 	"time"
 )
 
-// Catalog media is a separate bounded context. Commercial offer prices and
-// availability stay exclusively in the existing catalog/offer repositories.
+// MediaAsset is shared storage metadata used by independently owned Business,
+// Catalog, and Communication relations. Catalog gallery rules remain in the
+// CatalogMediaRepository; commercial offer prices and availability stay in Catalog.
 type MediaAsset struct {
 	ID              string
 	BusinessID      string
 	Purpose         string
+	Kind            string
 	StorageProvider string
 	StorageKey      string
 	MimeType        string

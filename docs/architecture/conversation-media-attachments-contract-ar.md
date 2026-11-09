@@ -1,116 +1,107 @@
-# Conversation Media & Attachments — Domain Contract (Slice 1)
+# Conversation Media & Attachments — Contract and Implementation Status
 
-**Status:** Implemented domain contract groundwork on feat/conversation-media-attachments. Persistence, HTTP upload, provider retrieval and delivery are not implemented by this slice.
+**Branch:** `feat/conversation-media-attachments`  
+**Status:** Domain and tenant-safe persistence foundation implemented. Provider retrieval, upload HTTP APIs, public message projections and delivery are not implemented.
 
-## 1. Repository baseline
+## 1. Current repository facts
 
-This work starts from main of Ammar777782439/mujeeb24-backend-go.
+- `migrations/000083_catalog_media_mvp` introduced `media_assets` for Catalog images and `catalog_media_links` for CatalogItem/Variant galleries.
+- `migrations/000084_catalog_media_backblaze` added Backblaze as a supported storage provider for the existing media objects.
+- `CatalogMediaRepository` remains the owner of Catalog gallery rules. It still creates assets with `purpose='catalog'`.
+- `communication_messages` is the Mujeeb-owned communication record and has a composite unique key `(business_id, id)`.
+- The existing SocialAPI adapter can send a single image URL in its outbound message request, but that is not a generic multi-format media contract.
 
-Relevant current implementation observed before this change:
+## 2. Separation rule
 
-- migrations/000083_catalog_media_mvp creates media_assets with purpose = catalog and catalog_media_links.
-- migrations/000084_catalog_media_backblaze permits the existing catalog assets to use R2 or Backblaze.
-- CatalogMediaRepository and MediaObjectStorage currently serve the catalog image feature.
-- SendMessageRequest currently accepts text only.
-- InboundEvent and ProviderInboundDraft currently carry text and provider identifiers, but no attachment collection is materialized.
-- The HTTP MessageAttachment projection currently describes an image with a catalog media_id/preview path. It is not a general persisted conversation attachment contract.
-- SocialAPI outbound messaging currently rejects more than one attachment and only accepts image URLs.
+Shared media bytes and metadata do not imply shared domain relationships.
 
-This contract does not claim end-to-end attachment support.
+```text
+CatalogItem / Variant
+  -> catalog_media_links
+  -> MediaAsset(purpose=catalog)
 
-## 2. Locked separation rule
+CommunicationMessage
+  -> message_attachments
+  -> MediaAsset(purpose=conversation_attachment)
 
-**Shared media infrastructure does not mean shared domain relationships.**
+Business brand media
+  -> future business-owned relation
+  -> MediaAsset(purpose=business_brand, reserved only)
+```
 
-CatalogItem and Variant media remain Catalog-owned relationships through catalog_media_links. Conversation attachments belong to Communication and will use an explicit MessageAttachment relation. Do not use catalog_media_links for messages, and do not change CatalogItem/Offer/Variant contracts to accommodate chat media.
+`catalog_media_links` must never be used for message attachments. CatalogItem, Variant and Offer contracts remain unchanged. The `business_brand` purpose is reserved by the current schema but no brand relation or brand upload use case is implemented by this PR.
 
-The existing media_assets schema is catalog-scoped today. Generalizing it requires a forward-only migration after the broader MediaAsset contract is reviewed. Do not alter migrations 000083/000084.
+## 3. Implemented in the current branch
 
-## 3. Domain-level attachment references added in this slice
+- Provider-neutral `AttachmentKind` values: `image`, `video`, `audio`, `document`, `file`.
+- Inbound references are provider-neutral opaque references with MIME/name/size values treated as untrusted hints.
+- Outbound references identify a Mujeeb-owned `MediaAssetID`; they contain no storage URL, bucket key, or provider media ID.
+- Migration `000087_conversation_media_attachments` adds `media_kind`, adds the `pending_ingestion` asset status, permits the `conversation_attachment` purpose, and creates `message_attachments`.
+- `message_attachments` references both `communication_messages` and `media_assets` through composite `(business_id, id)` foreign keys.
+- `ConversationMediaIngestionRepository` creates pending conversation image assets and promotes verified image metadata.
+- `MessageAttachmentRepository` creates and lists tenant-scoped links. A relation can become `ready` only if its underlying conversation MediaAsset is already `ready` and has the same kind.
+- Provider source references are opaque IDs only; HTTP(S) URLs are rejected by the repository and database constraint. The reference is cleared after successful ingestion.
+- The repositories perform local SQL only. Their methods can join a caller-owned `TransactionManager` transaction via the transaction context.
 
-### AttachmentKind
+## 4. Current implementation limit
 
-The provider-neutral kinds are image, video, audio, document and file. This is a logical classification. It does not prove that a channel/provider supports the kind or that the file bytes actually match it.
+**The enabled ingestion path is image-only.** The other logical kinds are represented in the domain contract but cannot yet be created as ready conversation assets. The current `media_assets` MIME constraint and verification contract are still image-specific.
 
-### InboundAttachmentReference
+No claim is made that WhatsApp, Instagram and Facebook expose identical media behavior. Inbound retrieval and outbound delivery must be verified separately for every channel and media kind before enabling them.
 
-An inbound message carries an opaque provider reference, plus untrusted descriptive hints:
+## 5. Required inbound flow — not wired yet
 
-- ProviderMediaReference
-- Kind
-- MIMEType (hint only)
-- FileName (hint only)
-- Caption
-- SizeBytes (zero means unknown; negative is invalid)
-
-It must not contain a durable Mujeeb storage URL/key or assume the provider URL is permanent. The SocialAPI adapter must resolve provider media through an explicitly supported provider operation. If the provider exposes only a URL, the adapter must treat it as a transient retrieval detail, not as Mujeeb's canonical file location.
-
-### OutboundAttachmentReference
-
-An outbound message refers to a Mujeeb-owned MediaAssetID, the logical kind and an optional caption. It deliberately contains no presigned storage URL, bucket/key, or SocialAPI media identifier. Authorization, tenant ownership, readiness and channel capability checks happen in Application before dispatch.
-
-Both reference types have pure validation functions. Validation rejects unknown kinds, missing stable references/IDs, and negative inbound sizes. It does not validate actual MIME bytes, file safety, size limits or provider capabilities.
-
-## 4. Storage ownership
-
-PostgreSQL stores metadata, ownership, lifecycle and relations. Private Object Storage stores file bytes. A conversation attachment must be linked to the tenant-scoped message and media asset through an explicit relation, such as a future message_attachments table with composite tenant-safe foreign keys.
-
-Do not place bytes/Base64 in PostgreSQL message rows. Do not persist a long-lived public URL. Signed read URLs are generated only after authorization and only for a short-lived operation.
-
-## 5. Inbound lifecycle — future implementation
-
+```text
 SocialAPI webhook
   -> signature verification + event ledger/idempotency
-  -> normalize attachment references
-  -> materialize message + pending attachment relation
-  -> enqueue provider media retrieval
-  -> fetch through SocialAPI adapter
-  -> verify bytes, MIME, size and checksum
+  -> normalize provider media reference
+  -> persist message + pending MediaAsset + message_attachments in one local transaction
+  -> claim pending reference through an internal worker port
+  -> fetch provider bytes outside the transaction
+  -> verify signature/content, MIME, size, dimensions and checksum
+  -> write bytes to private Object Storage outside the transaction
+  -> mark MediaAsset and MessageAttachment ready in one local transaction
+  -> publish attachment state change
+```
+
+Do not block webhook acknowledgement on a media download. If ingestion fails, preserve the text message and mark the attachment unavailable/failed.
+
+## 6. Required outbound flow — not wired yet
+
+```text
+Merchant upload request
+  -> authenticated upload intent
   -> private Object Storage
-  -> mark MediaAsset/MessageAttachment ready
-  -> publish message/attachment state update
-
-A webhook must not block while downloading large media. A media retrieval failure must not discard the text message; the attachment remains failed/unavailable with an explicit state and reason safe for the merchant.
-
-## 6. Outbound lifecycle — future implementation
-
-Merchant client
-  -> upload intent
-  -> private Object Storage
-  -> finalize and verify bytes
+  -> server-side verification
   -> MediaAsset ready
-  -> send message with MediaAsset IDs
+  -> outbound command references MediaAsset IDs
   -> tenant + readiness + capability validation
-  -> message + attachment rows + outbound + outbox in one local transaction
-  -> outbox worker resolves provider payload
-  -> SocialAPI adapter sends
-  -> delivery status reconciliation
+  -> message_attachments + outbound message + outbox in one local transaction
+  -> outbox worker resolves provider payload outside SQL transaction
+  -> SocialAPI send + delivery reconciliation
+```
 
-No network call may occur inside a PostgreSQL transaction. An unknown provider outcome must follow the repository's dead-letter/reconciliation policy; never perform a blind retry.
+Never persist public or presigned URLs as canonical references. Generate a short-lived read URL only at the authorized delivery boundary. An unknown provider outcome follows the existing dead-letter/reconciliation rule; never blind-retry.
 
-## 7. Channel capabilities
+## 7. Explicitly not implemented
 
-Do not promise WhatsApp, Facebook and Instagram parity based on one provider example. Inbound and outbound support are separate capabilities and must be verified per channel and media kind, including size/MIME/count limits and provider retrieval semantics. The current SocialAPI adapter's one-image outbound behavior is not a universal attachment contract.
+- SocialAPI inbound media normalization and provider download endpoint.
+- Durable worker claim/read API for pending provider references.
+- Generic authenticated upload/finalize API.
+- Message DTO projection and realtime attachment-state event.
+- Outbound message commands, Outbox attachment resolver changes, and provider-specific send capability checks.
+- Video/audio/document ingestion, scanning, thumbnails, retention and media quota accounting.
+- Business logo/cover relation and brand-asset management.
+- Live SocialAPI or Object Storage media tests.
 
-No numeric media limits are locked by this document. They must be sourced from the current provider contract and proven in channel-specific tests.
+## 8. Next implementation gates
 
-## 8. Explicitly out of scope for Slice 1
+1. Add the scoped pending-reference claim/read port and durable ingestion worker.
+2. Normalize verified SocialAPI webhook media references and materialize pending relations with the inbound message transaction.
+3. Download and verify image bytes, store them privately, and transition asset+relation atomically.
+4. Add authorized message attachment projections and realtime state notifications.
+5. Add authenticated private upload/finalize for outbound media, then route through Outbox.
+6. Verify per-channel constraints and live delivery before enabling the feature.
+7. Complete brand-media relation, orphan cleanup, storage quotas and backup/restore proof.
 
-- No database migration or new table.
-- No generic upload/finalize HTTP API.
-- No SocialAPI webhook parsing or media download.
-- No outbound multi-attachment delivery.
-- No AI image/document processing.
-- No catalog migration or modification.
-- No feature flag enablement or live provider claim.
-
-## 9. Next implementation gates
-
-1. Review and close the full MediaAsset + MessageAttachment persistence contract.
-2. Add forward-only tenant-safe schema and repository integration tests.
-3. Implement generic upload/finalize on private storage while preserving existing Catalog API compatibility.
-4. Implement inbound attachment normalization, provider retrieval worker and durable storage.
-5. Implement outbound attachment commands, Outbox delivery and provider-specific capability checks.
-6. Add live channel tests, retention, orphan cleanup, quotas and backup/restore proof.
-
-This document describes an incremental engineering boundary, not a declaration that customer media is already supported end-to-end.
+This is a persistence foundation, not end-to-end support for customer media.
