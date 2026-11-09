@@ -13,7 +13,7 @@
 - `MessageAttachmentRepository` creates/lists message attachment relations and marks them ready only after the backing MediaAsset is ready.
 - The S3 adapter now permits the isolated `conversation/` object namespace alongside `catalog/`; the Catalog feature flag remains independent from `CONVERSATION_MEDIA_ENABLED`.
 - SocialAPI `content.media[]` is normalized for inbound events. The temporary URL is validated and discarded; only an opaque SocialAPI interaction-id/attachment-index reference crosses into the domain.
-- `InboundMediaSourceResolver` re-queries authenticated conversation history and resolves the interaction to the current `attachment_url` for immediate ingestion. The message-history response exposes one attachment URL per message, so only position zero is currently resolvable.
+- `InboundMediaSourceResolver` re-queries authenticated conversation history using cursor pagination and resolves the interaction to its current attachment source. SocialAPI's documented message-history contract exposes one attachment per message, so only position zero is currently resolvable. For WhatsApp and Telegram, the resolver recognizes SocialAPI's `/v1/inbox/media/{id}` URL and returns only the opaque media ID; other platforms return their platform-hosted HTTPS URL.
 - `ProviderInboundStore.Materialize` creates the pending MediaAsset and MessageAttachment rows in the same PostgreSQL transaction as the inbound communication message.
 
 ## Important boundary

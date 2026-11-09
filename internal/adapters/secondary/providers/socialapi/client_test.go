@@ -185,6 +185,86 @@ func TestClientResolvesInboundMediaThroughConversationHistory(t *testing.T) {
 	}
 }
 
+func TestClientResolvesSocialAPIProxyMediaWithoutReturningTemporaryURL(t *testing.T) {
+	mediaID := "7f3c1e2a-9b4d-4e5f-8a6b-1c2d3e4f5a6b"
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/inbox/conversations/conversation-1/messages" {
+			t.Errorf("unexpected request path: %s", r.URL.Path)
+			http.Error(w, "unexpected", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":[{"id":"sapi_dm_stable-interaction","attachment_type":"image","attachment_url":"`+server.URL+`/v1/inbox/media/`+mediaID+`"}],"pagination":{"has_more":false,"next_cursor":""}}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "test-key", HTTPClient: server.Client()})
+	source, err := client.ResolveInboundMediaSource(context.Background(), "conversation-1",
+		encodeInboundMediaReference("sapi_dm_stable-interaction", 0), "image")
+	if err != nil {
+		t.Fatalf("ResolveInboundMediaSource: %v", err)
+	}
+	if source.ProviderMediaID != mediaID || source.URL != "" || source.Kind != "image" {
+		t.Fatalf("SocialAPI proxy URL must become an opaque media id, got %#v", source)
+	}
+}
+
+func TestClientDownloadsSocialAPIMediaWithBearerAndBoundedBody(t *testing.T) {
+	const mediaID = "media-id-123"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/inbox/media/"+mediaID {
+			t.Errorf("unexpected media request: %s %s", r.Method, r.URL.String())
+			http.Error(w, "unexpected", http.StatusBadRequest)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer test-key" {
+			t.Errorf("missing SocialAPI bearer token")
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = w.Write([]byte("image-bytes"))
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "test-key", HTTPClient: server.Client()})
+	body, mime, err := client.DownloadInboundMedia(context.Background(), mediaID, 32)
+	if err != nil {
+		t.Fatalf("DownloadInboundMedia: %v", err)
+	}
+	if string(body) != "image-bytes" || mime != "image/jpeg" {
+		t.Fatalf("unexpected downloaded media: body=%q mime=%q", body, mime)
+	}
+	if _, _, err := client.DownloadInboundMedia(context.Background(), mediaID, 4); !errors.Is(err, ErrInvalidResponse) {
+		t.Fatalf("expected bounded response rejection, got %v", err)
+	}
+}
+
+func TestClientTreatsSocialAPIMedia504AsRetryableAnd410AsTerminal(t *testing.T) {
+	for _, tc := range []struct {
+		status   int
+		retryable bool
+	}{
+		{status: http.StatusGatewayTimeout, retryable: true},
+		{status: http.StatusGone, retryable: false},
+	} {
+		t.Run(strconv.Itoa(tc.status), func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = io.WriteString(w, `{"error":{"code":"media_not_ready","message":"not ready"}}`)
+			}))
+			defer server.Close()
+			client := NewClient(Config{BaseURL: server.URL, APIKey: "test-key", HTTPClient: server.Client()})
+			_, _, err := client.DownloadInboundMedia(context.Background(), "media-id", 1024)
+			var apiErr *Error
+			if !errors.As(err, &apiErr) || apiErr.Retryable != tc.retryable {
+				t.Fatalf("status %d retryable=%v, err=%v", tc.status, tc.retryable, err)
+			}
+		})
+	}
+}
+
 func TestClientResolvesInboundMediaAcrossHistoryPages(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

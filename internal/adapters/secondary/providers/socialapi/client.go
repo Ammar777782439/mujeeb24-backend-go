@@ -818,6 +818,12 @@ func (c *Client) ResolveInboundMediaSource(ctx context.Context, providerConversa
 			if string(kind) != expectedKind {
 				return ports.InboundMediaSource{}, fmt.Errorf("%w: provider attachment kind does not match the stored reference", ErrInvalidResponse)
 			}
+			if mediaID, isSocialAPI, mediaErr := c.socialAPIInboundMediaID(message.AttachmentURL); isSocialAPI {
+				if mediaErr != nil {
+					return ports.InboundMediaSource{}, fmt.Errorf("%w: invalid SocialAPI media URL", ErrInvalidResponse)
+				}
+				return ports.InboundMediaSource{ProviderMediaID: mediaID, Kind: string(kind)}, nil
+			}
 			if err := validateInboundMediaURL(message.AttachmentURL); err != nil {
 				return ports.InboundMediaSource{}, fmt.Errorf("%w: provider attachment URL is invalid", ErrInvalidResponse)
 			}
@@ -836,6 +842,69 @@ func (c *Client) ResolveInboundMediaSource(ctx context.Context, providerConversa
 		seenCursors[next] = struct{}{}
 		cursor = next
 	}
+}
+
+func (c *Client) socialAPIInboundMediaID(raw string) (string, bool, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return "", false, err
+	}
+	base, err := url.Parse(c.baseURL)
+	if err != nil || base.Host == "" || parsed.Host == "" ||
+		!strings.EqualFold(parsed.Host, base.Host) || !strings.EqualFold(parsed.Scheme, base.Scheme) {
+		return "", false, nil
+	}
+	const prefix = "/v1/inbox/media/"
+	if !strings.HasPrefix(parsed.Path, prefix) {
+		return "", false, nil
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" || parsed.User != nil {
+		return "", true, ErrInvalidResponse
+	}
+	id := strings.TrimPrefix(parsed.Path, prefix)
+	if id == "" || strings.Contains(id, "/") || strings.Contains(id, "\\") || id == "." || id == ".." {
+		return "", true, ErrInvalidResponse
+	}
+	return id, true, nil
+}
+
+// DownloadInboundMedia fetches a WhatsApp/Telegram file through SocialAPI's
+// authenticated media endpoint. maxBytes is mandatory so provider responses
+// cannot cause unbounded memory growth.
+func (c *Client) DownloadInboundMedia(ctx context.Context, mediaID string, maxBytes int64) ([]byte, string, error) {
+	if c == nil || c.httpClient == nil || strings.TrimSpace(c.apiKey) == "" {
+		return nil, "", ErrNotConfigured
+	}
+	if strings.TrimSpace(mediaID) == "" || strings.ContainsAny(mediaID, "/\\?#") ||
+		maxBytes < 1 {
+		return nil, "", fmt.Errorf("%w: invalid media id or byte limit", ErrInvalidRequest)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		c.baseURL+"/v1/inbox/media/"+url.PathEscape(mediaID), nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("%w: create media download request", ErrInvalidRequest)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Accept", "*/*")
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("%w: %v", ErrTransport, err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return nil, "", parseAPIError(res)
+	}
+	if res.ContentLength > maxBytes {
+		return nil, "", fmt.Errorf("%w: inbound media exceeds configured size limit", ErrInvalidResponse)
+	}
+	data, err := io.ReadAll(io.LimitReader(res.Body, maxBytes+1))
+	if err != nil {
+		return nil, "", fmt.Errorf("%w: read inbound media", ErrInvalidResponse)
+	}
+	if len(data) == 0 || int64(len(data)) > maxBytes {
+		return nil, "", fmt.Errorf("%w: inbound media is empty or exceeds configured size limit", ErrInvalidResponse)
+	}
+	return data, strings.TrimSpace(strings.Split(res.Header.Get("Content-Type"), ";")[0]), nil
 }
 
 func validateInboundMediaURL(raw string) error {
@@ -1100,7 +1169,7 @@ func (e *Error) Error() string {
 
 func retryableStatus(statusCode int) bool {
 	switch statusCode {
-	case http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway:
+	case http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusGatewayTimeout:
 		return true
 	default:
 		return false
