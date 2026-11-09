@@ -13,7 +13,9 @@ import (
 
 type messageAttachmentsQueryRepositoryFake struct {
 	page ports.MessagePage
+
 }
+
 func (f messageAttachmentsQueryRepositoryFake) Record(context.Context, ports.CommunicationMessageDraft) (ports.CommunicationMessageRecord, error) {
 	return ports.CommunicationMessageRecord{}, nil
 }
@@ -24,7 +26,9 @@ func (f messageAttachmentsQueryRepositoryFake) ListByConversation(context.Contex
 type messageAttachmentsBatchReaderFake struct {
 	records []ports.MessageAttachmentRecord
 	messageIDs []string
+
 }
+
 func (f *messageAttachmentsBatchReaderFake) ListByMessages(_ context.Context, _ string, ids []string) ([]ports.MessageAttachmentRecord, error) {
 	f.messageIDs = append([]string(nil), ids...)
 	return f.records, nil

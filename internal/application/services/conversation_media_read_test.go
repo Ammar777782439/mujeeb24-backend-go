@@ -19,7 +19,9 @@ type conversationAttachmentReadInboxFake struct {
 
 func (f conversationAttachmentReadInboxFake) ListInbox(context.Context, ports.ConversationInboxFilter) (ports.ConversationPage, error) {
 	return ports.ConversationPage{}, nil
+
 }
+
 func (f conversationAttachmentReadInboxFake) InboxOverview(context.Context, ports.ConversationInboxFilter) (ports.ConversationInboxOverview, error) {
 	return ports.ConversationInboxOverview{}, nil
 }
@@ -31,7 +33,9 @@ type conversationAttachmentReadRepositoryFake struct {
 	record ports.ConversationAttachmentReadRecord
 	err error
 	calls int
+
 }
+
 func (f *conversationAttachmentReadRepositoryFake) GetReadyForMessage(context.Context, string, string, string, string) (ports.ConversationAttachmentReadRecord, error) {
 	f.calls++
 	return f.record, f.err
@@ -44,7 +48,9 @@ type conversationAttachmentObjectReaderFake struct {
 	url string
 	err error
 	calls int
+
 }
+
 func (f *conversationAttachmentObjectReaderFake) PresignGetFromProvider(_ context.Context, provider, key string, ttl time.Duration) (string, error) {
 	f.calls++
 	f.provider, f.key, f.ttl = provider, key, ttl
