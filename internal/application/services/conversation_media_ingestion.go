@@ -168,10 +168,10 @@ func (p *ConversationMediaIngestionProcessor) scheduleRetry(ctx context.Context,
 	return p.Attachments.ReleaseForRetry(ctx, item.BusinessID, item.AttachmentID, p.now().Add(delay), code)
 }
 
-func (p *ConversationMediaIngestionProcessor) reject(ctx context.Context, item ports.ClaimedMessageAttachmentIngestion, assetID string) error {
-	if _, err := p.Assets.MarkIngestionRejected(ctx, item.BusinessID, assetID); err != nil {
-		return err
-	}
+func (p *ConversationMediaIngestionProcessor) reject(ctx context.Context, item ports.ClaimedMessageAttachmentIngestion, _ string) error {
+	// MarkFailed atomically transitions both the attachment relation and its
+	// pending MediaAsset. Splitting these writes could strand a rejected asset
+	// behind a still-pending attachment if the second SQL operation failed.
 	_, err := p.Attachments.MarkFailed(ctx, item.BusinessID, item.AttachmentID)
 	return err
 }

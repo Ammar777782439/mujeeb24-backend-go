@@ -65,6 +65,10 @@ func BuildAPI(ctx context.Context, cfg config.ProcessConfig) (*APIRuntime, error
 	if err != nil {
 		return nil, err
 	}
+	if os.Getenv("CONVERSATION_MEDIA_ENABLED") == "true" && strings.TrimSpace(cfg.SocialAPIAPIKey) == "" {
+		database.Close()
+		return nil, errors.New("CONVERSATION_MEDIA_ENABLED requires SOCIALAPI_API_KEY for authenticated media ingestion")
+	}
 	authentication, err := buildAuthenticationRuntime(cfg, database)
 	if err != nil {
 		database.Close()
@@ -367,9 +371,13 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// (verified at compile time via var _ ports.ConversationEnricher).
 		// The Customers repo is the SAME one used by the customer CRUD
 		// endpoints (ports.CustomerRuntimeRepository) — no duplicate repo.
-		mediaStorageProvider := strings.TrimSpace(os.Getenv("S3_PROVIDER"))
-		if mediaStorageProvider == "" || mediaStorageProvider == "cloudflare" {
-			mediaStorageProvider = "r2"
+		mediaStorageProvider := ""
+		if os.Getenv("CONVERSATION_MEDIA_ENABLED") == "true" {
+			_, selectedProvider, mediaStorageErr := buildConversationMediaStorageFromEnv()
+			if mediaStorageErr != nil {
+				return nil, fmt.Errorf("conversation media storage configuration: %w", mediaStorageErr)
+			}
+			mediaStorageProvider = selectedProvider
 		}
 		webhookService := services.SocialAPIWebhookService{
 			MediaStorageProvider: mediaStorageProvider,

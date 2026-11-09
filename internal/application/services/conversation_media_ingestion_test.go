@@ -20,6 +20,7 @@ type conversationMediaAttachmentsFake struct {
 	retryCode string
 	ready     int
 	failed    int
+	assets    *conversationMediaAssetsFake
 }
 
 func (f *conversationMediaAttachmentsFake) Create(context.Context, ports.MessageAttachmentDraft) (ports.MessageAttachmentRecord, error) {
@@ -42,6 +43,10 @@ func (f *conversationMediaAttachmentsFake) MarkReady(context.Context, string, st
 }
 func (f *conversationMediaAttachmentsFake) MarkFailed(context.Context, string, string) (ports.MessageAttachmentRecord, error) {
 	f.failed++
+	if f.assets != nil && f.assets.asset.Status == "pending_ingestion" {
+		f.assets.rejected++
+		f.assets.asset.Status = "rejected"
+	}
 	return ports.MessageAttachmentRecord{Status: "failed"}, nil
 }
 
@@ -145,6 +150,7 @@ func conversationMediaFixture(t *testing.T) (*ConversationMediaIngestionProcesso
 		Kind: "image", StorageProvider: "backblaze", StorageKey: "conversation/business-1/asset-1.png",
 		Status: "pending_ingestion",
 	}}
+	attachments.assets = assets
 	resolver := &conversationMediaResolverFake{source: ports.InboundMediaSource{ProviderMediaID: "provider-media-1", Kind: "image"}}
 	downloader := &conversationMediaDownloaderFake{body: validConversationPNG(t)}
 	objects := &conversationMediaObjectsFake{}

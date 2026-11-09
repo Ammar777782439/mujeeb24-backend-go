@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"os"
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
@@ -40,27 +41,34 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 	if storageErr != nil {
 		log.Printf("[CatalogMedia] stage=worker_storage_configuration_failed error=%v", storageErr)
 	}
+	conversationMediaEnabled := os.Getenv("CONVERSATION_MEDIA_ENABLED") == "true"
 	conversationObjects, _, conversationStorageErr := buildConversationMediaStorageFromEnv()
 	if conversationStorageErr != nil {
+		if conversationMediaEnabled {
+			database.Close()
+			return nil, errors.New("conversation media storage is enabled but not configured")
+		}
 		log.Printf("[ConversationMedia] stage=worker_storage_configuration_failed error=%v", conversationStorageErr)
 	}
 	runtime.ConversationMediaObjects = conversationObjects
-	if conversationObjects != nil && external.SocialAPI != nil && cfg.SocialAPIAPIKey != "" {
+	if conversationMediaEnabled {
+		if cfg.SocialAPIAPIKey == "" || external.SocialAPI == nil {
+			database.Close()
+			return nil, errors.New("CONVERSATION_MEDIA_ENABLED requires a configured SocialAPI API key")
+		}
 		resolver, resolverOK := external.SocialAPI.(ports.InboundMediaSourceResolver)
 		downloader, downloaderOK := external.SocialAPI.(ports.InboundMediaDownloader)
-		if resolverOK && downloaderOK {
-			runtime.MediaIngestion = &services.ConversationMediaIngestionProcessor{
-				Attachments: postgres.NewMessageAttachmentRepository(database),
-				Assets:      postgres.NewConversationMediaIngestionRepository(database),
-				Resolver:    resolver,
-				Downloader:  downloader,
-				Objects:     conversationObjects,
-			}
-		} else {
-			log.Printf("[ConversationMedia] stage=worker_not_started reason=socialapi_media_contract_unavailable")
+		if !resolverOK || !downloaderOK || conversationObjects == nil {
+			database.Close()
+			return nil, errors.New("conversation media worker dependencies are incomplete")
 		}
-	} else if conversationObjects != nil && cfg.SocialAPIAPIKey == "" {
-		log.Printf("[ConversationMedia] stage=worker_not_started reason=socialapi_api_key_missing")
+		runtime.MediaIngestion = &services.ConversationMediaIngestionProcessor{
+			Attachments: postgres.NewMessageAttachmentRepository(database),
+			Assets:      postgres.NewConversationMediaIngestionRepository(database),
+			Resolver:    resolver,
+			Downloader:  downloader,
+			Objects:     conversationObjects,
+		}
 	}
 	if external.SocialAPI != nil {
 		runtime.Processor = &services.OutboxProcessor{

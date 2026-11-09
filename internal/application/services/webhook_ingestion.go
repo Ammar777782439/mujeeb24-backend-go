@@ -224,7 +224,7 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 				EventType:              event.EventType,
 				InteractionKind:        string(event.InteractionKind),
 				Text:                   event.Text,
-				Attachments:            inboundAttachmentDrafts(event.Attachments),
+				Attachments:            inboundAttachmentDraftsWhenEnabled(event.Attachments, s.MediaStorageProvider),
 				MediaStorageProvider:   s.MediaStorageProvider,
 				ExternalCreatedAt:      event.ExternalCreatedAt,
 				ReceivedAt:             event.ReceivedAt,
@@ -339,6 +339,13 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 
 	}
 	return result, nil
+}
+
+func inboundAttachmentDraftsWhenEnabled(references []channel.InboundAttachmentReference, storageProvider string) []ports.ProviderInboundAttachmentDraft {
+	if strings.TrimSpace(storageProvider) == "" {
+		return nil
+	}
+	return inboundAttachmentDrafts(references)
 }
 
 func inboundAttachmentDrafts(references []channel.InboundAttachmentReference) []ports.ProviderInboundAttachmentDraft {

@@ -186,6 +186,10 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 	if _, err := attachments.MarkFailed(ctx, businessID, reclaimed[0].AttachmentID); err != nil {
 		t.Fatalf("mark terminal ingestion failure: %v", err)
 	}
+	failedAsset, err := mediaAssets.GetAsset(ctx, businessID, reclaimed[0].MediaAssetID)
+	if err != nil || failedAsset.Status != "rejected" {
+		t.Fatalf("terminal attachment failure must reject its pending MediaAsset atomically: asset=%#v err=%v", failedAsset, err)
+	}
 
 	// A message and its media asset must belong to the same business.
 	_, err = attachments.Create(ctx, ports.MessageAttachmentDraft{

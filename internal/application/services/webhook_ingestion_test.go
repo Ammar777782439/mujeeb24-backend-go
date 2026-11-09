@@ -16,6 +16,7 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/commands"
 	appErrors "github.com/Ammar777782439/mujeeb24-backend-go/internal/application/errors"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/domain/channel"
 )
 
 type webhookRawPayloadStore struct {
@@ -169,6 +170,22 @@ func resolvedSocialWebhookService(inbound ports.ProviderInboundStore) SocialAPIW
 		Connections: webhookConnectionRepository{record: ports.ChannelConnectionRecord{ID: "connection-1", BusinessID: "business-1", ProviderReference: "socialapi", ProviderAccountReference: stringPointer("account-1"), ProviderConnectionRef: "connection-ref-1"}},
 		Events:      &webhookEventStore{created: true},
 		Inbound:     inbound,
+	}
+}
+
+
+func TestInboundAttachmentDraftsRequireConversationMediaStorage(t *testing.T) {
+	references := []channel.InboundAttachmentReference{{
+		ProviderMediaReference: "opaque-provider-media-reference",
+		Kind: channel.AttachmentImage,
+		Caption: "صورة",
+	}}
+	if got := inboundAttachmentDraftsWhenEnabled(references, ""); len(got) != 0 {
+		t.Fatalf("disabled conversation media must not create unprocessable pending rows: %#v", got)
+	}
+	got := inboundAttachmentDraftsWhenEnabled(references, "r2")
+	if len(got) != 1 || got[0].ProviderMediaReference != references[0].ProviderMediaReference || got[0].Kind != string(channel.AttachmentImage) {
+		t.Fatalf("enabled conversation media lost inbound attachment metadata: %#v", got)
 	}
 }
 

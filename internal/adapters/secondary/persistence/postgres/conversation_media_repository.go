@@ -419,12 +419,21 @@ func (r *MessageAttachmentRepository) MarkFailed(ctx context.Context, businessID
 			SET status = 'failed', ingestion_lease_until = NULL, ingestion_last_error_code = 'permanent_failure', updated_at = now()
 			WHERE business_id = $1::uuid AND id = $2::uuid AND status = 'pending_ingestion'
 			RETURNING *
+		),
+		rejected_asset AS (
+			UPDATE media_assets a
+			SET status = 'rejected', updated_at = now()
+			FROM updated u
+			WHERE a.business_id = u.business_id AND a.id = u.media_asset_id
+			  AND a.purpose = 'conversation_attachment' AND a.status = 'pending_ingestion'
+			RETURNING a.id
 		)
 		SELECT u.id::text, u.business_id::text, u.communication_message_id::text,
 		       u.media_asset_id::text, u.kind, u.caption, u.sort_order, u.status,
 		       u.created_at, u.updated_at, COALESCE(a.mime_type,''), COALESCE(a.size_bytes,0)
 		FROM updated u
 		JOIN media_assets a ON a.business_id = u.business_id AND a.id = u.media_asset_id
+		LEFT JOIN rejected_asset ra ON ra.id = u.media_asset_id
 	`, businessID, attachmentID)
 	return scanMessageAttachment(row, "message_attachment.mark_failed", false)
 }
