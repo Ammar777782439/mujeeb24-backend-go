@@ -1,5 +1,5 @@
 {
-  "migration_count": 86,
+  "migration_count": 87,
   "columns": [
     {
       "table": "ai_catalog_batches",
@@ -3973,6 +3973,13 @@
       "default": "now()"
     },
     {
+      "table": "media_assets",
+      "name": "media_kind",
+      "type": "text",
+      "not_null": true,
+      "default": "'image'::text"
+    },
+    {
       "table": "merchant_ai_messages",
       "name": "id",
       "type": "uuid",
@@ -4104,6 +4111,77 @@
       "name": "target_catalog_set_at",
       "type": "timestamp with time zone",
       "not_null": false
+    },
+    {
+      "table": "message_attachments",
+      "name": "id",
+      "type": "uuid",
+      "not_null": true
+    },
+    {
+      "table": "message_attachments",
+      "name": "business_id",
+      "type": "uuid",
+      "not_null": true
+    },
+    {
+      "table": "message_attachments",
+      "name": "communication_message_id",
+      "type": "uuid",
+      "not_null": true
+    },
+    {
+      "table": "message_attachments",
+      "name": "media_asset_id",
+      "type": "uuid",
+      "not_null": true
+    },
+    {
+      "table": "message_attachments",
+      "name": "kind",
+      "type": "text",
+      "not_null": true
+    },
+    {
+      "table": "message_attachments",
+      "name": "caption",
+      "type": "text",
+      "not_null": true,
+      "default": "''::text"
+    },
+    {
+      "table": "message_attachments",
+      "name": "sort_order",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "message_attachments",
+      "name": "status",
+      "type": "text",
+      "not_null": true,
+      "default": "'pending_ingestion'::text"
+    },
+    {
+      "table": "message_attachments",
+      "name": "source_provider_media_reference",
+      "type": "text",
+      "not_null": false
+    },
+    {
+      "table": "message_attachments",
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "not_null": true,
+      "default": "now()"
+    },
+    {
+      "table": "message_attachments",
+      "name": "updated_at",
+      "type": "timestamp with time zone",
+      "not_null": true,
+      "default": "now()"
     },
     {
       "table": "offers",
@@ -8712,6 +8790,12 @@
     },
     {
       "table": "media_assets",
+      "name": "media_assets_kind_chk",
+      "kind": "c",
+      "definition": "CHECK (media_kind = ANY (ARRAY['image'::text, 'video'::text, 'audio'::text, 'document'::text, 'file'::text]))"
+    },
+    {
+      "table": "media_assets",
       "name": "media_assets_mime_chk",
       "kind": "c",
       "definition": "CHECK (mime_type IS NULL OR (mime_type = ANY (ARRAY['image/jpeg'::text, 'image/png'::text, 'image/webp'::text])))"
@@ -8732,7 +8816,7 @@
       "table": "media_assets",
       "name": "media_assets_purpose_chk",
       "kind": "c",
-      "definition": "CHECK (purpose = 'catalog'::text)"
+      "definition": "CHECK (purpose = ANY (ARRAY['catalog'::text, 'conversation_attachment'::text, 'business_brand'::text]))"
     },
     {
       "table": "media_assets",
@@ -8756,7 +8840,7 @@
       "table": "media_assets",
       "name": "media_assets_status_chk",
       "kind": "c",
-      "definition": "CHECK (status = ANY (ARRAY['pending_upload'::text, 'ready'::text, 'rejected'::text, 'deleted'::text]))"
+      "definition": "CHECK (status = ANY (ARRAY['pending_upload'::text, 'pending_ingestion'::text, 'ready'::text, 'rejected'::text, 'deleted'::text]))"
     },
     {
       "table": "media_assets",
@@ -8841,6 +8925,78 @@
       "name": "merchant_ai_sessions_principal_fk",
       "kind": "f",
       "definition": "FOREIGN KEY (principal_id) REFERENCES principals(id) ON DELETE RESTRICT"
+    },
+    {
+      "table": "message_attachments",
+      "name": "message_attachments_asset_fk",
+      "kind": "f",
+      "definition": "FOREIGN KEY (business_id, media_asset_id) REFERENCES media_assets(business_id, id) ON DELETE RESTRICT"
+    },
+    {
+      "table": "message_attachments",
+      "name": "message_attachments_business_fk",
+      "kind": "f",
+      "definition": "FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE RESTRICT"
+    },
+    {
+      "table": "message_attachments",
+      "name": "message_attachments_business_id_uq",
+      "kind": "u",
+      "definition": "UNIQUE (business_id, id)"
+    },
+    {
+      "table": "message_attachments",
+      "name": "message_attachments_caption_chk",
+      "kind": "c",
+      "definition": "CHECK (char_length(caption) <= 2000)"
+    },
+    {
+      "table": "message_attachments",
+      "name": "message_attachments_kind_chk",
+      "kind": "c",
+      "definition": "CHECK (kind = ANY (ARRAY['image'::text, 'video'::text, 'audio'::text, 'document'::text, 'file'::text]))"
+    },
+    {
+      "table": "message_attachments",
+      "name": "message_attachments_message_asset_uq",
+      "kind": "u",
+      "definition": "UNIQUE (business_id, communication_message_id, media_asset_id)"
+    },
+    {
+      "table": "message_attachments",
+      "name": "message_attachments_message_fk",
+      "kind": "f",
+      "definition": "FOREIGN KEY (business_id, communication_message_id) REFERENCES communication_messages(business_id, id) ON DELETE RESTRICT"
+    },
+    {
+      "table": "message_attachments",
+      "name": "message_attachments_pending_reference_chk",
+      "kind": "c",
+      "definition": "CHECK (status <> 'pending_ingestion'::text OR source_provider_media_reference IS NOT NULL)"
+    },
+    {
+      "table": "message_attachments",
+      "name": "message_attachments_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "message_attachments",
+      "name": "message_attachments_provider_reference_chk",
+      "kind": "c",
+      "definition": "CHECK (source_provider_media_reference IS NULL OR length(btrim(source_provider_media_reference)) >= 1 AND length(btrim(source_provider_media_reference)) <= 2048 AND lower(btrim(source_provider_media_reference)) !~~ 'http://%'::text AND lower(btrim(source_provider_media_reference)) !~~ 'https://%'::text)"
+    },
+    {
+      "table": "message_attachments",
+      "name": "message_attachments_sort_order_chk",
+      "kind": "c",
+      "definition": "CHECK (sort_order >= 0)"
+    },
+    {
+      "table": "message_attachments",
+      "name": "message_attachments_status_chk",
+      "kind": "c",
+      "definition": "CHECK (status = ANY (ARRAY['pending_ingestion'::text, 'ready'::text, 'failed'::text, 'removed'::text]))"
     },
     {
       "table": "offers",

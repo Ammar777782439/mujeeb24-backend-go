@@ -39,7 +39,6 @@ jobs:
       GOTOOLCHAIN: local
       RUN_INTEGRATION: "1"
       POSTGRES_TEST_DSN: postgresql://mujeeb_test:local-ci-only-password@localhost:5432/mujeeb24_test?sslmode=disable
-      MERCHANT_ASSIST_SCHEMA_RECORD: "1"
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -50,7 +49,4 @@ jobs:
           cache: true
       - name: Verify repository contract
         run: bash scripts/verify-repository.sh
-      - name: Record reviewed PostgreSQL schema snapshot
-        run: go test -v -tags=integration -count=1 -run '^TestMerchantAssistSchemaAfterAllMigrations
- ./internal/platform/database
 
