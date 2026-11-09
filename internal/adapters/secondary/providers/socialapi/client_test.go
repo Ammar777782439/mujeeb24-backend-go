@@ -243,14 +243,20 @@ func TestClientDownloadsSocialAPIMediaWithBearerAndBoundedBody(t *testing.T) {
 
 func TestClientTreatsSocialAPIMedia504AsRetryableAnd410AsTerminal(t *testing.T) {
 	for _, tc := range []struct {
-		status    int
-		retryable bool
+		status         int
+		retryable      bool
+		retryAfter     string
+		wantRetryAfter time.Duration
 	}{
+		{status: http.StatusServiceUnavailable, retryable: true, retryAfter: "1", wantRetryAfter: time.Second},
 		{status: http.StatusGatewayTimeout, retryable: true},
 		{status: http.StatusGone, retryable: false},
 	} {
 		t.Run(strconv.Itoa(tc.status), func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.retryAfter != "" {
+					w.Header().Set("Retry-After", tc.retryAfter)
+				}
 				w.WriteHeader(tc.status)
 				_, _ = io.WriteString(w, `{"error":{"code":"media_not_ready","message":"not ready"}}`)
 			}))
@@ -258,8 +264,8 @@ func TestClientTreatsSocialAPIMedia504AsRetryableAnd410AsTerminal(t *testing.T) 
 			client := NewClient(Config{BaseURL: server.URL, APIKey: "test-key", HTTPClient: server.Client()})
 			_, _, err := client.DownloadInboundMedia(context.Background(), "media-id", 1024)
 			var apiErr *Error
-			if !errors.As(err, &apiErr) || apiErr.Retryable != tc.retryable {
-				t.Fatalf("status %d retryable=%v, err=%v", tc.status, tc.retryable, err)
+			if !errors.As(err, &apiErr) || apiErr.Retryable != tc.retryable || apiErr.RetryAfter != tc.wantRetryAfter {
+				t.Fatalf("status %d retryable=%v retry_after=%s, err=%v", tc.status, tc.retryable, tc.wantRetryAfter, err)
 			}
 		})
 	}

@@ -1146,7 +1146,28 @@ func parseAPIError(res *http.Response) error {
 	if decoded.RequestID == "" {
 		decoded.RequestID = res.Header.Get("X-Request-ID")
 	}
-	return &Error{StatusCode: res.StatusCode, Code: decoded.Error.Code, Message: decoded.Error.Message, RequestID: decoded.RequestID, Retryable: retryableStatus(res.StatusCode)}
+	return &Error{
+		StatusCode: res.StatusCode, Code: decoded.Error.Code, Message: decoded.Error.Message,
+		RequestID: decoded.RequestID, Retryable: retryableStatus(res.StatusCode),
+		RetryAfter: parseRetryAfter(res.Header.Get("Retry-After"), time.Now()),
+	}
+}
+
+func parseRetryAfter(value string, now time.Time) time.Duration {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+	if seconds, err := strconv.Atoi(value); err == nil {
+		if seconds <= 0 {
+			return 0
+		}
+		return time.Duration(seconds) * time.Second
+	}
+	if at, err := http.ParseTime(value); err == nil && at.After(now) {
+		return at.Sub(now)
+	}
+	return 0
 }
 
 type Error struct {
@@ -1155,6 +1176,7 @@ type Error struct {
 	Message    string
 	RequestID  string
 	Retryable  bool
+	RetryAfter time.Duration
 }
 
 func (e *Error) Error() string {
