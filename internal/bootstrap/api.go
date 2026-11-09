@@ -374,16 +374,16 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		webhookService := services.SocialAPIWebhookService{
 			MediaStorageProvider: mediaStorageProvider,
 			Receiver:             external.SocialWebhook,
-			RawPayloads:      postgres.NewRawPayloadStore(database),
-			History:          postgres.NewChannelHistoryRepository(database),
-			Connections:      postgres.NewChannelConnectionRepository(database),
-			Events:           eventStore,
-			Inbound:          postgres.NewProviderInboundStore(database),
-			DeliveryStatuses: postgres.NewDeliveryStatusStore(database),
-			Automation:       inboundAutomation,
-			AutoReply:        autoReply,
-			Realtime:         realtimeBroker,
-			Customers:        postgres.NewCustomerRepository(database),
+			RawPayloads:          postgres.NewRawPayloadStore(database),
+			History:              postgres.NewChannelHistoryRepository(database),
+			Connections:          postgres.NewChannelConnectionRepository(database),
+			Events:               eventStore,
+			Inbound:              postgres.NewProviderInboundStore(database),
+			DeliveryStatuses:     postgres.NewDeliveryStatusStore(database),
+			Automation:           inboundAutomation,
+			AutoReply:            autoReply,
+			Realtime:             realtimeBroker,
+			Customers:            postgres.NewCustomerRepository(database),
 		}
 		// Wire the enricher ONLY when the SocialAPI client is configured.
 		// The client implements both ports.ChannelProvider and
