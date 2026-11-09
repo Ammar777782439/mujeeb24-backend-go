@@ -32,15 +32,15 @@ type ConversationMediaIngestionRepository interface {
 // media reference; that reference is internal and is never exposed in message
 // DTOs or logs.
 type MessageAttachmentDraft struct {
-	ID                       string
-	BusinessID               string
-	CommunicationMessageID   string
-	MediaAssetID             string
-	Kind                     string
-	Caption                  string
-	SortOrder                int
-	SourceProviderMediaRef   *string
-	CreatedAt                time.Time
+	ID                     string
+	BusinessID             string
+	CommunicationMessageID string
+	MediaAssetID           string
+	Kind                   string
+	Caption                string
+	SortOrder              int
+	SourceProviderMediaRef *string
+	CreatedAt              time.Time
 }
 
 // MessageAttachmentRecord is a read model for an attachment relation. Storage
