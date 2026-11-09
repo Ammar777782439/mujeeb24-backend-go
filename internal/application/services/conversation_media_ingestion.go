@@ -119,6 +119,9 @@ func (p *ConversationMediaIngestionProcessor) processOne(ctx context.Context, it
 	}
 	writer := p.Objects.(ports.MediaObjectProviderWriter)
 	if err := writer.PutToProvider(ctx, asset.StorageProvider, asset.StorageKey, mime, body); err != nil {
+		if item.AttemptCount >= maxConversationIngestionAttempts {
+			return p.reject(ctx, item, asset.ID)
+		}
 		return p.scheduleRetry(ctx, item, "storage_write_failed", 0)
 	}
 	if _, err := p.Assets.MarkImageReady(ctx, item.BusinessID, asset.ID, verified); err != nil {

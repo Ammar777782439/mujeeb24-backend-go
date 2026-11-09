@@ -24,7 +24,7 @@
 - Source provider media references are opaque identifiers only. URL values are rejected before persistence and are never copied into a message DTO.
 - A lease-based claim/retry queue is present. It currently claims only the first WhatsApp image attachment per message; Facebook/Instagram URL retrieval and video/audio/document/file verification are deliberately left queued for later channel-specific implementations.
 - The worker downloads WhatsApp media through SocialAPI's authenticated `GET /v1/inbox/media/{id}` endpoint, refuses redirects, enforces a 10 MiB body bound, verifies JPEG/PNG bytes and image dimensions, and writes to the provider recorded on the MediaAsset. It never fetches a webhook-supplied URL.
-- Provider 504/503 and transport failures use bounded retry scheduling; permanent provider responses, unsupported media sources, and invalid image bytes are terminal. Terminal failure now changes the attachment and its pending MediaAsset in one SQL statement and clears the opaque provider reference.
+- Provider 504/503, transport failures, and object-storage write failures use bounded retry scheduling; permanent provider responses, exhausted retry budgets, unsupported media sources, and invalid image bytes are terminal. Terminal failure now changes the attachment and its pending MediaAsset in one SQL statement and clears the opaque provider reference.
 
 ## Atomicity and operations
 

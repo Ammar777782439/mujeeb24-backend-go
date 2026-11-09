@@ -102,6 +102,7 @@ type conversationMediaObjectsFake struct {
 	mime     string
 	body     []byte
 	puts     int
+	err      error
 }
 
 func (f *conversationMediaObjectsFake) Put(context.Context, string, string, []byte) error {
@@ -110,7 +111,7 @@ func (f *conversationMediaObjectsFake) Put(context.Context, string, string, []by
 func (f *conversationMediaObjectsFake) PutToProvider(_ context.Context, provider, key, mime string, body []byte) error {
 	f.provider, f.key, f.mime, f.body = provider, key, mime, append([]byte(nil), body...)
 	f.puts++
-	return nil
+	return f.err
 }
 func (f *conversationMediaObjectsFake) DeleteFromProvider(context.Context, string, string) error {
 	return nil
@@ -190,6 +191,28 @@ func TestConversationMediaIngestionRetriesProvider504WithoutLoggingProviderDetai
 		assets.rejected != 0 || downloader.calls != 0 || objects.puts != 0 {
 		t.Fatalf("provider retry was not scheduled correctly: attachments=%#v assets=%#v downloader=%d objects=%d",
 			attachments, assets, downloader.calls, objects.puts)
+	}
+}
+
+func TestConversationMediaIngestionRetriesStorageWriteFailureWithBoundedAttempts(t *testing.T) {
+	processor, attachments, assets, _, downloader, objects := conversationMediaFixture(t)
+	objects.err = errors.New("object store unavailable")
+	processed, err := processor.Process(context.Background(), 10)
+	if err != nil || processed != 1 || attachments.retried != 1 ||
+		attachments.retryCode != "storage_write_failed" || attachments.failed != 0 ||
+		assets.rejected != 0 || downloader.calls != 1 {
+		t.Fatalf("storage failure was not retried: processed=%d err=%v attachments=%#v assets=%#v downloader=%d", processed, err, attachments, assets, downloader.calls)
+	}
+}
+
+func TestConversationMediaIngestionRejectsAfterStorageRetryBudgetIsExhausted(t *testing.T) {
+	processor, attachments, assets, _, _, objects := conversationMediaFixture(t)
+	attachments.claimed[0].AttemptCount = maxConversationIngestionAttempts
+	objects.err = errors.New("object store unavailable")
+	processed, err := processor.Process(context.Background(), 10)
+	if err != nil || processed != 1 || attachments.failed != 1 || attachments.retried != 0 ||
+		assets.rejected != 1 || assets.asset.Status != "rejected" {
+		t.Fatalf("exhausted storage retries were not made terminal: processed=%d err=%v attachments=%#v assets=%#v", processed, err, attachments, assets)
 	}
 }
 
