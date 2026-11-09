@@ -795,27 +795,47 @@ func (c *Client) ResolveInboundMediaSource(ctx context.Context, providerConversa
 	if index != 0 {
 		return ports.InboundMediaSource{}, fmt.Errorf("%w: SocialAPI exposes a single attachment_url per message", ErrUnsupported)
 	}
-	response, err := c.ListConversationMessages(ctx, providerConversationID, InboxMessagesQuery{Limit: 200})
-	if err != nil {
-		return ports.InboundMediaSource{}, err
+
+	// Message history is cursor-paginated. Do not assume the interaction is
+	// in the newest page: webhook delivery can be delayed or retried later.
+	// A repeated/empty cursor with has_more=true is a provider contract error,
+	// not a reason to loop forever or silently report the media as missing.
+	cursor := ""
+	seenCursors := make(map[string]struct{})
+	for {
+		response, err := c.ListConversationMessages(ctx, providerConversationID, InboxMessagesQuery{Limit: 200, Cursor: cursor})
+		if err != nil {
+			return ports.InboundMediaSource{}, err
+		}
+		for _, message := range response.Data {
+			if message.ID != interactionID {
+				continue
+			}
+			kind, kindErr := inboundAttachmentKind(message.AttachmentType)
+			if kindErr != nil {
+				return ports.InboundMediaSource{}, kindErr
+			}
+			if string(kind) != expectedKind {
+				return ports.InboundMediaSource{}, fmt.Errorf("%w: provider attachment kind does not match the stored reference", ErrInvalidResponse)
+			}
+			if err := validateInboundMediaURL(message.AttachmentURL); err != nil {
+				return ports.InboundMediaSource{}, fmt.Errorf("%w: provider attachment URL is invalid", ErrInvalidResponse)
+			}
+			return ports.InboundMediaSource{URL: message.AttachmentURL, Kind: string(kind)}, nil
+		}
+		if !response.Pagination.HasMore {
+			return ports.InboundMediaSource{}, ErrInboundMediaNotFound
+		}
+		next := strings.TrimSpace(response.Pagination.NextCursor)
+		if next == "" || next == cursor {
+			return ports.InboundMediaSource{}, fmt.Errorf("%w: invalid SocialAPI message-history cursor", ErrInvalidResponse)
+		}
+		if _, exists := seenCursors[next]; exists {
+			return ports.InboundMediaSource{}, fmt.Errorf("%w: SocialAPI repeated a message-history cursor", ErrInvalidResponse)
+		}
+		seenCursors[next] = struct{}{}
+		cursor = next
 	}
-	for _, message := range response.Data {
-		if message.ID != interactionID {
-			continue
-		}
-		kind, kindErr := inboundAttachmentKind(message.AttachmentType)
-		if kindErr != nil {
-			return ports.InboundMediaSource{}, kindErr
-		}
-		if string(kind) != expectedKind {
-			return ports.InboundMediaSource{}, fmt.Errorf("%w: provider attachment kind does not match the stored reference", ErrInvalidResponse)
-		}
-		if err := validateInboundMediaURL(message.AttachmentURL); err != nil {
-			return ports.InboundMediaSource{}, fmt.Errorf("%w: provider attachment URL is invalid", ErrInvalidResponse)
-		}
-		return ports.InboundMediaSource{URL: message.AttachmentURL, Kind: string(kind)}, nil
-	}
-	return ports.InboundMediaSource{}, ErrInboundMediaNotFound
 }
 
 func validateInboundMediaURL(raw string) error {

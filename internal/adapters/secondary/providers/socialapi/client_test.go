@@ -185,6 +185,63 @@ func TestClientResolvesInboundMediaThroughConversationHistory(t *testing.T) {
 	}
 }
 
+func TestClientResolvesInboundMediaAcrossHistoryPages(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.URL.Query().Get("limit") != "200" {
+			t.Errorf("expected 200-message page, got %q", r.URL.RawQuery)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch requests {
+		case 1:
+			if r.URL.Query().Get("cursor") != "" {
+				t.Errorf("first page must not have a cursor")
+			}
+			_, _ = io.WriteString(w, `{"data":[{"id":"recent-message"}],"pagination":{"has_more":true,"next_cursor":"page-2"}}`)
+		case 2:
+			if r.URL.Query().Get("cursor") != "page-2" {
+				t.Errorf("expected second-page cursor, got %q", r.URL.Query().Get("cursor"))
+			}
+			_, _ = io.WriteString(w, `{"data":[{"id":"sapi_dm_stable-interaction","attachment_type":"image","attachment_url":"https://cdn.example.test/older.jpg"}],"pagination":{"has_more":false,"next_cursor":""}}`)
+		default:
+			t.Errorf("unexpected history request %d", requests)
+			http.Error(w, "too many requests", http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "test-key", HTTPClient: server.Client()})
+	source, err := client.ResolveInboundMediaSource(context.Background(), "conversation-1",
+		encodeInboundMediaReference("sapi_dm_stable-interaction", 0), "image")
+	if err != nil {
+		t.Fatalf("ResolveInboundMediaSource: %v", err)
+	}
+	if source.URL != "https://cdn.example.test/older.jpg" || requests != 2 {
+		t.Fatalf("unexpected source=%#v requests=%d", source, requests)
+	}
+}
+
+func TestClientRejectsRepeatedInboundMediaHistoryCursor(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":[{"id":"other-message"}],"pagination":{"has_more":true,"next_cursor":"same-cursor"}}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "test-key", HTTPClient: server.Client()})
+	_, err := client.ResolveInboundMediaSource(context.Background(), "conversation-1",
+		encodeInboundMediaReference("sapi_dm_stable-interaction", 0), "image")
+	if !errors.Is(err, ErrInvalidResponse) {
+		t.Fatalf("expected repeated cursor response error, got %v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("expected cursor repetition to stop after second page, requests=%d", requests)
+	}
+}
+
 func TestClientRejectsUnsupportedInboundMediaPositionBeforeCallingSocialAPI(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
