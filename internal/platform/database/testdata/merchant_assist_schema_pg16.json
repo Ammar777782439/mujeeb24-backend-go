@@ -1,5 +1,5 @@
 {
-  "migration_count": 87,
+  "migration_count": 88,
   "columns": [
     {
       "table": "ai_catalog_batches",
@@ -4182,6 +4182,32 @@
       "type": "timestamp with time zone",
       "not_null": true,
       "default": "now()"
+    },
+    {
+      "table": "message_attachments",
+      "name": "ingestion_attempts",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "message_attachments",
+      "name": "ingestion_next_attempt_at",
+      "type": "timestamp with time zone",
+      "not_null": true,
+      "default": "now()"
+    },
+    {
+      "table": "message_attachments",
+      "name": "ingestion_lease_until",
+      "type": "timestamp with time zone",
+      "not_null": false
+    },
+    {
+      "table": "message_attachments",
+      "name": "ingestion_last_error_code",
+      "type": "text",
+      "not_null": false
     },
     {
       "table": "offers",
@@ -8949,6 +8975,18 @@
       "name": "message_attachments_caption_chk",
       "kind": "c",
       "definition": "CHECK (char_length(caption) <= 2000)"
+    },
+    {
+      "table": "message_attachments",
+      "name": "message_attachments_ingestion_attempts_chk",
+      "kind": "c",
+      "definition": "CHECK (ingestion_attempts >= 0)"
+    },
+    {
+      "table": "message_attachments",
+      "name": "message_attachments_ingestion_error_code_chk",
+      "kind": "c",
+      "definition": "CHECK (ingestion_last_error_code IS NULL OR char_length(ingestion_last_error_code) >= 1 AND char_length(ingestion_last_error_code) <= 100)"
     },
     {
       "table": "message_attachments",
