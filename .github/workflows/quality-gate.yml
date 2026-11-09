@@ -50,4 +50,7 @@ jobs:
           cache: true
       - name: Verify repository contract
         run: bash scripts/verify-repository.sh
+      - name: Record reviewed PostgreSQL schema snapshot
+        run: go test -v -tags=integration -count=1 -run '^TestMerchantAssistSchemaAfterAllMigrations
+ ./internal/platform/database
 
