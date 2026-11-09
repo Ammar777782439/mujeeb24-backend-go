@@ -141,11 +141,14 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 	// Pending attachments are claimed with a bounded lease. A second worker
 	// cannot claim the same rows until the lease expires or they are released.
 	claimed, err := attachments.ClaimPendingIngestions(ctx, 10, time.Minute)
-	if err != nil || len(claimed) != 3 {
-		t.Fatalf("claim pending message media: items=%#v err=%v", claimed, err)
+	// This worker slice intentionally claims only WhatsApp images. The file
+	// placeholder remains pending until a non-image verifier is implemented.
+	if err != nil || len(claimed) != 2 {
+		t.Fatalf("claim supported WhatsApp image media: items=%#v err=%v", claimed, err)
 	}
 	for _, item := range claimed {
 		if item.BusinessID != businessID || item.ProviderConversationID != "provider-conversation-1" ||
+			item.Channel != "whatsapp" || item.Kind != "image" ||
 			item.ProviderMediaReference == "" || item.StorageProvider != "r2" ||
 			!strings.HasPrefix(item.StorageKey, "conversation/"+businessID+"/") || item.AttemptCount != 1 {
 			t.Fatalf("claimed ingestion leaked or lost scoped fields: %#v", item)
