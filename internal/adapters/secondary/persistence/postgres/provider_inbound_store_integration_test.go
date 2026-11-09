@@ -141,10 +141,11 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 	// Pending attachments are claimed with a bounded lease. A second worker
 	// cannot claim the same rows until the lease expires or they are released.
 	claimed, err := attachments.ClaimPendingIngestions(ctx, 10, time.Minute)
-	// This worker slice intentionally claims only WhatsApp images. The file
-	// placeholder remains pending until a non-image verifier is implemented.
-	if err != nil || len(claimed) != 2 {
-		t.Fatalf("claim supported WhatsApp image media: items=%#v err=%v", claimed, err)
+	// This worker slice intentionally claims only the first WhatsApp image
+	// because SocialAPI history exposes one attachment per message. The file
+	// placeholder and later attachment positions remain pending.
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claim supported first-position WhatsApp image: items=%#v err=%v", claimed, err)
 	}
 	for _, item := range claimed {
 		if item.BusinessID != businessID || item.ProviderConversationID != "provider-conversation-1" ||

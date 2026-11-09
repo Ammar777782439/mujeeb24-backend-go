@@ -288,6 +288,7 @@ func (r *MessageAttachmentRepository) ClaimPendingIngestions(ctx context.Context
 			  AND a.purpose = 'conversation_attachment'
 			  AND a.status IN ('pending_ingestion', 'ready')
 			  AND ma.kind = 'image'
+			  AND ma.sort_order = 0
 			  AND cc.channel = 'whatsapp'
 			ORDER BY ma.created_at, ma.id
 			LIMIT $1
