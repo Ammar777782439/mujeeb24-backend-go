@@ -12,12 +12,15 @@ SocialAPI Gateway Role: `SocialAPI` is the external unified messaging transport 
 - `ConnectionStatus`: Health and authorization state of a channel connection (`ConnectionActive`, `ConnectionDegraded`, `ConnectionDisconnected`, `ConnectionReconnectRequired`, etc.) ([channel.go](./channel.go#L29)).
 - `MessageDirection` / `MessageOrigin`: Traffic direction (`DirectionInbound`, `DirectionOutbound`) and originator (`OriginCustomer`, `OriginAI`, `OriginHuman`, `OriginAutomation`, `OriginSystem`) ([channel.go](./channel.go#L41-L56)).
 - `DeliveryStatus`: Outbox and provider delivery lifecycle (`DeliveryPending`, `DeliverySending`, `DeliverySent`, `DeliveryDelivered`, `DeliveryDeadLetter`, `DeliveryUnknown`, etc.) ([channel.go](./channel.go#L58-L70)).
+- `AttachmentKind`, `InboundAttachmentReference`, `OutboundAttachmentReference`: Provider-neutral media kinds and validated references used by inbound and outbound message contracts ([attachments.go](./attachments.go)).
 - `InboundEvent`: Canonical domain representation of an ingested social webhook event ([channel.go](./channel.go#L72)).
 - `OutboundMessage`: Canonical domain representation of an outgoing channel dispatch ([channel.go](./channel.go#L101)).
 
 ## Invariants
 - `ProviderSocialAPI` is the single supported external social communication provider enum.
 - No network calls, SQL drivers, or third-party SDKs are imported into this package.
+- Inbound attachment references contain opaque provider references only; outbound references point to Mujeeb MediaAsset IDs. Neither type carries public URLs, storage keys, or provider SDK objects.
+- Attachment validation is pure and checks logical kind/reference presence only; actual bytes, MIME, size limits and channel capabilities are verified outside the domain.
 - Delivery Lifecycle & Dead-Letter Isolation: `DeliveryUnknown` represents an ephemeral unconfirmed provider transmission state. To prevent duplicate customer messaging, unknown transmission results must transition directly to `DeliveryDeadLetter` terminal quarantine rather than triggering automated retries.
 
 ## Side Effects

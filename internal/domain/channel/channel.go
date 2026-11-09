@@ -87,6 +87,7 @@ type InboundEvent struct {
 	ProviderConversationID string
 	ExternalUserID         string
 	Text                   string
+	Attachments            []InboundAttachmentReference
 	MessageType            string
 	Direction              MessageDirection
 	Origin                 MessageOrigin
@@ -105,6 +106,7 @@ type OutboundMessage struct {
 	Channel                 Channel
 	Origin                  MessageOrigin
 	Content                 string
+	Attachments             []OutboundAttachmentReference
 	ProviderIdempotencyKey  string
 	Status                  DeliveryStatus
 	ProviderMessageID       string

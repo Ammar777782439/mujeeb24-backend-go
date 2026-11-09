@@ -7,7 +7,7 @@ Note on Domain Scope: In Mujeeb 24's codebase, `internal/domain` is strictly par
 
 ## Subdirectories & Boundaries
 - [ai](./ai/EGM.md) - AI system contracts, evidence data models, sanitized sales projections, and compiled system prompts.
-- [channel](./channel/EGM.md) - Omnichannel social communication domain models, lifecycle states, delivery statuses, and event representations.
+- [channel](./channel/EGM.md) - Omnichannel social communication domain models, lifecycle states, delivery statuses, and event representations. It also defines provider-neutral attachment references; durable media storage and tenant-scoped attachment persistence remain application/infrastructure concerns.
 
 ## Global Invariants
 - Zero external imports: No SQL packages (`pgx`, `database/sql`), no HTTP frameworks, and no third-party cloud SDKs are allowed in the domain layer.
