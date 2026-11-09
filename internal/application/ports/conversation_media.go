@@ -84,9 +84,24 @@ type MessageAttachmentRecord struct {
 	UpdatedAt              time.Time
 }
 
+type ClaimedMessageAttachmentIngestion struct {
+	AttachmentID            string
+	BusinessID              string
+	CommunicationMessageID  string
+	MediaAssetID             string
+	ProviderConversationID  string
+	ProviderMediaReference  string
+	Kind                    string
+	StorageProvider         string
+	StorageKey              string
+	AttemptCount            int
+}
+
 type MessageAttachmentRepository interface {
 	Create(ctx context.Context, draft MessageAttachmentDraft) (MessageAttachmentRecord, error)
 	ListByMessage(ctx context.Context, businessID, communicationMessageID string) ([]MessageAttachmentRecord, error)
+	ClaimPendingIngestions(ctx context.Context, limit int, lease time.Duration) ([]ClaimedMessageAttachmentIngestion, error)
+	ReleaseForRetry(ctx context.Context, businessID, attachmentID string, nextAttemptAt time.Time, errorCode string) error
 	MarkReady(ctx context.Context, businessID, attachmentID string) (MessageAttachmentRecord, error)
 	MarkFailed(ctx context.Context, businessID, attachmentID string) (MessageAttachmentRecord, error)
 }

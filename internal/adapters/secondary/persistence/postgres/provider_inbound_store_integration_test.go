@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -135,6 +136,51 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 	if err != nil || len(listedAttachments) != 3 || listedAttachments[0].Kind != "image" ||
 		listedAttachments[1].Kind != "file" || listedAttachments[2].ID != attachmentID {
 		t.Fatalf("list materialized and manually-created message attachments: items=%#v err=%v", listedAttachments, err)
+	}
+
+	// Pending attachments are claimed with a bounded lease. A second worker
+	// cannot claim the same rows until the lease expires or they are released.
+	claimed, err := attachments.ClaimPendingIngestions(ctx, 10, time.Minute)
+	if err != nil || len(claimed) != 3 {
+		t.Fatalf("claim pending message media: items=%#v err=%v", claimed, err)
+	}
+	for _, item := range claimed {
+		if item.BusinessID != businessID || item.ProviderConversationID != "provider-conversation-1" ||
+			item.ProviderMediaReference == "" || item.StorageProvider != "r2" ||
+			!strings.HasPrefix(item.StorageKey, "conversation/"+businessID+"/") || item.AttemptCount != 1 {
+			t.Fatalf("claimed ingestion leaked or lost scoped fields: %#v", item)
+		}
+	}
+	if again, claimErr := attachments.ClaimPendingIngestions(ctx, 10, time.Minute); claimErr != nil || len(again) != 0 {
+		t.Fatalf("leased attachments were claimed twice: items=%#v err=%v", again, claimErr)
+	}
+	if err := attachments.ReleaseForRetry(ctx, businessID, claimed[0].AttachmentID, time.Now().UTC().Add(time.Hour), "https://bad.example"); err == nil {
+		t.Fatal("unsafe error code was accepted for ingestion retry")
+	}
+	for _, item := range claimed {
+		if err := attachments.ReleaseForRetry(ctx, item.BusinessID, item.AttachmentID, time.Now().UTC().Add(time.Hour), "socialapi_media_not_ready"); err != nil {
+			t.Fatalf("release attachment for retry: %v", err)
+		}
+	}
+	if delayed, claimErr := attachments.ClaimPendingIngestions(ctx, 10, time.Minute); claimErr != nil || len(delayed) != 0 {
+		t.Fatalf("future retry rows were claimed early: items=%#v err=%v", delayed, claimErr)
+	}
+	// Simulate a worker crash: an expired lease is reclaimable and increments
+	// the attempt counter, while the attachment remains tenant-scoped.
+	if _, err := adapter.Pool().Exec(ctx, `
+		UPDATE message_attachments
+		SET ingestion_next_attempt_at = now() - interval '1 second',
+		    ingestion_lease_until = now() - interval '1 second'
+		WHERE business_id = $1::uuid AND id = $2::uuid
+	`, businessID, claimed[0].AttachmentID); err != nil {
+		t.Fatalf("expire media ingestion lease: %v", err)
+	}
+	reclaimed, err := attachments.ClaimPendingIngestions(ctx, 10, time.Minute)
+	if err != nil || len(reclaimed) != 1 || reclaimed[0].AttachmentID != claimed[0].AttachmentID || reclaimed[0].AttemptCount != 2 {
+		t.Fatalf("reclaim expired media ingestion lease: items=%#v err=%v", reclaimed, err)
+	}
+	if _, err := attachments.MarkFailed(ctx, businessID, reclaimed[0].AttachmentID); err != nil {
+		t.Fatalf("mark terminal ingestion failure: %v", err)
 	}
 
 	// A message and its media asset must belong to the same business.

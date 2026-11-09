@@ -2,8 +2,10 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
 )
@@ -257,6 +259,120 @@ func (r *MessageAttachmentRepository) ListByMessage(ctx context.Context, busines
 	return result, nil
 }
 
+func (r *MessageAttachmentRepository) ClaimPendingIngestions(ctx context.Context, limit int, lease time.Duration) ([]ports.ClaimedMessageAttachmentIngestion, error) {
+	if limit < 1 || limit > 100 || lease < time.Second || lease > 10*time.Minute {
+		return nil, invalidRepositoryInput("message_attachment.claim_ingestion", "limit must be 1..100 and lease must be between 1 second and 10 minutes")
+	}
+	db, err := r.executor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(ctx, `
+		WITH candidates AS (
+			SELECT ma.id, ma.business_id
+			FROM message_attachments ma
+			JOIN communication_messages cm
+			  ON cm.business_id = ma.business_id AND cm.id = ma.communication_message_id
+			JOIN conversation_references cr
+			  ON cr.business_id = cm.business_id AND cr.id = cm.conversation_reference_id
+			JOIN media_assets a
+			  ON a.business_id = ma.business_id AND a.id = ma.media_asset_id
+			WHERE ma.status = 'pending_ingestion'
+			  AND ma.source_provider_media_reference IS NOT NULL
+			  AND ma.ingestion_next_attempt_at <= now()
+			  AND (ma.ingestion_lease_until IS NULL OR ma.ingestion_lease_until <= now())
+			  AND cr.system = 'provider'
+			  AND cr.resource_type = 'conversation'
+			  AND a.purpose = 'conversation_attachment'
+			  AND a.status = 'pending_ingestion'
+			ORDER BY ma.created_at, ma.id
+			LIMIT $1
+			FOR UPDATE OF ma SKIP LOCKED
+		),
+		claimed AS (
+			UPDATE message_attachments ma
+			SET ingestion_lease_until = now() + ($2::bigint * interval '1 millisecond'),
+			    ingestion_attempts = ma.ingestion_attempts + 1,
+			    updated_at = now()
+			FROM candidates c
+			WHERE ma.business_id = c.business_id AND ma.id = c.id
+			RETURNING ma.id, ma.business_id, ma.communication_message_id,
+			          ma.media_asset_id, ma.kind, ma.source_provider_media_reference,
+		          ma.ingestion_attempts
+		)
+		SELECT c.id::text, c.business_id::text, c.communication_message_id::text,
+		       c.media_asset_id::text, cr.resource_id, c.source_provider_media_reference,
+		       c.kind, a.storage_provider, a.storage_key, c.ingestion_attempts
+		FROM claimed c
+		JOIN communication_messages cm
+		  ON cm.business_id = c.business_id AND cm.id = c.communication_message_id
+		JOIN conversation_references cr
+		  ON cr.business_id = cm.business_id AND cr.id = cm.conversation_reference_id
+		JOIN media_assets a
+		  ON a.business_id = c.business_id AND a.id = c.media_asset_id
+		ORDER BY c.id
+	`, limit, lease.Milliseconds())
+	if err != nil {
+		return nil, classifyRepositoryWriteError("message_attachment.claim_ingestion", err)
+	}
+	defer rows.Close()
+	claimed := make([]ports.ClaimedMessageAttachmentIngestion, 0)
+	for rows.Next() {
+		var item ports.ClaimedMessageAttachmentIngestion
+		if err := rows.Scan(&item.AttachmentID, &item.BusinessID, &item.CommunicationMessageID,
+			&item.MediaAssetID, &item.ProviderConversationID, &item.ProviderMediaReference,
+			&item.Kind, &item.StorageProvider, &item.StorageKey, &item.AttemptCount); err != nil {
+			return nil, fmt.Errorf("scan claimed message attachment ingestion: %w", err)
+		}
+		claimed = append(claimed, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate claimed message attachment ingestions: %w", err)
+	}
+	return claimed, nil
+}
+
+func (r *MessageAttachmentRepository) ReleaseForRetry(ctx context.Context, businessID, attachmentID string, nextAttemptAt time.Time, errorCode string) error {
+	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(attachmentID) == "" ||
+		nextAttemptAt.IsZero() || !validMediaIngestionErrorCode(errorCode) {
+		return invalidRepositoryInput("message_attachment.release_retry", "business, attachment, retry time and safe error code are required")
+	}
+	db, err := r.executor(ctx)
+	if err != nil {
+		return err
+	}
+	commandTag, err := db.Exec(ctx, `
+		UPDATE message_attachments
+		SET ingestion_lease_until = NULL,
+		    ingestion_next_attempt_at = $3,
+		    ingestion_last_error_code = $4,
+		    updated_at = now()
+		WHERE business_id = $1::uuid AND id = $2::uuid
+		  AND status = 'pending_ingestion'
+		  AND ingestion_lease_until IS NOT NULL
+	`, businessID, attachmentID, nextAttemptAt.UTC(), errorCode)
+	if err != nil {
+		return classifyRepositoryWriteError("message_attachment.release_retry", err)
+	}
+	if commandTag.RowsAffected() == 0 {
+		return &RepositoryError{Operation: "message_attachment.release_retry", Kind: RepositoryConflict, Err: errors.New("attachment is not currently leased for ingestion")}
+	}
+	return nil
+}
+
+func validMediaIngestionErrorCode(value string) bool {
+	if len(value) == 0 || len(value) > 100 {
+		return false
+	}
+	for _, r := range value {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' ||
+			r >= '0' && r <= '9' || r == '_' || r == '.' || r == '-') {
+			return false
+		}
+	}
+	return true
+}
+
 func (r *MessageAttachmentRepository) MarkReady(ctx context.Context, businessID, attachmentID string) (ports.MessageAttachmentRecord, error) {
 	db, err := r.executor(ctx)
 	if err != nil {
@@ -265,7 +381,7 @@ func (r *MessageAttachmentRepository) MarkReady(ctx context.Context, businessID,
 	row := db.QueryRow(ctx, `
 		WITH updated AS (
 			UPDATE message_attachments ma
-			SET status = 'ready', source_provider_media_reference = NULL, updated_at = now()
+			SET status = 'ready', source_provider_media_reference = NULL, ingestion_lease_until = NULL, updated_at = now()
 			WHERE ma.business_id = $1::uuid AND ma.id = $2::uuid
 			  AND ma.status = 'pending_ingestion'
 			  AND EXISTS (
@@ -293,7 +409,7 @@ func (r *MessageAttachmentRepository) MarkFailed(ctx context.Context, businessID
 	row := db.QueryRow(ctx, `
 		WITH updated AS (
 			UPDATE message_attachments
-			SET status = 'failed', updated_at = now()
+			SET status = 'failed', ingestion_lease_until = NULL, ingestion_last_error_code = 'permanent_failure', updated_at = now()
 			WHERE business_id = $1::uuid AND id = $2::uuid AND status = 'pending_ingestion'
 			RETURNING *
 		)
