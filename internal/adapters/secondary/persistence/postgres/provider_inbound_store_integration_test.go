@@ -117,7 +117,7 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 		createdAttachment, txErr = attachments.Create(txCtx, ports.MessageAttachmentDraft{
 			ID: attachmentID, BusinessID: businessID,
 			CommunicationMessageID: first.CommunicationMessageID, MediaAssetID: mediaAssetID,
-			Kind: "image", Caption: "صورة العميل", SortOrder: 0,
+			Kind: "image", Caption: "صورة العميل", SortOrder: 2,
 			SourceProviderMediaRef: &providerMediaRef, CreatedAt: base.Add(time.Second),
 		})
 		return txErr
