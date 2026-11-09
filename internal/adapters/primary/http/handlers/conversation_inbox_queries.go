@@ -11,6 +11,27 @@ import (
 
 func (s *Server) dispatchInboxQuery(ctx context.Context, operation string, input any) (any, bool) {
 	switch operation {
+	case "getConversationAttachmentReadURL":
+		in := input.(*contract.ConversationAttachmentReadInput)
+		if s.deps.GetConversationAttachmentReadURL == nil {
+			return mapApplicationError(appErrors.NotImplemented()), true
+		}
+		actor, err := s.requireScope(ctx, in.BusinessID)
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		view, err := s.deps.GetConversationAttachmentReadURL.Handle(ctx, queries.GetConversationAttachmentReadURLQuery{
+			Meta: queryMeta(actor, "", ""), ConversationID: commands.ConversationID(in.ConversationID),
+			MessageID: commands.MessageID(in.MessageID), AttachmentID: string(in.AttachmentID),
+		})
+		if err != nil {
+			return mapApplicationError(err), true
+		}
+		out := &contract.Single[contract.ConversationAttachmentReadURLView]{}
+		out.Body.Data = contract.ConversationAttachmentReadURLView{
+			URL: view.URL, ExpiresInSeconds: view.ExpiresInSeconds, MimeType: view.MimeType, SizeBytes: view.SizeBytes,
+		}
+		return out, true
 	case "getConversationSummary":
 		in := input.(*contract.ConversationInput)
 		actor, err := s.requireScope(ctx, in.BusinessID)

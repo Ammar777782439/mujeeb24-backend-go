@@ -43,6 +43,7 @@ type Dependencies struct {
 	GetConversationSummary       queries.GetConversationSummaryHandler
 	GetConversationInboxOverview queries.GetConversationInboxOverviewHandler
 	ListConversationMessages     queries.ListConversationMessagesHandler
+	GetConversationAttachmentReadURL queries.GetConversationAttachmentReadURLHandler
 	CreateOutboundMessage        commands.CreateOutboundMessageHandler
 	ListCustomers                queries.ListCustomersHandler
 	GetCustomer                  queries.GetCustomerHandler

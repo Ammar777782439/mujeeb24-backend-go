@@ -137,6 +137,10 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 		listedAttachments[1].Kind != "file" || listedAttachments[2].ID != attachmentID {
 		t.Fatalf("list materialized and manually-created message attachments: items=%#v err=%v", listedAttachments, err)
 	}
+	batchAttachments, err := attachments.ListByMessages(ctx, businessID, []string{first.CommunicationMessageID})
+	if err != nil || len(batchAttachments) != 3 || batchAttachments[0].CommunicationMessageID != first.CommunicationMessageID {
+		t.Fatalf("batch list message attachments: items=%#v err=%v", batchAttachments, err)
+	}
 
 	// Pending attachments are claimed with a bounded lease. A second worker
 	// cannot claim the same rows until the lease expires or they are released.
@@ -231,6 +235,14 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 	})
 	if err != nil || readyAttachment.Status != "ready" || readyAttachment.MimeType != "image/png" || readyAttachment.SizeBytes != 123 {
 		t.Fatalf("mark MediaAsset and message attachment ready atomically: item=%#v err=%v", readyAttachment, err)
+	}
+	readRecord, err := attachments.GetReadyForMessage(ctx, businessID, first.ConversationID, first.CommunicationMessageID, attachmentID)
+	if err != nil || readRecord.Attachment.ID != attachmentID || readRecord.StorageProvider != "r2" ||
+		readRecord.StorageKey != "conversation/"+businessID+"/"+mediaAssetID || readRecord.Attachment.MimeType != "image/png" {
+		t.Fatalf("tenant/conversation/message-scoped ready attachment lookup: record=%#v err=%v", readRecord, err)
+	}
+	if _, err := attachments.GetReadyForMessage(ctx, otherBusinessID, first.ConversationID, first.CommunicationMessageID, attachmentID); err == nil {
+		t.Fatal("cross-business attachment read was accepted")
 	}
 
 	urlReference := "https://provider.example/media/temporary"

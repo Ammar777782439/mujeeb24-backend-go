@@ -44,3 +44,11 @@ The PostgreSQL integration suite now checks:
 - rejection of Catalog-purpose assets from Conversation.
 
 Unit and integration tests cover image verification, retry/state transitions, and the PostgreSQL lease queue. CI success does not prove live SocialAPI retrieval or real R2/Backblaze object writes; no live provider or storage operation has been performed as part of this slice. The public upload endpoint and outbound attachment transport remain out of scope.
+
+
+## واجهة قراءة مرفقات المحادثة
+
+- إسقاط الرسائل يجلب مرفقات الرسائل العامة بدفعة واحدة، ولا يضمّن مفاتيح التخزين أو مراجع SocialAPI.
+- المرفق الجاهز يعرض `attachment_id` و`media_id` والنوع والحالة والتسمية، مع مسار قراءة خاص بالمحادثة والرسالة والمرفق. المرفقات المعلقة أو الفاشلة لا تحصل على مسار قراءة.
+- `GET /api/v1/businesses/{business_id}/conversations/{conversation_id}/messages/{message_id}/attachments/{attachment_id}/read-url` يتحقق من صلاحية قراءة المحادثة، ثم يتحقق في PostgreSQL من تطابق المستأجر والمحادثة والرسالة والمرفق وأن الرسالة عامة وأن الأصل من غرض `conversation_attachment` وحالته `ready`.
+- رابط التخزين الموقّع قصير العمر (5 دقائق)، ويُنشأ من مزود التخزين المسجل على `MediaAsset` نفسه؛ لا يحدث fallback إلى bucket آخر عند تغيير مزود الكتابة الافتراضي.

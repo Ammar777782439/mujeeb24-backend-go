@@ -42,6 +42,7 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 	decisionRepository := postgres.NewAIDecisionRepository(adapter)
 	auditRepository := postgres.NewAuditEventRepository(adapter)
 	messageRepository := postgres.NewMessageRepository(adapter)
+	messageAttachmentsRepository := postgres.NewMessageAttachmentRepository(adapter)
 	readCursorRepository := postgres.NewConversationReadCursorRepository(adapter)
 	cannedReplyRepository := postgres.NewCannedReplyRepository(adapter)
 	conversationRuntime := services.ConversationRuntimeService{Repository: conversationRepository, Reader: conversationRepository, Inbox: conversationRepository, Assignees: teamRepository, Labels: conversationLabelRepository, References: conversationReferenceRepository, Messages: messageRepository, NoteTargets: messageRepository, PrivateNotes: messageRepository, Transactions: adapter, Realtime: realtime}
@@ -51,6 +52,23 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 	channelConnectionRepository := postgres.NewChannelConnectionRepository(adapter)
 	channelRuntime := services.ChannelRuntimeService{Reader: channelConnectionRepository, Runtime: channelConnectionRepository, Transactions: adapter, HistoryStore: postgres.NewChannelHistoryRepository(adapter)}
 	channelCapabilityRepository := postgres.NewChannelCapabilityRepository(adapter)
+	var conversationMediaObjects ports.MediaObjectStorage
+	if os.Getenv("CONVERSATION_MEDIA_ENABLED") == "true" {
+		conversationMediaObjects = mediaObjects
+		if conversationMediaObjects == nil {
+			var conversationStorageErr error
+			conversationMediaObjects, _, conversationStorageErr = buildConversationMediaStorageFromEnv()
+			if conversationStorageErr != nil {
+				log.Printf("[ConversationMedia] stage=storage_configuration_failed error=%v", conversationStorageErr)
+			}
+		}
+	}
+	var conversationAttachmentRead queries.GetConversationAttachmentReadURLHandler
+	if reader, ok := conversationMediaObjects.(ports.MediaObjectProviderReader); ok {
+		conversationAttachmentRead = services.ConversationAttachmentReadService{
+			Inbox: conversationRepository, Attachments: messageAttachmentsRepository, Objects: reader,
+		}
+	}
 
 	return handlers.Dependencies{
 		GetLiveness:                  livenessQueryService{},
@@ -94,7 +112,8 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 		GetConversationInboxOverview: services.GetConversationInboxOverviewService{Inbox: conversationRepository},
 		GetConversation:              services.GetConversationQueryService{Inbox: conversationRepository, Labels: conversationLabelRepository},
 
-		ListConversationMessages:  services.MessageQueryService{Repository: messageRepository, Inbox: conversationRepository},
+		ListConversationMessages:  services.MessageQueryService{Repository: messageRepository, Inbox: conversationRepository, Attachments: messageAttachmentsRepository},
+		GetConversationAttachmentReadURL: conversationAttachmentRead,
 		ListCannedReplies:         services.ListCannedRepliesQueryService{CannedReplyService: cannedReplies},
 		ListAutomationRules:       services.ListAutomationRulesQueryService{AutomationRuleService: automationRules},
 		ListConversationAssignees: services.ListConversationAssigneesQueryService{TeamService: teamService},

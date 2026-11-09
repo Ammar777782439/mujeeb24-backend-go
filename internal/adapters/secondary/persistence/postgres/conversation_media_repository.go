@@ -259,6 +259,100 @@ func (r *MessageAttachmentRepository) ListByMessage(ctx context.Context, busines
 	return result, nil
 }
 
+func (r *MessageAttachmentRepository) ListByMessages(ctx context.Context, businessID string, communicationMessageIDs []string) ([]ports.MessageAttachmentRecord, error) {
+	if r == nil || r.adapter == nil {
+		return nil, ErrPoolClosed
+	}
+	if strings.TrimSpace(businessID) == "" {
+		return nil, invalidRepositoryInput("message_attachment.list_by_messages", "business id is required")
+	}
+	if len(communicationMessageIDs) == 0 {
+		return []ports.MessageAttachmentRecord{}, nil
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := executor.Query(ctx, `
+		SELECT ma.id::text, ma.business_id::text, ma.communication_message_id::text,
+		       ma.media_asset_id::text, ma.kind, ma.caption, ma.sort_order, ma.status,
+		       ma.created_at, ma.updated_at, COALESCE(a.mime_type,''), COALESCE(a.size_bytes,0)
+		FROM message_attachments ma
+		JOIN communication_messages cm
+		  ON cm.business_id = ma.business_id AND cm.id = ma.communication_message_id
+		JOIN media_assets a
+		  ON a.business_id = ma.business_id AND a.id = ma.media_asset_id
+		WHERE ma.business_id = $1::uuid
+		  AND cm.visibility = 'public'
+		  AND ma.communication_message_id::text = ANY($2::text[])
+		  AND ma.status <> 'removed'
+		ORDER BY ma.communication_message_id, ma.sort_order, ma.id
+	`, businessID, communicationMessageIDs)
+	if err != nil {
+		return nil, classifyRepositoryGetError("message_attachment.list_by_messages", err)
+	}
+	defer rows.Close()
+	items := make([]ports.MessageAttachmentRecord, 0)
+	for rows.Next() {
+		var item ports.MessageAttachmentRecord
+		if err := rows.Scan(&item.ID, &item.BusinessID, &item.CommunicationMessageID,
+			&item.MediaAssetID, &item.Kind, &item.Caption, &item.SortOrder, &item.Status,
+			&item.CreatedAt, &item.UpdatedAt, &item.MimeType, &item.SizeBytes); err != nil {
+			return nil, &RepositoryError{Operation: "message_attachment.list_by_messages", Kind: RepositoryInvalid, Err: err}
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, &RepositoryError{Operation: "message_attachment.list_by_messages", Kind: RepositoryInvalid, Err: err}
+	}
+	return items, nil
+}
+
+func (r *MessageAttachmentRepository) GetReadyForMessage(ctx context.Context, businessID, conversationID, messageID, attachmentID string) (ports.ConversationAttachmentReadRecord, error) {
+	if r == nil || r.adapter == nil {
+		return ports.ConversationAttachmentReadRecord{}, ErrPoolClosed
+	}
+	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(conversationID) == "" ||
+		strings.TrimSpace(messageID) == "" || strings.TrimSpace(attachmentID) == "" {
+		return ports.ConversationAttachmentReadRecord{}, invalidRepositoryInput("message_attachment.get_ready_for_message", "tenant, conversation, message and attachment ids are required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.ConversationAttachmentReadRecord{}, err
+	}
+	var result ports.ConversationAttachmentReadRecord
+	row := executor.QueryRow(ctx, `
+		SELECT ma.id::text, ma.business_id::text, ma.communication_message_id::text,
+		       ma.media_asset_id::text, ma.kind, ma.caption, ma.sort_order, ma.status,
+		       ma.created_at, ma.updated_at, COALESCE(a.mime_type,''), COALESCE(a.size_bytes,0),
+		       a.storage_provider, a.storage_key
+		FROM message_attachments ma
+		JOIN communication_messages cm
+		  ON cm.business_id = ma.business_id AND cm.id = ma.communication_message_id
+		JOIN conversation_references cr
+		  ON cr.business_id = cm.business_id AND cr.id = cm.conversation_reference_id
+		JOIN media_assets a
+		  ON a.business_id = ma.business_id AND a.id = ma.media_asset_id
+		WHERE ma.business_id = $1::uuid
+		  AND cr.conversation_id = $2::uuid
+		  AND cm.id = $3::uuid
+		  AND cm.visibility = 'public'
+		  AND ma.id = $4::uuid
+		  AND ma.status = 'ready'
+		  AND a.purpose = 'conversation_attachment'
+		  AND a.status = 'ready'
+	`, businessID, conversationID, messageID, attachmentID)
+	if err := row.Scan(&result.Attachment.ID, &result.Attachment.BusinessID,
+		&result.Attachment.CommunicationMessageID, &result.Attachment.MediaAssetID,
+		&result.Attachment.Kind, &result.Attachment.Caption, &result.Attachment.SortOrder,
+		&result.Attachment.Status, &result.Attachment.CreatedAt, &result.Attachment.UpdatedAt,
+		&result.Attachment.MimeType, &result.Attachment.SizeBytes,
+		&result.StorageProvider, &result.StorageKey); err != nil {
+		return ports.ConversationAttachmentReadRecord{}, classifyRepositoryGetError("message_attachment.get_ready_for_message", err)
+	}
+	return result, nil
+}
+
 func (r *MessageAttachmentRepository) ClaimPendingIngestions(ctx context.Context, limit int, lease time.Duration) ([]ports.ClaimedMessageAttachmentIngestion, error) {
 	if limit < 1 || limit > 100 || lease < time.Second || lease > 10*time.Minute {
 		return nil, invalidRepositoryInput("message_attachment.claim_ingestion", "limit must be 1..100 and lease must be between 1 second and 10 minutes")

@@ -60,6 +60,16 @@ func (s *CatalogMediaObjectStore) Delete(ctx context.Context, key string) error 
 	}
 	return p.Delete(ctx, key)
 }
+// PresignGetFromProvider resolves private bytes using the provider pinned to
+// the owning MediaAsset, even if the default write provider later changes.
+func (s *CatalogMediaObjectStore) PresignGetFromProvider(ctx context.Context, provider, key string, ttl time.Duration) (string, error) {
+	p, err := s.provider(provider)
+	if err != nil {
+		return "", err
+	}
+	return p.PresignGet(ctx, key, ttl)
+}
+
 func (s *CatalogMediaObjectStore) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
 	return s.PresignFromProvider(ctx, s.WriteProvider, key, ttl)
 }

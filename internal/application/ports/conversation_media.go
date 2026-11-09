@@ -69,9 +69,9 @@ type MessageAttachmentDraft struct {
 }
 
 // MessageAttachmentRecord is a read model for an attachment relation. Storage
-// keys and provider references are intentionally omitted from normal message
-// projections; a dedicated ingestion worker may load the source reference
-// through a separately authorized internal query in a later slice.
+// keys and provider references are intentionally omitted from message
+// projections; the ingestion worker uses the lease claim port, and private
+// object reads use the conversation-scoped ready-attachment port.
 type MessageAttachmentRecord struct {
 	ID                     string
 	BusinessID             string
@@ -99,6 +99,24 @@ type ClaimedMessageAttachmentIngestion struct {
 	StorageProvider        string
 	StorageKey             string
 	AttemptCount           int
+}
+
+type MessageAttachmentsBatchReader interface {
+	ListByMessages(ctx context.Context, businessID string, communicationMessageIDs []string) ([]MessageAttachmentRecord, error)
+}
+
+type ConversationAttachmentReadRecord struct {
+	Attachment      MessageAttachmentRecord
+	StorageProvider string
+	StorageKey      string
+}
+
+type ConversationAttachmentReadRepository interface {
+	GetReadyForMessage(ctx context.Context, businessID, conversationID, messageID, attachmentID string) (ConversationAttachmentReadRecord, error)
+}
+
+type MediaObjectProviderReader interface {
+	PresignGetFromProvider(ctx context.Context, provider, key string, ttl time.Duration) (string, error)
 }
 
 type MessageAttachmentRepository interface {
