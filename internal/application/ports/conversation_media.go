@@ -88,17 +88,17 @@ type MessageAttachmentRecord struct {
 }
 
 type ClaimedMessageAttachmentIngestion struct {
-	AttachmentID            string
-	BusinessID              string
-	CommunicationMessageID  string
-	MediaAssetID            string
-	ProviderConversationID  string
-	Channel                 string
-	ProviderMediaReference  string
-	Kind                    string
-	StorageProvider         string
-	StorageKey              string
-	AttemptCount            int
+	AttachmentID           string
+	BusinessID             string
+	CommunicationMessageID string
+	MediaAssetID           string
+	ProviderConversationID string
+	Channel                string
+	ProviderMediaReference string
+	Kind                   string
+	StorageProvider        string
+	StorageKey             string
+	AttemptCount           int
 }
 
 type MessageAttachmentRepository interface {

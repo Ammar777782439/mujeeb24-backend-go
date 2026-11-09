@@ -74,6 +74,7 @@ type conversationMediaResolverFake struct {
 	err    error
 	calls  int
 }
+
 func (f *conversationMediaResolverFake) ResolveInboundMediaSource(context.Context, string, string, string) (ports.InboundMediaSource, error) {
 	f.calls++
 	return f.source, f.err
@@ -84,6 +85,7 @@ type conversationMediaDownloaderFake struct {
 	err   error
 	calls int
 }
+
 func (f *conversationMediaDownloaderFake) DownloadInboundMedia(context.Context, string, int64) ([]byte, string, error) {
 	f.calls++
 	return f.body, "image/png", f.err
@@ -96,6 +98,7 @@ type conversationMediaObjectsFake struct {
 	body     []byte
 	puts     int
 }
+
 func (f *conversationMediaObjectsFake) Put(context.Context, string, string, []byte) error {
 	return errors.New("provider-pinned Put must be used")
 }
