@@ -265,7 +265,11 @@ func TestClientTreatsSocialAPIMedia504AsRetryableAnd410AsTerminal(t *testing.T) 
 			_, _, err := client.DownloadInboundMedia(context.Background(), "media-id", 1024)
 			var apiErr *Error
 			if !errors.As(err, &apiErr) || apiErr.Retryable != tc.retryable || apiErr.RetryAfter != tc.wantRetryAfter {
-				t.Fatalf("status %d retryable=%v retry_after=%s, err=%v", tc.status, tc.retryable, tc.wantRetryAfter, err)
+				var actual time.Duration
+				if apiErr != nil {
+					actual = apiErr.RetryAfter
+				}
+				t.Fatalf("status %d retryable=%v retry_after=%s actual_retry_after=%s, err=%v", tc.status, tc.retryable, tc.wantRetryAfter, actual, err)
 			}
 		})
 	}
