@@ -173,12 +173,11 @@ func resolvedSocialWebhookService(inbound ports.ProviderInboundStore) SocialAPIW
 	}
 }
 
-
 func TestInboundAttachmentDraftsRequireConversationMediaStorage(t *testing.T) {
 	references := []channel.InboundAttachmentReference{{
 		ProviderMediaReference: "opaque-provider-media-reference",
-		Kind: channel.AttachmentImage,
-		Caption: "صورة",
+		Kind:                   channel.AttachmentImage,
+		Caption:                "صورة",
 	}}
 	if got := inboundAttachmentDraftsWhenEnabled(references, ""); len(got) != 0 {
 		t.Fatalf("disabled conversation media must not create unprocessable pending rows: %#v", got)
