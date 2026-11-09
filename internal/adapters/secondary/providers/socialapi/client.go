@@ -886,7 +886,13 @@ func (c *Client) DownloadInboundMedia(ctx context.Context, mediaID string, maxBy
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Accept", "*/*")
-	res, err := c.httpClient.Do(req)
+	// Never follow a provider redirect with a bearer-authenticated media
+	// request. A redirect is surfaced to the caller for explicit handling.
+	mediaClient := *c.httpClient
+	mediaClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	res, err := mediaClient.Do(req)
 	if err != nil {
 		return nil, "", fmt.Errorf("%w: %v", ErrTransport, err)
 	}

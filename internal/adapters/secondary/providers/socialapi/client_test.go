@@ -241,6 +241,34 @@ func TestClientDownloadsSocialAPIMediaWithBearerAndBoundedBody(t *testing.T) {
 	}
 }
 
+func TestClientDoesNotFollowSocialAPIMediaRedirects(t *testing.T) {
+	var targetRequests int
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		targetRequests++
+		if r.Header.Get("Authorization") != "" {
+			t.Errorf("SocialAPI bearer token leaked to redirect target")
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("unexpected"))
+	}))
+	defer target.Close()
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/stolen", http.StatusFound)
+	}))
+	defer origin.Close()
+
+	client := NewClient(Config{BaseURL: origin.URL, APIKey: "test-key", HTTPClient: origin.Client()})
+	_, _, err := client.DownloadInboundMedia(context.Background(), "media-id", 1024)
+	var apiErr *Error
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusFound {
+		t.Fatalf("expected redirect to be surfaced, got %v", err)
+	}
+	if targetRequests != 0 {
+		t.Fatalf("redirect target must not be requested, got %d requests", targetRequests)
+	}
+}
+
 func TestClientTreatsSocialAPIMedia504AsRetryableAnd410AsTerminal(t *testing.T) {
 	for _, tc := range []struct {
 		status         int
