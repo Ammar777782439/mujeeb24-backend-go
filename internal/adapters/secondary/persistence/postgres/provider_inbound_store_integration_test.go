@@ -206,7 +206,7 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 	if _, err := catalogMedia.CreatePendingAsset(ctx, ports.PendingMediaAsset{
 		ID: catalogAssetID, BusinessID: businessID,
 		StorageKey:      "catalog/" + businessID + "/" + catalogAssetID,
-		UploadExpiresAt: base.Add(time.Hour),
+		UploadExpiresAt: time.Now().UTC().Add(time.Hour),
 	}); err != nil {
 		t.Fatalf("create catalog asset: %v", err)
 	}
