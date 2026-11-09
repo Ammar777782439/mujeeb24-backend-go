@@ -13,17 +13,18 @@ import (
 )
 
 type WorkerRuntime struct {
-	SalesActions *services.SalesActionProcessor
-	Database     *postgres.Adapter
-	EventStore   ports.EventStore
-	Outbox       ports.OutboxStore
-	SocialAPI    ports.ChannelProvider
-	Processor    *services.OutboxProcessor
-	Expiry       ports.SubscriptionExpiryRepository
-	PollInterval time.Duration
-	CycleTimeout time.Duration
-	BatchSize    int
-	WorkerOwner  string
+	SalesActions              *services.SalesActionProcessor
+	Database                  *postgres.Adapter
+	EventStore                ports.EventStore
+	Outbox                    ports.OutboxStore
+	SocialAPI                 ports.ChannelProvider
+	ConversationMediaObjects  ports.MediaObjectStorage
+	Processor                 *services.OutboxProcessor
+	Expiry                    ports.SubscriptionExpiryRepository
+	PollInterval              time.Duration
+	CycleTimeout              time.Duration
+	BatchSize                 int
+	WorkerOwner               string
 }
 
 func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime, error) {
@@ -38,6 +39,11 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 	if storageErr != nil {
 		log.Printf("[CatalogMedia] stage=worker_storage_configuration_failed error=%v", storageErr)
 	}
+	conversationObjects, _, conversationStorageErr := buildConversationMediaStorageFromEnv()
+	if conversationStorageErr != nil {
+		log.Printf("[ConversationMedia] stage=worker_storage_configuration_failed error=%v", conversationStorageErr)
+	}
+	runtime.ConversationMediaObjects = conversationObjects
 	if external.SocialAPI != nil {
 		runtime.Processor = &services.OutboxProcessor{
 			Outbox: outbox,

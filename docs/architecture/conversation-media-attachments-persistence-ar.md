@@ -11,6 +11,7 @@
 - `message_attachments` is a dedicated relation to `communication_messages` and `media_assets`, both guarded by composite `(business_id, id)` foreign keys.
 - `ConversationMediaIngestionRepository` creates tenant-scoped pending assets for image/video/audio/document/file and promotes verified image metadata only.
 - `MessageAttachmentRepository` creates/lists message attachment relations and marks them ready only after the backing MediaAsset is ready.
+- The S3 adapter now permits the isolated `conversation/` object namespace alongside `catalog/`; the Catalog feature flag remains independent from `CONVERSATION_MEDIA_ENABLED`.
 - SocialAPI `content.media[]` is normalized for inbound events. The temporary URL is validated and discarded; only an opaque SocialAPI interaction-id/attachment-index reference crosses into the domain.
 - `InboundMediaSourceResolver` re-queries authenticated conversation history and resolves the interaction to the current `attachment_url` for immediate ingestion. The message-history response exposes one attachment URL per message, so only position zero is currently resolvable.
 - `ProviderInboundStore.Materialize` creates the pending MediaAsset and MessageAttachment rows in the same PostgreSQL transaction as the inbound communication message.
@@ -39,4 +40,4 @@ The PostgreSQL integration suite now checks:
 - successful transition after verified image metadata is recorded,
 - rejection of Catalog-purpose assets from Conversation.
 
-This does not yet prove real SocialAPI media retrieval or Object Storage upload/download. The source resolver is covered by HTTP contract tests only; pending placeholders remain pending until the provider fetcher and media ingestion worker are implemented.
+This does not yet prove real SocialAPI media retrieval or Object Storage upload/download. The source resolver is covered by HTTP contract tests only; pending placeholders remain pending until the provider fetcher and media ingestion worker are implemented. `CONVERSATION_MEDIA_ENABLED` currently initializes the storage router in the worker, but does not run media downloads.

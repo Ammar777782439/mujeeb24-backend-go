@@ -14,8 +14,9 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 )
 
-// buildCatalogMediaStorageFromEnv keeps the historical R2 environment intact.
-// B2 is an explicit selection, never an implicit failover of existing photos.
+// buildCatalogMediaStorageFromEnv preserves the existing Catalog feature flag.
+// Conversation media has a separate flag but shares the same private S3 router.
+// B2 is an explicit selection, never an implicit failover of existing objects.
 func buildCatalogMediaStorageFromEnv() (ports.MediaObjectStorage, string, error) {
 	if os.Getenv("CATALOG_MEDIA_ENABLED") != "true" {
 		return nil, "", nil
@@ -75,7 +76,7 @@ func buildCatalogMediaStorageFromEnv() (ports.MediaObjectStorage, string, error)
 		}
 	}
 	if backends[selected] == nil {
-		return nil, "", fmt.Errorf("catalog media storage provider %s is not configured", selected)
+		return nil, "", fmt.Errorf("media storage provider %s is not configured", selected)
 	}
 	log.Printf("[CatalogMedia] stage=storage_configured write_provider=%s r2_available=%t backblaze_available=%t", selected, backends["r2"] != nil, backends["backblaze"] != nil)
 	return &services.CatalogMediaObjectStore{WriteProvider: selected, Providers: backends}, selected, nil

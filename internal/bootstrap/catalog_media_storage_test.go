@@ -63,3 +63,43 @@ func TestCatalogMediaStorageRejectsMissingOrUnsafeB2Config(t *testing.T) {
 		t.Fatal("missing secret accepted")
 	}
 }
+
+
+func TestConversationMediaStorageHasIndependentFeatureFlag(t *testing.T) {
+	t.Setenv("CATALOG_MEDIA_ENABLED", "false")
+	t.Setenv("CONVERSATION_MEDIA_ENABLED", "true")
+	t.Setenv("S3_PROVIDER", "backblaze")
+	t.Setenv("S3_ENDPOINT", "https://s3.us-west-004.backblazeb2.com")
+	t.Setenv("S3_REGION", "us-west-004")
+	t.Setenv("S3_BUCKET", "mujeeb24-images")
+	t.Setenv("S3_ACCESS_KEY_ID", "test-id")
+	t.Setenv("S3_SECRET_ACCESS_KEY", "test-secret")
+	t.Setenv("R2_ACCOUNT_ID", "")
+	t.Setenv("R2_BUCKET", "")
+	t.Setenv("R2_ACCESS_KEY_ID", "")
+	t.Setenv("R2_SECRET_ACCESS_KEY", "")
+
+	catalogObjects, catalogProvider, err := buildCatalogMediaStorageFromEnv()
+	if err != nil || catalogObjects != nil || catalogProvider != "" {
+		t.Fatalf("catalog storage must remain disabled: objects=%T provider=%q err=%v", catalogObjects, catalogProvider, err)
+	}
+	conversationObjects, provider, err := buildConversationMediaStorageFromEnv()
+	if err != nil || provider != "backblaze" {
+		t.Fatalf("conversation storage config: provider=%q err=%v", provider, err)
+	}
+	router, ok := conversationObjects.(*services.CatalogMediaObjectStore)
+	if !ok {
+		t.Fatalf("expected shared private S3 router, got %T", conversationObjects)
+	}
+	if _, err := router.PresignFromProvider(context.Background(), "backblaze", "conversation/business-1/asset-1", time.Minute); err != nil {
+		t.Fatalf("conversation media key should route through selected storage: %v", err)
+	}
+}
+
+func TestConversationMediaStorageDisabledByDefault(t *testing.T) {
+	t.Setenv("CONVERSATION_MEDIA_ENABLED", "false")
+	t.Setenv("S3_PROVIDER", "not-a-provider")
+	if objects, provider, err := buildConversationMediaStorageFromEnv(); err != nil || objects != nil || provider != "" {
+		t.Fatalf("disabled conversation media must not validate or initialize S3: objects=%T provider=%q err=%v", objects, provider, err)
+	}
+}

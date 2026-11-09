@@ -37,6 +37,7 @@ Business brand media
 - Inbound references are provider-neutral opaque references with MIME/name/size values treated as untrusted hints.
 - Outbound references identify a Mujeeb-owned `MediaAssetID`; they contain no storage URL, bucket key, or provider media ID.
 - Migration `000087_conversation_media_attachments` adds `media_kind`, adds the `pending_ingestion` asset status, permits the `conversation_attachment` purpose, and creates `message_attachments`.
+- The private S3 transport accepts only `catalog/` and `conversation/` key namespaces. Catalog behavior remains controlled by `CATALOG_MEDIA_ENABLED`; conversation object-store initialization has its own `CONVERSATION_MEDIA_ENABLED` flag.
 - `message_attachments` references both `communication_messages` and `media_assets` through composite `(business_id, id)` foreign keys.
 - `ConversationMediaIngestionRepository` creates pending conversation assets for supported logical kinds and promotes verified image metadata only.
 - SocialAPI webhook normalization reads `content.media[]`, validates that its URLs are HTTPS, discards those URLs, and emits opaque references based on the stable SocialAPI interaction ID and attachment position.
@@ -89,7 +90,7 @@ Never persist public or presigned URLs as canonical references. Generate a short
 
 ## 7. Explicitly not implemented
 
-- SocialAPI provider media download endpoint and durable ingestion worker.
+- SocialAPI provider media download endpoint and durable ingestion worker. The new storage feature flag only prepares the private S3 router; it does not mean downloads are active yet.
 - Durable worker claim/read API for pending provider references (the current relation holds only an opaque source reference).
 - Generic authenticated upload/finalize API.
 - Message DTO projection and realtime attachment-state event.
