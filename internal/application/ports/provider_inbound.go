@@ -27,10 +27,21 @@ type ProviderInboundDraft struct {
 	EventType              string
 	InteractionKind        string
 	Text                   string
+	Attachments            []ProviderInboundAttachmentDraft
+	MediaStorageProvider   string
 	ExternalCreatedAt      *time.Time
 	ReceivedAt             time.Time
 	RawPayloadReference    string
 	PayloadHash            string
+}
+
+// ProviderInboundAttachmentDraft carries a normalized reference without retaining
+// the provider's temporary media URL.
+type ProviderInboundAttachmentDraft struct {
+	ProviderMediaReference string
+	Kind                   string
+	Caption                string
+	SortOrder              int
 }
 
 type ProviderInboundResult struct {

@@ -1,7 +1,7 @@
 # Conversation Media & Attachments — Contract and Implementation Status
 
 **Branch:** `feat/conversation-media-attachments`  
-**Status:** Domain and tenant-safe persistence foundation implemented. Provider retrieval, upload HTTP APIs, public message projections and delivery are not implemented.
+**Status:** Domain, tenant-safe persistence and inbound webhook placeholder materialization are implemented. Provider media download, upload HTTP APIs, public message projections and outbound delivery are not implemented.
 
 ## 1. Current repository facts
 
@@ -38,30 +38,32 @@ Business brand media
 - Outbound references identify a Mujeeb-owned `MediaAssetID`; they contain no storage URL, bucket key, or provider media ID.
 - Migration `000087_conversation_media_attachments` adds `media_kind`, adds the `pending_ingestion` asset status, permits the `conversation_attachment` purpose, and creates `message_attachments`.
 - `message_attachments` references both `communication_messages` and `media_assets` through composite `(business_id, id)` foreign keys.
-- `ConversationMediaIngestionRepository` creates pending conversation image assets and promotes verified image metadata.
+- `ConversationMediaIngestionRepository` creates pending conversation assets for supported logical kinds and promotes verified image metadata only.
+- SocialAPI webhook normalization reads `content.media[]`, validates that its URLs are HTTPS, discards those URLs, and emits opaque references based on the stable platform message ID and attachment position.
+- `ProviderInboundStore.Materialize` creates pending MediaAsset and MessageAttachment records atomically with the communication message. The provider reference is not a URL.
 - `MessageAttachmentRepository` creates and lists tenant-scoped links. A relation can become `ready` only if its underlying conversation MediaAsset is already `ready` and has the same kind.
 - Provider source references are opaque IDs only; HTTP(S) URLs are rejected by the repository and database constraint. The reference is cleared after successful ingestion.
 - The repositories perform local SQL only. Their methods can join a caller-owned `TransactionManager` transaction via the transaction context.
 
 ## 4. Current implementation limit
 
-**The enabled ingestion path is image-only.** The other logical kinds are represented in the domain contract but cannot yet be created as ready conversation assets. The current `media_assets` MIME constraint and verification contract are still image-specific.
+**The verified-to-ready path is image-only.** Image/video/audio/file events can be materialized as pending placeholders; there is not yet a worker to download their bytes, determine verified MIME/size, write Object Storage, or transition them to ready. The current `media_assets` MIME and verification contract is still image-specific.
 
 No claim is made that WhatsApp, Instagram and Facebook expose identical media behavior. Inbound retrieval and outbound delivery must be verified separately for every channel and media kind before enabling them.
 
-## 5. Required inbound flow — not wired yet
+## 5. Inbound flow — placeholder materialization wired; download pending
 
 ```text
 SocialAPI webhook
   -> signature verification + event ledger/idempotency
-  -> normalize provider media reference
-  -> persist message + pending MediaAsset + message_attachments in one local transaction
-  -> claim pending reference through an internal worker port
-  -> fetch provider bytes outside the transaction
-  -> verify signature/content, MIME, size, dimensions and checksum
-  -> write bytes to private Object Storage outside the transaction
-  -> mark MediaAsset and MessageAttachment ready in one local transaction
-  -> publish attachment state change
+  -> normalize content.media[] to opaque message-id/index references
+  -> persist message + pending MediaAsset + MessageAttachment in one local transaction
+  -> [next] claim pending reference through an internal worker port
+  -> [next] fetch provider bytes outside the transaction
+  -> [next] verify MIME, size, dimensions and checksum
+  -> [next] write bytes to private Object Storage
+  -> [next] mark MediaAsset and MessageAttachment ready in one local transaction
+  -> [next] publish attachment state change
 ```
 
 Do not block webhook acknowledgement on a media download. If ingestion fails, preserve the text message and mark the attachment unavailable/failed.
@@ -85,8 +87,8 @@ Never persist public or presigned URLs as canonical references. Generate a short
 
 ## 7. Explicitly not implemented
 
-- SocialAPI inbound media normalization and provider download endpoint.
-- Durable worker claim/read API for pending provider references.
+- SocialAPI provider media download endpoint and durable ingestion worker.
+- Durable worker claim/read API for pending provider references (the current relation holds only an opaque source reference).
 - Generic authenticated upload/finalize API.
 - Message DTO projection and realtime attachment-state event.
 - Outbound message commands, Outbox attachment resolver changes, and provider-specific send capability checks.
@@ -97,7 +99,7 @@ Never persist public or presigned URLs as canonical references. Generate a short
 ## 8. Next implementation gates
 
 1. Add the scoped pending-reference claim/read port and durable ingestion worker.
-2. Normalize verified SocialAPI webhook media references and materialize pending relations with the inbound message transaction.
+2. Resolve the SocialAPI platform message ID and attachment position to its current `attachment_url`.
 3. Download and verify image bytes, store them privately, and transition asset+relation atomically.
 4. Add authorized message attachment projections and realtime state notifications.
 5. Add authenticated private upload/finalize for outbound media, then route through Outbox.

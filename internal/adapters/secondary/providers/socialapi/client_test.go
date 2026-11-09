@@ -48,6 +48,85 @@ func TestClientNormalizesAndVerifiesWebhookV2(t *testing.T) {
 	}
 }
 
+func TestClientNormalizesInboundMediaWithoutPersistingTemporaryURLs(t *testing.T) {
+	body := []byte(`{"event":"dm.received","data":{"id":"sapi_dm_media_1","type":"dm","platform":"whatsapp","account_id":"acc_1","conversation_id":"conv_1","platform_id":"platform-message-1","author":{"id":"customer-1"},"content":{"text":"هذه الصور","media":[{"url":"https://api.social-api.ai/v1/inbox/media/media-1","type":"image"},{"url":"https://api.social-api.ai/v1/inbox/media/media-2","type":"file"}]}}}`)
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	mac := hmac.New(sha256.New, []byte("secret"))
+	_, _ = mac.Write([]byte(timestamp + "." + string(body)))
+	headers := map[string]string{
+		"X-SocialAPI-Signature-V2": "sha256=" + hex.EncodeToString(mac.Sum(nil)),
+		"X-SocialAPI-Timestamp":    timestamp,
+		"X-SocialAPI-Delivery":     "delivery-media-1",
+	}
+
+	events, err := NewClient(Config{WebhookSecret: "secret"}).NormalizeWebhook(
+		httptest.NewRequest(http.MethodPost, "/", nil).Context(), headers, body,
+	)
+	if err != nil {
+		t.Fatalf("NormalizeWebhook: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected one normalized event, got %d", len(events))
+	}
+	event := events[0]
+	if event.ProviderMessageID != "platform-message-1" {
+		t.Fatalf("expected the platform message id for later provider lookup, got %q", event.ProviderMessageID)
+	}
+	if len(event.Attachments) != 2 {
+		t.Fatalf("expected two normalized attachments, got %#v", event.Attachments)
+	}
+	wantKinds := []channel.AttachmentKind{channel.AttachmentImage, channel.AttachmentFile}
+	for index, attachment := range event.Attachments {
+		if attachment.Kind != wantKinds[index] {
+			t.Fatalf("attachment %d kind=%q want=%q", index, attachment.Kind, wantKinds[index])
+		}
+		if err := attachment.Validate(); err != nil {
+			t.Fatalf("attachment %d invalid: %v", index, err)
+		}
+		if strings.Contains(attachment.ProviderMediaReference, "https://") ||
+			strings.Contains(attachment.ProviderMediaReference, "api.social-api.ai") {
+			t.Fatalf("temporary provider URL leaked into media reference: %q", attachment.ProviderMediaReference)
+		}
+	}
+	if event.Attachments[0].ProviderMediaReference == event.Attachments[1].ProviderMediaReference {
+		t.Fatal("attachments from the same message must retain distinct positions")
+	}
+}
+
+func TestClientRejectsInboundMediaWithoutStablePlatformMessageID(t *testing.T) {
+	body := []byte(`{"event":"dm.received","data":{"id":"sapi_dm_media_2","type":"dm","platform":"instagram","account_id":"acc_1","conversation_id":"conv_1","author":{"id":"customer-1"},"content":{"text":"","media":[{"url":"https://cdn.example.test/image.jpg","type":"image"}]}}}`)
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	mac := hmac.New(sha256.New, []byte("secret"))
+	_, _ = mac.Write([]byte(timestamp + "." + string(body)))
+	headers := map[string]string{
+		"X-SocialAPI-Signature-V2": "sha256=" + hex.EncodeToString(mac.Sum(nil)),
+		"X-SocialAPI-Timestamp":    timestamp,
+	}
+	_, err := NewClient(Config{WebhookSecret: "secret"}).NormalizeWebhook(
+		httptest.NewRequest(http.MethodPost, "/", nil).Context(), headers, body,
+	)
+	if !errors.Is(err, ErrInvalidResponse) {
+		t.Fatalf("expected missing stable platform id to be rejected, got %v", err)
+	}
+}
+
+func TestClientRejectsUnknownInboundMediaType(t *testing.T) {
+	body := []byte(`{"event":"dm.received","data":{"id":"sapi_dm_media_3","type":"dm","platform":"instagram","account_id":"acc_1","conversation_id":"conv_1","platform_id":"platform-message-3","author":{"id":"customer-1"},"content":{"media":[{"url":"https://cdn.example.test/file.bin","type":"archive"}]}}}`)
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	mac := hmac.New(sha256.New, []byte("secret"))
+	_, _ = mac.Write([]byte(timestamp + "." + string(body)))
+	headers := map[string]string{
+		"X-SocialAPI-Signature-V2": "sha256=" + hex.EncodeToString(mac.Sum(nil)),
+		"X-SocialAPI-Timestamp":    timestamp,
+	}
+	_, err := NewClient(Config{WebhookSecret: "secret"}).NormalizeWebhook(
+		httptest.NewRequest(http.MethodPost, "/", nil).Context(), headers, body,
+	)
+	if !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("expected unsupported media kind, got %v", err)
+	}
+}
+
 func TestClientRejectsReplayAndAcceptsVerificationPing(t *testing.T) {
 	client := NewClient(Config{WebhookSecret: "secret", APIKey: "sapi_key_test", ReplayWindow: time.Minute})
 	ctx := httptest.NewRequest(http.MethodPost, "/", nil).Context()

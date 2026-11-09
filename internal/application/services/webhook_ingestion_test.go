@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -168,6 +169,35 @@ func resolvedSocialWebhookService(inbound ports.ProviderInboundStore) SocialAPIW
 		Connections: webhookConnectionRepository{record: ports.ChannelConnectionRecord{ID: "connection-1", BusinessID: "business-1", ProviderReference: "socialapi", ProviderAccountReference: stringPointer("account-1"), ProviderConnectionRef: "connection-ref-1"}},
 		Events:      &webhookEventStore{created: true},
 		Inbound:     inbound,
+	}
+}
+
+func TestSocialAPIWebhookServiceCarriesInboundAttachmentsToMaterialization(t *testing.T) {
+	body := []byte(`{"event":"dm.received","data":{"id":"event-media-1","type":"dm","platform":"instagram","account_id":"account-1","conversation_id":"conversation-1","platform_id":"platform-message-1","author":{"id":"customer-1"},"content":{"text":"شاهد المرفق","media":[{"url":"https://cdn.example.test/photo.jpg","type":"image"},{"url":"https://cdn.example.test/receipt.pdf","type":"file"}]}}}`)
+	inbound := &providerInboundStore{result: ports.ProviderInboundResult{
+		BusinessID: "business-1", CustomerID: "customer-1",
+		ConversationID: "conversation-1", CommunicationMessageID: "message-1",
+	}}
+	service := resolvedSocialWebhookService(inbound)
+	service.MediaStorageProvider = "backblaze"
+	result, err := service.Handle(context.Background(), signedSocialCommand(t, body))
+	if err != nil || !result.Accepted || !result.Resolved {
+		t.Fatalf("webhook result=%#v err=%v", result, err)
+	}
+	if inbound.draft.MediaStorageProvider != "backblaze" {
+		t.Fatalf("storage provider not carried to materialization: %q", inbound.draft.MediaStorageProvider)
+	}
+	if len(inbound.draft.Attachments) != 2 {
+		t.Fatalf("expected two attachments in the materialization draft: %#v", inbound.draft.Attachments)
+	}
+	if inbound.draft.Attachments[0].Kind != "image" || inbound.draft.Attachments[1].Kind != "file" ||
+		inbound.draft.Attachments[0].SortOrder != 0 || inbound.draft.Attachments[1].SortOrder != 1 {
+		t.Fatalf("attachment kind/order changed: %#v", inbound.draft.Attachments)
+	}
+	for _, attachment := range inbound.draft.Attachments {
+		if strings.Contains(attachment.ProviderMediaReference, "https://") {
+			t.Fatalf("temporary URL leaked into the persistence draft: %#v", attachment)
+		}
 	}
 }
 

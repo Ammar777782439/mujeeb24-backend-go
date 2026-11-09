@@ -88,7 +88,7 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 	}
 
 	materializer := NewProviderInboundStore(adapter)
-	draft := ports.ProviderInboundDraft{InboundEventID: eventRecord.ID, BusinessID: businessID, ConnectionID: connectionID, ProviderRef: "socialapi", ProviderEventID: "provider-event-1", Channel: "whatsapp", ProviderAccountRef: "account-provider-a", ProviderConversationID: "provider-conversation-1", ExternalUserID: "provider-user-1", ProviderMessageID: "provider-message-1", EventType: "interaction_received", InteractionKind: "dm", Text: "مرحبا", ExternalCreatedAt: providerInboundTimePtr(base), ReceivedAt: base, RawPayloadReference: raw.Reference, PayloadHash: raw.SHA256}
+	draft := ports.ProviderInboundDraft{InboundEventID: eventRecord.ID, BusinessID: businessID, ConnectionID: connectionID, ProviderRef: "socialapi", ProviderEventID: "provider-event-1", Channel: "whatsapp", ProviderAccountRef: "account-provider-a", ProviderConversationID: "provider-conversation-1", ExternalUserID: "provider-user-1", ProviderMessageID: "provider-message-1", EventType: "interaction_received", InteractionKind: "dm", Text: "مرحبا", MediaStorageProvider: "r2", Attachments: []ports.ProviderInboundAttachmentDraft{{ProviderMediaReference: "socialapi:v1:cHJvdmlkZXItbWVzc2FnZS0x:0", Kind: "image", SortOrder: 0}, {ProviderMediaReference: "socialapi:v1:cHJvdmlkZXItbWVzc2FnZS0x:1", Kind: "file", SortOrder: 1}}, ExternalCreatedAt: providerInboundTimePtr(base), ReceivedAt: base, RawPayloadReference: raw.Reference, PayloadHash: raw.SHA256}
 	first, err := materializer.Materialize(ctx, draft)
 	if err != nil {
 		t.Fatalf("first materialize: %v", err)
@@ -132,8 +132,9 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 		t.Fatalf("unexpected pending message attachment: %#v", createdAttachment)
 	}
 	listedAttachments, err := attachments.ListByMessage(ctx, businessID, first.CommunicationMessageID)
-	if err != nil || len(listedAttachments) != 1 || listedAttachments[0].ID != attachmentID {
-		t.Fatalf("list message attachments: items=%#v err=%v", listedAttachments, err)
+	if err != nil || len(listedAttachments) != 3 || listedAttachments[0].Kind != "image" ||
+		listedAttachments[1].Kind != "file" || listedAttachments[2].ID != attachmentID {
+		t.Fatalf("list materialized and manually-created message attachments: items=%#v err=%v", listedAttachments, err)
 	}
 
 	// A message and its media asset must belong to the same business.

@@ -28,10 +28,12 @@ func (r *ConversationMediaIngestionRepository) CreatePendingIngestion(ctx contex
 		strings.TrimSpace(draft.StorageKey) == "" || strings.TrimSpace(draft.Kind) == "" {
 		return ports.MediaAsset{}, invalidRepositoryInput("conversation_media.create_pending", "business, asset id, storage key and kind are required")
 	}
-	// This implementation slice enables verified images only. Other logical
-	// kinds stay represented in the contract but cannot enter ready state yet.
-	if draft.Kind != "image" {
-		return ports.MediaAsset{}, invalidRepositoryInput("conversation_media.create_pending", "only image ingestion is enabled in this release")
+	// All verified provider kinds can be materialized as pending placeholders.
+	// Only the image verifier currently has a path to mark an asset ready.
+	switch draft.Kind {
+	case "image", "video", "audio", "document", "file":
+	default:
+		return ports.MediaAsset{}, invalidRepositoryInput("conversation_media.create_pending", "unsupported conversation media kind")
 	}
 	expectedStoragePrefix := "conversation/" + draft.BusinessID + "/" + draft.ID
 	if strings.HasPrefix(draft.StorageKey, "/") || strings.Contains(draft.StorageKey, "..") ||

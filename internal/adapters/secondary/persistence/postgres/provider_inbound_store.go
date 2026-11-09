@@ -101,6 +101,46 @@ func (s *ProviderInboundStore) Materialize(ctx context.Context, draft ports.Prov
 		if err != nil {
 			return err
 		}
+		if len(draft.Attachments) > 0 {
+			mediaRepository := NewConversationMediaIngestionRepository(s.adapter)
+			attachmentRepository := NewMessageAttachmentRepository(s.adapter)
+			for _, attachment := range draft.Attachments {
+				if strings.TrimSpace(attachment.ProviderMediaReference) == "" ||
+					strings.TrimSpace(attachment.Kind) == "" || attachment.SortOrder < 0 {
+					return invalidRepositoryInput("provider_inbound.attachments", "provider media reference, kind and non-negative order are required")
+				}
+				mediaAssetID := uuid.NewString()
+				storageProvider := strings.TrimSpace(draft.MediaStorageProvider)
+				if storageProvider == "" {
+					storageProvider = "r2"
+				}
+				mediaAsset, createErr := mediaRepository.CreatePendingIngestion(txCtx, ports.PendingConversationMediaAsset{
+					ID:              mediaAssetID,
+					BusinessID:      draft.BusinessID,
+					StorageProvider: storageProvider,
+					StorageKey:      "conversation/" + draft.BusinessID + "/" + mediaAssetID,
+					Kind:            attachment.Kind,
+				})
+				if createErr != nil {
+					return createErr
+				}
+				providerReference := strings.TrimSpace(attachment.ProviderMediaReference)
+				_, createErr = attachmentRepository.Create(txCtx, ports.MessageAttachmentDraft{
+					ID:                     uuid.NewString(),
+					BusinessID:             draft.BusinessID,
+					CommunicationMessageID: messageID,
+					MediaAssetID:           mediaAsset.ID,
+					Kind:                   attachment.Kind,
+					Caption:                attachment.Caption,
+					SortOrder:              attachment.SortOrder,
+					SourceProviderMediaRef: &providerReference,
+					CreatedAt:              draft.ReceivedAt,
+				})
+				if createErr != nil {
+					return createErr
+				}
+			}
+		}
 		if strings.HasPrefix(draft.ActionPayload, "m24.sales:") {
 			if _, err := executor.Exec(txCtx, `INSERT INTO sales_action_jobs(id,business_id,customer_id,conversation_id,message_id,payload,created_at,updated_at) VALUES(gen_random_uuid(),$1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6,$6) ON CONFLICT(business_id,message_id) DO NOTHING`, draft.BusinessID, customerID, conversationID, messageID, draft.ActionPayload, draft.ReceivedAt); err != nil {
 				return err

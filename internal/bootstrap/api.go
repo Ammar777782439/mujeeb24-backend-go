@@ -367,8 +367,13 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// (verified at compile time via var _ ports.ConversationEnricher).
 		// The Customers repo is the SAME one used by the customer CRUD
 		// endpoints (ports.CustomerRuntimeRepository) — no duplicate repo.
+		mediaStorageProvider := strings.TrimSpace(os.Getenv("S3_PROVIDER"))
+		if mediaStorageProvider == "" || mediaStorageProvider == "cloudflare" {
+			mediaStorageProvider = "r2"
+		}
 		webhookService := services.SocialAPIWebhookService{
-			Receiver:         external.SocialWebhook,
+			MediaStorageProvider: mediaStorageProvider,
+			Receiver:             external.SocialWebhook,
 			RawPayloads:      postgres.NewRawPayloadStore(database),
 			History:          postgres.NewChannelHistoryRepository(database),
 			Connections:      postgres.NewChannelConnectionRepository(database),

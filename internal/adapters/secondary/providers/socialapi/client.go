@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -610,7 +611,11 @@ type socialWebhookData struct {
 	CreatedAt      string `json:"created_at"`
 	Text           string `json:"text"`
 	Content        struct {
-		Text string `json:"text"`
+		Text  string `json:"text"`
+		Media []struct {
+			URL  string `json:"url"`
+			Type string `json:"type"`
+		} `json:"media"`
 	} `json:"content"`
 	From struct {
 		ID       string `json:"id"`
@@ -687,6 +692,29 @@ func (c *Client) NormalizeWebhook(ctx context.Context, headers map[string]string
 		text = envelope.Data.Text
 	}
 	event := channel.InboundEvent{ID: uuid.NewString(), Provider: channel.ProviderSocialAPI, Channel: providerChannel, ProviderConnectionID: envelope.Data.AccountID, ProviderEventID: providerEventID, DeliveryID: deliveryID, DedupeStrategy: dedupeStrategy, EventType: normalizedEventType, InteractionKind: interaction, ProviderMessageID: providerMessageID, ProviderConversationID: providerConversationID, ExternalUserID: externalUserID, Text: text, Direction: direction, Origin: origin, DeliveryStatus: strings.ToLower(strings.TrimSpace(envelope.Data.Status)), ReceivedAt: receivedAt}
+	if len(envelope.Data.Content.Media) > 0 {
+		if strings.TrimSpace(envelope.Data.PlatformID) == "" {
+			return nil, fmt.Errorf("%w: media-bearing DM has no platform message id", ErrInvalidResponse)
+		}
+		event.Attachments = make([]channel.InboundAttachmentReference, 0, len(envelope.Data.Content.Media))
+		for index, item := range envelope.Data.Content.Media {
+			if err := validateInboundMediaURL(item.URL); err != nil {
+				return nil, fmt.Errorf("%w: invalid inbound media URL", ErrInvalidResponse)
+			}
+			kind, kindErr := inboundAttachmentKind(item.Type)
+			if kindErr != nil {
+				return nil, kindErr
+			}
+			reference := channel.InboundAttachmentReference{
+				ProviderMediaReference: encodeInboundMediaReference(providerMessageID, index),
+				Kind:                   kind,
+			}
+			if err := reference.Validate(); err != nil {
+				return nil, fmt.Errorf("%w: invalid inbound attachment reference", ErrInvalidResponse)
+			}
+			event.Attachments = append(event.Attachments, reference)
+		}
+	}
 	if envelope.Event == "dm.postback" {
 		event.ActionPayload = envelope.Data.Metadata.Payload
 		event.ActionTitle = envelope.Data.Metadata.Title
@@ -705,6 +733,36 @@ func (c *Client) NormalizeWebhook(ctx context.Context, headers map[string]string
 		return nil, fmt.Errorf("%w: unsupported webhook payload for %s", ErrInvalidRequest, envelope.Event)
 	}
 	return []channel.InboundEvent{event}, nil
+}
+
+func inboundAttachmentKind(value string) (channel.AttachmentKind, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "image":
+		return channel.AttachmentImage, nil
+	case "video":
+		return channel.AttachmentVideo, nil
+	case "audio":
+		return channel.AttachmentAudio, nil
+	case "file":
+		return channel.AttachmentFile, nil
+	default:
+		return "", fmt.Errorf("%w: unsupported SocialAPI inbound attachment type %q", ErrUnsupported, value)
+	}
+}
+
+// The reference contains only the provider message identity and attachment
+// position. The webhook's temporary URL is intentionally not persisted.
+func encodeInboundMediaReference(platformMessageID string, index int) string {
+	encoded := base64.RawURLEncoding.EncodeToString([]byte(platformMessageID))
+	return fmt.Sprintf("socialapi:v1:%s:%d", encoded, index)
+}
+
+func validateInboundMediaURL(raw string) error {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+		return ErrInvalidResponse
+	}
+	return nil
 }
 
 func normalizeSocialEventType(event string) string {

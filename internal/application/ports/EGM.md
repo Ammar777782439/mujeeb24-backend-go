@@ -9,7 +9,7 @@ Defines the application boundary interfaces (Hexagonal Inbound and Outbound Port
 - `CatalogRepository` / `CatalogMediaRepository`: Product catalogs, attributes, variants, offers, and media attachment assets ([catalog_repository.go](./catalog_repository.go) / [catalog_media.go](./catalog_media.go)).
 - `ConversationMediaIngestionRepository` / `MessageAttachmentRepository`: Tenant-scoped media ingestion metadata and independent Communication-to-MediaAsset relations ([conversation_media.go](./conversation_media.go)).
 - `OutboxStore`: Outbox pattern state transitions, claim leases, completions, `MarkRetryableFailure`, `Requeue`, and dead-letter moves ([outbox.go](./outbox.go#L8)).
-- `ChannelProvider` / `WebhookReceiver`: Omnichannel dispatch and inbound webhook ingestion ([channel_provider.go](./channel_provider.go)).
+- `ChannelProvider` / `WebhookReceiver`: Omnichannel dispatch and inbound webhook ingestion ([channel_provider.go](./channel_provider.go)). `ProviderInboundStore.Materialize` also persists provider-neutral pending attachment references in the inbound message transaction ([provider_inbound.go](./provider_inbound.go)).
 - `CustomerSalesDecisionPort`: Canonical AI inference port for customer sales decisions and capability tool execution ([customer_sales_contract.go](./customer_sales_contract.go)).
   - Current Code Behavior: In `internal/bootstrap/integrations.go:102`, wires DeepSeek direct client with `standby=nil`.
   - Design Target / Branch Decision (Issue 21): Architecture documents Gemini as primary provider with DeepSeek as fallback on HTTP 503 errors at the transport adapter level without business logic impact.
