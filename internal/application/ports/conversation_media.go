@@ -87,6 +87,37 @@ type MessageAttachmentRecord struct {
 	UpdatedAt              time.Time
 }
 
+// ConversationMediaAssetReader resolves assets strictly inside one merchant scope.
+type ConversationMediaAssetReader interface {
+	GetAsset(ctx context.Context, businessID, mediaAssetID string) (MediaAsset, error)
+}
+
+// OutboundMessageAttachmentRecord is worker-only data. Storage routing fields
+// must never be exposed through message DTOs or realtime event payloads.
+type OutboundMessageAttachmentRecord struct {
+	AttachmentID           string
+	BusinessID             string
+	CommunicationMessageID string
+	OutboundMessageID      string
+	MediaAssetID           string
+	Kind                   string
+	MimeType               string
+	Caption                string
+	Status                 string
+	SortOrder              int
+	SizeBytes              int64
+	StorageProvider        string
+	StorageKey             string
+	AssetPurpose           string
+	AssetStatus            string
+	AssetDeleted           bool
+}
+
+type OutboundMessageAttachmentRepository interface {
+	CreateReadyOutbound(ctx context.Context, draft MessageAttachmentDraft) (MessageAttachmentRecord, error)
+	ListForOutboundMessage(ctx context.Context, businessID, outboundMessageID string) ([]OutboundMessageAttachmentRecord, error)
+}
+
 type ClaimedMessageAttachmentIngestion struct {
 	AttachmentID           string
 	BusinessID             string
