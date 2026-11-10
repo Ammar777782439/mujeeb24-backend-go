@@ -53,10 +53,11 @@ func (o *processorOutbox) Requeue(context.Context, string, time.Time, time.Time)
 
 type processorResolver struct {
 	delivery ports.OutboundDelivery
+	err      error
 }
 
 func (r processorResolver) Resolve(context.Context, string, string) (ports.OutboundDelivery, error) {
-	return r.delivery, nil
+	return r.delivery, r.err
 }
 
 type processorProvider struct {
@@ -111,3 +112,28 @@ func TestOutboxProcessorPreservesUnknownNetworkOutcome(t *testing.T) {
 var _ ports.OutboxStore = (*processorOutbox)(nil)
 var _ ports.OutboundDeliveryResolver = processorResolver{}
 var _ ports.ChannelProvider = (*processorProvider)(nil)
+
+
+func TestOutboxProcessorDeadLettersUnavailableConversationMediaWithoutProviderCall(t *testing.T) {
+	outbox := &processorOutbox{claimed: true, claimRecord: ports.OutboxEntryRecord{
+		ID: "entry-1", BusinessID: "business-1", OutboundMessageID: "message-1",
+		CommandType: OutboundSendCommandType,
+	}}
+	provider := &processorProvider{}
+	processor := OutboxProcessor{
+		Outbox: outbox,
+		Resolver: processorResolver{err: ErrRequiredConversationMediaUnavailable},
+		Provider: provider,
+		Owner: "worker-1",
+		Now: func() time.Time { return time.Unix(100, 0) },
+	}
+	if err := processor.Process(context.Background(), "entry-1"); err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	if outbox.deadLetter == nil ||
+		outbox.deadLetter.ErrorCode != "required_conversation_media_unavailable" ||
+		outbox.completed != nil || outbox.failure != nil || provider.command != nil {
+		t.Fatalf("unavailable media must be terminal before provider call: dead_letter=%#v completed=%#v failure=%#v provider=%#v",
+			outbox.deadLetter, outbox.completed, outbox.failure, provider.command)
+	}
+}
