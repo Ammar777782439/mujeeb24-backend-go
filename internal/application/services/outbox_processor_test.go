@@ -113,7 +113,6 @@ var _ ports.OutboxStore = (*processorOutbox)(nil)
 var _ ports.OutboundDeliveryResolver = processorResolver{}
 var _ ports.ChannelProvider = (*processorProvider)(nil)
 
-
 func TestOutboxProcessorDeadLettersUnavailableConversationMediaWithoutProviderCall(t *testing.T) {
 	outbox := &processorOutbox{claimed: true, claimRecord: ports.OutboxEntryRecord{
 		ID: "entry-1", BusinessID: "business-1", OutboundMessageID: "message-1",

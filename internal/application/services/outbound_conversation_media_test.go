@@ -68,7 +68,7 @@ func verifiedOutboundMediaCapability() []ports.ChannelCapabilityRecord {
 	evidence := "verified-provider-capability"
 	return []ports.ChannelCapabilityRecord{{
 		ConnectionID: "connection-1", Name: "media_outbound", Enabled: true,
-		CheckedAt: time.Date(2026, 11, 10, 10, 0, 0, 0, time.UTC),
+		CheckedAt:      time.Date(2026, 11, 10, 10, 0, 0, 0, time.UTC),
 		EvidenceSource: &evidence,
 	}}
 }
@@ -133,7 +133,7 @@ func TestOutboundResolverPresignsConversationImageFromRecordedProvider(t *testin
 		CommunicationMessageID: "communication-1", OutboundMessageID: "message-1",
 		MediaAssetID: "media-1", Kind: "image", MimeType: "image/png",
 		Status: "ready", StorageProvider: "backblaze",
-		StorageKey:  "conversation/business-1/media-1.png",
+		StorageKey:   "conversation/business-1/media-1.png",
 		AssetPurpose: "conversation_attachment", AssetStatus: "ready",
 	}}, verifiedOutboundMediaCapability(), presigner)
 
@@ -196,7 +196,7 @@ func TestManualOutboundLinksTenantOwnedReadyMediaInsideOutboxTransaction(t *test
 	}
 	result, err := service.Handle(context.Background(), commands.CreateOutboundMessageCommand{
 		Meta: commands.CommandMeta{
-			Actor: commands.ActorContext{BusinessID: "biz-1", PrincipalID: "agent-1", Role: "owner", Permissions: []string{"*"}},
+			Actor:          commands.ActorContext{BusinessID: "biz-1", PrincipalID: "agent-1", Role: "owner", Permissions: []string{"*"}},
 			IdempotencyKey: "reply-with-photo-1",
 		},
 		ConversationID: "conv-1", Text: "هذه صورة المنتج",
@@ -246,7 +246,7 @@ func TestManualOutboundRejectsImageWhenMediaOutboundCapabilityIsNotVerified(t *t
 	}
 	_, err := service.Handle(context.Background(), commands.CreateOutboundMessageCommand{
 		Meta: commands.CommandMeta{
-			Actor: commands.ActorContext{BusinessID: "biz-1", PrincipalID: "agent-1", Role: "owner", Permissions: []string{"*"}},
+			Actor:          commands.ActorContext{BusinessID: "biz-1", PrincipalID: "agent-1", Role: "owner", Permissions: []string{"*"}},
 			IdempotencyKey: "reply-with-unverified-media-1",
 		},
 		ConversationID: "conv-1", Text: "صورة",
