@@ -217,7 +217,7 @@ func TestManualOutboundConversationImageIsAtomicInPostgres(t *testing.T) {
 	}
 	item := resolved[0]
 	if item.BusinessID != businessID || item.OutboundMessageID != outboundMessageID ||
-		item.CommunicationMessageID != result.Message.ID || item.MediaAssetID != mediaAssetID ||
+		item.CommunicationMessageID != string(result.Message.ID) || item.MediaAssetID != mediaAssetID ||
 		item.Status != "ready" || item.AssetPurpose != "conversation_attachment" ||
 		item.AssetStatus != "ready" || item.AssetDeleted ||
 		item.StorageProvider != "backblaze" || item.StorageKey != ready.StorageKey ||
