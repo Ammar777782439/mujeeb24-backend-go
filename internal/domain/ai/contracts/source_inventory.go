@@ -24,7 +24,7 @@ type TableSourceRecord struct {
 }
 
 // sourceInventory is an explicit deny-by-default census from migrations
-// 000001..000087 on the current backend baseline. 000053 drops legacy Chatwoot tables.
+// 000001..000088 on the current backend baseline. 000053 drops legacy Chatwoot tables.
 // Adding any CREATE TABLE in a future migration requires updating this list
 // and auditing its columns before any AI projection becomes accessible.
 var sourceInventory = []TableSourceRecord{
