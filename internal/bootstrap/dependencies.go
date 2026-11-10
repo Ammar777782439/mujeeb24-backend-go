@@ -48,7 +48,13 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 	readCursorRepository := postgres.NewConversationReadCursorRepository(adapter)
 	cannedReplyRepository := postgres.NewCannedReplyRepository(adapter)
 	conversationRuntime := services.ConversationRuntimeService{Repository: conversationRepository, Reader: conversationRepository, Inbox: conversationRepository, Assignees: teamRepository, Labels: conversationLabelRepository, References: conversationReferenceRepository, Messages: messageRepository, NoteTargets: messageRepository, PrivateNotes: messageRepository, Transactions: adapter, Realtime: realtime}
-	manualOutbound := services.ManualOutboundMessageService{References: conversationReferenceRepository, Connections: postgres.NewChannelConnectionRepository(adapter), Outbound: postgres.NewOutboundMessageRepository(adapter), Outbox: postgres.NewPostgresOutboxStore(adapter), Messages: messageRepository, Inbox: conversationRepository, Conversations: conversationRepository, Transactions: adapter, Realtime: realtime}
+	manualOutbound := services.ManualOutboundMessageService{
+		References: conversationReferenceRepository, Connections: postgres.NewChannelConnectionRepository(adapter),
+		Capabilities: postgres.NewChannelCapabilityRepository(adapter), MediaAssets: postgres.NewConversationMediaIngestionRepository(adapter),
+		Attachments: messageAttachmentsRepository, Outbound: postgres.NewOutboundMessageRepository(adapter),
+		Outbox: postgres.NewPostgresOutboxStore(adapter), Messages: messageRepository, Inbox: conversationRepository,
+		Conversations: conversationRepository, Transactions: adapter, Realtime: realtime,
+	}
 	cannedReplies := services.CannedReplyService{Repository: cannedReplyRepository, Transactions: adapter}
 	automationRules := services.AutomationRuleService{Repository: postgres.NewAutomationRuleRepository(adapter), Transactions: adapter}
 	channelConnectionRepository := postgres.NewChannelConnectionRepository(adapter)

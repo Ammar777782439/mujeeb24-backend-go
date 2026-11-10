@@ -251,7 +251,14 @@ func (s *Server) CreateOutboundMessage(ctx context.Context, in *contract.Convers
 	if err != nil {
 		return nil, mapApplicationError(err)
 	}
-	result, err := s.deps.CreateOutboundMessage.Handle(ctx, commands.CreateOutboundMessageCommand{Meta: commandMeta(ctx, actor, in.CommandHeaders), ConversationID: commands.ConversationID(in.ConversationID), Text: in.Body.Text})
+	mediaIDs := make([]string, 0, len(in.Body.AttachmentMediaIDs))
+	for _, mediaID := range in.Body.AttachmentMediaIDs {
+		mediaIDs = append(mediaIDs, string(mediaID))
+	}
+	result, err := s.deps.CreateOutboundMessage.Handle(ctx, commands.CreateOutboundMessageCommand{
+		Meta: commandMeta(ctx, actor, in.CommandHeaders), ConversationID: commands.ConversationID(in.ConversationID),
+		Text: in.Body.Text, AttachmentMediaIDs: mediaIDs,
+	})
 	if err != nil {
 		return nil, mapApplicationError(err)
 	}
@@ -372,6 +379,17 @@ func singleConversation(v commands.ConversationView) *contract.Single[contract.C
 func singleMessage(v commands.MessageView) *contract.Single[contract.Message] {
 	out := &contract.Single[contract.Message]{}
 	out.Body.Data = contract.Message{ID: contract.UUID(v.ID), ConversationID: contract.UUID(v.ConversationID), Direction: v.Direction, Origin: v.Origin, Status: v.Status, Text: v.Text, CreatedAt: v.CreatedAt, OccurredAt: v.OccurredAt, Private: v.Private, ContentType: v.ContentType, AuthorPrincipalID: v.AuthorPrincipalID, AuthorDisplayName: v.AuthorDisplayName, RelatedMessageID: v.RelatedMessageID, RelatedMessageText: v.RelatedMessageText}
+	for _, attachment := range v.Attachments {
+		var attachmentID *contract.UUID
+		if attachment.AttachmentID != "" {
+			id := contract.UUID(attachment.AttachmentID)
+			attachmentID = &id
+		}
+		out.Body.Data.Attachments = append(out.Body.Data.Attachments, contract.MessageAttachment{
+			AttachmentID: attachmentID, Type: attachment.Type, MediaID: contract.UUID(attachment.MediaID),
+			Caption: attachment.Caption, Status: attachment.Status,
+		})
+	}
 	return out
 }
 

@@ -4736,6 +4736,11 @@ components:
           format: uri
           readOnly: true
           type: string
+        attachment_media_ids:
+          items:
+            type: string
+          maxItems: 1
+          type: array
         text:
           maxLength: 10000
           minLength: 1

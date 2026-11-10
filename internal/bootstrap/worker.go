@@ -51,6 +51,10 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 		log.Printf("[ConversationMedia] stage=worker_storage_configuration_failed error=%v", conversationStorageErr)
 	}
 	runtime.ConversationMediaObjects = conversationObjects
+	var conversationMediaReader ports.MediaObjectProviderReader
+	if reader, ok := conversationObjects.(ports.MediaObjectProviderReader); ok {
+		conversationMediaReader = reader
+	}
 	if conversationMediaEnabled {
 		if cfg.SocialAPIAPIKey == "" || external.SocialAPI == nil {
 			database.Close()
@@ -77,8 +81,11 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 				OutboundRepository:   postgres.NewOutboundMessageRepository(database),
 				ReferenceRepository:  postgres.NewConversationReferenceRepository(database),
 				ConnectionRepository: postgres.NewChannelConnectionRepository(database),
-				CatalogMedia:         postgres.NewCatalogMediaRepository(database),
-				MediaObjects:         objects,
+				CatalogMedia:              postgres.NewCatalogMediaRepository(database),
+				MediaObjects:              objects,
+				ConversationAttachments:   postgres.NewMessageAttachmentRepository(database),
+				ConversationMediaObjects:  conversationMediaReader,
+				Capabilities:              postgres.NewChannelCapabilityRepository(database),
 			},
 			Provider: external.SocialAPI,
 			Messages: postgres.NewOutboundMessageRepository(database),
