@@ -259,7 +259,6 @@ func TestManualOutboundRejectsImageWhenMediaOutboundCapabilityIsNotVerified(t *t
 	}
 }
 
-
 func TestManualOutboundRejectsImageWhenConversationMediaFeatureIsDisabled(t *testing.T) {
 	const mediaID = "11111111-1111-4111-8111-111111111111"
 	connectionID := "conn-1"
