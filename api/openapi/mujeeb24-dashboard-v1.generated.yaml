@@ -4740,6 +4740,7 @@ components:
           items:
             type: string
           maxItems: 1
+          nullable: true
           type: array
         text:
           maxLength: 10000
