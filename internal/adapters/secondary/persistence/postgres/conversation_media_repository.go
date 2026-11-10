@@ -221,6 +221,93 @@ func (r *MessageAttachmentRepository) Create(ctx context.Context, draft ports.Me
 	return scanMessageAttachment(row, "message_attachment.create", true)
 }
 
+// CreateReadyOutbound links a ready, non-deleted conversation image to a public
+// outbound communication message. It intentionally does not accept provider refs.
+func (r *MessageAttachmentRepository) CreateReadyOutbound(ctx context.Context, draft ports.MessageAttachmentDraft) (ports.MessageAttachmentRecord, error) {
+	if strings.TrimSpace(draft.ID) == "" || strings.TrimSpace(draft.BusinessID) == "" ||
+		strings.TrimSpace(draft.CommunicationMessageID) == "" || strings.TrimSpace(draft.MediaAssetID) == "" ||
+		draft.Kind != "image" || draft.SortOrder < 0 || draft.CreatedAt.IsZero() ||
+		strings.TrimSpace(draft.Caption) != "" || draft.SourceProviderMediaRef != nil {
+		return ports.MessageAttachmentRecord{}, invalidRepositoryInput("message_attachment.create_ready_outbound", "ready image, tenant, message, asset and timestamp are required")
+	}
+	db, err := r.executor(ctx)
+	if err != nil {
+		return ports.MessageAttachmentRecord{}, err
+	}
+	row := db.QueryRow(ctx, `
+		WITH created AS (
+			INSERT INTO message_attachments
+				(id, business_id, communication_message_id, media_asset_id, kind,
+				 caption, sort_order, status, source_provider_media_reference, created_at, updated_at)
+			SELECT $1::uuid, $2::uuid, cm.id, a.id, 'image', '', $5, 'ready', NULL, $6, $6
+			FROM communication_messages cm
+			JOIN media_assets a ON a.business_id = cm.business_id
+			WHERE cm.business_id = $2::uuid AND cm.id = $3::uuid
+			  AND cm.direction = 'outbound' AND cm.visibility = 'public'
+			  AND cm.outbound_message_id IS NOT NULL
+			  AND a.id = $4::uuid
+			  AND a.purpose = 'conversation_attachment'
+			  AND a.media_kind = 'image' AND a.status = 'ready' AND a.deleted_at IS NULL
+			RETURNING id, business_id, communication_message_id, media_asset_id,
+			          kind, caption, sort_order, status, created_at, updated_at
+		)
+		SELECT c.id::text, c.business_id::text, c.communication_message_id::text,
+		       c.media_asset_id::text, c.kind, c.caption, c.sort_order, c.status,
+		       c.created_at, c.updated_at, COALESCE(a.mime_type,''), COALESCE(a.size_bytes,0)
+		FROM created c
+		JOIN media_assets a ON a.business_id = c.business_id AND a.id = c.media_asset_id
+	`, draft.ID, draft.BusinessID, draft.CommunicationMessageID, draft.MediaAssetID, draft.SortOrder, draft.CreatedAt)
+	return scanMessageAttachment(row, "message_attachment.create_ready_outbound", true)
+}
+
+// ListForOutboundMessage returns worker-only media references for one tenant-owned
+// outbound message; storage keys are never copied into API message projections.
+func (r *MessageAttachmentRepository) ListForOutboundMessage(ctx context.Context, businessID, outboundMessageID string) ([]ports.OutboundMessageAttachmentRecord, error) {
+	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(outboundMessageID) == "" {
+		return nil, invalidRepositoryInput("message_attachment.list_for_outbound", "business and outbound message ids are required")
+	}
+	db, err := r.executor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(ctx, `
+		SELECT ma.id::text, ma.business_id::text, ma.communication_message_id::text,
+		       cm.outbound_message_id::text, ma.media_asset_id::text, ma.kind,
+		       COALESCE(a.mime_type,''), ma.caption, ma.status, ma.sort_order,
+		       COALESCE(a.size_bytes,0), a.storage_provider, a.storage_key,
+		       a.purpose, a.status, (a.deleted_at IS NOT NULL)
+		FROM communication_messages cm
+		JOIN message_attachments ma
+		  ON ma.business_id = cm.business_id AND ma.communication_message_id = cm.id
+		JOIN media_assets a
+		  ON a.business_id = ma.business_id AND a.id = ma.media_asset_id
+		WHERE cm.business_id = $1::uuid
+		  AND cm.outbound_message_id = $2::uuid
+		  AND cm.direction = 'outbound' AND cm.visibility = 'public'
+		ORDER BY ma.sort_order, ma.id
+	`, businessID, outboundMessageID)
+	if err != nil {
+		return nil, classifyRepositoryGetError("message_attachment.list_for_outbound", err)
+	}
+	defer rows.Close()
+	result := make([]ports.OutboundMessageAttachmentRecord, 0)
+	for rows.Next() {
+		var item ports.OutboundMessageAttachmentRecord
+		if err := rows.Scan(&item.AttachmentID, &item.BusinessID, &item.CommunicationMessageID,
+			&item.OutboundMessageID, &item.MediaAssetID, &item.Kind, &item.MimeType,
+			&item.Caption, &item.Status, &item.SortOrder, &item.SizeBytes,
+			&item.StorageProvider, &item.StorageKey, &item.AssetPurpose, &item.AssetStatus,
+			&item.AssetDeleted); err != nil {
+			return nil, &RepositoryError{Operation: "message_attachment.list_for_outbound", Kind: RepositoryInvalid, Err: err}
+		}
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, &RepositoryError{Operation: "message_attachment.list_for_outbound", Kind: RepositoryInvalid, Err: err}
+	}
+	return result, nil
+}
+
 func (r *MessageAttachmentRepository) ListByMessage(ctx context.Context, businessID, communicationMessageID string) ([]ports.MessageAttachmentRecord, error) {
 	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(communicationMessageID) == "" {
 		return nil, invalidRepositoryInput("message_attachment.list", "business and communication message ids are required")
@@ -547,3 +634,4 @@ func scanMessageAttachment(row interface{ Scan(...any) error }, operation string
 }
 
 var _ ports.MessageAttachmentRepository = (*MessageAttachmentRepository)(nil)
+var _ ports.OutboundMessageAttachmentRepository = (*MessageAttachmentRepository)(nil)

@@ -60,6 +60,8 @@ func (p OutboxProcessor) Process(ctx context.Context, entryID string) error {
 		reason := "outbound_mapping_missing"
 		if errors.Is(err, ErrRequiredCatalogMediaUnavailable) {
 			reason = "required_catalog_media_unavailable"
+		} else if errors.Is(err, ErrRequiredConversationMediaUnavailable) {
+			reason = "required_conversation_media_unavailable"
 		}
 		log.Printf("[Worker] DEAD_LETTER outbox=%s outbound=%s code=%s", record.ID, record.OutboundMessageID, reason)
 		return p.deadLetter(ctx, record, reason)
