@@ -169,7 +169,7 @@ func TestManualOutboundConversationImageIsAtomicInPostgres(t *testing.T) {
 		return commands.CreateOutboundMessageCommand{
 			Meta: commands.CommandMeta{
 				Actor: commands.ActorContext{
-					BusinessID: businessID, PrincipalID: principalID, Role: "owner", Permissions: []string{"*"},
+					BusinessID: commands.BusinessID(businessID), PrincipalID: commands.PrincipalID(principalID), Role: "owner", Permissions: []string{"*"},
 				},
 				IdempotencyKey: key,
 			},
