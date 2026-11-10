@@ -153,17 +153,17 @@ func TestManualOutboundConversationImageIsAtomicInPostgres(t *testing.T) {
 	attachments := NewMessageAttachmentRepository(adapter)
 	outbox := NewPostgresOutboxStore(adapter)
 	service := services.ManualOutboundMessageService{
-		References:   NewConversationReferenceRepository(adapter),
-		Connections:  NewChannelConnectionRepository(adapter),
+		References:              NewConversationReferenceRepository(adapter),
+		Connections:             NewChannelConnectionRepository(adapter),
 		MediaAttachmentsEnabled: true,
-		Capabilities: NewChannelCapabilityRepository(adapter),
-		MediaAssets:  mediaAssets,
-		Attachments:  attachments,
-		Outbound:     outbound,
-		Outbox:       outboundMediaFailingOutbox{OutboxStore: outbox, cause: errors.New("forced outbox failure")},
-		Messages:     messages,
-		Inbox:        outboundMediaIntegrationInbox{},
-		Transactions: adapter,
+		Capabilities:            NewChannelCapabilityRepository(adapter),
+		MediaAssets:             mediaAssets,
+		Attachments:             attachments,
+		Outbound:                outbound,
+		Outbox:                  outboundMediaFailingOutbox{OutboxStore: outbox, cause: errors.New("forced outbox failure")},
+		Messages:                messages,
+		Inbox:                   outboundMediaIntegrationInbox{},
+		Transactions:            adapter,
 	}
 	newCommand := func(key string) commands.CreateOutboundMessageCommand {
 		return commands.CreateOutboundMessageCommand{

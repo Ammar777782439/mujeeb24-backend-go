@@ -52,7 +52,7 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 		References: conversationReferenceRepository, Connections: postgres.NewChannelConnectionRepository(adapter),
 		Capabilities: postgres.NewChannelCapabilityRepository(adapter), MediaAssets: postgres.NewConversationMediaIngestionRepository(adapter),
 		MediaAttachmentsEnabled: os.Getenv("CONVERSATION_MEDIA_ENABLED") == "true",
-		Attachments: messageAttachmentsRepository, Outbound: postgres.NewOutboundMessageRepository(adapter),
+		Attachments:             messageAttachmentsRepository, Outbound: postgres.NewOutboundMessageRepository(adapter),
 		Outbox: postgres.NewPostgresOutboxStore(adapter), Messages: messageRepository, Inbox: conversationRepository,
 		Conversations: conversationRepository, Transactions: adapter, Realtime: realtime,
 	}

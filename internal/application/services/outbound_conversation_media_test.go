@@ -186,7 +186,7 @@ func TestManualOutboundLinksTenantOwnedReadyMediaInsideOutboxTransaction(t *test
 	service := ManualOutboundMessageService{
 		Inbox: unitOwnedInbox{}, References: references, Connections: connections,
 		MediaAttachmentsEnabled: true,
-		Capabilities: outboundMediaCapabilityFake{records: verifiedOutboundMediaCapability()},
+		Capabilities:            outboundMediaCapabilityFake{records: verifiedOutboundMediaCapability()},
 		MediaAssets: outboundMediaAssetFake{asset: ports.MediaAsset{
 			ID: mediaID, BusinessID: "biz-1", Purpose: "conversation_attachment",
 			Kind: "image", MimeType: "image/jpeg", Status: "ready",
@@ -233,12 +233,12 @@ func TestManualOutboundRejectsImageWhenMediaOutboundCapabilityIsNotVerified(t *t
 			ConnectionID: &connectionID, IsCurrent: true, MappingStatus: "active",
 		}},
 		MediaAttachmentsEnabled: true,
-		Connections: &fakeChannelConnectionRepository{record: ports.ChannelConnectionRecord{
+		Connections:              &fakeChannelConnectionRepository{record: ports.ChannelConnectionRecord{
 			ID: connectionID, BusinessID: "biz-1", ProviderReference: "socialapi",
 			Channel: "whatsapp", Status: "active",
 		}},
-		Capabilities: outboundMediaCapabilityFake{},
-		MediaAssets: outboundMediaAssetFake{asset: ports.MediaAsset{
+		Capabilities:            outboundMediaCapabilityFake{},
+		MediaAssets:              outboundMediaAssetFake{asset: ports.MediaAsset{
 			ID: mediaID, BusinessID: "biz-1", Purpose: "conversation_attachment",
 			Kind: "image", MimeType: "image/png", Status: "ready",
 			StorageProvider: "r2", StorageKey: "conversation/biz-1/photo.png",

@@ -14,21 +14,21 @@ import (
 )
 
 type ManualOutboundMessageService struct {
-	References    ports.ConversationReferenceRepository
-	Connections   ports.ChannelConnectionRepository
-	Capabilities  ports.ChannelCapabilityRepository
+	References              ports.ConversationReferenceRepository
+	Connections             ports.ChannelConnectionRepository
+	Capabilities            ports.ChannelCapabilityRepository
 	MediaAttachmentsEnabled bool
-	MediaAssets   ports.ConversationMediaAssetReader
-	Attachments   ports.OutboundMessageAttachmentRepository
-	Outbound      ports.OutboundMessageRepository
-	Outbox        ports.OutboxStore
-	Messages      ports.MessageRepository
-	Conversations ports.ConversationRuntimeRepository
-	Inbox         ports.ConversationInboxRepository
-	Transactions  ports.TransactionManager
-	Realtime      ports.RealtimePublisher
-	Now           func() time.Time
-	NewID         func() string
+	MediaAssets             ports.ConversationMediaAssetReader
+	Attachments             ports.OutboundMessageAttachmentRepository
+	Outbound                ports.OutboundMessageRepository
+	Outbox                  ports.OutboxStore
+	Messages                ports.MessageRepository
+	Conversations           ports.ConversationRuntimeRepository
+	Inbox                   ports.ConversationInboxRepository
+	Transactions            ports.TransactionManager
+	Realtime                ports.RealtimePublisher
+	Now                     func() time.Time
+	NewID                   func() string
 }
 
 func (s ManualOutboundMessageService) Handle(ctx context.Context, command commands.CreateOutboundMessageCommand) (commands.MessageResult, error) {
