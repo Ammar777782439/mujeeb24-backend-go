@@ -14,7 +14,7 @@ import (
 
 type conversationAttachmentReadInboxFake struct {
 	record ports.ConversationRecord
-	err error
+	err    error
 }
 
 func (f conversationAttachmentReadInboxFake) ListInbox(context.Context, ports.ConversationInboxFilter) (ports.ConversationPage, error) {
@@ -31,9 +31,8 @@ func (f conversationAttachmentReadInboxFake) GetInboxConversation(context.Contex
 
 type conversationAttachmentReadRepositoryFake struct {
 	record ports.ConversationAttachmentReadRecord
-	err error
-	calls int
-
+	err    error
+	calls  int
 }
 
 func (f *conversationAttachmentReadRepositoryFake) GetReadyForMessage(context.Context, string, string, string, string) (ports.ConversationAttachmentReadRecord, error) {
@@ -43,12 +42,11 @@ func (f *conversationAttachmentReadRepositoryFake) GetReadyForMessage(context.Co
 
 type conversationAttachmentObjectReaderFake struct {
 	provider string
-	key string
-	ttl time.Duration
-	url string
-	err error
-	calls int
-
+	key      string
+	ttl      time.Duration
+	url      string
+	err      error
+	calls    int
 }
 
 func (f *conversationAttachmentObjectReaderFake) PresignGetFromProvider(_ context.Context, provider, key string, ttl time.Duration) (string, error) {

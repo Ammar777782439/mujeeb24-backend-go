@@ -67,6 +67,7 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
 	// Business owner assignment adds 1 platform business lifecycle endpoint. Total = 141.
 	// Later contract work brought the baseline to 144; token-based team invitations add 7. Total = 151.
 	// Catalog Media MVP adds six tenant-scoped operations; merchant preview adds a seventh.
+	// Conversation media adds one tenant-scoped private attachment read operation. Total = 180.
 	operationIDs := regexp.MustCompile(`(?m)^\s+operationId: ([A-Za-z0-9_]+)$`).FindAllSubmatch(document, -1)
 	if !bytes.Contains(document, []byte("operationId: getCatalogMediaPreview")) {
 		t.Fatal("authenticated catalog preview operation missing")
@@ -76,8 +77,8 @@ func TestBuildAPIGeneratesCompleteDashboardContract(t *testing.T) {
 			t.Fatalf("sales operation missing: %s", op)
 		}
 	}
-	if len(operationIDs) != 179 {
-		t.Fatalf("generated %d operations, want 179", len(operationIDs))
+	if len(operationIDs) != 180 {
+		t.Fatalf("generated %d operations, want 180", len(operationIDs))
 	}
 	for _, op := range []string{"platformCreateSubscriptionAddon", "platformListSubscriptionAddons", "platformRecordSubscriptionAddonPayment", "platformCancelSubscriptionAddon", "platformApproveChannelPassCapacity"} {
 		if !bytes.Contains(document, []byte("operationId: "+op)) {
