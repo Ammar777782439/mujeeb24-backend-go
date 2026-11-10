@@ -39,4 +39,3 @@ func registerConversationMediaUploadOperations(api huma.API, dispatcher Dashboar
 		Errors:          []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusUnprocessableEntity, http.StatusServiceUnavailable},
 	}, ConversationImageUploadInput{}, Single[ConversationMediaAssetView]{})
 }
-

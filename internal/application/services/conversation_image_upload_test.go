@@ -81,6 +81,7 @@ type conversationUploadObjectsFake struct {
 	deleteErr      error
 	deletes        int
 }
+
 func (f *conversationUploadObjectsFake) Put(context.Context, string, string, []byte) error {
 	return errors.New("unpinned writes are forbidden")
 }
