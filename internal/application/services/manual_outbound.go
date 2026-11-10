@@ -17,6 +17,7 @@ type ManualOutboundMessageService struct {
 	References    ports.ConversationReferenceRepository
 	Connections   ports.ChannelConnectionRepository
 	Capabilities  ports.ChannelCapabilityRepository
+	MediaAttachmentsEnabled bool
 	MediaAssets   ports.ConversationMediaAssetReader
 	Attachments   ports.OutboundMessageAttachmentRepository
 	Outbound      ports.OutboundMessageRepository
@@ -55,6 +56,9 @@ func (s ManualOutboundMessageService) Handle(ctx context.Context, command comman
 		}
 		seen[normalized] = struct{}{}
 		mediaIDs = append(mediaIDs, normalized)
+	}
+	if len(mediaIDs) > 0 && !s.MediaAttachmentsEnabled {
+		return commands.MessageResult{}, appErrors.New(appErrors.CodeInvalidState, "outbound conversation media is disabled")
 	}
 	if len(mediaIDs) > 0 && (s.Capabilities == nil || s.MediaAssets == nil || s.Attachments == nil) {
 		return commands.MessageResult{}, appErrors.NotImplemented()

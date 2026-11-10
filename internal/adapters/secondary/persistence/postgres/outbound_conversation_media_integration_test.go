@@ -155,6 +155,7 @@ func TestManualOutboundConversationImageIsAtomicInPostgres(t *testing.T) {
 	service := services.ManualOutboundMessageService{
 		References:   NewConversationReferenceRepository(adapter),
 		Connections:  NewChannelConnectionRepository(adapter),
+		MediaAttachmentsEnabled: true,
 		Capabilities: NewChannelCapabilityRepository(adapter),
 		MediaAssets:  mediaAssets,
 		Attachments:  attachments,
