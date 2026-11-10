@@ -42,7 +42,7 @@ func (f *outboundMessageAttachmentsFake) CreateReadyOutbound(_ context.Context, 
 	return ports.MessageAttachmentRecord{
 		ID: draft.ID, BusinessID: draft.BusinessID,
 		CommunicationMessageID: draft.CommunicationMessageID,
-		MediaAssetID: draft.MediaAssetID, Kind: draft.Kind,
+		MediaAssetID:           draft.MediaAssetID, Kind: draft.Kind,
 		Status: "ready", SortOrder: draft.SortOrder, CreatedAt: draft.CreatedAt,
 	}, nil
 }
@@ -107,7 +107,7 @@ func outboundMediaResolver(attachments []ports.OutboundMessageAttachmentRecord, 
 			ID: "message-1", BusinessID: "business-1", ConversationID: "conversation-1",
 			ConversationReferenceID: "reference-1", ConnectionID: connection,
 			ProviderRef: "socialapi", Channel: "whatsapp",
-			ContentReference: EncodeInlineTextContentReference("reply"),
+			ContentReference:       EncodeInlineTextContentReference("reply"),
 			ProviderIdempotencyKey: "idem-1", Status: "pending",
 		}},
 		ReferenceRepository: resolverReferenceRepository{record: ports.ConversationReferenceRecord{
@@ -120,9 +120,9 @@ func outboundMediaResolver(attachments []ports.OutboundMessageAttachmentRecord, 
 			ID: connection, BusinessID: "business-1", ProviderReference: "socialapi",
 			Channel: "whatsapp", ProviderAccountReference: &account, Status: "active",
 		}},
-		ConversationAttachments: &outboundMessageAttachmentsFake{items: attachments},
+		ConversationAttachments:  &outboundMessageAttachmentsFake{items: attachments},
 		ConversationMediaObjects: presigner,
-		Capabilities: outboundMediaCapabilityFake{records: capabilities},
+		Capabilities:             outboundMediaCapabilityFake{records: capabilities},
 	}
 }
 
@@ -133,7 +133,7 @@ func TestOutboundResolverPresignsConversationImageFromRecordedProvider(t *testin
 		CommunicationMessageID: "communication-1", OutboundMessageID: "message-1",
 		MediaAssetID: "media-1", Kind: "image", MimeType: "image/png",
 		Status: "ready", StorageProvider: "backblaze",
-		StorageKey: "conversation/business-1/media-1.png",
+		StorageKey:  "conversation/business-1/media-1.png",
 		AssetPurpose: "conversation_attachment", AssetStatus: "ready",
 	}}, verifiedOutboundMediaCapability(), presigner)
 

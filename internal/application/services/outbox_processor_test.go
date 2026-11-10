@@ -121,11 +121,11 @@ func TestOutboxProcessorDeadLettersUnavailableConversationMediaWithoutProviderCa
 	}}
 	provider := &processorProvider{}
 	processor := OutboxProcessor{
-		Outbox: outbox,
+		Outbox:   outbox,
 		Resolver: processorResolver{err: ErrRequiredConversationMediaUnavailable},
 		Provider: provider,
-		Owner: "worker-1",
-		Now: func() time.Time { return time.Unix(100, 0) },
+		Owner:    "worker-1",
+		Now:      func() time.Time { return time.Unix(100, 0) },
 	}
 	if err := processor.Process(context.Background(), "entry-1"); err != nil {
 		t.Fatalf("Process: %v", err)
