@@ -20,16 +20,16 @@ const uploadTestBusinessID = "11111111-1111-4111-8111-111111111111"
 const uploadTestAssetID = "22222222-2222-4222-8222-222222222222"
 
 type conversationUploadAssetsFake struct {
-	asset ports.MediaAsset
-	created ports.PendingConversationMediaAsset
-	createErr error
-	markErr error
-	rejectErr error
-	createdCount int
-	markedCount int
+	asset         ports.MediaAsset
+	created       ports.PendingConversationMediaAsset
+	createErr     error
+	markErr       error
+	rejectErr     error
+	createdCount  int
+	markedCount   int
 	rejectedCount int
-	verified ports.VerifiedImage
-	rejectStatus string
+	verified      ports.VerifiedImage
+	rejectStatus  string
 }
 
 func (f *conversationUploadAssetsFake) CreatePendingIngestion(_ context.Context, draft ports.PendingConversationMediaAsset) (ports.MediaAsset, error) {
@@ -71,15 +71,15 @@ func (f *conversationUploadAssetsFake) MarkIngestionRejected(context.Context, st
 }
 
 type conversationUploadObjectsFake struct {
-	putProvider string
-	putKey string
-	putMime string
-	body []byte
-	putErr error
+	putProvider    string
+	putKey         string
+	putMime        string
+	body           []byte
+	putErr         error
 	deleteProvider string
-	deleteKey string
-	deleteErr error
-	deletes int
+	deleteKey      string
+	deleteErr      error
+	deletes        int
 }
 func (f *conversationUploadObjectsFake) Put(context.Context, string, string, []byte) error {
 	return errors.New("unpinned writes are forbidden")
@@ -113,7 +113,6 @@ func uploadTestService(assets *conversationUploadAssetsFake, objects *conversati
 	return ConversationImageUploadService{
 		Assets: assets, Objects: objects, StorageProvider: "backblaze",
 		NewID: func() string { return uploadTestAssetID },
-		Now: func() time.Time { return time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC) },
 	}
 }
 
@@ -195,7 +194,7 @@ func TestConversationImageUploadMarksAssetRejectedAndCleansPartialObjectOnStorag
 
 func TestConversationImageUploadDoesNotDeleteObjectWhenAssetRejectionDidNotSucceed(t *testing.T) {
 	assets := &conversationUploadAssetsFake{
-		markErr: errors.New("mark ready query failed"),
+		markErr:      errors.New("mark ready query failed"),
 		rejectStatus: "ready",
 	}
 	objects := &conversationUploadObjectsFake{}
@@ -213,6 +212,6 @@ func TestConversationImageUploadDoesNotDeleteObjectWhenAssetRejectionDidNotSucce
 
 var (
 	_ ports.ConversationMediaIngestionRepository = (*conversationUploadAssetsFake)(nil)
-	_ ports.MediaObjectStorage = (*conversationUploadObjectsFake)(nil)
-	_ ports.MediaObjectProviderWriter = (*conversationUploadObjectsFake)(nil)
+	_ ports.MediaObjectStorage                   = (*conversationUploadObjectsFake)(nil)
+	_ ports.MediaObjectProviderWriter            = (*conversationUploadObjectsFake)(nil)
 )

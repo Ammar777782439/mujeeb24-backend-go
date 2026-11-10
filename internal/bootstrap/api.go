@@ -106,8 +106,8 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	}
 	if conversationMediaObjects != nil {
 		dependencies.ConversationImageUpload = services.ConversationImageUploadService{
-			Assets: postgres.NewConversationMediaIngestionRepository(database),
-			Objects: conversationMediaObjects,
+			Assets:          postgres.NewConversationMediaIngestionRepository(database),
+			Objects:         conversationMediaObjects,
 			StorageProvider: conversationStorageProvider,
 		}
 	}

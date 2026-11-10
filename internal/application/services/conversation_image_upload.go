@@ -114,4 +114,3 @@ func (s ConversationImageUploadService) UploadBase64(ctx context.Context, busine
 	}
 	return ready, nil
 }
-
