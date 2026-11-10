@@ -258,3 +258,39 @@ func TestManualOutboundRejectsImageWhenMediaOutboundCapabilityIsNotVerified(t *t
 		t.Fatalf("unverified outbound media must not create an outbound obligation: err=%v outbound=%#v outbox=%#v", err, outbound.record, outbox)
 	}
 }
+
+
+func TestManualOutboundRejectsImageWhenConversationMediaFeatureIsDisabled(t *testing.T) {
+	const mediaID = "11111111-1111-4111-8111-111111111111"
+	connectionID := "conn-1"
+	outbound := &fakeOutboundRepository{}
+	outbox := &fakeOutboxStore{}
+	service := ManualOutboundMessageService{
+		Inbox: unitOwnedInbox{},
+		References: fakeReferenceRepository{record: ports.ConversationReferenceRecord{
+			ID: "ref-1", BusinessID: "biz-1", ConversationID: "conv-1",
+			System: "provider", ProviderRef: "socialapi", ResourceID: "provider-conv-1",
+			ConnectionID: &connectionID, IsCurrent: true, MappingStatus: "active",
+		}},
+		Connections: &fakeChannelConnectionRepository{record: ports.ChannelConnectionRecord{
+			ID: connectionID, BusinessID: "biz-1", ProviderReference: "socialapi",
+			Channel: "whatsapp", Status: "active",
+		}},
+		Outbound: outbound, Outbox: outbox, Messages: &fakeMessageRepository{},
+		Transactions: fakeTransactionManager{},
+	}
+	_, err := service.Handle(context.Background(), commands.CreateOutboundMessageCommand{
+		Meta: commands.CommandMeta{
+			Actor: commands.ActorContext{
+				BusinessID: commands.BusinessID("biz-1"), PrincipalID: commands.PrincipalID("agent-1"),
+				Role: "owner", Permissions: []string{"*"},
+			},
+			IdempotencyKey: "reply-with-disabled-media-1",
+		},
+		ConversationID: "conv-1", Text: "صورة",
+		AttachmentMediaIDs: []string{mediaID},
+	})
+	if err == nil || outbound.record.ID != "" || outbox.calls != 0 {
+		t.Fatalf("disabled conversation media must be rejected before creating outbound state: err=%v outbound=%#v outbox=%#v", err, outbound.record, outbox)
+	}
+}
