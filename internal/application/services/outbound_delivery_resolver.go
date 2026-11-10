@@ -17,14 +17,14 @@ var ErrRequiredCatalogMediaUnavailable = errors.New("required catalog media unav
 var ErrRequiredConversationMediaUnavailable = errors.New("required conversation media unavailable")
 
 type MujeebOutboundDeliveryResolver struct {
-	OutboundRepository   ports.OutboundMessageRepository
-	ReferenceRepository  ports.ConversationReferenceRepository
-	ConnectionRepository ports.ChannelConnectionRepository
-	CatalogMedia              ports.CatalogMediaRepository
-	MediaObjects              ports.MediaObjectStorage
-	ConversationAttachments   ports.OutboundMessageAttachmentRepository
-	ConversationMediaObjects  ports.MediaObjectProviderReader
-	Capabilities              ports.ChannelCapabilityRepository
+	OutboundRepository       ports.OutboundMessageRepository
+	ReferenceRepository      ports.ConversationReferenceRepository
+	ConnectionRepository     ports.ChannelConnectionRepository
+	CatalogMedia             ports.CatalogMediaRepository
+	MediaObjects             ports.MediaObjectStorage
+	ConversationAttachments  ports.OutboundMessageAttachmentRepository
+	ConversationMediaObjects ports.MediaObjectProviderReader
+	Capabilities             ports.ChannelCapabilityRepository
 }
 
 func (r MujeebOutboundDeliveryResolver) Resolve(ctx context.Context, businessID, outboundMessageID string) (ports.OutboundDelivery, error) {
