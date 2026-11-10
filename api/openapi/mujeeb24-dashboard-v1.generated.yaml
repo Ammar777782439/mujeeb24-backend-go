@@ -1485,6 +1485,25 @@ components:
         - display_name
         - role
       type: object
+    ConversationAttachmentReadURLView:
+      additionalProperties: false
+      properties:
+        expires_in_seconds:
+          format: int64
+          type: integer
+        mime_type:
+          type: string
+        size_bytes:
+          format: int64
+          type: integer
+        url:
+          type: string
+      required:
+        - url
+        - expires_in_seconds
+        - mime_type
+        - size_bytes
+      type: object
     ConversationInboxOverview:
       additionalProperties: false
       properties:
@@ -3756,18 +3775,32 @@ components:
     MessageAttachment:
       additionalProperties: false
       properties:
+        attachment_id:
+          format: uuid
+          type: string
+        caption:
+          type: string
         media_id:
+          format: uuid
           type: string
         preview_path:
+          type: string
+        status:
+          enum:
+            - pending_ingestion
+            - ready
+            - failed
           type: string
         type:
           enum:
             - image
+            - video
+            - audio
+            - document
+            - file
           type: string
       required:
         - type
-        - media_id
-        - preview_path
       type: object
     MissingField:
       additionalProperties: false
@@ -5019,6 +5052,23 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/CommercialTransaction"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleConversationAttachmentReadURLViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleConversationAttachmentReadURLViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/ConversationAttachmentReadURLView"
         request_id:
           type: string
       required:
@@ -11556,6 +11606,88 @@ paths:
       security:
         - bearerAuth: []
       summary: Create an outbound message intent
+      tags:
+        - Conversations
+  /businesses/{business_id}/conversations/{conversation_id}/messages/{message_id}/attachments/{attachment_id}/read-url:
+    get:
+      operationId: getConversationAttachmentReadURL
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: conversation_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: message_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: attachment_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleConversationAttachmentReadURLViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Get a short-lived private URL for a ready conversation attachment
       tags:
         - Conversations
   /businesses/{business_id}/conversations/{conversation_id}/notes:
