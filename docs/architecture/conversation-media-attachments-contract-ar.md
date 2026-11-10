@@ -1,7 +1,7 @@
 # Conversation Media & Attachments — Contract and Implementation Status
 
 **Branch:** `feat/conversation-media-attachments`  
-**Status:** Domain, tenant-safe persistence and inbound webhook placeholder materialization are implemented. Provider media download, upload HTTP APIs, public message projections and outbound delivery are not implemented.
+**Status:** Domain and tenant-safe persistence, inbound placeholder materialization, the first WhatsApp image-ingestion worker, message attachment projections/read URLs, and a private conversation-image upload endpoint are implemented. Attaching merchant-uploaded media to outbound messages and provider delivery are not implemented.
 
 ## 1. Current repository facts
 
@@ -44,16 +44,18 @@ Business brand media
 - `InboundMediaSourceResolver` resolves that opaque ID through SocialAPI's authenticated conversation message-history endpoint and returns the current `attachment_url` only for immediate ingestion use; the URL is not stored.
 - `ProviderInboundStore.Materialize` creates pending MediaAsset and MessageAttachment records atomically with the communication message. The provider reference is not a URL.
 - `MessageAttachmentRepository` creates and lists tenant-scoped links. A relation can become `ready` only if its underlying conversation MediaAsset is already `ready` and has the same kind.
+- `POST /api/v1/businesses/{business_id}/conversation-media/uploads` accepts a bounded base64 JPEG/PNG image, verifies bytes and dimensions server-side, writes it to the recorded private-storage provider, and returns a `ready` `MediaAsset(purpose=conversation_attachment)`. It does not create a message relation; outbound message attachment support is still pending.
+- Conversation message projections list attachment IDs, media IDs, kind, caption and state without exposing storage keys or SocialAPI references. The conversation/message-scoped read URL endpoint checks tenant, conversation, public message, attachment and ready asset before returning a five-minute signed URL.
 - Provider source references are opaque IDs only; HTTP(S) URLs are rejected by the repository and database constraint. The reference is cleared after successful ingestion.
 - The repositories perform local SQL only. Their methods can join a caller-owned `TransactionManager` transaction via the transaction context.
 
 ## 4. Current implementation limit
 
-**The verified-to-ready path is image-only.** The source resolver follows the current SocialAPI message-history schema, which exposes one `attachment_url` per message. It resolves position zero; positions above zero are rejected as unsupported. The actual HTTP download, byte verification and object-storage write remain pending. Image/video/audio/file events can be materialized as pending placeholders; there is not yet a worker to download their bytes, determine verified MIME/size, write Object Storage, or transition them to ready. The current `media_assets` MIME and verification contract is still image-specific.
+**Ready media remains image-only.** The inbound source resolver follows SocialAPI message history, which exposes one `attachment_url` per message. The current worker claims only the first WhatsApp image attachment (`sort_order=0`), downloads it through SocialAPI's authenticated media proxy, verifies JPEG/PNG bytes and dimensions, and stores it privately. Other channels, extra attachment positions, and video/audio/document/file kinds remain pending and are not marked ready. Merchant uploads also accept JPEG/PNG only, with a 10 MiB decoded-size bound and server-side dimension/pixel checks.
 
 No claim is made that WhatsApp, Instagram and Facebook expose identical media behavior. Inbound retrieval and outbound delivery must be verified separately for every channel and media kind before enabling them.
 
-## 5. Inbound flow — placeholder materialization wired; download pending
+## 5. Inbound flow — first WhatsApp image slice implemented
 
 ```text
 SocialAPI webhook
@@ -61,21 +63,21 @@ SocialAPI webhook
   -> normalize content.media[] to opaque SocialAPI interaction-id/index references
   -> persist message + pending MediaAsset + MessageAttachment in one local transaction
   -> source resolver looks up the stable interaction ID in SocialAPI message history
-  -> [next] claim pending reference through an internal worker port
-  -> [next] fetch provider bytes outside the transaction
-  -> [next] verify MIME, size, dimensions and checksum
-  -> [next] write bytes to private Object Storage
-  -> [next] mark MediaAsset and MessageAttachment ready in one local transaction
-  -> [next] publish attachment state change
+  -> lease-based claim (WhatsApp image, first position only)
+  -> authenticated SocialAPI media lookup and download outside SQL
+  -> JPEG/PNG, size, dimensions and checksum verification
+  -> private Object Storage write to the MediaAsset's recorded provider
+  -> mark MediaAsset and MessageAttachment ready through local SQL
+  -> message list exposes state; authorized read URL is available when ready
 ```
 
 Do not block webhook acknowledgement on a media download. If ingestion fails, preserve the text message and mark the attachment unavailable/failed.
 
-## 6. Required outbound flow — not wired yet
+## 6. Required outbound flow — upload exists; message dispatch not wired
 
 ```text
 Merchant upload request
-  -> authenticated upload intent
+  -> POST /businesses/{business_id}/conversation-media/uploads (base64 JPEG/PNG)
   -> private Object Storage
   -> server-side verification
   -> MediaAsset ready
@@ -90,24 +92,21 @@ Never persist public or presigned URLs as canonical references. Generate a short
 
 ## 7. Explicitly not implemented
 
-- SocialAPI provider media download endpoint and durable ingestion worker. The new storage feature flag only prepares the private S3 router; it does not mean downloads are active yet.
-- Durable worker claim/read API for pending provider references (the current relation holds only an opaque source reference).
-- Generic authenticated upload/finalize API.
-- Message DTO projection and realtime attachment-state event.
-- Outbound message commands, Outbox attachment resolver changes, and provider-specific send capability checks.
+- Generic multipart/upload-intent/finalize API; the current direct upload endpoint supports base64 JPEG/PNG only.
+- Realtime attachment-state event after a pending inbound attachment becomes ready or failed.
+- Outbound message commands, MessageAttachment links for uploaded assets, Outbox attachment resolution and provider-specific send capability checks.
 - Video/audio/document ingestion, scanning, thumbnails, retention and media quota accounting.
 - Business logo/cover relation and brand-asset management.
 - Live SocialAPI or Object Storage media tests.
 
 ## 8. Next implementation gates
 
-1. Add the scoped pending-reference claim/read port and durable ingestion worker.
-2. Resolve the whole opaque SocialAPI interaction ID and attachment position through the authenticated conversation message-history endpoint; use the returned `attachment_url` only for immediate ingestion.
-3. Download and verify image bytes, store them privately, and transition asset+relation atomically.
-4. Add authorized message attachment projections and realtime state notifications.
-5. Add authenticated private upload/finalize for outbound media, then route through Outbox.
-6. Verify per-channel constraints and live delivery before enabling the feature.
-7. Complete brand-media relation, orphan cleanup, storage quotas and backup/restore proof.
+1. Add the outbound message attachment command and link ready tenant-owned MediaAssets to the public communication message within the same transaction as Outbox enqueue.
+2. Resolve those message attachments in the Outbox worker and presign from the storage provider recorded on each asset; enforce the verified SocialAPI channel/media capability contract.
+3. Emit realtime attachment-state notifications when inbound ingestion completes or fails.
+4. Add multipart/upload-intent/finalize and quota/retention policy only if product requirements justify them.
+5. Verify per-channel constraints and real SocialAPI/Object Storage delivery before enabling outbound media.
+6. Complete brand-media relation, orphan cleanup, storage quotas and backup/restore proof.
 
 ## 9. Provider contract references
 

@@ -27,6 +27,7 @@ type PlatformAccessChecker interface {
 type Dependencies struct {
 	CatalogMediaService              services.CatalogMediaService
 	CatalogImageUpload               services.CatalogImageUploadService
+	ConversationImageUpload          services.ConversationImageUploadService
 	SalesAdmin                       ports.SalesAdminPort
 	Scope                            ScopeProvider
 	PlatformAccess                   PlatformAccessChecker
@@ -384,6 +385,9 @@ func (s *Server) Dispatch(ctx context.Context, operationID string, input any) (a
 		return dispatchResult(result)
 	}
 	if result, handled := s.dispatchCatalogMedia(ctx, operationID, input); handled {
+		return dispatchResult(result)
+	}
+	if result, handled := s.dispatchConversationMediaUpload(ctx, operationID, input); handled {
 		return dispatchResult(result)
 	}
 	// Platform operations (operationID starts with "platform") are dispatched

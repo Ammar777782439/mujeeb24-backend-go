@@ -97,6 +97,20 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	realtimeBroker.StartListener(context.Background())
 
 	dependencies := BuildDependenciesWithRealtime(database, realtimeBroker)
+	conversationMediaObjects, conversationStorageProvider, conversationStorageErr := buildConversationMediaStorageFromEnv()
+	if conversationStorageErr != nil {
+		if os.Getenv("CONVERSATION_MEDIA_ENABLED") == "true" {
+			return nil, fmt.Errorf("conversation media storage configuration: %w", conversationStorageErr)
+		}
+		log.Printf("[ConversationMedia] stage=api_storage_disabled reason=configuration_unavailable")
+	}
+	if conversationMediaObjects != nil {
+		dependencies.ConversationImageUpload = services.ConversationImageUploadService{
+			Assets: postgres.NewConversationMediaIngestionRepository(database),
+			Objects: conversationMediaObjects,
+			StorageProvider: conversationStorageProvider,
+		}
+	}
 	dependencies.GetReadiness = readinessQueryService{Ping: database.Ping, FeatureChecks: external.ReadinessChecks()}
 	dependencies.BeginChannelConnection = services.ChannelProvisioningDisabledService{}
 	dependencies.IngestSocialAPIWebhook = services.WebhookReceiverDisabledService{Receiver: "SocialAPI"}
@@ -371,14 +385,7 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// (verified at compile time via var _ ports.ConversationEnricher).
 		// The Customers repo is the SAME one used by the customer CRUD
 		// endpoints (ports.CustomerRuntimeRepository) — no duplicate repo.
-		mediaStorageProvider := ""
-		if os.Getenv("CONVERSATION_MEDIA_ENABLED") == "true" {
-			_, selectedProvider, mediaStorageErr := buildConversationMediaStorageFromEnv()
-			if mediaStorageErr != nil {
-				return nil, fmt.Errorf("conversation media storage configuration: %w", mediaStorageErr)
-			}
-			mediaStorageProvider = selectedProvider
-		}
+		mediaStorageProvider := conversationStorageProvider
 		webhookService := services.SocialAPIWebhookService{
 			MediaStorageProvider: mediaStorageProvider,
 			Receiver:             external.SocialWebhook,
