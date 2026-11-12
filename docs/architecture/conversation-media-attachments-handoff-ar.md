@@ -63,11 +63,11 @@ CI does not prove live SocialAPI delivery, real R2/Backblaze object writes/reads
 
 ## Next implementation priorities
 
-### P0 — finish outbound attachment verification
-1. Run Quality Gate, Native AI Contracts, AI Contract Verification, and Render image verification on the current HEAD after the ActorContext compile fix.
-2. Confirm the PostgreSQL integration test proves rollback of `outbound_messages`, `communication_messages`, `message_attachments`, and `outbox_entries`, then proves the successful commit path and pinned storage provider.
-3. Only then mark the outbound image slice CI-verified. Separately perform a controlled live SocialAPI image-send and object-store read test before claiming provider E2E support.
-4. Keep the capability and feature gates fail-closed; do not broaden to video, audio, documents, or multiple images without provider evidence and tests.
+### P0 — close the code and integration boundary
+1. Keep PR #35 open until the code review is accepted; CI is green on current HEAD.
+2. Frontend must consume the conversation/message/attachment-scoped read URL rather than the old tenant-wide Catalog preview path.
+3. Add merchant image-send UX only against the `attachment_media_ids` contract; preserve the one-image JPEG/PNG limit.
+4. Operator performs the controlled live SocialAPI image-send and private object-storage read/write checks. Do not claim provider E2E support before those checks.
 
 ### P1 — inbound completion events
 Publish tenant-scoped realtime state changes after attachment becomes ready/failed; never expose provider references or storage keys.
