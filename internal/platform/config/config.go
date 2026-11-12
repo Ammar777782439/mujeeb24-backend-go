@@ -166,6 +166,9 @@ func LoadFromEnv() (ProcessConfig, error) {
 	if cfg.NativeAIEnabled && (cfg.DeepSeekAPIKey == "" || cfg.DeepSeekModel == "" || cfg.NativeHTTPTimeout <= 0 || cfg.NativeMaxOutputTokens <= 0 || cfg.NativeMaxContextTokens <= cfg.NativeMaxOutputTokens || cfg.NativeMaxInputCharacters <= 0 || cfg.NativeMerchantMaxRequestBytes <= 0) {
 		return ProcessConfig{}, errors.New("NATIVE_AI_ENABLED requires a DeepSeek credential, model, and positive limits")
 	}
+	if cfg.NativeAIEnabled && (cfg.NativeMaxOutputTokens > 8192 || cfg.NativeMaxOutputTokens > cfg.NativeMaxContextTokens/4) {
+		return ProcessConfig{}, errors.New("NATIVE_AI_MAX_OUTPUT_TOKENS cannot exceed 8192 or 25% of NATIVE_AI_MAX_CONTEXT_TOKENS")
+	}
 	if cfg.AuthEnabled && (cfg.JWTEd25519PrivateKey == "" || cfg.JWTEd25519PublicKey == "" || strings.TrimSpace(cfg.JWTIssuer) == "" || cfg.JWTAccessTTL <= 0 || cfg.RefreshSessionTTL <= 0) {
 		return ProcessConfig{}, errors.New("AUTH_ENABLED requires JWT_ED25519_PRIVATE_KEY, JWT_ED25519_PUBLIC_KEY, JWT_ISSUER, and positive token lifetimes")
 	}

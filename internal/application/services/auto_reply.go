@@ -286,7 +286,13 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 
 	// Per contract ④ §8, call the AI gateway via the CustomerSalesDecisionPort.
 	log.Printf("[AutoReply] AI_GATEWAY_CALL business=%s conversation=%s run=%s", businessID, conversationID, run.ID)
-	capabilities := ports.CustomerSalesCapabilities(s.fullCatalogReady(run), s.Sales != nil && builtContext != nil && builtContext.Sales != nil && builtContext.Sales.Enabled && builtContext.Sales.AllowInteractions)
+	fullCatalogAvailable := s.fullCatalogReady(run)
+	if builtContext != nil && len(builtContext.CatalogEvidence) > 0 && catalogManifestItemCount(builtContext.CatalogManifest) <= len(builtContext.CatalogEvidence) {
+		// When the active catalog is already completely present in context,
+		// do not offer evaluate_full_catalog to avoid redundant multi-turn batch loops.
+		fullCatalogAvailable = false
+	}
+	capabilities := ports.CustomerSalesCapabilities(fullCatalogAvailable, s.Sales != nil && builtContext != nil && builtContext.Sales != nil && builtContext.Sales.Enabled && builtContext.Sales.AllowInteractions)
 	out, err := s.CustomerSalesDecision.Decide(ctx, ports.CustomerSalesDecisionInput{
 		Request: ports.CustomerSalesDecisionRequest{
 			BusinessID:             businessID,
@@ -307,6 +313,9 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 	if err != nil {
 		log.Printf("[AutoReply] AI_GATEWAY_FAILED business=%s err=%v", businessID, err)
 		s.markFailedSafe(ctx, run, classifyAIErrorStage(err), classifyAIProviderError(err), err.Error())
+		if fallbackResult, fbErr := s.enqueueFallbackHandoff(ctx, command, run, err.Error()); fbErr == nil && fallbackResult.Enqueued {
+			return fallbackResult, nil
+		}
 		return commands.AutoReplyResult{}, err
 	}
 	proposal := out.Decision
@@ -325,38 +334,54 @@ func (s AutoReplyService) Handle(ctx context.Context, command commands.AutoReply
 		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
 	}
 	if fullCatalogRequired {
-		log.Printf("[AutoReply] CATALOG_EVAL_TRIGGER run=%s capability=%s", run.ID, out.Decision.Capability)
-		// Per contract ② §9, run the full catalog evaluation pipeline.
-		entityContract := CatalogEntityContractPayload{}
-		if len(s.EntityContractPayload) == 0 {
-			err := errors.New("catalog entity contract payload is required for full catalog evaluation")
-			s.markFailedSafe(ctx, run, ports.AIRunFailureStageContextBuild, string(ports.AIRunFailureCategoryInfrastructure), err.Error())
-			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
-		}
-		if err := json.Unmarshal(s.EntityContractPayload, &entityContract); err != nil {
-			s.markFailedSafe(ctx, run, ports.AIRunFailureStageContextBuild, string(ports.AIRunFailureCategoryInfrastructure), "decode catalog entity contract: "+err.Error())
-			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, fmt.Errorf("decode catalog entity contract: %w", err)
-		}
-		catalogResult, err := s.CatalogBatch.RunCatalogEvaluation(ctx, CatalogEvaluationInput{
-			AIRunID:                run.ID,
-			AttemptID:              "", // no separate attempt tracking in this path
-			BusinessID:             businessID,
-			ConversationID:         conversationID,
-			SourceMessageReference: sourceMessageRef,
-			CatalogScope:           "", // evaluate all active catalogs for the business
-			CustomerMessage:        command.Text,
-			ConversationContext:    derefCustomerSalesContext(builtContext),
-			EntityContract:         entityContract,
-		})
-		if err != nil {
-			catalogdump.Record(catalogdump.WithRun(ctx, run.ID), "catalog_evaluation_failed", err.Error())
-			log.Printf("[AutoReply] CATALOG_EVAL_FAILED run=%s err=%v", run.ID, err)
-			s.markFailedSafe(ctx, run, classifyAIErrorStage(err), classifyAIProviderError(err), "catalog evaluation: "+err.Error())
-			return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, fmt.Errorf("catalog evaluation failed: %w", err)
+		if builtContext != nil && len(builtContext.CatalogEvidence) > 0 && catalogManifestItemCount(builtContext.CatalogManifest) <= len(builtContext.CatalogEvidence) {
+			log.Printf("[AutoReply] CATALOG_EVAL_BYPASS run=%s reason=catalog_already_in_context items=%d", run.ID, len(builtContext.CatalogEvidence))
+			if proposal.Capability == ports.CustomerSalesCapabilityFullCatalog {
+				proposal.Capability = ports.CustomerSalesCapabilityRespondWithoutAction
+				if strings.TrimSpace(proposal.ResponseText) == "" {
+					proposal.ResponseText = "أهلاً بك! تفضل بالاطلاع على المنتجات المتوفرة لدينا."
+				}
+			}
 		} else {
-			log.Printf("[AutoReply] CATALOG_EVAL_OK run=%s capability=%s", run.ID, catalogResult.Decision.Capability)
-			proposal = catalogResult.Decision
-			catalogEvidence.Merge(catalogResult.Evidence)
+			log.Printf("[AutoReply] CATALOG_EVAL_TRIGGER run=%s capability=%s", run.ID, out.Decision.Capability)
+			// Per contract ② §9, run the full catalog evaluation pipeline.
+			entityContract := CatalogEntityContractPayload{}
+			if len(s.EntityContractPayload) == 0 {
+				err := errors.New("catalog entity contract payload is required for full catalog evaluation")
+				s.markFailedSafe(ctx, run, ports.AIRunFailureStageContextBuild, string(ports.AIRunFailureCategoryInfrastructure), err.Error())
+				if fallbackResult, fbErr := s.enqueueFallbackHandoff(ctx, command, run, err.Error()); fbErr == nil && fallbackResult.Enqueued {
+					return fallbackResult, nil
+				}
+				return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, err
+			}
+			if err := json.Unmarshal(s.EntityContractPayload, &entityContract); err != nil {
+				s.markFailedSafe(ctx, run, ports.AIRunFailureStageContextBuild, string(ports.AIRunFailureCategoryInfrastructure), "decode catalog entity contract: "+err.Error())
+				if fallbackResult, fbErr := s.enqueueFallbackHandoff(ctx, command, run, err.Error()); fbErr == nil && fallbackResult.Enqueued {
+					return fallbackResult, nil
+				}
+				return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, fmt.Errorf("decode catalog entity contract: %w", err)
+			}
+			catalogResult, err := s.CatalogBatch.RunCatalogEvaluation(ctx, CatalogEvaluationInput{
+				AIRunID:                run.ID,
+				AttemptID:              "", // no separate attempt tracking in this path
+				BusinessID:             businessID,
+				ConversationID:         conversationID,
+				SourceMessageReference: sourceMessageRef,
+				CatalogScope:           "", // evaluate all active catalogs for the business
+				CustomerMessage:        command.Text,
+				ConversationContext:    derefCustomerSalesContext(builtContext),
+				EntityContract:         entityContract,
+			})
+			if err != nil {
+				catalogdump.Record(catalogdump.WithRun(ctx, run.ID), "catalog_evaluation_failed", err.Error())
+				log.Printf("[AutoReply] CATALOG_EVAL_FAILED run=%s err=%v", run.ID, err)
+				s.markFailedSafe(ctx, run, classifyAIErrorStage(err), classifyAIProviderError(err), "catalog evaluation: "+err.Error())
+				return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, fmt.Errorf("catalog evaluation failed: %w", err)
+			} else {
+				log.Printf("[AutoReply] CATALOG_EVAL_OK run=%s capability=%s", run.ID, catalogResult.Decision.Capability)
+				proposal = catalogResult.Decision
+				catalogEvidence.Merge(catalogResult.Evidence)
+			}
 		}
 	}
 
@@ -1398,4 +1423,150 @@ func (s AutoReplyService) recordAIUsage(ctx context.Context, businessID string, 
 	log.Printf("[AutoReply] AI_USAGE_RECORDED business=%s subscription=%s tokens_in=%d tokens_cached=%d tokens_out=%d cost_yer=%d final_replies=%d pricing=%s status=%s",
 		businessID, subscriptionID, out.Usage.InputTokens, out.Usage.CachedTokens, out.Usage.OutputTokens, providerCostYER, finalAIReplies, pricingVersion, recordStatus)
 	return nil
+}
+
+func (s AutoReplyService) enqueueFallbackHandoff(ctx context.Context, command commands.AutoReplyCommand, run ports.AIRunRecord, failureReason string) (commands.AutoReplyResult, error) {
+	businessID := string(command.Meta.Actor.BusinessID)
+	conversationID := string(command.ConversationID)
+	sourceMessageRef := command.SourceMessageReference
+	policyVersion := s.policyVersionOr()
+	now := s.now()
+
+	log.Printf("[AutoReply] FAIL_SAFE_HANDOFF_TRIGGER business=%s conversation=%s run=%s reason=%s",
+		businessID, conversationID, run.ID, failureReason)
+
+	if s.Transactions == nil || s.ReferenceRepository == nil || s.OutboundRepository == nil || s.Outbox == nil {
+		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, fmt.Errorf("fail-safe handoff dependencies unavailable: %s", failureReason)
+	}
+
+	fallbackText := "عذراً منك، نواجه ضغطاً في الرد حالياً. تم تحويل محادثتك إلى أحد موظفينا وسيقوم بالرد عليك في أقرب وقت."
+	result := commands.AutoReplyResult{Action: "human_request", Capability: string(ports.CustomerSalesCapabilityHandoff)}
+
+	txErr := s.Transactions.Within(ctx, func(txCtx context.Context) error {
+		reference, refErr := s.ReferenceRepository.GetCurrentByConversation(txCtx, businessID, conversationID, "provider")
+		if refErr != nil {
+			return mapAIRepositoryError(refErr)
+		}
+		if reference.ConnectionID == nil || strings.TrimSpace(*reference.ConnectionID) == "" || strings.TrimSpace(reference.ResourceID) == "" {
+			return appErrors.New(appErrors.CodeInvalidState, "conversation provider reference is incomplete")
+		}
+
+		if s.Conversations != nil {
+			st := "waiting_human"
+			own := "human"
+			if _, convErr := s.Conversations.TransitionLifecycle(txCtx, ports.ConversationLifecycleTransition{
+				BusinessID:     businessID,
+				ConversationID: conversationID,
+				State:          &st,
+				Ownership:      &own,
+				LastActivityAt: &now,
+			}); convErr != nil {
+				return mapAIRepositoryError(convErr)
+			}
+		}
+
+		decisionID := s.id()
+		decisionDraft := ports.AIDecisionDraft{
+			ID:                     decisionID,
+			BusinessID:             businessID,
+			ConversationID:         &conversationID,
+			SourceMessageReference: &sourceMessageRef,
+			RequestedAction:        "human_request",
+			RequestedCapability:    stringPtr(string(ports.CustomerSalesCapabilityHandoff)),
+			EffectiveCapability:    stringPtr(string(ports.CustomerSalesCapabilityHandoff)),
+			ConfidenceBand:         "unknown",
+			RequiresHuman:          true,
+			MissingInformation:     encodeReasonCodes([]string{failureReason}),
+			ReasonCodes:            encodeReasonCodes([]string{"fail_safe_handoff"}),
+			PolicyVersion:          policyVersion,
+			SchemaVersion:          1,
+			Lifecycle:              "proposed",
+			PolicyDecision:         stringPtr("allowed"),
+			EffectiveAction:        stringPtr("human_request"),
+			CreatedAt:              now,
+			UpdatedAt:              now,
+		}
+		if run.ID != "" {
+			decisionDraft.AIRunID = &run.ID
+		}
+		if s.DecisionRepository != nil {
+			decision, createErr := s.DecisionRepository.CreateProposed(txCtx, decisionDraft)
+			if createErr != nil {
+				return mapAIRepositoryError(createErr)
+			}
+			result.Decision = aiDecisionView(decision)
+		}
+
+		dedupeKey := "auto-reply-fallback:" + sourceMessageRef
+		outboundID := s.id()
+		contentReference := EncodeInlineTextContentReference(fallbackText)
+
+		outbound, outboundErr := s.OutboundRepository.CreatePending(txCtx, ports.OutboundMessageDraft{
+			ID:                      outboundID,
+			BusinessID:              businessID,
+			ConversationID:          conversationID,
+			ConversationReferenceID: reference.ID,
+			ConnectionID:            *reference.ConnectionID,
+			ProviderRef:             command.ProviderRef,
+			Channel:                 command.Channel,
+			Origin:                  "ai",
+			Transport:               "provider",
+			ContentReference:        contentReference,
+			ProviderIdempotencyKey:  dedupeKey,
+			CorrelationID:           uuidStringPointer(command.Meta.CorrelationID),
+			CausationID:             uuidStringPointer(decisionID),
+		})
+		if outboundErr != nil {
+			return mapAIRepositoryError(outboundErr)
+		}
+
+		if s.MessageRepository != nil {
+			msgDraft := ports.CommunicationMessageDraft{
+				ID:                      s.id(),
+				BusinessID:              businessID,
+				ConversationReferenceID: reference.ID,
+				OutboundMessageID:       &outbound.ID,
+				Direction:               "outbound",
+				Origin:                  "ai",
+				Transport:               "provider",
+				ContentType:             "text",
+				TextContent:             &fallbackText,
+				ContentReference:        contentReference,
+				Visibility:              "public",
+				OccurredAt:              now,
+				CreatedAt:               now,
+			}
+			if _, msgErr := s.MessageRepository.Record(txCtx, msgDraft); msgErr != nil {
+				return mapAIRepositoryError(msgErr)
+			}
+		}
+
+		outboxEntry, outboxErr := s.Outbox.Enqueue(txCtx, ports.OutboxEntryDraft{
+			ID:                s.id(),
+			BusinessID:        businessID,
+			OutboundMessageID: outbound.ID,
+			CommandType:       OutboundSendCommandType,
+			DedupeKey:         dedupeKey,
+			AvailableAt:       now,
+			CreatedAt:         now,
+			UpdatedAt:         now,
+		})
+		if outboxErr != nil {
+			return mapAIRepositoryError(outboxErr)
+		}
+
+		result.OutboundMessageID = commands.MessageID(outbound.ID)
+		result.OutboxEntryID = commands.ID(outboxEntry.ID)
+		result.Enqueued = true
+		return nil
+	})
+
+	if txErr != nil {
+		log.Printf("[AutoReply] FAIL_SAFE_HANDOFF_TX_ERROR business=%s conversation=%s err=%v", businessID, conversationID, txErr)
+		return commands.AutoReplyResult{Action: "no_action", Enqueued: false}, txErr
+	}
+
+	log.Printf("[AutoReply] FAIL_SAFE_HANDOFF_ENQUEUED business=%s conversation=%s outbound=%s outbox=%s",
+		businessID, conversationID, result.OutboundMessageID, result.OutboxEntryID)
+	return result, nil
 }

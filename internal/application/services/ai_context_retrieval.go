@@ -408,7 +408,7 @@ func (b AutoReplyContextBuilder) finalizeContext(ctx context.Context, base ports
 		}
 	}
 	if len(base.CatalogEvidence) > 0 || len(base.OfferEvidence) > 0 || len(base.VariantEvidence) > 0 {
-		base.KnowledgeState = CustomerSalesContextPartial
+		base.KnowledgeState = CustomerSalesContextGrounded
 	}
 	if len(base.KnowledgeEvidence) > 0 || len(base.BusinessPolicyEvidence) > 0 {
 		base.KnowledgeState = CustomerSalesContextGrounded

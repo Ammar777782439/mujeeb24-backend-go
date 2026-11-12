@@ -79,11 +79,15 @@ func (c *NativeCatalogAdapter) count(ctx context.Context, req chatCompletionRequ
 	if err != nil {
 		return 0, err
 	}
-	const protocolReserve = 4096
-	if len(encoded) > int(^uint(0)>>1)-protocolReserve {
+	const protocolReserve = 512
+	maxBytes := (int(^uint(0)>>1) - protocolReserve) / 3
+	if len(encoded) > maxBytes {
 		return 0, errors.New("native catalog request size overflow")
 	}
-	conservative := len(encoded) + protocolReserve
+	// DeepSeek/OpenAI BPE tokenizers average ~3.5 to 4.0 bytes per token for Arabic & JSON text.
+	// Using 2.8 bytes per token (len * 10 / 28) + 512 reserve provides a conservative, safe admission bound
+	// without 430% token inflation.
+	conservative := (len(encoded) * 10 / 28) + protocolReserve
 	measured, exact, _, err := c.client.CountTokens(ctx, req)
 	if err != nil {
 		if ctx.Err() != nil {

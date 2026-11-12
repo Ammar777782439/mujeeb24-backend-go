@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -34,8 +35,13 @@ func TestNativeCatalogStrictCapacityEstimationIsConservative(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if count < len(strings.Repeat("large catalog evidence", 100))+4096 {
-		t.Fatalf("unsafe context estimate: %d", count)
+	encoded, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedMin := (len(encoded) * 10 / 28) + 512
+	if count < expectedMin {
+		t.Fatalf("unsafe context estimate: %d (expected at least %d)", count, expectedMin)
 	}
 	if err := adapter.ensureModelCapacity(65536); err == nil {
 		t.Fatal("oversized canonical request allowed")

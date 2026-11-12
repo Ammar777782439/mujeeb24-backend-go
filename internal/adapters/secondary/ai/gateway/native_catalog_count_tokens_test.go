@@ -34,9 +34,10 @@ func TestNativeCatalogUsesConservativeBudgetWithoutProviderTokenizer(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
+	expected := (len(encoded) * 10 / 28) + 512
 	actual, err := adapter.count(context.Background(), request)
-	if err != nil || actual != len(encoded)+4096 {
-		t.Fatalf("unsafe admission count %d: %v", actual, err)
+	if err != nil || actual != expected {
+		t.Fatalf("unsafe admission count %d (expected %d): %v", actual, expected, err)
 	}
 	measured, exact, standby, err := client.CountTokens(context.Background(), request)
 	if err != nil || measured != 0 || exact || standby {

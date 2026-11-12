@@ -236,9 +236,39 @@ func (b AutoReplyContextBuilder) Build(ctx context.Context, input ports.Customer
 			return b.finalizeContext(ctx, context, input, now)
 		}
 	}
-	// Without a validated conversation focus, only the bounded catalog manifest
-	// is attached here. Item-level catalog data is handled by the complete
-	// catalog evaluation path when the model requests additional data.
+	// Direct In-Context Catalog Injection:
+	// For discovery or questions without an entity focus, load the merchant's active catalog
+	// projection directly into context (up to 100 items) so the model can evaluate products on Turn 1.
+	if len(context.CatalogEvidence) == 0 && b.CatalogAI != nil {
+		const directCatalogLimit = 100
+		page, err := b.CatalogAI.ListProjectionPage(ctx, ports.CatalogAIProjectionRequest{
+			BusinessID: input.BusinessID,
+			Limit:      directCatalogLimit,
+		})
+		if err == nil && len(page.Items) > 0 {
+			for _, bundle := range page.Items {
+				context.CatalogEvidence = append(context.CatalogEvidence, catalogItemEvidence(bundle.Item, now))
+				for _, v := range bundle.Variants {
+					context.VariantEvidence = append(context.VariantEvidence, ports.CustomerSalesVariantEvidence{
+						Reference:            v.ID,
+						CatalogItemReference: v.CatalogItemID,
+						Name:                 v.Name,
+						Status:               v.Status,
+						Attributes:           safeJSONObject(v.Attributes),
+						EvidenceState:        CustomerSalesContextFresh,
+						RetrievedAt:          now,
+						SchemaVersion:        AIEvidenceSchemaVersion,
+					})
+				}
+				for _, o := range bundle.Offers {
+					context.OfferEvidence = append(context.OfferEvidence, toOfferEvidence(o, now))
+				}
+				if bundle.AttributeSchema != nil {
+					context.CatalogSchemaEvidence = append(context.CatalogSchemaEvidence, customerSalesSchemaEvidence(*bundle.AttributeSchema))
+				}
+			}
+		}
+	}
 
 	return b.finalizeContext(ctx, context, input, now)
 }

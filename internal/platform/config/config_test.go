@@ -128,3 +128,13 @@ func TestLoadFromEnvRejectsIncompleteSocialAPIProvisioningConfiguration(t *testi
 		t.Fatal("ValidateChannelProvisioning accepted incomplete SocialAPI provisioning configuration")
 	}
 }
+
+func TestLoadFromEnvRejectsExcessiveOutputTokens(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost/db")
+	t.Setenv("NATIVE_AI_ENABLED", "true")
+	t.Setenv("DEEPSEEK_API_KEY", "test-deepseek-key")
+	t.Setenv("NATIVE_AI_MAX_OUTPUT_TOKENS", "16000")
+	if _, err := LoadFromEnv(); err == nil {
+		t.Fatal("LoadFromEnv accepted output tokens > 8192")
+	}
+}
