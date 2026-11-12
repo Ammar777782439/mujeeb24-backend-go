@@ -1,7 +1,7 @@
 # Conversation Media & Attachments — Contract and Implementation Status
 
 **Branch:** `feat/conversation-media-attachments`  
-**Status:** Domain and tenant-safe persistence, inbound placeholder materialization, the first WhatsApp image-ingestion worker, message attachment projections/read URLs, and a private conversation-image upload endpoint are implemented. Attaching merchant-uploaded media to outbound messages and provider delivery are not implemented.
+**Status:** Tenant-safe persistence, inbound WhatsApp image ingestion, merchant image upload, scoped private reads, manual outbound image attachment persistence, and SocialAPI outbox resolution are implemented. Live provider/storage verification and frontend send-image UX remain separate gates.
 
 ## 1. Current repository facts
 
@@ -73,7 +73,7 @@ SocialAPI webhook
 
 Do not block webhook acknowledgement on a media download. If ingestion fails, preserve the text message and mark the attachment unavailable/failed.
 
-## 6. Required outbound flow — upload exists; message dispatch not wired
+## 6. Outbound flow — implemented for one manual image
 
 ```text
 Merchant upload request
@@ -81,11 +81,12 @@ Merchant upload request
   -> private Object Storage
   -> server-side verification
   -> MediaAsset ready
-  -> outbound command references MediaAsset IDs
-  -> tenant + readiness + capability validation
-  -> message_attachments + outbound message + outbox in one local transaction
-  -> outbox worker resolves provider payload outside SQL transaction
-  -> SocialAPI send + delivery reconciliation
+  -> manual outbound command references attachment_media_ids (maximum one)
+  -> tenant + purpose + readiness + feature flag + verified capability validation
+  -> OutboundMessage + CommunicationMessage + MessageAttachment + Outbox in one local transaction
+  -> outbox worker resolves the relation and recorded storage provider outside SQL transaction
+  -> short-lived HTTPS URL is created at dispatch
+  -> SocialAPI image send
 ```
 
 Never persist public or presigned URLs as canonical references. Generate a short-lived read URL only at the authorized delivery boundary. An unknown provider outcome follows the existing dead-letter/reconciliation rule; never blind-retry.
@@ -94,19 +95,19 @@ Never persist public or presigned URLs as canonical references. Generate a short
 
 - Generic multipart/upload-intent/finalize API; the current direct upload endpoint supports base64 JPEG/PNG only.
 - Realtime attachment-state event after a pending inbound attachment becomes ready or failed.
-- Outbound message commands, MessageAttachment links for uploaded assets, Outbox attachment resolution and provider-specific send capability checks.
+- Live SocialAPI send confirmation and production object-storage read/write verification.
 - Video/audio/document ingestion, scanning, thumbnails, retention and media quota accounting.
 - Business logo/cover relation and brand-asset management.
 - Live SocialAPI or Object Storage media tests.
 
 ## 8. Next implementation gates
 
-1. Add the outbound message attachment command and link ready tenant-owned MediaAssets to the public communication message within the same transaction as Outbox enqueue.
-2. Resolve those message attachments in the Outbox worker and presign from the storage provider recorded on each asset; enforce the verified SocialAPI channel/media capability contract.
-3. Emit realtime attachment-state notifications when inbound ingestion completes or fails.
-4. Add multipart/upload-intent/finalize and quota/retention policy only if product requirements justify them.
-5. Verify per-channel constraints and real SocialAPI/Object Storage delivery before enabling outbound media.
-6. Complete brand-media relation, orphan cleanup, storage quotas and backup/restore proof.
+1. Complete controlled live SocialAPI image-send and private object-storage read/write verification before enabling this capability for merchants.
+2. Emit tenant-scoped realtime attachment-state notifications when inbound ingestion completes or fails.
+3. Add Facebook/Instagram inbound media only after proving provider URL retrieval and SSRF/redirect protections.
+4. Add additional attachment positions and video/audio/document/file only after provider evidence, format-specific verification and tests.
+5. Define orphan cleanup, storage quotas, retention and backup/restore proof.
+6. Add multipart/upload-intent/finalize only if measured product requirements justify it.
 
 ## 9. Provider contract references
 
