@@ -1,7 +1,7 @@
 # Conversation Media & Attachments — Persistence Slice 2
 
 **Branch:** `feat/conversation-media-attachments`  
-**Scope:** Tenant-safe media metadata and relations, inbound webhook materialization, the first bounded WhatsApp image-ingestion worker, message projection/read URL, and a separate private conversation-image upload endpoint. Outbound attachment transport remains disabled.
+**Scope:** Tenant-safe media metadata and relations, inbound WhatsApp image ingestion, private merchant image upload and reads, plus one-image manual outbound persistence and SocialAPI outbox resolution.
 
 ## What changed
 
@@ -11,7 +11,7 @@
 - `message_attachments` is a dedicated relation to `communication_messages` and `media_assets`, both guarded by composite `(business_id, id)` foreign keys.
 - `ConversationMediaIngestionRepository` creates tenant-scoped pending assets for image/video/audio/document/file and promotes verified image metadata only.
 - `MessageAttachmentRepository` creates/lists message attachment relations and marks them ready only after the backing MediaAsset is ready.
-- `ConversationImageUploadService` exposes `POST /api/v1/businesses/{business_id}/conversation-media/uploads` for bounded base64 JPEG/PNG uploads (10 MiB decoded maximum). It verifies actual bytes/dimensions, creates `MediaAsset(purpose=conversation_attachment)`, writes to the provider recorded on that asset outside SQL, and marks it ready. This asset is not yet linked to an outbound message.
+- `ConversationImageUploadService` exposes `POST /api/v1/businesses/{business_id}/conversation-media/uploads` for bounded base64 JPEG/PNG uploads (10 MiB decoded maximum). It verifies actual bytes/dimensions, creates `MediaAsset(purpose=conversation_attachment)`, writes to the provider recorded on that asset outside SQL, and marks it ready. `ManualOutboundMessageService` can then link one ready merchant-owned image to a public message.
 - The message list projects attachment IDs and status. The read URL endpoint is tenant/conversation/message scoped and issues a five-minute URL only for a public message whose attachment and asset are both ready.
 - The S3 adapter permits the isolated `conversation/` object namespace alongside `catalog/`; the Catalog feature flag remains independent from `CONVERSATION_MEDIA_ENABLED`. When Conversation Media is enabled, both API and worker startup validate the selected private-storage provider and require `SOCIALAPI_API_KEY`; when disabled, inbound attachments do not create pending database rows.
 - SocialAPI `content.media[]` is normalized for inbound events. The temporary URL is validated and discarded; only an opaque SocialAPI interaction-id/attachment-index reference crosses into the domain.
@@ -27,6 +27,7 @@
 - A lease-based claim/retry queue is present. It currently claims only the first WhatsApp image attachment per message; Facebook/Instagram URL retrieval and video/audio/document/file verification are deliberately left queued for later channel-specific implementations.
 - The worker downloads WhatsApp media through SocialAPI's authenticated `GET /v1/inbox/media/{id}` endpoint, refuses redirects, enforces a 10 MiB body bound, verifies JPEG/PNG bytes and image dimensions, and writes to the provider recorded on the MediaAsset. It never fetches a webhook-supplied URL.
 - The merchant upload endpoint independently accepts JPEG/PNG only, verifies bytes and dimensions before storage, and never reuses Catalog-purpose assets or Catalog gallery relations.
+- Manual outbound image delivery is gated by `CONVERSATION_MEDIA_ENABLED` and a checked, enabled `media_outbound` capability with evidence. Outbound message, communication message, attachment relation and Outbox row are committed atomically. The worker re-resolves the ready attachment and presigns from its pinned storage provider only at dispatch.
 - Provider 504/503, transport failures, and object-storage write failures use bounded retry scheduling; permanent provider responses, exhausted retry budgets, unsupported media sources, and invalid image bytes are terminal. Terminal failure now changes the attachment and its pending MediaAsset in one SQL statement and clears the opaque provider reference.
 
 ## Atomicity and operations
@@ -46,7 +47,7 @@ The PostgreSQL integration suite now checks:
 - terminal attachment failure atomically rejects its pending MediaAsset,
 - rejection of Catalog-purpose assets from Conversation.
 
-Unit and integration tests cover inbound image verification, retry/state transitions, the PostgreSQL lease queue, and merchant image upload validation/cleanup behavior. CI success does not prove live SocialAPI retrieval or real R2/Backblaze object writes; no live provider or storage operation has been performed as part of this slice. The upload endpoint is implemented, but outbound message attachment commands and provider delivery remain out of scope.
+Unit and integration tests cover inbound image verification, retry/state transitions, the PostgreSQL lease queue, merchant image upload validation/cleanup, outbound capability checks, dispatch resolution and PostgreSQL atomicity of the outbound message/attachment/Outbox transaction. CI success does not prove live SocialAPI retrieval or real R2/Backblaze object writes; no live provider or storage operation has been performed as part of this slice. Outbound command, atomic persistence and SocialAPI dispatch resolution are implemented; live provider delivery remains unverified.
 
 
 ## واجهة قراءة مرفقات المحادثة
