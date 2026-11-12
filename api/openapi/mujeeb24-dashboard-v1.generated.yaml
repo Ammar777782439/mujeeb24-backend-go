@@ -4744,10 +4744,7 @@ components:
           type: array
         text:
           maxLength: 10000
-          minLength: 1
           type: string
-      required:
-        - text
       type: object
     SingleAIConfigurationViewBody:
       additionalProperties: false

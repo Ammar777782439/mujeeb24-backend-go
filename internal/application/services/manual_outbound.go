@@ -37,8 +37,8 @@ func (s ManualOutboundMessageService) Handle(ctx context.Context, command comman
 	}
 	text := strings.TrimSpace(command.Text)
 	idempotencyKey := strings.TrimSpace(command.Meta.IdempotencyKey)
-	if text == "" || idempotencyKey == "" {
-		return commands.MessageResult{}, appErrors.New(appErrors.CodeValidation, "message text and Idempotency-Key are required")
+	if idempotencyKey == "" {
+		return commands.MessageResult{}, appErrors.New(appErrors.CodeValidation, "Idempotency-Key is required")
 	}
 	if len(command.AttachmentMediaIDs) > 1 {
 		return commands.MessageResult{}, appErrors.New(appErrors.CodeValidation, "at most one image attachment is currently supported")
@@ -56,6 +56,9 @@ func (s ManualOutboundMessageService) Handle(ctx context.Context, command comman
 		}
 		seen[normalized] = struct{}{}
 		mediaIDs = append(mediaIDs, normalized)
+	}
+	if text == "" && len(mediaIDs) == 0 {
+		return commands.MessageResult{}, appErrors.New(appErrors.CodeValidation, "message text or at least one attachment is required")
 	}
 	if len(mediaIDs) > 0 && !s.MediaAttachmentsEnabled {
 		return commands.MessageResult{}, appErrors.New(appErrors.CodeInvalidState, "outbound conversation media is disabled")
@@ -134,7 +137,15 @@ func (s ManualOutboundMessageService) Handle(ctx context.Context, command comman
 		contentReference := EncodeInlineTextContentReference(text)
 		contentType := "text"
 		if len(validatedAssets) > 0 {
-			contentType = "mixed"
+			if text == "" {
+				contentType = "image"
+			} else {
+				contentType = "mixed"
+			}
+		}
+		var textContent *string
+		if text != "" {
+			textContent = &text
 		}
 		outbound, outboundErr := s.Outbound.CreatePending(txCtx, ports.OutboundMessageDraft{
 			ID: newID(), BusinessID: businessID, ConversationID: conversationID,
@@ -152,7 +163,7 @@ func (s ManualOutboundMessageService) Handle(ctx context.Context, command comman
 			AuthorPrincipalID: &author, ID: newID(), BusinessID: businessID,
 			ConversationReferenceID: reference.ID, OutboundMessageID: &outbound.ID,
 			Direction: "outbound", Origin: "human", Transport: "provider",
-			ContentType: contentType, TextContent: &text, ContentReference: contentReference,
+			ContentType: contentType, TextContent: textContent, ContentReference: contentReference,
 			Visibility: "public", OccurredAt: now, CreatedAt: now,
 		}
 		recordedMessage, msgErr := s.Messages.Record(txCtx, msgDraft)

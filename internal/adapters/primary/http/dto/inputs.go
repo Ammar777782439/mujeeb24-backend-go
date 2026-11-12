@@ -161,7 +161,7 @@ type BusinessBodyInput struct {
 
 type SendMessageRequest struct {
 	AttachmentMediaIDs []UUID `json:"attachment_media_ids,omitempty" maxItems:"1"`
-	Text               string `json:"text" minLength:"1" maxLength:"10000"`
+	Text               string `json:"text,omitempty" maxLength:"10000"`
 }
 type AssignConversationRequest struct {
 	AssigneePrincipalID UUID `json:"assignee_principal_id" format:"uuid"`

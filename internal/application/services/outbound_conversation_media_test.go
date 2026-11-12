@@ -218,6 +218,21 @@ func TestManualOutboundLinksTenantOwnedReadyMediaInsideOutboxTransaction(t *test
 		t.Fatalf("conversation image was not attached to the public message: msg=%#v attachments=%#v result=%#v",
 			messages.recorded, attachments.created, result.Message)
 	}
+	// Image-only replies are valid and must be represented as image, not mixed/text.
+	result, err = service.Handle(context.Background(), commands.CreateOutboundMessageCommand{
+		Meta: commands.CommandMeta{
+			Actor: commands.ActorContext{BusinessID: "biz-1", PrincipalID: "agent-1", Role: "owner", Permissions: []string{"*"}},
+			IdempotencyKey: "reply-image-only-2",
+		},
+		ConversationID: "conv-1",
+		AttachmentMediaIDs: []string{mediaID},
+	})
+	if err != nil {
+		t.Fatalf("Handle image-only message: %v", err)
+	}
+	if messages.recorded.ContentType != "image" || messages.recorded.TextContent != nil || len(result.Message.Attachments) != 1 {
+		t.Fatalf("image-only message was not represented correctly: message=%#v result=%#v", messages.recorded, result.Message)
+	}
 }
 
 func TestManualOutboundRejectsImageWhenMediaOutboundCapabilityIsNotVerified(t *testing.T) {

@@ -583,7 +583,10 @@ func TestClientSendsMessageAndMapsDeliveryStatus(t *testing.T) {
 			body, _ := io.ReadAll(request.Body)
 			sawAuth = request.Header.Get("Authorization") == "Bearer sapi_key_test"
 			sawProviderIdempotencyHeader = request.Header.Get("Idempotency-Key") != ""
-			if !strings.Contains(string(body), `"account_id":"acc_1"`) || !strings.Contains(string(body), `"text":"hello"`) {
+			if !strings.Contains(string(body), `"account_id":"acc_1"`) ||
+				!strings.Contains(string(body), `"text":"hello"`) ||
+				!strings.Contains(string(body), `"attachment_url":"https://cdn.example.com/image.jpg"`) ||
+				strings.Contains(string(body), `"attachments"`) {
 				t.Errorf("unexpected send body: %s", body)
 			}
 			writer.Header().Set("X-Request-ID", "request_1")
@@ -600,7 +603,11 @@ func TestClientSendsMessageAndMapsDeliveryStatus(t *testing.T) {
 	}))
 	defer server.Close()
 	client := NewClient(Config{BaseURL: server.URL, APIKey: "sapi_key_test", HTTPClient: server.Client()})
-	result, err := client.SendMessage(httptest.NewRequest(http.MethodPost, "/", nil).Context(), ports.SendMessageCommand{ProviderAccountID: "acc_1", ProviderConversationID: "conv_1", Text: "hello", IdempotencyKey: "outbound_1"})
+	result, err := client.SendMessage(httptest.NewRequest(http.MethodPost, "/", nil).Context(), ports.SendMessageCommand{
+		ProviderAccountID: "acc_1", ProviderConversationID: "conv_1",
+		Text: "hello", IdempotencyKey: "outbound_1",
+		Attachments: []ports.OutboundAttachment{{Type: "image", URL: "https://cdn.example.com/image.jpg"}},
+	})
 	if err != nil {
 		t.Fatalf("SendMessage: %v", err)
 	}
@@ -610,6 +617,36 @@ func TestClientSendsMessageAndMapsDeliveryStatus(t *testing.T) {
 	status, err := client.GetDeliveryStatus(httptest.NewRequest(http.MethodGet, "/", nil).Context(), ports.DeliveryReference{ProviderConversationID: "conv_1", ProviderMessageID: "m_1"})
 	if err != nil || status != channel.DeliveryDelivered {
 		t.Fatalf("GetDeliveryStatus status=%v err=%v", status, err)
+	}
+}
+
+func TestClientSendsImageOnlyMessage(t *testing.T) {
+	var sentBody string
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodPost || request.URL.Path != "/v1/inbox/conversations/conv_1/messages" {
+			http.NotFound(writer, request)
+			return
+		}
+		body, _ := io.ReadAll(request.Body)
+		sentBody = string(body)
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"message_id":"m_image","message_ids":["m_image"],"success":true}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "sapi_key_test", HTTPClient: server.Client()})
+	_, err := client.SendMessage(httptest.NewRequest(http.MethodPost, "/", nil).Context(), ports.SendMessageCommand{
+		ProviderAccountID: "acc_1", ProviderConversationID: "conv_1",
+		IdempotencyKey: "image-only-1",
+		Attachments: []ports.OutboundAttachment{{Type: "image", URL: "https://cdn.example.com/image.png"}},
+	})
+	if err != nil {
+		t.Fatalf("SendMessage image-only: %v", err)
+	}
+	if !strings.Contains(sentBody, `"account_id":"acc_1"`) ||
+		!strings.Contains(sentBody, `"attachment_url":"https://cdn.example.com/image.png"`) ||
+		strings.Contains(sentBody, `"text"`) {
+		t.Fatalf("unexpected image-only send body: %s", sentBody)
 	}
 }
 

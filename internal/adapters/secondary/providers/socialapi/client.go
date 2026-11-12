@@ -976,8 +976,9 @@ func platformChannel(platform string) (channel.Channel, error) {
 }
 
 func (c *Client) SendMessage(ctx context.Context, command ports.SendMessageCommand) (ports.ProviderSendResult, error) {
-	if command.ProviderAccountID == "" || command.ProviderConversationID == "" || command.Text == "" || command.IdempotencyKey == "" {
-		return ports.ProviderSendResult{}, fmt.Errorf("%w: account, conversation, text, and idempotency key are required", ErrInvalidRequest)
+	if command.ProviderAccountID == "" || command.ProviderConversationID == "" || command.IdempotencyKey == "" ||
+		(command.Text == "" && len(command.Attachments) == 0) {
+		return ports.ProviderSendResult{}, fmt.Errorf("%w: account, conversation, idempotency key, and text or attachment are required", ErrInvalidRequest)
 	}
 	type button struct {
 		Type    string `json:"type"`
@@ -985,14 +986,10 @@ func (c *Client) SendMessage(ctx context.Context, command ports.SendMessageComma
 		Payload string `json:"payload"`
 	}
 	request := struct {
-		Attachments []struct {
-			Type       string `json:"type"`
-			SourceType string `json:"source_type"`
-			Source     string `json:"source"`
-		} `json:"attachments,omitempty"`
-		AccountID string   `json:"account_id"`
-		Text      string   `json:"text"`
-		Buttons   []button `json:"buttons,omitempty"`
+		AccountID     string   `json:"account_id"`
+		AttachmentURL string   `json:"attachment_url,omitempty"`
+		Text          string   `json:"text,omitempty"`
+		Buttons       []button `json:"buttons,omitempty"`
 	}{AccountID: command.ProviderAccountID, Text: command.Text}
 	if len(command.Attachments) > 1 {
 		return ports.ProviderSendResult{}, fmt.Errorf("%w: too many attachments", ErrInvalidRequest)
@@ -1002,11 +999,7 @@ func (c *Client) SendMessage(ctx context.Context, command ports.SendMessageComma
 		if parseErr != nil || uri.Scheme != "https" || uri.Host == "" || attachment.Type != "image" {
 			return ports.ProviderSendResult{}, fmt.Errorf("%w: invalid media URL or type", ErrInvalidRequest)
 		}
-		request.Attachments = append(request.Attachments, struct {
-			Type       string `json:"type"`
-			SourceType string `json:"source_type"`
-			Source     string `json:"source"`
-		}{Type: "image", SourceType: "url", Source: attachment.URL})
+		request.AttachmentURL = attachment.URL
 	}
 	if len(command.Buttons) > 0 {
 		if command.Channel != "instagram" && command.Channel != "facebook" && command.Channel != "whatsapp" {
