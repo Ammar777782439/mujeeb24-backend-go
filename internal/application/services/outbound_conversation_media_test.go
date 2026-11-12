@@ -221,10 +221,10 @@ func TestManualOutboundLinksTenantOwnedReadyMediaInsideOutboxTransaction(t *test
 	// Image-only replies are valid and must be represented as image, not mixed/text.
 	result, err = service.Handle(context.Background(), commands.CreateOutboundMessageCommand{
 		Meta: commands.CommandMeta{
-			Actor: commands.ActorContext{BusinessID: "biz-1", PrincipalID: "agent-1", Role: "owner", Permissions: []string{"*"}},
+			Actor:          commands.ActorContext{BusinessID: "biz-1", PrincipalID: "agent-1", Role: "owner", Permissions: []string{"*"}},
 			IdempotencyKey: "reply-image-only-2",
 		},
-		ConversationID: "conv-1",
+		ConversationID:     "conv-1",
 		AttachmentMediaIDs: []string{mediaID},
 	})
 	if err != nil {

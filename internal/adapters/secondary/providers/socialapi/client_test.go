@@ -638,7 +638,7 @@ func TestClientSendsImageOnlyMessage(t *testing.T) {
 	_, err := client.SendMessage(httptest.NewRequest(http.MethodPost, "/", nil).Context(), ports.SendMessageCommand{
 		ProviderAccountID: "acc_1", ProviderConversationID: "conv_1",
 		IdempotencyKey: "image-only-1",
-		Attachments: []ports.OutboundAttachment{{Type: "image", URL: "https://cdn.example.com/image.png"}},
+		Attachments:    []ports.OutboundAttachment{{Type: "image", URL: "https://cdn.example.com/image.png"}},
 	})
 	if err != nil {
 		t.Fatalf("SendMessage image-only: %v", err)
