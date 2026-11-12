@@ -1,10 +1,10 @@
 # Mujeeb 24 — Conversation Media Handoff
 
-**Updated:** 2026-11-10  
+**Updated:** 2026-11-12  
 **Repository:** `Ammar777782439/mujeeb24-backend-go`  
 **Branch:** `feat/conversation-media-attachments`  
 **PR:** [#35](https://github.com/Ammar777782439/mujeeb24-backend-go/pull/35) — Open, Draft, not merged.  
-**Branch HEAD before this documentation update:** `b92013512b1d78dc5de8f6a8149b65c9da639b88`.
+**Current branch HEAD at review:** `c52f1b31758e6a43a360e3ad05a0d39206b78b0f`.
 **PR state:** Open / Draft / not merged.
 
 ## Current implementation
@@ -40,7 +40,7 @@ This is more than the initial persistence foundation. The branch currently imple
 - 000088 `conversation_media_ingestion_queue`: lease/retry fields and queue index.
 - Existing Catalog migrations 000083/000084 were not modified.
 - PostgreSQL 16 schema snapshot: migration_count 88, 81 tables, 1025 columns, 717 constraints, 29 standalone unique indexes.
-- Small documentation cleanup: comment in `internal/domain/ai/contracts/source_inventory.go` still says migrations 000001..000087; update it to 000001..000088 (migration 88 adds queue columns/index, no new table).
+- The source inventory comment already records migrations 000001..000088; no follow-up is required there.
 
 ## Feature flag
 
@@ -48,18 +48,18 @@ This is more than the initial persistence foundation. The branch currently imple
 
 ## CI status and verification boundary
 
-The last complete green CI set observed during this implementation was on commit `803e83311feafc75cb6247ef698f313adc7515aa`:
+The current branch HEAD c52f1b31758e6a43a360e3ad05a0d39206b78b0f has a complete green CI set:
 
 | Workflow | Run | Result |
 |---|---:|---|
-| Quality gate | 42854958398 | success |
-| Native AI Contracts | 42854958389 | success |
-| AI Contract Verification | 42854958481 | success |
-| Render image verification | 42854958407 | success |
+| Native AI Contracts | 43218143153 | success |
+| AI Contract Verification | 43218143404 | success |
+| Quality gate | 43218143275 | success |
+| Render image verification | 43218143161 | success |
 
-After that run, the branch gained the PostgreSQL outbound atomicity integration test, typed ActorContext fixes, and the explicit media feature gate. The branch is now at `b92013512b1d78dc5de8f6a8149b65c9da639b88`; no check-runs were returned for that HEAD at the time of this update. Earlier CI attempts on `b21b506` and `16fc99a` failed to compile the new integration test because its ActorContext fields used plain strings; those two fields have since been changed to `commands.BusinessID` and `commands.PrincipalID`.
+This confirms automated checks on the current backend HEAD, including the outbound PostgreSQL integration test, feature gate, formatting/build/vet/full Go tests/race detector/OpenAPI checks and production Docker image verification.
 
-The current HEAD therefore must not be described as CI-green yet. CI success on `803e833` does not include the new PostgreSQL integration test. No live SocialAPI, R2 or Backblaze end-to-end verification has been performed. Gemini Live Smoke remains manual/skipped.
+CI does not prove live SocialAPI delivery, real R2/Backblaze object writes/reads, or merchant UI behavior. Those remain manual integration gates. Gemini Live Smoke remains manual/skipped.
 
 ## Next implementation priorities
 
