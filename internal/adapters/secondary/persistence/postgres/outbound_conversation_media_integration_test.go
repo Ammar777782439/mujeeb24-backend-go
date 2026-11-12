@@ -86,6 +86,7 @@ func TestManualOutboundConversationImageIsAtomicInPostgres(t *testing.T) {
 		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM customers WHERE business_id = $1::uuid`, businessID)
 		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM channel_connection_capabilities WHERE connection_id = $1::uuid`, connectionID)
 		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM channel_connections WHERE business_id = $1::uuid`, businessID)
+		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM business_memberships WHERE business_id = $1::uuid AND principal_id = $2::uuid`, businessID, principalID)
 		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM principals WHERE id = $1::uuid`, principalID)
 		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM businesses WHERE id = $1::uuid`, businessID)
 	}()
@@ -95,6 +96,12 @@ func TestManualOutboundConversationImageIsAtomicInPostgres(t *testing.T) {
 		VALUES ($1::uuid, $2, 'Media Test Agent', 'integration-test-hash', 'active', $3, $3)
 	`, principalID, "outbound-media-"+principalID+"@example.test", now); err != nil {
 		t.Fatalf("insert principal: %v", err)
+	}
+	if _, err := adapter.Pool().Exec(ctx, `
+		INSERT INTO business_memberships (business_id, principal_id, role, permissions, status, created_at, updated_at)
+		VALUES ($1::uuid, $2::uuid, 'owner', '["*"]'::jsonb, 'active', $3, $3)
+	`, businessID, principalID, now); err != nil {
+		t.Fatalf("insert business membership: %v", err)
 	}
 	if _, err := adapter.Pool().Exec(ctx, `
 		INSERT INTO channel_connections
