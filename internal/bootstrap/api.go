@@ -65,6 +65,10 @@ func BuildAPI(ctx context.Context, cfg config.ProcessConfig) (*APIRuntime, error
 	if err != nil {
 		return nil, err
 	}
+	if os.Getenv("CONVERSATION_MEDIA_ENABLED") == "true" && strings.TrimSpace(cfg.SocialAPIAPIKey) == "" {
+		database.Close()
+		return nil, errors.New("CONVERSATION_MEDIA_ENABLED requires SOCIALAPI_API_KEY for authenticated media ingestion")
+	}
 	authentication, err := buildAuthenticationRuntime(cfg, database)
 	if err != nil {
 		database.Close()
@@ -93,6 +97,20 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 	realtimeBroker.StartListener(context.Background())
 
 	dependencies := BuildDependenciesWithRealtime(database, realtimeBroker)
+	conversationMediaObjects, conversationStorageProvider, conversationStorageErr := buildConversationMediaStorageFromEnv()
+	if conversationStorageErr != nil {
+		if os.Getenv("CONVERSATION_MEDIA_ENABLED") == "true" {
+			return nil, fmt.Errorf("conversation media storage configuration: %w", conversationStorageErr)
+		}
+		log.Printf("[ConversationMedia] stage=api_storage_disabled reason=configuration_unavailable")
+	}
+	if conversationMediaObjects != nil {
+		dependencies.ConversationImageUpload = services.ConversationImageUploadService{
+			Assets:          postgres.NewConversationMediaIngestionRepository(database),
+			Objects:         conversationMediaObjects,
+			StorageProvider: conversationStorageProvider,
+		}
+	}
 	dependencies.GetReadiness = readinessQueryService{Ping: database.Ping, FeatureChecks: external.ReadinessChecks()}
 	dependencies.BeginChannelConnection = services.ChannelProvisioningDisabledService{}
 	dependencies.IngestSocialAPIWebhook = services.WebhookReceiverDisabledService{Receiver: "SocialAPI"}
@@ -367,18 +385,20 @@ func newAPIWithExternalAndAuthentication(database *postgres.Adapter, address str
 		// (verified at compile time via var _ ports.ConversationEnricher).
 		// The Customers repo is the SAME one used by the customer CRUD
 		// endpoints (ports.CustomerRuntimeRepository) — no duplicate repo.
+		mediaStorageProvider := conversationStorageProvider
 		webhookService := services.SocialAPIWebhookService{
-			Receiver:         external.SocialWebhook,
-			RawPayloads:      postgres.NewRawPayloadStore(database),
-			History:          postgres.NewChannelHistoryRepository(database),
-			Connections:      postgres.NewChannelConnectionRepository(database),
-			Events:           eventStore,
-			Inbound:          postgres.NewProviderInboundStore(database),
-			DeliveryStatuses: postgres.NewDeliveryStatusStore(database),
-			Automation:       inboundAutomation,
-			AutoReply:        autoReply,
-			Realtime:         realtimeBroker,
-			Customers:        postgres.NewCustomerRepository(database),
+			MediaStorageProvider: mediaStorageProvider,
+			Receiver:             external.SocialWebhook,
+			RawPayloads:          postgres.NewRawPayloadStore(database),
+			History:              postgres.NewChannelHistoryRepository(database),
+			Connections:          postgres.NewChannelConnectionRepository(database),
+			Events:               eventStore,
+			Inbound:              postgres.NewProviderInboundStore(database),
+			DeliveryStatuses:     postgres.NewDeliveryStatusStore(database),
+			Automation:           inboundAutomation,
+			AutoReply:            autoReply,
+			Realtime:             realtimeBroker,
+			Customers:            postgres.NewCustomerRepository(database),
 		}
 		// Wire the enricher ONLY when the SocialAPI client is configured.
 		// The client implements both ports.ChannelProvider and

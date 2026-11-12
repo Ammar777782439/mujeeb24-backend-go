@@ -14,13 +14,17 @@ import (
 // ErrRequiredCatalogMediaUnavailable means a selected follow-up image became
 // unresolvable; the worker must dead-letter it rather than send a caption alone.
 var ErrRequiredCatalogMediaUnavailable = errors.New("required catalog media unavailable")
+var ErrRequiredConversationMediaUnavailable = errors.New("required conversation media unavailable")
 
 type MujeebOutboundDeliveryResolver struct {
-	OutboundRepository   ports.OutboundMessageRepository
-	ReferenceRepository  ports.ConversationReferenceRepository
-	ConnectionRepository ports.ChannelConnectionRepository
-	CatalogMedia         ports.CatalogMediaRepository
-	MediaObjects         ports.MediaObjectStorage
+	OutboundRepository       ports.OutboundMessageRepository
+	ReferenceRepository      ports.ConversationReferenceRepository
+	ConnectionRepository     ports.ChannelConnectionRepository
+	CatalogMedia             ports.CatalogMediaRepository
+	MediaObjects             ports.MediaObjectStorage
+	ConversationAttachments  ports.OutboundMessageAttachmentRepository
+	ConversationMediaObjects ports.MediaObjectProviderReader
+	Capabilities             ports.ChannelCapabilityRepository
 }
 
 func (r MujeebOutboundDeliveryResolver) Resolve(ctx context.Context, businessID, outboundMessageID string) (ports.OutboundDelivery, error) {
@@ -82,6 +86,41 @@ func (r MujeebOutboundDeliveryResolver) Resolve(ctx context.Context, businessID,
 			log.Printf("[CatalogMedia] stage=dispatch_text_fallback business=%s outbound=%s media_link=%s reason=photo_unavailable", businessID, outboundMessageID, message.MediaLinkID)
 		} else {
 			log.Printf("[CatalogMedia] stage=dispatch_image_ready business=%s outbound=%s media_link=%s channel=%s", businessID, outboundMessageID, message.MediaLinkID, delivery.Channel)
+		}
+	}
+	if r.ConversationAttachments != nil {
+		attachments, attachmentErr := r.ConversationAttachments.ListForOutboundMessage(ctx, businessID, outboundMessageID)
+		if attachmentErr != nil {
+			return ports.OutboundDelivery{}, mapAIRepositoryError(attachmentErr)
+		}
+		if len(attachments) > 1 {
+			return ports.OutboundDelivery{}, ErrRequiredConversationMediaUnavailable
+		}
+		if len(attachments) == 1 {
+			attachment := attachments[0]
+			if attachment.BusinessID != businessID || attachment.OutboundMessageID != outboundMessageID ||
+				attachment.Status != "ready" || attachment.AssetPurpose != "conversation_attachment" ||
+				attachment.AssetStatus != "ready" || attachment.AssetDeleted ||
+				attachment.Kind != "image" || (attachment.MimeType != "image/jpeg" && attachment.MimeType != "image/png") ||
+				strings.TrimSpace(attachment.StorageProvider) == "" || strings.TrimSpace(attachment.StorageKey) == "" ||
+				r.Capabilities == nil || r.ConversationMediaObjects == nil || len(delivery.Attachments) != 0 {
+				log.Printf("[ConversationMedia] stage=dispatch_rejected business=%s outbound=%s reason=attachment_or_capability_unavailable", businessID, outboundMessageID)
+				return ports.OutboundDelivery{}, ErrRequiredConversationMediaUnavailable
+			}
+			capabilities, capabilityErr := r.Capabilities.ListByConnection(ctx, businessID, connection.ID)
+			if capabilityErr != nil {
+				return ports.OutboundDelivery{}, mapAIRepositoryError(capabilityErr)
+			}
+			if !hasVerifiedChannelCapability(capabilities, "media_outbound") {
+				log.Printf("[ConversationMedia] stage=dispatch_rejected business=%s outbound=%s reason=media_outbound_not_verified", businessID, outboundMessageID)
+				return ports.OutboundDelivery{}, ErrRequiredConversationMediaUnavailable
+			}
+			mediaURL, presignErr := r.ConversationMediaObjects.PresignGetFromProvider(ctx, attachment.StorageProvider, attachment.StorageKey, 45*time.Minute)
+			if presignErr != nil || strings.TrimSpace(mediaURL) == "" {
+				log.Printf("[ConversationMedia] stage=dispatch_rejected business=%s outbound=%s reason=private_media_unavailable", businessID, outboundMessageID)
+				return ports.OutboundDelivery{}, ErrRequiredConversationMediaUnavailable
+			}
+			delivery.Attachments = append(delivery.Attachments, ports.OutboundAttachment{Type: "image", URL: mediaURL})
 		}
 	}
 	return delivery, nil

@@ -1,0 +1,637 @@
+package postgres
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+)
+
+type ConversationMediaIngestionRepository struct {
+	adapter *Adapter
+}
+
+func NewConversationMediaIngestionRepository(adapter *Adapter) *ConversationMediaIngestionRepository {
+	return &ConversationMediaIngestionRepository{adapter: adapter}
+}
+
+func (r *ConversationMediaIngestionRepository) executor(ctx context.Context) (SQLExecutor, error) {
+	if r == nil || r.adapter == nil {
+		return nil, ErrPoolClosed
+	}
+	return r.adapter.Executor(ctx)
+}
+
+func (r *ConversationMediaIngestionRepository) CreatePendingIngestion(ctx context.Context, draft ports.PendingConversationMediaAsset) (ports.MediaAsset, error) {
+	if strings.TrimSpace(draft.ID) == "" || strings.TrimSpace(draft.BusinessID) == "" ||
+		strings.TrimSpace(draft.StorageKey) == "" || strings.TrimSpace(draft.Kind) == "" {
+		return ports.MediaAsset{}, invalidRepositoryInput("conversation_media.create_pending", "business, asset id, storage key and kind are required")
+	}
+	// All verified provider kinds can be materialized as pending placeholders.
+	// Only the image verifier currently has a path to mark an asset ready.
+	switch draft.Kind {
+	case "image", "video", "audio", "document", "file":
+	default:
+		return ports.MediaAsset{}, invalidRepositoryInput("conversation_media.create_pending", "unsupported conversation media kind")
+	}
+	expectedStoragePrefix := "conversation/" + draft.BusinessID + "/" + draft.ID
+	if strings.HasPrefix(draft.StorageKey, "/") || strings.Contains(draft.StorageKey, "..") ||
+		(draft.StorageKey != expectedStoragePrefix && !strings.HasPrefix(draft.StorageKey, expectedStoragePrefix+".")) {
+		return ports.MediaAsset{}, invalidRepositoryInput("conversation_media.create_pending", "storage key must be generated under the tenant and asset namespace")
+	}
+	provider := strings.TrimSpace(draft.StorageProvider)
+	if provider == "" {
+		provider = "r2"
+	}
+	if provider != "r2" && provider != "backblaze" {
+		return ports.MediaAsset{}, invalidRepositoryInput("conversation_media.create_pending", "unsupported storage provider")
+	}
+
+	db, err := r.executor(ctx)
+	if err != nil {
+		return ports.MediaAsset{}, err
+	}
+	var asset ports.MediaAsset
+	err = db.QueryRow(ctx, `
+		INSERT INTO media_assets
+			(id, business_id, purpose, media_kind, storage_provider, storage_key, status, created_by)
+		VALUES ($1::uuid, $2::uuid, 'conversation_attachment', $3, $4, $5, 'pending_ingestion', $6)
+		RETURNING id::text, business_id::text, purpose, media_kind, storage_provider,
+		          storage_key, status, created_at, updated_at
+	`, draft.ID, draft.BusinessID, draft.Kind, provider, draft.StorageKey, draft.CreatedBy).Scan(
+		&asset.ID, &asset.BusinessID, &asset.Purpose, &asset.Kind, &asset.StorageProvider,
+		&asset.StorageKey, &asset.Status, &asset.CreatedAt, &asset.UpdatedAt,
+	)
+	if err != nil {
+		return ports.MediaAsset{}, classifyRepositoryWriteError("conversation_media.create_pending", err)
+	}
+	return asset, nil
+}
+
+func (r *ConversationMediaIngestionRepository) GetAsset(ctx context.Context, businessID, mediaAssetID string) (ports.MediaAsset, error) {
+	db, err := r.executor(ctx)
+	if err != nil {
+		return ports.MediaAsset{}, err
+	}
+	var asset ports.MediaAsset
+	err = db.QueryRow(ctx, `
+		SELECT id::text, business_id::text, purpose, media_kind, storage_provider,
+		       storage_key, COALESCE(mime_type,''), COALESCE(size_bytes,0), sha256,
+		       COALESCE(width,0), COALESCE(height,0), status, upload_expires_at,
+		       deleted_at, created_at, updated_at
+		FROM media_assets
+		WHERE business_id = $1::uuid AND id = $2::uuid AND purpose = 'conversation_attachment'
+	`, businessID, mediaAssetID).Scan(
+		&asset.ID, &asset.BusinessID, &asset.Purpose, &asset.Kind, &asset.StorageProvider,
+		&asset.StorageKey, &asset.MimeType, &asset.SizeBytes, &asset.SHA256,
+		&asset.Width, &asset.Height, &asset.Status, &asset.UploadExpiresAt,
+		&asset.DeletedAt, &asset.CreatedAt, &asset.UpdatedAt,
+	)
+	if err != nil {
+		return ports.MediaAsset{}, classifyRepositoryGetError("conversation_media.get", err)
+	}
+	return asset, nil
+}
+
+func (r *ConversationMediaIngestionRepository) MarkImageReady(ctx context.Context, businessID, mediaAssetID string, verified ports.VerifiedImage) (ports.MediaAsset, error) {
+	if verified.MimeType != "image/jpeg" && verified.MimeType != "image/png" && verified.MimeType != "image/webp" {
+		return ports.MediaAsset{}, invalidRepositoryInput("conversation_media.mark_ready", "unsupported verified image MIME type")
+	}
+	if verified.SizeBytes < 1 || verified.SizeBytes > 10*1024*1024 ||
+		len(verified.SHA256) != 32 || verified.Width < 1 || verified.Height < 1 ||
+		verified.Width > 12000 || verified.Height > 12000 ||
+		int64(verified.Width)*int64(verified.Height) > 16_000_000 {
+		return ports.MediaAsset{}, invalidRepositoryInput("conversation_media.mark_ready", "verified image metadata is outside accepted bounds")
+	}
+	db, err := r.executor(ctx)
+	if err != nil {
+		return ports.MediaAsset{}, err
+	}
+	var asset ports.MediaAsset
+	err = db.QueryRow(ctx, `
+		UPDATE media_assets
+		SET status = 'ready', mime_type = $3, size_bytes = $4, sha256 = $5,
+		    width = $6, height = $7, updated_at = now()
+		WHERE business_id = $1::uuid AND id = $2::uuid
+		  AND purpose = 'conversation_attachment'
+		  AND media_kind = 'image' AND status = 'pending_ingestion'
+		RETURNING id::text, business_id::text, purpose, media_kind, storage_provider,
+		          storage_key, mime_type, size_bytes, sha256, width, height,
+		          status, upload_expires_at, deleted_at, created_at, updated_at
+	`, businessID, mediaAssetID, verified.MimeType, verified.SizeBytes, verified.SHA256, verified.Width, verified.Height).Scan(
+		&asset.ID, &asset.BusinessID, &asset.Purpose, &asset.Kind, &asset.StorageProvider,
+		&asset.StorageKey, &asset.MimeType, &asset.SizeBytes, &asset.SHA256,
+		&asset.Width, &asset.Height, &asset.Status, &asset.UploadExpiresAt,
+		&asset.DeletedAt, &asset.CreatedAt, &asset.UpdatedAt,
+	)
+	if err != nil {
+		return ports.MediaAsset{}, classifyRepositoryWriteError("conversation_media.mark_ready", err)
+	}
+	return asset, nil
+}
+
+func (r *ConversationMediaIngestionRepository) MarkIngestionRejected(ctx context.Context, businessID, mediaAssetID string) (ports.MediaAsset, error) {
+	db, err := r.executor(ctx)
+	if err != nil {
+		return ports.MediaAsset{}, err
+	}
+	var asset ports.MediaAsset
+	err = db.QueryRow(ctx, `
+		UPDATE media_assets
+		SET status = 'rejected', updated_at = now()
+		WHERE business_id = $1::uuid AND id = $2::uuid
+		  AND purpose = 'conversation_attachment'
+		  AND status = 'pending_ingestion'
+		RETURNING id::text, business_id::text, purpose, media_kind, storage_provider,
+		          storage_key, status, created_at, updated_at
+	`, businessID, mediaAssetID).Scan(
+		&asset.ID, &asset.BusinessID, &asset.Purpose, &asset.Kind,
+		&asset.StorageProvider, &asset.StorageKey, &asset.Status, &asset.CreatedAt, &asset.UpdatedAt,
+	)
+	if err != nil {
+		return ports.MediaAsset{}, classifyRepositoryWriteError("conversation_media.reject", err)
+	}
+	return asset, nil
+}
+
+var _ ports.ConversationMediaIngestionRepository = (*ConversationMediaIngestionRepository)(nil)
+
+type MessageAttachmentRepository struct {
+	adapter *Adapter
+}
+
+func NewMessageAttachmentRepository(adapter *Adapter) *MessageAttachmentRepository {
+	return &MessageAttachmentRepository{adapter: adapter}
+}
+
+func (r *MessageAttachmentRepository) executor(ctx context.Context) (SQLExecutor, error) {
+	if r == nil || r.adapter == nil {
+		return nil, ErrPoolClosed
+	}
+	return r.adapter.Executor(ctx)
+}
+
+func (r *MessageAttachmentRepository) Create(ctx context.Context, draft ports.MessageAttachmentDraft) (ports.MessageAttachmentRecord, error) {
+	if strings.TrimSpace(draft.ID) == "" || strings.TrimSpace(draft.BusinessID) == "" ||
+		strings.TrimSpace(draft.CommunicationMessageID) == "" || strings.TrimSpace(draft.MediaAssetID) == "" ||
+		strings.TrimSpace(draft.Kind) == "" || draft.SortOrder < 0 || draft.CreatedAt.IsZero() ||
+		len([]rune(draft.Caption)) > 2000 {
+		return ports.MessageAttachmentRecord{}, invalidRepositoryInput("message_attachment.create", "required identifiers, kind, timestamp or valid order/caption are missing")
+	}
+	if draft.Kind != "image" && draft.Kind != "video" && draft.Kind != "audio" && draft.Kind != "document" && draft.Kind != "file" {
+		return ports.MessageAttachmentRecord{}, invalidRepositoryInput("message_attachment.create", "unsupported attachment kind")
+	}
+	if draft.SourceProviderMediaRef != nil {
+		ref := strings.TrimSpace(*draft.SourceProviderMediaRef)
+		if ref == "" || len(ref) > 2048 || strings.HasPrefix(strings.ToLower(ref), "http://") || strings.HasPrefix(strings.ToLower(ref), "https://") {
+			return ports.MessageAttachmentRecord{}, invalidRepositoryInput("message_attachment.create", "provider media reference must be a non-URL opaque reference")
+		}
+		draft.SourceProviderMediaRef = &ref
+	}
+	db, err := r.executor(ctx)
+	if err != nil {
+		return ports.MessageAttachmentRecord{}, err
+	}
+	row := db.QueryRow(ctx, `
+		WITH created AS (
+			INSERT INTO message_attachments
+				(id, business_id, communication_message_id, media_asset_id, kind,
+				 caption, sort_order, status, source_provider_media_reference, created_at, updated_at)
+			SELECT $1::uuid, $2::uuid, $3::uuid, a.id, $5, $6, $7,
+			       CASE WHEN a.status = 'ready' THEN 'ready' ELSE 'pending_ingestion' END,
+			       CASE WHEN a.status = 'ready' THEN NULL ELSE $8 END, $9, $9
+			FROM media_assets a
+			WHERE a.business_id = $2::uuid AND a.id = $4::uuid
+			  AND a.purpose = 'conversation_attachment'
+			  AND a.status IN ('pending_ingestion', 'ready')
+			  AND a.media_kind = $5
+			RETURNING id, business_id, communication_message_id, media_asset_id,
+			          kind, caption, sort_order, status, created_at, updated_at
+		)
+		SELECT c.id::text, c.business_id::text, c.communication_message_id::text,
+		       c.media_asset_id::text, c.kind, c.caption, c.sort_order, c.status,
+		       c.created_at, c.updated_at, COALESCE(a.mime_type,''), COALESCE(a.size_bytes,0)
+		FROM created c
+		JOIN media_assets a ON a.business_id = c.business_id AND a.id = c.media_asset_id
+	`, draft.ID, draft.BusinessID, draft.CommunicationMessageID, draft.MediaAssetID,
+		draft.Kind, draft.Caption, draft.SortOrder, optionalStringValue(draft.SourceProviderMediaRef), draft.CreatedAt)
+	return scanMessageAttachment(row, "message_attachment.create", true)
+}
+
+// CreateReadyOutbound links a ready, non-deleted conversation image to a public
+// outbound communication message. It intentionally does not accept provider refs.
+func (r *MessageAttachmentRepository) CreateReadyOutbound(ctx context.Context, draft ports.MessageAttachmentDraft) (ports.MessageAttachmentRecord, error) {
+	if strings.TrimSpace(draft.ID) == "" || strings.TrimSpace(draft.BusinessID) == "" ||
+		strings.TrimSpace(draft.CommunicationMessageID) == "" || strings.TrimSpace(draft.MediaAssetID) == "" ||
+		draft.Kind != "image" || draft.SortOrder < 0 || draft.CreatedAt.IsZero() ||
+		strings.TrimSpace(draft.Caption) != "" || draft.SourceProviderMediaRef != nil {
+		return ports.MessageAttachmentRecord{}, invalidRepositoryInput("message_attachment.create_ready_outbound", "ready image, tenant, message, asset and timestamp are required")
+	}
+	db, err := r.executor(ctx)
+	if err != nil {
+		return ports.MessageAttachmentRecord{}, err
+	}
+	row := db.QueryRow(ctx, `
+		WITH created AS (
+			INSERT INTO message_attachments
+				(id, business_id, communication_message_id, media_asset_id, kind,
+				 caption, sort_order, status, source_provider_media_reference, created_at, updated_at)
+			SELECT $1::uuid, $2::uuid, cm.id, a.id, 'image', '', $5, 'ready', NULL, $6, $6
+			FROM communication_messages cm
+			JOIN media_assets a ON a.business_id = cm.business_id
+			WHERE cm.business_id = $2::uuid AND cm.id = $3::uuid
+			  AND cm.direction = 'outbound' AND cm.visibility = 'public'
+			  AND cm.outbound_message_id IS NOT NULL
+			  AND a.id = $4::uuid
+			  AND a.purpose = 'conversation_attachment'
+			  AND a.media_kind = 'image' AND a.status = 'ready' AND a.deleted_at IS NULL
+			RETURNING id, business_id, communication_message_id, media_asset_id,
+			          kind, caption, sort_order, status, created_at, updated_at
+		)
+		SELECT c.id::text, c.business_id::text, c.communication_message_id::text,
+		       c.media_asset_id::text, c.kind, c.caption, c.sort_order, c.status,
+		       c.created_at, c.updated_at, COALESCE(a.mime_type,''), COALESCE(a.size_bytes,0)
+		FROM created c
+		JOIN media_assets a ON a.business_id = c.business_id AND a.id = c.media_asset_id
+	`, draft.ID, draft.BusinessID, draft.CommunicationMessageID, draft.MediaAssetID, draft.SortOrder, draft.CreatedAt)
+	return scanMessageAttachment(row, "message_attachment.create_ready_outbound", true)
+}
+
+// ListForOutboundMessage returns worker-only media references for one tenant-owned
+// outbound message; storage keys are never copied into API message projections.
+func (r *MessageAttachmentRepository) ListForOutboundMessage(ctx context.Context, businessID, outboundMessageID string) ([]ports.OutboundMessageAttachmentRecord, error) {
+	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(outboundMessageID) == "" {
+		return nil, invalidRepositoryInput("message_attachment.list_for_outbound", "business and outbound message ids are required")
+	}
+	db, err := r.executor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(ctx, `
+		SELECT ma.id::text, ma.business_id::text, ma.communication_message_id::text,
+		       cm.outbound_message_id::text, ma.media_asset_id::text, ma.kind,
+		       COALESCE(a.mime_type,''), ma.caption, ma.status, ma.sort_order,
+		       COALESCE(a.size_bytes,0), a.storage_provider, a.storage_key,
+		       a.purpose, a.status, (a.deleted_at IS NOT NULL)
+		FROM communication_messages cm
+		JOIN message_attachments ma
+		  ON ma.business_id = cm.business_id AND ma.communication_message_id = cm.id
+		JOIN media_assets a
+		  ON a.business_id = ma.business_id AND a.id = ma.media_asset_id
+		WHERE cm.business_id = $1::uuid
+		  AND cm.outbound_message_id = $2::uuid
+		  AND cm.direction = 'outbound' AND cm.visibility = 'public'
+		ORDER BY ma.sort_order, ma.id
+	`, businessID, outboundMessageID)
+	if err != nil {
+		return nil, classifyRepositoryGetError("message_attachment.list_for_outbound", err)
+	}
+	defer rows.Close()
+	result := make([]ports.OutboundMessageAttachmentRecord, 0)
+	for rows.Next() {
+		var item ports.OutboundMessageAttachmentRecord
+		if err := rows.Scan(&item.AttachmentID, &item.BusinessID, &item.CommunicationMessageID,
+			&item.OutboundMessageID, &item.MediaAssetID, &item.Kind, &item.MimeType,
+			&item.Caption, &item.Status, &item.SortOrder, &item.SizeBytes,
+			&item.StorageProvider, &item.StorageKey, &item.AssetPurpose, &item.AssetStatus,
+			&item.AssetDeleted); err != nil {
+			return nil, &RepositoryError{Operation: "message_attachment.list_for_outbound", Kind: RepositoryInvalid, Err: err}
+		}
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, &RepositoryError{Operation: "message_attachment.list_for_outbound", Kind: RepositoryInvalid, Err: err}
+	}
+	return result, nil
+}
+
+func (r *MessageAttachmentRepository) ListByMessage(ctx context.Context, businessID, communicationMessageID string) ([]ports.MessageAttachmentRecord, error) {
+	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(communicationMessageID) == "" {
+		return nil, invalidRepositoryInput("message_attachment.list", "business and communication message ids are required")
+	}
+	db, err := r.executor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(ctx, `
+		SELECT ma.id::text, ma.business_id::text, ma.communication_message_id::text,
+		       ma.media_asset_id::text, ma.kind, ma.caption, ma.sort_order, ma.status,
+		       ma.created_at, ma.updated_at, COALESCE(a.mime_type,''), COALESCE(a.size_bytes,0)
+		FROM message_attachments ma
+		JOIN media_assets a
+		  ON a.business_id = ma.business_id AND a.id = ma.media_asset_id
+		WHERE ma.business_id = $1::uuid AND ma.communication_message_id = $2::uuid
+		ORDER BY ma.sort_order, ma.id
+	`, businessID, communicationMessageID)
+	if err != nil {
+		return nil, classifyRepositoryGetError("message_attachment.list", err)
+	}
+	defer rows.Close()
+	result := make([]ports.MessageAttachmentRecord, 0)
+	for rows.Next() {
+		var item ports.MessageAttachmentRecord
+		if err := rows.Scan(&item.ID, &item.BusinessID, &item.CommunicationMessageID,
+			&item.MediaAssetID, &item.Kind, &item.Caption, &item.SortOrder,
+			&item.Status, &item.CreatedAt, &item.UpdatedAt, &item.MimeType, &item.SizeBytes); err != nil {
+			return nil, fmt.Errorf("scan message attachment: %w", err)
+		}
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate message attachments: %w", err)
+	}
+	return result, nil
+}
+
+func (r *MessageAttachmentRepository) ListByMessages(ctx context.Context, businessID string, communicationMessageIDs []string) ([]ports.MessageAttachmentRecord, error) {
+	if r == nil || r.adapter == nil {
+		return nil, ErrPoolClosed
+	}
+	if strings.TrimSpace(businessID) == "" {
+		return nil, invalidRepositoryInput("message_attachment.list_by_messages", "business id is required")
+	}
+	if len(communicationMessageIDs) == 0 {
+		return []ports.MessageAttachmentRecord{}, nil
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := executor.Query(ctx, `
+		SELECT ma.id::text, ma.business_id::text, ma.communication_message_id::text,
+		       ma.media_asset_id::text, ma.kind, ma.caption, ma.sort_order, ma.status,
+		       ma.created_at, ma.updated_at, COALESCE(a.mime_type,''), COALESCE(a.size_bytes,0)
+		FROM message_attachments ma
+		JOIN communication_messages cm
+		  ON cm.business_id = ma.business_id AND cm.id = ma.communication_message_id
+		JOIN media_assets a
+		  ON a.business_id = ma.business_id AND a.id = ma.media_asset_id
+		WHERE ma.business_id = $1::uuid
+		  AND cm.visibility = 'public'
+		  AND ma.communication_message_id::text = ANY($2::text[])
+		  AND ma.status <> 'removed'
+		ORDER BY ma.communication_message_id, ma.sort_order, ma.id
+	`, businessID, communicationMessageIDs)
+	if err != nil {
+		return nil, classifyRepositoryGetError("message_attachment.list_by_messages", err)
+	}
+	defer rows.Close()
+	items := make([]ports.MessageAttachmentRecord, 0)
+	for rows.Next() {
+		var item ports.MessageAttachmentRecord
+		if err := rows.Scan(&item.ID, &item.BusinessID, &item.CommunicationMessageID,
+			&item.MediaAssetID, &item.Kind, &item.Caption, &item.SortOrder, &item.Status,
+			&item.CreatedAt, &item.UpdatedAt, &item.MimeType, &item.SizeBytes); err != nil {
+			return nil, &RepositoryError{Operation: "message_attachment.list_by_messages", Kind: RepositoryInvalid, Err: err}
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, &RepositoryError{Operation: "message_attachment.list_by_messages", Kind: RepositoryInvalid, Err: err}
+	}
+	return items, nil
+}
+
+func (r *MessageAttachmentRepository) GetReadyForMessage(ctx context.Context, businessID, conversationID, messageID, attachmentID string) (ports.ConversationAttachmentReadRecord, error) {
+	if r == nil || r.adapter == nil {
+		return ports.ConversationAttachmentReadRecord{}, ErrPoolClosed
+	}
+	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(conversationID) == "" ||
+		strings.TrimSpace(messageID) == "" || strings.TrimSpace(attachmentID) == "" {
+		return ports.ConversationAttachmentReadRecord{}, invalidRepositoryInput("message_attachment.get_ready_for_message", "tenant, conversation, message and attachment ids are required")
+	}
+	executor, err := r.adapter.Executor(ctx)
+	if err != nil {
+		return ports.ConversationAttachmentReadRecord{}, err
+	}
+	var result ports.ConversationAttachmentReadRecord
+	row := executor.QueryRow(ctx, `
+		SELECT ma.id::text, ma.business_id::text, ma.communication_message_id::text,
+		       ma.media_asset_id::text, ma.kind, ma.caption, ma.sort_order, ma.status,
+		       ma.created_at, ma.updated_at, COALESCE(a.mime_type,''), COALESCE(a.size_bytes,0),
+		       a.storage_provider, a.storage_key
+		FROM message_attachments ma
+		JOIN communication_messages cm
+		  ON cm.business_id = ma.business_id AND cm.id = ma.communication_message_id
+		JOIN conversation_references cr
+		  ON cr.business_id = cm.business_id AND cr.id = cm.conversation_reference_id
+		JOIN media_assets a
+		  ON a.business_id = ma.business_id AND a.id = ma.media_asset_id
+		WHERE ma.business_id = $1::uuid
+		  AND cr.conversation_id = $2::uuid
+		  AND cm.id = $3::uuid
+		  AND cm.visibility = 'public'
+		  AND ma.id = $4::uuid
+		  AND ma.status = 'ready'
+		  AND a.purpose = 'conversation_attachment'
+		  AND a.status = 'ready'
+	`, businessID, conversationID, messageID, attachmentID)
+	if err := row.Scan(&result.Attachment.ID, &result.Attachment.BusinessID,
+		&result.Attachment.CommunicationMessageID, &result.Attachment.MediaAssetID,
+		&result.Attachment.Kind, &result.Attachment.Caption, &result.Attachment.SortOrder,
+		&result.Attachment.Status, &result.Attachment.CreatedAt, &result.Attachment.UpdatedAt,
+		&result.Attachment.MimeType, &result.Attachment.SizeBytes,
+		&result.StorageProvider, &result.StorageKey); err != nil {
+		return ports.ConversationAttachmentReadRecord{}, classifyRepositoryGetError("message_attachment.get_ready_for_message", err)
+	}
+	return result, nil
+}
+
+func (r *MessageAttachmentRepository) ClaimPendingIngestions(ctx context.Context, limit int, lease time.Duration) ([]ports.ClaimedMessageAttachmentIngestion, error) {
+	if limit < 1 || limit > 100 || lease < time.Second || lease > 10*time.Minute {
+		return nil, invalidRepositoryInput("message_attachment.claim_ingestion", "limit must be 1..100 and lease must be between 1 second and 10 minutes")
+	}
+	db, err := r.executor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(ctx, `
+		WITH candidates AS (
+			SELECT ma.id, ma.business_id
+			FROM message_attachments ma
+			JOIN communication_messages cm
+			  ON cm.business_id = ma.business_id AND cm.id = ma.communication_message_id
+			JOIN conversation_references cr
+			  ON cr.business_id = cm.business_id AND cr.id = cm.conversation_reference_id
+			JOIN channel_connections cc
+			  ON cc.business_id = cr.business_id AND cc.id = cr.connection_id
+			JOIN media_assets a
+			  ON a.business_id = ma.business_id AND a.id = ma.media_asset_id
+			WHERE ma.status = 'pending_ingestion'
+			  AND ma.source_provider_media_reference IS NOT NULL
+			  AND ma.ingestion_next_attempt_at <= now()
+			  AND (ma.ingestion_lease_until IS NULL OR ma.ingestion_lease_until <= now())
+			  AND cr.system = 'provider'
+			  AND cr.resource_type = 'conversation'
+			  AND a.purpose = 'conversation_attachment'
+			  AND a.status IN ('pending_ingestion', 'ready')
+			  AND ma.kind = 'image'
+			  AND ma.sort_order = 0
+			  AND cc.channel = 'whatsapp'
+			ORDER BY ma.created_at, ma.id
+			LIMIT $1
+			FOR UPDATE OF ma SKIP LOCKED
+		),
+		claimed AS (
+			UPDATE message_attachments ma
+			SET ingestion_lease_until = now() + ($2::bigint * interval '1 millisecond'),
+			    ingestion_attempts = ma.ingestion_attempts + 1,
+			    updated_at = now()
+			FROM candidates c
+			WHERE ma.business_id = c.business_id AND ma.id = c.id
+			RETURNING ma.id, ma.business_id, ma.communication_message_id,
+			          ma.media_asset_id, ma.kind, ma.source_provider_media_reference,
+		          ma.ingestion_attempts
+		)
+		SELECT c.id::text, c.business_id::text, c.communication_message_id::text,
+		       c.media_asset_id::text, cr.resource_id, cc.channel, c.source_provider_media_reference,
+		       c.kind, a.storage_provider, a.storage_key, c.ingestion_attempts
+		FROM claimed c
+		JOIN communication_messages cm
+		  ON cm.business_id = c.business_id AND cm.id = c.communication_message_id
+		JOIN conversation_references cr
+		  ON cr.business_id = cm.business_id AND cr.id = cm.conversation_reference_id
+		JOIN channel_connections cc
+		  ON cc.business_id = cr.business_id AND cc.id = cr.connection_id
+		JOIN media_assets a
+		  ON a.business_id = c.business_id AND a.id = c.media_asset_id
+		ORDER BY c.id
+	`, limit, lease.Milliseconds())
+	if err != nil {
+		return nil, classifyRepositoryWriteError("message_attachment.claim_ingestion", err)
+	}
+	defer rows.Close()
+	claimed := make([]ports.ClaimedMessageAttachmentIngestion, 0)
+	for rows.Next() {
+		var item ports.ClaimedMessageAttachmentIngestion
+		if err := rows.Scan(&item.AttachmentID, &item.BusinessID, &item.CommunicationMessageID,
+			&item.MediaAssetID, &item.ProviderConversationID, &item.Channel, &item.ProviderMediaReference,
+			&item.Kind, &item.StorageProvider, &item.StorageKey, &item.AttemptCount); err != nil {
+			return nil, fmt.Errorf("scan claimed message attachment ingestion: %w", err)
+		}
+		claimed = append(claimed, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate claimed message attachment ingestions: %w", err)
+	}
+	return claimed, nil
+}
+
+func (r *MessageAttachmentRepository) ReleaseForRetry(ctx context.Context, businessID, attachmentID string, nextAttemptAt time.Time, errorCode string) error {
+	if strings.TrimSpace(businessID) == "" || strings.TrimSpace(attachmentID) == "" ||
+		nextAttemptAt.IsZero() || !validMediaIngestionErrorCode(errorCode) {
+		return invalidRepositoryInput("message_attachment.release_retry", "business, attachment, retry time and safe error code are required")
+	}
+	db, err := r.executor(ctx)
+	if err != nil {
+		return err
+	}
+	commandTag, err := db.Exec(ctx, `
+		UPDATE message_attachments
+		SET ingestion_lease_until = NULL,
+		    ingestion_next_attempt_at = $3,
+		    ingestion_last_error_code = $4,
+		    updated_at = now()
+		WHERE business_id = $1::uuid AND id = $2::uuid
+		  AND status = 'pending_ingestion'
+		  AND ingestion_lease_until IS NOT NULL
+	`, businessID, attachmentID, nextAttemptAt.UTC(), errorCode)
+	if err != nil {
+		return classifyRepositoryWriteError("message_attachment.release_retry", err)
+	}
+	if commandTag.RowsAffected() == 0 {
+		return &RepositoryError{Operation: "message_attachment.release_retry", Kind: RepositoryConflict, Err: errors.New("attachment is not currently leased for ingestion")}
+	}
+	return nil
+}
+
+func validMediaIngestionErrorCode(value string) bool {
+	if len(value) == 0 || len(value) > 100 {
+		return false
+	}
+	for _, r := range value {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' ||
+			r >= '0' && r <= '9' || r == '_' || r == '.' || r == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func (r *MessageAttachmentRepository) MarkReady(ctx context.Context, businessID, attachmentID string) (ports.MessageAttachmentRecord, error) {
+	db, err := r.executor(ctx)
+	if err != nil {
+		return ports.MessageAttachmentRecord{}, err
+	}
+	row := db.QueryRow(ctx, `
+		WITH updated AS (
+			UPDATE message_attachments ma
+			SET status = 'ready', source_provider_media_reference = NULL, ingestion_lease_until = NULL, updated_at = now()
+			WHERE ma.business_id = $1::uuid AND ma.id = $2::uuid
+			  AND ma.status = 'pending_ingestion'
+			  AND EXISTS (
+				SELECT 1 FROM media_assets a
+				WHERE a.business_id = ma.business_id AND a.id = ma.media_asset_id
+				  AND a.purpose = 'conversation_attachment' AND a.status = 'ready'
+				  AND a.media_kind = ma.kind
+			  )
+			RETURNING ma.*
+		)
+		SELECT u.id::text, u.business_id::text, u.communication_message_id::text,
+		       u.media_asset_id::text, u.kind, u.caption, u.sort_order, u.status,
+		       u.created_at, u.updated_at, COALESCE(a.mime_type,''), COALESCE(a.size_bytes,0)
+		FROM updated u
+		JOIN media_assets a ON a.business_id = u.business_id AND a.id = u.media_asset_id
+	`, businessID, attachmentID)
+	return scanMessageAttachment(row, "message_attachment.mark_ready", false)
+}
+
+func (r *MessageAttachmentRepository) MarkFailed(ctx context.Context, businessID, attachmentID string) (ports.MessageAttachmentRecord, error) {
+	db, err := r.executor(ctx)
+	if err != nil {
+		return ports.MessageAttachmentRecord{}, err
+	}
+	row := db.QueryRow(ctx, `
+		WITH updated AS (
+			UPDATE message_attachments
+			SET status = 'failed', source_provider_media_reference = NULL, ingestion_lease_until = NULL, ingestion_last_error_code = 'permanent_failure', updated_at = now()
+			WHERE business_id = $1::uuid AND id = $2::uuid AND status = 'pending_ingestion'
+			RETURNING *
+		),
+		rejected_asset AS (
+			UPDATE media_assets a
+			SET status = 'rejected', updated_at = now()
+			FROM updated u
+			WHERE a.business_id = u.business_id AND a.id = u.media_asset_id
+			  AND a.purpose = 'conversation_attachment' AND a.status = 'pending_ingestion'
+			RETURNING a.id
+		)
+		SELECT u.id::text, u.business_id::text, u.communication_message_id::text,
+		       u.media_asset_id::text, u.kind, u.caption, u.sort_order, u.status,
+		       u.created_at, u.updated_at, COALESCE(a.mime_type,''), COALESCE(a.size_bytes,0)
+		FROM updated u
+		JOIN media_assets a ON a.business_id = u.business_id AND a.id = u.media_asset_id
+		LEFT JOIN rejected_asset ra ON ra.id = u.media_asset_id
+	`, businessID, attachmentID)
+	return scanMessageAttachment(row, "message_attachment.mark_failed", false)
+}
+
+func scanMessageAttachment(row interface{ Scan(...any) error }, operation string, write bool) (ports.MessageAttachmentRecord, error) {
+	var record ports.MessageAttachmentRecord
+	err := row.Scan(&record.ID, &record.BusinessID, &record.CommunicationMessageID,
+		&record.MediaAssetID, &record.Kind, &record.Caption, &record.SortOrder,
+		&record.Status, &record.CreatedAt, &record.UpdatedAt, &record.MimeType, &record.SizeBytes)
+	if err == nil {
+		return record, nil
+	}
+	if write {
+		return record, classifyRepositoryWriteError(operation, err)
+	}
+	return record, classifyRepositoryGetError(operation, err)
+}
+
+var _ ports.MessageAttachmentRepository = (*MessageAttachmentRepository)(nil)
+var _ ports.OutboundMessageAttachmentRepository = (*MessageAttachmentRepository)(nil)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -25,10 +26,11 @@ import (
 const defaultBaseURL = "https://api.social-api.ai"
 
 var (
-	ErrNotConfigured  = errors.New("socialapi client is not configured")
-	ErrInvalidWebhook = errors.New("socialapi webhook signature is invalid")
-	ErrReplay         = errors.New("socialapi webhook timestamp is outside tolerance")
-	ErrUnsupported    = errors.New("socialapi operation is unsupported by the verified contract")
+	ErrNotConfigured        = errors.New("socialapi client is not configured")
+	ErrInvalidWebhook       = errors.New("socialapi webhook signature is invalid")
+	ErrReplay               = errors.New("socialapi webhook timestamp is outside tolerance")
+	ErrUnsupported          = errors.New("socialapi operation is unsupported by the verified contract")
+	ErrInboundMediaNotFound = errors.New("socialapi inbound media source was not found")
 )
 
 type Client struct {
@@ -610,7 +612,11 @@ type socialWebhookData struct {
 	CreatedAt      string `json:"created_at"`
 	Text           string `json:"text"`
 	Content        struct {
-		Text string `json:"text"`
+		Text  string `json:"text"`
+		Media []struct {
+			URL  string `json:"url"`
+			Type string `json:"type"`
+		} `json:"media"`
 	} `json:"content"`
 	From struct {
 		ID       string `json:"id"`
@@ -687,6 +693,32 @@ func (c *Client) NormalizeWebhook(ctx context.Context, headers map[string]string
 		text = envelope.Data.Text
 	}
 	event := channel.InboundEvent{ID: uuid.NewString(), Provider: channel.ProviderSocialAPI, Channel: providerChannel, ProviderConnectionID: envelope.Data.AccountID, ProviderEventID: providerEventID, DeliveryID: deliveryID, DedupeStrategy: dedupeStrategy, EventType: normalizedEventType, InteractionKind: interaction, ProviderMessageID: providerMessageID, ProviderConversationID: providerConversationID, ExternalUserID: externalUserID, Text: text, Direction: direction, Origin: origin, DeliveryStatus: strings.ToLower(strings.TrimSpace(envelope.Data.Status)), ReceivedAt: receivedAt}
+	if len(envelope.Data.Content.Media) > 0 {
+		// The stable SocialAPI interaction ID is the lookup key in the
+		// authenticated message history. A delivery ID is only a webhook
+		// deduplication fallback and is not suitable for media resolution.
+		if strings.TrimSpace(envelope.Data.ID) == "" {
+			return nil, fmt.Errorf("%w: media-bearing DM has no stable SocialAPI interaction id", ErrInvalidResponse)
+		}
+		event.Attachments = make([]channel.InboundAttachmentReference, 0, len(envelope.Data.Content.Media))
+		for index, item := range envelope.Data.Content.Media {
+			if err := validateInboundMediaURL(item.URL); err != nil {
+				return nil, fmt.Errorf("%w: invalid inbound media URL", ErrInvalidResponse)
+			}
+			kind, kindErr := inboundAttachmentKind(item.Type)
+			if kindErr != nil {
+				return nil, kindErr
+			}
+			reference := channel.InboundAttachmentReference{
+				ProviderMediaReference: encodeInboundMediaReference(providerEventID, index),
+				Kind:                   kind,
+			}
+			if err := reference.Validate(); err != nil {
+				return nil, fmt.Errorf("%w: invalid inbound attachment reference", ErrInvalidResponse)
+			}
+			event.Attachments = append(event.Attachments, reference)
+		}
+	}
 	if envelope.Event == "dm.postback" {
 		event.ActionPayload = envelope.Data.Metadata.Payload
 		event.ActionTitle = envelope.Data.Metadata.Title
@@ -705,6 +737,188 @@ func (c *Client) NormalizeWebhook(ctx context.Context, headers map[string]string
 		return nil, fmt.Errorf("%w: unsupported webhook payload for %s", ErrInvalidRequest, envelope.Event)
 	}
 	return []channel.InboundEvent{event}, nil
+}
+
+func inboundAttachmentKind(value string) (channel.AttachmentKind, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "image":
+		return channel.AttachmentImage, nil
+	case "video":
+		return channel.AttachmentVideo, nil
+	case "audio":
+		return channel.AttachmentAudio, nil
+	case "file":
+		return channel.AttachmentFile, nil
+	default:
+		return "", fmt.Errorf("%w: unsupported SocialAPI inbound attachment type %q", ErrUnsupported, value)
+	}
+}
+
+// The reference contains only the stable SocialAPI interaction ID and
+// attachment position. The webhook's temporary URL is intentionally discarded.
+func encodeInboundMediaReference(socialAPIInteractionID string, index int) string {
+	encoded := base64.RawURLEncoding.EncodeToString([]byte(socialAPIInteractionID))
+	return fmt.Sprintf("socialapi:v1:%s:%d", encoded, index)
+}
+
+func decodeInboundMediaReference(reference string) (string, int, error) {
+	const prefix = "socialapi:v1:"
+	if !strings.HasPrefix(reference, prefix) {
+		return "", 0, fmt.Errorf("%w: invalid inbound media reference", ErrInvalidRequest)
+	}
+	parts := strings.SplitN(strings.TrimPrefix(reference, prefix), ":", 2)
+	if len(parts) != 2 {
+		return "", 0, fmt.Errorf("%w: invalid inbound media reference", ErrInvalidRequest)
+	}
+	interactionIDBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil || len(interactionIDBytes) == 0 || !utf8.Valid(interactionIDBytes) {
+		return "", 0, fmt.Errorf("%w: invalid inbound media identity", ErrInvalidRequest)
+	}
+	index, err := strconv.Atoi(parts[1])
+	if err != nil || index < 0 {
+		return "", 0, fmt.Errorf("%w: invalid inbound media position", ErrInvalidRequest)
+	}
+	return string(interactionIDBytes), index, nil
+}
+
+// ResolveInboundMediaSource resolves media through SocialAPI's authenticated
+// message-history endpoint. Its public response contract exposes one
+// attachment_url per message, so only position zero can currently be fetched.
+func (c *Client) ResolveInboundMediaSource(ctx context.Context, providerConversationID, providerMediaReference, expectedKind string) (ports.InboundMediaSource, error) {
+	if strings.TrimSpace(providerConversationID) == "" {
+		return ports.InboundMediaSource{}, fmt.Errorf("%w: provider conversation id is required", ErrInvalidRequest)
+	}
+	interactionID, index, err := decodeInboundMediaReference(providerMediaReference)
+	if err != nil {
+		return ports.InboundMediaSource{}, err
+	}
+	if index != 0 {
+		return ports.InboundMediaSource{}, fmt.Errorf("%w: SocialAPI exposes a single attachment_url per message", ErrUnsupported)
+	}
+
+	// Message history is cursor-paginated. Do not assume the interaction is
+	// in the newest page: webhook delivery can be delayed or retried later.
+	// A repeated/empty cursor with has_more=true is a provider contract error,
+	// not a reason to loop forever or silently report the media as missing.
+	cursor := ""
+	seenCursors := make(map[string]struct{})
+	for {
+		response, err := c.ListConversationMessages(ctx, providerConversationID, InboxMessagesQuery{Limit: 200, Cursor: cursor})
+		if err != nil {
+			return ports.InboundMediaSource{}, err
+		}
+		for _, message := range response.Data {
+			if message.ID != interactionID {
+				continue
+			}
+			kind, kindErr := inboundAttachmentKind(message.AttachmentType)
+			if kindErr != nil {
+				return ports.InboundMediaSource{}, kindErr
+			}
+			if string(kind) != expectedKind {
+				return ports.InboundMediaSource{}, fmt.Errorf("%w: provider attachment kind does not match the stored reference", ErrInvalidResponse)
+			}
+			if mediaID, isSocialAPI, mediaErr := c.socialAPIInboundMediaID(message.AttachmentURL); isSocialAPI {
+				if mediaErr != nil {
+					return ports.InboundMediaSource{}, fmt.Errorf("%w: invalid SocialAPI media URL", ErrInvalidResponse)
+				}
+				return ports.InboundMediaSource{ProviderMediaID: mediaID, Kind: string(kind)}, nil
+			}
+			if err := validateInboundMediaURL(message.AttachmentURL); err != nil {
+				return ports.InboundMediaSource{}, fmt.Errorf("%w: provider attachment URL is invalid", ErrInvalidResponse)
+			}
+			return ports.InboundMediaSource{URL: message.AttachmentURL, Kind: string(kind)}, nil
+		}
+		if !response.Pagination.HasMore {
+			return ports.InboundMediaSource{}, ErrInboundMediaNotFound
+		}
+		next := strings.TrimSpace(response.Pagination.NextCursor)
+		if next == "" || next == cursor {
+			return ports.InboundMediaSource{}, fmt.Errorf("%w: invalid SocialAPI message-history cursor", ErrInvalidResponse)
+		}
+		if _, exists := seenCursors[next]; exists {
+			return ports.InboundMediaSource{}, fmt.Errorf("%w: SocialAPI repeated a message-history cursor", ErrInvalidResponse)
+		}
+		seenCursors[next] = struct{}{}
+		cursor = next
+	}
+}
+
+func (c *Client) socialAPIInboundMediaID(raw string) (string, bool, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return "", false, err
+	}
+	base, err := url.Parse(c.baseURL)
+	if err != nil || base.Host == "" || parsed.Host == "" ||
+		!strings.EqualFold(parsed.Host, base.Host) || !strings.EqualFold(parsed.Scheme, base.Scheme) {
+		return "", false, nil
+	}
+	const prefix = "/v1/inbox/media/"
+	if !strings.HasPrefix(parsed.Path, prefix) {
+		return "", false, nil
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" || parsed.User != nil {
+		return "", true, ErrInvalidResponse
+	}
+	id := strings.TrimPrefix(parsed.Path, prefix)
+	if id == "" || strings.Contains(id, "/") || strings.Contains(id, "\\") || id == "." || id == ".." {
+		return "", true, ErrInvalidResponse
+	}
+	return id, true, nil
+}
+
+// DownloadInboundMedia fetches a WhatsApp/Telegram file through SocialAPI's
+// authenticated media endpoint. maxBytes is mandatory so provider responses
+// cannot cause unbounded memory growth.
+func (c *Client) DownloadInboundMedia(ctx context.Context, mediaID string, maxBytes int64) ([]byte, string, error) {
+	if c == nil || c.httpClient == nil || strings.TrimSpace(c.apiKey) == "" {
+		return nil, "", ErrNotConfigured
+	}
+	if strings.TrimSpace(mediaID) == "" || strings.ContainsAny(mediaID, "/\\?#") ||
+		maxBytes < 1 {
+		return nil, "", fmt.Errorf("%w: invalid media id or byte limit", ErrInvalidRequest)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		c.baseURL+"/v1/inbox/media/"+url.PathEscape(mediaID), nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("%w: create media download request", ErrInvalidRequest)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Accept", "*/*")
+	// Never follow a provider redirect with a bearer-authenticated media
+	// request. A redirect is surfaced to the caller for explicit handling.
+	mediaClient := *c.httpClient
+	mediaClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	res, err := mediaClient.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("%w: %v", ErrTransport, err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return nil, "", parseAPIError(res)
+	}
+	if res.ContentLength > maxBytes {
+		return nil, "", fmt.Errorf("%w: inbound media exceeds configured size limit", ErrInvalidResponse)
+	}
+	data, err := io.ReadAll(io.LimitReader(res.Body, maxBytes+1))
+	if err != nil {
+		return nil, "", fmt.Errorf("%w: read inbound media", ErrInvalidResponse)
+	}
+	if len(data) == 0 || int64(len(data)) > maxBytes {
+		return nil, "", fmt.Errorf("%w: inbound media is empty or exceeds configured size limit", ErrInvalidResponse)
+	}
+	return data, strings.TrimSpace(strings.Split(res.Header.Get("Content-Type"), ";")[0]), nil
+}
+
+func validateInboundMediaURL(raw string) error {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+		return ErrInvalidResponse
+	}
+	return nil
 }
 
 func normalizeSocialEventType(event string) string {
@@ -762,8 +976,9 @@ func platformChannel(platform string) (channel.Channel, error) {
 }
 
 func (c *Client) SendMessage(ctx context.Context, command ports.SendMessageCommand) (ports.ProviderSendResult, error) {
-	if command.ProviderAccountID == "" || command.ProviderConversationID == "" || command.Text == "" || command.IdempotencyKey == "" {
-		return ports.ProviderSendResult{}, fmt.Errorf("%w: account, conversation, text, and idempotency key are required", ErrInvalidRequest)
+	if command.ProviderAccountID == "" || command.ProviderConversationID == "" || command.IdempotencyKey == "" ||
+		(command.Text == "" && len(command.Attachments) == 0) {
+		return ports.ProviderSendResult{}, fmt.Errorf("%w: account, conversation, idempotency key, and text or attachment are required", ErrInvalidRequest)
 	}
 	type button struct {
 		Type    string `json:"type"`
@@ -771,14 +986,10 @@ func (c *Client) SendMessage(ctx context.Context, command ports.SendMessageComma
 		Payload string `json:"payload"`
 	}
 	request := struct {
-		Attachments []struct {
-			Type       string `json:"type"`
-			SourceType string `json:"source_type"`
-			Source     string `json:"source"`
-		} `json:"attachments,omitempty"`
-		AccountID string   `json:"account_id"`
-		Text      string   `json:"text"`
-		Buttons   []button `json:"buttons,omitempty"`
+		AccountID     string   `json:"account_id"`
+		AttachmentURL string   `json:"attachment_url,omitempty"`
+		Text          string   `json:"text,omitempty"`
+		Buttons       []button `json:"buttons,omitempty"`
 	}{AccountID: command.ProviderAccountID, Text: command.Text}
 	if len(command.Attachments) > 1 {
 		return ports.ProviderSendResult{}, fmt.Errorf("%w: too many attachments", ErrInvalidRequest)
@@ -788,11 +999,7 @@ func (c *Client) SendMessage(ctx context.Context, command ports.SendMessageComma
 		if parseErr != nil || uri.Scheme != "https" || uri.Host == "" || attachment.Type != "image" {
 			return ports.ProviderSendResult{}, fmt.Errorf("%w: invalid media URL or type", ErrInvalidRequest)
 		}
-		request.Attachments = append(request.Attachments, struct {
-			Type       string `json:"type"`
-			SourceType string `json:"source_type"`
-			Source     string `json:"source"`
-		}{Type: "image", SourceType: "url", Source: attachment.URL})
+		request.AttachmentURL = attachment.URL
 	}
 	if len(command.Buttons) > 0 {
 		if command.Channel != "instagram" && command.Channel != "facebook" && command.Channel != "whatsapp" {
@@ -938,7 +1145,28 @@ func parseAPIError(res *http.Response) error {
 	if decoded.RequestID == "" {
 		decoded.RequestID = res.Header.Get("X-Request-ID")
 	}
-	return &Error{StatusCode: res.StatusCode, Code: decoded.Error.Code, Message: decoded.Error.Message, RequestID: decoded.RequestID, Retryable: retryableStatus(res.StatusCode)}
+	return &Error{
+		StatusCode: res.StatusCode, Code: decoded.Error.Code, Message: decoded.Error.Message,
+		RequestID: decoded.RequestID, Retryable: retryableStatus(res.StatusCode),
+		RetryAfter: parseRetryAfter(res.Header.Get("Retry-After"), time.Now()),
+	}
+}
+
+func parseRetryAfter(value string, now time.Time) time.Duration {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+	if seconds, err := strconv.Atoi(value); err == nil {
+		if seconds <= 0 {
+			return 0
+		}
+		return time.Duration(seconds) * time.Second
+	}
+	if at, err := http.ParseTime(value); err == nil && at.After(now) {
+		return at.Sub(now)
+	}
+	return 0
 }
 
 type Error struct {
@@ -947,6 +1175,16 @@ type Error struct {
 	Message    string
 	RequestID  string
 	Retryable  bool
+	RetryAfter time.Duration
+}
+
+func (e *Error) IsRetryable() bool { return e != nil && e.Retryable }
+
+func (e *Error) RetryAfterDuration() time.Duration {
+	if e == nil {
+		return 0
+	}
+	return e.RetryAfter
 }
 
 func (e *Error) Error() string {
@@ -961,16 +1199,17 @@ func (e *Error) Error() string {
 
 func retryableStatus(statusCode int) bool {
 	switch statusCode {
-	case http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway:
+	case http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
 		return true
 	default:
 		return false
 	}
 }
 
-var ErrTransport = errors.New("socialapi transport error")
+var ErrTransport = ports.ErrTransientMediaProvider
 
 var _ ports.ChannelProvider = (*Client)(nil)
 var _ ports.ChannelAccountDisconnector = (*Client)(nil)
 var _ ports.ConversationEnricher = (*Client)(nil)
+var _ ports.InboundMediaSourceResolver = (*Client)(nil)
 var _ ports.WebhookReceiver = (*Client)(nil)

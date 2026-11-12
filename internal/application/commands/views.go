@@ -71,8 +71,18 @@ type ConversationView struct {
 	ResourceVersion        ResourceVersion
 }
 type MessageAttachmentView struct {
-	Type    string
-	MediaID string
+	AttachmentID string
+	Type         string
+	MediaID      string
+	Caption      string
+	Status       string
+}
+
+type ConversationAttachmentReadURLView struct {
+	URL              string
+	ExpiresInSeconds int
+	MimeType         string
+	SizeBytes        int64
 }
 
 type MessageView struct {

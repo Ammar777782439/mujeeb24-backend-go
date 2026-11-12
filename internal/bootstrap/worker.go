@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"os"
 	"time"
 
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
@@ -13,17 +14,19 @@ import (
 )
 
 type WorkerRuntime struct {
-	SalesActions *services.SalesActionProcessor
-	Database     *postgres.Adapter
-	EventStore   ports.EventStore
-	Outbox       ports.OutboxStore
-	SocialAPI    ports.ChannelProvider
-	Processor    *services.OutboxProcessor
-	Expiry       ports.SubscriptionExpiryRepository
-	PollInterval time.Duration
-	CycleTimeout time.Duration
-	BatchSize    int
-	WorkerOwner  string
+	SalesActions             *services.SalesActionProcessor
+	Database                 *postgres.Adapter
+	EventStore               ports.EventStore
+	Outbox                   ports.OutboxStore
+	SocialAPI                ports.ChannelProvider
+	ConversationMediaObjects ports.MediaObjectStorage
+	MediaIngestion           *services.ConversationMediaIngestionProcessor
+	Processor                *services.OutboxProcessor
+	Expiry                   ports.SubscriptionExpiryRepository
+	PollInterval             time.Duration
+	CycleTimeout             time.Duration
+	BatchSize                int
+	WorkerOwner              string
 }
 
 func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime, error) {
@@ -38,15 +41,51 @@ func BuildWorker(ctx context.Context, cfg config.ProcessConfig) (*WorkerRuntime,
 	if storageErr != nil {
 		log.Printf("[CatalogMedia] stage=worker_storage_configuration_failed error=%v", storageErr)
 	}
+	conversationMediaEnabled := os.Getenv("CONVERSATION_MEDIA_ENABLED") == "true"
+	conversationObjects, _, conversationStorageErr := buildConversationMediaStorageFromEnv()
+	if conversationStorageErr != nil {
+		if conversationMediaEnabled {
+			database.Close()
+			return nil, errors.New("conversation media storage is enabled but not configured")
+		}
+		log.Printf("[ConversationMedia] stage=worker_storage_configuration_failed error=%v", conversationStorageErr)
+	}
+	runtime.ConversationMediaObjects = conversationObjects
+	var conversationMediaReader ports.MediaObjectProviderReader
+	if reader, ok := conversationObjects.(ports.MediaObjectProviderReader); ok {
+		conversationMediaReader = reader
+	}
+	if conversationMediaEnabled {
+		if cfg.SocialAPIAPIKey == "" || external.SocialAPI == nil {
+			database.Close()
+			return nil, errors.New("CONVERSATION_MEDIA_ENABLED requires a configured SocialAPI API key")
+		}
+		resolver, resolverOK := external.SocialAPI.(ports.InboundMediaSourceResolver)
+		downloader, downloaderOK := external.SocialAPI.(ports.InboundMediaDownloader)
+		if !resolverOK || !downloaderOK || conversationObjects == nil {
+			database.Close()
+			return nil, errors.New("conversation media worker dependencies are incomplete")
+		}
+		runtime.MediaIngestion = &services.ConversationMediaIngestionProcessor{
+			Attachments: postgres.NewMessageAttachmentRepository(database),
+			Assets:      postgres.NewConversationMediaIngestionRepository(database),
+			Resolver:    resolver,
+			Downloader:  downloader,
+			Objects:     conversationObjects,
+		}
+	}
 	if external.SocialAPI != nil {
 		runtime.Processor = &services.OutboxProcessor{
 			Outbox: outbox,
 			Resolver: services.MujeebOutboundDeliveryResolver{
-				OutboundRepository:   postgres.NewOutboundMessageRepository(database),
-				ReferenceRepository:  postgres.NewConversationReferenceRepository(database),
-				ConnectionRepository: postgres.NewChannelConnectionRepository(database),
-				CatalogMedia:         postgres.NewCatalogMediaRepository(database),
-				MediaObjects:         objects,
+				OutboundRepository:       postgres.NewOutboundMessageRepository(database),
+				ReferenceRepository:      postgres.NewConversationReferenceRepository(database),
+				ConnectionRepository:     postgres.NewChannelConnectionRepository(database),
+				CatalogMedia:             postgres.NewCatalogMediaRepository(database),
+				MediaObjects:             objects,
+				ConversationAttachments:  postgres.NewMessageAttachmentRepository(database),
+				ConversationMediaObjects: conversationMediaReader,
+				Capabilities:             postgres.NewChannelCapabilityRepository(database),
 			},
 			Provider: external.SocialAPI,
 			Messages: postgres.NewOutboundMessageRepository(database),
@@ -104,6 +143,14 @@ func (r *WorkerRuntime) RunOnce(ctx context.Context) (int, error) {
 	if r.Expiry != nil {
 		count, err := r.Expiry.ExpireDue(ctx, time.Now().UTC(), limit)
 		if err != nil {
+			return processed, err
+		}
+		processed += count
+	}
+	if r.MediaIngestion != nil {
+		count, err := r.MediaIngestion.Process(ctx, limit)
+		if err != nil {
+			log.Printf("[ConversationMedia] stage=worker_batch_failed err=%v", err)
 			return processed, err
 		}
 		processed += count

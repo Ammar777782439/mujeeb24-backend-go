@@ -294,3 +294,53 @@ func TestSDKDirectGetSanitizesPrivateProviderErrors(t *testing.T) {
 		t.Fatalf("unsafe or missing S3 provider diagnostic: %v", err)
 	}
 }
+
+func TestObjectKeyNamespacesAllowCatalogAndConversationOnly(t *testing.T) {
+	for _, key := range []string{
+		"catalog/business-1/asset-1.jpg",
+		"conversation/business-1/asset-1.jpg",
+	} {
+		if err := validateKey(key); err != nil {
+			t.Errorf("expected allowed media namespace for %q, got %v", key, err)
+		}
+	}
+	for _, key := range []string{
+		"other/business-1/asset-1.jpg",
+		"catalogue/business-1/asset-1.jpg",
+		"/conversation/business-1/asset-1.jpg",
+		"conversation/",
+		"conversation//asset.jpg",
+		"conversation/business/../asset.jpg",
+		"conversation/business/asset..jpg",
+		"conversation/business/asset.jpg?signature=x",
+		"conversation/business/asset\\name.jpg",
+		"conversation/business/asset\x00.jpg",
+	} {
+		if err := validateKey(key); err == nil {
+			t.Errorf("expected unsafe or unowned media key %q to be rejected", key)
+		}
+	}
+}
+
+func TestSDKBackblazeCanPutConversationImageObject(t *testing.T) {
+	data := []byte("verified-image-placeholder")
+	var observed bool
+	c := b2TestClient(roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		observed = true
+		if req.Method != http.MethodPut ||
+			req.URL.EscapedPath() != "/mujeeb24-images/conversation/business-1/asset-1" {
+			t.Errorf("unexpected conversation media PUT target: %s %s", req.Method, req.URL)
+		}
+		body, err := io.ReadAll(req.Body)
+		if err != nil || !bytes.Equal(body, data) {
+			t.Errorf("conversation media body mismatch len=%d err=%v", len(body), err)
+		}
+		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(""))}, nil
+	}))
+	if err := c.Put(context.Background(), "conversation/business-1/asset-1", "image/jpeg", data); err != nil {
+		t.Fatalf("conversation namespace PUT should be allowed: %v", err)
+	}
+	if !observed {
+		t.Fatal("conversation namespace PUT was not dispatched")
+	}
+}

@@ -79,12 +79,15 @@ func (c *Client) endpoint() string {
 }
 
 func validateKey(key string) error {
-	if !strings.HasPrefix(key, "catalog/") || strings.Contains(key, "..") || strings.ContainsAny(key, "\\?#") {
-		return errors.New("unsafe catalog media key")
+	// A shared private bucket has separate explicit domain-owned namespaces.
+	// The repositories still enforce business/asset ownership and purpose.
+	if (!strings.HasPrefix(key, "catalog/") && !strings.HasPrefix(key, "conversation/")) ||
+		strings.Contains(key, "..") || strings.ContainsAny(key, "\\?#\x00") {
+		return errors.New("unsafe media object key")
 	}
 	for _, part := range strings.Split(key, "/") {
 		if part == "" || part == "." || part == ".." {
-			return errors.New("unsafe catalog media key")
+			return errors.New("unsafe media object key")
 		}
 	}
 	return nil

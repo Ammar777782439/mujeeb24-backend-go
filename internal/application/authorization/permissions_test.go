@@ -14,7 +14,7 @@ func TestEveryMerchantBusinessOperationHasPermission(t *testing.T) {
 		"createOutboundMessage", "createTeamInvitation", "createTransactionDraft", "createVariant", "disconnectChannel",
 		"getAIDecision", "getAttributeSchema", "getAuditEvent", "getBusiness", "getBusinessPolicy", "getBusinessSubscription", "getCatalog",
 		"getCatalogEntityContract", "getCatalogItem", "getChannelConnection", "getConnectionCapabilities",
-		"getConversation", "getCustomer", "getDashboardOverview", "getLead", "getTransaction", "getTransactionReview",
+		"getConversation", "getConversationAttachmentReadURL", "getCustomer", "getDashboardOverview", "getLead", "getTransaction", "getTransactionReview",
 		"listAIDecisions", "listAttributeSchemas", "listAuditEvents", "listAutomationRules", "listCannedReplies",
 		"listCatalogItems", "listCatalogs", "listChannelConnections", "listConversationMessages", "listConversations",
 		"listCustomerConversations", "listCustomerTransactions", "listCustomers", "listLeadAttributions", "listLeadScores",
@@ -24,7 +24,7 @@ func TestEveryMerchantBusinessOperationHasPermission(t *testing.T) {
 		"requestHumanReview", "resendTeamInvitation", "revokeTeamInvitation", "revokeTeamMember", "sendCannedReply",
 		"submitTransactionReview", "updateAutomationRule", "updateBusinessPolicy", "updateBusinessProfile",
 		"updateCannedReply", "updateCatalog", "updateCatalogItem", "updateConversation", "updateConversationLabels",
-		"updateCustomer", "updateLead", "updateOffer", "updateTeamMemberAccess", "updateTeamMemberRole",
+		"updateCustomer", "updateLead", "updateOffer", "uploadConversationImage", "updateTeamMemberAccess", "updateTeamMemberRole",
 		"updateTransactionDraft", "updateVariant",
 	}
 	for _, operation := range operations {

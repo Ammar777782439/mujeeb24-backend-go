@@ -18,19 +18,15 @@ func TestSendMessageWithCatalogPhotoUsesSameProviderRequest(t *testing.T) {
 			t.Fatalf("wrong provider route: %s %s", r.Method, r.URL)
 		}
 		var body struct {
-			Text        string `json:"text"`
-			Attachments []struct {
-				Type       string `json:"type"`
-				SourceType string `json:"source_type"`
-				Source     string `json:"source"`
-			} `json:"attachments"`
+			AccountID     string `json:"account_id"`
+			AttachmentURL string `json:"attachment_url"`
+			Text          string `json:"text"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatal(err)
 		}
-		if body.Text != "هذا المنتج متوفر" || len(body.Attachments) != 1 ||
-			body.Attachments[0].Type != "image" || body.Attachments[0].SourceType != "url" ||
-			body.Attachments[0].Source != "https://private.example.test/product.jpg?sig=123" {
+		if body.AccountID != "acc1" || body.Text != "هذا المنتج متوفر" ||
+			body.AttachmentURL != "https://private.example.test/product.jpg?sig=123" {
 			t.Fatalf("invalid mixed provider send: %+v", body)
 		}
 		w.Header().Set("Content-Type", "application/json")

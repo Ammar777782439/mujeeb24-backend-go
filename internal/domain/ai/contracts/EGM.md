@@ -19,7 +19,7 @@ Defines provider-neutral, versioned domain metadata, evidence types, and project
 - Zero SQL or database dependencies (`pgx` is never imported).
 - Zero network or HTTP calls inside contract methods.
 - Tenant ID (`business_id`) and raw internal database keys stay strictly outside model-facing fields.
-- Projections enforce closed enum sets matching the PostgreSQL 16 schema baseline (schema census benchmarks baseline migrations `000001..000083` in `source_inventory.go:27`).
+- Projections enforce closed enum sets matching the PostgreSQL 16 schema baseline (schema census benchmarks baseline migrations `000001..000087` in `source_inventory.go`).
 - All numbers representing currency or scores enforce fixed-precision strings validated via `big.Rat`.
 
 ## Side Effects

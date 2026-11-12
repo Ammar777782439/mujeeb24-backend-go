@@ -33,6 +33,26 @@ func (s *CatalogMediaObjectStore) Put(ctx context.Context, key, mime string, bod
 	}
 	return p.Put(ctx, key, mime, body)
 }
+
+// PutToProvider writes using the provider persisted on the owning MediaAsset.
+// It deliberately bypasses WriteProvider so pending uploads remain pinned to
+// the provider selected when their database row was created.
+func (s *CatalogMediaObjectStore) PutToProvider(ctx context.Context, provider, key, mime string, body []byte) error {
+	p, err := s.provider(provider)
+	if err != nil {
+		return err
+	}
+	return p.Put(ctx, key, mime, body)
+}
+
+func (s *CatalogMediaObjectStore) DeleteFromProvider(ctx context.Context, provider, key string) error {
+	p, err := s.provider(provider)
+	if err != nil {
+		return err
+	}
+	return p.Delete(ctx, key)
+}
+
 func (s *CatalogMediaObjectStore) Delete(ctx context.Context, key string) error {
 	p, err := s.provider(s.WriteProvider)
 	if err != nil {
@@ -40,6 +60,17 @@ func (s *CatalogMediaObjectStore) Delete(ctx context.Context, key string) error 
 	}
 	return p.Delete(ctx, key)
 }
+
+// PresignGetFromProvider resolves private bytes using the provider pinned to
+// the owning MediaAsset, even if the default write provider later changes.
+func (s *CatalogMediaObjectStore) PresignGetFromProvider(ctx context.Context, provider, key string, ttl time.Duration) (string, error) {
+	p, err := s.provider(provider)
+	if err != nil {
+		return "", err
+	}
+	return p.PresignGet(ctx, key, ttl)
+}
+
 func (s *CatalogMediaObjectStore) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
 	return s.PresignFromProvider(ctx, s.WriteProvider, key, ttl)
 }

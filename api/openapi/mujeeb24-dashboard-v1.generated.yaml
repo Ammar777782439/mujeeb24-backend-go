@@ -1485,6 +1485,41 @@ components:
         - display_name
         - role
       type: object
+    ConversationAttachmentReadURLView:
+      additionalProperties: false
+      properties:
+        expires_in_seconds:
+          format: int64
+          type: integer
+        mime_type:
+          type: string
+        size_bytes:
+          format: int64
+          type: integer
+        url:
+          type: string
+      required:
+        - url
+        - expires_in_seconds
+        - mime_type
+        - size_bytes
+      type: object
+    ConversationImageUploadRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/ConversationImageUploadRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        data_base64:
+          description: JPEG or PNG image, base64-encoded. Up to 10 MiB decoded.
+          minLength: 1
+          type: string
+      required:
+        - data_base64
+      type: object
     ConversationInboxOverview:
       additionalProperties: false
       properties:
@@ -1510,6 +1545,32 @@ components:
         - assigned_to_me
         - unassigned
         - state_counts
+      type: object
+    ConversationMediaAssetView:
+      additionalProperties: false
+      properties:
+        height:
+          format: int64
+          type: integer
+        id:
+          type: string
+        mime_type:
+          type: string
+        size_bytes:
+          format: int64
+          type: integer
+        status:
+          type: string
+        width:
+          format: int64
+          type: integer
+      required:
+        - id
+        - mime_type
+        - size_bytes
+        - width
+        - height
+        - status
       type: object
     ConversationRead:
       additionalProperties: false
@@ -3756,18 +3817,32 @@ components:
     MessageAttachment:
       additionalProperties: false
       properties:
+        attachment_id:
+          format: uuid
+          type: string
+        caption:
+          type: string
         media_id:
+          format: uuid
           type: string
         preview_path:
+          type: string
+        status:
+          enum:
+            - pending_ingestion
+            - ready
+            - failed
           type: string
         type:
           enum:
             - image
+            - video
+            - audio
+            - document
+            - file
           type: string
       required:
         - type
-        - media_id
-        - preview_path
       type: object
     MissingField:
       additionalProperties: false
@@ -4661,12 +4736,15 @@ components:
           format: uri
           readOnly: true
           type: string
+        attachment_media_ids:
+          items:
+            type: string
+          maxItems: 1
+          nullable: true
+          type: array
         text:
           maxLength: 10000
-          minLength: 1
           type: string
-      required:
-        - text
       type: object
     SingleAIConfigurationViewBody:
       additionalProperties: false
@@ -5025,6 +5103,23 @@ components:
         - data
         - request_id
       type: object
+    SingleConversationAttachmentReadURLViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleConversationAttachmentReadURLViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/ConversationAttachmentReadURLView"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
     SingleConversationBody:
       additionalProperties: false
       properties:
@@ -5053,6 +5148,23 @@ components:
           type: string
         data:
           $ref: "#/components/schemas/ConversationInboxOverview"
+        request_id:
+          type: string
+      required:
+        - data
+        - request_id
+      type: object
+    SingleConversationMediaAssetViewBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          example: /api/v1/schemas/SingleConversationMediaAssetViewBody.json
+          format: uri
+          readOnly: true
+          type: string
+        data:
+          $ref: "#/components/schemas/ConversationMediaAssetView"
         request_id:
           type: string
       required:
@@ -10528,6 +10640,70 @@ paths:
       summary: Permanently remove channel connection, revoke provider account, and purge local history
       tags:
         - Connections
+  /businesses/{business_id}/conversation-media/uploads:
+    post:
+      operationId: uploadConversationImage
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConversationImageUploadRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleConversationMediaAssetViewBody"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Service Unavailable
+      security:
+        - bearerAuth: []
+      summary: Upload a verified private image for a conversation attachment
+      tags:
+        - ConversationMedia
   /businesses/{business_id}/conversations:
     get:
       operationId: listConversations
@@ -11556,6 +11732,88 @@ paths:
       security:
         - bearerAuth: []
       summary: Create an outbound message intent
+      tags:
+        - Conversations
+  /businesses/{business_id}/conversations/{conversation_id}/messages/{message_id}/attachments/{attachment_id}/read-url:
+    get:
+      operationId: getConversationAttachmentReadURL
+      parameters:
+        - in: path
+          name: business_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: conversation_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: message_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: attachment_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleConversationAttachmentReadURLViewBody"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Internal Server Error
+      security:
+        - bearerAuth: []
+      summary: Get a short-lived private URL for a ready conversation attachment
       tags:
         - Conversations
   /businesses/{business_id}/conversations/{conversation_id}/notes:

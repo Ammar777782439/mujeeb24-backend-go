@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,6 +48,7 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 	}
 	defer func() {
 		cleanupCtx := context.Background()
+		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM message_attachments WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
 		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM communication_messages WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
 		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM conversation_references WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
 		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM external_identities WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
@@ -55,6 +57,7 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM inbound_event_ledger WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
 		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM channel_connections WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
 		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM inbound_webhook_payloads WHERE provider_ref = 'socialapi' AND delivery_id LIKE 'provider-test-%'`)
+		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM media_assets WHERE business_id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
 		_, _ = adapter.Pool().Exec(cleanupCtx, `DELETE FROM businesses WHERE id IN ($1::uuid, $2::uuid)`, businessID, otherBusinessID)
 	}()
 	_, err = adapter.Pool().Exec(ctx, `INSERT INTO channel_connections (id, business_id, provider_ref, channel, provider_account_ref, provider_connection_ref, status, secret_reference, created_at, updated_at) VALUES ($1::uuid, $2::uuid, 'socialapi', 'whatsapp', 'account-provider-a', 'connection-provider-a', 'active', 'secret://provider-a', $5, $5), ($3::uuid, $4::uuid, 'socialapi', 'whatsapp', 'account-provider-b', 'connection-provider-b', 'active', 'secret://provider-b', $5, $5)`, connectionID, businessID, otherConnectionID, otherBusinessID, base)
@@ -86,13 +89,216 @@ func TestProviderInboundStoreAgainstPostgres(t *testing.T) {
 	}
 
 	materializer := NewProviderInboundStore(adapter)
-	draft := ports.ProviderInboundDraft{InboundEventID: eventRecord.ID, BusinessID: businessID, ConnectionID: connectionID, ProviderRef: "socialapi", ProviderEventID: "provider-event-1", Channel: "whatsapp", ProviderAccountRef: "account-provider-a", ProviderConversationID: "provider-conversation-1", ExternalUserID: "provider-user-1", ProviderMessageID: "provider-message-1", EventType: "interaction_received", InteractionKind: "dm", Text: "مرحبا", ExternalCreatedAt: providerInboundTimePtr(base), ReceivedAt: base, RawPayloadReference: raw.Reference, PayloadHash: raw.SHA256}
+	draft := ports.ProviderInboundDraft{InboundEventID: eventRecord.ID, BusinessID: businessID, ConnectionID: connectionID, ProviderRef: "socialapi", ProviderEventID: "provider-event-1", Channel: "whatsapp", ProviderAccountRef: "account-provider-a", ProviderConversationID: "provider-conversation-1", ExternalUserID: "provider-user-1", ProviderMessageID: "provider-message-1", EventType: "interaction_received", InteractionKind: "dm", Text: "مرحبا", MediaStorageProvider: "r2", Attachments: []ports.ProviderInboundAttachmentDraft{{ProviderMediaReference: "socialapi:v1:cHJvdmlkZXItZXZlbnQtMQ:0", Kind: "image", SortOrder: 0}, {ProviderMediaReference: "socialapi:v1:cHJvdmlkZXItZXZlbnQtMQ:1", Kind: "file", SortOrder: 1}}, ExternalCreatedAt: providerInboundTimePtr(base), ReceivedAt: base, RawPayloadReference: raw.Reference, PayloadHash: raw.SHA256}
 	first, err := materializer.Materialize(ctx, draft)
 	if err != nil {
 		t.Fatalf("first materialize: %v", err)
 	}
 	if first.Duplicate || first.Ignored || first.CustomerID == "" || first.ConversationID == "" || first.ConversationReferenceID == "" || first.CommunicationMessageID == "" || first.InboundEventID != eventID {
 		t.Fatalf("unexpected first materialization: %#v", first)
+	}
+	// Conversation attachments are separate from catalog_media_links and
+	// share only the tenant-owned MediaAsset storage metadata.
+	mediaAssetID := uuid.NewString()
+	mediaAssets := NewConversationMediaIngestionRepository(adapter)
+	attachmentID := uuid.NewString()
+	providerMediaRef := "provider-media-opaque-1"
+	attachments := NewMessageAttachmentRepository(adapter)
+	var pendingAsset ports.MediaAsset
+	var createdAttachment ports.MessageAttachmentRecord
+	err = adapter.Within(ctx, func(txCtx context.Context) error {
+		var txErr error
+		pendingAsset, txErr = mediaAssets.CreatePendingIngestion(txCtx, ports.PendingConversationMediaAsset{
+			ID: mediaAssetID, BusinessID: businessID, StorageProvider: "r2",
+			StorageKey: "conversation/" + businessID + "/" + mediaAssetID, Kind: "image",
+		})
+		if txErr != nil {
+			return txErr
+		}
+		createdAttachment, txErr = attachments.Create(txCtx, ports.MessageAttachmentDraft{
+			ID: attachmentID, BusinessID: businessID,
+			CommunicationMessageID: first.CommunicationMessageID, MediaAssetID: mediaAssetID,
+			Kind: "image", Caption: "صورة العميل", SortOrder: 2,
+			SourceProviderMediaRef: &providerMediaRef, CreatedAt: base.Add(time.Second),
+		})
+		return txErr
+	})
+	if err != nil {
+		t.Fatalf("create pending media asset and message attachment atomically: %v", err)
+	}
+	if pendingAsset.Purpose != "conversation_attachment" || pendingAsset.Kind != "image" || pendingAsset.Status != "pending_ingestion" {
+		t.Fatalf("unexpected pending media asset: %#v", pendingAsset)
+	}
+	if createdAttachment.Status != "pending_ingestion" || createdAttachment.MediaAssetID != mediaAssetID {
+		t.Fatalf("unexpected pending message attachment: %#v", createdAttachment)
+	}
+	listedAttachments, err := attachments.ListByMessage(ctx, businessID, first.CommunicationMessageID)
+	if err != nil || len(listedAttachments) != 3 || listedAttachments[0].Kind != "image" ||
+		listedAttachments[1].Kind != "file" || listedAttachments[2].ID != attachmentID {
+		t.Fatalf("list materialized and manually-created message attachments: items=%#v err=%v", listedAttachments, err)
+	}
+	batchAttachments, err := attachments.ListByMessages(ctx, businessID, []string{first.CommunicationMessageID})
+	if err != nil || len(batchAttachments) != 3 || batchAttachments[0].CommunicationMessageID != first.CommunicationMessageID {
+		t.Fatalf("batch list message attachments: items=%#v err=%v", batchAttachments, err)
+	}
+
+	// Pending attachments are claimed with a bounded lease. A second worker
+	// cannot claim the same rows until the lease expires or they are released.
+	claimed, err := attachments.ClaimPendingIngestions(ctx, 10, time.Minute)
+	// This worker slice intentionally claims only the first WhatsApp image
+	// because SocialAPI history exposes one attachment per message. The file
+	// placeholder and later attachment positions remain pending.
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claim supported first-position WhatsApp image: items=%#v err=%v", claimed, err)
+	}
+	for _, item := range claimed {
+		if item.BusinessID != businessID || item.ProviderConversationID != "provider-conversation-1" ||
+			item.Channel != "whatsapp" || item.Kind != "image" ||
+			item.ProviderMediaReference == "" || item.StorageProvider != "r2" ||
+			!strings.HasPrefix(item.StorageKey, "conversation/"+businessID+"/") || item.AttemptCount != 1 {
+			t.Fatalf("claimed ingestion leaked or lost scoped fields: %#v", item)
+		}
+	}
+	if again, claimErr := attachments.ClaimPendingIngestions(ctx, 10, time.Minute); claimErr != nil || len(again) != 0 {
+		t.Fatalf("leased attachments were claimed twice: items=%#v err=%v", again, claimErr)
+	}
+	if err := attachments.ReleaseForRetry(ctx, businessID, claimed[0].AttachmentID, time.Now().UTC().Add(time.Hour), "https://bad.example"); err == nil {
+		t.Fatal("unsafe error code was accepted for ingestion retry")
+	}
+	for _, item := range claimed {
+		if err := attachments.ReleaseForRetry(ctx, item.BusinessID, item.AttachmentID, time.Now().UTC().Add(time.Hour), "socialapi_media_not_ready"); err != nil {
+			t.Fatalf("release attachment for retry: %v", err)
+		}
+	}
+	if delayed, claimErr := attachments.ClaimPendingIngestions(ctx, 10, time.Minute); claimErr != nil || len(delayed) != 0 {
+		t.Fatalf("future retry rows were claimed early: items=%#v err=%v", delayed, claimErr)
+	}
+	// Simulate a worker crash: an expired lease is reclaimable and increments
+	// the attempt counter, while the attachment remains tenant-scoped.
+	if _, err := adapter.Pool().Exec(ctx, `
+		UPDATE message_attachments
+		SET ingestion_next_attempt_at = now() - interval '1 second',
+		    ingestion_lease_until = now() - interval '1 second'
+		WHERE business_id = $1::uuid AND id = $2::uuid
+	`, businessID, claimed[0].AttachmentID); err != nil {
+		t.Fatalf("expire media ingestion lease: %v", err)
+	}
+	reclaimed, err := attachments.ClaimPendingIngestions(ctx, 10, time.Minute)
+	if err != nil || len(reclaimed) != 1 || reclaimed[0].AttachmentID != claimed[0].AttachmentID || reclaimed[0].AttemptCount != 2 {
+		t.Fatalf("reclaim expired media ingestion lease: items=%#v err=%v", reclaimed, err)
+	}
+	if _, err := attachments.MarkFailed(ctx, businessID, reclaimed[0].AttachmentID); err != nil {
+		t.Fatalf("mark terminal ingestion failure: %v", err)
+	}
+	failedAsset, err := mediaAssets.GetAsset(ctx, businessID, reclaimed[0].MediaAssetID)
+	if err != nil || failedAsset.Status != "rejected" {
+		t.Fatalf("terminal attachment failure must reject its pending MediaAsset atomically: asset=%#v err=%v", failedAsset, err)
+	}
+	var terminalSourceReference string
+	if err := adapter.Pool().QueryRow(ctx, `
+		SELECT COALESCE(source_provider_media_reference, '')
+		FROM message_attachments
+		WHERE business_id = $1::uuid AND id = $2::uuid
+	`, businessID, reclaimed[0].AttachmentID).Scan(&terminalSourceReference); err != nil {
+		t.Fatalf("read terminal attachment source reference: %v", err)
+	}
+	if terminalSourceReference != "" {
+		t.Fatal("terminal attachment must clear its opaque provider reference")
+	}
+
+	// A message and its media asset must belong to the same business.
+	_, err = attachments.Create(ctx, ports.MessageAttachmentDraft{
+		ID: uuid.NewString(), BusinessID: otherBusinessID,
+		CommunicationMessageID: first.CommunicationMessageID, MediaAssetID: mediaAssetID,
+		Kind: "image", SortOrder: 1, CreatedAt: base.Add(2 * time.Second),
+	})
+	if err == nil {
+		t.Fatal("cross-business message/media attachment was accepted")
+	}
+
+	// The attachment cannot become ready before its bytes have been verified
+	// and the corresponding MediaAsset has transitioned to ready.
+	if _, err := attachments.MarkReady(ctx, businessID, attachmentID); err == nil {
+		t.Fatal("pending MediaAsset was allowed to mark its message attachment ready")
+	}
+	digest := sha256.Sum256([]byte("verified image fixture"))
+	var readyAttachment ports.MessageAttachmentRecord
+	err = adapter.Within(ctx, func(txCtx context.Context) error {
+		if _, txErr := mediaAssets.MarkImageReady(txCtx, businessID, mediaAssetID, ports.VerifiedImage{
+			MimeType: "image/png", SizeBytes: 123, SHA256: digest[:], Width: 10, Height: 10,
+		}); txErr != nil {
+			return txErr
+		}
+		var txErr error
+		readyAttachment, txErr = attachments.MarkReady(txCtx, businessID, attachmentID)
+		return txErr
+	})
+	if err != nil || readyAttachment.Status != "ready" || readyAttachment.MimeType != "image/png" || readyAttachment.SizeBytes != 123 {
+		t.Fatalf("mark MediaAsset and message attachment ready atomically: item=%#v err=%v", readyAttachment, err)
+	}
+	readRecord, err := attachments.GetReadyForMessage(ctx, businessID, first.ConversationID, first.CommunicationMessageID, attachmentID)
+	if err != nil || readRecord.Attachment.ID != attachmentID || readRecord.StorageProvider != "r2" ||
+		readRecord.StorageKey != "conversation/"+businessID+"/"+mediaAssetID || readRecord.Attachment.MimeType != "image/png" {
+		t.Fatalf("tenant/conversation/message-scoped ready attachment lookup: record=%#v err=%v", readRecord, err)
+	}
+	if _, err := attachments.GetReadyForMessage(ctx, otherBusinessID, first.ConversationID, first.CommunicationMessageID, attachmentID); err == nil {
+		t.Fatal("cross-business attachment read was accepted")
+	}
+
+	urlReference := "https://provider.example/media/temporary"
+	if _, err := attachments.Create(ctx, ports.MessageAttachmentDraft{
+		ID: uuid.NewString(), BusinessID: businessID,
+		CommunicationMessageID: first.CommunicationMessageID, MediaAssetID: mediaAssetID,
+		Kind: "image", SortOrder: 2, SourceProviderMediaRef: &urlReference, CreatedAt: base.Add(4 * time.Second),
+	}); err == nil {
+		t.Fatal("a provider URL was accepted as a durable opaque media reference")
+	}
+
+	// A failed relation insert must roll back the pending MediaAsset created
+	// earlier in the same application transaction.
+	orphanAssetID := uuid.NewString()
+	err = adapter.Within(ctx, func(txCtx context.Context) error {
+		if _, txErr := mediaAssets.CreatePendingIngestion(txCtx, ports.PendingConversationMediaAsset{
+			ID: orphanAssetID, BusinessID: businessID, StorageProvider: "r2",
+			StorageKey: "conversation/" + businessID + "/" + orphanAssetID, Kind: "image",
+		}); txErr != nil {
+			return txErr
+		}
+		_, txErr := attachments.Create(txCtx, ports.MessageAttachmentDraft{
+			ID: uuid.NewString(), BusinessID: businessID,
+			CommunicationMessageID: uuid.NewString(), MediaAssetID: orphanAssetID,
+			Kind: "image", SourceProviderMediaRef: &providerMediaRef, CreatedAt: base.Add(5 * time.Second),
+		})
+		return txErr
+	})
+	if err == nil {
+		t.Fatal("expected invalid message attachment transaction to fail")
+	}
+	if _, err := mediaAssets.GetAsset(ctx, businessID, orphanAssetID); err == nil {
+		t.Fatal("pending MediaAsset survived a failed attachment transaction")
+	}
+
+	// Catalog assets are intentionally not accepted as conversation attachments.
+	catalogAssetID := uuid.NewString()
+	catalogMedia := NewCatalogMediaRepository(adapter)
+	if _, err := catalogMedia.CreatePendingAsset(ctx, ports.PendingMediaAsset{
+		ID: catalogAssetID, BusinessID: businessID,
+		StorageKey:      "catalog/" + businessID + "/" + catalogAssetID,
+		UploadExpiresAt: time.Now().UTC().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("create catalog asset: %v", err)
+	}
+	if _, err := catalogMedia.MarkAssetReady(ctx, businessID, catalogAssetID, ports.VerifiedImage{
+		MimeType: "image/png", SizeBytes: 123, SHA256: digest[:], Width: 10, Height: 10,
+	}); err != nil {
+		t.Fatalf("mark catalog asset ready: %v", err)
+	}
+	if _, err := attachments.Create(ctx, ports.MessageAttachmentDraft{
+		ID: uuid.NewString(), BusinessID: businessID,
+		CommunicationMessageID: first.CommunicationMessageID, MediaAssetID: catalogAssetID,
+		Kind: "image", SortOrder: 1, CreatedAt: base.Add(3 * time.Second),
+	}); err == nil {
+		t.Fatal("catalog-purpose MediaAsset was accepted as a conversation attachment")
 	}
 	second, err := materializer.Materialize(ctx, draft)
 	if err != nil {

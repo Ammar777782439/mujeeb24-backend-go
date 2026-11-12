@@ -554,6 +554,20 @@ func messageList(v commands.ListResult[commands.MessageView], businessID string)
 			AuthorPrincipalID: item.AuthorPrincipalID, AuthorDisplayName: item.AuthorDisplayName,
 		}
 		for _, attachment := range item.Attachments {
+			if attachment.AttachmentID != "" {
+				attachmentID := contract.UUID(attachment.AttachmentID)
+				projected := contract.MessageAttachment{
+					AttachmentID: &attachmentID, Type: attachment.Type,
+					MediaID: contract.UUID(attachment.MediaID), Caption: attachment.Caption, Status: attachment.Status,
+				}
+				if attachment.Status == "ready" {
+					projected.PreviewPath = "/api/v1/businesses/" + businessID +
+						"/conversations/" + string(item.ConversationID) + "/messages/" + string(item.ID) +
+						"/attachments/" + attachment.AttachmentID + "/read-url"
+				}
+				msg.Attachments = append(msg.Attachments, projected)
+				continue
+			}
 			if attachment.Type != "image" || attachment.MediaID == "" {
 				continue
 			}

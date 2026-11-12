@@ -19,3 +19,12 @@ type ListAutomationRulesQuery struct {
 }
 
 type ListAutomationRulesHandler = commands.QueryHandler[ListAutomationRulesQuery, commands.ListResult[commands.AutomationRuleView]]
+
+type GetConversationAttachmentReadURLQuery struct {
+	Meta           commands.QueryMeta
+	ConversationID commands.ConversationID
+	MessageID      commands.MessageID
+	AttachmentID   string
+}
+
+type GetConversationAttachmentReadURLHandler = commands.QueryHandler[GetConversationAttachmentReadURLQuery, commands.ConversationAttachmentReadURLView]

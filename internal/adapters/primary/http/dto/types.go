@@ -355,9 +355,12 @@ type Conversation struct {
 	ResourceVersion        string            `json:"resource_version"`
 }
 type MessageAttachment struct {
-	Type        string `json:"type" enum:"image"`
-	MediaID     UUID   `json:"media_id"`
-	PreviewPath string `json:"preview_path"`
+	AttachmentID *UUID  `json:"attachment_id,omitempty" format:"uuid"`
+	Type         string `json:"type" enum:"image,video,audio,document,file"`
+	MediaID      UUID   `json:"media_id,omitempty" format:"uuid"`
+	Caption      string `json:"caption,omitempty"`
+	Status       string `json:"status,omitempty" enum:"pending_ingestion,ready,failed"`
+	PreviewPath  string `json:"preview_path,omitempty"`
 }
 type ConversationAssignee struct {
 	PrincipalID UUID   `json:"principal_id"`

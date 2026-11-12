@@ -64,7 +64,7 @@ func TestMerchantAssistSchemaAfterAllMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(migrations) != 86 {
+	if len(migrations) != 88 {
 		t.Fatalf("unexpected migration sequence length %d (review migration inventory first)", len(migrations))
 	}
 	applied, err := database.RunMigrations(ctx, dsn, time.Now().UTC())

@@ -10,8 +10,9 @@ import (
 )
 
 type MessageQueryService struct {
-	Repository ports.MessageRepository
-	Inbox      ports.ConversationInboxRepository
+	Repository  ports.MessageRepository
+	Inbox       ports.ConversationInboxRepository
+	Attachments ports.MessageAttachmentsBatchReader
 }
 
 func (s MessageQueryService) Handle(ctx context.Context, query queries.ListConversationMessagesQuery) (commands.ListResult[commands.MessageView], error) {
@@ -29,9 +30,32 @@ func (s MessageQueryService) ListConversationMessages(ctx context.Context, query
 	if err != nil {
 		return commands.ListResult[commands.MessageView]{}, err
 	}
+	attachmentsByMessage := make(map[string][]ports.MessageAttachmentRecord)
+	if s.Attachments != nil && len(page.Items) > 0 {
+		messageIDs := make([]string, 0, len(page.Items))
+		for _, record := range page.Items {
+			messageIDs = append(messageIDs, record.ID)
+		}
+		attachmentRecords, err := s.Attachments.ListByMessages(ctx, string(query.Meta.Actor.BusinessID), messageIDs)
+		if err != nil {
+			return commands.ListResult[commands.MessageView]{}, err
+		}
+		for _, attachment := range attachmentRecords {
+			attachmentsByMessage[attachment.CommunicationMessageID] = append(attachmentsByMessage[attachment.CommunicationMessageID], attachment)
+		}
+	}
 	items := make([]commands.MessageView, 0, len(page.Items))
 	for _, record := range page.Items {
-		items = append(items, messageView(record))
+		view := messageView(record)
+		if !view.Private {
+			for _, attachment := range attachmentsByMessage[record.ID] {
+				view.Attachments = append(view.Attachments, commands.MessageAttachmentView{
+					AttachmentID: attachment.ID, Type: attachment.Kind, MediaID: attachment.MediaAssetID,
+					Caption: attachment.Caption, Status: attachment.Status,
+				})
+			}
+		}
+		items = append(items, view)
 	}
 	return commands.ListResult[commands.MessageView]{Items: items, NextCursor: page.NextCursor, HasMore: page.HasMore}, nil
 }

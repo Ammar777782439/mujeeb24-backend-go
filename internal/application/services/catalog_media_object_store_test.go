@@ -86,3 +86,50 @@ func TestCatalogDirectPreviewReadUsesRecordedProvider(t *testing.T) {
 		t.Fatal("unknown provider must not read from default store")
 	}
 }
+
+func TestConversationMediaWritesToTheProviderRecordedOnTheAsset(t *testing.T) {
+	r2 := &namedObjectStore{name: "r2"}
+	b2 := &namedObjectStore{name: "backblaze"}
+	storage := &CatalogMediaObjectStore{
+		WriteProvider: "backblaze",
+		Providers:     map[string]ports.MediaObjectStorage{"r2": r2, "backblaze": b2},
+	}
+	if err := storage.PutToProvider(context.Background(), "r2", "conversation/business/asset.png", "image/png", []byte("image")); err != nil {
+		t.Fatal(err)
+	}
+	if r2.puts != 1 || b2.puts != 0 {
+		t.Fatalf("pending asset must stay on recorded R2 provider: r2=%d b2=%d", r2.puts, b2.puts)
+	}
+	if err := storage.DeleteFromProvider(context.Background(), "r2", "conversation/business/asset.png"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := storage.provider("missing"); err == nil {
+		t.Fatal("missing historical provider must fail closed")
+	}
+}
+
+func TestConversationMediaWritesAndReadsFromTheProviderRecordedOnTheAsset(t *testing.T) {
+	r2 := &namedObjectStore{name: "r2"}
+	b2 := &namedObjectStore{name: "backblaze"}
+	storage := &CatalogMediaObjectStore{
+		WriteProvider: "backblaze",
+		Providers:     map[string]ports.MediaObjectStorage{"r2": r2, "backblaze": b2},
+	}
+	key := "conversation/business/asset.png"
+	if err := storage.PutToProvider(context.Background(), "r2", key, "image/png", []byte("image")); err != nil {
+		t.Fatal(err)
+	}
+	if r2.puts != 1 || b2.puts != 0 {
+		t.Fatalf("pending asset must stay on recorded R2 provider: r2=%d b2=%d", r2.puts, b2.puts)
+	}
+	url, err := storage.PresignGetFromProvider(context.Background(), "r2", key, time.Minute)
+	if err != nil || !strings.Contains(url, "r2.example.test") || r2.reads != 1 || b2.reads != 0 {
+		t.Fatalf("private read must use recorded R2 provider: url=%q err=%v r2=%d b2=%d", url, err, r2.reads, b2.reads)
+	}
+	if err := storage.DeleteFromProvider(context.Background(), "r2", key); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := storage.provider("missing"); err == nil {
+		t.Fatal("missing historical provider must fail closed")
+	}
+}

@@ -50,7 +50,7 @@ func (r *CatalogMediaRepository) CreatePendingAsset(ctx context.Context, draft p
 	if err != nil {
 		return ports.MediaAsset{}, fmt.Errorf("media asset insert: %w", err)
 	}
-	result.Purpose, result.StorageProvider = "catalog", provider
+	result.Purpose, result.Kind, result.StorageProvider = "catalog", "image", provider
 	result.UploadExpiresAt = &draft.UploadExpiresAt
 	return result, nil
 }
@@ -61,11 +61,11 @@ func (r *CatalogMediaRepository) GetAsset(ctx context.Context, businessID, media
 		return ports.MediaAsset{}, err
 	}
 	var a ports.MediaAsset
-	err = db.QueryRow(ctx, `SELECT id::text, business_id::text, purpose, storage_provider,
+	err = db.QueryRow(ctx, `SELECT id::text, business_id::text, purpose, media_kind, storage_provider,
         storage_key, COALESCE(mime_type,''), COALESCE(size_bytes,0), sha256,
         COALESCE(width,0), COALESCE(height,0), status, upload_expires_at, deleted_at, created_at, updated_at
         FROM media_assets WHERE business_id=$1::uuid AND id=$2::uuid`, businessID, mediaID).Scan(
-		&a.ID, &a.BusinessID, &a.Purpose, &a.StorageProvider, &a.StorageKey, &a.MimeType,
+		&a.ID, &a.BusinessID, &a.Purpose, &a.Kind, &a.StorageProvider, &a.StorageKey, &a.MimeType,
 		&a.SizeBytes, &a.SHA256, &a.Width, &a.Height, &a.Status,
 		&a.UploadExpiresAt, &a.DeletedAt, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
@@ -95,7 +95,7 @@ func (r *CatalogMediaRepository) MarkAssetReady(ctx context.Context, businessID,
 	if err != nil {
 		return ports.MediaAsset{}, fmt.Errorf("media completion rejected: %w", err)
 	}
-	a.Purpose, a.MimeType = "catalog", info.MimeType
+	a.Purpose, a.Kind, a.MimeType = "catalog", "image", info.MimeType
 	a.SizeBytes, a.SHA256, a.Width, a.Height = info.SizeBytes, info.SHA256, info.Width, info.Height
 	return a, nil
 }

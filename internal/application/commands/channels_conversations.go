@@ -62,9 +62,10 @@ type AddPrivateNoteCommand struct {
 	Text             string
 }
 type CreateOutboundMessageCommand struct {
-	Meta           CommandMeta
-	ConversationID ConversationID
-	Text           string
+	Meta               CommandMeta
+	ConversationID     ConversationID
+	Text               string
+	AttachmentMediaIDs []string
 }
 type ConversationResult struct {
 	MutationResult

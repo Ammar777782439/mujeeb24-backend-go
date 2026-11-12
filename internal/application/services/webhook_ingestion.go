@@ -34,6 +34,8 @@ type SocialAPIWebhookService struct {
 	// provider's webhook payload for DMs carries only author.id; the name
 	// is only available via the inbox/conversations REST endpoint.
 	Enricher ports.ConversationEnricher
+	// MediaStorageProvider selects the object store for new inbound media placeholders.
+	MediaStorageProvider string
 	// Customers (optional) — required for Enricher to persist the fetched
 	// display_name/picture into the customer.profile JSONB column.
 	Customers ports.CustomerRuntimeRepository
@@ -222,6 +224,8 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 				EventType:              event.EventType,
 				InteractionKind:        string(event.InteractionKind),
 				Text:                   event.Text,
+				Attachments:            inboundAttachmentDraftsWhenEnabled(event.Attachments, s.MediaStorageProvider),
+				MediaStorageProvider:   s.MediaStorageProvider,
 				ExternalCreatedAt:      event.ExternalCreatedAt,
 				ReceivedAt:             event.ReceivedAt,
 				RawPayloadReference:    stored.Reference,
@@ -335,6 +339,29 @@ func (s SocialAPIWebhookService) Handle(ctx context.Context, command commands.In
 
 	}
 	return result, nil
+}
+
+func inboundAttachmentDraftsWhenEnabled(references []channel.InboundAttachmentReference, storageProvider string) []ports.ProviderInboundAttachmentDraft {
+	if strings.TrimSpace(storageProvider) == "" {
+		return nil
+	}
+	return inboundAttachmentDrafts(references)
+}
+
+func inboundAttachmentDrafts(references []channel.InboundAttachmentReference) []ports.ProviderInboundAttachmentDraft {
+	if len(references) == 0 {
+		return nil
+	}
+	result := make([]ports.ProviderInboundAttachmentDraft, 0, len(references))
+	for index, reference := range references {
+		result = append(result, ports.ProviderInboundAttachmentDraft{
+			ProviderMediaReference: reference.ProviderMediaReference,
+			Kind:                   string(reference.Kind),
+			Caption:                reference.Caption,
+			SortOrder:              index,
+		})
+	}
+	return result
 }
 
 func validateWebhookCommand(command commands.IngestWebhookCommand) error {

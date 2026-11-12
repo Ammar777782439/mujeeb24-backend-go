@@ -1,12 +1,14 @@
 package bootstrap
 
 import (
+	"log"
+	"os"
+
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/primary/http/handlers"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/adapters/secondary/persistence/postgres"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/ports"
+	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/queries"
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
-	"log"
-	"os"
 )
 
 func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.RealtimePublisher) handlers.Dependencies {
@@ -42,15 +44,40 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 	decisionRepository := postgres.NewAIDecisionRepository(adapter)
 	auditRepository := postgres.NewAuditEventRepository(adapter)
 	messageRepository := postgres.NewMessageRepository(adapter)
+	messageAttachmentsRepository := postgres.NewMessageAttachmentRepository(adapter)
 	readCursorRepository := postgres.NewConversationReadCursorRepository(adapter)
 	cannedReplyRepository := postgres.NewCannedReplyRepository(adapter)
 	conversationRuntime := services.ConversationRuntimeService{Repository: conversationRepository, Reader: conversationRepository, Inbox: conversationRepository, Assignees: teamRepository, Labels: conversationLabelRepository, References: conversationReferenceRepository, Messages: messageRepository, NoteTargets: messageRepository, PrivateNotes: messageRepository, Transactions: adapter, Realtime: realtime}
-	manualOutbound := services.ManualOutboundMessageService{References: conversationReferenceRepository, Connections: postgres.NewChannelConnectionRepository(adapter), Outbound: postgres.NewOutboundMessageRepository(adapter), Outbox: postgres.NewPostgresOutboxStore(adapter), Messages: messageRepository, Inbox: conversationRepository, Conversations: conversationRepository, Transactions: adapter, Realtime: realtime}
+	manualOutbound := services.ManualOutboundMessageService{
+		References: conversationReferenceRepository, Connections: postgres.NewChannelConnectionRepository(adapter),
+		Capabilities: postgres.NewChannelCapabilityRepository(adapter), MediaAssets: postgres.NewConversationMediaIngestionRepository(adapter),
+		MediaAttachmentsEnabled: os.Getenv("CONVERSATION_MEDIA_ENABLED") == "true",
+		Attachments:             messageAttachmentsRepository, Outbound: postgres.NewOutboundMessageRepository(adapter),
+		Outbox: postgres.NewPostgresOutboxStore(adapter), Messages: messageRepository, Inbox: conversationRepository,
+		Conversations: conversationRepository, Transactions: adapter, Realtime: realtime,
+	}
 	cannedReplies := services.CannedReplyService{Repository: cannedReplyRepository, Transactions: adapter}
 	automationRules := services.AutomationRuleService{Repository: postgres.NewAutomationRuleRepository(adapter), Transactions: adapter}
 	channelConnectionRepository := postgres.NewChannelConnectionRepository(adapter)
 	channelRuntime := services.ChannelRuntimeService{Reader: channelConnectionRepository, Runtime: channelConnectionRepository, Transactions: adapter, HistoryStore: postgres.NewChannelHistoryRepository(adapter)}
 	channelCapabilityRepository := postgres.NewChannelCapabilityRepository(adapter)
+	var conversationMediaObjects ports.MediaObjectStorage
+	if os.Getenv("CONVERSATION_MEDIA_ENABLED") == "true" {
+		conversationMediaObjects = mediaObjects
+		if conversationMediaObjects == nil {
+			var conversationStorageErr error
+			conversationMediaObjects, _, conversationStorageErr = buildConversationMediaStorageFromEnv()
+			if conversationStorageErr != nil {
+				log.Printf("[ConversationMedia] stage=storage_configuration_failed error=%v", conversationStorageErr)
+			}
+		}
+	}
+	var conversationAttachmentRead queries.GetConversationAttachmentReadURLHandler
+	if reader, ok := conversationMediaObjects.(ports.MediaObjectProviderReader); ok {
+		conversationAttachmentRead = services.ConversationAttachmentReadService{
+			Inbox: conversationRepository, Attachments: messageAttachmentsRepository, Objects: reader,
+		}
+	}
 
 	return handlers.Dependencies{
 		GetLiveness:                  livenessQueryService{},
@@ -94,14 +121,15 @@ func BuildDependenciesWithRealtime(adapter *postgres.Adapter, realtime ports.Rea
 		GetConversationInboxOverview: services.GetConversationInboxOverviewService{Inbox: conversationRepository},
 		GetConversation:              services.GetConversationQueryService{Inbox: conversationRepository, Labels: conversationLabelRepository},
 
-		ListConversationMessages:  services.MessageQueryService{Repository: messageRepository, Inbox: conversationRepository},
-		ListCannedReplies:         services.ListCannedRepliesQueryService{CannedReplyService: cannedReplies},
-		ListAutomationRules:       services.ListAutomationRulesQueryService{AutomationRuleService: automationRules},
-		ListConversationAssignees: services.ListConversationAssigneesQueryService{TeamService: teamService},
-		ListTeamMembers:           services.ListTeamMembersQueryService{TeamService: teamService},
-		ListTeamInvitations:       services.ListTeamInvitationsQueryService{TeamService: teamService},
-		InspectTeamInvitation:     services.InspectTeamInvitationQueryService{TeamService: teamService},
-		CreateOutboundMessage:     manualOutbound,
+		ListConversationMessages:         services.MessageQueryService{Repository: messageRepository, Inbox: conversationRepository, Attachments: messageAttachmentsRepository},
+		GetConversationAttachmentReadURL: conversationAttachmentRead,
+		ListCannedReplies:                services.ListCannedRepliesQueryService{CannedReplyService: cannedReplies},
+		ListAutomationRules:              services.ListAutomationRulesQueryService{AutomationRuleService: automationRules},
+		ListConversationAssignees:        services.ListConversationAssigneesQueryService{TeamService: teamService},
+		ListTeamMembers:                  services.ListTeamMembersQueryService{TeamService: teamService},
+		ListTeamInvitations:              services.ListTeamInvitationsQueryService{TeamService: teamService},
+		InspectTeamInvitation:            services.InspectTeamInvitationQueryService{TeamService: teamService},
+		CreateOutboundMessage:            manualOutbound,
 		GetConnectionCapabilities: services.ConnectionCapabilitiesQueryService{
 			Repository: channelCapabilityRepository,
 		},

@@ -14,12 +14,24 @@ import (
 	"github.com/Ammar777782439/mujeeb24-backend-go/internal/application/services"
 )
 
-// buildCatalogMediaStorageFromEnv keeps the historical R2 environment intact.
-// B2 is an explicit selection, never an implicit failover of existing photos.
+// buildCatalogMediaStorageFromEnv preserves the existing Catalog feature flag.
+// Conversation media has a separate flag but shares the same private S3 router.
+// B2 is an explicit selection, never an implicit failover of existing objects.
 func buildCatalogMediaStorageFromEnv() (ports.MediaObjectStorage, string, error) {
 	if os.Getenv("CATALOG_MEDIA_ENABLED") != "true" {
 		return nil, "", nil
 	}
+	return buildMediaStorageFromEnv()
+}
+
+func buildConversationMediaStorageFromEnv() (ports.MediaObjectStorage, string, error) {
+	if os.Getenv("CONVERSATION_MEDIA_ENABLED") != "true" {
+		return nil, "", nil
+	}
+	return buildMediaStorageFromEnv()
+}
+
+func buildMediaStorageFromEnv() (ports.MediaObjectStorage, string, error) {
 	selected := strings.TrimSpace(os.Getenv("S3_PROVIDER"))
 	switch selected {
 	case "", "r2", "cloudflare":
@@ -58,25 +70,25 @@ func buildCatalogMediaStorageFromEnv() (ports.MediaObjectStorage, string, error)
 			probeCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 			keyCheck := checkB2Credentials(probeCtx, nil, b2NativeAuthorizationEndpoint,
 				client.AccessKeyID, client.SecretAccessKey, client.Bucket, client.Endpoint)
-			log.Printf("[CatalogMedia] stage=b2_native_key_check result=%s response_kind=%s provider_code=%s key_id_suffix=%s key_id_outer_whitespace=%t secret_outer_whitespace=%t endpoint_match=%t bucket_scope=%s write_files=%t",
+			log.Printf("[MediaStorage] stage=b2_native_key_check result=%s response_kind=%s provider_code=%s key_id_suffix=%s key_id_outer_whitespace=%t secret_outer_whitespace=%t endpoint_match=%t bucket_scope=%s write_files=%t",
 				keyCheck.Result, keyCheck.ResponseKind, keyCheck.ProviderCode, keyCheck.KeyIDSuffix,
 				keyCheck.KeyIDWhitespace, keyCheck.SecretWhitespace, keyCheck.EndpointMatch,
 				keyCheck.BucketScope, keyCheck.CanWrite)
 			if keyCheck.Result == "key_pair_valid" {
 				if probeErr := client.ProbeBucketLocation(probeCtx); probeErr != nil {
-					log.Printf("[CatalogMedia] stage=b2_s3_readonly_check result=failed cause=%v", probeErr)
+					log.Printf("[MediaStorage] stage=b2_s3_readonly_check result=failed cause=%v", probeErr)
 				} else {
-					log.Printf("[CatalogMedia] stage=b2_s3_readonly_check result=success")
+					log.Printf("[MediaStorage] stage=b2_s3_readonly_check result=success")
 				}
 			} else {
-				log.Printf("[CatalogMedia] stage=b2_s3_readonly_check result=skipped reason=key_check_unverified")
+				log.Printf("[MediaStorage] stage=b2_s3_readonly_check result=skipped reason=key_check_unverified")
 			}
 			cancel()
 		}
 	}
 	if backends[selected] == nil {
-		return nil, "", fmt.Errorf("catalog media storage provider %s is not configured", selected)
+		return nil, "", fmt.Errorf("media storage provider %s is not configured", selected)
 	}
-	log.Printf("[CatalogMedia] stage=storage_configured write_provider=%s r2_available=%t backblaze_available=%t", selected, backends["r2"] != nil, backends["backblaze"] != nil)
+	log.Printf("[MediaStorage] stage=storage_configured write_provider=%s r2_available=%t backblaze_available=%t", selected, backends["r2"] != nil, backends["backblaze"] != nil)
 	return &services.CatalogMediaObjectStore{WriteProvider: selected, Providers: backends}, selected, nil
 }
