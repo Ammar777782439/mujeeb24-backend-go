@@ -4,7 +4,7 @@
 **Repository:** `Ammar777782439/mujeeb24-backend-go`  
 **Branch:** `feat/conversation-media-attachments`  
 **PR:** [#35](https://github.com/Ammar777782439/mujeeb24-backend-go/pull/35) — Open, Draft, not merged.  
-**Current branch HEAD at review:** `c52f1b31758e6a43a360e3ad05a0d39206b78b0f`.
+**Current branch HEAD at review:** `94aaa94bf7a2cd7d22a8fd30a54a22fae9c8b827`.
 **PR state:** Open / Draft / not merged.
 
 ## Current implementation
@@ -52,10 +52,10 @@ The current branch HEAD c52f1b31758e6a43a360e3ad05a0d39206b78b0f has a complete 
 
 | Workflow | Run | Result |
 |---|---:|---|
-| Native AI Contracts | 43218143153 | success |
-| AI Contract Verification | 43218143404 | success |
-| Quality gate | 43218143275 | success |
-| Render image verification | 43218143161 | success |
+| Quality gate | 43223499847 | success |
+| Native AI Contracts | 43223499529 | success |
+| AI Contract Verification | 43223499658 | success |
+| Render image verification | 43223499531 | success |
 
 This confirms automated checks on the current backend HEAD, including the outbound PostgreSQL integration test, feature gate, formatting/build/vet/full Go tests/race detector/OpenAPI checks and production Docker image verification.
 
@@ -65,7 +65,7 @@ CI does not prove live SocialAPI delivery, real R2/Backblaze object writes/reads
 
 ### P0 — close the code and integration boundary
 1. Keep PR #35 open until the code review is accepted; CI is green on current HEAD.
-2. Frontend must consume the conversation/message/attachment-scoped read URL rather than the old tenant-wide Catalog preview path.
+2. Frontend PR #21 now consumes the conversation/message/attachment-scoped read URL rather than the old tenant-wide Catalog preview path; it depends on this backend PR.
 3. Add merchant image-send UX only against the `attachment_media_ids` contract; preserve the one-image JPEG/PNG limit.
 4. Operator performs the controlled live SocialAPI image-send and private object-storage read/write checks. Do not claim provider E2E support before those checks.
 
